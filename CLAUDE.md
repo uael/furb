@@ -51,6 +51,8 @@ The suite drives the engine through its public API alone, end to end, from the m
   assertion to pass: a sentence the engine fails stays red until the engine, or the sentence, is right.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
   `test/conftest.py`.
+- `test/outside/` holds the tests of the World, the Kernel, the command line and the provider, which stand outside
+  the hygiene laws.
 
 ## The hygiene laws
 
@@ -79,6 +81,10 @@ Run every command from the root of the repository.
   indentation, 120 columns.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`.
 - `uv run pre-commit run --all-files`: every gate the commit hook runs.
+- `uv run python script/smoke.py`: one real life on opus/low through the claude command line on PATH, or the one
+  `FURB_CLAUDE_BIN` names. It is no test of the suite and spends one prompt.
+- `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
+  record.
 
 ## Prose
 

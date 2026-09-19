@@ -6,6 +6,7 @@ engine. The contract is `src/furb/engine.pyi`, whose docstrings hold every law, 
 in `test/` holds one test per sentence.
 
 - `uv sync` installs the environment, and `uv run pytest -q` runs the suite.
+- `uv run python script/smoke.py` runs one real life on opus/low through the claude command line.
 
 Copyright (C) 2026 Abel Lucas. furb is free software under the GNU Affero General Public License, version 3, which
 `LICENSE` holds: you may use, study, change and share it, and anyone who ships it or runs a changed furb as a
