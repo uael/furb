@@ -1,0 +1,156 @@
+"""write, the text put at its path."""
+
+import pytest
+
+from conftest import STANDS, Dead, Sand, World, life, said, settle, shown, sown, tags
+from furb import engine
+from furb.engine import Refused, Text
+
+KEPT = (
+  "def kept(id):\n"
+  "  while True:\n"
+  "    match (yield):\n"
+  "      case ('write', qid, _, _, Text(path=path)) if path.startswith('nums://'):\n"
+  "        yield 'done', qid, 7\n"
+  "\n"
+  "act('nums', '', kept)\n"
+  "close(write(Text('nums://a', 'x')))\n"
+)
+
+
+class Firm(Sand):
+  """A World whose disk holds one line more than it was asked to write."""
+
+  def hears(self) -> World:
+    """The World that answers a standing, and a write it takes with a line of its own at the end."""
+    while True:
+      a = yield
+      match a:
+        case ("stand", qid, *_):
+          self.calls.append(a)
+          yield "done", qid, self.stands or ((), "", "")
+        case ("write", qid, _, _, Text(path=path, content=content)):
+          self.calls.append(a)
+          self.files[path] = content + "END\n"
+          yield "done", qid, Text(path, self.files[path])
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_a_write_whoever_serves_the_path_of_the_text_takes_its_content() -> None:
+  """A write: whoever serves the path of the text takes its content."""
+  sand = Sand(stands=STANDS)
+  _, root = life(sand)
+  assert engine.write(Text("b.txt", "one\n"), on=root) == Text("/w/b.txt", "one\n")
+  assert sand.files == {"/w/b.txt": "one\n"}
+  assert engine.write(Text(root, "k = 1"), on=root) == Text(root, "k = 1")
+  await settle()
+  assert engine.modules[root]["k"] == 1
+  assert engine.read(root, on=root) == Text(root, "k = 1")
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_write_is_given_a_text_and_gives_the_text_as_it_is_on_disk_after_the_write() -> None:
+  """write is given a text, and gives the text as it is on disk after the write."""
+  sand = Sand(stands=STANDS)
+  _, root = life(sand)
+  assert engine.write(Text("b.txt", "one\n"), on=root) == Text("/w/b.txt", "one\n")
+  assert engine.write(Text("b.txt", "two\n"), on=root) == Text("/w/b.txt", "two\n")
+  assert sand.files["/w/b.txt"] == "two\n"
+  assert engine.read("b.txt", on=root) == Text("/w/b.txt", "two\n")
+  _, held = engine.ask("transcript", root, root)
+  assert isinstance(held, list)
+  asked = said(held, "write")[0]
+  assert asked[4] == Text("b.txt", "one\n")
+  assert [a[3] for a in said(held, "done") if a[1] == asked[1]] == [Text("/w/b.txt", "one\n")]
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_a_write_that_the_world_refuses_raises_refused_in_the_caller() -> None:
+  """A write that the World refuses raises Refused in the caller."""
+  dead = Dead(stands=STANDS)
+  _, root = life(dead)
+  with pytest.raises(Refused, match="a dead World answers no write"):
+    engine.write(Text("b.txt", "one\n"), on=root)
+  word = "try:\n  write(Text('b.txt', 'one\\n'))\nexcept Refused as no:\n  close(str(no))"
+  assert await engine.rung(word, on=root) == "a dead World answers no write"
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_the_engine_tells_of_a_write_of_a_text_only_the_lines_that_differ() -> None:
+  """The engine tells of a write of a text only the lines that differ from what the caller asked, and of a write a door answers with a value, that value."""
+  sand = Firm(stands=STANDS)
+  _, root = life(sand)
+  assert await engine.rung("write(Text('b.txt', 'one\\ntwo\\n'))", on=root) is None
+  assert sand.files == {"b.txt": "one\ntwo\nEND\n"}
+  told = tags(engine.turns(on=root), "write")[0]
+  assert shown(told) == [("shown", [("path", "b.txt"), ("known", 0)], "3 END")]
+  other = sown()
+  _, two = life(other)
+  other.script[two] = [KEPT]
+  assert await engine.prompt(int, "a door of my own", on=two) == 7
+  assert [tag[2] for tag in tags(engine.turns(on=two), "write")] == ["7"]
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_a_write_takes_no_show() -> None:
+  """A write takes no show, since what a write would show the word of the model already said: it tells the lines of what came back that differ from what it asked for, and of those, the lines the model has not seen, so a write that the disk took as it was asked tells nothing at all."""
+  sand = Sand(stands=STANDS)
+  _, root = life(sand)
+  assert await engine.rung("write(Text('b.txt', 'one\\ntwo\\n'))", on=root) is None
+  told = tags(engine.turns(on=root), "write")[0]
+  assert shown(told) == [("shown", [("path", "/w/b.txt"), ("known", 0)], "")]
+  _, held = engine.ask("transcript", root, root)
+  assert isinstance(held, list)
+  assert said(held, "write")[0][4:] == (Text("b.txt", "one\ntwo\n"),)
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_a_door_that_answers_a_write_with_more_than_it_was_asked_for() -> None:
+  """A door that answers a write with more than it was asked for, as a chain answers a write of its program with the whole of it, tells the lines it added and no line the model read before."""
+  sand = Sand(stands=STANDS)
+  _, root = life(sand)
+  assert await engine.rung("read(__name__)\nwrite(Text(__name__, 'k = 4'))", on=root) is None
+  await settle()
+  told = tags(engine.turns(on=root), "read")[0]
+  made = tags(engine.turns(on=root), "write")[0]
+  first = "1 read(__name__)\n2 write(Text(__name__, 'k = 4'))"
+  assert shown(told) == [("shown", [("path", root), ("known", 0)], first)]
+  assert shown(made) == [("shown", [("path", root), ("known", 2)], "3 k = 4")]
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_a_write_to_chain_lineage_makes_a_rung_of_what_is_written() -> None:
+  """A write to chain://lineage makes a rung of what is written, so the door and the verb are one act."""
+  sand = sown()
+  log, root = life(sand)
+  got = engine.write(Text(root, "k = 21"), on=root)
+  await settle()
+  assert got == Text(root, "k = 21")
+  _, held = engine.ask("transcript", root, root)
+  assert isinstance(held, list)
+  asked = said(held, "write")[0]
+  assert (asked[1], asked[4]) == ("write://operator.2", Text(root, "k = 21"))
+  assert [(a[1], a[2], a[4]) for a in said(log, "rung")] == [("rung://operator.1.2", root, "k = 21")]
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_the_chain_answers_a_write_of_its_name_by_making_a_rung_of_what_is_written() -> None:
+  """The chain answers a write of its name by making a rung of what is written."""
+  sand = sown()
+  log, root = life(sand)
+  got = engine.write(Text(root, "k = 21"), on=root)
+  await settle()
+  assert engine.modules[root]["k"] == 21
+  assert [a[4] for a in said(log, "rung")] == ["k = 21"]
+  assert got == Text(root, "k = 21") and [a[0] for a in sand.calls] == ["stand"]
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_a_new_file_is_a_write_of_a_text_made_of_its_path_and_its_content() -> None:
+  """A new file is a write of a Text made of its path and its content."""
+  sand = Sand(stands=STANDS)
+  _, root = life(sand)
+  assert "/w/new.txt" not in sand.files
+  assert engine.write(Text("new.txt", "one\n"), on=root) == Text("/w/new.txt", "one\n")
+  assert sand.files["/w/new.txt"] == "one\n"
+  assert engine.read("new.txt", on=root) == Text("/w/new.txt", "one\n")

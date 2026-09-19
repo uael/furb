@@ -32,3 +32,9 @@ repos:
         language: system
         types_or: [python, pyi]
         pass_filenames: false
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -q
+        language: system
+        types_or: [python, pyi, toml]
+        pass_filenames: false

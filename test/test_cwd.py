@@ -1,0 +1,78 @@
+"""cwd, the working directory that the paths of a chain resolve against."""
+
+import pytest
+
+from conftest import STANDS, Sand, Where, attr, life, said, settle, tags
+from furb import engine
+from furb.engine import Text
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_the_working_directory_of_a_chain_is_the_closest_cd_back_in_its_transcript() -> None:
+  """The working directory of a chain is the closest cd back in its transcript."""
+  sand = Sand(stands=STANDS)
+  _, root = life(sand)
+  engine.cd("/x", on=root)
+  assert engine.cwd(on=root) == "/x"
+  engine.cd("/y", on=root)
+  assert engine.cwd(on=root) == "/y"
+  await engine.rung("cd('/z')", on=root)
+  assert engine.cwd(on=root) == "/z"
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_the_working_directory_of_a_chain_is_the_directory_of_the_standing_before_any_cd() -> None:
+  """The working directory of a chain is the directory of the standing before any cd."""
+  sand = Sand(stands=STANDS)
+  _, root = life(sand)
+  assert STANDS[1] == "/w"
+  assert engine.cwd(on=root) == "/w"
+  two = engine.chain("two")
+  await settle()
+  assert engine.cwd(on=two) == "/w"
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_the_world_resolves_the_path_of_a_read_a_write_and_a_command_against_the_working_directory() -> None:
+  """The World resolves the path of a read, a write and a command against the working directory it asks the chain for."""
+  sand = Where(files={"/x/a.txt": "two\n"}, stands=STANDS)
+  _, root = life(sand)
+  engine.cd("/x", on=root)
+  assert engine.read("a.txt", on=root) == Text("/x/a.txt", "two\n")
+  assert engine.write(Text("b.txt", "kept"), on=root) == Text("/x/b.txt", "kept")
+  assert sand.files["/x/b.txt"] == "kept"
+  await engine.bash("echo hi", on=root)
+  assert sand.where == ["/x"]
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_cwd_gives_the_working_directory_that_the_paths_of_the_chain_resolve_against() -> None:
+  """cwd gives the working directory that the paths of the chain resolve against."""
+  sand = Sand(files={"/w/a.txt": "one\n", "/x/a.txt": "two\n"}, stands=STANDS)
+  _, root = life(sand)
+  assert engine.cwd(on=root) == "/w" and engine.read("a.txt", on=root).path == "/w/a.txt"
+  engine.cd("/x", on=root)
+  assert engine.cwd(on=root) == "/x" and engine.read("a.txt", on=root).path == "/x/a.txt"
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_the_chain_answers_for_where_its_paths_resolve() -> None:
+  """The chain answers for where its paths resolve, which is the closest cd back in what it heard."""
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
+  assert engine.cwd(on=root) == "/w"
+  engine.cd("/deep", on=root)
+  assert engine.cwd(on=root) == "/deep"
+  answered = [one for one in said(log, "done") if one[1].startswith("cwd://")]
+  assert [(one[2], one[3]) for one in answered] == [(root, "/w"), (root, "/deep")]
+
+
+@pytest.mark.xfail(strict=True, raises=NotImplementedError)
+async def test_cwd_tells_the_path_it_was_answered() -> None:
+  """cwd tells the path it was answered."""
+  sand = Sand(stands=STANDS)
+  _, root = life(sand)
+  sand.script[root] = ["cwd()\ncd('/x')\ncwd()\nclose(1)"]
+  assert await engine.prompt(int, "where am i", on=root) == 1
+  await settle()
+  assert [attr(tag, "path") for tag in tags(engine.turns(on=root), "cwd")] == ["/w", "/x"]

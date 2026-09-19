@@ -1,7 +1,8 @@
 # furb
 
 The engine is `src/furb/engine.py`, one file, which depends only on the python interpreter and on two interfaces it
-declares, World and Kernel. It is derived from the contract, `src/furb/engine.pyi`. Every call in the engine raises NotImplementedError: the contract and the suite come first. `src/furb/CLAUDE.md` holds the technical names of the engine and the laws that no test can hold.
+declares, World and Kernel. It is derived from the contract, `src/furb/engine.pyi`, and proved by the suite in
+`test/`. Every call in the engine raises NotImplementedError: the contract and the suite come first. `src/furb/CLAUDE.md` holds the technical names of the engine and the laws that no test can hold.
 
 ## The contract
 
@@ -31,11 +32,51 @@ control flow in it changes the odds of a good or a bad response, so a flaw in it
 two shapes both pass every gate, the one that serves the meaning of every word is the one, and a shape that is
 green and incoherent is not done.
 
+## The suite
+
+The suite drives the engine through its public API alone, end to end, from the module the operator gives.
+
+- `test/conftest.py` is the harness. `Sand` is a World in memory: files by path, scripted words by chain id, the
+  calls it performed, the entries it kept, and what it fed its commands. `Dead` refuses every question, and `Where`
+  asks the chain where it stands at every path. `Py` is a Kernel that is python, with a gate that refuses a word
+  that does not compile or that holds `BAD`. `life` boots a life on them, `settle` gives the loop room, `plain`
+  sends a record through the wire and back, and `tags`, `attr`, `said` and `text_of` read the facts and the turns.
+- One test file per definition of the contract: `test_<name>.py` for a function, a global or a type alias,
+  `test_<class>_<method>.py` for a method, in lower case, with dunder underscores stripped. A capitalized definition
+  whose lower-case name is another definition's, `Bash` beside `bash`, has `test_<name>_shape.py`.
+- One test per sentence. The docstring of a test is exactly one sentence of the contract, and nothing else. A
+  test that the engine cannot satisfy is marked `@pytest.mark.xfail(strict=True, raises=NotImplementedError)`, and
+  the mark goes when the engine makes it pass.
+- A test arranges the World, acts through `engine.<verb>(...)` with `from furb import engine`, and asserts exact
+  values: names, entries of `sand.record`, results through `engine.peek`, turns through `engine.turns(on=root)`,
+  and the calls of the doubles. It reads a fact by position, as the contract declares it, and never weakens an
+  assertion to pass: a sentence the engine fails stays red until the engine, or the sentence, is right.
+- A helper that only one file needs lives in that file. A helper that several files need lives in
+  `test/conftest.py`.
+
+## The hygiene laws
+
+`test/test_hygiene.py` holds the contract and the suite to these laws, and it must stay green:
+
+1. Every sentence of a definition has exactly one test, in the file of that definition, whose docstring is that
+   sentence. A constructor and a property are no definitions of their own: their sentences are the class's.
+2. Every test carries a sentence of the contract.
+3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
+4. The module docstring of `engine.pyi` is empty.
+5. `engine.py`, minified in layout alone, costs fewer than 6000 tokens to the model that reads it.
+6. The minified `engine.py` parses to the same program as the file on disk.
+7. No name in `engine.py` is bound again beneath a scope that already binds it: a parameter, a local, a loop
+   target or an import never takes the spelling of a name of an enclosing function or of the module. Every word
+   keeps one meaning.
+
 ## Commands
 
 Run every command from the root of the repository.
 
 - `uv sync`: install the environment.
+- `uv run pytest -q`: the suite, with the coverage of `src/`, which must be whole but for the four stubs of the bus
+  that the toml excludes with their reason.
+- `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
 - `uv run ruff format src test script` then `uv run ruff check src test script`: format and lint. Two spaces of
   indentation, 120 columns.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`.
