@@ -131,7 +131,7 @@ impl Talks for Says {
 }
 
 /// One life of the real engine, on a yard of the disk, with the model answering these words.
-fn life(yard: &str, words: &[&str]) -> (Life<Far, Live<Says>, Strict>, PathBuf) {
+fn life(yard: &str, words: &[&str]) -> (Life<Far, Live<Says>, Strict>, PathBuf, Voice) {
   let at = std::env::temp_dir().join(format!("furb-life-{yard}"));
   let _ = std::fs::remove_dir_all(&at);
   std::fs::create_dir_all(&at).expect("a yard of the test");
@@ -145,9 +145,9 @@ fn life(yard: &str, words: &[&str]) -> (Life<Far, Live<Says>, Strict>, PathBuf) 
     ]),
   ]);
   let talks = Says { words: words.iter().map(|one| (*one).to_owned()).collect(), read: Vec::new() };
-  let world = Live::new(&at, "m/low", roster, talks, voice).keeping(at.join("record.jsonl"));
+  let world = Live::new(&at, "m/low", roster, talks, voice.clone()).keeping(at.join("record.jsonl"));
   let held = Life::boot(Far::open(), world, Strict, ears, &[]).expect("a life of the real engine");
-  (held, at)
+  (held, at, voice)
 }
 
 /// What an act came to, once the host has had its moment to answer for a model, a person and a command.
@@ -164,7 +164,7 @@ fn came(held: &mut Life<Far, Live<Says>, Strict>, act: &Act) -> Value {
 
 #[test]
 fn a_life_of_the_real_engine_opens_on_its_root_and_answers_what_the_root_stands_on() {
-  let (mut held, at) = life("open", &[]);
+  let (mut held, at, _) = life("open", &[]);
   assert_eq!(held.root(), "chain://operator.1");
   let root = held.root().to_owned();
   assert_eq!(held.calls(Cwd { on: &root }).unwrap(), at.display().to_string());
@@ -173,7 +173,7 @@ fn a_life_of_the_real_engine_opens_on_its_root_and_answers_what_the_root_stands_
 
 #[test]
 fn the_world_of_this_machine_serves_a_read_and_a_write_of_the_real_engine() {
-  let (mut held, at) = life("disk", &[]);
+  let (mut held, at, _) = life("disk", &[]);
   let root = held.root().to_owned();
   let text = furb::Text::new("a.txt", "one\ntwo\n");
   let got = held.calls(Writes { text, on: &root }).unwrap();
@@ -187,7 +187,7 @@ fn the_world_of_this_machine_serves_a_read_and_a_write_of_the_real_engine() {
 
 #[test]
 fn a_model_answers_a_prompt_of_the_real_engine_and_the_kernel_runs_the_word_it_wrote() {
-  let (mut held, _) = life("prompt", &["close(len(read('a.txt').lines))"]);
+  let (mut held, _, _) = life("prompt", &["close(len(read('a.txt').lines))"]);
   let root = held.root().to_owned();
   let text = furb::Text::new("a.txt", "one\ntwo\nthree\n");
   held.calls(Writes { text, on: &root }).unwrap();
@@ -198,7 +198,7 @@ fn a_model_answers_a_prompt_of_the_real_engine_and_the_kernel_runs_the_word_it_w
 
 #[test]
 fn the_gate_of_the_host_refuses_a_word_and_the_engine_asks_the_model_again() {
-  let (mut held, _) = life("gate", &["close(BAD)", "close(7)"]);
+  let (mut held, _, _) = life("gate", &["close(BAD)", "close(7)"]);
   let root = held.root().to_owned();
   let act = held.calls(Prompt { shape: "int", message: "count", on: &root, ..Prompt::default() }).unwrap();
   assert_eq!(came(&mut held, &act), Value::Int(7));
@@ -207,7 +207,7 @@ fn the_gate_of_the_host_refuses_a_word_and_the_engine_asks_the_model_again() {
 
 #[test]
 fn a_command_of_the_real_engine_runs_in_the_world_of_this_machine_and_says_what_it_came_to() {
-  let (mut held, _) = life("bash", &[]);
+  let (mut held, _, _) = life("bash", &[]);
   let root = held.root().to_owned();
   let act = held.calls(Bash { command: "echo hi; exit 3", on: &root, ..Bash::default() }).unwrap();
   let got = came(&mut held, &act);
@@ -218,7 +218,7 @@ fn a_command_of_the_real_engine_runs_in_the_world_of_this_machine_and_says_what_
 
 #[test]
 fn the_operator_answers_a_prompt_of_the_operator_by_closing_it() {
-  let (mut held, _) = life("operator", &[]);
+  let (mut held, _, _) = life("operator", &[]);
   let root = held.root().to_owned();
   let act = held.calls(Prompt { shape: "str", message: "say a word", to: "operator", on: &root }).unwrap();
   assert_eq!(came(&mut held, &act), Value::Str("the operator answered".to_owned()));
@@ -226,7 +226,7 @@ fn the_operator_answers_a_prompt_of_the_operator_by_closing_it() {
 
 #[test]
 fn a_second_life_on_the_record_the_world_kept_makes_the_same_acts_again() {
-  let (mut held, at) = life("again", &["close(2)"]);
+  let (mut held, at, _) = life("again", &["close(2)"]);
   let root = held.root().to_owned();
   let act = held.calls(Prompt { shape: "int", message: "one plus one", on: &root, ..Prompt::default() }).unwrap();
   assert_eq!(came(&mut held, &act), Value::Int(2));
@@ -245,7 +245,7 @@ fn a_second_life_on_the_record_the_world_kept_makes_the_same_acts_again() {
 
 #[test]
 fn what_a_verb_gave_is_read_as_the_shape_the_contract_gives() {
-  let (mut held, _) = life("shapes", &[]);
+  let (mut held, _, _) = life("shapes", &[]);
   let root = held.root().to_owned();
   assert!(held.calls(furb::verb::Clock { on: &root }).unwrap() > 1.0);
   let drew = held.calls(furb::verb::Chance { on: &root }).unwrap();
@@ -257,7 +257,7 @@ fn what_a_verb_gave_is_read_as_the_shape_the_contract_gives() {
 
 #[test]
 fn what_the_engine_raised_reaches_the_host_as_the_exception_it_is() {
-  let (mut held, _) = life("raised", &[]);
+  let (mut held, _, _) = life("raised", &[]);
   let no = held.word("get('bash://operator.9')").unwrap_err();
   assert_eq!(no.name(), "KeyError");
   assert!(!no.refused(), "{no}");
@@ -267,7 +267,7 @@ fn what_the_engine_raised_reaches_the_host_as_the_exception_it_is() {
 
 #[test]
 fn a_word_of_a_model_awaits_an_act_and_the_kernel_carries_the_run_forward() {
-  let (mut held, _) = life("await", &["close((await bash('echo hi')).code)"]);
+  let (mut held, _, _) = life("await", &["close((await bash('echo hi')).code)"]);
   let root = held.root().to_owned();
   let act = held.calls(Prompt { shape: "int", message: "run it", on: &root, ..Prompt::default() }).unwrap();
   assert_eq!(came(&mut held, &act), Value::Int(0));
@@ -275,7 +275,7 @@ fn a_word_of_a_model_awaits_an_act_and_the_kernel_carries_the_run_forward() {
 
 #[test]
 fn a_word_that_raises_is_asked_again_and_the_model_reads_what_it_raised() {
-  let (mut held, _) = life("raises", &["close(1 // 0)", "close(5)"]);
+  let (mut held, _, _) = life("raises", &["close(1 // 0)", "close(5)"]);
   let root = held.root().to_owned();
   let act = held.calls(Prompt { shape: "int", message: "count", on: &root, ..Prompt::default() }).unwrap();
   assert_eq!(came(&mut held, &act), Value::Int(5));
@@ -285,7 +285,7 @@ fn a_word_that_raises_is_asked_again_and_the_model_reads_what_it_raised() {
 #[test]
 fn what_a_word_tells_stands_in_the_turns_the_model_reads_next() {
   // A tell outside a run tells nothing, which the contract says, so the word of a rung says this one.
-  let (mut held, _) = life("tell", &["tell('noted', ('by', 'the word'), body='go on')", "close(1)"]);
+  let (mut held, _, _) = life("tell", &["tell('noted', ('by', 'the word'), body='go on')", "close(1)"]);
   let root = held.root().to_owned();
   let act = held.calls(Prompt { shape: "int", message: "note it", on: &root, ..Prompt::default() }).unwrap();
   assert_eq!(came(&mut held, &act), Value::Int(1));
@@ -298,7 +298,7 @@ fn what_a_word_tells_stands_in_the_turns_the_model_reads_next() {
 
 #[test]
 fn a_cancel_of_the_operator_ends_an_act_and_what_it_came_to_says_so() {
-  let (mut held, _) = life("cancel", &[]);
+  let (mut held, _, _) = life("cancel", &[]);
   let root = held.root().to_owned();
   let act = held.calls(furb::verb::Wait { seconds: 30.0, on: &root }).unwrap();
   assert_eq!(held.came(&act).unwrap(), None);
@@ -308,7 +308,7 @@ fn a_cancel_of_the_operator_ends_an_act_and_what_it_came_to_says_so() {
 
 #[test]
 fn a_chain_of_the_operator_has_a_transcript_of_its_own() {
-  let (mut held, _) = life("chain", &[]);
+  let (mut held, _, _) = life("chain", &[]);
   let root = held.root().to_owned();
   let made = held.calls(furb::verb::Chain { label: "work", on: &root, ..furb::verb::Chain::default() }).unwrap();
   assert_ne!(made.0, root);
@@ -320,7 +320,7 @@ fn a_chain_of_the_operator_has_a_transcript_of_its_own() {
 
 #[test]
 fn the_stdin_of_a_fed_command_takes_what_a_write_of_its_door_says() {
-  let (mut held, _) = life("fed", &[]);
+  let (mut held, _, _) = life("fed", &[]);
   let root = held.root().to_owned();
   let act = held.calls(Bash { command: "cat", fed: true, on: &root, ..Bash::default() }).unwrap();
   let door = format!("bash://{}/stdin", act.rsplit_once("://").map_or("", |(_, one)| one));
@@ -333,7 +333,7 @@ fn the_stdin_of_a_fed_command_takes_what_a_write_of_its_door_says() {
 #[test]
 fn a_show_says_which_lines_of_a_text_a_read_tells() {
   // A read outside a run tells nothing, which the contract says, so the word of a rung says this one.
-  let (mut held, _) = life("show", &["close(len(read('a.txt', span(2, 3)).lines))"]);
+  let (mut held, _, _) = life("show", &["close(len(read('a.txt', span(2, 3)).lines))"]);
   let root = held.root().to_owned();
   let text = furb::Text::new("a.txt", "one\ntwo\nthree\nfour\n");
   held.calls(Writes { text, on: &root }).unwrap();
@@ -345,4 +345,40 @@ fn a_show_says_which_lines_of_a_text_a_read_tells() {
   // A read tells the lines the model has not seen, each by its number, so the show is read off those.
   assert!(whole.contains("2 two\n3 three"), "{whole}");
   assert!(!whole.contains("four"), "{whole}");
+}
+
+#[test]
+fn a_chain_a_host_pauses_makes_no_rung_until_the_operator_wakes_it() {
+  let (mut held, _, voice) = life("pause", &["close(9)"]);
+  let root = held.root().to_owned();
+  voice.pause(&root);
+  held.heard().unwrap();
+  let act = held.calls(Prompt { shape: "int", message: "count", on: &root, ..Prompt::default() }).unwrap();
+  for _ in 0..20 {
+    assert_eq!(held.came(&act).unwrap(), None);
+    thread::sleep(Duration::from_millis(5));
+  }
+  assert!(held.world().talks.read.is_empty(), "a paused chain asks no model");
+  held.calls(furb::verb::Wake { id: &root }).unwrap();
+  assert_eq!(came(&mut held, &act), Value::Int(9));
+}
+
+#[test]
+fn a_record_that_holds_an_act_the_life_makes_otherwise_is_a_drift() {
+  let (mut held, at, _) = life("drift", &["close((await bash('echo hi')).code)"]);
+  let root = held.root().to_owned();
+  let act = held.calls(Prompt { shape: "int", message: "run it", on: &root, ..Prompt::default() }).unwrap();
+  assert_eq!(came(&mut held, &act), Value::Int(0));
+  drop(held);
+
+  // The command of the act alone, and not the word that made it, so the word makes an act the record denies.
+  let lines = std::fs::read_to_string(at.join("record.jsonl")).unwrap().replace("\"echo hi\"", "\"echo bye\"");
+  let kept = furb::record::read(&lines).expect("a record of one life");
+  let (voice, ears) = Ears::made();
+  let talks = Says { words: Vec::new(), read: Vec::new() };
+  let world = Live::new(&at, "m/low", Value::Tuple(vec![]), talks, voice);
+  match Life::boot(Far::open(), world, Strict, ears, &kept) {
+    Err(no) => assert_eq!(no.name(), "Drift", "{no}"),
+    Ok(_) => panic!("a record that holds an act the life makes otherwise is a drift"),
+  }
 }
