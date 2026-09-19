@@ -1,9 +1,14 @@
-"""What the engine needs of the interpreter that runs it, read off the engine itself.
+"""What the engine needs of the interpreter that runs it, and what the suite needs on top, read off both.
 
 The engine runs in a sandbox, and the preamble runs beside it. Those two files are everything that runs in there,
-so what they use is everything the sandbox must have. This reads both and says it: the modules they import and
+so what they use is everything the sandbox must have. This reads them and says it: the modules they import and
 what they take from each, the builtins they call, the syntax they are written in, and the attributes they reach
 for. Nothing of it is a list somebody keeps by hand, so it is right on the day it is read.
+
+It says the same of the suite, which is the second thing that may run in there. A suite that runs where the
+engine runs holds the engine to every sentence of the contract in the one place that proof means anything, and
+it needs more than the engine does: the names of its own files, which no import of a sandbox finds, so a host
+must be able to put a module in there under a name.
 
     uv run python script/needs.py
 
@@ -18,7 +23,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 """ROOT is the root of the repository."""
 FILES = (ROOT / "src" / "furb" / "engine.py", ROOT / "src" / "preamble.py")
-"""FILES are the two files that run in the sandbox, and nothing else runs in there."""
+"""FILES are the two files that run in the sandbox for a life, and nothing else runs in there."""
+SUITE = (*sorted((ROOT / "test").glob("test_*.py")), ROOT / "test" / "conftest.py")
+"""SUITE are the files of the suite, which run in there too when the suite runs where the engine runs."""
+APART = "test_hygiene.py"
+"""APART is the one file of the suite that is no test of the engine, and that no sandbox ever runs."""
 PLAIN = {
   ast.Module,
   ast.Expr,
@@ -103,17 +112,25 @@ def said(name: str, held: set[str]) -> str:
   return "\n".join(lines)
 
 
+def whole(files: tuple[Path, ...]) -> dict[str, set[str]]:
+  """Everything a group of files asks of its interpreter, said once for the group."""
+  held: dict[str, set[str]] = {"modules": set(), "builtins": set(), "syntax": set(), "attributes": set()}
+  for at in files:
+    for key, one in parts(ast.parse(at.read_text(encoding="utf-8"))).items():
+      held[key].update(one)
+  return held
+
+
 def main() -> int:
-  """What the two files of the sandbox need, said once for both of them."""
-  whole: dict[str, set[str]] = {"modules": set(), "builtins": set(), "syntax": set(), "attributes": set()}
-  for at in FILES:
-    held = parts(ast.parse(at.read_text(encoding="utf-8")))
-    for key, one in held.items():
-      whole[key].update(one)
-  names = ", ".join(at.name for at in FILES)
-  sys.stdout.write(f"What {names} need of the interpreter that runs them\n\n")
+  """What the files of the sandbox need, and what the suite needs on top of them."""
+  engine = whole(FILES)
+  sys.stdout.write("What the engine needs of the interpreter that runs it\n\n")
   for key in ("modules", "builtins", "syntax", "attributes"):
-    sys.stdout.write(said(key, whole[key]) + "\n\n")
+    sys.stdout.write(said(key, engine[key]) + "\n\n")
+  suite = whole(tuple(at for at in SUITE if at.name != APART))
+  sys.stdout.write("What the suite needs on top, to run where the engine runs\n\n")
+  for key in ("modules", "builtins", "syntax"):
+    sys.stdout.write(said(key, suite[key] - engine[key]) + "\n\n")
   return 0
 
 

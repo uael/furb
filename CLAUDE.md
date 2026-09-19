@@ -94,8 +94,8 @@ The crate is held by gates of its own, which the commit hook runs too:
   engine from end to end through a sandbox of the tests.
 - `cargo fmt` then `cargo clippy --all-targets -- -D warnings`: format and lint the crate. Two spaces of
   indentation, 120 columns, as everywhere else.
-- `uv run python script/needs.py`: what the engine and the preamble need of the interpreter that runs them, read
-  off the two files themselves.
+- `uv run python script/needs.py`: what the engine and the preamble need of the interpreter that runs them, and
+  what the suite needs on top to run in there too, read off the files themselves.
 - `uv run python script/verbs.py`: every word the crate makes, held against the engine that must take it.
 - `uv run python script/turns.py`: every turn of the suite, read by the crate and by the python World, held
   against each other.
