@@ -5,6 +5,10 @@ writes: the engine, minified, is its whole system prompt, and each word it answe
 engine. The contract is `src/furb/engine.pyi`, whose docstrings hold every law, one sentence per line, and the suite
 in `test/` holds one test per sentence.
 
+`pip install furb` installs the engine and the `furb` command. It needs python 3.14.
+
+From a clone of this repository:
+
 - `uv sync` installs the environment, and `uv run pytest -q` runs the suite.
 - `uv run python script/smoke.py` runs one real life on opus/low through the claude command line.
 - `uv run python script/deepswe.py run <task>` runs one DeepSWE task and grades it.
