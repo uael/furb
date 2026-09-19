@@ -64,10 +64,7 @@ impl Value {
   pub fn text(path: impl Into<String>, content: impl Into<String>) -> Self {
     Value::Shape {
       name: "Text".to_owned(),
-      fields: vec![
-        ("path".to_owned(), Value::Str(path.into())),
-        ("content".to_owned(), Value::Str(content.into())),
-      ],
+      fields: vec![("path".to_owned(), Value::Str(path.into())), ("content".to_owned(), Value::Str(content.into()))],
     }
   }
 
@@ -168,18 +165,13 @@ impl Value {
     match said {
       Json::Null => Value::None,
       Json::Bool(held) => Value::Bool(*held),
-      Json::Number(held) => held.as_i64().map_or_else(
-        || Value::Float(held.as_f64().unwrap_or(0.0)),
-        Value::Int,
-      ),
+      Json::Number(held) => held.as_i64().map_or_else(|| Value::Float(held.as_f64().unwrap_or(0.0)), Value::Int),
       Json::String(held) => Value::Str(held.clone()),
       Json::Array(held) => Value::List(held.iter().map(Value::of_record).collect()),
       Json::Object(held) => match held.get("is").and_then(Json::as_str) {
         Some(TUPLE) => Value::Tuple(shaped(held, "args")),
         Some(SHOW) => Value::Show,
-        Some(name) if held.contains_key("args") => {
-          Value::Error { name: name.to_owned(), args: shaped(held, "args") }
-        }
+        Some(name) if held.contains_key("args") => Value::Error { name: name.to_owned(), args: shaped(held, "args") },
         Some(name) => Value::Shape {
           name: name.to_owned(),
           fields: held
@@ -209,12 +201,14 @@ fn of_map(held: &[(String, Value)]) -> Value {
   match name {
     Some(TUPLE) => Value::Tuple(args()),
     Some(SHOW) => Value::Show,
-    Some(name) if held.iter().any(|(key, _)| key == "args") => {
-      Value::Error { name: name.to_owned(), args: args() }
-    }
+    Some(name) if held.iter().any(|(key, _)| key == "args") => Value::Error { name: name.to_owned(), args: args() },
     Some(name) => Value::Shape {
       name: name.to_owned(),
-      fields: held.iter().filter(|(key, _)| key != "is").map(|(key, one)| (key.clone(), Value::of_plain(one))).collect(),
+      fields: held
+        .iter()
+        .filter(|(key, _)| key != "is")
+        .map(|(key, one)| (key.clone(), Value::of_plain(one)))
+        .collect(),
     },
     None => Value::Map(held.iter().map(|(key, one)| (key.clone(), Value::of_plain(one))).collect()),
   }
@@ -239,11 +233,7 @@ pub struct Fact(pub Vec<Value>);
 impl Fact {
   /// A fact from its kind, the act it is about, who said it, and its words.
   pub fn new(kind: impl Into<String>, about: impl Into<String>, by: impl Into<String>, words: Vec<Value>) -> Self {
-    let mut held = vec![
-      Value::Str(kind.into()),
-      Value::Str(about.into()),
-      Value::Str(by.into()),
-    ];
+    let mut held = vec![Value::Str(kind.into()), Value::Str(about.into()), Value::Str(by.into())];
     held.extend(words);
     Fact(held)
   }
@@ -321,19 +311,13 @@ mod tests {
     let said = held.record();
     assert_eq!(said.to_string(), r#"["done",{"is":"Text","path":"a.txt","content":"x"}]"#);
     let back = Value::of_record(&said);
-    assert_eq!(
-      back,
-      Value::List(vec![Value::Str("done".to_owned()), Value::text("a.txt", "x")])
-    );
+    assert_eq!(back, Value::List(vec![Value::Str("done".to_owned()), Value::text("a.txt", "x")]));
   }
 
   #[test]
   fn an_exception_crosses_as_its_name_and_what_it_was_made_with() {
     let held = Value::refused("a.txt is the door of nothing that lives");
-    assert_eq!(
-      held.record().to_string(),
-      r#"{"is":"Refused","args":["a.txt is the door of nothing that lives"]}"#
-    );
+    assert_eq!(held.record().to_string(), r#"{"is":"Refused","args":["a.txt is the door of nothing that lives"]}"#);
     assert_eq!(Value::of_record(&held.record()), held);
   }
 }

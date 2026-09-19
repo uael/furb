@@ -1,0 +1,4 @@
+# The crate is written the way the rest of the repository is: two spaces of indentation, 120 columns.
+max_width = 120
+tab_spaces = 2
+use_small_heuristics = "Max"

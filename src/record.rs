@@ -34,10 +34,7 @@ impl Entry {
 
   /// The entry as the line a World writes, which is one json array.
   pub fn line(&self) -> String {
-    let mut held = vec![
-      serde_json::Value::String(self.before.clone()),
-      Value::List(self.fact.0.clone()).record(),
-    ];
+    let mut held = vec![serde_json::Value::String(self.before.clone()), Value::List(self.fact.0.clone()).record()];
     if let Some(answer) = &self.answer {
       held.push(answer.record());
     }

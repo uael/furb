@@ -87,11 +87,7 @@ mod tests {
           "done",
           fact.about(),
           "world",
-          vec![Value::Tuple(vec![
-            Value::Tuple(vec![]),
-            Value::Str("/w".to_owned()),
-            Value::Str("m/low".to_owned()),
-          ])],
+          vec![Value::Tuple(vec![Value::Tuple(vec![]), Value::Str("/w".to_owned()), Value::Str("m/low".to_owned())])],
         )),
         "read" => Reply::ask("cwd", fact.on().unwrap_or_default()),
         _ => Reply::Nothing,
@@ -107,12 +103,8 @@ mod tests {
   #[test]
   fn a_world_answers_a_stand_and_asks_the_chain_where_its_paths_resolve() {
     let mut sand = Sand { asked: Vec::new() };
-    let stand = Fact::new(
-      "stand",
-      "stand://operator.1.1",
-      "operator",
-      vec![Value::Str("chain://operator.1".to_owned())],
-    );
+    let stand =
+      Fact::new("stand", "stand://operator.1.1", "operator", vec![Value::Str("chain://operator.1".to_owned())]);
     assert!(matches!(sand.hears(&stand), Reply::Say(said) if said.len() == 1));
     let read = Fact::new(
       "read",
