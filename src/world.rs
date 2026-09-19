@@ -69,10 +69,9 @@ pub trait World {
 /// so a host needs none of its own. It stands here all the same, since the engine names the Kernel beside the
 /// World, and a host that wants its own gate gives one.
 pub trait Kernel {
-  /// What the gate finds against a word, which is nothing at all when the word may run.
-  fn gate(&mut self, word: &str, ladder: &[String], shape: &str) -> Vec<String>;
-
-  /// One fact, heard: a run to begin, a sent to carry forward, or a control that drops a frame.
+  /// One fact, heard: a gate to answer, a run to begin, a sent to carry forward, or a control that drops a frame.
+  ///
+  /// A gate is a question like any other, so it comes here and is answered here, and the Kernel has one way in.
   fn hears(&mut self, fact: &Fact) -> Reply;
 }
 

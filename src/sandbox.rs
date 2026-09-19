@@ -234,8 +234,8 @@ impl<R: Reach> Monty<R> {
                 let why = args.first().and_then(Value::as_str).unwrap_or_default().to_owned();
                 self.injected.insert(rung.to_owned(), (name.clone(), why));
               }
-              let held = settled(&mut self.holding(&got), &got);
-              one.resume(vec![(call_id, held)], PrintWriter::Stdout)
+              let held = self.into_monty(&got);
+              one.resume(vec![(call_id, settled(held, &got))], PrintWriter::Stdout)
             }
             Awaited::Waits => {
               self.waiting.insert(rung.to_owned(), Waiting::Futures(one, call_id));
@@ -250,11 +250,6 @@ impl<R: Reach> Monty<R> {
         }
       };
     }
-  }
-
-  /// What an act came to, as the sandbox holds it.
-  fn holding(&mut self, got: &Value) -> MontyObject {
-    self.into_monty(got)
   }
 
   /// The words of one call: what stood by place, and what stood by name.
@@ -321,13 +316,13 @@ impl<R: Reach> Monty<R> {
 }
 
 /// What an act came to, as a future of the sandbox is settled with: a value, or a raise for an exception.
-fn settled(held: &mut MontyObject, got: &Value) -> ExtFunctionResult {
+fn settled(held: MontyObject, got: &Value) -> ExtFunctionResult {
   match got {
     Value::Error { name, args } => {
       let why = args.first().and_then(Value::as_str).map(str::to_owned);
       ExtFunctionResult::Error(MontyException::new(exception_of(name), why))
     }
-    _ => ExtFunctionResult::Return(held.clone()),
+    _ => ExtFunctionResult::Return(held),
   }
 }
 
@@ -400,8 +395,8 @@ impl<R: Reach> Sandbox for Monty<R> {
       return Step::Ran(None);
     };
     let chain = self.chains.get(rung).cloned().unwrap_or_default();
-    let mut value = self.into_monty(got);
-    let said = one.resume(vec![(call_id, settled(&mut value, got))], PrintWriter::Stdout);
+    let value = self.into_monty(got);
+    let said = one.resume(vec![(call_id, settled(value, got))], PrintWriter::Stdout);
     self.drive(rung, &chain, said)
   }
 

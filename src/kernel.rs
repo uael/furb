@@ -105,10 +105,6 @@ fn lineage(name: &str) -> &str {
 }
 
 impl<S: Sandbox> Kernel for Native<S> {
-  fn gate(&mut self, word: &str, ladder: &[String], shape: &str) -> Vec<String> {
-    self.sandbox.gate(word, ladder, shape)
-  }
-
   fn hears(&mut self, fact: &Fact) -> Reply {
     let words = fact.words();
     match fact.kind() {
