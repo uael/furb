@@ -2,7 +2,8 @@
 
 The engine is `src/furb/engine.py`, one file, which depends only on the python interpreter and on two interfaces it
 declares, World and Kernel. It is derived from the contract, `src/furb/engine.pyi`, and proved by the suite in
-`test/`. `src/furb/CLAUDE.md` holds the technical names of the engine and the laws that no test can hold.
+`test/`. `src/furb/CLAUDE.md` holds the technical names of the engine and the laws that no test can hold, and
+`script/CLAUDE.md` says how to run the rig.
 
 ## The contract
 
@@ -85,6 +86,7 @@ Run every command from the root of the repository.
   `FURB_CLAUDE_BIN` names. It is no test of the suite and spends one prompt.
 - `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
   record.
+- `uv run python script/deepswe.py`: the DeepSWE rig, which `script/CLAUDE.md` says how to run.
 
 ## Prose
 
