@@ -94,7 +94,7 @@ async def test_the_facts_that_the_world_says_of_its_own_are_for_the_acts_that_co
   assert {a[1] for a in own} == {command, asked}
 
 
-async def test_the_world_speaks_by_yielding_a_fact_or_by_calling_send_under_its_own_name() -> None:
+async def test_the_world_speaks_by_yielding_a_saying_or_by_calling_send_under_its_own_name() -> None:
   """The World speaks by yielding a saying, or by calling send under its own name when it speaks from its loop."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)

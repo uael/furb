@@ -80,7 +80,7 @@ async def test_a_paused_chain_goes_quiet_as_its_in_flight_work_returns() -> None
   assert said(log, "run") == [] and act not in engine.outcomes
 
 
-async def test_a_kind_a_pause_stops_it_starts_its_body() -> None:
+async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
   """A kind a pause stops: it starts its ear, and while a pause over it stands the ear hears nothing, and at the wake it hears everything that was said meanwhile, in order."""
   sand = Sand(stands=STANDS, auto=False)
   _, root = life(sand)

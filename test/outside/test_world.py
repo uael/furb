@@ -263,6 +263,10 @@ def test_what_the_model_reads_of_a_tag_is_its_name_its_attributes_and_its_body()
     '<read>\n<shown path="f">\n1 a\n</shown>\n</read>'
   )
   assert shown(("read", [], [(Text("f", "a"), engine.HEAD)])).startswith("<read>\n(Text(")
+  # A body is any value a tag was told with, and a tag of an extension may hold one of a kind this World has no
+  # reading of, which stands as python shows it rather than going missing.
+  assert shown(("found", [], Text("a.txt", "hi"))) == "<found>\nText(path='a.txt', content='hi', before=None)\n</found>"
+  assert shown(("found", [], 3)) == "<found>\n3\n</found>"
   assert rendered([("cwd", [("path", "/w")], None), "said"]) == '<cwd path="/w"/>\nsaid'
   assert rendered([]) == ""
 

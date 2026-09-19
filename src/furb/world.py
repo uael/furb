@@ -129,6 +129,9 @@ def shown(tag: tuple) -> str:
   elif isinstance(body, list):
     # A tag says its attributes as a list, which nothing else a body holds does, a showing among it.
     parts.extend(shown(one) if isinstance(one, tuple) and isinstance(one[1], list) else repr(one) for one in body)
+  elif body is not None:
+    # A body is any value a tag was told with, so one of a kind this World does not know stands as python shows it.
+    parts.append(repr(body))
   inner = "\n".join(one for one in parts if one)
   return f"<{name}{attrs}/>" if not inner else f"<{name}{attrs}>\n{inner}\n</{name}>"
 
@@ -364,8 +367,9 @@ class Live:
       return
     one.stands(proc)
     if one.over:
+      # The word that ended it came before the group was up, so it dies here; its streams and its code are still
+      # read to the end below, since a process nobody reaps leaves its pipes open for the collector to complain of.
       one.slay()
-      return
 
     async def drained() -> None:
       """Both streams to their end, and then the code of the command."""

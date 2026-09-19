@@ -50,7 +50,7 @@ async def test_an_act_said_it_is_begun_and_what_the_call_gives_is_its_name() -> 
 
 
 async def test_an_act_said_twice_under_one_name_is_one_act() -> None:
-  """An act said twice under one name is one act, and the second saying brings no second life and gives the name back."""
+  """An act said twice under one name is one act, and the second saying brings no second ear and gives the name back."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   first = engine.rung("close(bash('echo hi'))", on=root)
@@ -100,7 +100,7 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
   assert engine.get(unsaid)[3] == root
 
 
-async def test_the_life_of_an_act_is_given_the_name_of_the_act_and_hears_every_fact_said_after_its_birth() -> None:
+async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fact_said_after_its_birth() -> None:
   """The ear of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a saying or by calling the bus."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)

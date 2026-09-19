@@ -100,7 +100,7 @@ def ask(kind: str, on: str, *words: object) -> tuple[Question, object]:
 def act[T = object](kind: str, on: str, ear: Callable[[str], Ear], *words: object) -> Act[T]:
   """The way to make a question that lives: it takes a name when it is made, it is logged, its ear is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it.
   An act said: it is begun, and what the call gives is its name, which is awaited for what the act comes to.
-  An act said twice under one name is one act, and the second saying brings no second life and gives the name back.
+  An act said twice under one name is one act, and the second saying brings no second ear and gives the name back.
   Two acts that say the same words under one name are one act.
   The engine refuses an act said from outside a run that names no chain, a chain apart.
   The chain an act is on is the chain named to the call, or the scope of the one that made it when the call names none.
