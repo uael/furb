@@ -83,14 +83,15 @@ impl Session for Far {
       let said = self.heard();
       if let Some(held) = said.get("call").and_then(serde_json::Value::as_array) {
         let name = held[0].as_str().unwrap_or_default().to_owned();
-        let got = host.called(&name, &Value::of_record(&held[1]));
+        // What the sandbox hands over is plain, and the mark of it is the boundary's to read, not this one's.
+        let got = host.called(&name, &Value::of_data(&held[1]));
         self.tells(&serde_json::json!({ "said": got.record() }));
         continue;
       }
       if let Some(held) = said.get("raised") {
-        return Err(Value::of_record(held));
+        return Err(Value::of_data(held));
       }
-      return Ok(Value::of_record(said.get("gave").unwrap_or(&serde_json::Value::Null)));
+      return Ok(Value::of_data(said.get("gave").unwrap_or(&serde_json::Value::Null)));
     }
   }
 }

@@ -105,9 +105,9 @@ impl<S: Session, W: World, G: Gate> Life<S, W, G> {
   /// more. The engine runs next, and `boot` is given the two generators the preamble makes.
   pub fn boot(mut session: S, world: W, gate: G, ears: Ears, record: &[Entry]) -> Result<Self, Refusal> {
     let mut outside = Outside::new(world, gate);
-    session.run(PREAMBLE, &mut outside).map_err(Refusal::Raised)?;
+    session.run(PREAMBLE, &mut outside).map_err(one)?;
     let kept: Vec<Value> = record.iter().map(Entry::as_value).collect();
-    let got = session.run(&opening(&Value::List(kept).plain()), &mut outside).map_err(Refusal::Raised)?;
+    let got = session.run(&opening(&Value::List(kept).plain()), &mut outside).map_err(one)?;
     let Some(root) = got.as_str().map(str::to_owned) else {
       return Err(Refusal::Read(format!("a life opens on a chain, and {got:?} is none")));
     };

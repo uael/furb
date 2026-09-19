@@ -134,6 +134,23 @@ impl Value {
     }
   }
 
+  /// The value a piece of json holds, read as the data it is: a map stays a map, and no mark is read.
+  ///
+  /// This is what a session that carries its values as text gives a host: the plain form, as a value, with every
+  /// mark still standing, which [`Value::of_plain`] is what reads. [`Value::of_record`] reads a mark as it reads
+  /// a record, so a session that used it would read every mark twice.
+  pub fn of_data(said: &serde_json::Value) -> Self {
+    use serde_json::Value as Json;
+    match said {
+      Json::Null => Value::None,
+      Json::Bool(held) => Value::Bool(*held),
+      Json::Number(held) => held.as_i64().map_or_else(|| Value::Float(held.as_f64().unwrap_or(0.0)), Value::Int),
+      Json::String(held) => Value::Str(held.clone()),
+      Json::Array(held) => Value::List(held.iter().map(Value::of_data).collect()),
+      Json::Object(held) => Value::Map(held.iter().map(|(key, one)| (key.clone(), Value::of_data(one))).collect()),
+    }
+  }
+
   /// The value as the record holds it: the form the python World writes, where a tuple is an array.
   pub fn record(&self) -> serde_json::Value {
     use serde_json::Value as Json;
