@@ -183,6 +183,11 @@ impl<S: Session, W: World, G: Gate> Life<S, W, G> {
   pub fn world(&self) -> &W {
     &self.outside.world
   }
+
+  /// The World of this life, to change: a host that holds state in its World reaches it here.
+  pub fn world_mut(&mut self) -> &mut W {
+    &mut self.outside.world
+  }
 }
 
 impl<W: World, G: Gate> Host for Outside<W, G> {

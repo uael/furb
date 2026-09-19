@@ -26,6 +26,12 @@ pub const KERNEL: &str = "kernel";
 ///
 /// The Kernel runs the word of a rung where the engine runs, so the one thing it cannot answer for itself is
 /// whether the word may run at all: what a word is read against is the host's to decide.
+///
+/// The contract says a response that is not python is a finding like any other, and that is the host's to make
+/// too, since the crate holds no reading of python outside the sandbox. A host that cannot read python may
+/// leave it: the word then runs, raises where it stands, and the engine closes the rung with what it raised and
+/// asks the model again. A host that can read python finds it here instead, and the model is told before a rung
+/// of nothing is spent.
 pub trait Gate {
   /// What the gate finds against a word, read against the ladder of its chain and the shape it must give.
   ///
