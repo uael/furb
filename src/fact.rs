@@ -100,6 +100,36 @@ impl Value {
     }
   }
 
+  /// The plain form of the value, which is what crosses to a host: a tuple, a shape, an exception and the mark
+  /// of a show each stand under a name, and everything else is itself.
+  ///
+  /// This is the form `src/preamble.py` makes and reads, so what a host says back is made again as it was said.
+  pub fn plain(&self) -> Value {
+    match self {
+      Value::None | Value::Bool(_) | Value::Int(_) | Value::Float(_) | Value::Str(_) => self.clone(),
+      Value::List(held) => Value::List(held.iter().map(Value::plain).collect()),
+      Value::Map(held) => Value::Map(held.iter().map(|(key, one)| (key.clone(), one.plain())).collect()),
+      Value::Tuple(held) => marked(TUPLE, Value::List(held.iter().map(Value::plain).collect())),
+      Value::Error { name, args } => marked(name, Value::List(args.iter().map(Value::plain).collect())),
+      Value::Show | Value::Held(_) => Value::Map(vec![("is".to_owned(), Value::Str(SHOW.to_owned()))]),
+      Value::Shape { name, fields } => {
+        let mut held = vec![("is".to_owned(), Value::Str(name.clone()))];
+        held.extend(fields.iter().map(|(key, one)| (key.clone(), one.plain())));
+        Value::Map(held)
+      }
+    }
+  }
+
+  /// The value again from its plain form, as a host says it back.
+  pub fn of_plain(said: &Value) -> Value {
+    match said {
+      Value::List(held) => Value::List(held.iter().map(Value::of_plain).collect()),
+      Value::Tuple(held) => Value::Tuple(held.iter().map(Value::of_plain).collect()),
+      Value::Map(held) => of_map(held),
+      other => other.clone(),
+    }
+  }
+
   /// The value as the record holds it: the form the python World writes, where a tuple is an array.
   pub fn record(&self) -> serde_json::Value {
     use serde_json::Value as Json;
@@ -161,6 +191,32 @@ impl Value {
         None => Value::Map(held.iter().map(|(key, one)| (key.clone(), Value::of_record(one))).collect()),
       },
     }
+  }
+}
+
+/// A value under a name, which is how the plain form says what is no plain data.
+fn marked(name: &str, args: Value) -> Value {
+  Value::Map(vec![("is".to_owned(), Value::Str(name.to_owned())), ("args".to_owned(), args)])
+}
+
+/// One map of the plain form, made again: a tuple, a show, an exception, a shape, or a map that is a map.
+fn of_map(held: &[(String, Value)]) -> Value {
+  let name = held.iter().find(|(key, _)| key == "is").and_then(|(_, one)| one.as_str());
+  let args = || match held.iter().find(|(key, _)| key == "args") {
+    Some((_, Value::List(each))) => each.iter().map(Value::of_plain).collect(),
+    _ => Vec::new(),
+  };
+  match name {
+    Some(TUPLE) => Value::Tuple(args()),
+    Some(SHOW) => Value::Show,
+    Some(name) if held.iter().any(|(key, _)| key == "args") => {
+      Value::Error { name: name.to_owned(), args: args() }
+    }
+    Some(name) => Value::Shape {
+      name: name.to_owned(),
+      fields: held.iter().filter(|(key, _)| key != "is").map(|(key, one)| (key.clone(), Value::of_plain(one))).collect(),
+    },
+    None => Value::Map(held.iter().map(|(key, one)| (key.clone(), Value::of_plain(one))).collect()),
   }
 }
 
@@ -279,5 +335,57 @@ mod tests {
       r#"{"is":"Refused","args":["a.txt is the door of nothing that lives"]}"#
     );
     assert_eq!(Value::of_record(&held.record()), held);
+  }
+}
+
+#[cfg(test)]
+mod plain {
+  use super::*;
+
+  /// One fact as it crosses: a tell of a read, which carries a text and the show it was told by.
+  fn told() -> Value {
+    Value::Tuple(vec![
+      Value::Str("tell".to_owned()),
+      Value::Str("rung://operator.1.1".to_owned()),
+      Value::List(vec![Value::Tuple(vec![
+        Value::Str("read".to_owned()),
+        Value::List(vec![Value::Tuple(vec![Value::Str("path".to_owned()), Value::Str("a.txt".to_owned())])]),
+        Value::List(vec![Value::Tuple(vec![Value::text("/w/a.txt", "one\n"), Value::Show])]),
+      ])]),
+    ])
+  }
+
+  #[test]
+  fn what_crosses_plain_is_made_again_as_it_was_said() {
+    let held = told();
+    assert_eq!(Value::of_plain(&held.plain()), held);
+  }
+
+  #[test]
+  fn a_tuple_stands_apart_from_a_list_in_the_plain_form() {
+    let held = Value::Tuple(vec![Value::Int(1)]);
+    assert_ne!(held.plain(), Value::List(vec![Value::Int(1)]).plain());
+    assert_eq!(Value::of_plain(&held.plain()), held);
+    assert_eq!(Value::of_plain(&Value::List(vec![Value::Int(1)])), Value::List(vec![Value::Int(1)]));
+  }
+
+  #[test]
+  fn an_exception_and_a_shape_each_stand_under_their_name() {
+    let refused = Value::refused("a.txt is the door of nothing that lives");
+    assert_eq!(Value::of_plain(&refused.plain()), refused);
+    let text = Value::text("a.txt", "one\n");
+    assert_eq!(Value::of_plain(&text.plain()), text);
+  }
+
+  #[test]
+  fn a_map_that_is_a_map_crosses_as_a_map() {
+    let held = Value::Map(vec![("k".to_owned(), Value::Int(1))]);
+    assert_eq!(Value::of_plain(&held.plain()), held);
+  }
+
+  #[test]
+  fn what_no_host_reads_crosses_as_the_mark_of_what_it_was() {
+    assert_eq!(Value::of_plain(&Value::Show.plain()), Value::Show);
+    assert_eq!(Value::of_plain(&Value::Held("held.1".to_owned()).plain()), Value::Show);
   }
 }

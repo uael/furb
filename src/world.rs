@@ -71,18 +71,6 @@ pub trait World {
   }
 }
 
-/// The interface that gates and runs the words of a chain.
-///
-/// The crate carries one of these, which gates with the type checker and runs the word in the module of its chain,
-/// so a host needs none of its own. It stands here all the same, since the engine names the Kernel beside the
-/// World, and a host that wants its own gate gives one.
-pub trait Kernel {
-  /// One fact, heard: a gate to answer, a run to begin, a sent to carry forward, or a control that drops a frame.
-  ///
-  /// A gate is a question like any other, so it comes here and is answered here, and the Kernel has one way in.
-  fn hears(&mut self, fact: &Fact) -> Reply;
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;

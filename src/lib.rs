@@ -24,15 +24,17 @@
 //! globals of a chain hold what the file defines and nothing more, which is what a model reads.
 
 pub mod fact;
+pub mod host;
 pub mod record;
 pub mod voice;
 pub mod world;
 
 pub use crate::{
   fact::{Fact, Value},
+  host::{Gate, Outside},
   record::{Drift, Entry},
   voice::{Ears, Voice},
-  world::{Kernel, Reply, World},
+  world::{Reply, World},
 };
 
 /// The engine: the one file the sandbox runs, and the whole system prompt of a model.
