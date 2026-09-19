@@ -173,7 +173,10 @@ async def test_a_cancelled_command_dies_instead_of_running_on(yard: Path) -> Non
   engine.cancel(waits)
   with pytest.raises(asyncio.CancelledError):
     await waits
-  await settle()
+  # A child the kill missed holds the stdout of the command open, so the stream never ends and the drain of the
+  # World never returns: the tasks of the life fall to the test alone only when the whole group is dead.
+  await drained()
+  assert asyncio.all_tasks() == {asyncio.current_task()}
 
 
 async def test_a_command_cancelled_before_its_process_stood_dies_as_soon_as_it_stands(yard: Path) -> None:
