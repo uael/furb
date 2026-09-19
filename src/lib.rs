@@ -24,6 +24,8 @@
 //! globals of a chain hold what the file defines and nothing more, which is what a model reads.
 
 pub mod fact;
+#[cfg(feature = "gate")]
+pub mod gate;
 pub mod host;
 pub mod life;
 pub mod record;
@@ -46,6 +48,11 @@ pub use crate::{
 /// The crate carries the same file the python package ships, so the engine a host runs and the engine a model
 /// reads are one thing.
 pub const ENGINE: &str = include_str!("furb/engine.py");
+
+/// The contract: the typed surface of the engine, whose docstrings hold every law.
+///
+/// The gate reads the word of a rung against this, since what a word may say is what the contract declares.
+pub const CONTRACT: &str = include_str!("furb/engine.pyi");
 
 /// The boundary of a host that is not python, which the crate runs in a module of its own.
 pub const PREAMBLE: &str = include_str!("preamble.py");
