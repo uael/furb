@@ -94,14 +94,14 @@ async def test_it_lives_until_it_returns() -> None:
   assert heard and heard[-1] is log[-1]
 
 
-async def test_a_generator_that_yields_a_fact_is_given_the_fact_as_the_bus_said_it() -> None:
-  """A generator that yields a fact is given the fact as the bus said it, and one that yields nothing waits for the next fact said."""
+async def test_a_generator_that_yields_a_saying_is_given_the_fact_as_the_bus_said_it() -> None:
+  """A generator that yields a saying is given the fact as the bus said it, and one that yields nothing waits for the next fact said."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   got: list[object] = []
 
   def asking() -> Generator[tuple | None, tuple | None]:
-    """An ear that says one fact of its own and then waits for what is said after it."""
+    """An ear that says one saying of its own and then waits for what is said after it."""
     got.append((yield "tell", root, [("noted", [], None)]))
     while True:
       got.append((yield))

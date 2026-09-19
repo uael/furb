@@ -24,7 +24,7 @@ def ask(kind, on, *words):
   raise RuntimeError("no life is living")
 
 
-def act(kind, on, life, *words):
+def act(kind, on, ear, *words):
   raise RuntimeError("no life is living")
 
 
@@ -148,7 +148,7 @@ def wait(seconds: float = 0.0, on: str = "") -> Act[None]:
 
 
 def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", on: str = "") -> Act:
-  def life(id):
+  def ear(id):
     wants = None
     if word:
       told("opened", id, body=word)
@@ -169,7 +169,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
           yield "done", id, value
           return
 
-  return act("rung", on, ending(pausing(life)), word, retells, actor, returns)
+  return act("rung", on, ending(pausing(ear)), word, retells, actor, returns)
 
 
 def prompt[T](shape: type[T] | None, message: str = "", to: str = "", on: str = "") -> Act[T]:
@@ -181,7 +181,7 @@ def prompt[T](shape: type[T] | None, message: str = "", to: str = "", on: str = 
     else repr(shape).replace(Text.__module__ + ".", "")
   )
 
-  def life(id):
+  def ear(id):
     asking = None
     told("opened", id, ("shape", named), ("message", message), ("to", to))
     while True:
@@ -194,14 +194,14 @@ def prompt[T](shape: type[T] | None, message: str = "", to: str = "", on: str = 
           rung(word)
           yield "done", qid, Text(path, word)
 
-  return act("prompt", on, pausing(ending(started(life, to))), named, message, to)
+  return act("prompt", on, pausing(ending(started(ear, to))), named, message, to)
 
 
 def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act:
   if source and acts.get(source, ("",))[0] != "chain":
     raise Refused(f"{source} names no chain")
 
-  def life(id):
+  def ear(id):
     transcript, rungs, retold, paused, mine = [], {}, set(), set(), {id}
     asking, running, to_run, unseen = None, "", [], ""
 
@@ -302,11 +302,11 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         prompt(None, f"{unseen} is done", on=id)
         unseen = ""
 
-  return act("chain", on, life, label, source)
+  return act("chain", on, ear, label, source)
 
 
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
-  def life(id):
+  def ear(id):
     here = scope(id)
     if not (usd or share) or (usd or 0) < 0 or not 0 <= (share or 0) <= 1:
       yield "done", id, Refused(f"{usd} dollars and {share} of the window is no ceiling")
@@ -334,7 +334,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
           if (usd is not None and spent >= usd) or (share is not None and filled >= share):
             pause(here)
 
-  return act("grant", on, ending(life), usd, share)
+  return act("grant", on, ending(ear), usd, share)
 
 
 def bash(
@@ -345,7 +345,7 @@ def bash(
   show_err: Show | None = None,
   on: str = "",
 ) -> Act[Exit]:
-  def life(id):
+  def ear(id):
     out, err, stdin = (f"{id}/{one}" for one in ("stdout", "stderr", "stdin"))
     streams, gone, mute = {out: Text(out), err: Text(err)}, "", "" if fed else "the command is not fed"
     if show is not HIDDEN:
@@ -378,7 +378,7 @@ def bash(
           gone = "the command ended"
           yield "done", id, ended(a, id)
 
-  return act("bash", on, pausing(started(life)), command, fed, timeout)
+  return act("bash", on, pausing(started(ear)), command, fed, timeout)
 
 
 @dataclass
@@ -549,9 +549,9 @@ def lives(g, a):
   return True
 
 
-def pausing(life):
+def pausing(ear):
   def lived(id):
-    g, held, paused = life(id), [], False
+    g, held, paused = ear(id), [], False
     lives(g, None)
     while True:
       match a := (yield):
@@ -569,9 +569,9 @@ def pausing(life):
   return lived
 
 
-def ending(life):
+def ending(ear):
   def lived(id):
-    g, a = life(id), None
+    g, a = ear(id), None
     while lives(g, a):
       match a := (yield):
         case ("done", about, *_) if about == id:
@@ -583,11 +583,11 @@ def ending(life):
   return lived
 
 
-def started(life, to=OPERATOR):
+def started(ear, to=OPERATOR):
   def lived(id):
     if to == OPERATOR and not ask("holds", "", id)[1]:
       yield "start", id
-    yield from life(id)
+    yield from ear(id)
 
   return lived
 
@@ -679,7 +679,7 @@ def boot(record=(), **outside):
       raise got
     return a, got
 
-  def makes(kind, on, life, *words):
+  def makes(kind, on, ear, *words):
     by = site.get()
     a = (kind, named(kind, by), by, on or scope(by), *words)
     if not a[3] and kind != "chain":
@@ -687,7 +687,7 @@ def boot(record=(), **outside):
     if acts.setdefault(a[1], a) is not a:
       return Act(a[1])
     log.append(a)
-    live(life(a[1]), a[1])
+    live(ear(a[1]), a[1])
     dispatch()
     return Act(a[1])
 

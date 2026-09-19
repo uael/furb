@@ -129,6 +129,9 @@ def shown(tag: tuple) -> str:
   elif isinstance(body, list):
     # A tag says its attributes as a list, which nothing else a body holds does, a showing among it.
     parts.extend(shown(one) if isinstance(one, tuple) and isinstance(one[1], list) else repr(one) for one in body)
+  elif body is not None:
+    # A body is any value a tag was told with, so one of a kind this World does not know stands as python shows it.
+    parts.append(repr(body))
   inner = "\n".join(one for one in parts if one)
   return f"<{name}{attrs}/>" if not inner else f"<{name}{attrs}>\n{inner}\n</{name}>"
 
@@ -240,7 +243,7 @@ class Live:
   `directory` is where the chains of the life start, `record` the file it keeps the record in and reads it back
   from, `actor` the actor a prompt goes to when it names none, and `roster` the actors it offers. `calls` holds
   every fact it answered or performed, in order, and `model` is the one model it asks, when it is given one.
-  `ear` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
+  `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
   """
 
   directory: str
@@ -250,7 +253,7 @@ class Live:
   calls: list[tuple] = field(default_factory=list)
   model: Model[object] | None = None
   bought: dict[str, Model[object]] = field(default_factory=dict)
-  ear: asyncio.StreamReader | None = None
+  reader: asyncio.StreamReader | None = None
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
 
   def buys(self, name: str) -> Model[object]:
@@ -302,14 +305,14 @@ class Live:
 
     The reader of the terminal is made once, at the first read, and it is the one reader there is.
     """
-    if self.ear is None:
+    if self.reader is None:
       # The loop is asked for the number of the file first: a terminal it cannot read fails here, where nothing
       # has been built yet, rather than half way through a reader whose own end then fails again.
       sys.stdin.fileno()
-      self.ear = ear = asyncio.StreamReader()
-      made = asyncio.StreamReaderProtocol(ear)
+      self.reader = reader = asyncio.StreamReader()
+      made = asyncio.StreamReaderProtocol(reader)
       await asyncio.get_running_loop().connect_read_pipe(lambda: made, sys.stdin)
-    return (await self.ear.readline()).decode(errors="replace").strip()
+    return (await self.reader.readline()).decode(errors="replace").strip()
 
   def read(self, here: str, path: str) -> Text | Refused:
     """The text at a path: the file on the disk, and a refusal for the door of nothing that lives."""
@@ -353,10 +356,10 @@ class Live:
     World ends the command at its timeout, and the code of it is nothing then.
     """
     hiss = subprocess.STDOUT if one.merged else subprocess.PIPE
-    ear = subprocess.PIPE if one.fed else subprocess.DEVNULL
+    mouth = subprocess.PIPE if one.fed else subprocess.DEVNULL
     try:
       proc = await asyncio.create_subprocess_shell(
-        one.command, stdin=ear, stdout=subprocess.PIPE, stderr=hiss, cwd=self.at(here), start_new_session=True
+        one.command, stdin=mouth, stdout=subprocess.PIPE, stderr=hiss, cwd=self.at(here), start_new_session=True
       )
     except OSError as no:
       # The machine would not start it, so the command never runs and whoever waits for it hears why instead.

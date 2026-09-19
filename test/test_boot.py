@@ -500,7 +500,7 @@ def test_a_life_settles_an_await_of_its_acts_from_outside_a_run_in_the_loop_it_i
 
 
 async def test_an_act_of_the_operator_is_said_again_through_its_verb() -> None:
-  """An act of the operator is said again through its verb, with the words the record holds and the chain it names, so its life is the verb's, and a show or a filter it was given is not said again, since the record holds none."""
+  """An act of the operator is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, and a show or a filter it was given is not said again, since the record holds none."""
   sand = sown()
   log, root = life(sand)
   one = engine.bash("echo hi", show=HIDDEN, on=root)

@@ -316,8 +316,8 @@ class Session:
     self.bin = os.environ.get(BIN) or "claude"
     self.stall = float(os.environ.get(HELD) or STALL)
     self.child: asyncio.subprocess.Process | None = None
-    self.ears: asyncio.Task[None] | None = None
-    self.eyes: asyncio.Task[None] | None = None
+    self.listening: asyncio.Task[None] | None = None
+    self.watching: asyncio.Task[None] | None = None
     self.heard: asyncio.Queue[Said] = asyncio.Queue()
     # One process holds one conversation, so it answers one turn at a time. Two callers arriving on the same key is
     # a caller naming one conversation twice, not two conversations: the second waits and then extends the first.
@@ -452,8 +452,8 @@ class Session:
     self.child = child
     self.paid = 0.0
     self.mode = "resume"
-    self.ears = asyncio.ensure_future(self.listen(child))
-    self.eyes = asyncio.ensure_future(self.watch(child))
+    self.listening = asyncio.ensure_future(self.listen(child))
+    self.watching = asyncio.ensure_future(self.watch(child))
     listed(self, on=True)
 
   async def listen(self, child: asyncio.subprocess.Process) -> None:
@@ -577,12 +577,12 @@ class Session:
     """Cool the session: the process dies, the conversation does not, since claude keeps it under our id."""
     child, self.child = self.child, None
     listed(self, on=False)
-    for task in (self.ears, self.eyes):
+    for task in (self.listening, self.watching):
       if task is not None:
         task.cancel()
         with suppress(asyncio.CancelledError):
           await task
-    self.ears = self.eyes = None
+    self.listening = self.watching = None
     if child is not None:
       with suppress(ProcessLookupError):
         child.kill()

@@ -162,8 +162,10 @@ async def test_a_cancelled_command_dies_instead_of_running_on(yard: Path) -> Non
   """A cancel ends the command, and the World kills the whole group it grew rather than leave it running."""
   live = world(yard)
   root = life(live)
-  waits = engine.bash("echo up; sleep 30", timeout=60.0, on=root)
-  # What the command said is the one word that the machine has its group up, which is what the cancel must kill.
+  waits = engine.bash("sleep 30 & echo up; wait", timeout=60.0, on=root)
+  # The shell grows the child before it says the word, so what the command said is the one word that the machine has
+  # the whole group up, which is what the cancel must kill. A word said before the fork proves nothing: a cancel that
+  # lands in that window kills the shell alone, and the child it grows after it holds the stdout of the command open.
   for _ in range(2000):
     await asyncio.sleep(0.001)
     if engine.read(f"{waits}/stdout", on=root).content:
@@ -171,7 +173,10 @@ async def test_a_cancelled_command_dies_instead_of_running_on(yard: Path) -> Non
   engine.cancel(waits)
   with pytest.raises(asyncio.CancelledError):
     await waits
-  await settle()
+  # A child the kill missed holds the stdout of the command open, so the stream never ends and the drain of the
+  # World never returns: the tasks of the life fall to the test alone only when the whole group is dead.
+  await drained()
+  assert asyncio.all_tasks() == {asyncio.current_task()}
 
 
 async def test_a_command_cancelled_before_its_process_stood_dies_as_soon_as_it_stands(yard: Path) -> None:
@@ -263,6 +268,10 @@ def test_what_the_model_reads_of_a_tag_is_its_name_its_attributes_and_its_body()
     '<read>\n<shown path="f">\n1 a\n</shown>\n</read>'
   )
   assert shown(("read", [], [(Text("f", "a"), engine.HEAD)])).startswith("<read>\n(Text(")
+  # A body is any value a tag was told with, and a tag of an extension may hold one of a kind this World has no
+  # reading of, which stands as python shows it rather than going missing.
+  assert shown(("found", [], Text("a.txt", "hi"))) == "<found>\nText(path='a.txt', content='hi', before=None)\n</found>"
+  assert shown(("found", [], 3)) == "<found>\n3\n</found>"
   assert rendered([("cwd", [("path", "/w")], None), "said"]) == '<cwd path="/w"/>\nsaid'
   assert rendered([]) == ""
 
