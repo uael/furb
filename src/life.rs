@@ -101,6 +101,22 @@ impl<S: Session, W: World, G: Gate> Life<S, W, G> {
     Ok(said.len())
   }
 
+  /// What an act came to, and nothing at all while it waits.
+  ///
+  /// A host says what it owes first, since a fact it is holding may be the very one that settles the act, and
+  /// then asks. It never waits in here: how long to wait for a command or a model is the host's to decide, and
+  /// what this gives is one honest look.
+  pub fn came(&mut self, act: &str) -> Result<Option<Value>, Refusal> {
+    self.heard()?;
+    let asked = format!("({act:?} in outcomes, peek({act:?}))");
+    let said = self.word(&asked)?;
+    let held = said.as_entries().unwrap_or_default();
+    match held.first() {
+      Some(Value::Bool(true)) => Ok(Some(held.get(1).cloned().unwrap_or(Value::None))),
+      _ => Ok(None),
+    }
+  }
+
   /// The World of this life, which a host reads what it kept of the life off.
   pub fn world(&self) -> &W {
     &self.outside.world
@@ -248,6 +264,21 @@ mod tests {
     assert!(word.starts_with("says(__engine, "), "{word}");
     assert!(word.contains("\"out\""), "{word}");
     assert_eq!(held.heard().unwrap(), 0);
+  }
+
+  #[test]
+  fn what_an_act_came_to_is_nothing_at_all_while_it_waits() {
+    let waiting = Value::Tuple(vec![Value::Bool(false), Value::None]).plain();
+    let over = Value::Tuple(vec![Value::Bool(true), Value::Int(3)]).plain();
+    let said = Said {
+      gives: vec![Value::None, Value::Str("chain://operator.1".to_owned()), waiting, over],
+      ..Said::default()
+    };
+    let (mut held, _) = life(said);
+    assert_eq!(held.came("prompt://operator.2").unwrap(), None);
+    assert_eq!(held.came("prompt://operator.2").unwrap(), Some(Value::Int(3)));
+    let asked = held.session.ran.last().unwrap();
+    assert!(asked.contains("\\\"prompt://operator.2\\\" in outcomes"), "{asked}");
   }
 
   #[test]
