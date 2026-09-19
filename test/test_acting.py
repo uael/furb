@@ -1,13 +1,10 @@
 """acting, the run a word speaks from."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said
 from furb import engine
 from furb.engine import OPERATOR, WORLD, site
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_run_a_word_speaks_from() -> None:
   """The run a fact speaks from, which is the name the site holds when that name is an act's, and nothing at all for the operator and for the World, since a fact of theirs is said from no run."""
   sand = Sand(stands=STANDS)

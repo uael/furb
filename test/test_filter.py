@@ -1,12 +1,9 @@
 """Filter, what says which acts of a transcript the turns of a chain with a source keep."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, lived, plain, relived, said, seen, settle, sown, tags
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_filter_is_given_the_acts_of_the_transcript_up_to_the_source() -> None:
   """A filter is given the acts of the transcript up to the source of a chain that has one."""
   sand = sown()
@@ -22,7 +19,6 @@ async def test_a_filter_is_given_the_acts_of_the_transcript_up_to_the_source() -
   assert named <= {one[1] for one in held}
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_filter_says_which_acts_the_turns_of_that_chain_keep_each_with_its_entries() -> None:
   """A filter says which acts the turns of that chain keep, each with its entries."""
   sand = sown()
@@ -36,7 +32,6 @@ async def test_a_filter_says_which_acts_the_turns_of_that_chain_keep_each_with_i
   assert [tag[0] for tag in told if ("id", step) in tag[1]] == ["opened"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_filter_is_any_callable_of_that_shape() -> None:
   """A filter is any callable of that shape, so a word adds a filter by writing one, and take makes the filter of the file."""
   sand = Sand(stands=STANDS)
@@ -53,7 +48,6 @@ async def test_a_filter_is_any_callable_of_that_shape() -> None:
   assert engine.take(command, inside=False)([engine.get(command)]) == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_later_life_runs_the_filter_again_and_keeps_the_same_acts() -> None:
   """A later life runs the filter again and keeps the same acts, since the word that opened the chain opens it again with it."""
   sand = Sand(stands=STANDS)
@@ -71,7 +65,6 @@ async def test_a_later_life_runs_the_filter_again_and_keeps_the_same_acts() -> N
   assert over == root and tags(engine.turns(on=side)) == was
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_filter_is_no_word_of_a_chain() -> None:
   """A filter is no word of a chain: the verb keeps it for what the chain holds, so no record holds one."""
   sand = sown()

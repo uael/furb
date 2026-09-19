@@ -2,14 +2,11 @@
 
 from asyncio import CancelledError
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_close_is_a_cancel_that_carries_what_the_act_it_names_is_done_with() -> None:
   """A close is a cancel that carries what the act it names is done with, and it is a kind of its own, since a tuple has no slot that may be empty."""
   sand = Sand(stands=STANDS, auto=False)
@@ -26,7 +23,6 @@ async def test_a_close_is_a_cancel_that_carries_what_the_act_it_names_is_done_wi
   assert engine.outcomes[act] == 21 and isinstance(engine.outcomes[gone], CancelledError)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_close_is_over_the_act_it_names_and_the_words_running_under_it() -> None:
   """A close is over the act it names and the words running under it, where a cancel is over everything under it."""
   sand = Sand(stands=STANDS, auto=False)

@@ -6,7 +6,6 @@ from conftest import STANDS, Sand, life
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_raised_is_the_exception_object_that_the_last_rung_raised_rebound_at_each_raise() -> None:
   """raised is the exception object that the last rung raised, rebound at each raise."""
   sand = Sand(stands=STANDS)

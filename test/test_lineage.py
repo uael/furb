@@ -1,12 +1,9 @@
 """lineage, the makers of an act one under the other."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_lineage_of_an_act_the_makers_of_it_one_under_the_other() -> None:
   """The lineage of an act, the makers of it one under the other, which its name holds after its kind."""
   sand = Sand(stands=STANDS)

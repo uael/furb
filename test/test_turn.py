@@ -1,7 +1,5 @@
 """Turn, one item of what a model reads of a transcript."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle, text_of
 from furb import engine
 
@@ -18,7 +16,6 @@ async def spoke(sand: Sand, words: list[str]) -> tuple[list[tuple], str]:
   return log, root
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_one_turn_of_what_a_model_reads() -> None:
   """One turn of what a model reads: who said it, what it holds, what the answer to it cost, and the blocks of the provider, which are its own, are read by nothing of the engine, and go back to it with the turn."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -29,7 +26,6 @@ async def test_one_turn_of_what_a_model_reads() -> None:
   assert [type(one).__name__ for one in got[0][1]] == ["tuple"] * len(got[0][1])
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_role_of_a_turn_is_assistant_for_a_response_and_user_for_everything_else() -> None:
   """The role of a turn is assistant for a response, and user for everything else."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -37,7 +33,6 @@ async def test_the_role_of_a_turn_is_assistant_for_a_response_and_user_for_every
   assert [role for role, *_ in engine.turns(on=root)] == ["user", "assistant", "user", "assistant", "user"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_blocks_of_an_assistant_turn_are_the_response_as_the_provider_returned_it() -> None:
   """The blocks of an assistant turn are the response as the provider returned it."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -46,7 +41,6 @@ async def test_the_blocks_of_an_assistant_turn_are_the_response_as_the_provider_
   assert said(log, "answer")[0][3][3] == ["signed 8"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_turn_is_a_role_a_content_a_usage_and_blocks() -> None:
   """A turn is a role, a content, a usage and blocks."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -58,7 +52,6 @@ async def test_a_turn_is_a_role_a_content_a_usage_and_blocks() -> None:
   assert [tag[0] for tag in content] == ["opened", "opened", "opened", "opened"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_assistant_turn_carries_the_usage_of_the_response() -> None:
   """An assistant turn carries the usage of the response."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -67,7 +60,6 @@ async def test_an_assistant_turn_carries_the_usage_of_the_response() -> None:
   assert engine.turns(on=root)[1][2] == (8000, 30, 0, 0, 1.5)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_assistant_turn_keeps_the_role_assistant_for_every_model_that_reads_the_turns() -> None:
   """An assistant turn keeps the role assistant for every model that reads the turns."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -78,7 +70,6 @@ async def test_an_assistant_turn_keeps_the_role_assistant_for_every_model_that_r
   assert [role for role, *_ in engine.turns(on=twin)] == ["user", "assistant", "user", "assistant", "user"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_engine_sends_the_response_to_the_provider_again_whole() -> None:
   """The engine sends the response to the provider again whole."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -88,7 +79,6 @@ async def test_the_engine_sends_the_response_to_the_provider_again_whole() -> No
   assert said(log, "ask")[1][5][1] == ("assistant", ["a = 1"], COST, ["signed 5"])
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_text_of_a_turn_is_everything_it_holds_that_is_text() -> None:
   """The text of a turn is everything it holds that is text, which is the whole of what a model says when what it says is python."""
   sand = Sand(stands=STANDS, cost=COST)

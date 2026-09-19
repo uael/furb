@@ -1,13 +1,10 @@
 """replace, the text with one string put for another."""
 
-import pytest
-
 from furb.engine import Text
 
 ONE = Text("/w/n.txt", "one\ntwo\none\n")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 def test_replace_old_new_once_gives_a_new_text_with_the_edit_added() -> None:
   """replace(old, new, once) gives a new text with the edit added."""
   assert ONE.replace("one", "1").content == "1\ntwo\n1\n"

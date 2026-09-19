@@ -1,13 +1,10 @@
 """Read, the question of the text at a path."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said
 from furb import engine
 from furb.engine import Text
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_read_is_the_question_of_the_text_at_a_path() -> None:
   """A read is the question of the text at a path."""
   sand = Sand(files={"/w/a.txt": "one\ntwo\n", "/w/b.txt": "three\n"}, stands=STANDS)

@@ -26,7 +26,6 @@ def body_of(tag: tuple) -> str:
   return one
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_read_whoever_serves_the_path_answers_it_with_the_text_of_it() -> None:
   """A read: whoever serves the path answers it with the text of it, which the read tells by the lines the model has not seen."""
   sand = sown()
@@ -38,7 +37,6 @@ async def test_a_read_whoever_serves_the_path_answers_it_with_the_text_of_it() -
   assert [body_of(tag) for tag in told] == ["1 one\n2 two", ""]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_read_that_the_world_refuses_raises_refused_in_the_caller() -> None:
   """A read that the World refuses raises Refused in the caller."""
   dead = Dead(stands=STANDS)
@@ -49,7 +47,6 @@ async def test_a_read_that_the_world_refuses_raises_refused_in_the_caller() -> N
   assert await engine.rung(word, on=root) == "a dead World answers no read"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_read_on_a_chain_with_a_source_tells_the_lines_of_a_skipped_read_again() -> None:
   """A read on a chain with a source tells the lines of a skipped read again, since they are not known there."""
   sand = sown()
@@ -68,7 +65,6 @@ async def test_a_read_on_a_chain_with_a_source_tells_the_lines_of_a_skipped_read
   assert [body_of(tag) for tag in there] == ["1 one\n2 two", ""]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_engine_judges_no_scheme() -> None:
   """The engine judges no scheme, so a path of an unknown scheme goes to the World too."""
   sand = Sand(files={"weird://x": "kept\n"}, stands=STANDS)
@@ -78,7 +74,6 @@ async def test_the_engine_judges_no_scheme() -> None:
   assert engine.read("weird://y", on=root) is None
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_read_is_given_a_path_and_a_show() -> None:
   """read is given a path and a show."""
   sand = sown()
@@ -90,7 +85,6 @@ async def test_read_is_given_a_path_and_a_show() -> None:
   assert [body_of(tag) for tag in told] == ["2 two", "1 one"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_read_gives_a_text() -> None:
   """read gives a Text."""
   sand = sown()
@@ -100,7 +94,6 @@ async def test_read_gives_a_text() -> None:
   assert engine.read("a.txt", span(1, 1), on=root) == Text("/w/a.txt", "one\ntwo\n")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_text_without_a_show_is_told_as_head() -> None:
   """A text without a show is told as HEAD, which is the span of its first 2000 lines."""
   assert HEAD(BIG.splitlines()) == span(1, 2000)(BIG.splitlines()) == list(range(1, 2001))
@@ -114,7 +107,6 @@ async def test_a_text_without_a_show_is_told_as_head() -> None:
   assert len(body.splitlines()) == 2000
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_read_of_chain_lineage_gives_the_program_of_the_chain() -> None:
   """A read of chain://lineage gives the program of the chain, its accepted words in order."""
   sand = sown()
@@ -124,7 +116,6 @@ async def test_a_read_of_chain_lineage_gives_the_program_of_the_chain() -> None:
   assert engine.read(root, on=root) == Text(root, "a = 1\nclose(a + 1)")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_whether_a_name_is_the_chains_own_or_one_of_the_acts_it_has_heard_on_itself() -> None:
   """Whether a name is the chain's own or one of the acts it has heard on itself, which is what its doors serve and no other path, a path of no name being none of them."""
   sand = sown()
@@ -138,7 +129,6 @@ async def test_whether_a_name_is_the_chains_own_or_one_of_the_acts_it_has_heard_
   assert engine.read("", on=root) is None and engine.read("nowhere://x", on=root) is None
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_is_the_door_of_its_program() -> None:
   """The chain is the door of its program, so a read of its name gives its accepted words in order, and a read of the name of any act it has heard gives the words of that ladder alone, which are none at all for an act that ran no word."""
   sand = sown()
@@ -153,7 +143,6 @@ async def test_the_chain_is_the_door_of_its_program() -> None:
   assert engine.read(command, on=root).content == ""
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_one_asked_from_inside_an_act_tells_itself() -> None:
   """One asked from inside an act tells itself, with its path and what it was answered, on the scope of that act; one asked from outside an act tells nothing, and neither does one whose show is hidden."""
   sand = sown()
@@ -172,7 +161,6 @@ async def test_one_asked_from_inside_an_act_tells_itself() -> None:
   assert tags(engine.turns(on=root)) == was
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_read_answered_with_what_is_no_text_gives_that_value() -> None:
   """A read answered with what is no text gives that value, and tells it as python shows it."""
   sand = sown()

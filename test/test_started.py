@@ -1,13 +1,10 @@
 """started, the kind that has the World do an act the record does not hold."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR, WORLD
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_act_the_world_does_says_start_at_its_birth() -> None:
   """An act the World does says start at its birth, and the facts of the World about it come after."""
   sand = Sand()
@@ -19,7 +16,6 @@ async def test_an_act_the_world_does_says_start_at_its_birth() -> None:
   assert [i for i, a in enumerate(about) if a[2] == WORLD] == [3, 4]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_world_starts_a_command_at_its_start_which_the_command_says_at_its_birth() -> None:
   """The World starts a command at its start, which the command says at its birth."""
   sand = Sand()
@@ -30,7 +26,6 @@ async def test_the_world_starts_a_command_at_its_start_which_the_command_says_at
   assert (await act).code == 0
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_prompt_to_a_model_is_the_engines_to_do_so_it_says_no_start() -> None:
   """A prompt to a model is the engine's to do, so it says no start."""
   sand = Sand(stands=STANDS)

@@ -7,7 +7,6 @@ from furb import engine
 from furb.engine import OPERATOR, Refused
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_chance_gives_a_number_that_is_at_least_zero_and_under_one() -> None:
   """chance gives a number that is at least zero and under one."""
   sand = Sand(stands=STANDS)
@@ -17,7 +16,6 @@ async def test_chance_gives_a_number_that_is_at_least_zero_and_under_one() -> No
   assert all(0 <= one < 1 for one in drawn)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_number_the_world_draws_at_least_zero_and_under_one() -> None:
   """A number the World draws, at least zero and under one."""
   sand = Sand(stands=STANDS)
@@ -29,7 +27,6 @@ async def test_a_number_the_world_draws_at_least_zero_and_under_one() -> None:
     engine.chance(on=over)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_chance_is_a_question_the_world_answers_and_it_enters_the_record() -> None:
   """chance is a question the World answers, and it enters the record as any question of a run does."""
   sand = Sand(stands=STANDS)
@@ -44,7 +41,6 @@ async def test_chance_is_a_question_the_world_answers_and_it_enters_the_record()
   assert over == root and [one for one in later.calls if one[0] == "chance"] == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_chance_tells_the_number_it_drew() -> None:
   """chance tells the number it drew."""
   sand = Sand(stands=STANDS)

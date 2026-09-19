@@ -1,12 +1,9 @@
 """Grant, the act that carries a ceiling."""
 
-import pytest
-
 from conftest import STANDS, Sand, attr, life, said, settle, tags
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_grant_carries_the_ceiling_in_dollars_and_the_ceiling_in_share_of_the_window() -> None:
   """A grant carries the ceiling in dollars and the ceiling in share of the window."""
   sand = Sand(stands=STANDS)

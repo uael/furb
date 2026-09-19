@@ -2,14 +2,11 @@
 
 from asyncio import CancelledError
 
-import pytest
-
 from conftest import STANDS, Sand, attr, life, said, settle, tags
 from furb import engine
 from furb.engine import OPERATOR, Exit, Text
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
   """An act ended from outside, by its name, with a value: it is done with it, and it ends what it made, since a close is a cancel that carries what the act it names is done with."""
   sand = Sand(stands=STANDS, auto=False)
@@ -25,7 +22,6 @@ async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
   assert engine.peek(command, on=root) == Exit(None, Text(f"{command}/stdout"), Text(f"{command}/stderr"))
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_close_of_the_operator_enters_the_record_as_a_word_of_its_own() -> None:
   """The close of the operator enters the record as a fact of its own."""
   sand = Sand(stands=STANDS)
@@ -38,7 +34,6 @@ async def test_the_close_of_the_operator_enters_the_record_as_a_word_of_its_own(
   assert [(one[1], one[2], one[3]) for one in kept] == [(act, OPERATOR, 21)]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_close_ends_the_rung_of_a_prompt_at_its_next_await() -> None:
   """A close ends the rung of a prompt at its next await."""
   sand = Sand(stands=STANDS, auto=False)
@@ -52,7 +47,6 @@ async def test_a_close_ends_the_rung_of_a_prompt_at_its_next_await() -> None:
   assert (await act) == 21 and isinstance(engine.outcomes[step], CancelledError)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_operator_closes_a_prompt_of_shape_none_with_none() -> None:
   """The operator closes a prompt of shape None with None."""
   sand = Sand(stands=STANDS)
@@ -64,7 +58,6 @@ async def test_the_operator_closes_a_prompt_of_shape_none_with_none() -> None:
   assert act in engine.outcomes and (await act) is None
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_close_of_the_operator_delivers_to_the_act_of_the_rung_whenever_the_close_comes() -> None:
   """The close of the operator delivers to the act of the rung whenever the close comes."""
   sand = Sand(stands=STANDS)
@@ -79,7 +72,6 @@ async def test_the_close_of_the_operator_delivers_to_the_act_of_the_rung_wheneve
   assert (await act) == 21
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_operator_closes_a_pending_prompt_of_any_actor() -> None:
   """The operator closes a pending prompt of any actor."""
   sand = Sand(stands=STANDS)
@@ -92,7 +84,6 @@ async def test_the_operator_closes_a_pending_prompt_of_any_actor() -> None:
   assert (await act) == 21
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_rung_closes_a_pending_prompt_of_any_actor() -> None:
   """A rung closes a pending prompt of any actor."""
   sand = Sand(stands=STANDS)
@@ -106,7 +97,6 @@ async def test_a_rung_closes_a_pending_prompt_of_any_actor() -> None:
   assert ((await waiting), (await act)) == (21, 1)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_close_is_given_the_id_of_a_pending_act_and_its_result() -> None:
   """close is given the result of a pending act, and the id of that act when it is not the prompt of the running word."""
   sand = Sand(stands=STANDS, auto=False)
@@ -118,7 +108,6 @@ async def test_close_is_given_the_id_of_a_pending_act_and_its_result() -> None:
   assert (await act) == "done with it"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_exception_closes_a_prompt_with_that_exception() -> None:
   """An exception closes a prompt with that exception."""
   sand = Sand(stands=STANDS)
@@ -131,7 +120,6 @@ async def test_an_exception_closes_a_prompt_with_that_exception() -> None:
   assert isinstance(got, ValueError) and str(got) == "boom"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_close_of_the_operator_stands_in_the_transcript_with_the_name_of_the_operator() -> None:
   """The close of the operator stands in the transcript with the name of the operator."""
   sand = Sand(stands=STANDS)
@@ -146,7 +134,6 @@ async def test_the_close_of_the_operator_stands_in_the_transcript_with_the_name_
   assert [attr(tag, "over") for tag in tags(engine.turns(on=root), "closed")] == [act]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_prompt_completes_with_the_exception_that_the_word_of_the_prompt_gave_to_close() -> None:
   """A prompt completes with the exception that the word of the prompt gave to close."""
   sand = Sand(stands=STANDS)
@@ -159,7 +146,6 @@ async def test_a_prompt_completes_with_the_exception_that_the_word_of_the_prompt
   assert (await act) == 1 and isinstance(engine.outcomes[waiting], ValueError)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_close_is_given_the_name_of_the_act_it_closes_and_the_value() -> None:
   """close is given the value first, since a word that answers its own prompt names no act at all."""
   sand = Sand(stands=STANDS, auto=False)
@@ -171,7 +157,6 @@ async def test_close_is_given_the_name_of_the_act_it_closes_and_the_value() -> N
   assert word[4] == [("closed", [("over", act)], "21")]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_value_closes_an_act_with_that_value_whatever_the_shape_of_the_act() -> None:
   """A value closes an act with that value, whatever the shape of the act."""
   sand = Sand(stands=STANDS)
@@ -183,7 +168,6 @@ async def test_a_value_closes_an_act_with_that_value_whatever_the_shape_of_the_a
   assert (await act) == "twenty one"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
   """A close on an act that is over reaches nothing."""
   sand = Sand(stands=STANDS)
@@ -195,7 +179,6 @@ async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
   assert (await act).code == 0
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_that_asked_for_it() -> None:
   """A close said from a word that names no act is over the prompt that asked for the word, and over the rung itself for a word its caller wrote, which answers no prompt."""
   sand = Sand(stands=STANDS)
@@ -210,7 +193,6 @@ async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_tha
   assert [one[1] for one in said(log, "close")] == [act, mine]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_close_of_the_prompt_of_the_running_word_stops_that_word_where_it_stands() -> None:
   """A close of the prompt of the running word stops that word where it stands, as a raise does, and nothing after the call runs."""
   sand = Sand(stands=STANDS)

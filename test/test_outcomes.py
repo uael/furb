@@ -7,7 +7,6 @@ from furb import engine
 from furb.engine import WORLD, Exit, Text
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_outcomes_holds_what_every_question_of_the_life_came_to_under_its_name() -> None:
   """outcomes holds what every question of the life came to, under its name, once the done that names it has landed: the value it was answered or completed with, or the exception it completed with, and no entry while it waits."""
   sand = Sand(files={"/w/a.txt": "one\n"}, stands=STANDS, auto=False)
@@ -27,7 +26,6 @@ async def test_outcomes_holds_what_every_question_of_the_life_came_to_under_its_
   assert isinstance(engine.outcomes[step], ValueError)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_first_done_of_a_question_is_what_it_came_to() -> None:
   """The first done of a question is what it came to, and the life fills it in when that done is said, and a later done of the same question fills nothing."""
   sand = Sand(stands=STANDS)
@@ -42,7 +40,6 @@ async def test_the_first_done_of_a_question_is_what_it_came_to() -> None:
   assert engine.outcomes[act] == 21
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_outcome_is_no_slot_of_the_question() -> None:
   """The outcome is no slot of the question, so the plain form of a question holds none of it, and a question made again from the record waits as it did."""
   sand = Sand(stands=STANDS, auto=False)
@@ -57,7 +54,6 @@ async def test_the_outcome_is_no_slot_of_the_question() -> None:
   assert over == root and act in engine.acts and act not in engine.outcomes
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_boot_empties_it() -> None:
   """boot empties it."""
   sand = Sand(stands=STANDS)

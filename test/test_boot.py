@@ -34,7 +34,6 @@ def made(log: list[tuple]) -> list[str]:
   return [a[1] for a in log if a[0] in ACTS and engine.question(a)]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_life_everything_that_is_said_in_it_is_said_here() -> None:
   """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names, and the act made last are its own, and four names reach them: send, which says a fact, ask, which puts a query, act, which makes an act, and drive, which brings a generator to life."""
   one = sown()
@@ -58,7 +57,6 @@ async def test_a_life_everything_that_is_said_in_it_is_said_here() -> None:
   assert len(said(second, "bash")) == 1 and said(heard, "bash") == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_verb_from_a_rung_takes_the_chain_of_the_rung_when_the_call_leaves_on_unsaid() -> None:
   """A verb from a rung takes the chain of the rung when the call leaves on unsaid."""
   sand = sown()
@@ -69,7 +67,6 @@ async def test_a_verb_from_a_rung_takes_the_chain_of_the_rung_when_the_call_leav
   assert [a[3] for a in said(log, "bash")] == [two]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_kind_of_an_act_is_the_verb_that_made_the_act() -> None:
   """The kind of an act is the verb that made the act."""
   sand = sown()
@@ -77,7 +74,6 @@ async def test_the_kind_of_an_act_is_the_verb_that_made_the_act() -> None:
   assert {name.partition("://")[0] for name in made(log)} == {"chain", "prompt", "rung", "bash"}
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_lineage_of_an_act_is_the_lineage_of_the_act_that_made_it() -> None:
   """The lineage of an act is the lineage of the act that made it, and then which of the acts of that one it is."""
   sand = sown()
@@ -86,7 +82,6 @@ async def test_the_lineage_of_an_act_is_the_lineage_of_the_act_that_made_it() ->
   assert (one[1], step[1], command[1]) == ("prompt://operator.2", "rung://operator.2.1", "bash://operator.2.1.2")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_lineage_of_an_act_that_the_operator_made_begins_at_the_operator() -> None:
   """The lineage of an act that the operator made begins at the operator."""
   sand = sown()
@@ -95,7 +90,6 @@ async def test_the_lineage_of_an_act_that_the_operator_made_begins_at_the_operat
   assert (root, one) == ("chain://operator.1", "bash://operator.2")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_name_is_never_reused_in_the_record() -> None:
   """A name is never reused in the record."""
   sand = sown()
@@ -104,7 +98,6 @@ async def test_a_name_is_never_reused_in_the_record() -> None:
   assert names and len(names) == len(set(names))
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_later_life_gives_the_same_names() -> None:
   """A later life gives the same names, since the same acts make them again."""
   sand = sown()
@@ -113,7 +106,6 @@ async def test_a_later_life_gives_the_same_names() -> None:
   assert made(again) == made(log)[: len(made(again))] and over == root
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_root_has_no_parent() -> None:
   """The root has no parent."""
   sand = sown()
@@ -122,7 +114,6 @@ async def test_the_root_has_no_parent() -> None:
   assert [name for name in made(log) if name != root and engine.under(root, name)] == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_question_goes_to_the_living_acts_of_the_engine_before_it_goes_to_the_world() -> None:
   """A question goes to the living acts of the engine before it goes to the World, since the engine settles what it knows before the outside reads it, and asks the outside for nothing that the engine can answer itself."""
   sand = sown()
@@ -136,7 +127,6 @@ async def test_a_question_goes_to_the_living_acts_of_the_engine_before_it_goes_t
   assert engine.modules[over]["k"] == 2 and [a for a in dead.calls if a[0] == "read"] == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_later_life_makes_a_door_again_from_the_word_of_the_rung_that_defined_it() -> None:
   """A later life makes a door again from the word of the rung that defined it."""
   sand = sown()
@@ -148,7 +138,6 @@ async def test_a_later_life_makes_a_door_again_from_the_word_of_the_rung_that_de
   assert engine.read("note://a", on=over).content == "kept"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_record_that_boot_is_given_enters_nothing_in_the_record() -> None:
   """The record that boot is given enters nothing in the record, since the record is what boot is given."""
   sand = sown()
@@ -158,7 +147,6 @@ async def test_the_record_that_boot_is_given_enters_nothing_in_the_record() -> N
   assert later.record == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_act_takes_its_name_when_the_act_opens_and_the_name_says_what_made_the_act() -> None:
   """An act takes its name when the act opens, and the name says what made the act."""
   sand = sown()
@@ -168,7 +156,6 @@ async def test_an_act_takes_its_name_when_the_act_opens_and_the_name_says_what_m
   assert [tag for tag in tags(engine.turns(on=root), "opened") if tag[1][0] == ("id", command[1])]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_engine_derives_the_transcripts_the_turns_the_globals_and_the_working_directories() -> None:
   """The engine derives the transcripts, the turns, the globals and the working directories from the record."""
   sand = sown()
@@ -186,7 +173,6 @@ async def test_the_engine_derives_the_transcripts_the_turns_the_globals_and_the_
   assert engine.modules[over]["k"] == 2 and engine.cwd(on=over) == "/deep"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_fact_the_journal_says_again_keeps_who_said_it_first() -> None:
   """A fact the journal says again keeps who said it first, and a fact the record answers by is the record's own."""
   sand = sown()
@@ -200,7 +186,6 @@ async def test_a_fact_the_journal_says_again_keeps_who_said_it_first() -> None:
   assert [a[2] for a in said(again, "done") if a[1].startswith("read://")] == ["record"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_the_module_holds_is_not_in_the_record() -> None:
   """What the module holds is not in the record."""
   sand = sown()
@@ -209,7 +194,6 @@ async def test_what_the_module_holds_is_not_in_the_record() -> None:
   assert [e for e in sand.record if 2 in (*e[1][3:], *e[2:])] == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_root_is_the_first_act_of_the_record() -> None:
   """The root is the first act of the record."""
   sand = sown()
@@ -217,7 +201,6 @@ async def test_the_root_is_the_first_act_of_the_record() -> None:
   assert sand.record[0][1][:2] == ("chain", root)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_later_life_on_a_kept_record_makes_the_root_again_and_enters_no_second_root() -> None:
   """A later life on a kept record makes the root again and enters no second root."""
   sand = sown()
@@ -228,7 +211,6 @@ async def test_a_later_life_on_a_kept_record_makes_the_root_again_and_enters_no_
   assert later.record == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_engine_appends_after_the_last_entry_of_the_record_boot_was_given() -> None:
   """The engine appends after the last entry of the record boot was given."""
   sand = sown()
@@ -242,7 +224,6 @@ async def test_the_engine_appends_after_the_last_entry_of_the_record_boot_was_gi
   assert later.record[: len(old)] == old and len(later.record) > len(old)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_the_word_of_a_rung_made_or_computed_a_later_life_makes_again_by_running_the_word() -> None:
   """What the word of a rung made or computed, a later life makes again by running the word."""
   sand = sown()
@@ -251,7 +232,6 @@ async def test_what_the_word_of_a_rung_made_or_computed_a_later_life_makes_again
   assert engine.modules[over]["k"] == 2 and engine.modules[over]["t"] == Text("/w/a.txt", "one\ntwo\n")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_engine_makes_a_chain_from_the_record_and_in_no_other_way() -> None:
   """The engine makes a chain from the record and in no other way, by running the ladder again."""
   sand = sown()
@@ -263,7 +243,6 @@ async def test_the_engine_makes_a_chain_from_the_record_and_in_no_other_way() ->
   assert engine.read(over, on=over) == was
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_rungs_of_the_ladder_run_in_record_order() -> None:
   """The rungs of the ladder run in record order."""
   sand = sown()
@@ -276,7 +255,6 @@ async def test_the_rungs_of_the_ladder_run_in_record_order() -> None:
   assert py.ran == ["a = 1", "b = a + 1", "close(b)"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_each_act_a_rung_makes_again_is_the_act_the_record_holds_at_that_place() -> None:
   """Each act a rung makes again is the act the record holds at that place, with its result."""
   sand = sown()
@@ -288,7 +266,6 @@ async def test_each_act_a_rung_makes_again_is_the_act_the_record_holds_at_that_p
   assert isinstance(got, Exit) and got.code == 0
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_replay_makes_the_same_acts_in_the_same_order_and_gives_them_the_same_ids() -> None:
   """A replay makes the same acts in the same order and gives them the same ids."""
   sand = sown()
@@ -298,7 +275,6 @@ async def test_a_replay_makes_the_same_acts_in_the_same_order_and_gives_them_the
   assert made(again)[: len(was)] == was
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_record_answers_what_it_holds_an_answer_for_and_the_gate_is_asked_again() -> None:
   """The record answers what it holds an answer for, and the gate is asked again."""
   sand = sown()
@@ -310,7 +286,6 @@ async def test_the_record_answers_what_it_holds_an_answer_for_and_the_gate_is_as
   assert py.gated == [WORD, "close(None)"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_later_life_on_a_kept_record_starts_nothing_and_keeps_the_ids_of_the_earlier_life() -> None:
   """A later life on a kept record starts nothing and keeps the ids of the earlier life."""
   sand = sown()
@@ -321,7 +296,6 @@ async def test_a_later_life_on_a_kept_record_starts_nothing_and_keeps_the_ids_of
   assert [a[1] for a in said(again, "bash")] == [a[1] for a in said(log, "bash")]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_in_a_later_life_the_ladder_of_every_chain_runs_again() -> None:
   """In a later life the ladder of every chain runs again from the record that the World kept."""
   sand = sown()
@@ -338,7 +312,6 @@ async def test_in_a_later_life_the_ladder_of_every_chain_runs_again() -> None:
   assert engine.modules[root]["here"] == 1 and engine.modules[two]["there"] == 2
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_engine_serves_the_doors_of_the_file_itself_and_asks_the_world_for_nothing() -> None:
   """The engine serves the doors of the file itself, and asks the World for nothing."""
   sand = sown()
@@ -351,7 +324,6 @@ async def test_the_engine_serves_the_doors_of_the_file_itself_and_asks_the_world
   assert len(sand.calls) == before
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_later_life_reads_the_same_text_from_a_door() -> None:
   """A later life reads the same text from a door."""
   sand = sown()
@@ -362,7 +334,6 @@ async def test_a_later_life_reads_the_same_text_from_a_door() -> None:
   assert engine.read(f"{command}/stdout", on=over) == was
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_it_is_given_what_the_world_kept_of_the_life_before_it() -> None:
   """It is given what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own."""
   sand = sown()
@@ -374,7 +345,6 @@ async def test_it_is_given_what_the_world_kept_of_the_life_before_it() -> None:
   assert [a[1] for a in said(again, "bash")] == [a[1] for a in said(log, "bash")]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_it_opens_the_root_the_first_act_of_any_record() -> None:
   """It opens the root, the first act of any record, which every life opens under the one name, and which a record that holds it already gives back, and that root is what it gives back."""
   sand = sown()
@@ -384,7 +354,6 @@ async def test_it_opens_the_root_the_first_act_of_any_record() -> None:
   assert over == root and [a[1] for a in said(again, "chain")] == [root]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_the_record_says_a_question_came_to_if_it_says_anything() -> None:
   """What the record says a question came to, if it says anything, the facts this life kept among it, so that a chain with a source which asks again what its origin asked is answered from the record too."""
   sand = sown()
@@ -398,7 +367,6 @@ async def test_what_the_record_says_a_question_came_to_if_it_says_anything() -> 
   assert [a for a in dead.calls if a[0] == "read"] == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_record_a_life_was_opened_from_answers_what_it_holds_of_an_act() -> None:
   """The record a life was opened from, which answers what it holds of an act, so that an act the World did once is done no more."""
   sand = sown()
@@ -412,7 +380,6 @@ async def test_the_record_a_life_was_opened_from_answers_what_it_holds_of_an_act
   assert isinstance(got, Exit) and got.code == 0
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_journal_it_hears_everything_and_keeps_what_the_world_said() -> None:
   """The journal: it hears everything, and keeps what the World said and what the operator said that is no query, of the acts and of the queries of a run it holds and of nothing else, since it keeps nothing that a later life works out again by asking, each entry of it after the words of the act it is about."""
   sand = sown()
@@ -424,7 +391,6 @@ async def test_the_journal_it_hears_everything_and_keeps_what_the_world_said() -
       assert names.index(e[1][1]) < len([one for one in sand.record[:i] if engine.question(one[1])])
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_query_the_operator_asks_is_of_the_moment_and_enters_no_record() -> None:
   """A query the operator asks is of the moment and enters no record, neither the query nor what it was answered, since nobody asks it again; a change the operator wants a later life to hold it makes a rung of, which is kept."""
   sand = sown()
@@ -437,7 +403,6 @@ async def test_a_query_the_operator_asks_is_of_the_moment_and_enters_no_record()
   assert [e[1][0] for e in sand.record] == ["chain", "rung"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_it_keeps_it_says() -> None:
   """What it keeps it says, so that the World holds the record and the journal alone says what belongs in it; a World that is durable keeps what it is told, one that is not keeps nothing, and either way what the World holds is what the life after it is given."""
   sand = sown()
@@ -450,7 +415,6 @@ async def test_what_it_keeps_it_says() -> None:
   assert said(third, "bash") == [] and once == root
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> None:
   """Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them: a query nobody asks again it steps over and holds back nothing with; an act of the operator it says at once, as the operator, once the chain it is on has been made again, which is how the acts of the operator start the life; any other fact it says when the act it is about has been made again and the act that was made last before it is there too, so that its controls land where they landed, but for a question, which its own word says again, and a done, which is the World's and which the record answers by."""
   sand = sown()
@@ -474,7 +438,6 @@ async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> No
   assert [a for a in said(heard, "done") if a[1] == top] == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_act_made_last_before_an_entry_is_the_last_act_the_journal_heard() -> None:
   """The act made last before an entry is the last act the journal heard when it kept the entry, which is the act made last when the fact was said, since the journal hears every fact in the order it was said."""
   sand = sown()
@@ -487,7 +450,6 @@ async def test_the_act_made_last_before_an_entry_is_the_last_act_the_journal_hea
   assert seen == sorted(seen)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_one_said_under_a_name_it_had_keeps_it() -> None:
   """One said under a name it had keeps it, and whoever names acts under the lineage of that name counts on from it, so that no later act takes a name that is taken."""
   sand = sown()
@@ -500,7 +462,6 @@ async def test_one_said_under_a_name_it_had_keeps_it() -> None:
   assert one not in made(log)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_boot_is_a_life_a_second_boot_is_a_second_life_and_the_first_is_gone() -> None:
   """A boot is a life; a second boot is a second life, and the first is gone."""
   sand = sown()
@@ -514,7 +475,6 @@ async def test_a_boot_is_a_life_a_second_boot_is_a_second_life_and_the_first_is_
   assert engine.read(f"{command}/stdout", on=over) is None
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_names_operator_record_and_journal_are_the_lifes_own_ears() -> None:
   """The names operator, record and journal are the life's own ears, and boot refuses a generator of the outside under one of them."""
   heard: list[tuple] = []
@@ -525,7 +485,6 @@ async def test_the_names_operator_record_and_journal_are_the_lifes_own_ears() ->
   assert heard == []
 
 
-@pytest.mark.xfail(strict=True)
 def test_a_life_settles_an_await_of_its_acts_from_outside_a_run_in_the_loop_it_is_opened_in() -> None:
   """A life settles an await of its acts from outside a run in the loop it is opened in, so boot outside a running loop raises before it makes anything."""
   woke: list[str] = []
@@ -540,7 +499,6 @@ def test_a_life_settles_an_await_of_its_acts_from_outside_a_run_in_the_loop_it_i
   assert woke == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_act_of_the_operator_is_said_again_through_its_verb() -> None:
   """An act of the operator is said again through its verb, with the words the record holds and the chain it names, so its life is the verb's, and a show or a filter it was given is not said again, since the record holds none."""
   sand = sown()
@@ -557,7 +515,6 @@ async def test_an_act_of_the_operator_is_said_again_through_its_verb() -> None:
   assert [attr(tag, "id") for tag in tags(engine.turns(on=over), "closed")] == [one]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_record_answers_a_question_said_again_from_what_it_holds_of_it() -> None:
   """The record answers a question said again from what it holds of it, a query from the answer beside it and an act from the done that names it."""
   sand = sown()

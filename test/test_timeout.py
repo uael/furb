@@ -1,13 +1,10 @@
 """TIMEOUT, the timeout of a command that says none."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
 from furb.engine import TIMEOUT
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_timeout_is_the_timeout_in_seconds_of_a_command_that_does_not_say_one() -> None:
   """TIMEOUT is the timeout, in seconds, of a command that does not say one."""
   assert TIMEOUT == 600.0

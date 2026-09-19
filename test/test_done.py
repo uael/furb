@@ -2,14 +2,11 @@
 
 from asyncio import CancelledError
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Exit
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_an_act_came_to_a_done_settles_the_act_it_names() -> None:
   """What an act came to: a done settles the act it names."""
   sand = Sand(stands=STANDS)
@@ -21,7 +18,6 @@ async def test_what_an_act_came_to_a_done_settles_the_act_it_names() -> None:
   assert act in engine.outcomes and (await act) == 21
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_result_enters_the_transcript_whether_or_not_anyone_awaits_it() -> None:
   """A result enters the transcript whether or not anyone awaits it."""
   sand = Sand(stands=STANDS)
@@ -34,7 +30,6 @@ async def test_a_result_enters_the_transcript_whether_or_not_anyone_awaits_it() 
   assert [isinstance(one[3], Exit) for one in ends] == [True]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_act_that_is_over_says_nothing_and_a_command_lives_on_to_answer_its_doors() -> None:
   """An act that is over says nothing, and a command lives on to answer its doors."""
   sand = Sand(stands=STANDS)
@@ -51,7 +46,6 @@ async def test_an_act_that_is_over_says_nothing_and_a_command_lives_on_to_answer
   assert engine.read(f"{command}/stdout", on=root).content == "ran echo hi\n"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_done_that_an_act_said_itself_is_the_result_of_the_act() -> None:
   """A done that an act said itself is the result of the act."""
   sand = Sand(stands=STANDS)
@@ -63,7 +57,6 @@ async def test_a_done_that_an_act_said_itself_is_the_result_of_the_act() -> None
   assert engine.peek(act, on=root) == 21
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_done_that_names_a_question_is_the_answer_to_the_question() -> None:
   """A done that names a question is the answer to the question."""
   sand = Sand(files={"/w/a.txt": "one\n"}, stands=STANDS)
@@ -74,7 +67,6 @@ async def test_a_done_that_names_a_question_is_the_answer_to_the_question() -> N
   assert [(one[2], one[3]) for one in ends] == [(WORLD, got)]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_kind_that_ends_when_it_is_told_to() -> None:
   """A kind that ends when it is told to: it starts its body, and then a done that names it is what it came to; a cancel over it ends it with a CancelledError, and a close of it with the value that close carries."""
   sand = Sand(stands=STANDS)

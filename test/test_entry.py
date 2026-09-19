@@ -1,13 +1,10 @@
 """Entry, one entry of the record."""
 
-import pytest
-
 from conftest import STANDS, Dead, Sand, life, lived, plain, relived, said, settle, sown
 from furb import engine
 from furb.engine import Text
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_one_entry_of_the_record_the_act_made_last_before_its_fact_and_the_fact() -> None:
   """One entry of the record: the act made last before its fact, and the fact; for a query of a run, the query and what it was answered beside, since a query is answered at once and its answer travels with it."""
   sand = sown()
@@ -19,7 +16,6 @@ async def test_one_entry_of_the_record_the_act_made_last_before_its_fact_and_the
   assert all(e[0] == "" or e[0] in made for e in sand.record)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_entry_says_which_act_was_made_last_before_it() -> None:
   """An entry says which act was made last before it, and that is what puts the entry back in its place in a later life."""
   sand = Sand(stands=STANDS)
@@ -33,7 +29,6 @@ async def test_an_entry_says_which_act_was_made_last_before_it() -> None:
   assert [one[1] for one in said(again, "prompt")] == [said(log, "prompt")[0][1]]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_world_keeps_each_entry_as_the_journal_says_it_plain_or_not() -> None:
   """The World keeps each entry as the journal says it, plain or not."""
   sand = sown()
@@ -45,7 +40,6 @@ async def test_the_world_keeps_each_entry_as_the_journal_says_it_plain_or_not() 
   assert over == root
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_record_is_a_sequence_of_entries_about_acts() -> None:
   """The record is a sequence of entries about acts."""
   sand = sown()

@@ -1,13 +1,10 @@
 """Peek, the question of what an act came to."""
 
-import pytest
-
 from conftest import STANDS, Sand, attr, life, said, settle, tags
 from furb import engine
 from furb.engine import OPERATOR, Exit
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_peek_is_at_an_act_and_gives_what_the_act_came_to_as_the_record_stands() -> None:
   """A peek is at an act, and gives what the act came to as the record stands."""
   sand = Sand(stands=STANDS)

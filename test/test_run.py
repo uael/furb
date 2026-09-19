@@ -2,14 +2,11 @@
 
 from itertools import pairwise
 
-import pytest
-
 from conftest import STANDS, Py, Sand, life, plain, relived, said, settle, sown
 from furb import engine
 from furb.engine import WORLD
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_run_tells_the_kernel_to_run_the_word_of_a_rung() -> None:
   """A run tells the Kernel to run the word of a rung, and says the chain whose module it runs in."""
   sand, py = Sand(stands=STANDS), Py()
@@ -23,7 +20,6 @@ async def test_a_run_tells_the_kernel_to_run_the_word_of_a_rung() -> None:
   assert py.ran == ["k = 1", "close(k + 1)"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_every_rung_of_a_chain_runs_in_the_globals_of_the_chain() -> None:
   """Every rung of a chain runs in the globals of the chain, the word of a model and a word its caller wrote alike."""
   sand = sown()
@@ -34,7 +30,6 @@ async def test_every_rung_of_a_chain_runs_in_the_globals_of_the_chain() -> None:
   assert (engine.modules[root]["mine"], engine.modules[root]["theirs"]) == (1, 2)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_a_rung_binds_stays_bound_for_every_later_rung_of_the_chain() -> None:
   """What a rung binds stays bound for every later rung of the chain."""
   sand = sown()
@@ -44,7 +39,6 @@ async def test_what_a_rung_binds_stays_bound_for_every_later_rung_of_the_chain()
   assert (engine.modules[root]["a"], engine.modules[root]["b"]) == (1, 2)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_last_rung_to_bind_a_name_wins() -> None:
   """The last rung to bind a name wins."""
   sand = sown()
@@ -55,7 +49,6 @@ async def test_the_last_rung_to_bind_a_name_wins() -> None:
   assert await engine.prompt(int, "use it", on=root) == 63
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_one_rung_runs_at_a_time_on_a_chain_and_rungs_interleave_at_their_awaits() -> None:
   """One rung runs at a time on a chain, and rungs interleave at their awaits, whether they are rungs of one chain or of many."""
   sand = Sand(files={"/w/a.txt": "one\ntwo\n"}, stands=STANDS, auto=False)
@@ -74,7 +67,6 @@ async def test_one_rung_runs_at_a_time_on_a_chain_and_rungs_interleave_at_their_
   assert ((await here), (await there)) == (0, 0)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_word_of_a_rung_runs_again_in_every_chain_made_from_its_chain() -> None:
   """The word of a rung runs again in every chain made from its chain and in every later life, and what it does outside its acts it does again."""
   sand = sown()
@@ -89,7 +81,6 @@ async def test_the_word_of_a_rung_runs_again_in_every_chain_made_from_its_chain(
   assert engine.modules[over]["marks"] == [1]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_two_prompts_on_one_chain_see_the_bindings_of_each_other_as_they_run() -> None:
   """Two prompts on one chain see the bindings of each other as they run."""
   sand = sown()
@@ -101,7 +92,6 @@ async def test_two_prompts_on_one_chain_see_the_bindings_of_each_other_as_they_r
   assert ((await first), (await second)) == (1, 2)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_rung_whose_word_rebinds_a_broken_name_repairs_the_chain() -> None:
   """A rung whose word rebinds a broken name repairs the chain, since the last rung to bind wins."""
   sand = sown()
@@ -113,7 +103,6 @@ async def test_a_rung_whose_word_rebinds_a_broken_name_repairs_the_chain() -> No
   assert await engine.prompt(int, "use it", on=root) == 42
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_prompt_after_such_a_rung_finds_what_it_bound() -> None:
   """A prompt after such a rung finds what it bound."""
   sand = sown()
@@ -123,7 +112,6 @@ async def test_a_prompt_after_such_a_rung_finds_what_it_bound() -> None:
   assert await engine.prompt(int, "use it", on=root) == 42
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_runs_one_word_at_a_time() -> None:
   """The chain runs one word at a time."""
   sand, py = Sand(stands=STANDS, auto=False), Py()
@@ -140,7 +128,6 @@ async def test_the_chain_runs_one_word_at_a_time() -> None:
   assert first in engine.outcomes and await second == 2
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_word_that_waits_for_an_act_gives_the_chain_to_the_next_word() -> None:
   """A word that waits for an act gives the chain to the next word, which runs while it waits, and the waiting word runs on at the done of what it awaits."""
   sand = sown()

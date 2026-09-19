@@ -2,14 +2,11 @@
 
 from asyncio import CancelledError
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
 from furb.engine import WORLD
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_cancel_ends_everything_it_is_over() -> None:
   """A cancel ends everything it is over: each of them is done with CancelledError, and none of them says anything of its own again."""
   sand = Sand(stands=STANDS, auto=False)
@@ -27,7 +24,6 @@ async def test_a_cancel_ends_everything_it_is_over() -> None:
   assert [a for a in log[mark:] if a[2] in (one, step, command)] == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_cancel_reaches_to_any_depth_and_on_whatever_chain() -> None:
   """A cancel reaches to any depth, and on whatever chain."""
   sand = Sand(stands=STANDS, auto=False)

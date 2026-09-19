@@ -1,13 +1,10 @@
 """Wake, the fact that ends a pause."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
 from furb.engine import WORLD, Exit
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_wake_ends_the_pause_over_the_same_act_and_what_waited_is_heard() -> None:
   """A wake ends the pause over the same act, and what waited is heard."""
   sand = Sand(stands=STANDS, auto=False)
@@ -25,7 +22,6 @@ async def test_a_wake_ends_the_pause_over_the_same_act_and_what_waited_is_heard(
   assert act in engine.outcomes and (await act).code == 0
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_wake_is_over_the_act_it_names_and_everything_under_it() -> None:
   """A wake is over the act it names and everything under it."""
   sand = Sand(stands=STANDS, auto=False)

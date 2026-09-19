@@ -1,13 +1,10 @@
 """Program, the question of the accepted words of a ladder."""
 
-import pytest
-
 from conftest import WORD, Sand, lived, said, settle, sown
 from furb import engine
 from furb.engine import OPERATOR
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_program_is_the_question_of_the_accepted_words_of_a_ladder() -> None:
   """A program is the question of the accepted words of a ladder, each with the name of its rung, which the chain answers, and which a chain with a source asks of its origin."""
   sand: Sand = sown()

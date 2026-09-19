@@ -1,12 +1,9 @@
 """covers, whether a control is over an act."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_whether_a_control_is_over_an_act() -> None:
   """Whether a control is over an act: over the act it names and everything under it, and over every act on the chain it names; a close is over the act it names and the words running under it, where a cancel is over everything under it."""
   sand = Sand(stands=STANDS, auto=False)

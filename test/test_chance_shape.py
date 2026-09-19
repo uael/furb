@@ -1,13 +1,10 @@
 """Chance, the question the World draws a number for."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said
 from furb import engine
 from furb.engine import OPERATOR, WORLD
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_chance_is_the_question_of_a_number_the_world_draws() -> None:
   """A chance is the question of a number the World draws."""
   sand = Sand(stands=STANDS)

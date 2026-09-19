@@ -1,7 +1,5 @@
 """Showing, a text a tag shows and the show of it."""
 
-import pytest
-
 from conftest import STANDS, Sand, attr, life, said, settle, shown, tags
 from furb import engine
 from furb.engine import TAIL, WORLD, Text, grep
@@ -21,7 +19,6 @@ def sown() -> Sand:
   return Sand(files={"/w/n.txt": THREE}, stands=STANDS)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_text_a_tag_shows_and_the_show_of_it() -> None:
   """A text a tag shows, and the show of it, which is what a tell of a text carries and what the fold of the turns makes a tag of."""
   sand = sown()
@@ -36,7 +33,6 @@ async def test_a_text_a_tag_shows_and_the_show_of_it() -> None:
   assert shown(made) == [("shown", [("path", "/w/n.txt"), ("known", 0)], "2 two\n3 three")]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_body_of_a_closed_tag_holds_one_shown_for_each_text_told() -> None:
   """The body of a closed tag holds one shown for each text told."""
   sand = Sand(stands=STANDS)
@@ -49,7 +45,6 @@ async def test_the_body_of_a_closed_tag_holds_one_shown_for_each_text_told() -> 
   assert [attr(one, "path") for one in shown(closed)] == [f"{command}/stdout", f"{command}/stderr"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_shown_tag_holds_as_its_body_the_lines_that_a_show_picked_with_their_numbers() -> None:
   """The shown tag holds as its body the lines that a show picked, with their numbers."""
   sand = sown()
@@ -61,7 +56,6 @@ async def test_the_shown_tag_holds_as_its_body_the_lines_that_a_show_picked_with
   assert grep("^t")(Text("/w/n.txt", THREE).lines) == [2, 3]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_engine_applies_a_show_before_it_makes_a_tag() -> None:
   """The engine applies a show before it makes a tag, so the body holds the picked lines alone."""
   sand = sown()
@@ -73,7 +67,6 @@ async def test_the_engine_applies_a_show_before_it_makes_a_tag() -> None:
   assert "one" not in body_of(told)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_show_applies_to_a_text_or_to_a_stream() -> None:
   """A show applies to a text or to a stream."""
   sand = sown()
@@ -93,7 +86,6 @@ async def test_a_show_applies_to_a_text_or_to_a_stream() -> None:
   assert body_of(closed) == "1 a"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_line_told_once_on_a_chain_is_known_there() -> None:
   """A line told once on a chain is known there, by its path, its number and its content."""
   sand = sown()
@@ -106,7 +98,6 @@ async def test_a_line_told_once_on_a_chain_is_known_there() -> None:
   assert [attr(shown(tag)[0], "known") for tag in told] == [0, 3]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_read_tells_a_line_again_after_the_content_of_the_line_changed() -> None:
   """read tells a line again after the content of the line changed."""
   sand = sown()
@@ -121,7 +112,6 @@ async def test_read_tells_a_line_again_after_the_content_of_the_line_changed() -
   assert [attr(shown(tag)[0], "known") for tag in told] == [0, 2]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_text_costs_its_size_once_on_a_chain() -> None:
   """A text costs its size once on a chain."""
   sand = sown()
@@ -134,7 +124,6 @@ async def test_a_text_costs_its_size_once_on_a_chain() -> None:
   assert len(lines) == len(Text("/w/n.txt", THREE).lines)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_second_read_of_a_text_tells_the_model_no_line_that_an_earlier_read_told() -> None:
   """A second read of a text tells the model no line that an earlier read of the chain told."""
   sand = sown()

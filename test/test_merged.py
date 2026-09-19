@@ -1,13 +1,10 @@
 """Merged, the question of whether the stderr of a command flows into its stdout."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
 from furb.engine import TAIL, WORLD
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_merged_is_the_question_of_whether_the_stderr_of_a_command_flows_into_its_stdout() -> None:
   """A merged is the question of whether the stderr of a command flows into its stdout, which the command answers from what its verb was given, and which the World asks before it starts the command."""
   sand = Sand(stands=STANDS)

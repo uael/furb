@@ -1,13 +1,10 @@
 """Bash, the act the World hears as a command."""
 
-import pytest
-
 from conftest import STANDS, Sand, attr, life, said, shown, tags
 from furb import engine
 from furb.engine import HEAD, OPERATOR, TAIL
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_bash_carries_the_command_the_fed_flag_and_the_timeout() -> None:
   """A bash carries the command, the fed flag and the timeout, and no show and no working directory."""
   sand = Sand(stands=STANDS)

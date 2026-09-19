@@ -1,13 +1,10 @@
 """Actor, an actor the World offers."""
 
-import pytest
-
 from conftest import STANDS, Sand, attr, life, said, settle, tags
 from furb import engine
 from furb.engine import Refused
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_actor_the_world_offers() -> None:
   """An actor the World offers: the name of a model, the efforts it takes, and the window it reads."""
   one = ("m", ("low", "high"), 400000)
@@ -20,7 +17,6 @@ async def test_an_actor_the_world_offers() -> None:
   assert attr(told[1], "roster") == STANDS[0]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_window_that_a_roster_entry_leaves_unsaid_is_the_window_that_the_file_names() -> None:
   """The window that a roster entry leaves unsaid is the window that the file names."""
   assert engine.WINDOW == 200000
@@ -36,7 +32,6 @@ async def test_the_window_that_a_roster_entry_leaves_unsaid_is_the_window_that_t
   assert filled == [100000 / engine.WINDOW, 100000 / 400000]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_a_prompt_names_is_one_of_these_names_and_one_effort_of_that_range() -> None:
   """What a prompt names is one of these names and one effort of that range."""
   sand = Sand(stands=STANDS)
@@ -50,7 +45,6 @@ async def test_what_a_prompt_names_is_one_of_these_names_and_one_effort_of_that_
   engine.cancel(right)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_actor_takes_an_effort_of_its_own_and_any_actor_takes_the_effort_that_is_not_named() -> None:
   """An actor takes an effort of its own, and any actor takes the effort that is not named."""
   sand = Sand(stands=STANDS)

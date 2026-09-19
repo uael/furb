@@ -1,7 +1,5 @@
 """Usage, what one answer of a model cost."""
 
-import pytest
-
 from conftest import STANDS, Sand, attr, life, settle, tags
 from furb import engine
 
@@ -18,7 +16,6 @@ def test_what_one_answer_of_a_model_cost() -> None:
   assert len(COST) == 5
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_usage_holds_the_token_counts_and_the_dollars_of_one_model_response() -> None:
   """A usage holds the token counts and the dollars of one model response."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -28,7 +25,6 @@ async def test_a_usage_holds_the_token_counts_and_the_dollars_of_one_model_respo
   assert [usage for _, _, usage, _ in engine.turns(on=root)] == [None, COST, None]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_the_window_of_the_actor() -> None:
   """The share of the window it filled is the words it read against the window of the actor, so no word of it says the share."""
   sand = Sand(stands=STANDS, cost=COST)

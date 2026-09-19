@@ -1,12 +1,9 @@
 """Turns, the question of the turns of a chain."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, tags
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_turns_is_the_question_of_the_turns_of_a_chain() -> None:
   """A turns is the question of the turns of a chain."""
   sand = Sand(stands=STANDS)

@@ -1,13 +1,10 @@
 """TAIL, the span that the stdout of a command without a show is told as."""
 
-import pytest
-
 from conftest import MANY, STANDS, Sand, attr, life, said, settle, shown, tags
 from furb import engine
 from furb.engine import TAIL, WORLD, span
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_tail_is_the_span_of_the_last_250_lines() -> None:
   """TAIL is the span of the last 250 lines, which the stdout of a command without a show is told as."""
   assert TAIL(MANY.splitlines()) == span(-250, -1)(MANY.splitlines()) == list(range(51, 301))

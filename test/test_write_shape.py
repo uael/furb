@@ -1,13 +1,10 @@
 """Write, the question of putting a text at its path."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said
 from furb import engine
 from furb.engine import Text
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_write_is_the_question_of_putting_a_text_at_its_path() -> None:
   """A write is the question of putting a text at its path."""
   sand = Sand(stands=STANDS)

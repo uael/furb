@@ -22,7 +22,6 @@ def breaks() -> Generator[tuple | None, tuple | None]:
   raise ValueError("boom")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_other_way_to_speak_a_generator_is_brought_to_life_under_a_name() -> None:
   """The other way to speak: a generator is brought to life under a name, and from then it hears every fact that is said and says its own."""
   sand = Sand(stands=STANDS)
@@ -35,7 +34,6 @@ async def test_the_other_way_to_speak_a_generator_is_brought_to_life_under_a_nam
   assert heard == log[at:]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_one_that_returns_is_over_and_lives_no_more() -> None:
   """One that returns is over and lives no more, which is how a thing that watches for one fact alone is dropped the moment it hears it."""
   sand = Sand(stands=STANDS)
@@ -47,7 +45,6 @@ async def test_one_that_returns_is_over_and_lives_no_more() -> None:
   assert len(mark) == 1 and len(said(log, "bash")) == 2
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_one_that_raises_while_it_hears_is_broken_the_same_way() -> None:
   """One that raises while it hears is broken the same way, and what went wrong goes to the one that spoke."""
   sand = Sand(stands=STANDS)
@@ -59,7 +56,6 @@ async def test_one_that_raises_while_it_hears_is_broken_the_same_way() -> None:
   assert len(said(log, "bash")) == 2
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_generator_brought_to_life_under_a_name_and_nothing_more() -> None:
   """A generator brought to life under a name and nothing more: it hears from the tip and runs to its first wait, and one born while a fact goes round hears from the next."""
   sand = Sand(stands=STANDS)
@@ -83,7 +79,6 @@ async def test_a_generator_brought_to_life_under_a_name_and_nothing_more() -> No
   assert later and command not in later and later == log[log.index(command) + 1 :]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_it_lives_until_it_returns() -> None:
   """It lives until it returns, and an act that hears nothing more returns at the first fact it hears after its own end."""
   sand = Sand(stands=STANDS)
@@ -99,7 +94,6 @@ async def test_it_lives_until_it_returns() -> None:
   assert heard and heard[-1] is log[-1]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_generator_that_yields_a_fact_is_given_the_fact_as_the_bus_said_it() -> None:
   """A generator that yields a fact is given the fact as the bus said it, and one that yields nothing waits for the next fact said."""
   sand = Sand(stands=STANDS)

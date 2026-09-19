@@ -1,12 +1,9 @@
 """Gate, the question of whether a word may run."""
 
-import pytest
-
 from conftest import STANDS, Py, Sand, attr, life, said, settle, sown, tags
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_gate_is_the_question_of_whether_a_word_may_run() -> None:
   """A gate is the question of whether a word may run, which the Kernel answers with its findings."""
   sand, py = Sand(stands=STANDS), Py()
@@ -19,7 +16,6 @@ async def test_a_gate_is_the_question_of_whether_a_word_may_run() -> None:
   assert engine.gate("k = 9", on=root) == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_refused_tag_holds_as_its_body_the_findings_that_refused_the_word_of_a_rung() -> None:
   """The refused tag holds as its body the findings that refused the word of a rung."""
   sand = sown()
@@ -29,7 +25,6 @@ async def test_the_refused_tag_holds_as_its_body_the_findings_that_refused_the_w
   assert [tag[2] for tag in tags(engine.turns(on=root), "refused")] == ["BAD in rung, against int after 0 rungs"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_has_the_kernel_gate_the_word_of_a_rung_before_it_runs() -> None:
   """The chain has the Kernel gate the word of a rung before it runs, and a refused word runs never."""
   sand, py = sown(), Py()
@@ -40,7 +35,6 @@ async def test_the_chain_has_the_kernel_gate_the_word_of_a_rung_before_it_runs()
   assert "BAD" not in engine.modules[root]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_refused_word_of_a_rung_is_not_part_of_the_program_of_the_chain() -> None:
   """A refused word of a rung is not part of the program of the chain."""
   sand = sown()
@@ -53,7 +47,6 @@ async def test_a_refused_word_of_a_rung_is_not_part_of_the_program_of_the_chain(
   assert [word for _, word in program] == ["close(7)"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:
   """The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the prompt of it asks again as it does for a word that gave no value."""
   sand, py = sown(), Py()

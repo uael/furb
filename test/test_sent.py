@@ -1,13 +1,10 @@
 """Sent, what an act a run waited for came to."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said
 from furb import engine
 from furb.engine import Exit
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_sent_carries_to_a_run_what_the_act_it_waited_for_came_to() -> None:
   """A sent carries to a run what the act it waited for came to."""
   sand = Sand(stands=STANDS)

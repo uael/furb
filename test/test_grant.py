@@ -2,8 +2,6 @@
 
 from asyncio import CancelledError
 
-import pytest
-
 from conftest import STANDS, Py, Sand, attr, life, said, settle, tags
 from furb import engine
 from furb.engine import OPERATOR, Refused
@@ -12,7 +10,6 @@ COST = (80000, 0, 0, 0, 1.5)
 """One answer of a model: a dollar and a half, and a fifth of the window of the actor the suite stands on."""
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_both() -> None:
   """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells that ledger at each answer of a model, so no turn an ask has sent grows a tag after it."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -25,7 +22,6 @@ async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_bot
   assert [(attr(tag, "spent"), attr(tag, "filled")) for tag in told] == [(1.5, 0.2), (3.0, 0.2), (4.5, 0.2)]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_grant_on_a_chain_puts_a_ceiling_on_it_dollars_a_share_of_the_window_or_both() -> None:
   """grant on a chain puts a ceiling on it: dollars, a share of the window, or both."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -44,7 +40,6 @@ async def test_grant_on_a_chain_puts_a_ceiling_on_it_dollars_a_share_of_the_wind
   assert {one[1] for one in said(log, "pause")} == {root, two, three}
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_engine_enters_a_pause_on_the_chain_when_a_response_carries_the_ledger_to_its_ceiling() -> None:
   """The engine enters a pause on the chain when a response carries the ledger to its ceiling."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -57,7 +52,6 @@ async def test_the_engine_enters_a_pause_on_the_chain_when_a_response_carries_th
   assert [(one[1], one[2]) for one in said(log, "pause")] == [(root, ceiling)]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_word_of_the_response_that_crossed_the_ceiling_runs() -> None:
   """The word of the response that crossed the ceiling runs."""
   sand, py = Sand(stands=STANDS, cost=COST), Py()
@@ -70,7 +64,6 @@ async def test_the_word_of_the_response_that_crossed_the_ceiling_runs() -> None:
   assert act not in engine.outcomes
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_no_ask_follows_the_response_that_carried_the_ledger_to_the_ceiling_until_a_wake() -> None:
   """No ask follows the response that carried the ledger to the ceiling, until a wake."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -85,7 +78,6 @@ async def test_no_ask_follows_the_response_that_carried_the_ledger_to_the_ceilin
   assert len(said(log, "ask")) == 2
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_model_continues_after_a_later_grant_and_a_wake() -> None:
   """The model continues after a later grant and a wake."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -101,7 +93,6 @@ async def test_the_model_continues_after_a_later_grant_and_a_wake() -> None:
   assert (await act) == 2
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_answer_that_carries_the_ledger_past_the_ceiling_pauses_the_chain() -> None:
   """An answer that carries the ledger past the ceiling pauses the chain, so the word that answer brought runs and what it gave waits, and no rung of the chain asks until the wake."""
   sand, py = Sand(stands=STANDS, cost=COST), Py()
@@ -117,7 +108,6 @@ async def test_an_answer_that_carries_the_ledger_past_the_ceiling_pauses_the_cha
   assert (await act) == 5
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_lifting_a_ceiling_wakes_nothing() -> None:
   """Lifting a ceiling wakes nothing: the pause stands until a wake, ceiling or no ceiling."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -135,7 +125,6 @@ async def test_lifting_a_ceiling_wakes_nothing() -> None:
   assert (await act) == 5
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_it_stands_until_it_is_lifted_as_the_chain_it_is_on_does() -> None:
   """It stands until it is lifted, as the chain it is on does, so what it comes to is what lifted it: nothing for a later grant that closes it, and a CancelledError for a cancel."""
   sand = Sand(stands=STANDS)
@@ -151,7 +140,6 @@ async def test_it_stands_until_it_is_lifted_as_the_chain_it_is_on_does() -> None
   assert isinstance(engine.outcomes[two], CancelledError) and isinstance(engine.peek(two, on=root), CancelledError)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one_is_no_ceiling() -> None:
   """A grant of nothing, of a ceiling under zero, or of a share past one is no ceiling: it is done with the refusal, which whoever made it takes by awaiting it, and it tells nothing, since it never stood; a prompt to no actor of the roster is closed the same way after it has told its open."""
   sand = Sand(stands=STANDS)
@@ -171,7 +159,6 @@ async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one
   assert told == ["opened", "closed"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_later_grant_that_stands_closes_every_grant_of_the_chain_before_it_that_stands() -> None:
   """A later grant that stands closes every grant of the chain before it that stands, and none that is over, so the ledger counts from the new one alone; one that is no ceiling closes nothing, and the ceiling that stands stands on."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -195,7 +182,6 @@ async def test_a_later_grant_that_stands_closes_every_grant_of_the_chain_before_
   assert len(shut) == 1 and [tag for tag in tags(engine.turns(on=root), "closed") if ("over", top) in tag[1]] == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_cancel_of_it_lifts_the_ceiling_since_it_is_an_act_like_any_other() -> None:
   """A cancel of it lifts the ceiling, since it is an act like any other."""
   sand = Sand(stands=STANDS, cost=COST)
@@ -212,7 +198,6 @@ async def test_a_cancel_of_it_lifts_the_ceiling_since_it_is_an_act_like_any_othe
   assert said(log, "pause") == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_grant_is_any_callers_on_any_chain() -> None:
   """A grant is any caller's, on any chain."""
   sand = Sand(stands=STANDS)
@@ -229,7 +214,6 @@ async def test_a_grant_is_any_callers_on_any_chain() -> None:
   assert (await mine) is None
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_grant_whose_chain_answers_no_transcript_is_done_with_what_it_was_answered() -> None:
   """A grant whose chain answers no transcript is done with what it was answered, since it reads its ledger from the transcript."""
   sand = Sand(stands=STANDS)

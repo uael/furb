@@ -1,13 +1,10 @@
 """Out, the streams of a command as they come."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, relived, settle
 from furb import engine
 from furb.engine import TAIL, WORLD
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_streams_of_a_command_come_as_out_facts_while_the_command_runs() -> None:
   """The streams of a command come as out facts while the command runs, which the record keeps."""
   sand = Sand(stands=STANDS, auto=False)
@@ -22,7 +19,6 @@ async def test_the_streams_of_a_command_come_as_out_facts_while_the_command_runs
   assert [(one[4], one[3]) for one in kept] == [("stdout", "one\n"), ("stderr", "bad\n")]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_later_life_reads_the_parts_that_a_command_told_before_the_death_of_the_process() -> None:
   """A later life reads the parts that a command told before the death of the process."""
   sand = Sand(stands=STANDS, auto=False)

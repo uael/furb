@@ -1,7 +1,5 @@
 """Stand, what a chain stands on."""
 
-import pytest
-
 from conftest import STANDS, Sand, attr, life, plain, relived, said, settle, sown, tags
 from furb import engine
 from furb.engine import WORLD
@@ -10,7 +8,6 @@ LATER = ((("operator", (), 200000), ("o", ("low",), 200000)), "/z", "o/low")
 """What a later World offers: another roster, another directory and another default actor."""
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_a_chain_stands_on() -> None:
   """What a chain stands on, which every chain without a source asks the World for as it opens, and a chain with a source asks of its origin, and which binds the actor and the directory of that chain from then on."""
   sand = Sand(stands=STANDS)
@@ -25,7 +22,6 @@ async def test_what_a_chain_stands_on() -> None:
   assert engine.modules[side]["actor"] == "m/low" and engine.cwd(on=side) == "/w"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_a_chain() -> None:
   """A change of the World between two lives enters the transcript of a chain."""
   sand = Sand(stands=STANDS)
@@ -40,7 +36,6 @@ async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_
   assert engine.cwd(on=over) == "/z" and engine.modules[over]["actor"] == "o/low"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_world_answers_a_stand_with_the_roster_the_directory_and_the_actor() -> None:
   """The World answers a stand with the roster, the directory and the actor."""
   sand = Sand(stands=STANDS)
@@ -52,7 +47,6 @@ async def test_the_world_answers_a_stand_with_the_roster_the_directory_and_the_a
   assert said(sand.calls, "stand") == [asked]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_model_asked_on_any_chain_of_a_later_life_finds_the_new_roster() -> None:
   """A model asked on any chain of a later life finds the new roster in the transcript of its chain."""
   sand = Sand(stands=STANDS)
@@ -69,7 +63,6 @@ async def test_a_model_asked_on_any_chain_of_a_later_life_finds_the_new_roster()
   ]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_world_answers_it_while_the_chain_waits() -> None:
   """The World answers it while the chain waits, since what a chain stands on is asked and never done."""
   sand = Sand(stands=STANDS)
@@ -80,7 +73,6 @@ async def test_the_world_answers_it_while_the_chain_waits() -> None:
   assert engine.modules[root]["actor"] == "m/low"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_chain_asks_what_it_stands_on_at_its_open_and_never_again_in_that_life() -> None:
   """A chain asks what it stands on at its open and never again in that life, and every life asks the World again, so a change of the World reaches every chain of the next life."""
   sand = Sand(stands=STANDS)
@@ -100,7 +92,6 @@ async def test_a_chain_asks_what_it_stands_on_at_its_open_and_never_again_in_tha
   assert engine.modules[twin]["actor"] == "o/low"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_each_standing_binds_the_default_actor_of_the_chain_under_the_name_actor() -> None:
   """Each standing binds the default actor of the chain, under the name actor."""
   sand = sown()
@@ -110,7 +101,6 @@ async def test_each_standing_binds_the_default_actor_of_the_chain_under_the_name
   assert engine.modules[root]["actor"] == "m/low" == said(log, "ask")[0][4]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_tells_the_standing_it_was_answered_under_the_name_opened() -> None:
   """The chain tells the standing it was answered under the name opened, with the roster, the directory and the actor."""
   sand = sown()
@@ -119,7 +109,6 @@ async def test_the_chain_tells_the_standing_it_was_answered_under_the_name_opene
   assert dict(told[1][1]) == {"id": root, "roster": STANDS[0], "directory": "/w", "actor": "m/low"}
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_holds_no_stand() -> None:
   """The chain holds no stand, since the standing it tells is what its transcript holds of it."""
   sand = sown()

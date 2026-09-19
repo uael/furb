@@ -9,7 +9,6 @@ from furb import engine
 from furb.engine import OPERATOR, Act, Text
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_name_of_an_act() -> None:
   """The name of an act, which is what a verb gives and what a caller holds of the act: a string, so it names the act to close, cancel, pause, peek and get, and awaitable, so it gives what the act comes to."""
   sand = Sand(stands=STANDS)
@@ -29,7 +28,6 @@ async def test_the_name_of_an_act() -> None:
   assert isinstance(engine.peek(two), CancelledError)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_act_is_over_when_its_done_stands_and_lives_until_then() -> None:
   """An act is over when its done stands and lives until then; there is no other state, and a control over an act that is over reaches nothing."""
   sand = Sand(stands=STANDS)
@@ -46,7 +44,6 @@ async def test_an_act_is_over_when_its_done_stands_and_lives_until_then() -> Non
   assert engine.peek(one) == 21 and (await one) == 21
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_outcome_of_a_cancelled_act_is_the_cancellederror_it_completed_with() -> None:
   """The outcome of a cancelled act is the CancelledError it completed with."""
   sand = Sand(stands=STANDS, auto=False)
@@ -61,7 +58,6 @@ async def test_the_outcome_of_a_cancelled_act_is_the_cancellederror_it_completed
     await one
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_only_a_command_lives_past_its_done_and_every_other_act_is_dropped_at_its_done() -> None:
   """Only a command lives past its done, and every other act is dropped at its done."""
   sand = Sand(stands=STANDS)

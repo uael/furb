@@ -7,7 +7,6 @@ from furb import engine
 from furb.engine import OPERATOR, Refused
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_idle_hears_every_fact_and_says_nothing_of_its_own() -> None:
   """idle hears every fact and says nothing of its own, which is the life of a wait and the ear of the operator."""
   hears = engine.idle("wait://operator.1.1")

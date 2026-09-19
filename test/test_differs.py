@@ -1,12 +1,9 @@
 """differs, the show of the lines that differ, which is what a write shows."""
 
-import pytest
-
 from conftest import STANDS, Sand, attr, life, settle, shown, tags
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_differs_lines_is_the_show_of_the_lines_that_differ_from_the_lines_it_holds() -> None:
   """differs(lines) is the show of the lines that differ from the lines it holds, which is what a write shows of what came back."""
   assert engine.differs(["one", "two"])(["one", "new", "two"]) == [2, 3]

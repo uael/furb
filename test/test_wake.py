@@ -1,13 +1,10 @@
 """wake, which ends a pause and gives what waited."""
 
-import pytest
-
 from conftest import STANDS, Py, Sand, life, said, settle, tags
 from furb import engine
 from furb.engine import WORLD
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_heard() -> None:
   """A wake: it ends the pause over the same act, and what waited is heard."""
   sand = Sand(stands=STANDS, auto=False)
@@ -24,7 +21,6 @@ async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_hea
   assert tags(engine.turns(on=root), "woke") == [("woke", [("over", act)], None)]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_delivery_carries_on_the_rungs_that_await_the_result_on_whatever_chain() -> None:
   """Delivery carries on the rungs that await the result, on whatever chain."""
   sand = Sand(stands=STANDS, auto=False)
@@ -44,7 +40,6 @@ async def test_delivery_carries_on_the_rungs_that_await_the_result_on_whatever_c
   assert (await act) == 0
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_wake_on_one_act_lifts_a_pause_of_its_chain_for_that_act_alone() -> None:
   """A wake on one act lifts a pause of its chain for that act alone."""
   sand = Sand(stands=STANDS, auto=False)
@@ -60,7 +55,6 @@ async def test_a_wake_on_one_act_lifts_a_pause_of_its_chain_for_that_act_alone()
   assert one in engine.outcomes and two not in engine.outcomes
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_wake_is_given_the_id_of_an_act_or_the_id_of_a_chain() -> None:
   """wake is given the id of an act or the id of a chain."""
   sand = Sand(stands=STANDS, auto=False)
@@ -79,7 +73,6 @@ async def test_wake_is_given_the_id_of_an_act_or_the_id_of_a_chain() -> None:
   assert two in engine.outcomes
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_wake_lifts_the_pause_and_delivers_every_held_result() -> None:
   """A wake lifts the pause and delivers every held result."""
   sand = Sand(stands=STANDS, auto=False)
@@ -96,7 +89,6 @@ async def test_a_wake_lifts_the_pause_and_delivers_every_held_result() -> None:
   assert ((await one).code, (await two).code) == (1, 2)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_wake_gates_and_runs_a_held_response() -> None:
   """A wake gates and runs a held response."""
   sand, py = Sand(stands=STANDS), Py()
@@ -111,7 +103,6 @@ async def test_a_wake_gates_and_runs_a_held_response() -> None:
   assert py.gated == ["close(7)"] and py.ran == ["close(7)"] and (await act) == 7
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_wake_makes_a_prompt_ask_with_the_transcript_as_it_grew() -> None:
   """A wake makes a prompt ask with the transcript as it grew."""
   sand = Sand(stands=STANDS)
@@ -129,7 +120,6 @@ async def test_a_wake_makes_a_prompt_ask_with_the_transcript_as_it_grew() -> Non
   assert "noted" not in [name for name, *_ in tags(asks[0][5])]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_wake_makes_no_ask_twice_and_loses_none() -> None:
   """A wake makes no ask twice and loses none."""
   sand = Sand(stands=STANDS)

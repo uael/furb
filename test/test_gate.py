@@ -37,7 +37,6 @@ class Strict(Py):
     return found + [f"a close of {type(one.value).__name__} is no {shape}" for one in wrong]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_whether_the_word_of_a_rung_may_run() -> None:
   """Whether the word of a rung may run: the Kernel reads it against the rungs of its chain before it and the name of the shape the word must give, and it finds nothing when the word may run."""
   sand, py = Sand(stands=STANDS), Py()
@@ -49,7 +48,6 @@ async def test_whether_the_word_of_a_rung_may_run() -> None:
   assert py.gates == [("k = 1", [], ""), ("close(k + 1)", ["k = 1"], "int")]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_word_of_a_rung_runs_only_if_the_gate_accepts_the_word() -> None:
   """The word of a rung runs only if the gate accepts the word."""
   sand, py = Sand(stands=STANDS), Py()
@@ -61,7 +59,6 @@ async def test_the_word_of_a_rung_runs_only_if_the_gate_accepts_the_word() -> No
   assert py.ran == ["k = 1"] and engine.modules[root]["k"] == 1
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_gate_checks_the_word_of_a_rung_against_the_rungs_before_it_in_record_order() -> None:
   """The gate checks the word of a rung against the rungs before it in record order."""
   sand, py = Sand(stands=STANDS), Py()
@@ -72,7 +69,6 @@ async def test_the_gate_checks_the_word_of_a_rung_against_the_rungs_before_it_in
   assert [ladder for _, ladder, _ in py.gates] == [[], ["a = 1"], ["a = 1", "b = 2"]]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_response_that_is_not_python_is_a_finding_like_any_other() -> None:
   """A response that is not python is a finding like any other."""
   sand = Sand(stands=STANDS)
@@ -84,7 +80,6 @@ async def test_a_response_that_is_not_python_is_a_finding_like_any_other() -> No
   assert len(bad) == 1 and isinstance(bad[0][2], str) and bad[0][2].startswith("not python: ")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_gate_gives_no_finding_when_the_gate_accepts_the_rung() -> None:
   """The gate gives no finding when the gate accepts the rung."""
   sand = Sand(stands=STANDS)
@@ -93,7 +88,6 @@ async def test_the_gate_gives_no_finding_when_the_gate_accepts_the_rung() -> Non
   assert engine.gate("close(1)", "int", on=root) == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_word_of_a_rung_is_gated_again_in_every_life_that_runs_it() -> None:
   """The word of a rung is gated again in every life that runs it, since the gate is of the moment and its findings are kept by nobody."""
   sand, py = Sand(stands=STANDS), Py()
@@ -108,7 +102,6 @@ async def test_the_word_of_a_rung_is_gated_again_in_every_life_that_runs_it() ->
   assert over == root and again.gated == ["close(1)"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_gate_refuses_a_return_whose_value_does_not_have_the_shape() -> None:
   """The gate refuses a word whose close carries a value that does not have the shape."""
   sand, py = Sand(stands=STANDS), Strict()
@@ -120,7 +113,6 @@ async def test_the_gate_refuses_a_return_whose_value_does_not_have_the_shape() -
   assert py.ran == ["close(1)"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_gate_tells_the_shape_it_read_against_and_the_findings_as_its_body() -> None:
   """gate tells the shape it read against and the findings as its body."""
   sand = Sand(stands=STANDS)

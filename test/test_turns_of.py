@@ -1,12 +1,9 @@
 """turns_of, the fold of what a chain has heard."""
 
-import pytest
-
 from conftest import STANDS, Sand, attr, life, said, settle, tags
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_user_turn_packs_one_tag_for_each_thing_told_since_the_last_ask() -> None:
   """A user turn packs one tag for each thing told since the last ask, in order."""
   sand = Sand(stands=STANDS)
@@ -17,7 +14,6 @@ async def test_a_user_turn_packs_one_tag_for_each_thing_told_since_the_last_ask(
   assert [name for name, *_ in tags(got[:1])] == ["opened", "opened", "opened", "closed"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_turns_of_a_chain_only_grow() -> None:
   """The turns of a chain only grow."""
   sand = Sand(stands=STANDS)
@@ -32,7 +28,6 @@ async def test_the_turns_of_a_chain_only_grow() -> None:
   assert len(tags(now)) > len(tags(was))
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_turn_once_phrased_is_phrased_the_same_on_every_later_ask() -> None:
   """A turn once phrased is phrased the same on every later ask."""
   sand = Sand(stands=STANDS)
@@ -47,7 +42,6 @@ async def test_a_turn_once_phrased_is_phrased_the_same_on_every_later_ask() -> N
   assert [one[: len(asks[1])] for one in asks[1:]] == [asks[1]] * 2
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_turns_are_folded_whole_at_each_ask() -> None:
   """The turns are folded whole at each ask, and a user turn holds every tag told before its ask and since the ask before it, so a tag told while an ask is in flight goes to the turn after the answer."""
   sand = Sand(stands=STANDS)
@@ -68,7 +62,6 @@ async def test_the_turns_are_folded_whole_at_each_ask() -> None:
   assert attr(last[0], "id") == said(log, "bash")[0][1]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_ask_appends_the_response_as_an_assistant_turn() -> None:
   """An ask appends the response as an assistant turn."""
   sand = Sand(stands=STANDS)
@@ -80,7 +73,6 @@ async def test_an_ask_appends_the_response_as_an_assistant_turn() -> None:
   assert got[-2][0] == "assistant" and got[-1][0] == "user"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_next_ask_tells_everything_that_the_step_told() -> None:
   """The next ask tells everything that the step told."""
   sand = Sand(stands=STANDS)
@@ -92,7 +84,6 @@ async def test_the_next_ask_tells_everything_that_the_step_told() -> None:
   assert [name for name, *_ in tags(second[-1:])] == ["raised", "closed", "opened"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_turns_hold_every_answer_of_the_model_as_the_turn_it_is() -> None:
   """The turns hold every answer of the model as the turn it is."""
   sand = Sand(stands=STANDS)
@@ -104,7 +95,6 @@ async def test_the_turns_hold_every_answer_of_the_model_as_the_turn_it_is() -> N
   assert [turn for turn in got if turn[0] == "assistant"] == [a[3] for a in said(log, "answer")]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_turns_of_a_chain_show_every_act_the_model_made() -> None:
   """The turns of a chain show every act the model made, with its result, and turns is how they are read."""
   sand = Sand(stands=STANDS)
@@ -117,7 +107,6 @@ async def test_the_turns_of_a_chain_show_every_act_the_model_made() -> None:
   assert [name for name, attrs, _ in tags(got) if ("id", command) in attrs] == ["opened", "closed"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_turns_end_with_a_user_turn() -> None:
   """The turns end with a user turn, empty when nothing was told since the last answer."""
   sand = Sand(stands=STANDS)

@@ -1,7 +1,5 @@
 """showing, what a tag shows of what a door answered."""
 
-import pytest
-
 from conftest import life, settle, sown, tags
 from furb import engine
 from furb.engine import HEAD, Text
@@ -19,7 +17,6 @@ NUMS = (
 )
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_a_tag_shows_of_what_a_door_answered() -> None:
   """What a tag shows of what a door answered: the text by the lines the model has not seen, and anything that is no text as python shows it."""
   one = Text("/w/n.txt", "one\ntwo\n")

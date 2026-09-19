@@ -1,13 +1,10 @@
 """told, the tag that an act tells of itself."""
 
-import pytest
-
 from conftest import STANDS, Sand, attr, life, said, settle, tags
 from furb import engine
 from furb.engine import OPERATOR
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_opened_tag_tells_the_id_and_what_the_act_says_of_itself() -> None:
   """The opened tag tells the id and what the act says of itself, and no actor and no arguments as such."""
   sand = Sand(stands=STANDS)
@@ -20,7 +17,6 @@ async def test_the_opened_tag_tells_the_id_and_what_the_act_says_of_itself() -> 
   assert opened == [("opened", [("id", command), ("command", "echo hi")], None)]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_closed_tag_tells_the_act_with_what_it_came_to_as_python_shows_it() -> None:
   """A closed tag tells the act with what it came to, as python shows it."""
   sand = Sand(stands=STANDS)
@@ -40,7 +36,6 @@ async def test_a_closed_tag_tells_the_act_with_what_it_came_to_as_python_shows_i
   assert [attr(tag, "code") for tag in closed if ("id", said(log, "bash")[0][1]) in tag[1]] == [0]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_told_says_a_tell_about_an_act_with_one_tag_that_names_the_act_by_its_id() -> None:
   """told says a tell about an act with one tag that names the act by its id, and gives the tell back, so a chain holds what it told where it told it."""
   sand = Sand(stands=STANDS)

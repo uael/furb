@@ -1,12 +1,9 @@
 """ending, the kind that ends an act at its done and at a control over it."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_close_from_outside_still_ends_what_a_pause_is_over() -> None:
   """A close from outside still ends what a pause is over."""
   sand = Sand(stands=STANDS)
@@ -19,7 +16,6 @@ async def test_a_close_from_outside_still_ends_what_a_pause_is_over() -> None:
   assert act in engine.outcomes and (await act) == 21
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_it_is_over_as_it_says_a_done_of_its_own() -> None:
   """It is over as it says a done of its own, so it never hears that done and says nothing after it."""
   sand = Sand(stands=STANDS)

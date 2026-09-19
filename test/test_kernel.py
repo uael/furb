@@ -2,14 +2,11 @@
 
 from asyncio import CancelledError
 
-import pytest
-
 from conftest import STANDS, Py, Sand, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Exit
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_has_the_kernel_gate_and_begin_every_rung_by_the_facts_gate_and_run() -> None:
   """The chain has the Kernel gate and begin every rung, by the facts gate and run."""
   sand, py = Sand(stands=STANDS), Py()
@@ -23,7 +20,6 @@ async def test_the_chain_has_the_kernel_gate_and_begin_every_rung_by_the_facts_g
   assert [one[2] for one in said(log, "done") if one[1].startswith("gate://")] == ["kernel", "kernel"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_kernel_answers_a_gate_with_its_findings_and_runs_the_word_of_a_run() -> None:
   """The Kernel answers a gate with its findings, runs the word of a run in the module of the chain the run names, says wants for the act a run waits for, takes a sent of what that act came to, and says ran with what the word gave."""
   sand = Sand(stands=STANDS)
@@ -41,7 +37,6 @@ async def test_the_kernel_answers_a_gate_with_its_findings_and_runs_the_word_of_
   assert isinstance(out, Exit) and out.code == 0
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_kernel_sets_the_site_to_the_rung_whose_word_it_steps() -> None:
   """The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung."""
   sand = Sand(stands=STANDS)

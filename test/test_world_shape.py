@@ -4,8 +4,6 @@ import asyncio
 from asyncio import CancelledError
 from functools import partial
 
-import pytest
-
 from conftest import STANDS, Sand, Where, World, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Refused, Text
@@ -38,7 +36,6 @@ class Knows(Sand):
           loop.call_soon(partial(engine.send, "answer", rung, turn, by=WORLD))
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_world_hears_every_fact() -> None:
   """The World hears every fact: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory it asks the chain for; it starts a command it is started with, asking it whether it is merged, feeds it, ends it at its timeout and at a cancel; it answers an ask with the turn of the model; and it shows a prompt to the operator."""
   sand = Sand(files={"/w/a.txt": "one\n"}, stands=STANDS, auto=False)
@@ -74,7 +71,6 @@ async def test_the_world_hears_every_fact() -> None:
   assert where.where == ["/x"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_world_performs_any_fact_that_an_extension_defines_and_that_the_world_knows() -> None:
   """The World performs any fact that an extension defines and that the World knows."""
   sand = Knows(stands=STANDS)
@@ -84,7 +80,6 @@ async def test_the_world_performs_any_fact_that_an_extension_defines_and_that_th
   assert [a[1] for a in said(sand.calls, "start")] == ["ping://operator.2.1.1"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_facts_that_the_world_says_of_its_own_are_for_the_acts_that_complete_later() -> None:
   """The facts that the World says of its own are for the acts that complete later."""
   sand = Sand(stands=STANDS)
@@ -99,7 +94,6 @@ async def test_the_facts_that_the_world_says_of_its_own_are_for_the_acts_that_co
   assert {a[1] for a in own} == {command, asked}
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_world_speaks_by_yielding_a_fact_or_by_calling_send_under_its_own_name() -> None:
   """The World speaks by yielding a fact, or by calling send under its own name when it speaks from its loop."""
   sand = Sand(stands=STANDS)

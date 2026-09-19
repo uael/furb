@@ -1,7 +1,5 @@
 """take, the filter of the file."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle, tags
 from furb import engine
 from furb.engine import take
@@ -25,7 +23,6 @@ def named(on: str) -> set[str]:
   return {value for tag in tags(engine.turns(on=on)) for key, value in tag[1] if key == "id" and isinstance(value, str)}
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_take_keeps_the_acts_it_names_and_everything_they_made() -> None:
   """take keeps the acts it names and everything they made."""
   root, first, second, one, two = await twice(Sand(stands=STANDS))
@@ -35,7 +32,6 @@ async def test_take_keeps_the_acts_it_names_and_everything_they_made() -> None:
   assert second not in named(kept) and two not in named(kept)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_take_is_given_ids_and_keeps_the_acts_with_those_ids() -> None:
   """take is given ids and keeps the acts with those ids."""
   root, first, second, one, two = await twice(Sand(stands=STANDS))
@@ -47,7 +43,6 @@ async def test_take_is_given_ids_and_keeps_the_acts_with_those_ids() -> None:
   assert [a[1] for a in take(first, second)(made)] == [first, one, second, two]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_take_keeps_everything_that_the_acts_with_those_ids_caused() -> None:
   """take keeps everything that the acts with those ids caused."""
   sand = Sand(stands=STANDS)
@@ -63,7 +58,6 @@ async def test_take_keeps_everything_that_the_acts_with_those_ids_caused() -> No
   assert {first, step, command} <= named(kept)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_take_that_is_not_inside_keeps_every_other_act() -> None:
   """take that is not inside keeps every other act, and drops everything the ones it names made."""
   root, first, second, one, two = await twice(Sand(stands=STANDS))

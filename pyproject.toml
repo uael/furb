@@ -80,14 +80,31 @@ skip-magic-trailing-comma = true
 [tool.ty.src]
 include = ["src", "test"]
 
+# The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
+# of an act, a task or a standing it reads after the check the sentence beside it makes.
+[[tool.ty.overrides]]
+include = ["src/furb/engine.py"]
+
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+unsupported-operator = "ignore"
+invalid-argument-type = "ignore"
+
 [tool.pytest.ini_options]
 minversion = "9.1"
 testpaths = ["test"]
 pythonpath = [".", "test"]
-addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "--cov=furb", "--cov-report=term-missing"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "--cov=furb", "--cov-report=term-missing", "--cov-fail-under=100"]
 xfail_strict = true
 timeout = 30
 timeout_method = "thread"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["error"]
+
+[tool.coverage.report]
+# The suite runs every line of engine.py. The lines it cannot reach are the bodies of send, ask, act and drive
+# before a life is living: boot binds the four to itself before anything can call them, so the stubs stand only
+# to name the error of a call outside a life.
+fail_under = 100
+exclude_also = ['raise RuntimeError\("no life is living"\)']

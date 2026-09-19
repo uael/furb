@@ -2,8 +2,6 @@
 
 from collections.abc import Generator
 
-import pytest
-
 from conftest import STANDS, Sand, keeping, life
 from furb import engine
 from furb.engine import OPERATOR
@@ -14,7 +12,6 @@ def once() -> Generator[tuple | None, tuple | None]:
   yield "done", "none://one", None
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_lives_carries_a_fact_into_a_body_and_says_everything_the_body_yields() -> None:
   """lives carries a fact into a body, says everything the body yields, and gives whether the body lives on."""
   sand = Sand(stands=STANDS)

@@ -9,7 +9,6 @@ from furb import engine
 from furb.engine import OPERATOR
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_cancel_of_that_prompt_reaches_the_acts_that_its_rungs_made_on_the_chain_with_a_source() -> None:
   """A cancel of that prompt reaches the acts that its rungs made on the chain with a source."""
   sand = Sand(stands=STANDS, auto=False)
@@ -27,7 +26,6 @@ async def test_a_cancel_of_that_prompt_reaches_the_acts_that_its_rungs_made_on_t
   assert isinstance(engine.peek(command[1]), CancelledError)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_cancel_is_over_the_act_it_names_and_everything_that_act_made() -> None:
   """A cancel is over the act it names and everything that act made, and each of them is done with CancelledError."""
   sand = Sand(stands=STANDS, auto=False)
@@ -43,7 +41,6 @@ async def test_a_cancel_is_over_the_act_it_names_and_everything_that_act_made() 
   assert isinstance(engine.peek(command), CancelledError)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_cancel_is_given_the_id_of_an_act_and_says_a_cancel_over_it() -> None:
   """cancel is given the id of an act, and says a cancel over it."""
   sand = Sand(stands=STANDS, auto=False)
@@ -53,7 +50,6 @@ async def test_cancel_is_given_the_id_of_an_act_and_says_a_cancel_over_it() -> N
   assert said(log, "cancel") == [("cancel", one, OPERATOR, [("cancelled", [("over", one)], None)])]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_cancelled_act_completes_with_cancellederror() -> None:
   """A cancelled act completes with CancelledError."""
   sand = Sand(stands=STANDS, auto=False)
@@ -64,7 +60,6 @@ async def test_a_cancelled_act_completes_with_cancellederror() -> None:
   assert isinstance(engine.peek(one), CancelledError)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_cancelled_prompt_raises_cancellederror_to_whoever_awaits_it() -> None:
   """A cancelled prompt raises CancelledError to whoever awaits it."""
   sand = Sand(stands=STANDS)
@@ -76,7 +71,6 @@ async def test_a_cancelled_prompt_raises_cancellederror_to_whoever_awaits_it() -
     await one
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_cancel_touches_nothing_else_on_the_chain() -> None:
   """A cancel touches nothing else on the chain."""
   sand = Sand(stands=STANDS)
@@ -92,7 +86,6 @@ async def test_a_cancel_touches_nothing_else_on_the_chain() -> None:
   assert (await two) == 21
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_awaiter_of_a_cancelled_command_raises_cancellederror_in_its_step() -> None:
   """The awaiter of a cancelled command raises CancelledError in its step."""
   sand = Sand(stands=STANDS, auto=False)

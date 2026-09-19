@@ -2,7 +2,7 @@
 
 The engine is `src/furb/engine.py`, one file, which depends only on the python interpreter and on two interfaces it
 declares, World and Kernel. It is derived from the contract, `src/furb/engine.pyi`, and proved by the suite in
-`test/`. Every call in the engine raises NotImplementedError: the contract and the suite come first. `src/furb/CLAUDE.md` holds the technical names of the engine and the laws that no test can hold.
+`test/`. `src/furb/CLAUDE.md` holds the technical names of the engine and the laws that no test can hold.
 
 ## The contract
 
@@ -44,9 +44,7 @@ The suite drives the engine through its public API alone, end to end, from the m
 - One test file per definition of the contract: `test_<name>.py` for a function, a global or a type alias,
   `test_<class>_<method>.py` for a method, in lower case, with dunder underscores stripped. A capitalized definition
   whose lower-case name is another definition's, `Bash` beside `bash`, has `test_<name>_shape.py`.
-- One test per sentence. The docstring of a test is exactly one sentence of the contract, and nothing else. A
-  test that the engine cannot satisfy is marked `@pytest.mark.xfail(strict=True, raises=NotImplementedError)`, and
-  the mark goes when the engine makes it pass.
+- One test per sentence. The docstring of a test is exactly one sentence of the contract, and nothing else.
 - A test arranges the World, acts through `engine.<verb>(...)` with `from furb import engine`, and asserts exact
   values: names, entries of `sand.record`, results through `engine.peek`, turns through `engine.turns(on=root)`,
   and the calls of the doubles. It reads a fact by position, as the contract declares it, and never weakens an

@@ -1,15 +1,12 @@
 """span, the show of the lines lo through hi."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle, tags
 from furb import engine
-from furb.engine import HIDDEN, span
+from furb.engine import HIDDEN, Text, span
 
-LINES = [f"line {i}" for i in range(1, 31)]
+LINES = Text("/w/n.txt", "".join(f"line {i}\n" for i in range(1, 31))).lines
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 def test_span_lo_hi_is_the_show_of_the_lines_lo_through_hi() -> None:
   """span(lo, hi) is the show of the lines lo through hi, where a line under one is counted back from the end, so that span(1, 20) is the first twenty lines and span(-20, -1) is the last twenty."""
   assert span(1, 20)(LINES) == list(range(1, 21))
@@ -20,7 +17,6 @@ def test_span_lo_hi_is_the_show_of_the_lines_lo_through_hi() -> None:
   assert span(1, 9)([]) == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_span_that_holds_no_line_shows_none_which_hidden_is() -> None:
   """A span that holds no line shows none, which HIDDEN is, and what a hidden show shows stands in no turns at all, neither its open nor its close."""
   assert span(0, 0)(LINES) == HIDDEN(LINES) == []

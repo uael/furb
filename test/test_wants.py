@@ -1,13 +1,10 @@
 """Wants, the act a run waits for."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
 from furb.engine import WORLD
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_wants_says_the_act_a_run_waits_for() -> None:
   """A wants says the act a run waits for."""
   sand = Sand(stands=STANDS, auto=False)

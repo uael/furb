@@ -1,12 +1,9 @@
 """scope, the chain a question is on."""
 
-import pytest
-
 from conftest import life, said, settle, sown
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_scope_of_a_question_from_its_name() -> None:
   """The scope of a question, from its name: the chain it is on, and itself for a chain, and nothing for a name of no question of the life."""
   sand = sown()

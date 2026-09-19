@@ -1,13 +1,10 @@
 """find, the numbers of the lines that a pattern matches."""
 
-import pytest
-
 from furb.engine import Text, grep
 
 ONE = Text("/w/n.txt", "one\ntwo\nthree\n")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 def test_find_pattern_gives_the_numbers_of_the_lines_that_the_pattern_matches() -> None:
   """find(pattern) gives the numbers of the lines that the pattern matches."""
   assert ONE.find("^t") == [2, 3]
@@ -16,7 +13,6 @@ def test_find_pattern_gives_the_numbers_of_the_lines_that_the_pattern_matches() 
   assert Text("/w/n.txt").find("one") == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 def test_the_numbers_of_the_lines_the_pattern_matches_which_is_what_grep_picks_of_them() -> None:
   """The numbers of the lines the pattern matches, which is what grep picks of them."""
   assert ONE.find("^t") == grep("^t")(ONE.lines) == [2, 3]

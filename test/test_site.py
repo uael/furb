@@ -1,13 +1,10 @@
 """site, who is speaking."""
 
-import pytest
-
 from conftest import keeping, life, said, sown
 from furb import engine
 from furb.engine import OPERATOR, WORLD
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_who_is_speaking_is_the_site_which_every_fact_is_said_from() -> None:
   """Who is speaking is the site, which every fact is said from: the generator while it speaks, the run while it is stepped, the operator otherwise."""
   sand = sown()

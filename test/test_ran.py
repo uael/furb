@@ -8,7 +8,6 @@ from conftest import STANDS, Sand, life, said
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_ran_says_what_the_word_of_a_rung_gave() -> None:
   """A ran says what the word of a rung gave."""
   sand = Sand(stands=STANDS)

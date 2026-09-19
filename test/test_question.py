@@ -1,13 +1,10 @@
 """question, whether a fact is a question."""
 
-import pytest
-
 from conftest import life, said, settle, sown
 from furb import engine
 from furb.engine import Text
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_whether_a_fact_is_a_question_which_its_name_says() -> None:
   """Whether a fact is a question, which its name says: a question is about itself, and its name is under its kind."""
   sand = sown()

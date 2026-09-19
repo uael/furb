@@ -1,12 +1,9 @@
 """Tell, the fact that carries the tags of an act."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, plain, relived, said, tags
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_tell_carries_tags_about_the_act_it_is_about() -> None:
   """A tell carries tags about the act it is about, and the turns are folded from them."""
   sand = Sand(stands=STANDS)
@@ -18,7 +15,6 @@ async def test_a_tell_carries_tags_about_the_act_it_is_about() -> None:
   assert [tag for a in told for tag in a[3]] == tags(engine.turns(on=root))[2:]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_an_act_tells_is_the_telling_of_its_chain() -> None:
   """What an act tells is the telling of its chain, so the record keeps none of it, and a later life tells it again."""
   sand = Sand(stands=STANDS)
@@ -32,7 +28,6 @@ async def test_what_an_act_tells_is_the_telling_of_its_chain() -> None:
   assert said(again, "tell") != []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_fact_that_carries_tags_is_what_the_turns_are_folded_from() -> None:
   """A fact that carries tags is what the turns are folded from: a tell, and a control, which carries the tag it tells."""
   sand = Sand(stands=STANDS)

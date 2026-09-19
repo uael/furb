@@ -1,12 +1,9 @@
 """Wait, the seconds that must pass before the World is done with it."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_wait_carries_the_seconds_that_must_pass_before_the_world_is_done_with_it() -> None:
   """A wait carries the seconds that must pass before the World is done with it."""
   sand = Sand(stands=STANDS)

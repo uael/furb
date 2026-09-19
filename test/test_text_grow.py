@@ -1,13 +1,10 @@
 """grow, the text as more of it is told."""
 
-import pytest
-
 from conftest import Sand, life, said, settle
 from furb import engine
 from furb.engine import WORLD, Text
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_text_as_more_of_it_is_told() -> None:
   """The text as more of it is told, which is how a stream of a command grows, and which comes from no text, since a stream that grows is no edit of one."""
   grown = Text("/x/stdout").grow("half\n").grow("rest\n")

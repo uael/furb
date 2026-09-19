@@ -1,13 +1,10 @@
 """Transcript, the question of the transcript of a chain up to an act."""
 
-import pytest
-
 from conftest import life, said, settle, sown
 from furb import engine
 from furb.engine import OPERATOR
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_transcript_is_the_question_of_the_transcript_of_a_chain_up_to_an_act() -> None:
   """A transcript is the question of the transcript of a chain up to an act, which the chain answers, and which a chain with a source and a grant ask."""
   sand = sown()

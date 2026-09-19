@@ -1,12 +1,9 @@
 """grep, the show of the lines that a pattern matches."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, settle, shown, tags
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_grep_pattern_is_the_show_of_the_lines_that_the_pattern_matches_each_with_its_number() -> None:
   """grep(pattern) is the show of the lines that the pattern matches, each with its number."""
   assert engine.grep("^b")(["a", "b", "c", "bb"]) == [2, 4]

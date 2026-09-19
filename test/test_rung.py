@@ -9,7 +9,6 @@ from furb import engine
 from furb.engine import WORLD, Exit, Refused
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_run_of_a_word_on_a_chain() -> None:
   """The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is."""
   sand = Sand(stands=STANDS)
@@ -22,7 +21,6 @@ async def test_the_run_of_a_word_on_a_chain() -> None:
   assert [text_of(turn) for turn in engine.turns(on=root) if turn[0] == "assistant"] == ["close(k + 1)"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_rung_is_an_act_the_run_of_one_word_in_the_globals_of_its_chain() -> None:
   """A rung is an act: the run of one word in the globals of its chain, which the chain has the Kernel run."""
   sand, py = Sand(stands=STANDS), Py()
@@ -36,7 +34,6 @@ async def test_a_rung_is_an_act_the_run_of_one_word_in_the_globals_of_its_chain(
   assert py.ran == ["k = 21"] and engine.modules[root]["k"] == 21
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_engine_tells_what_a_step_raised() -> None:
   """The engine tells what a step raised."""
   sand = Sand(stands=STANDS)
@@ -46,7 +43,6 @@ async def test_the_engine_tells_what_a_step_raised() -> None:
   assert [attr(tag, "message") for tag in tags(engine.turns(on=root), "raised")] == ["boom"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -> None:
   """A step that raised nothing and debugged nothing tells nothing."""
   sand = Sand(stands=STANDS)
@@ -57,7 +53,6 @@ async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -
   assert tags(told, "raised") == [] and tags(told, "debugged") == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_opened_tag_of_a_rung_with_a_word_carries_that_word_as_its_body() -> None:
   """The opened tag of a rung with a word carries that word as its body."""
   sand = Sand(stands=STANDS)
@@ -67,7 +62,6 @@ async def test_the_opened_tag_of_a_rung_with_a_word_carries_that_word_as_its_bod
   assert ("opened", [("id", act)], "k = 1") in tags(engine.turns(on=root), "opened")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_opened_tag_of_a_rung_with_no_word_tells_the_actor_and_the_close_its_word_must_say() -> None:
   """The opened tag of a rung with no word tells the actor that is asked and the close its word must say to answer the prompt, whose shape is what the gate reads that word against."""
   sand = Sand(stands=STANDS, auto=False)
@@ -80,7 +74,6 @@ async def test_the_opened_tag_of_a_rung_with_no_word_tells_the_actor_and_the_clo
   assert opened[1] == [("id", mine[1]), ("actor", "m/high"), ("says", "close(int)")]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_raised_tag_tells_the_type_and_the_message_of_the_exception_as_attributes() -> None:
   """The raised tag tells the type and the message of the exception as attributes."""
   sand = Sand(stands=STANDS)
@@ -91,7 +84,6 @@ async def test_the_raised_tag_tells_the_type_and_the_message_of_the_exception_as
   assert [tag[1][1:] for tag in raised] == [[("type", "ValueError"), ("message", "boom")]]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_rung_that_retells_another_rung_names_its_acts_under_that_one() -> None:
   """A rung that retells another rung names its acts under that one, so it makes the same acts and shares them."""
   sand = Sand(stands=STANDS)
@@ -107,7 +99,6 @@ async def test_a_rung_that_retells_another_rung_names_its_acts_under_that_one() 
   assert engine.modules[twin]["x"] == command
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_cancel_of_a_rung_is_the_kernels_to_do() -> None:
   """A cancel of a rung is the Kernel's to do, since the Kernel is the one running the word."""
   sand = Sand(stands=STANDS, auto=False)
@@ -123,7 +114,6 @@ async def test_a_cancel_of_a_rung_is_the_kernels_to_do() -> None:
   engine.cancel(act)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_word_of_a_model_is_python_code_and_nothing_else() -> None:
   """The word of a model is python code and nothing else."""
   sand = Sand(stands=STANDS)
@@ -134,7 +124,6 @@ async def test_the_word_of_a_model_is_python_code_and_nothing_else() -> None:
   assert [turn[1] for turn in engine.turns(on=root) if turn[0] == "assistant"] == [["close(1 + 1)"]]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_step_that_raised_keeps_what_it_bound_before_the_raise() -> None:
   """A step that raised keeps what it bound before the raise."""
   sand = Sand(stands=STANDS)
@@ -144,7 +133,6 @@ async def test_a_step_that_raised_keeps_what_it_bound_before_the_raise() -> None
   assert engine.modules[root]["a"] == 1
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_rung_may_await_at_its_top_level() -> None:
   """A rung may await at its top level."""
   sand = Sand(stands=STANDS)
@@ -152,7 +140,6 @@ async def test_a_rung_may_await_at_its_top_level() -> None:
   assert await engine.rung("out = await bash('echo hi')\nclose(out.code)", on=root) == 0
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_rung_answers_the_prompt_of_its_chain_with_close() -> None:
   """A rung answers the prompt of its chain with close, wherever in its word the close is said."""
   sand = Sand(stands=STANDS)
@@ -160,7 +147,6 @@ async def test_a_rung_answers_the_prompt_of_its_chain_with_close() -> None:
   assert await engine.rung("close(21)", on=root) == 21
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_kernel_gives_nothing_for_a_word_that_ran_to_its_end() -> None:
   """The Kernel gives nothing for a word that ran to its end, since a word that answers says a close and stops there."""
   sand = Sand(stands=STANDS)
@@ -169,7 +155,6 @@ async def test_the_kernel_gives_nothing_for_a_word_that_ran_to_its_end() -> None
   assert [isinstance(a[3], CancelledError) for a in said(log, "ran")] == [True]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_kernel_gives_what_a_word_raised() -> None:
   """The Kernel gives what a word raised, and a top-level return is no python, which the gate refuses as it refuses any word that is not python."""
   sand, py = Sand(stands=STANDS), Py()
@@ -186,7 +171,6 @@ async def test_the_kernel_gives_what_a_word_raised() -> None:
   assert py.gated[-1] == "k = (" and py.ran == ["k = 1", "raise ValueError('boom')"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_word_of_a_rung_runs_to_its_next_await_and_continues_when_the_close_it_awaits_comes() -> None:
   """The word of a rung runs to its next await and continues when the close it awaits comes."""
   sand = Sand(stands=STANDS)
@@ -200,7 +184,6 @@ async def test_the_word_of_a_rung_runs_to_its_next_await_and_continues_when_the_
   assert (await act) == 21
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_word_of_a_rung_answers_its_prompt_with_close() -> None:
   """The word of a rung answers its prompt with close, which carries the value the prompt is done with."""
   sand = Sand(stands=STANDS)
@@ -209,7 +192,6 @@ async def test_the_word_of_a_rung_answers_its_prompt_with_close() -> None:
   assert await engine.prompt(int, "how many?", on=root) == 21
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_turns_of_the_chain_of_another_prompt_tell_the_rung_of_a_word_its_caller_wrote() -> None:
   """The turns of the chain of another prompt tell the rung of a word its caller wrote."""
   sand = Sand(stands=STANDS)
@@ -222,7 +204,6 @@ async def test_the_turns_of_the_chain_of_another_prompt_tell_the_rung_of_a_word_
   assert [tag[2] for tag in tags(engine.turns(on=root), "opened") if tag[2]] == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_word_its_caller_wrote_is_a_user_turn_the_opened_tag_of_its_rung() -> None:
   """A word its caller wrote is a user turn, the opened tag of its rung."""
   sand = Sand(stands=STANDS)
@@ -233,7 +214,6 @@ async def test_a_word_its_caller_wrote_is_a_user_turn_the_opened_tag_of_its_rung
   assert turn[0] == "user" and ("opened", [("id", act)], "k = 1") in turn[1]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_rung_is_given_a_word_and_runs_it_on_a_chain_in_the_globals_of_that_chain() -> None:
   """rung is given a word and runs it on a chain in the globals of that chain."""
   sand = Sand(stands=STANDS)
@@ -244,7 +224,6 @@ async def test_rung_is_given_a_word_and_runs_it_on_a_chain_in_the_globals_of_tha
   assert [(a[4], a[3]) for a in said(log, "rung")] == [("k = 1", two)]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_kernel_gates_the_word_its_caller_wrote_like_any_word() -> None:
   """The Kernel gates the word its caller wrote like any word."""
   sand, py = Sand(stands=STANDS), Py()
@@ -256,7 +235,6 @@ async def test_the_kernel_gates_the_word_its_caller_wrote_like_any_word() -> Non
   assert py.gated == ["k = 1", "BAD = 1"] and py.ran == ["k = 1"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_rung_with_a_word_completes_with_what_that_word_raises() -> None:
   """A rung with a word completes with what that word raises, and with nothing when the word runs to its end."""
   sand = Sand(stands=STANDS)
@@ -266,7 +244,6 @@ async def test_a_rung_with_a_word_completes_with_what_that_word_raises() -> None
     await engine.rung("raise ValueError('boom')", on=root)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_close_ends_the_rung_that_runs_in_a_prompt_at_its_next_await() -> None:
   """A close ends the rung that runs in a prompt at its next await."""
   sand = Sand(stands=STANDS, auto=False)
@@ -280,7 +257,6 @@ async def test_a_close_ends_the_rung_that_runs_in_a_prompt_at_its_next_await() -
   assert (await act) == 21 and isinstance(engine.peek(step, on=root), CancelledError)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_chain_with_a_source_and_its_origin_share_the_one_act() -> None:
   """A chain with a source and its origin share the one act, the record's."""
   sand = Sand(stands=STANDS)
@@ -295,7 +271,6 @@ async def test_a_chain_with_a_source_and_its_origin_share_the_one_act() -> None:
   assert engine.modules[twin]["x"] == engine.modules[root]["x"] == command
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_chain_with_a_source_awaits_what_its_origin_started() -> None:
   """A chain with a source awaits what its origin started, through the name of the act."""
   sand = Sand(stands=STANDS, auto=False)
@@ -314,7 +289,6 @@ async def test_a_chain_with_a_source_awaits_what_its_origin_started() -> None:
   assert (await act) == 0 and [a[1] for a in said(log, "bash")] == [command]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_it_says_its_word_may_run_as_soon_as_it_holds_one() -> None:
   """It says its word may run as soon as it holds one, whichever way that word came, and what the chain makes of the word is the chain's."""
   sand = Sand(stands=STANDS)
@@ -328,7 +302,6 @@ async def test_it_says_its_word_may_run_as_soon_as_it_holds_one() -> None:
   assert [a[1] for a in said(log, "run")] == [laid, asking]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_has_the_kernel_begin_it_in_the_module_of_that_chain() -> None:
   """The chain has the Kernel begin it in the module of that chain, and the run carries it forward at the done of every act the word waits for, so that the engine owns the order of it."""
   sand = Sand(stands=STANDS)
@@ -342,7 +315,6 @@ async def test_the_chain_has_the_kernel_begin_it_in_the_module_of_that_chain() -
   assert isinstance(out, Exit) and out.code == 0
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_it_is_done_with_what_the_word_gave() -> None:
   """It is done with what the word gave, nothing for a word that ran to its end and the exception for a raise, which it tells with its type and its message, which its close then holds none of."""
   sand = Sand(stands=STANDS)
@@ -358,7 +330,6 @@ async def test_it_is_done_with_what_the_word_gave() -> None:
   assert [tag[2] for tag in shut] == [None]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_of_the_queries_its_word_asked_it_tells_nothing() -> None:
   """Of the queries its word asked it tells nothing, since they tell themselves."""
   sand = Sand(files={"/w/a.txt": "one\n"}, stands=STANDS)
@@ -371,7 +342,6 @@ async def test_of_the_queries_its_word_asked_it_tells_nothing() -> None:
   assert [tag[0] for tag in tags(told) if ("id", step) in tag[1]] == ["opened"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_answer_with_no_text_is_a_word_like_any_other() -> None:
   """An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the model is asked again."""
   sand, py = Sand(stands=STANDS), Py()
@@ -381,7 +351,6 @@ async def test_an_answer_with_no_text_is_a_word_like_any_other() -> None:
   assert py.gated == ["", "close(1)"] and py.ran == ["", "close(1)"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_with_a_source_makes_a_rung_of_its_own_retelling_each_rung() -> None:
   """The chain with a source makes a rung of its own retelling each rung of the ladder it is given."""
   sand = Sand(files={"/w/a.txt": "one\n"}, stands=STANDS)
@@ -396,7 +365,6 @@ async def test_the_chain_with_a_source_makes_a_rung_of_its_own_retelling_each_ru
   assert mine and all(a[1] != a[5] for a in mine)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_rung_that_awaits_an_act_nobody_settles_waits_until_the_operator_cancels_it() -> None:
   """A rung that awaits an act nobody settles waits until the operator cancels it, and holds nothing else of the chain."""
   sand = Sand(stands=STANDS, auto=False)
@@ -410,7 +378,6 @@ async def test_a_rung_that_awaits_an_act_nobody_settles_waits_until_the_operator
   assert isinstance(engine.outcomes[stuck], CancelledError)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_lineage_a_rung_names_its_acts_under() -> None:
   """The lineage a rung names its acts under is the lineage of its own name, and of the name of the one it retells for a rung that retells."""
   sand = Sand(stands=STANDS)

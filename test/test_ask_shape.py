@@ -4,8 +4,6 @@ import asyncio
 from dataclasses import dataclass
 from functools import partial
 
-import pytest
-
 from conftest import STANDS, Sand, World, attr, life, plain, relived, said, settle, sown, tags
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Refused
@@ -40,7 +38,6 @@ class Busy(Sand):
             loop.call_soon(partial(engine.send, "answer", rung, turn, by=WORLD))
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_request_of_an_ask_is_the_transcript_of_the_chain_as_turns() -> None:
   """The request of an ask is the transcript of the chain as turns."""
   sand = Sand(stands=STANDS)
@@ -53,7 +50,6 @@ async def test_the_request_of_an_ask_is_the_transcript_of_the_chain_as_turns() -
   assert [tag[0] for tag in asked[5][0][1] if isinstance(tag, tuple)] == ["opened"] * 4
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_model_reads_the_turns_of_the_chain_at_each_step() -> None:
   """The model reads the turns of the chain at each step."""
   sand = Sand(stands=STANDS)
@@ -67,7 +63,6 @@ async def test_the_model_reads_the_turns_of_the_chain_at_each_step() -> None:
   assert list(asked[1][5])[:1] == list(asked[0][5])
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_ask_carries_the_rung_it_asks_for_the_chain_that_asks_the_actor_and_the_turns() -> None:
   """An ask carries the rung it asks for, the chain that asks, the actor, and the turns of the chain, in order, and nothing else."""
   sand = Sand(stands=STANDS)
@@ -80,7 +75,6 @@ async def test_an_ask_carries_the_rung_it_asks_for_the_chain_that_asks_the_actor
   assert [turn[0] for turn in word[5]] == ["user"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_ask_says_the_chain_that_asks_as_a_word() -> None:
   """An ask says the chain that asks as a word, so the World keys its facts and its cache by chain."""
   sand = Sand(stands=STANDS)
@@ -96,7 +90,6 @@ async def test_an_ask_says_the_chain_that_asks_as_a_word() -> None:
   assert [a[3] for a in said(sand.calls, "ask")] == [root, two]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_ask_the_world_cannot_answer_is_the_worlds_to_close() -> None:
   """An ask the World cannot answer is the World's to close: it pauses the chain first when it wants a wake, and closes the rung with the refusal, which the prompt asks again after."""
   sand = Busy(stands=STANDS)
@@ -112,7 +105,6 @@ async def test_an_ask_the_world_cannot_answer_is_the_worlds_to_close() -> None:
   assert (await one) == 7 and len(said(log, "ask")) == 2
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_ask_hands_the_turns_of_the_chain_whole_folded_again_for_that_ask() -> None:
   """An ask hands the turns of the chain whole, folded again for that ask, and the record keeps the answer and no turns."""
   sand = Sand(stands=STANDS)
@@ -126,7 +118,6 @@ async def test_an_ask_hands_the_turns_of_the_chain_whole_folded_again_for_that_a
   assert "answer" in kinds and "ask" not in kinds
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_many_prompts_are_pending_on_one_chain_at_once() -> None:
   """Many prompts are pending on one chain at once."""
   sand = sown()
@@ -141,7 +132,6 @@ async def test_many_prompts_are_pending_on_one_chain_at_once() -> None:
   assert ((await one), (await two)) == (1, 2)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_chain_has_at_most_one_ask_in_flight() -> None:
   """A chain has at most one ask in flight."""
   sand = sown()
@@ -156,7 +146,6 @@ async def test_a_chain_has_at_most_one_ask_in_flight() -> None:
   assert all(ends[one] < opens[other] for one, other in zip(opens, list(opens)[1:], strict=False))
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_across_chains_there_is_no_limit_on_the_asks_in_flight() -> None:
   """Across chains there is no limit on the asks in flight."""
   sand = sown()
@@ -170,7 +159,6 @@ async def test_across_chains_there_is_no_limit_on_the_asks_in_flight() -> None:
   assert sand.script.get(root, []) == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_every_model_asked_on_a_chain_reads_all_the_turns_of_the_chain_as_the_turns_grow() -> None:
   """Every model asked on a chain reads all the turns of the chain, as the turns grow."""
   sand = sown()
@@ -183,7 +171,6 @@ async def test_every_model_asked_on_a_chain_reads_all_the_turns_of_the_chain_as_
   assert len(second[5]) > len(first[5])
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_as_many_asks_as_there_are_chains_are_in_flight_together() -> None:
   """As many asks as there are chains are in flight together."""
   sand = sown()
@@ -195,7 +182,6 @@ async def test_as_many_asks_as_there_are_chains_are_in_flight_together() -> None
   assert [a[3] for a in said(log, "ask")] == [root, two, three]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_later_life_asks_no_model_and_does_no_act_whose_close_the_record_already_holds() -> None:
   """A later life asks no model, and does no act, whose close the record already holds."""
   sand = sown()
@@ -209,7 +195,6 @@ async def test_a_later_life_asks_no_model_and_does_no_act_whose_close_the_record
   assert [a for a in later.calls if a[0] in ("ask", "start")] == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_new_prompt_reads_the_whole_transcript_of_the_chain_the_cancelled_work_included() -> None:
   """A new prompt reads the whole transcript of the chain, the cancelled work included."""
   sand = sown()
@@ -225,7 +210,6 @@ async def test_a_new_prompt_reads_the_whole_transcript_of_the_chain_the_cancelle
   assert [attr(tag, "over") for tag in tags(told, "cancelled")] == [first]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_no_prompt_that_a_pause_is_over_asks_a_model() -> None:
   """No prompt that a pause is over asks a model."""
   sand = sown()
@@ -240,7 +224,6 @@ async def test_no_prompt_that_a_pause_is_over_asks_a_model() -> None:
   assert (await one) == 2 and len(said(log, "ask")) == 2
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_paused_chain_makes_no_new_ask_after_a_held_response() -> None:
   """A paused chain makes no new ask after a held response."""
   sand = sown()
@@ -254,7 +237,6 @@ async def test_a_paused_chain_makes_no_new_ask_after_a_held_response() -> None:
   assert len(said(log, "ask")) == 1 and engine.peek(one) is None
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_no_model_is_asked_for_a_rung_the_record_answered() -> None:
   """No model is asked for a rung the record answered, since a later life asks again for nothing it was answered once."""
   sand = sown()
@@ -268,7 +250,6 @@ async def test_no_model_is_asked_for_a_rung_the_record_answered() -> None:
   assert engine.modules[over]["a"] == 1
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_it_asks_for_no_rung_a_pause_stands_over() -> None:
   """It asks for no rung a pause stands over, whether the pause is over that rung or over the chain, so a paused chain asks no model until the wake."""
   sand = sown()
@@ -283,7 +264,6 @@ async def test_it_asks_for_no_rung_a_pause_stands_over() -> None:
   assert (await one) == 1 and len(said(log, "ask")) == 1
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_asks_one_model_at_a_time() -> None:
   """The chain asks one model at a time, which it reads from its transcript, the rung that has waited the longest among those it heard on itself that nothing has been said of, handing it the turns as they stand, for the World to render as it likes, so that many chains ask many models at once."""
   sand = sown()

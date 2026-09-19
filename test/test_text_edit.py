@@ -7,7 +7,6 @@ from furb.engine import Refused, Text
 ONE = Text("/w/n.txt", "one\ntwo\nthree\n")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 def test_the_text_with_one_more_edit_an_edit_whose_lines_are_not_there_is_refused() -> None:
   """The text with one more edit; an edit whose lines are not there is refused."""
   made = ONE.edit(2, 2, ["TWO"])
@@ -18,7 +17,6 @@ def test_the_text_with_one_more_edit_an_edit_whose_lines_are_not_there_is_refuse
     ONE.edit(1, 4, ["x"])
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 def test_the_edits_that_say_themselves_are_one_edit_each() -> None:
   """The edits that say themselves are one edit each: a replace of a string, an append at the end, an insert before a line, and a delete of lines."""
   assert ONE.replace("one", "1").content == "1\ntwo\nthree\n"

@@ -7,7 +7,6 @@ from furb import engine
 from furb.engine import Refused
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_a_word_tells_of_itself_as_it_runs() -> None:
   """What a word tells of itself as it runs: each interpolation of a template, with its expression and its value."""
   sand = Sand(stands=STANDS)
@@ -20,7 +19,6 @@ async def test_what_a_word_tells_of_itself_as_it_runs() -> None:
   assert [tag[1] for tag in told] == [[("id", step), ("n", 42)], [("id", step), ("n + 1", 43)]]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_engine_tells_what_a_step_debugged() -> None:
   """The engine tells what a step debugged."""
   sand = Sand(stands=STANDS)
@@ -31,7 +29,6 @@ async def test_the_engine_tells_what_a_step_debugged() -> None:
   assert [tag[1][1] for tag in tags(engine.turns(on=root), "debugged")] == [("7", 7)]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_debugged_tag_tells_one_interpolation_of_a_debug() -> None:
   """The debugged tag tells one interpolation of a debug, its expression and its value."""
   sand = Sand(stands=STANDS)
@@ -43,7 +40,6 @@ async def test_the_debugged_tag_tells_one_interpolation_of_a_debug() -> None:
   assert [tag[2] for tag in told] == [None, None]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_raised_tag_and_a_debugged_tag_stand_at_the_place_in_the_run_where_they_happened() -> None:
   """A raised tag and a debugged tag stand at the place in the run where they happened."""
   sand = Sand(stands=STANDS)
@@ -55,7 +51,6 @@ async def test_a_raised_tag_and_a_debugged_tag_stand_at_the_place_in_the_run_whe
   assert [tag[0] for tag in got[2][1] if isinstance(tag, tuple)] == ["debugged", "raised", "closed", "opened"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_transcript_holds_between_the_entries_what_the_run_of_each_word_raised_and_debugged() -> None:
   """The transcript holds between the entries what the run of each word raised and debugged."""
   sand = Sand(stands=STANDS)
@@ -72,7 +67,6 @@ async def test_the_transcript_holds_between_the_entries_what_the_run_of_each_wor
   assert len(told) == 1 and opened[0] < told[0] < shut[0]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_debug_is_given_a_python_template_string() -> None:
   """debug is given a python template string."""
   sand = Sand(stands=STANDS)
@@ -82,7 +76,6 @@ async def test_debug_is_given_a_python_template_string() -> None:
   assert [tag[1][1] for tag in told] == [("who", "me"), ("1 + 1", 2)]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_debug_tells_each_interpolation_of_the_template_with_its_expression_and_its_value() -> None:
   """debug tells each interpolation of the template, with its expression and its value."""
   sand = Sand(stands=STANDS)
@@ -91,7 +84,6 @@ async def test_debug_tells_each_interpolation_of_the_template_with_its_expressio
   assert [tag[1][1] for tag in tags(engine.turns(on=root), "debugged")] == [("a", 1), ("b", 2), ("c", 3)]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_debug_tells_nothing_but_the_interpolations() -> None:
   """debug tells nothing but the interpolations."""
   sand = Sand(stands=STANDS)
@@ -104,7 +96,6 @@ async def test_debug_tells_nothing_but_the_interpolations() -> None:
   assert tags(engine.turns(on=root), "debugged") == told
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_debug_enters_nothing_in_the_record() -> None:
   """debug enters nothing in the record."""
   sand = Sand(stands=STANDS)
@@ -114,7 +105,6 @@ async def test_debug_enters_nothing_in_the_record() -> None:
   assert [fact[0] for _, fact, *_ in sand.record] == ["chain", "rung"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_it_is_no_act_and_it_enters_no_record() -> None:
   """It is no act and it enters no record, and it stands in the turns at the place in the run where it happened."""
   sand = Sand(stands=STANDS)
@@ -129,7 +119,6 @@ async def test_it_is_no_act_and_it_enters_no_record() -> None:
   assert [tag[0] for tag in turn[1] if isinstance(tag, tuple)] == ["opened", "opened", "opened", "debugged", "closed"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_outside_an_act_there_is_nothing_to_tell_of_so_it_is_refused() -> None:
   """Outside an act there is nothing to tell of, so it is refused."""
   sand = Sand(stands=STANDS)
@@ -138,7 +127,6 @@ async def test_outside_an_act_there_is_nothing_to_tell_of_so_it_is_refused() -> 
     engine.debug(t"{1}")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_engine_refuses_debug_outside_an_act() -> None:
   """The engine refuses debug outside an act."""
   sand = Sand(stands=STANDS)
@@ -149,7 +137,6 @@ async def test_the_engine_refuses_debug_outside_an_act() -> None:
   assert log[mark:] == [] and tags(engine.turns(on=root), "debugged") == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_tell_is_on_the_scope_of_the_act_it_is_of_so_debug_takes_no_chain_of_its_own() -> None:
   """A tell is on the scope of the act it is of, so debug takes no chain of its own."""
   sand = Sand(stands=STANDS)

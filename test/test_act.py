@@ -26,7 +26,6 @@ def noting(heard: list[object], how: str = ""):  # noqa: ANN201
   return lives
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_way_to_make_a_question_that_lives() -> None:
   """The way to make a question that lives: it takes a name when it is made, it is logged, its life is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it."""
   sand = Sand(stands=STANDS)
@@ -39,7 +38,6 @@ async def test_the_way_to_make_a_question_that_lives() -> None:
   assert heard[0] == one
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_act_said_it_is_begun_and_what_the_call_gives_is_its_name() -> None:
   """An act said: it is begun, and what the call gives is its name, which is awaited for what the act comes to."""
   sand = Sand(stands=STANDS)
@@ -51,7 +49,6 @@ async def test_an_act_said_it_is_begun_and_what_the_call_gives_is_its_name() -> 
   assert (await one).code == 0
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_act_said_twice_under_one_name_is_one_act() -> None:
   """An act said twice under one name is one act, and the second saying brings no second life and gives the name back."""
   sand = Sand(stands=STANDS)
@@ -63,7 +60,6 @@ async def test_an_act_said_twice_under_one_name_is_one_act() -> None:
   assert [a[1] for a in sand.calls if a[0] == "start"] == ["bash://operator.2.1"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_two_acts_that_say_the_same_words_under_one_name_are_one_act() -> None:
   """Two acts that say the same words under one name are one act."""
   sand = Sand(stands=STANDS)
@@ -80,7 +76,6 @@ async def test_two_acts_that_say_the_same_words_under_one_name_are_one_act() -> 
   assert [e[1][1] for e in sand.record if e[1][0] == "bash"] == [one]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_engine_refuses_an_act_said_from_outside_a_run_that_names_no_chain() -> None:
   """The engine refuses an act said from outside a run that names no chain, a chain apart."""
   sand = Sand(stands=STANDS)
@@ -92,7 +87,6 @@ async def test_the_engine_refuses_an_act_said_from_outside_a_run_that_names_no_c
   assert engine.chain("two").startswith("chain://")
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
   """The chain an act is on is the chain named to the call, or the scope of the one that made it when the call names none."""
   sand = Sand(stands=STANDS)
@@ -106,7 +100,6 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
   assert engine.get(unsaid)[3] == root
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_life_of_an_act_is_given_the_name_of_the_act_and_hears_every_fact_said_after_its_birth() -> None:
   """The life of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a fact or by calling the bus."""
   sand = Sand(stands=STANDS)
@@ -123,7 +116,6 @@ async def test_the_life_of_an_act_is_given_the_name_of_the_act_and_hears_every_f
   ]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_act_carries_the_words_of_its_kind() -> None:
   """An act carries the words of its kind, which are the plain arguments the verb was given, in the order of the verb, and a show or a filter is none of them."""
   sand = Sand(stands=STANDS)

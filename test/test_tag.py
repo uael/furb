@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle, shown, sown, tags, wire
 from furb import engine
 from furb.engine import Text
@@ -44,7 +42,6 @@ NAMES = {
 }
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_one_thing_a_turn_says() -> None:
   """One thing a turn says: its name, what it holds of its own, and what it is of, which is a text and its show when a text is what it shows."""
   sand = Sand(files={"/w/n.txt": "one\ntwo\n"}, stands=STANDS)
@@ -60,7 +57,6 @@ async def test_one_thing_a_turn_says() -> None:
   assert shown(told) == [("shown", [("path", "/w/n.txt"), ("known", 0)], "1 one")]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_tag_is_a_name_attributes_as_pairs_of_a_name_and_a_value_and_a_body() -> None:
   """A tag is a name, attributes as pairs of a name and a value that the World makes plain, and a body."""
   sand = Sand(stands=STANDS)
@@ -74,7 +70,6 @@ async def test_a_tag_is_a_name_attributes_as_pairs_of_a_name_and_a_value_and_a_b
   assert json.loads(json.dumps(made)) == made
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_each_tag_of_a_user_turn_that_is_of_an_act_names_the_act_by_its_id() -> None:
   """Each tag of a user turn that is of an act names the act by its id among its attributes, under the name id for what an act tells and over for a control, and a tag of a query stands at the place in the run where the query was asked."""
   sand = Sand(files={"/w/n.txt": "one\n"}, stands=STANDS)
@@ -90,7 +85,6 @@ async def test_each_tag_of_a_user_turn_that_is_of_an_act_names_the_act_by_its_id
   assert [tag[1] for tag in tags(engine.turns(on=root), "paused")] == [[("over", root)]]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_tags_of_the_file() -> None:
   """The tags of the file are opened, closed, shown, raised, debugged, refused, paused, woke, cancelled, ledger, and one for each query the model may say: read, write, peek, turns, clock, chance, gate, cd and cwd."""
   sand = sown()

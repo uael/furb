@@ -1,12 +1,9 @@
 """Holds, the question of what the record kept of an act."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, relived, said, settle
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_holds_is_the_question_of_what_the_record_kept_of_an_act() -> None:
   """A holds is the question of what the record kept of an act."""
   sand = Sand(stands=STANDS)
@@ -22,7 +19,6 @@ async def test_a_holds_is_the_question_of_what_the_record_kept_of_an_act() -> No
   assert engine.ask("holds", over, "bash://nobody")[1] == []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_holds_its_holds_in_the_transcript() -> None:
   """The chain holds its holds in the transcript, where the ask stands in a life that asks, so the fold cuts a user turn there in every life."""
   sand = Sand(stands=STANDS)

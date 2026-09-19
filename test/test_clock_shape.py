@@ -1,13 +1,10 @@
 """Clock, the question of a reading of the wall clock."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said
 from furb import engine
 from furb.engine import OPERATOR, WORLD
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_clock_is_the_question_of_a_reading_of_the_wall_clock() -> None:
   """A clock is the question of a reading of the wall clock."""
   sand = Sand(stands=STANDS)

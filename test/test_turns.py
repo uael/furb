@@ -1,7 +1,5 @@
 """turns, what a model reads of a chain."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle, shown, tags
 from furb import engine
 from furb.engine import span
@@ -15,7 +13,6 @@ def carrying(held: list[tuple]) -> list[tuple]:
   return [tag for a in held if a[0] in CARRY for tag in (a[4] if a[0] == "close" else a[3])]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
   """The turns of a chain, folded from what it has heard."""
   sand = Sand(stands=STANDS)
@@ -28,7 +25,6 @@ async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
   assert [role for role, *_ in got] == ["user"]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_turns_asked_from_a_run_tells_how_many_turns_there_are() -> None:
   """A turns asked from a run tells how many turns there are, and never the turns."""
   sand = Sand(stands=STANDS)
@@ -38,7 +34,6 @@ async def test_a_turns_asked_from_a_run_tells_how_many_turns_there_are() -> None
   assert tags(engine.turns(on=root), "turns") == [("turns", [("turns", 3)], None)]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_turns_of_what_a_chain_has_heard() -> None:
   """The turns of what a chain has heard: every fact that carries tags stands as its tags, and nothing else stands at all."""
   sand = Sand(stands=STANDS)
@@ -54,7 +49,6 @@ async def test_the_turns_of_what_a_chain_has_heard() -> None:
   assert carried != [] and [a[0] for a in held if a[0] not in CARRY] != []
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operator() -> None:
   """The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines it has not seen, which the one that tells it says the show of."""
   sand = Sand(files={"/w/n.txt": "one\ntwo\n"}, stands=STANDS)
@@ -68,7 +62,6 @@ async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operato
   assert span(2, 2)(["one", "two"]) == [2]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_chain_answers_for_its_turns() -> None:
   """The chain answers for its turns, folded from what it has heard."""
   sand = Sand(stands=STANDS)

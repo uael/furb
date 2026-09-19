@@ -9,7 +9,6 @@ from furb.engine import Drift
 ROSTER, WHERE, WHO = STANDS
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_a_chain_stands_on() -> None:
   """What a chain stands on: the actors the World offers, the directory the chain starts in, and the actor a prompt goes to when it names none."""
   sand = Sand(stands=STANDS)
@@ -23,7 +22,6 @@ async def test_what_a_chain_stands_on() -> None:
   assert engine.modules[root]["actor"] == "m/low"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_the_transcript() -> None:
   """The roster, the directory and the actor that a model reads are in the transcript of its chain."""
   sand = Sand(stands=STANDS)
@@ -35,7 +33,6 @@ async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_
   assert [tag for a in held if a[0] == "tell" for tag in a[3] if ("roster", ROSTER) in tag[1]] == [told]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_standing_holds_no_source() -> None:
   """A standing holds no source: the engine is one file the model imports, and a record made by another engine is a drift."""
   assert len(STANDS) == 3

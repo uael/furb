@@ -2,13 +2,10 @@
 
 from asyncio import CancelledError
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_what_an_act_a_control_is_over_is_done_with() -> None:
   """What an act a control is over is done with: the value a close carries for the act it names, and a CancelledError for every other."""
   sand = Sand(stands=STANDS, auto=False)

@@ -1,12 +1,9 @@
 """Ready, the word a rung holds and the shape that word must give."""
 
-import pytest
-
 from conftest import DOOR, STANDS, Sand, life, plain, relived, said, settle, sown, text_of
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_a_ready_says_the_word_a_rung_holds_and_the_name_of_the_shape_that_word_must_give() -> None:
   """A ready says the word a rung holds and the name of the shape that word must give."""
   sand = Sand(stands=STANDS)
@@ -20,7 +17,6 @@ async def test_a_ready_says_the_word_a_rung_holds_and_the_name_of_the_shape_that
   assert [a[1] for a in said(log, "ready")] == [laid, asking]
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_an_accepted_word_of_a_rung_enters_the_program_of_the_chain() -> None:
   """An accepted word of a rung enters the program of the chain and runs in the globals of the chain."""
   sand = sown()
@@ -33,7 +29,6 @@ async def test_an_accepted_word_of_a_rung_enters_the_program_of_the_chain() -> N
   assert engine.modules[root]["a"] == 1
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_word_of_a_rung_that_extends_the_engine_is_part_of_the_program() -> None:
   """The word of a rung that extends the engine is part of the program, so the extension returns in a later life."""
   sand = sown()
@@ -46,7 +41,6 @@ async def test_the_word_of_a_rung_that_extends_the_engine_is_part_of_the_program
   assert engine.read("note://a", on=over).content == "kept"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_the_old_words_stay_in_the_program_and_in_the_turns_after_a_rung_rebinds_a_name() -> None:
   """The old words stay in the program and in the turns after a rung rebinds a name."""
   sand = sown()

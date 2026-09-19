@@ -1,12 +1,9 @@
 """HIDDEN, the span of no line."""
 
-import pytest
-
 from conftest import STANDS, Sand, life, said, settle, tags
 from furb import engine
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError)
 async def test_hidden_is_the_span_of_no_line_which_an_act_takes_to_tell_nothing_of_itself() -> None:
   """HIDDEN is the span of no line, which an act takes to tell nothing of itself."""
   assert engine.HIDDEN(["one", "two", "three"]) == []
