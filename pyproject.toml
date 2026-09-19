@@ -1,0 +1,23 @@
+[project]
+name = "furb"
+version = "0.1.0"
+description = "The core of an AI harness, in one python file."
+readme = "README.md"
+requires-python = ">=3.14"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "Abel Lucas", email = "uaelucas@gmail.com" }]
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Source = "https://github.com/uael/furb"
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = ["pre-commit>=4.6.2"]
