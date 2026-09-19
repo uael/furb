@@ -41,7 +41,7 @@ use ruff_db::{
   diagnostic::{Diagnostic, DiagnosticFormat, DisplayDiagnosticConfig, DisplayDiagnostics},
   file_revision::FileRevision,
   files::{File, FileRootKind, Files, system_path_to_file},
-  system::{DbWithTestSystem, DbWithWritableSystem as _, SystemPath, SystemPathBuf, System, TestSystem},
+  system::{DbWithTestSystem, DbWithWritableSystem as _, System, SystemPathBuf, TestSystem},
   vendored::VendoredFileSystem,
 };
 use ruff_python_ast::{self as ast, PythonVersion, Stmt};
@@ -199,15 +199,10 @@ fn python(word: &str) -> Vec<String> {
     Ok(held) => held,
     Err(no) => return vec![format!("line {}: {no}", lined(word, no.location.start().into()))],
   };
-  let mut said: Vec<String> = held
-    .errors()
-    .iter()
-    .map(|no| format!("line {}: {no}", lined(word, no.location.start().into())))
-    .collect();
+  let mut said: Vec<String> =
+    held.errors().iter().map(|no| format!("line {}: {no}", lined(word, no.location.start().into()))).collect();
   said.extend(
-    returns(&held.syntax().body)
-      .into_iter()
-      .map(|at| format!("line {}: 'return' outside function", lined(word, at))),
+    returns(&held.syntax().body).into_iter().map(|at| format!("line {}: 'return' outside function", lined(word, at))),
   );
   said
 }
@@ -377,10 +372,7 @@ impl Default for Memory {
       .expect("the typeshed ty carries always resolves");
     paths.try_register_static_roots(&db);
     db.program = ProgramSettings {
-      python_version: PythonVersionWithSource {
-        version: PythonVersion::PY314,
-        source: PythonVersionSource::default(),
-      },
+      python_version: PythonVersionWithSource { version: PythonVersion::PY314, source: PythonVersionSource::default() },
       python_platform: PythonPlatform::default(),
       search_paths: paths,
     };
@@ -436,11 +428,7 @@ impl PythonCoreDb for Memory {
 #[salsa::db]
 impl Db for Memory {
   fn check_file(&self, file: File) -> Vec<Diagnostic> {
-    if self.should_check_file(file) {
-      check_file_unwrap(self, self.program_file(file))
-    } else {
-      Vec::new()
-    }
+    if self.should_check_file(file) { check_file_unwrap(self, self.program_file(file)) } else { Vec::new() }
   }
 
   fn program_file(&self, file: File) -> ProgramFile<'_> {
@@ -537,7 +525,10 @@ mod tests {
     let mut held = Ty::new();
     // The code of an exit is a number or nothing, which is the shape the word must be read against.
     assert_eq!(held.gate("close((await bash('ls')).code)", &[], "int | None"), Vec::<String>::new());
-    assert!(!held.gate("close((await bash('ls')).code)", &[], "int").is_empty(), "a code that may be nothing is no int");
+    assert!(
+      !held.gate("close((await bash('ls')).code)", &[], "int").is_empty(),
+      "a code that may be nothing is no int"
+    );
   }
 
   #[test]

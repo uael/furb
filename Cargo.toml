@@ -8,7 +8,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
 
 [features]
-default = []
+default = ["gate"]
 # The gate of the crate: ty, as a library, reading the word of a rung before it runs.
 gate = [
   "dep:ruff_db",
