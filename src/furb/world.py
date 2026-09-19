@@ -367,9 +367,8 @@ class Live:
       return
     one.stands(proc)
     if one.over:
-      # The word that ended it came before the group was up, so it dies here; its streams and its code are still
-      # read to the end below, since a process nobody reaps leaves its pipes open for the collector to complain of.
       one.slay()
+      return
 
     async def drained() -> None:
       """Both streams to their end, and then the code of the command."""
