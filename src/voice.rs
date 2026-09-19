@@ -1,13 +1,16 @@
 //! How a host speaks into a life when nothing asked it to.
 //!
-//! A World answers most facts where it hears them, and [`crate::Reply`] carries those answers back. The facts of
-//! the World about the acts that complete later are not like that: a command says what it wrote as it writes it,
-//! says its code when it ends, and a model answers an ask long after the ask was heard. The engine says so
-//! plainly: the World speaks by yielding a fact, or by calling send under its own name when it speaks from its
-//! loop. This is that second way.
+//! A World answers most facts where it hears them, and [`crate::Reply`] carries those answers back. The work that
+//! finishes later is not like that: a command says what it wrote as it writes it, says its code when it ends, and
+//! a model answers an ask long after the ask was heard. The engine says so plainly: the World speaks by yielding
+//! a fact, or by calling send under its own name when it speaks from its loop. This is that second way.
+//!
+//! What a host says there is a fact of its own, or a control over an act: a prompt of the operator is answered by
+//! closing the prompt with the line the operator wrote, and a chain whose actor has gone quiet twice is paused.
+//! [`Said`] is those three, and the life does each of them in the order it was said.
 //!
 //! A [`Voice`] is what a host holds to speak, and [`Ears`] is what the life drains. The two are made together and
-//! belong together: a fact said into a Voice is heard by the life that holds its Ears, and by no other.
+//! belong together: what is said into a Voice is heard by the life that holds its Ears, and by no other.
 //!
 //! A Voice may be cloned and carried anywhere the host does its work, including another thread, since what it
 //! says waits in order until the life is ready to hear it. A life drains its Ears where it is safe to say a fact,
@@ -18,10 +21,46 @@ use std::{
   sync::{Arc, Mutex},
 };
 
-use crate::fact::Fact;
+use crate::fact::{Fact, Value};
 
-/// The facts a host has said and the life has not heard yet, held in the order they were said.
-type Waiting = Arc<Mutex<VecDeque<Fact>>>;
+/// One thing a host said while nothing asked it to.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Said {
+  /// One fact, said under the name of whoever said it.
+  Fact(Fact),
+  /// One act, closed with a value, which is how a prompt of the operator is answered.
+  Closed {
+    /// The act that is closed.
+    id: String,
+    /// What it is done with.
+    value: Value,
+  },
+  /// One chain, paused, which a World does when it cannot answer and the fault of it stands.
+  Paused(String),
+}
+
+impl Said {
+  /// What a host said, as the boundary reads it: its mark, and then what it carries.
+  pub fn plain(&self) -> Value {
+    let held = match self {
+      Said::Fact(one) => vec![
+        Value::Str("fact".to_owned()),
+        Value::Str(one.kind().to_owned()),
+        Value::Str(one.about().to_owned()),
+        Value::Str(one.by().to_owned()),
+        Value::List(one.words().to_vec()),
+      ],
+      Said::Closed { id, value } => {
+        vec![Value::Str("close".to_owned()), Value::Str(id.clone()), value.clone()]
+      }
+      Said::Paused(id) => vec![Value::Str("pause".to_owned()), Value::Str(id.clone())],
+    };
+    Value::Tuple(held).plain()
+  }
+}
+
+/// What a host has said and the life has not heard yet, held in the order it was said.
+type Waiting = Arc<Mutex<VecDeque<Said>>>;
 
 /// What a host speaks into a life with, for what it does not answer where it hears it.
 ///
@@ -36,20 +75,35 @@ pub struct Voice {
 impl Voice {
   /// One fact, said into the life.
   ///
-  /// A fact said after the life is gone is dropped, since there is nobody to hear it.
-  pub fn say(&self, fact: Fact) {
-    if let Ok(mut held) = self.waiting.lock() {
-      held.push_back(fact);
-    }
+  /// A word said after the life is gone is dropped, since there is nobody to hear it.
+  pub fn send(&self, fact: Fact) {
+    self.holds(Said::Fact(fact));
+  }
+
+  /// One act, closed with a value, which is how the work a host started answers the act that asked for it.
+  pub fn close(&self, id: impl Into<String>, value: Value) {
+    self.holds(Said::Closed { id: id.into(), value });
+  }
+
+  /// One chain, paused, which stops it until the operator wakes it.
+  pub fn pause(&self, id: impl Into<String>) {
+    self.holds(Said::Paused(id.into()));
   }
 
   /// Whether anything said into this Voice is still waiting to be heard.
   pub fn waiting(&self) -> bool {
     self.waiting.lock().is_ok_and(|held| !held.is_empty())
   }
+
+  /// One thing said, held until the life hears it.
+  fn holds(&self, one: Said) {
+    if let Ok(mut held) = self.waiting.lock() {
+      held.push_back(one);
+    }
+  }
 }
 
-/// What a life drains: the facts its host has said and it has not heard.
+/// What a life drains: everything its host has said and it has not heard.
 #[derive(Debug)]
 pub struct Ears {
   /// What has been said and not heard.
@@ -68,7 +122,7 @@ impl Ears {
   ///
   /// A life drains where it is safe to say a fact, so what a host says lands between the facts of the life and
   /// never inside one.
-  pub fn drained(&mut self) -> Vec<Fact> {
+  pub fn drained(&mut self) -> Vec<Said> {
     match self.waiting.lock() {
       Ok(mut held) => held.drain(..).collect(),
       Err(_) => Vec::new(),
@@ -81,49 +135,60 @@ mod tests {
   use std::thread;
 
   use super::*;
-  use crate::fact::Value;
 
   /// One fact of a command, as the World of a host says it while the command runs.
   fn out(text: &str) -> Fact {
-    Fact::new(
-      "out",
-      "bash://operator.1.1",
-      "world",
-      vec![Value::Str(text.to_owned()), Value::Str("stdout".to_owned())],
-    )
+    Fact::new("out", "bash://operator.1.1", "world", vec![Value::Str(text.to_owned()), Value::Str("stdout".to_owned())])
   }
 
   #[test]
   fn what_a_host_says_is_heard_in_the_order_it_was_said() {
     let (voice, mut ears) = Ears::made();
     assert!(!voice.waiting());
-    voice.say(out("one\n"));
-    voice.say(out("two\n"));
+    voice.send(out("one\n"));
+    voice.send(out("two\n"));
     assert!(voice.waiting());
     let held = ears.drained();
     assert_eq!(held.len(), 2);
-    assert_eq!(held[0].words()[0], Value::Str("one\n".to_owned()));
-    assert_eq!(held[1].words()[0], Value::Str("two\n".to_owned()));
+    assert_eq!(held[0], Said::Fact(out("one\n")));
+    assert_eq!(held[1], Said::Fact(out("two\n")));
     assert!(!voice.waiting());
     assert!(ears.drained().is_empty());
+  }
+
+  #[test]
+  fn a_host_answers_a_prompt_by_closing_it_and_quiets_a_chain_by_pausing_it() {
+    let (voice, mut ears) = Ears::made();
+    voice.close("prompt://operator.2", Value::Int(3));
+    voice.pause("chain://operator.1");
+    let held = ears.drained();
+    assert_eq!(held[0], Said::Closed { id: "prompt://operator.2".to_owned(), value: Value::Int(3) });
+    assert_eq!(held[1], Said::Paused("chain://operator.1".to_owned()));
+  }
+
+  #[test]
+  fn what_a_host_says_carries_its_mark_so_the_boundary_reads_which_of_the_three_it_is() {
+    let held = Said::Closed { id: "prompt://operator.2".to_owned(), value: Value::Int(3) };
+    let words = Value::of_plain(&held.plain());
+    assert_eq!(words.as_entries().unwrap()[0], Value::Str("close".to_owned()));
+    assert_eq!(Value::of_plain(&Said::Fact(out("one\n")).plain()).as_entries().unwrap().len(), 5);
   }
 
   #[test]
   fn a_voice_is_carried_to_wherever_the_host_does_its_work() {
     let (voice, mut ears) = Ears::made();
     let held = voice.clone();
-    thread::spawn(move || held.say(out("from the command\n"))).join().unwrap();
+    thread::spawn(move || held.send(out("from the command\n"))).join().unwrap();
     let said = ears.drained();
     assert_eq!(said.len(), 1);
-    assert_eq!(said[0].kind(), "out");
-    assert_eq!(said[0].by(), "world");
+    assert_eq!(said[0], Said::Fact(out("from the command\n")));
   }
 
   #[test]
-  fn a_fact_said_after_the_life_is_gone_is_dropped() {
+  fn a_word_said_after_the_life_is_gone_is_dropped() {
     let (voice, ears) = Ears::made();
     drop(ears);
-    voice.say(out("nobody hears this\n"));
+    voice.send(out("nobody hears this\n"));
     assert!(voice.waiting());
   }
 }

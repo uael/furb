@@ -8,12 +8,12 @@
 //! or with a question of its own, so its answer is a reply. The Kernel asks whether a word may run, which is a
 //! question with a value for an answer, so its answer is the findings.
 //!
-//! What a host said into its [`Voice`] since the last call rides out with the next answer, so the facts of a
-//! command that is running reach the life without the host calling into it.
+//! Nothing of what a host said into its [`crate::Voice`] goes out from here. A reply answers the fact that was
+//! heard and nothing else, and what the host said meanwhile the life hears through [`crate::Life::heard`], in the
+//! order it was said, so a fact of a command never passes the close of a prompt that was said before it.
 
 use crate::{
   fact::{Fact, Value},
-  voice::Ears,
   world::{Reply, World},
 };
 
@@ -33,21 +33,19 @@ pub trait Gate {
   fn gate(&mut self, word: &str, ladder: &[String], shape: &str) -> Vec<String>;
 }
 
-/// The outside of one life: the World it hears through, the gate it is read by, and what its host has said.
+/// The outside of one life: the World it hears through, and the gate its words are read by.
 #[derive(Debug)]
 pub struct Outside<W, G> {
   /// The World of this life.
   pub world: W,
   /// What reads the word of every rung of this life.
   pub gate: G,
-  /// What the host has said and the life has not heard.
-  ears: Ears,
 }
 
 impl<W: World, G: Gate> Outside<W, G> {
   /// The outside of one life.
-  pub fn new(world: W, gate: G, ears: Ears) -> Self {
-    Outside { world, gate, ears }
+  pub fn new(world: W, gate: G) -> Self {
+    Outside { world, gate }
   }
 
   /// One call of the sandbox, answered.
@@ -63,12 +61,7 @@ impl<W: World, G: Gate> Outside<W, G> {
       Some("answered") => self.world.answered(words.get(1).unwrap_or(&Value::None)),
       _ => self.world.hears(&Fact(words)),
     };
-    self.replied(reply)
-  }
-
-  /// Everything the host has said and the life has not heard, which rides out with the next answer.
-  pub fn drained(&mut self) -> Vec<Fact> {
-    self.ears.drained()
+    replied(reply)
   }
 
   /// What the gate found against a word, which is the answer to the one question the Kernel asks.
@@ -85,27 +78,24 @@ impl<W: World, G: Gate> Outside<W, G> {
     let found = self.gate.gate(word, &ladder, shape);
     Value::List(found.into_iter().map(Value::Str).collect()).plain()
   }
+}
 
-  /// One reply of the World, as the sandbox reads it, with whatever the host said meanwhile said after it.
-  fn replied(&mut self, reply: Reply) -> Value {
-    let mut said = match reply {
-      Reply::Say(held) => held,
-      Reply::Nothing => Vec::new(),
-      Reply::Ask { kind, on, words } => {
-        let asked = vec![Value::Str("ask".to_owned()), Value::Str(kind), Value::Str(on), Value::List(words)];
-        return Value::Tuple(asked).plain();
-      }
-    };
-    said.extend(self.ears.drained());
-    let held = said.into_iter().map(|one| Value::List(one.0)).collect();
-    Value::Tuple(vec![Value::Str("say".to_owned()), Value::List(held)]).plain()
-  }
+/// One reply of the World, as the sandbox reads it.
+fn replied(reply: Reply) -> Value {
+  let held = match reply {
+    Reply::Say(said) => said.into_iter().map(|one| Value::List(one.0)).collect(),
+    Reply::Nothing => Vec::new(),
+    Reply::Ask { kind, on, words } => {
+      let asked = vec![Value::Str("ask".to_owned()), Value::Str(kind), Value::Str(on), Value::List(words)];
+      return Value::Tuple(asked).plain();
+    }
+  };
+  Value::Tuple(vec![Value::Str("say".to_owned()), Value::List(held)]).plain()
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::voice::Voice;
 
   /// A World of the test: it answers a stand, asks where a read resolves, and keeps what it heard.
   #[derive(Default)]
@@ -122,11 +112,7 @@ mod tests {
           "done",
           fact.about(),
           WORLD,
-          vec![Value::Tuple(vec![
-            Value::Tuple(vec![]),
-            Value::Str("/w".to_owned()),
-            Value::Str("m/low".to_owned()),
-          ])],
+          vec![Value::Tuple(vec![Value::Tuple(vec![]), Value::Str("/w".to_owned()), Value::Str("m/low".to_owned())])],
         )),
         "read" => Reply::ask("cwd", fact.on().unwrap_or_default()),
         _ => Reply::Nothing,
@@ -161,8 +147,7 @@ mod tests {
 
   #[test]
   fn the_world_hears_a_fact_and_what_it_says_goes_back_plain() {
-    let (_, ears) = Ears::made();
-    let mut outside = Outside::new(Sand::default(), Strict::default(), ears);
+    let mut outside = Outside::new(Sand::default(), Strict::default());
     let got = outside.called(WORLD, &said("stand", "stand://operator.1.1", vec![Value::Str("chain".to_owned())]));
     let held = Value::of_plain(&got);
     let words = held.as_entries().unwrap();
@@ -175,21 +160,16 @@ mod tests {
 
   #[test]
   fn a_world_that_must_ask_the_engine_says_so_and_is_given_the_answer() {
-    let (_, ears) = Ears::made();
-    let mut outside = Outside::new(Sand::default(), Strict::default(), ears);
-    let asked = outside.called(
-      WORLD,
-      &said("read", "read://operator.1.1", vec![Value::Str("chain://operator.1".to_owned())]),
-    );
+    let mut outside = Outside::new(Sand::default(), Strict::default());
+    let asked =
+      outside.called(WORLD, &said("read", "read://operator.1.1", vec![Value::Str("chain://operator.1".to_owned())]));
     let held = Value::of_plain(&asked);
     let words = held.as_entries().unwrap();
     assert_eq!(words[0], Value::Str("ask".to_owned()));
     assert_eq!(words[1], Value::Str("cwd".to_owned()));
     assert_eq!(words[2], Value::Str("chain://operator.1".to_owned()));
-    let back = outside.called(
-      WORLD,
-      &Value::Tuple(vec![Value::Str("answered".to_owned()), Value::Str("/w".to_owned())]).plain(),
-    );
+    let back = outside
+      .called(WORLD, &Value::Tuple(vec![Value::Str("answered".to_owned()), Value::Str("/w".to_owned())]).plain());
     assert_eq!(outside.world.answered, vec![Value::Str("/w".to_owned())]);
     let done = Value::of_plain(&back);
     let facts = done.as_entries().unwrap()[1].as_entries().unwrap();
@@ -198,8 +178,7 @@ mod tests {
 
   #[test]
   fn the_kernel_asks_what_the_gate_finds_and_is_answered_with_the_findings() {
-    let (_, ears) = Ears::made();
-    let mut outside = Outside::new(Sand::default(), Strict::default(), ears);
+    let mut outside = Outside::new(Sand::default(), Strict::default());
     let asked = Value::Tuple(vec![
       Value::Str("gate".to_owned()),
       Value::Str("close(BAD)".to_owned()),
@@ -210,17 +189,5 @@ mod tests {
     let got = outside.called(KERNEL, &asked);
     assert_eq!(got, Value::List(vec![Value::Str("BAD in rung".to_owned())]));
     assert_eq!(outside.gate.read, vec![("close(BAD)".to_owned(), 1, "int".to_owned())]);
-  }
-
-  #[test]
-  fn what_a_host_said_meanwhile_rides_out_with_the_next_answer() {
-    let (voice, ears) = Ears::made();
-    let mut outside = Outside::new(Sand::default(), Strict::default(), ears);
-    voice.say(Fact::new("out", "bash://operator.1.1", WORLD, vec![Value::Str("one\n".to_owned())]));
-    let got = outside.called(WORLD, &said("keep", "", vec![]));
-    let held = Value::of_plain(&got);
-    let facts = held.as_entries().unwrap()[1].as_entries().unwrap();
-    assert_eq!(facts.len(), 1);
-    assert_eq!(facts[0].as_entries().unwrap()[0], Value::Str("out".to_owned()));
   }
 }

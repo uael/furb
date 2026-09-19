@@ -233,17 +233,23 @@ def opened(engine: dict[str, object], record: object, host: Host) -> object:
   return verb(engine, "boot")(unwire(record, engine), world=world, kernel=gated)
 
 
-def says(engine: dict[str, object], facts: object) -> None:
-  """Every fact a host said while nothing asked it, said into the life.
+def does(engine: dict[str, object], held: object) -> None:
+  """Everything a host said while nothing asked it, done in the order it was said.
 
-  A fact says its kind, the act it is about, who said it and its words, and the bus is told who said it, since a
-  fact of the World is the World's own.
+  A host says a fact of its own, or it closes an act with what the work it started came to, or it pauses a chain
+  it cannot answer for. A fact says its kind, the act it is about, who said it and its words, and the bus is told
+  who said it, since a fact of the World is the World's own.
   """
-  said = unwire(facts, engine)
+  said = unwire(held, engine)
   assert isinstance(said, list)
   for one in said:
-    kind, about, by, *words = one
-    verb(engine, "send")(kind, about, *words, by=by)
+    match one:
+      case ("fact", str(kind), str(about), str(by), list(words)):
+        verb(engine, "send")(kind, about, *words, by=by)
+      case ("close", str(name), value):
+        verb(engine, "close")(value, name)
+      case ("pause", str(name)):
+        verb(engine, "pause")(name)
 
 
 def asked(engine: dict[str, object], word: str) -> object:

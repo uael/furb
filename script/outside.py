@@ -25,7 +25,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
   sys.path.insert(0, str(SRC))
 
-from preamble import asked, module, opened, says, unwire, wire  # noqa: E402
+from preamble import asked, does, module, opened, unwire, wire  # noqa: E402
 
 WORD = "close(len(read('a.txt').lines))"
 """WORD is what the model of this rig answers with: it reads a file and closes with how many lines it holds."""
@@ -84,7 +84,7 @@ async def main() -> None:
   assert isinstance(held, list)
   say(f"turns: {len(held)}")
 
-  says(engine, [wire(("tell", root, "world", [("noted", [], "a fact the host said later")]))])
+  does(engine, [wire(("fact", "tell", root, "world", [[("noted", [], "a fact the host said later")]]))])
   again = unwire(asked(engine, f"turns(on={root!r})"), names)
   assert isinstance(again, list)
   tags = [tag[0] for _, content, _, _ in again for tag in content]

@@ -11,9 +11,9 @@
 use crate::{
   ENGINE, PREAMBLE,
   fact::Value,
-  host::{Gate, KERNEL, Outside, WORLD},
+  host::{Gate, Outside},
   record::Entry,
-  voice::Ears,
+  voice::{Ears, Said},
   world::World,
 };
 
@@ -53,6 +53,8 @@ pub struct Life<S, W, G> {
   session: S,
   /// The World it hears through and the gate its words are read by.
   outside: Outside<W, G>,
+  /// What its host has said and it has not heard.
+  ears: Ears,
   /// The root chain, which every life opens under the one name.
   root: String,
 }
@@ -63,12 +65,12 @@ impl<S: Session, W: World, G: Gate> Life<S, W, G> {
   /// The preamble runs in a module of its own, so the globals of a chain hold what the engine defines and nothing
   /// more. The engine runs next, and `boot` is given the two generators the preamble makes.
   pub fn boot(mut session: S, world: W, gate: G, ears: Ears, record: &[Entry]) -> Result<Self, Refusal> {
-    let mut outside = Outside::new(world, gate, ears);
+    let mut outside = Outside::new(world, gate);
     session.run(PREAMBLE, &mut outside).map_err(Refusal)?;
     let kept: Vec<Value> = record.iter().map(Entry::as_value).collect();
     let root = session.run(&opening(&Value::List(kept).plain()), &mut outside).map_err(Refusal)?;
     let root = root.as_str().unwrap_or_default().to_owned();
-    Ok(Life { session, outside, root })
+    Ok(Life { session, outside, ears, root })
   }
 
   /// The root chain of the life, which is the first act of any record.
@@ -86,17 +88,19 @@ impl<S: Session, W: World, G: Gate> Life<S, W, G> {
     Ok(Value::of_plain(&said))
   }
 
-  /// Everything the host has said into its Voice, said into the life.
+  /// Everything the host has said into its Voice, done in the life, in the order it was said.
   ///
-  /// A command says what it wrote while it runs, and a model answers an ask long after the ask was heard. Nothing
-  /// of the life hears them until they are said in there, which is what this does.
+  /// A command says what it wrote while it runs, a model answers an ask long after the ask was heard, and the
+  /// operator answers a prompt whenever the operator answers it. Nothing of the life hears any of that until it
+  /// is said in there, which is what this does, and it is the one door they come through, so what a host said
+  /// first is done first.
   pub fn heard(&mut self) -> Result<usize, Refusal> {
-    let said = self.outside.drained();
+    let said = self.ears.drained();
     if said.is_empty() {
       return Ok(0);
     }
-    let held: Vec<Value> = said.iter().map(|one| Value::List(one.0.clone())).collect();
-    let word = format!("says(__engine, {})", shown(&Value::List(held).plain()));
+    let held: Vec<Value> = said.iter().map(Said::plain).collect();
+    let word = format!("does(__engine, {})", shown(&Value::List(held)));
     self.session.run(&word, &mut self.outside).map_err(Refusal)?;
     Ok(said.len())
   }
@@ -162,19 +166,20 @@ mod tests {
   use super::*;
   use crate::{
     fact::Fact,
+    host::{KERNEL, WORLD},
     voice::Voice,
     world::Reply,
   };
 
   /// A sandbox of the test: it keeps every word it was given and answers by a script.
   #[derive(Default)]
-  struct Said {
+  struct Spoke {
     ran: Vec<String>,
     gives: Vec<Value>,
     asks: Vec<(String, Value)>,
   }
 
-  impl Session for Said {
+  impl Session for Spoke {
     fn run(&mut self, code: &str, host: &mut dyn Host) -> Result<Value, String> {
       self.ran.push(code.to_owned());
       for (name, said) in std::mem::take(&mut self.asks) {
@@ -207,7 +212,7 @@ mod tests {
   }
 
   /// A life whose sandbox is the fake one, with the root it was scripted to give.
-  fn life(said: Said) -> (Life<Said, Sand, Open>, Voice) {
+  fn life(said: Spoke) -> (Life<Spoke, Sand, Open>, Voice) {
     let (voice, ears) = Ears::made();
     let held = Life::boot(said, Sand::default(), Open, ears, &[]).unwrap();
     (held, voice)
@@ -215,7 +220,7 @@ mod tests {
 
   #[test]
   fn a_life_opens_the_preamble_in_a_module_of_its_own_then_the_engine_then_boot() {
-    let said = Said { gives: vec![Value::None, Value::Str("chain://operator.1".to_owned())], ..Said::default() };
+    let said = Spoke { gives: vec![Value::None, Value::Str("chain://operator.1".to_owned())], ..Spoke::default() };
     let (held, _) = life(said);
     assert_eq!(held.root(), "chain://operator.1");
     assert!(held.session.ran[0].contains("def outside("), "the preamble is the session's own namespace");
@@ -226,9 +231,9 @@ mod tests {
 
   #[test]
   fn a_word_of_the_operator_runs_in_the_sandbox_and_what_it_gave_comes_back() {
-    let said = Said {
+    let said = Spoke {
       gives: vec![Value::None, Value::Str("chain://operator.1".to_owned()), Value::Int(42).plain()],
-      ..Said::default()
+      ..Spoke::default()
     };
     let (mut held, _) = life(said);
     assert_eq!(held.word("close(42)").unwrap(), Value::Int(42));
@@ -237,16 +242,13 @@ mod tests {
 
   #[test]
   fn what_the_sandbox_asks_while_a_word_runs_is_answered_by_the_world() {
-    let heard = Value::Tuple(vec![
-      Value::Str("keep".to_owned()),
-      Value::Str(String::new()),
-      Value::Str("journal".to_owned()),
-    ])
-    .plain();
-    let said = Said {
+    let heard =
+      Value::Tuple(vec![Value::Str("keep".to_owned()), Value::Str(String::new()), Value::Str("journal".to_owned())])
+        .plain();
+    let said = Spoke {
       gives: vec![Value::None, Value::Str("chain://operator.1".to_owned()), Value::None],
       asks: vec![(WORLD.to_owned(), heard)],
-      ..Said::default()
+      ..Spoke::default()
     };
     let (mut held, _) = life(said);
     held.word("prompt(int, 'work')").unwrap();
@@ -254,15 +256,16 @@ mod tests {
   }
 
   #[test]
-  fn what_a_host_says_into_its_voice_is_said_into_the_life() {
-    let said = Said { gives: vec![Value::None, Value::Str("chain://operator.1".to_owned())], ..Said::default() };
+  fn what_a_host_says_into_its_voice_is_done_in_the_life_in_the_order_it_was_said() {
+    let said = Spoke { gives: vec![Value::None, Value::Str("chain://operator.1".to_owned())], ..Spoke::default() };
     let (mut held, voice) = life(said);
     assert_eq!(held.heard().unwrap(), 0);
-    voice.say(Fact::new("out", "bash://operator.1.1", WORLD, vec![Value::Str("one\n".to_owned())]));
-    assert_eq!(held.heard().unwrap(), 1);
+    voice.send(Fact::new("out", "bash://operator.1.1", WORLD, vec![Value::Str("one\n".to_owned())]));
+    voice.close("prompt://operator.2", Value::Int(3));
+    assert_eq!(held.heard().unwrap(), 2);
     let word = held.session.ran.last().unwrap();
-    assert!(word.starts_with("says(__engine, "), "{word}");
-    assert!(word.contains("\"out\""), "{word}");
+    assert!(word.starts_with("does(__engine, "), "{word}");
+    assert!(word.find("\"out\"").unwrap() < word.find("\"close\"").unwrap(), "{word}");
     assert_eq!(held.heard().unwrap(), 0);
   }
 
@@ -270,9 +273,9 @@ mod tests {
   fn what_an_act_came_to_is_nothing_at_all_while_it_waits() {
     let waiting = Value::Tuple(vec![Value::Bool(false), Value::None]).plain();
     let over = Value::Tuple(vec![Value::Bool(true), Value::Int(3)]).plain();
-    let said = Said {
+    let said = Spoke {
       gives: vec![Value::None, Value::Str("chain://operator.1".to_owned()), waiting, over],
-      ..Said::default()
+      ..Spoke::default()
     };
     let (mut held, _) = life(said);
     assert_eq!(held.came("prompt://operator.2").unwrap(), None);
@@ -290,10 +293,10 @@ mod tests {
       Value::Str("int".to_owned()),
     ])
     .plain();
-    let said = Said {
+    let said = Spoke {
       gives: vec![Value::None, Value::Str("chain://operator.1".to_owned()), Value::None],
       asks: vec![(KERNEL.to_owned(), asked)],
-      ..Said::default()
+      ..Spoke::default()
     };
     let (mut held, _) = life(said);
     held.word("rung('close(1)')").unwrap();
