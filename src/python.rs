@@ -17,7 +17,7 @@ use pyo3::{
 use crate::{
   fact::{Fact, Value},
   kernel::Native,
-  sandbox::{Called, Held, Monty, Reach},
+  sandbox::{Awaited, Called, Held, Monty, Reach},
   world::{Kernel as KernelOf, Reply},
 };
 
@@ -57,6 +57,10 @@ impl Reach for Engine {
     })
   }
 
+  fn awaits(&mut self, rung: &str, act: &str) -> Awaited {
+    Python::attach(|py| self.awaiting(py, rung, act).unwrap_or(Awaited::Waits))
+  }
+
   fn field(&mut self, of: &Value, name: &str) -> Held {
     Python::attach(|py| {
       let held = into_py(py, self.module.bind(py), of).and_then(|made| {
@@ -69,6 +73,29 @@ impl Reach for Engine {
 }
 
 impl Engine {
+  /// What happens where a word awaits an act, which the engine itself says.
+  ///
+  /// The engine holds the laws of an await, so this asks the act, standing on the rung that waits: what the
+  /// engine refuses it raises here, and what the life already holds under the name of the act it gives at once.
+  fn awaiting(&self, py: Python<'_>, rung: &str, act: &str) -> PyResult<Awaited> {
+    let module = self.module.bind(py);
+    let site = module.getattr("site")?;
+    let token = site.call_method1("set", (rung,))?;
+    let asked = module.getattr("Act")?.call1((act,)).and_then(|one| one.call_method0("__await__"));
+    let said = asked.and_then(|held| held.call_method0("__next__").map(|_| ()));
+    site.call_method1("reset", (token,))?;
+    if let Err(raised) = said
+      && !raised.is_instance_of::<pyo3::exceptions::PyStopIteration>(py)
+    {
+      return Ok(Awaited::Refused(of_py(raised.value(py))?));
+    }
+    let outcomes = module.getattr("outcomes")?;
+    match outcomes.get_item(act) {
+      Ok(got) => Ok(Awaited::Over(of_py(&got)?)),
+      Err(_) => Ok(Awaited::Waits),
+    }
+  }
+
   /// One call of a verb, made where the engine lives.
   ///
   /// A verb takes the chain of the rung when the call leaves it unsaid, and the word runs outside a rung as python

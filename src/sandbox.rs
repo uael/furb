@@ -33,6 +33,17 @@ pub enum Held {
   Nothing,
 }
 
+/// What an act a word awaits comes to, where the word waits.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Awaited {
+  /// The act is not over, so the word waits for it.
+  Waits,
+  /// The act is over already, with this, so the word carries on at once.
+  Over(Value),
+  /// The await itself is refused, as awaiting a chain is, so the word raises where it waited.
+  Refused(Value),
+}
+
 /// What a verb of the engine gave a word.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Called {
@@ -63,6 +74,13 @@ pub trait Reach {
   /// verb makes is named under it, and the fact it says is on the chain of it.
   fn call(&mut self, rung: &str, chain: &str, name: &str, args: Vec<Value>, kwargs: Vec<(String, Value)>) -> Called;
 
+  /// What happens where a word of a rung awaits an act.
+  ///
+  /// A word that awaits an act which is over already carries on at once, since the done that would settle it was
+  /// said before the word asked and is said no second time. An await the engine will not make is refused where
+  /// the word waited.
+  fn awaits(&mut self, rung: &str, act: &str) -> Awaited;
+
   /// One field of a value the engine gave, which the word asked for and the value did not carry.
   ///
   /// The value is given whole, so a host answers from the value itself and holds nothing between the calls.
@@ -89,6 +107,11 @@ pub struct Monty<R> {
   acts: HashMap<u32, String>,
   /// Every value the host holds for the sandbox, by the identity the sandbox knows it as.
   held: HashMap<MontyUuid, Value>,
+  /// The exception this put into each run, by the name of the run.
+  ///
+  /// The sandbox holds a closed set of exception types, so a type of the engine, a Refused among them, has no
+  /// form of its own in there. What went in is kept here, and a run that ends with it comes out as it went in.
+  injected: HashMap<String, (String, String)>,
   /// How many identities the sandbox has given out, which names the next one.
   named: u128,
 }
@@ -103,6 +126,7 @@ impl<R: Reach> Monty<R> {
       waiting: HashMap::new(),
       acts: HashMap::new(),
       held: HashMap::new(),
+      injected: HashMap::new(),
       named: 0,
     }
   }
@@ -140,9 +164,13 @@ impl<R: Reach> Monty<R> {
         Ok(progress) => progress,
         Err(error) => {
           let error = *error;
-          let raised = Value::Error {
-            name: format!("{:?}", error.error.exc_type()),
-            args: vec![Value::Str(error.error.to_string())],
+          let text = error.error.to_string();
+          let mine = self.injected.remove(rung);
+          let raised = match &mine {
+            Some((name, why)) if text.contains(why.as_str()) => {
+              Value::Error { name: name.clone(), args: vec![Value::Str(why.clone())] }
+            }
+            _ => Value::Error { name: format!("{:?}", error.error.exc_type()), args: vec![Value::Str(text)] },
           };
           self.sessions.insert(chain.to_owned(), error.repl);
           return Step::Ran(Some(raised));
@@ -179,6 +207,7 @@ impl<R: Reach> Monty<R> {
               one.resume_pending(PrintWriter::Stdout)
             }
             Called::Raised { name, why } if name == "CancelledError" => {
+              self.injected.insert(rung.to_owned(), (name.clone(), why.clone()));
               // A close of the prompt of the running word stops that word where it stands, and nothing after the
               // call runs, so the cancel is uncatchable and the run is over with it.
               let raised = MontyException::new(ExcType::RuntimeError, Some(why));
@@ -187,6 +216,7 @@ impl<R: Reach> Monty<R> {
               return Step::Ran(Some(Value::Error { name, args: Vec::new() }));
             }
             Called::Raised { name, why } => {
+              self.injected.insert(rung.to_owned(), (name.clone(), why.clone()));
               let raised = MontyException::new(exception_of(&name), Some(why));
               one.resume(ExtFunctionResult::Error(raised), PrintWriter::Stdout)
             }
@@ -198,8 +228,20 @@ impl<R: Reach> Monty<R> {
             return Step::Ran(None);
           };
           let act = self.acts.get(&call_id).cloned().unwrap_or_default();
-          self.waiting.insert(rung.to_owned(), Waiting::Futures(one, call_id));
-          return Step::Wants(act);
+          match self.reach.awaits(rung, &act) {
+            Awaited::Over(got) | Awaited::Refused(got) => {
+              if let Value::Error { name, args } = &got {
+                let why = args.first().and_then(Value::as_str).unwrap_or_default().to_owned();
+                self.injected.insert(rung.to_owned(), (name.clone(), why));
+              }
+              let held = settled(&mut self.holding(&got), &got);
+              one.resume(vec![(call_id, held)], PrintWriter::Stdout)
+            }
+            Awaited::Waits => {
+              self.waiting.insert(rung.to_owned(), Waiting::Futures(one, call_id));
+              return Step::Wants(act);
+            }
+          }
         }
         ReplProgress::OsCall(one) => {
           // The word reaches the machine through the verbs of the engine alone, so the os is closed to it.
@@ -208,6 +250,11 @@ impl<R: Reach> Monty<R> {
         }
       };
     }
+  }
+
+  /// What an act came to, as the sandbox holds it.
+  fn holding(&mut self, got: &Value) -> MontyObject {
+    self.into_monty(got)
   }
 
   /// The words of one call: what stood by place, and what stood by name.
@@ -225,17 +272,14 @@ impl<R: Reach> Monty<R> {
   /// An act the word holds is a pending future of the session, so the name of the act goes back to the engine
   /// wherever the word hands one to a verb.
   fn of_sandbox(&self, said: &ObjectRef<'_>) -> Value {
-    let got = of_monty(said);
-    match &got {
-      Value::Error { name, args } if name == "Repr" => {
-        let repr = args.first().and_then(Value::as_str).unwrap_or_default();
-        match awaited(repr).and_then(|id| self.acts.get(&id)) {
-          Some(act) => Value::Str(act.clone()),
-          None => got,
-        }
-      }
-      _ => got,
+    // A pending future has no form of its own at the boundary, and says what it is in its repr alone. A value
+    // that is a string is itself, so a word that holds the name of an act never crosses as the act.
+    if said.as_str().is_none()
+      && let Some(act) = awaited(&said.py_repr()).and_then(|id| self.acts.get(&id))
+    {
+      return Value::Str(act.clone());
     }
+    of_monty(said)
   }
 
   /// A value of the engine as the sandbox holds it.
@@ -273,6 +317,17 @@ impl<R: Reach> Monty<R> {
         MontyObject::class_instance(kind, id, attrs)
       }
     }
+  }
+}
+
+/// What an act came to, as a future of the sandbox is settled with: a value, or a raise for an exception.
+fn settled(held: &mut MontyObject, got: &Value) -> ExtFunctionResult {
+  match got {
+    Value::Error { name, args } => {
+      let why = args.first().and_then(Value::as_str).map(str::to_owned);
+      ExtFunctionResult::Error(MontyException::new(exception_of(name), why))
+    }
+    _ => ExtFunctionResult::Return(held.clone()),
   }
 }
 
@@ -345,12 +400,13 @@ impl<R: Reach> Sandbox for Monty<R> {
       return Step::Ran(None);
     };
     let chain = self.chains.get(rung).cloned().unwrap_or_default();
-    let value = self.into_monty(got);
-    let said = one.resume(vec![(call_id, ExtFunctionResult::Return(value))], PrintWriter::Stdout);
+    let mut value = self.into_monty(got);
+    let said = one.resume(vec![(call_id, settled(&mut value, got))], PrintWriter::Stdout);
     self.drive(rung, &chain, said)
   }
 
   fn drop_frame(&mut self, rung: &str) {
+    self.injected.remove(rung);
     if let Some(Waiting::Futures(one, _)) = self.waiting.remove(rung) {
       let chain = self.chains.get(rung).cloned().unwrap_or_default();
       self.sessions.insert(chain, one.into_repl());
@@ -385,6 +441,10 @@ mod tests {
         "read" => Called::Gave(Value::text("/w/a.txt", "one\ntwo\n")),
         _ => Called::Gave(Value::None),
       }
+    }
+
+    fn awaits(&mut self, _rung: &str, _act: &str) -> Awaited {
+      Awaited::Waits
     }
 
     fn field(&mut self, _of: &Value, name: &str) -> Held {
