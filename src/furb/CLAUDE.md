@@ -25,8 +25,9 @@ Each name has one meaning, which the contract's sentences use as given here.
   it was answered the life holds under its name; an act if it lives, a query if it does not.
 - query: a synchronous question, answered now or with nothing.
 - act: an asynchronous question, answered now or later, which a life lives, opened by the call and done by its done.
-- life: the generator of an act, given its name, which hears every fact and speaks by yielding one; a verb makes it
-  with pausing, ending and started.
+- life: a generator that hears every fact and speaks by yielding one; the life of an act is given the name of the
+  act, and a verb makes it with pausing, ending and started; the World, the Kernel and every other generator that
+  boot is given from the outside are lives too.
 - outcome: what a question came to, held under its name once its done lands: the value or the exception.
 - id: the name of a question, as a string, kind://lineage.n: its kind, the lineage of its maker, and its number
   among that maker's.
@@ -74,6 +75,8 @@ Each name has one meaning, which the contract's sentences use as given here.
 - record: the entries the journal keeps, in the order they were said.
 - entry: one line of the record: the act made last before its fact, and the fact; for a query of a run, its answer
   beside.
+- plain: the form of a value on the wire, which the World may keep an entry as: nothing, a boolean, a number, a
+  string, a list of plain, or a table from a string to plain.
 - drift: an act that, made again, does not agree with the record.
 
 ## Laws no test holds
@@ -93,7 +96,7 @@ Within a chain, a rung binds, passes and returns any python value, plain or not.
 When its share of the window is high, a model opens a chain with a source and a take that is not inside.
 Compaction is not in the core.
 engine.pyi is the specification of engine.py: it says what the engine is, what is always true of it and what its surface is, and never how it is made; it names the interfaces and the facts as python reads them, and holds every law, so engine.py holds no sentence and no comment.
-engine.py depends only on the python interpreter and on the two interfaces the contract names, World and Kernel, which are generators given to boot, held by no verb and bound to no name of the engine.
+engine.py depends only on the python interpreter and on the two interfaces the contract names, World and Kernel, which are lives given to boot, held by no verb and bound to no name of the engine.
 A fact is a tuple, its kind first, deconstructed only by match, and nothing of the engine is a class but a text, an exit, the name of an act, and the two exceptions.
 The verbs and Text carry their signatures, typed, since a model reads them; nothing else in engine.py has a type annotation but what ty and a dataclass need.
 engine.py has no private names, and a name one thing alone uses lives inside it.
