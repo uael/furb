@@ -100,10 +100,16 @@ def laid(text: str, depth: int) -> str:
   return "".join(f"{' ' * depth}{line}\n" if line.strip() else "\n" for line in text.split("\n"))
 
 
-def sheet(ladder: str, word: str, shape: str) -> tuple[str, int]:
-  """The word on a sheet of its own, and how many lines stand above it, which every finding is counted back by."""
-  above = HEAD + CLOSING % shape + OPENED + laid(ladder, 4) + CAUGHT
-  return above + laid(word, 2), above.count("\n")
+def sheet(ladder: str, word: str, shape: str) -> tuple[str, range, int]:
+  """The word on a sheet of its own, the lines the shape stands on, and how many lines stand above the word, which
+  every finding is counted back by.
+
+  The shape is the gate's own writing and no word of anybody, so a finding on those lines is a finding against the
+  shape itself and never against the word.
+  """
+  closing, first = CLOSING % shape, HEAD.count("\n") + 1
+  above = HEAD + closing + OPENED + laid(ladder, 4) + CAUGHT
+  return above + laid(word, 2), range(first, first + closing.count("\n")), above.count("\n")
 
 
 def checked(text: str) -> list[tuple[int, str]]:
@@ -157,6 +163,9 @@ class Native:
   def gate(self, word: str, ladder: list[str], shape: str) -> list[str]:
     """What the gate finds against a word: the word is read for what the interpreter will take and for the name of
     the sheet, and then ty reads it against the ladder of its chain and against the shape it must close with.
+
+    A shape that names nothing is no shape, whether the reading of it fails or ty cannot resolve it, since a word
+    read against a shape that nobody can read is a word nobody read.
     """
     try:
       compiled(word, "<gate>")
@@ -169,8 +178,11 @@ class Native:
       ast.parse(given, mode="eval")
     except SyntaxError:
       return [f"{shape} is no shape"]
-    text, above = sheet("\n".join(ladder), word, given)
-    return [f"line {n - above}: {why}" for n, why in checked(text) if n > above]
+    text, lines, above = sheet("\n".join(ladder), word, given)
+    found = checked(text)
+    if any(n in lines for n, _ in found):
+      return [f"{shape} is no shape"]
+    return [f"line {n - above}: {why}" for n, why in found if n > above]
 
   def ended(self, name: str, got: BaseException | None) -> None:
     """The run is over, and what it came to goes to the chain that had it run."""

@@ -173,7 +173,13 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
 
 
 def prompt[T](shape: type[T] | None, message: str = "", to: str = "", on: str = "") -> Act[T]:
-  named = shape if isinstance(shape, str) else shape.__name__ if isinstance(shape, type) else repr(shape)
+  named = (
+    shape
+    if isinstance(shape, str)
+    else shape.__name__
+    if isinstance(shape, type)
+    else repr(shape).replace(Text.__module__ + ".", "")
+  )
 
   def life(id):
     asking = None

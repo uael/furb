@@ -395,9 +395,13 @@ async def test_a_prompt_takes_any_shape_and_the_gate_reads_the_word_against_the_
   """A prompt takes any shape, and the gate reads the word of a rung against the name of it."""
   sand, py = Sand(stands=STANDS), Py()
   _, root = life(sand, kernel=py)
-  sand.script[root] = ["close(Text('p.txt', 'hi'))"]
+  sand.script[root] = ["close(Text('p.txt', 'hi'))", "close([1, 2])", "close([])"]
   assert await engine.prompt(Text, "a text", on=root) == Text("p.txt", "hi")
-  assert [shape for _, _, shape in py.gates] == ["Text"]
+  assert await engine.prompt(list[int], "some numbers", on=root) == [1, 2]
+  # The name of a shape is the word a chain would say, and the globals of a chain hold no module, so a shape that
+  # holds a name of the engine is said as the engine says it and never under the module it was defined in.
+  assert await engine.prompt(list[Text], "texts", on=root) == []
+  assert [shape for _, _, shape in py.gates] == ["Text", "list[int]", "list[Text]"]
 
 
 async def test_a_prompt_carries_the_name_of_its_shape_as_a_word() -> None:
