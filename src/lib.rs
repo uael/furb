@@ -21,6 +21,8 @@
 
 pub mod fact;
 pub mod kernel;
+#[cfg(feature = "python")]
+pub mod python;
 pub mod record;
 pub mod sandbox;
 pub mod world;

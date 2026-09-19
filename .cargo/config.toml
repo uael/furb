@@ -1,0 +1,4 @@
+# The crate binds to the python of this project, which uv puts in .venv, so a build never takes another one from
+# the path and gives a module that a different interpreter cannot load.
+[env]
+PYO3_PYTHON = { value = ".venv/bin/python3.14", relative = true }

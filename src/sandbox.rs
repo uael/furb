@@ -57,11 +57,16 @@ pub trait Reach {
   /// What the engine holds under a name.
   fn holds(&mut self, name: &str) -> Held;
 
-  /// One call of a verb of the engine, from a word of the given chain.
-  fn call(&mut self, chain: &str, name: &str, args: Vec<Value>, kwargs: Vec<(String, Value)>) -> Called;
+  /// One call of a verb of the engine, made by the word of a rung, on the chain of that rung.
+  ///
+  /// What the word says is said by that rung, so the host stands the engine on the rung for the call: the act the
+  /// verb makes is named under it, and the fact it says is on the chain of it.
+  fn call(&mut self, rung: &str, chain: &str, name: &str, args: Vec<Value>, kwargs: Vec<(String, Value)>) -> Called;
 
   /// One field of a value the engine gave, which the word asked for and the value did not carry.
-  fn field(&mut self, of: MontyUuid, name: &str) -> Held;
+  ///
+  /// The value is given whole, so a host answers from the value itself and holds nothing between the calls.
+  fn field(&mut self, of: &Value, name: &str) -> Held;
 }
 
 /// One suspended run, held between the step that suspended it and the step that carries it on.
@@ -115,6 +120,19 @@ impl<R: Reach> Monty<R> {
     })
   }
 
+  /// The session of a chain, put back wherever a run of it left off.
+  fn recover(&mut self, chain: &str, said: Result<ReplProgress, Box<monty::ReplStartError>>) {
+    let repl = match said {
+      Ok(ReplProgress::Complete { repl, .. }) => repl,
+      Ok(ReplProgress::NameLookup(one)) => one.into_repl(),
+      Ok(ReplProgress::FunctionCall(one)) => one.into_repl(),
+      Ok(ReplProgress::ResolveFutures(one)) => one.into_repl(),
+      Ok(ReplProgress::OsCall(one)) => one.into_repl(),
+      Err(error) => (*error).repl,
+    };
+    self.sessions.insert(chain.to_owned(), repl);
+  }
+
   /// One run, driven to its next await or to its end.
   fn drive(&mut self, rung: &str, chain: &str, mut said: Result<ReplProgress, Box<monty::ReplStartError>>) -> Step {
     loop {
@@ -137,8 +155,8 @@ impl<R: Reach> Monty<R> {
           return Step::Ran(None);
         }
         ReplProgress::NameLookup(one) => {
-          let got = match one.object_id() {
-            Some(of) => self.reach.field(of, &one.name),
+          let got = match one.object_id().and_then(|id| self.held.get(&id).cloned()) {
+            Some(of) => self.reach.field(&of, &one.name),
             None => self.reach.holds(&one.name),
           };
           let answer = match got {
@@ -149,9 +167,9 @@ impl<R: Reach> Monty<R> {
           one.resume(answer, PrintWriter::Stdout)
         }
         ReplProgress::FunctionCall(one) => {
-          let (args, kwargs) = words_of(&one.args);
+          let (args, kwargs) = self.words_of(&one.args);
           let call_id = one.call_id;
-          match self.reach.call(chain, &one.function_name, args, kwargs) {
+          match self.reach.call(rung, chain, &one.function_name, args, kwargs) {
             Called::Gave(value) => {
               let got = self.into_monty(&value);
               one.resume(ExtFunctionResult::Return(got), PrintWriter::Stdout)
@@ -159,6 +177,14 @@ impl<R: Reach> Monty<R> {
             Called::Act(name) => {
               self.acts.insert(call_id, name);
               one.resume_pending(PrintWriter::Stdout)
+            }
+            Called::Raised { name, why } if name == "CancelledError" => {
+              // A close of the prompt of the running word stops that word where it stands, and nothing after the
+              // call runs, so the cancel is uncatchable and the run is over with it.
+              let raised = MontyException::new(ExcType::RuntimeError, Some(why));
+              let said = one.abort(raised, PrintWriter::Stdout);
+              self.recover(chain, said);
+              return Step::Ran(Some(Value::Error { name, args: Vec::new() }));
             }
             Called::Raised { name, why } => {
               let raised = MontyException::new(exception_of(&name), Some(why));
@@ -181,6 +207,34 @@ impl<R: Reach> Monty<R> {
           one.abort(refused, PrintWriter::Stdout)
         }
       };
+    }
+  }
+
+  /// The words of one call: what stood by place, and what stood by name.
+  fn words_of(&self, args: &monty_types::CallArgs) -> (Vec<Value>, Vec<(String, Value)>) {
+    let held = args.args().map(|one| self.of_sandbox(&one)).collect();
+    let named = args
+      .kwargs()
+      .map(|(key, one)| (key.as_str().unwrap_or_default().to_owned(), self.of_sandbox(&one)))
+      .collect();
+    (held, named)
+  }
+
+  /// One value of the sandbox as the engine reads it.
+  ///
+  /// An act the word holds is a pending future of the session, so the name of the act goes back to the engine
+  /// wherever the word hands one to a verb.
+  fn of_sandbox(&self, said: &ObjectRef<'_>) -> Value {
+    let got = of_monty(said);
+    match &got {
+      Value::Error { name, args } if name == "Repr" => {
+        let repr = args.first().and_then(Value::as_str).unwrap_or_default();
+        match awaited(repr).and_then(|id| self.acts.get(&id)) {
+          Some(act) => Value::Str(act.clone()),
+          None => got,
+        }
+      }
+      _ => got,
     }
   }
 
@@ -222,14 +276,10 @@ impl<R: Reach> Monty<R> {
   }
 }
 
-/// The words of one call: what stood by place, and what stood by name.
-fn words_of(args: &monty_types::CallArgs) -> (Vec<Value>, Vec<(String, Value)>) {
-  let held = args.args().map(|one| of_monty(&one)).collect();
-  let named = args
-    .kwargs()
-    .map(|(key, one)| (key.as_str().unwrap_or_default().to_owned(), of_monty(&one)))
-    .collect();
-  (held, named)
+/// Which act a pending future of the sandbox stands for, which its own repr says.
+fn awaited(said: &str) -> Option<u32> {
+  let held = said.split("external_future(").nth(1)?;
+  held.split(')').next()?.parse().ok()
 }
 
 /// One value of the sandbox, as the engine reads it.
@@ -328,7 +378,7 @@ mod tests {
       }
     }
 
-    fn call(&mut self, _chain: &str, name: &str, args: Vec<Value>, _kwargs: Vec<(String, Value)>) -> Called {
+    fn call(&mut self, _rung: &str, _chain: &str, name: &str, args: Vec<Value>, _kwargs: Vec<(String, Value)>) -> Called {
       self.calls.push((name.to_owned(), args.clone()));
       match name {
         "bash" => Called::Act("bash://operator.1.1.1".to_owned()),
@@ -337,7 +387,7 @@ mod tests {
       }
     }
 
-    fn field(&mut self, _of: MontyUuid, name: &str) -> Held {
+    fn field(&mut self, _of: &Value, name: &str) -> Held {
       match name {
         "lines" => Held::Is(Value::List(vec![Value::Str("one".to_owned()), Value::Str("two".to_owned())])),
         _ => Held::Nothing,
