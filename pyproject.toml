@@ -8,6 +8,8 @@ license = "AGPL-3.0-only"
 license-files = ["LICENSE"]
 authors = [{ name = "Abel Lucas", email = "uaelucas@gmail.com" }]
 classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
@@ -23,6 +25,7 @@ furb = "furb.cli:main"
 
 [project.urls]
 Source = "https://github.com/uael/furb"
+Issues = "https://github.com/uael/furb/issues"
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]

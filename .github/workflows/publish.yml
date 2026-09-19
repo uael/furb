@@ -1,0 +1,24 @@
+name: publish
+
+# A tag that names a version publishes that version to PyPI. PyPI is told to trust this workflow of this
+# repository, so no token is kept anywhere: the job asks GitHub for a short lived identity and PyPI reads it.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.14"
+      - run: uv build
+      - run: uv publish --trusted-publishing always
