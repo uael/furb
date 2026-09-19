@@ -27,7 +27,7 @@ def noting(heard: list[object], how: str = ""):  # noqa: ANN201
 
 
 async def test_the_way_to_make_a_question_that_lives() -> None:
-  """The way to make a question that lives: it takes a name when it is made, it is logged, its life is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it."""
+  """The way to make a question that lives: it takes a name when it is made, it is logged, its ear is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   heard: list[object] = []
@@ -101,7 +101,7 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
 
 
 async def test_the_life_of_an_act_is_given_the_name_of_the_act_and_hears_every_fact_said_after_its_birth() -> None:
-  """The life of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a fact or by calling the bus."""
+  """The ear of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a fact or by calling the bus."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   heard: list[object] = []

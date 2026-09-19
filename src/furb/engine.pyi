@@ -56,13 +56,13 @@ A question is named by its kind, so a fact is a question when the act it is abou
 The name of a question: its kind, the lineage of the one that made it, which is the lineage of that act when the maker is one and of its name otherwise, and how many that one has made, which the life counts for each maker.
 A question is named by its kind, so a rung is rung://, a prompt prompt://, a read read://, and the generator that settles an await of an act from outside a run is named waits:// under that act, which is the name of no question.
 """
-type Life = Generator[Fact | None, Fact]
-"""A life is any generator of that shape, so the World and the Kernel are lives, and boot takes a life of the outside under any name it is to hear by."""
+type Ear = Generator[Fact | None, Fact]
+"""An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by."""
 
 type Show = Callable[[list[str]], list[int]]
 """A show is given the lines of a text and gives the numbers of the lines to tell.
 A show is any callable of that shape, so a word adds a show by writing one, and span, grep and differs make the shows of the file.
-A show is no word of a fact: the verb that was given it keeps it for what it tells, and the life of the act closes over it, so no record holds one.
+A show is no word of a fact: the verb that was given it keeps it for what it tells, and the ear of the act closes over it, so no record holds one.
 """
 type Filter = Callable[[list[Question]], list[Question]]
 """A filter is given the acts of the transcript up to the source of a chain that has one.
@@ -95,18 +95,18 @@ def ask(kind: str, on: str, *words: object) -> tuple[Question, object]:
   A query the operator asks from outside a run that names no chain is put to every generator, and no chain answers it.
   """
 
-def act[T = object](kind: str, on: str, life: Callable[[str], Life], *words: object) -> Act[T]:
-  """The way to make a question that lives: it takes a name when it is made, it is logged, its life is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it.
+def act[T = object](kind: str, on: str, ear: Callable[[str], Ear], *words: object) -> Act[T]:
+  """The way to make a question that lives: it takes a name when it is made, it is logged, its ear is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it.
   An act said: it is begun, and what the call gives is its name, which is awaited for what the act comes to.
   An act said twice under one name is one act, and the second saying brings no second life and gives the name back.
   Two acts that say the same words under one name are one act.
   The engine refuses an act said from outside a run that names no chain, a chain apart.
   The chain an act is on is the chain named to the call, or the scope of the one that made it when the call names none.
-  The life of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a fact or by calling the bus.
+  The ear of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a fact or by calling the bus.
   An act carries the words of its kind, which are the plain arguments the verb was given, in the order of the verb, and a show or a filter is none of them.
   """
 
-def drive(g: Life, name: str) -> None:
+def drive(g: Ear, name: str) -> None:
   """The other way to speak: a generator is brought to life under a name, and from then it hears every fact that is said and says its own.
   One that returns is over and lives no more, which is how a thing that watches for one fact alone is dropped the moment it hears it.
   One that raises while it hears is broken the same way, and what went wrong goes to the one that spoke.
@@ -240,7 +240,7 @@ def pause(id: str) -> None:
   pause is given the id of a pending act or the id of a chain.
   A pause stops no ask in flight: the ask returns.
   A paused chain goes quiet as its in-flight work returns.
-  A kind a pause stops: it starts its body, and while a pause over it stands the body hears nothing, and at the wake it hears everything that was said meanwhile, in order.
+  A kind a pause stops: it starts its ear, and while a pause over it stands the ear hears nothing, and at the wake it hears everything that was said meanwhile, in order.
   A query of that time it never hears at all, since a query is answered while the one that asked waits, and that one waits no longer.
   A pause stands over what is made after it, until the wake.
   A control is on the scope of what it is over, so it takes no chain of its own.
@@ -658,7 +658,7 @@ A result enters the transcript whether or not anyone awaits it.
 An act that is over says nothing, and a command lives on to answer its doors.
 A done that an act said itself is the result of the act.
 A done that names a question is the answer to the question.
-A kind that ends when it is told to: it starts its body, and then a done that names it is what it came to; a cancel over it ends it with a CancelledError, and a close of it with the value that close carries.
+A kind that ends when it is told to: it starts its ear, and then a done that names it is what it came to; a cancel over it ends it with a CancelledError, and a close of it with the value that close carries.
 """
 type Tell = tuple[Literal["tell"], str, str, list[Tag]]
 """A tell carries tags about the act it is about, and the turns are folded from them.
@@ -874,12 +874,12 @@ def ended(a: Fact, id: str) -> object:
   """What an act a control is over is done with: the value a close carries for the act it names, and a CancelledError for every other."""
 
 def idle(id: str) -> Generator[None, Fact]:
-  """idle hears every fact and says nothing of its own, which is the life of a wait and the ear of the operator."""
+  """idle hears every fact and says nothing of its own, which is the ear of a wait and the ear of the operator."""
 
-def lives(g: Life, a: Fact | None) -> bool:
-  """lives carries a fact into a body, says everything the body yields, and gives whether the body lives on."""
+def lives(g: Ear, a: Fact | None) -> bool:
+  """lives carries a fact into an ear, says everything the ear yields, and gives whether the ear lives on."""
 
-def pausing(life: Callable[[str], Life]) -> Callable[[str], Life]:
+def pausing(ear: Callable[[str], Ear]) -> Callable[[str], Ear]:
   """An act is paused while the last control in record order that is over it is a pause.
   A pause holds delivery: a result that arrives enters the record and waits.
   A paused prompt stops at its next boundary, with its loop where it stood.
@@ -888,18 +888,18 @@ def pausing(life: Callable[[str], Life]) -> Callable[[str], Life]:
   A control from outside reaches a paused act at once, where what the words of the act say waits for the wake.
   """
 
-def ending(life: Callable[[str], Life]) -> Callable[[str], Life]:
+def ending(ear: Callable[[str], Ear]) -> Callable[[str], Ear]:
   """A close from outside still ends what a pause is over.
   It is over as it says a done of its own, so it never hears that done and says nothing after it.
   """
 
-def started(life: Callable[[str], Life], to: str = OPERATOR) -> Callable[[str], Life]:
+def started(ear: Callable[[str], Ear], to: str = OPERATOR) -> Callable[[str], Ear]:
   """An act the World does says start at its birth, and the facts of the World about it come after.
   The World starts a command at its start, which the command says at its birth.
   A prompt to a model is the engine's to do, so it says no start.
   """
 
-def boot(record: Sequence[Entry] = (), **outside: Life) -> Act[Never]:
+def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names, and the act made last are its own, and four names reach them: send, which says a fact, ask, which puts a query, act, which makes an act, and drive, which brings a generator to life.
   A verb from a rung takes the chain of the rung when the call leaves on unsaid.
   The kind of an act is the verb that made the act.
@@ -941,7 +941,7 @@ def boot(record: Sequence[Entry] = (), **outside: Life) -> Act[Never]:
   A boot is a life; a second boot is a second life, and the first is gone.
   The names operator, record and journal are the life's own ears, and boot refuses a generator of the outside under one of them.
   A life settles an await of its acts from outside a run in the loop it is opened in, so boot outside a running loop raises before it makes anything.
-  An act of the operator is said again through its verb, with the words the record holds and the chain it names, so its life is the verb's, and a show or a filter it was given is not said again, since the record holds none.
+  An act of the operator is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, and a show or a filter it was given is not said again, since the record holds none.
   The record answers a question said again from what it holds of it, a query from the answer beside it and an act from the done that names it.
   """
 
@@ -952,13 +952,13 @@ The program rebinds actor like any name, and the last binding wins.
 raised: BaseException | None
 """raised is the exception object that the last rung raised, rebound at each raise."""
 
-type World = Life
+type World = Ear
 """The World hears every fact: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory it asks the chain for; it starts a command it is started with, asking it whether it is merged, feeds it, ends it at its timeout and at a cancel; it answers an ask with the turn of the model; and it shows a prompt to the operator.
 The World performs any fact that an extension defines and that the World knows.
 The facts that the World says of its own are for the acts that complete later.
 The World speaks by yielding a fact, or by calling send under its own name when it speaks from its loop.
 """
-type Kernel = Life
+type Kernel = Ear
 """The chain has the Kernel gate and begin every rung, by the facts gate and run.
 The Kernel answers a gate with its findings, runs the word of a run in the module of the chain the run names, says wants for the act a run waits for, takes a sent of what that act came to, and says ran with what the word gave.
 The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung.

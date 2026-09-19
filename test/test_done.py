@@ -68,7 +68,7 @@ async def test_a_done_that_names_a_question_is_the_answer_to_the_question() -> N
 
 
 async def test_a_kind_that_ends_when_it_is_told_to() -> None:
-  """A kind that ends when it is told to: it starts its body, and then a done that names it is what it came to; a cancel over it ends it with a CancelledError, and a close of it with the value that close carries."""
+  """A kind that ends when it is told to: it starts its ear, and then a done that names it is what it came to; a cancel over it ends it with a CancelledError, and a close of it with the value that close carries."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   assert await engine.wait(0, on=root) is None

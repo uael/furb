@@ -13,7 +13,7 @@ def once() -> Generator[tuple | None, tuple | None]:
 
 
 async def test_lives_carries_a_fact_into_a_body_and_says_everything_the_body_yields() -> None:
-  """lives carries a fact into a body, says everything the body yields, and gives whether the body lives on."""
+  """lives carries a fact into an ear, says everything the ear yields, and gives whether the ear lives on."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   heard: list[tuple] = []

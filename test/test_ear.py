@@ -1,4 +1,4 @@
-"""Life, any generator that hears every fact and speaks by yielding one."""
+"""Ear, any generator that hears every fact and speaks by yielding one."""
 
 from collections.abc import Generator
 
@@ -8,7 +8,7 @@ from furb.engine import Text
 
 
 def note(kept: list[tuple]) -> Generator[tuple | None, tuple]:
-  """A life of the outside that answers a read of a door of its own and keeps every fact it hears."""
+  """An ear of the outside that answers a read of a door of its own and keeps every fact it hears."""
   while True:
     match a := (yield):
       case ("read", qid, _, _, path) if path.startswith("note://"):
@@ -18,8 +18,8 @@ def note(kept: list[tuple]) -> Generator[tuple | None, tuple]:
         kept.append(a)
 
 
-async def test_a_life_is_any_generator_of_that_shape() -> None:
-  """A life is any generator of that shape, so the World and the Kernel are lives, and boot takes a life of the outside under any name it is to hear by."""
+async def test_an_ear_is_any_generator_of_that_shape() -> None:
+  """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by."""
   sand, py = sown(), Py()
   kept: list[tuple] = []
   root = engine.boot((), world=sand.hears(), kernel=py.kernel(), note=note(kept))

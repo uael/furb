@@ -24,10 +24,11 @@ Each name has one meaning, which the contract's sentences use as given here.
 - question: a fact that is asked; it takes a name when it is said, its first word is the chain it is on, and what
   it was answered the life holds under its name; an act if it lives, a query if it does not.
 - query: a synchronous question, answered now or with nothing.
-- act: an asynchronous question, answered now or later, which a life lives, opened by the call and done by its done.
-- life: a generator that hears every fact and speaks by yielding one; the life of an act is given the name of the
-  act, and a verb makes it with pausing, ending and started; the World, the Kernel and every other generator that
-  boot is given from the outside are lives too.
+- act: an asynchronous question, answered now or later, which an ear lives, opened by the call and done by its done.
+- life: one run of the engine, which boot opens and a second boot ends; every act, name and outcome is of it.
+- ear: a generator that hears every fact of the life and speaks by yielding one; the ear of an act is given the
+  name of the act, and a verb makes it with pausing, ending and started; the World, the Kernel and every other
+  generator that boot is given from the outside are ears too.
 - outcome: what a question came to, held under its name once its done lands: the value or the exception.
 - id: the name of a question, as a string, kind://lineage.n: its kind, the lineage of its maker, and its number
   among that maker's.
@@ -61,7 +62,7 @@ Each name has one meaning, which the contract's sentences use as given here.
 - command: what bash runs on the machine.
 - merged: the state of a command whose stderr flows into its stdout, in the order the command wrote them.
 - door: the name of an act, with a part after it or without; the word of a rung adds a door by making an act whose
-  life answers reads of a scheme, and the World serves the rest.
+  ear answers reads of a scheme, and the World serves the rest.
 - text: what read gives, and what write is given and gives back as it landed; a Text, with a path and a content.
 - show: a callable given the lines of a text, which gives the numbers of the lines the engine tells; span, grep and
   differs make the shows of the file.
@@ -90,13 +91,13 @@ The defaults of every verb are public names in the file.
 A model knows from the source alone what the engine does with what the model writes.
 What the engine does to the word of a rung it does to itself.
 The prompt is the one channel of the engine: every exchange between the operator, the models and a chain is a prompt.
-A model extends the engine from a step: an extension writes verbs and lives, shows and filters as callables, and rebinds names, and it tells tags of its own, from a door or from a rebound verb.
+A model extends the engine from a step: an extension writes verbs and ears, shows and filters as callables, and rebinds names, and it tells tags of its own, from a door or from a rebound verb.
 The engine has no registry, no plugin surface, no permission and no REPL: the record says who made each act.
 Within a chain, a rung binds, passes and returns any python value, plain or not.
 When its share of the window is high, a model opens a chain with a source and a take that is not inside.
 Compaction is not in the core.
 engine.pyi is the specification of engine.py: it says what the engine is, what is always true of it and what its surface is, and never how it is made; it names the interfaces and the facts as python reads them, and holds every law, so engine.py holds no sentence and no comment.
-engine.py depends only on the python interpreter and on the two interfaces the contract names, World and Kernel, which are lives given to boot, held by no verb and bound to no name of the engine.
+engine.py depends only on the python interpreter and on the two interfaces the contract names, World and Kernel, which are ears given to boot, held by no verb and bound to no name of the engine.
 A fact is a tuple, its kind first, deconstructed only by match, and nothing of the engine is a class but a text, an exit, the name of an act, and the two exceptions.
 The verbs and Text carry their signatures, typed, since a model reads them; nothing else in engine.py has a type annotation but what ty and a dataclass need.
 engine.py has no private names, and a name one thing alone uses lives inside it.

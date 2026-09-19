@@ -27,7 +27,7 @@ async def test_a_show_is_any_callable_of_that_shape() -> None:
 
 
 async def test_a_show_is_no_word_of_a_fact() -> None:
-  """A show is no word of a fact: the verb that was given it keeps it for what it tells, and the life of the act closes over it, so no record holds one."""
+  """A show is no word of a fact: the verb that was given it keeps it for what it tells, and the ear of the act closes over it, so no record holds one."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["read('a.txt', span(1, 1))\nx = bash('echo hi', show=span(1, 1))\nclose(1)"]
