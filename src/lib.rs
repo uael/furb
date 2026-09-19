@@ -5,8 +5,12 @@
 //! implements, and the two bindings, one for typescript and one for python.
 //!
 //! What the crate takes care of is the Kernel. The engine has the Kernel gate and run the word of every rung, and
-//! that word is written by a model, so it is the one part of a life that must not be trusted. The crate runs it in
-//! the sandbox, in the module of its chain, and gates it before it runs.
+//! that word is written by a model, so it is the one part of a life that must not be trusted. The word runs in the
+//! sandbox where the engine itself runs, in the module of its chain, and it is gated before it runs.
+//!
+//! Because the engine runs in there too, nothing of the engine crosses to the host: a text, an act and a refusal
+//! are the sandbox's own, the engine calls its own shows and filters in there, and the one thing that crosses is
+//! a fact, plain.
 //!
 //! # How a host reaches the engine
 //!
@@ -20,16 +24,11 @@
 //! globals of a chain hold what the file defines and nothing more, which is what a model reads.
 
 pub mod fact;
-pub mod kernel;
-#[cfg(feature = "python")]
-pub mod python;
 pub mod record;
-pub mod sandbox;
 pub mod world;
 
 pub use crate::{
   fact::{Fact, Value},
-  kernel::{Native, Sandbox, Step},
   record::{Drift, Entry},
   world::{Kernel, Reply, World},
 };

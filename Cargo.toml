@@ -7,22 +7,10 @@ description = "The core of an AI harness: the engine in a sandbox, and a World o
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
 
-[features]
-default = []
-# The bindings, one per language, each of which gives the crate's surface to a host of that language.
-python = ["dep:pyo3"]
-ts = ["dep:napi", "dep:napi-derive"]
-
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-pyo3 = { version = "0.29", optional = true, features = ["extension-module"] }
-napi = { version = "3", optional = true, features = ["napi8"] }
-napi-derive = { version = "3", optional = true }
-monty = { git = "https://github.com/uael/monty", branch = "main" }
-monty-types = { git = "https://github.com/uael/monty", branch = "main" }
 
 [lib]
 name = "furb"
 path = "src/lib.rs"
-crate-type = ["lib", "cdylib"]
