@@ -65,8 +65,11 @@ pub enum Called {
 /// The host holds the engine, in whatever language it is written in, and answers for it here. A name the word
 /// says is looked up once for each session that says it, and a verb it calls is performed where the engine lives.
 pub trait Reach {
-  /// What the engine holds under a name.
-  fn holds(&mut self, name: &str) -> Held;
+  /// What the globals of a chain hold under a name.
+  ///
+  /// Every rung of a chain runs in the globals of that chain, which hold every name the engine defines and the
+  /// two the chain binds of its own, so a name is read there.
+  fn holds(&mut self, chain: &str, name: &str) -> Held;
 
   /// One call of a verb of the engine, made by the word of a rung, on the chain of that rung.
   ///
@@ -80,6 +83,12 @@ pub trait Reach {
   /// said before the word asked and is said no second time. An await the engine will not make is refused where
   /// the word waited.
   fn awaits(&mut self, rung: &str, act: &str) -> Awaited;
+
+  /// What a word bound in the module of its chain, said once the word is over.
+  ///
+  /// What a rung binds stays bound for every later rung of the chain, and the module of a chain is the engine's,
+  /// so what the word bound in the sandbox lands there.
+  fn binds(&mut self, chain: &str, held: Vec<(String, Value)>);
 
   /// One field of a value the engine gave, which the word asked for and the value did not carry.
   ///
@@ -105,6 +114,8 @@ pub struct Monty<R> {
   waiting: HashMap<String, Waiting>,
   /// The act that each call id of a pending future stands for.
   acts: HashMap<u32, String>,
+  /// The names each chain took from the engine, which are no bindings of its words.
+  looked: HashMap<String, Vec<String>>,
   /// Every value the host holds for the sandbox, by the identity the sandbox knows it as.
   held: HashMap<MontyUuid, Value>,
   /// The exception this put into each run, by the name of the run.
@@ -125,6 +136,7 @@ impl<R: Reach> Monty<R> {
       chains: HashMap::new(),
       waiting: HashMap::new(),
       acts: HashMap::new(),
+      looked: HashMap::new(),
       held: HashMap::new(),
       injected: HashMap::new(),
       named: 0,
@@ -164,7 +176,8 @@ impl<R: Reach> Monty<R> {
         Ok(progress) => progress,
         Err(error) => {
           let error = *error;
-          let text = error.error.to_string();
+          // The message of an exception is what python holds as its first argument, and never the traceback.
+          let text = error.error.message().unwrap_or_default().to_owned();
           let mine = self.injected.remove(rung);
           let raised = match &mine {
             Some((name, why)) if text.contains(why.as_str()) => {
@@ -173,19 +186,23 @@ impl<R: Reach> Monty<R> {
             _ => Value::Error { name: format!("{:?}", error.error.exc_type()), args: vec![Value::Str(text)] },
           };
           self.sessions.insert(chain.to_owned(), error.repl);
-          return Step::Ran(Some(raised));
+          return self.over(chain, Some(raised));
         }
       };
       said = match progress {
         ReplProgress::Complete { repl, value } => {
-          self.sessions.insert(chain.to_owned(), repl);
           let _ = value;
-          return Step::Ran(None);
+          self.sessions.insert(chain.to_owned(), repl);
+          return self.over(chain, None);
         }
         ReplProgress::NameLookup(one) => {
           let got = match one.object_id().and_then(|id| self.held.get(&id).cloned()) {
             Some(of) => self.reach.field(&of, &one.name),
-            None => self.reach.holds(&one.name),
+            None => {
+              // A name the engine answers is the engine's, and never a binding of a word of this chain.
+              self.looked.entry(chain.to_owned()).or_default().push(one.name.clone());
+              self.reach.holds(chain, &one.name)
+            }
           };
           let answer = match got {
             Held::Verb => NameLookupResult::Value(MontyObject::function(one.name.clone(), None)),
@@ -213,7 +230,7 @@ impl<R: Reach> Monty<R> {
               let raised = MontyException::new(ExcType::RuntimeError, Some(why));
               let said = one.abort(raised, PrintWriter::Stdout);
               self.recover(chain, said);
-              return Step::Ran(Some(Value::Error { name, args: Vec::new() }));
+              return self.over(chain, Some(Value::Error { name, args: Vec::new() }));
             }
             Called::Raised { name, why } => {
               self.injected.insert(rung.to_owned(), (name.clone(), why.clone()));
@@ -225,7 +242,7 @@ impl<R: Reach> Monty<R> {
         ReplProgress::ResolveFutures(one) => {
           let Some(&call_id) = one.pending_call_ids().first() else {
             self.sessions.insert(chain.to_owned(), one.into_repl());
-            return Step::Ran(None);
+            return self.over(chain, None);
           };
           let act = self.acts.get(&call_id).cloned().unwrap_or_default();
           match self.reach.awaits(rung, &act) {
@@ -250,6 +267,42 @@ impl<R: Reach> Monty<R> {
         }
       };
     }
+  }
+
+  /// A run that is over, whichever way it ended: what its word bound lands in the module of its chain first.
+  ///
+  /// A step that raised keeps what it bound before the raise, and a word that answers its own prompt is stopped
+  /// where it stands, so every way a run ends carries its bindings home.
+  fn over(&mut self, chain: &str, raised: Option<Value>) -> Step {
+    let held = self.bound(chain);
+    self.reach.binds(chain, held);
+    Step::Ran(raised)
+  }
+
+  /// What the words of a chain have bound in its module, which the session itself says.
+  ///
+  /// A verb the engine answered for stands in the same namespace, since a name is kept in its slot once it is
+  /// looked up, and it is dropped here: the engine holds its own verbs. Everything else is the chain's, whether a
+  /// word bound it or a word rebound a name the engine gave, and the last binding in record order wins.
+  fn bound(&mut self, chain: &str) -> Vec<(String, Value)> {
+    let Some(mut session) = self.sessions.remove(chain) else {
+      return Vec::new();
+    };
+    let said = session.feed_run("locals()", Vec::new(), PrintWriter::Stdout);
+    self.sessions.insert(chain.to_owned(), session);
+    let Ok(got) = said else {
+      return Vec::new();
+    };
+    let taken = self.looked.get(chain).cloned().unwrap_or_default();
+    let mut held = Vec::new();
+    for (name, one) in got.as_ref().pairs().unwrap_or_default() {
+      let name = name.as_str().unwrap_or_default().to_owned();
+      let verb = taken.contains(&name) && one.py_repr().ends_with("external>");
+      if !name.starts_with("__") && !verb {
+        held.push((name, self.of_sandbox(&one)));
+      }
+    }
+    held
   }
 
   /// The words of one call: what stood by place, and what stood by name.
@@ -411,17 +464,18 @@ impl<R: Reach> Sandbox for Monty<R> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
   use super::*;
 
   /// An engine of the test: it holds the verbs of a word and keeps every call the word made.
   #[derive(Default)]
-  struct Engine {
-    calls: Vec<(String, Vec<Value>)>,
+  pub(crate) struct Engine {
+    pub(crate) calls: Vec<(String, Vec<Value>)>,
+    pub(crate) bound: Vec<(String, Vec<(String, Value)>)>,
   }
 
   impl Reach for Engine {
-    fn holds(&mut self, name: &str) -> Held {
+    fn holds(&mut self, _chain: &str, name: &str) -> Held {
       match name {
         "close" | "bash" | "read" => Held::Verb,
         "TIMEOUT" => Held::Is(Value::Float(600.0)),
@@ -440,6 +494,10 @@ mod tests {
 
     fn awaits(&mut self, _rung: &str, _act: &str) -> Awaited {
       Awaited::Waits
+    }
+
+    fn binds(&mut self, chain: &str, held: Vec<(String, Value)>) {
+      self.bound.push((chain.to_owned(), held));
     }
 
     fn field(&mut self, _of: &Value, name: &str) -> Held {
@@ -505,5 +563,31 @@ mod tests {
       }
       other => panic!("a word that raises is over with what it raised, and gave {other:?}"),
     }
+  }
+}
+
+#[cfg(test)]
+mod bindings {
+  use super::{tests::*, *};
+
+  #[test]
+  fn what_a_rung_binds_lands_in_the_module_of_its_chain() {
+    let mut sandbox = Monty::new(Engine::default());
+    assert_eq!(sandbox.begin("rung://operator.1.1", "chain://operator.1", "k = 41"), Step::Ran(None));
+    let (chain, held) = sandbox.reach.bound.last().cloned().unwrap();
+    assert_eq!(chain, "chain://operator.1");
+    assert_eq!(held, vec![("k".to_owned(), Value::Int(41))]);
+  }
+
+  #[test]
+  fn a_name_the_engine_answered_is_no_binding_of_a_word() {
+    let mut sandbox = Monty::new(Engine::default());
+    let word = "t = read('a.txt')\nclose(1)";
+    sandbox.begin("rung://operator.1.1", "chain://operator.1", word);
+    let (_, held) = sandbox.reach.bound.last().cloned().unwrap();
+    let names: Vec<&str> = held.iter().map(|(name, _)| name.as_str()).collect();
+    assert!(names.contains(&"t"), "a word binds what it binds: {names:?}");
+    assert!(!names.contains(&"read"), "a verb of the engine is no binding: {names:?}");
+    assert!(!names.contains(&"close"), "a verb of the engine is no binding: {names:?}");
   }
 }

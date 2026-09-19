@@ -28,20 +28,28 @@ struct Engine {
 }
 
 impl Engine {
-  /// What the engine holds under a name, as python answers it.
-  fn look(&self, py: Python<'_>, name: &str) -> PyResult<Held> {
+  /// What the globals of a chain hold under a name, as python answers it.
+  ///
+  /// The module of a chain holds what the engine defines and what the chain binds of its own, so it answers
+  /// first; the engine answers for a name no chain of the life has yet.
+  fn look(&self, py: Python<'_>, chain: &str, name: &str) -> PyResult<Held> {
     let module = self.module.bind(py);
-    if !module.hasattr(name)? {
-      return Ok(Held::Nothing);
-    }
-    let got = module.getattr(name)?;
+    let held = module
+      .getattr("modules")
+      .and_then(|held| held.get_item(chain))
+      .and_then(|bound| bound.get_item(name));
+    let got = match held {
+      Ok(got) => got,
+      Err(_) if module.hasattr(name)? => module.getattr(name)?,
+      Err(_) => return Ok(Held::Nothing),
+    };
     if got.is_callable() { Ok(Held::Verb) } else { Ok(Held::Is(of_py(&got)?)) }
   }
 }
 
 impl Reach for Engine {
-  fn holds(&mut self, name: &str) -> Held {
-    Python::attach(|py| self.look(py, name).unwrap_or(Held::Nothing))
+  fn holds(&mut self, chain: &str, name: &str) -> Held {
+    Python::attach(|py| self.look(py, chain, name).unwrap_or(Held::Nothing))
   }
 
   fn call(&mut self, rung: &str, chain: &str, name: &str, args: Vec<Value>, kwargs: Vec<(String, Value)>) -> Called {
@@ -59,6 +67,20 @@ impl Reach for Engine {
 
   fn awaits(&mut self, rung: &str, act: &str) -> Awaited {
     Python::attach(|py| self.awaiting(py, rung, act).unwrap_or(Awaited::Waits))
+  }
+
+  fn binds(&mut self, chain: &str, held: Vec<(String, Value)>) {
+    Python::attach(|py| {
+      let module = self.module.bind(py);
+      let Ok(bound) = module.getattr("modules").and_then(|held| held.get_item(chain)) else {
+        return;
+      };
+      for (name, one) in held {
+        if let Ok(value) = into_py(py, module, &one) {
+          let _ = bound.set_item(name, value);
+        }
+      }
+    });
   }
 
   fn field(&mut self, of: &Value, name: &str) -> Held {
