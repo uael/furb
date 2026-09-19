@@ -24,7 +24,6 @@ use std::fmt;
 use crate::{
   fact::{Fact, Value},
   life::Refusal,
-  turn::repr,
 };
 
 /// The name of an act, which is what a verb gives and what a caller holds of the act.
@@ -809,7 +808,7 @@ fn named_act(got: &Value) -> Result<Act, Refusal> {
 
 /// What a verb gave, or the refusal that says what stood there instead.
 fn wanted<T>(got: &Value, what: &str, held: Option<T>) -> Result<T, Refusal> {
-  held.ok_or_else(|| Refusal::Read(format!("the engine gave {}, which is no {what}", repr(got))))
+  held.ok_or_else(|| Refusal::Read(format!("the engine gave {got:?}, which is no {what}")))
 }
 
 /// Whether one character ends a line, which is every line break python reads.

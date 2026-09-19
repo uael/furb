@@ -77,7 +77,11 @@ impl Refusal {
 impl std::fmt::Display for Refusal {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      Refusal::Raised(held) => f.write_str(&crate::turn::repr(held)),
+      Refusal::Raised(Value::Error { name, args }) => {
+        let each: Vec<&str> = args.iter().filter_map(Value::as_str).collect();
+        if each.is_empty() { f.write_str(name) } else { write!(f, "{name}: {}", each.join(" ")) }
+      }
+      Refusal::Raised(held) => write!(f, "{held:?}"),
       Refusal::Read(held) => f.write_str(held),
     }
   }
@@ -294,7 +298,7 @@ mod tests {
     let no = held.word("close('one')").unwrap_err();
     assert!(no.refused(), "{no}");
     assert_eq!(no.name(), "Refused");
-    assert_eq!(no.to_string(), "Refused('a close of str is no int')");
+    assert_eq!(no.to_string(), "Refused: a close of str is no int");
   }
 
   #[test]
