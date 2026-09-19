@@ -7,8 +7,14 @@
 //!
 //! A World that must ask the engine something while it answers, as it does for the working directory of a chain
 //! before it opens a path, answers [`Reply::Ask`] and is given the answer through [`World::answered`]. It never
-//! calls into a life that stands waiting for it, and it never says a fact itself: it hands back what it would say,
-//! and the boundary says each of them in order, which is the one way the outside speaks.
+//! calls into a life that stands waiting for it: it hands back what it would say, and the boundary says each of
+//! them in order.
+//!
+//! What a World does not answer where it hears it, it says later through a [`crate::Voice`]: a command says what
+//! it wrote as it writes it and its code when it ends, and a model answers an ask long after the ask was heard.
+//! Those are the facts of the World about the acts that complete later, and they are the second way the engine
+//! names: the World speaks by yielding a fact, or by calling send under its own name when it speaks from its
+//! loop.
 
 use crate::fact::{Fact, Value};
 
@@ -50,6 +56,8 @@ impl Reply {
 /// the journal says to keep.
 ///
 /// Everything it answers is plain, and everything it hears is plain, so a World holds nothing of python.
+///
+/// A World that does work which finishes later holds a [`crate::Voice`] and says the facts of that work into it.
 pub trait World {
   /// One fact, heard. What the World would say of it, or the question it must ask first.
   fn hears(&mut self, fact: &Fact) -> Reply;

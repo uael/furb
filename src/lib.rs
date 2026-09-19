@@ -25,11 +25,13 @@
 
 pub mod fact;
 pub mod record;
+pub mod voice;
 pub mod world;
 
 pub use crate::{
   fact::{Fact, Value},
   record::{Drift, Entry},
+  voice::{Ears, Voice},
   world::{Kernel, Reply, World},
 };
 
