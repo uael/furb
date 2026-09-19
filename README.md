@@ -35,7 +35,9 @@ let world = furb::Live::new("/w", "opus/low", roster, talks, voice);
 let mut life = furb::Life::boot(session, world, gate, ears, &[])?;
 let root = life.root().to_owned();
 let act = life.calls(furb::verb::Prompt { shape: "int", message: "count the lines", on: &root, ..Default::default() })?;
-while life.came(&act)?.is_none() {}
+while life.came(&act)?.is_none() {
+  life.waits(std::time::Duration::from_millis(50));
+}
 ```
 
 - `cargo test` runs the tests of the crate, `tests/life.rs` among them, which drives one life of the real engine

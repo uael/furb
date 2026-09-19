@@ -155,6 +155,14 @@ impl<S: Session, W: World, G: Gate> Life<S, W, G> {
     Ok(said.len())
   }
 
+  /// Wait until the host says something, or until this long has passed, and say whether anything waits.
+  ///
+  /// A life goes on when a fact is said in it, so while it waits for a model, a command or a person, nothing of
+  /// it moves until its host speaks. This is how a host waits for its own work without asking over and over.
+  pub fn waits(&mut self, how_long: std::time::Duration) -> bool {
+    self.ears.waits(how_long)
+  }
+
   /// What an act came to, and nothing at all while it waits.
   ///
   /// A host says what it owes first, since a fact it is holding may be the very one that settles the act, and

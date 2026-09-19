@@ -18,7 +18,8 @@
 
 use std::{
   collections::VecDeque,
-  sync::{Arc, Mutex},
+  sync::{Arc, Condvar, Mutex},
+  time::Duration,
 };
 
 use crate::fact::{Fact, Value};
@@ -59,8 +60,9 @@ impl Said {
   }
 }
 
-/// What a host has said and the life has not heard yet, held in the order it was said.
-type Waiting = Arc<Mutex<VecDeque<Said>>>;
+/// What a host has said and the life has not heard yet, held in the order it was said, and the word that wakes
+/// whoever waits for it.
+type Waiting = Arc<(Mutex<VecDeque<Said>>, Condvar)>;
 
 /// What a host speaks into a life with, for what it does not answer where it hears it.
 ///
@@ -92,13 +94,14 @@ impl Voice {
 
   /// Whether anything said into this Voice is still waiting to be heard.
   pub fn waiting(&self) -> bool {
-    self.waiting.lock().is_ok_and(|held| !held.is_empty())
+    self.waiting.0.lock().is_ok_and(|held| !held.is_empty())
   }
 
-  /// One thing said, held until the life hears it.
+  /// One thing said, held until the life hears it, and whoever waits for it woken.
   fn holds(&self, one: Said) {
-    if let Ok(mut held) = self.waiting.lock() {
+    if let Ok(mut held) = self.waiting.0.lock() {
       held.push_back(one);
+      self.waiting.1.notify_all();
     }
   }
 }
@@ -114,8 +117,23 @@ impl Ears {
   /// A Voice and the Ears that hear it, made together.
   #[must_use]
   pub fn made() -> (Voice, Ears) {
-    let waiting: Waiting = Arc::new(Mutex::new(VecDeque::new()));
+    let waiting: Waiting = Arc::new((Mutex::new(VecDeque::new()), Condvar::new()));
     (Voice { waiting: Arc::clone(&waiting) }, Ears { waiting })
+  }
+
+  /// Wait until the host says something, or until this long has passed, and say whether anything waits.
+  ///
+  /// A life goes on when a fact is said in it, and while it waits for a model, a command or a person, nothing
+  /// of it moves until the host speaks. This is how a host waits for that without asking over and over.
+  pub fn waits(&mut self, how_long: Duration) -> bool {
+    let Ok(held) = self.waiting.0.lock() else { return false };
+    if !held.is_empty() {
+      return true;
+    }
+    match self.waiting.1.wait_timeout(held, how_long) {
+      Ok((held, _)) => !held.is_empty(),
+      Err(_) => false,
+    }
   }
 
   /// Everything said since the last drain, in the order it was said.
@@ -123,7 +141,7 @@ impl Ears {
   /// A life drains where it is safe to say a fact, so what a host says lands between the facts of the life and
   /// never inside one.
   pub fn drained(&mut self) -> Vec<Said> {
-    match self.waiting.lock() {
+    match self.waiting.0.lock() {
       Ok(mut held) => held.drain(..).collect(),
       Err(_) => Vec::new(),
     }
@@ -132,7 +150,7 @@ impl Ears {
 
 #[cfg(test)]
 mod tests {
-  use std::thread;
+  use std::{thread, time::Instant};
 
   use super::*;
 
@@ -172,6 +190,25 @@ mod tests {
     let words = Value::of_plain(&held.plain());
     assert_eq!(words.as_entries().unwrap()[0], Value::Str("close".to_owned()));
     assert_eq!(Value::of_plain(&Said::Fact(out("one\n")).plain()).as_entries().unwrap().len(), 5);
+  }
+
+  #[test]
+  fn a_life_waits_for_its_host_and_never_asks_it_over_and_over() {
+    let (voice, mut ears) = Ears::made();
+    let waited = Instant::now();
+    assert!(!ears.waits(Duration::from_millis(30)));
+    assert!(waited.elapsed() >= Duration::from_millis(25), "it waits for as long as it was given");
+    let held = voice.clone();
+    thread::spawn(move || {
+      thread::sleep(Duration::from_millis(20));
+      held.send(out("late\n"));
+    });
+    let waited = Instant::now();
+    assert!(ears.waits(Duration::from_secs(10)));
+    assert!(waited.elapsed() < Duration::from_secs(5), "it wakes when the host speaks and not at its end");
+    assert_eq!(ears.drained().len(), 1);
+    voice.send(out("now\n"));
+    assert!(ears.waits(Duration::from_secs(0)), "what is said already needs no wait at all");
   }
 
   #[test]

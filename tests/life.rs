@@ -158,7 +158,7 @@ fn came(held: &mut Life<Far, Live<Says>, Strict>, act: &Act) -> Value {
     if let Some(got) = held.came(act).expect("the life answers what an act came to") {
       return got;
     }
-    thread::sleep(Duration::from_millis(10));
+    held.waits(Duration::from_millis(20));
   }
   panic!("{act} never came to anything")
 }
