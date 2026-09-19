@@ -36,7 +36,7 @@ pub mod world;
 pub use crate::{
   fact::{Fact, Value},
   host::{Gate, Outside},
-  life::{Host, Life, Refusal, Session},
+  life::{HOST, Host, Life, Refusal, Session},
   live::{Live, Talks},
   record::{Drift, Entry},
   turn::{Body, Shown, Tag, Turn, Usage},

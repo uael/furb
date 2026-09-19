@@ -18,6 +18,9 @@ use crate::{
   world::World,
 };
 
+/// The name the sandbox reaches its host by, which the preamble calls and nothing else does.
+pub const HOST: &str = "host";
+
 /// What answers the sandbox while its code runs.
 pub trait Host {
   /// One call of the sandbox, answered: the name of the generator that made it, and what it handed over, plain.
@@ -28,20 +31,55 @@ pub trait Host {
 ///
 /// One of these serves one life. Everything inside it is the life's own: the engine, the module of every chain,
 /// and every word a model wrote. Nothing of the host is in there, and the only way out is [`Host`].
+///
+/// A session does three things, and nothing else:
+///
+/// - It runs python in one namespace, which stands from one call to the next, so what one call binds a later
+///   call reads.
+/// - It binds [`HOST`] to a call of the host: one name and one plain value go in, and one plain value comes
+///   back. The preamble calls it, and that is how the World and the gate of the host are reached from inside.
+/// - It gives back the value of the last expression of the code, plain, and nothing for code that ends in none.
 pub trait Session {
-  /// One word, run in the sandbox, and what it gave.
+  /// One piece of code, run in the sandbox, and what the last expression of it gave.
   ///
-  /// The host answers every call the word makes while it runs, which is how the World and the gate are reached.
-  fn run(&mut self, code: &str, host: &mut dyn Host) -> Result<Value, String>;
+  /// The host answers every call the code makes while it runs, which is how the World and the gate are reached.
+  /// What the code raises is the fault: the exception, plain, which is its name and what it was made with.
+  fn run(&mut self, code: &str, host: &mut dyn Host) -> Result<Value, Value>;
 }
 
 /// What a life could not do.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Refusal(pub String);
+pub enum Refusal {
+  /// What the engine raised, as the exception it is: its name, and what it was made with.
+  ///
+  /// A call the engine will not make raises `Refused` in the one that made it, and a host reads which it was by
+  /// the name, so that it tells a call it may not make from one it made wrong.
+  Raised(Value),
+  /// What the crate could not read of what the engine gave.
+  Read(String),
+}
+
+impl Refusal {
+  /// The name of what the engine raised, and nothing for a fault of the reading.
+  pub fn name(&self) -> &str {
+    match self {
+      Refusal::Raised(Value::Error { name, .. }) => name,
+      _ => "",
+    }
+  }
+
+  /// Whether the engine refused the call, which is the one fault a word of a model makes on purpose.
+  pub fn refused(&self) -> bool {
+    self.name() == "Refused"
+  }
+}
 
 impl std::fmt::Display for Refusal {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_str(&self.0)
+    match self {
+      Refusal::Raised(held) => f.write_str(&crate::turn::repr(held)),
+      Refusal::Read(held) => f.write_str(held),
+    }
   }
 }
 
@@ -67,10 +105,12 @@ impl<S: Session, W: World, G: Gate> Life<S, W, G> {
   /// more. The engine runs next, and `boot` is given the two generators the preamble makes.
   pub fn boot(mut session: S, world: W, gate: G, ears: Ears, record: &[Entry]) -> Result<Self, Refusal> {
     let mut outside = Outside::new(world, gate);
-    session.run(PREAMBLE, &mut outside).map_err(Refusal)?;
+    session.run(PREAMBLE, &mut outside).map_err(Refusal::Raised)?;
     let kept: Vec<Value> = record.iter().map(Entry::as_value).collect();
-    let root = session.run(&opening(&Value::List(kept).plain()), &mut outside).map_err(Refusal)?;
-    let root = root.as_str().unwrap_or_default().to_owned();
+    let got = session.run(&opening(&Value::List(kept).plain()), &mut outside).map_err(Refusal::Raised)?;
+    let Some(root) = got.as_str().map(str::to_owned) else {
+      return Err(Refusal::Read(format!("a life opens on a chain, and {got:?} is none")));
+    };
     Ok(Life { session, outside, ears, root })
   }
 
@@ -94,7 +134,7 @@ impl<S: Session, W: World, G: Gate> Life<S, W, G> {
   /// today. [`Life::calls`] makes the word of every verb the contract declares, and this takes any other.
   pub fn word(&mut self, word: &str) -> Result<Value, Refusal> {
     let asked = format!("asked(__engine, {})", shown(&Value::Str(word.to_owned())));
-    let said = self.session.run(&asked, &mut self.outside).map_err(Refusal)?;
+    let said = self.session.run(&asked, &mut self.outside).map_err(one)?;
     Ok(Value::of_plain(&said))
   }
 
@@ -111,7 +151,7 @@ impl<S: Session, W: World, G: Gate> Life<S, W, G> {
     }
     let held: Vec<Value> = said.iter().map(Said::plain).collect();
     let word = format!("does(__engine, {})", shown(&Value::List(held)));
-    self.session.run(&word, &mut self.outside).map_err(Refusal)?;
+    self.session.run(&word, &mut self.outside).map_err(one)?;
     Ok(said.len())
   }
 
@@ -143,12 +183,21 @@ impl<W: World, G: Gate> Host for Outside<W, G> {
   }
 }
 
+/// One fault of the sandbox, as the life reads it.
+fn one(raised: Value) -> Refusal {
+  Refusal::Raised(Value::of_plain(&raised))
+}
+
 /// The word that opens a life: the engine in a module of its own, and boot.
 ///
 /// The preamble is the session's own namespace, so the engine is given one of its own beside it, and the globals
 /// of a chain hold what the engine defines and nothing of the boundary.
 fn opening(record: &Value) -> String {
-  format!("__engine = module({ENGINE:?})\n__root = opened(__engine, {}, host)\n", shown(record))
+  format!(
+    "__engine = module({})\n__root = opened(__engine, {}, {HOST})\n__root\n",
+    shown(&Value::Str(ENGINE.to_owned())),
+    shown(record)
+  )
 }
 
 #[cfg(test)]
@@ -167,13 +216,17 @@ mod tests {
     ran: Vec<String>,
     gives: Vec<Value>,
     asks: Vec<(String, Value)>,
+    raises: Option<Value>,
   }
 
   impl Session for Spoke {
-    fn run(&mut self, code: &str, host: &mut dyn Host) -> Result<Value, String> {
+    fn run(&mut self, code: &str, host: &mut dyn Host) -> Result<Value, Value> {
       self.ran.push(code.to_owned());
       for (name, said) in std::mem::take(&mut self.asks) {
         host.called(&name, &said);
+      }
+      if let Some(held) = self.raises.take() {
+        return Err(held);
       }
       Ok(if self.gives.is_empty() { Value::None } else { self.gives.remove(0) })
     }
@@ -217,6 +270,18 @@ mod tests {
     let opened = &held.session.ran[1];
     assert!(opened.contains("__engine = module("), "{opened}");
     assert!(opened.contains("__root = opened(__engine, [], host)"), "{opened}");
+    assert!(opened.ends_with("__root\n"), "a life opens on the chain the last expression gives");
+  }
+
+  #[test]
+  fn what_the_engine_raised_is_what_the_call_could_not_do() {
+    let said = Spoke { gives: vec![Value::None, Value::Str("chain://operator.1".to_owned())], ..Spoke::default() };
+    let (mut held, _) = life(said);
+    held.session.raises = Some(Value::refused("a close of str is no int").plain());
+    let no = held.word("close('one')").unwrap_err();
+    assert!(no.refused(), "{no}");
+    assert_eq!(no.name(), "Refused");
+    assert_eq!(no.to_string(), "Refused('a close of str is no int')");
   }
 
   #[test]
