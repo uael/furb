@@ -28,6 +28,7 @@ use crate::{
   fact::{Fact, Value},
   host::WORLD,
   record::Entry,
+  turn::Turn,
   voice::Voice,
   world::{Reply, World},
 };
@@ -46,7 +47,7 @@ const STARTS: [&str; 3] = ["bash", "wait", "prompt"];
 /// fact, and the operator answers a prompt by closing the prompt with the value the shape asked for.
 pub trait Talks {
   /// One ask of a model: the rung that asks, the chain it is on, the actor, and the turns as they stand.
-  fn asked(&mut self, rung: &str, on: &str, actor: &str, turns: &Value, voice: &Voice);
+  fn asked(&mut self, rung: &str, on: &str, actor: &str, turns: &[Turn], voice: &Voice);
 
   /// One prompt of the operator: the act, the shape it wants, and the message it carries.
   fn shown(&mut self, about: &str, shape: &str, message: &str, voice: &Voice);
@@ -438,7 +439,7 @@ impl<T: Talks> World for Live<T> {
       "ask" => {
         let (rung, on) = (fact.about().to_owned(), fact.on().unwrap_or_default().to_owned());
         let actor = words.get(1).and_then(Value::as_str).unwrap_or_default().to_owned();
-        let turns = words.get(2).cloned().unwrap_or(Value::None);
+        let turns = Turn::every(words.get(2).and_then(Value::as_entries).unwrap_or_default());
         self.talks.asked(&rung, &on, &actor, &turns, &self.voice);
         Reply::Nothing
       }
@@ -595,7 +596,7 @@ mod tests {
   }
 
   impl Talks for Quiet {
-    fn asked(&mut self, rung: &str, _on: &str, actor: &str, _turns: &Value, _voice: &Voice) {
+    fn asked(&mut self, rung: &str, _on: &str, actor: &str, _turns: &[Turn], _voice: &Voice) {
       self.asked.push(format!("{rung} {actor}"));
     }
 

@@ -94,6 +94,8 @@ The crate is held by gates of its own, which the commit hook runs too:
 - `cargo fmt` then `cargo clippy --all-targets -- -D warnings`: format and lint the crate. Two spaces of
   indentation, 120 columns, as everywhere else.
 - `uv run python script/verbs.py`: every word the crate makes, held against the engine that must take it.
+- `uv run python script/turns.py`: every turn of the suite, read by the crate and by the python World, held
+  against each other.
 - `uv run python script/wired.py`: the suite, with every World of the harness behind the plain boundary.
 - `uv run python script/kerneled.py`: the suite, with the Kernel of the crate in place of the harness's.
 - `uv run python script/inside.py`: the suite with no pytest at all, so that it runs where the engine runs.
@@ -105,7 +107,8 @@ The crate runs the engine in a sandbox and gives its surface to a host that is n
 the boundary: it runs in the sandbox, stands in for the two generators the engine takes, and makes every value
 plain. `src/fact.rs` is the plain form, `src/world.rs` the World a host implements, `src/host.rs` the side that
 answers the sandbox, `src/voice.rs` what a host says when nothing asked it, `src/life.rs` one life, `src/verb.rs`
-the typed surface of every verb, `src/record.rs` the record, and `src/live.rs` a World of this machine.
+the typed surface of every verb, `src/turn.rs` what a model reads of a chain, `src/record.rs` the record, and
+`src/live.rs` a World of this machine.
 
 Nothing of the engine crosses to the host: the word of a rung runs where the engine runs, and a fact crosses
 plain. The crate takes care of the Kernel, so a host writes the World alone.
