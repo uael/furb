@@ -147,7 +147,7 @@ impl Engine {
     for (key, one) in kwargs {
       named.set_item(key, into_py(py, module, Some(table), one)?)?;
     }
-    if takes_a_chain(py, &verb)? && !named.contains("on")? {
+    if takes_a_chain(&verb, held.len())? && !named.contains("on")? {
       named.set_item("on", chain)?;
     }
     let got = verb.call(PyTuple::new(py, held)?, Some(&named));
@@ -171,15 +171,16 @@ impl Engine {
   }
 }
 
-/// Whether a verb takes the chain it is called on, which its signature says.
-fn takes_a_chain(py: Python<'_>, verb: &Bound<'_, PyAny>) -> PyResult<bool> {
-  let code = match verb.getattr("__code__") {
-    Ok(code) => code,
-    Err(_) => return Ok(false),
+/// Whether a verb still wants the chain it is called on, which its signature and the call together say.
+///
+/// A verb takes the chain of the rung when the call leaves it unsaid. A word that said it, by place or by name,
+/// has said it, and a verb that takes the chain by place, as ask does, is one the word fills itself.
+fn takes_a_chain(verb: &Bound<'_, PyAny>, said: usize) -> PyResult<bool> {
+  let Ok(code) = verb.getattr("__code__") else {
+    return Ok(false);
   };
   let names: Vec<String> = code.getattr("co_varnames")?.extract()?;
-  let _ = py;
-  Ok(names.iter().any(|one| one == "on"))
+  Ok(names.iter().position(|one| one == "on").is_some_and(|at| said <= at))
 }
 
 /// Whether what a verb gave is the name of an act, which is what a caller holds of one.

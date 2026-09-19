@@ -116,6 +116,8 @@ pub struct Monty<R> {
   acts: HashMap<u32, String>,
   /// The names each chain took from the engine, which are no bindings of its words.
   looked: HashMap<String, Vec<String>>,
+  /// The chain whose word runs now, which is what the module of a word is named after.
+  running: String,
   /// Every value the host holds for the sandbox, by the identity the sandbox knows it as.
   held: HashMap<MontyUuid, Value>,
   /// The exception this put into each run, by the name of the run.
@@ -137,6 +139,7 @@ impl<R: Reach> Monty<R> {
       waiting: HashMap::new(),
       acts: HashMap::new(),
       looked: HashMap::new(),
+      running: String::new(),
       held: HashMap::new(),
       injected: HashMap::new(),
       named: 0,
@@ -151,9 +154,10 @@ impl<R: Reach> Monty<R> {
 
   /// The session of a chain, which is made the first time a word of that chain runs.
   fn session(&mut self, chain: &str) -> MontyRepl {
-    self.sessions.remove(chain).unwrap_or_else(|| {
-      MontyRepl::new(chain, ResourceTracker::default(), CompileOptions::default())
-    })
+    self
+      .sessions
+      .remove(chain)
+      .unwrap_or_else(|| MontyRepl::new(chain, ResourceTracker::default(), CompileOptions::default()))
   }
 
   /// The session of a chain, put back wherever a run of it left off.
@@ -322,8 +326,10 @@ impl<R: Reach> Monty<R> {
   fn of_sandbox(&self, said: &ObjectRef<'_>) -> Value {
     // A pending future has no form of its own at the boundary, and says what it is in its repr alone. A value
     // that is a string is itself, so a word that holds the name of an act never crosses as the act.
-    if said.as_str().is_some() {
-      return of_monty(said);
+    if let Some(held) = said.as_str() {
+      // The globals of a chain are those of a module named by the id of the chain, and the sandbox names the
+      // module a word runs in `__main__`, so a word that says `__name__` says the chain it runs on.
+      return if held == MAIN { Value::Str(self.running.clone()) } else { of_monty(said) };
     }
     let repr = said.py_repr();
     if let Some(act) = awaited(&repr).and_then(|id| self.acts.get(&id)) {
@@ -384,6 +390,9 @@ fn settled(held: MontyObject, got: &Value) -> ExtFunctionResult {
     _ => ExtFunctionResult::Return(held),
   }
 }
+
+/// What the sandbox names the module a word runs in, which the engine names by the id of the chain.
+const MAIN: &str = "__main__";
 
 /// The name a thing of the host stands under in the sandbox, which its own repr says.
 fn held(said: &str) -> Option<String> {
@@ -450,6 +459,7 @@ impl<R: Reach> Sandbox for Monty<R> {
   }
 
   fn begin(&mut self, rung: &str, chain: &str, word: &str) -> Step {
+    self.running = chain.to_owned();
     let session = self.session(chain);
     self.chains.insert(rung.to_owned(), chain.to_owned());
     let said = session.feed_start(word, Vec::new(), PrintWriter::Stdout);
@@ -461,6 +471,7 @@ impl<R: Reach> Sandbox for Monty<R> {
       return Step::Ran(None);
     };
     let chain = self.chains.get(rung).cloned().unwrap_or_default();
+    self.running.clone_from(&chain);
     let value = self.into_monty(got);
     let said = one.resume(vec![(call_id, settled(value, got))], PrintWriter::Stdout);
     self.drive(rung, &chain, said)
