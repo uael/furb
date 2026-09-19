@@ -51,12 +51,11 @@ pub enum Value {
     args: Vec<Value>,
   },
   /// A show or a filter: the verb that was given it keeps it, and nothing crosses but the mark.
-  Show,
-  /// Something the host holds, by the name it holds it under, which crosses back to the host as itself.
   ///
-  /// A show is one of these while a word carries it: the word takes it from a verb and hands it to another, and
-  /// the host keeps the callable itself, since nothing of it can cross.
-  Held(String),
+  /// Nothing of a host is ever one of these. The engine runs where the word of a rung runs, so a show a word
+  /// makes is made in there and handed to a verb in there, and it never reaches a boundary at all. What reaches
+  /// one is a show of the file that a record holds the mark of, which is a mark and nothing more.
+  Show,
 }
 
 impl Default for Value {
@@ -115,7 +114,7 @@ impl Value {
       Value::Map(held) => Value::Map(held.iter().map(|(key, one)| (key.clone(), one.plain())).collect()),
       Value::Tuple(held) => marked(TUPLE, Value::List(held.iter().map(Value::plain).collect())),
       Value::Error { name, args } => marked(name, Value::List(args.iter().map(Value::plain).collect())),
-      Value::Show | Value::Held(_) => Value::Map(vec![("is".to_owned(), Value::Str(SHOW.to_owned()))]),
+      Value::Show => Value::Map(vec![("is".to_owned(), Value::Str(SHOW.to_owned()))]),
       Value::Shape { name, fields } => {
         let mut held = vec![("is".to_owned(), Value::Str(name.clone()))];
         held.extend(fields.iter().map(|(key, one)| (key.clone(), one.plain())));
@@ -176,7 +175,7 @@ impl Value {
         out.insert("args".to_owned(), Json::Array(args.iter().map(Value::record).collect()));
         Json::Object(out)
       }
-      Value::Show | Value::Held(_) => Json::Object(serde_json::Map::new()),
+      Value::Show => Json::Object(serde_json::Map::new()),
     }
   }
 
@@ -404,6 +403,6 @@ mod plain {
   #[test]
   fn what_no_host_reads_crosses_as_the_mark_of_what_it_was() {
     assert_eq!(Value::of_plain(&Value::Show.plain()), Value::Show);
-    assert_eq!(Value::of_plain(&Value::Held("held.1".to_owned()).plain()), Value::Show);
+    assert_eq!(Value::of_plain(&Value::Show.plain()), Value::Show);
   }
 }

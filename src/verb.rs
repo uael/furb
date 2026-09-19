@@ -748,7 +748,7 @@ pub(crate) fn shown(value: &Value) -> String {
       let each: Vec<String> = held.iter().map(|(key, one)| format!("{}: {}", quoted(key), shown(one))).collect();
       format!("{{{}}}", each.join(", "))
     }
-    Value::Shape { .. } | Value::Error { .. } | Value::Show | Value::Held(_) => shown(&value.plain()),
+    Value::Shape { .. } | Value::Error { .. } | Value::Show => shown(&value.plain()),
   }
 }
 

@@ -98,7 +98,7 @@ impl Tag {
     match &self.body {
       Body::Nothing => {}
       Body::Text(held) => parts.push(held.clone()),
-      Body::Parts(held) => parts.extend(held.iter().map(Shown::inside)),
+      Body::Parts(held) => parts.extend(held.iter().map(Part::inside)),
     }
     let inner: Vec<String> = parts.into_iter().filter(|one| !one.is_empty()).collect();
     let name = &self.name;
@@ -119,7 +119,7 @@ pub enum Body {
   /// One text.
   Text(String),
   /// The parts of it, each a tag of its own or a value the tag shows.
-  Parts(Vec<Shown>),
+  Parts(Vec<Part>),
 }
 
 impl Body {
@@ -127,7 +127,7 @@ impl Body {
   pub fn of(got: &Value) -> Self {
     match got {
       Value::Str(held) => Body::Text(held.clone()),
-      Value::List(held) | Value::Tuple(held) => Body::Parts(held.iter().map(Shown::of).collect()),
+      Value::List(held) | Value::Tuple(held) => Body::Parts(held.iter().map(Part::of).collect()),
       _ => Body::Nothing,
     }
   }
@@ -135,33 +135,33 @@ impl Body {
 
 /// One part of what a turn or a tag holds: a tag of its own, or a value it shows.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Shown {
+pub enum Part {
   /// One tag.
   Tag(Tag),
   /// One value, which the tag shows as python shows it.
   Held(Value),
 }
 
-impl Shown {
+impl Part {
   /// One part, from what the engine holds of it.
   pub fn of(got: &Value) -> Self {
-    Tag::of(got).map_or_else(|| Shown::Held(got.clone()), Shown::Tag)
+    Tag::of(got).map_or_else(|| Part::Held(got.clone()), Part::Tag)
   }
 
   /// The part as it stands in the body of a tag, where a value that is no tag stands as python shows it.
   pub fn inside(&self) -> String {
     match self {
-      Shown::Tag(held) => held.shown(),
-      Shown::Held(held) => repr(held),
+      Part::Tag(held) => held.shown(),
+      Part::Held(held) => repr(held),
     }
   }
 
   /// The part as it stands in a turn, where a text stands as itself.
   pub fn said(&self) -> String {
     match self {
-      Shown::Tag(held) => held.shown(),
-      Shown::Held(Value::Str(held)) => held.clone(),
-      Shown::Held(held) => repr(held),
+      Part::Tag(held) => held.shown(),
+      Part::Held(Value::Str(held)) => held.clone(),
+      Part::Held(held) => repr(held),
     }
   }
 }
@@ -172,7 +172,7 @@ pub struct Turn {
   /// Who spoke, which is the operator and the World as the user, or the model as the assistant.
   pub role: String,
   /// What was said, as the tags of the chain and the words of the model.
-  pub content: Vec<Shown>,
+  pub content: Vec<Part>,
   /// What the turn cost, and nothing for a turn of the user.
   pub usage: Option<Usage>,
   /// What the provider gave of its own, which the host that asked it reads and nobody else.
@@ -186,7 +186,7 @@ impl Turn {
     let [role, content, usage, blocks] = held else { return None };
     Some(Turn {
       role: role.as_str()?.to_owned(),
-      content: content.as_entries()?.iter().map(Shown::of).collect(),
+      content: content.as_entries()?.iter().map(Part::of).collect(),
       usage: Usage::of(usage),
       blocks: blocks.clone(),
     })
@@ -199,7 +199,7 @@ impl Turn {
 
   /// What the turn holds, as one text: a tag as its block, and a text as itself.
   pub fn rendered(&self) -> String {
-    let each: Vec<String> = self.content.iter().map(Shown::said).collect();
+    let each: Vec<String> = self.content.iter().map(Part::said).collect();
     each.join("\n")
   }
 }
@@ -211,7 +211,7 @@ pub fn repr(value: &Value) -> String {
     Value::Bool(held) => if *held { "True" } else { "False" }.to_owned(),
     Value::Int(held) => held.to_string(),
     Value::Float(held) => floated(*held),
-    Value::Str(held) | Value::Held(held) => quoted(held),
+    Value::Str(held) => quoted(held),
     Value::List(held) => {
       let each: Vec<String> = held.iter().map(repr).collect();
       format!("[{}]", each.join(", "))

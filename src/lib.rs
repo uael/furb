@@ -39,7 +39,7 @@ pub use crate::{
   life::{HOST, Host, Life, Refusal, Session},
   live::{Live, Talks},
   record::{Drift, Entry},
-  turn::{Body, Shown, Tag, Turn, Usage},
+  turn::{Body, Part, Tag, Turn, Usage},
   verb::{Act, Exit, Filter, Show, Text, Verb},
   voice::{Ears, Said, Voice},
   world::{Reply, World},
