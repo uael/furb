@@ -30,8 +30,8 @@ def test_the_sheet_binds_what_the_contract_declares() -> None:
   assert {"bash", "Text", "HEAD", "read", "prompt", "actor", "raised"} <= set(NAMES)
   assert {"World", "Kernel"}.isdisjoint(NAMES)
   assert all(f"  {name} = __engine.{name}\n" in HEAD for name in NAMES if name != CLOSE)
-  laid, above = sheet("k = 1", "close(k)", "int")
-  assert above > HEAD.count("\n")
+  laid, lines, above = sheet("k = 1", "close(k)", "int")
+  assert above > lines.stop > lines.start == HEAD.count("\n") + 1
   assert laid.endswith("  close(k)\n")
   assert "    k = 1\n" in laid
   assert "def close(value: int" in laid
@@ -67,6 +67,24 @@ def test_a_word_is_read_against_the_shape_it_must_give() -> None:
   assert said("close('a', 'rung://elsewhere')", shape="int") == []
   assert said("k = 1", shape="int") == []
   assert ANY == "object"
+
+
+def test_a_shape_that_names_nothing_is_no_shape() -> None:
+  """A shape the sheet cannot resolve holds a word to nothing at all, since ty reads what it cannot resolve as any
+  value, so the gate says the shape is no shape rather than let every word through.
+
+  A name of a module is such a shape: the globals of a chain hold the names of the engine and no module, so a name
+  under one is a name of nobody, here and on the chain alike. A name that a rung of the chain made is no such
+  thing: the ladder stands on the sheet, so the shape resolves against it.
+  """
+  assert said("close('a string')", shape="Text")[0].startswith("line 1: [invalid-argument-type]")
+  assert said("close('a string')", shape="Text | None")[0].startswith("line 1: [invalid-argument-type]")
+  assert said("close('a string')", shape="Nope") == ["Nope is no shape"]
+  assert said("close('a string')", shape="furb.engine.Text") == ["furb.engine.Text is no shape"]
+  assert said("close('a string')", shape="furb.engine.Text | None") == ["furb.engine.Text | None is no shape"]
+  made = ("class Report:\n  n: int = 1",)
+  assert said("close(Report())", made, "Report") == []
+  assert said("close('a string')", made, "Report")[0].startswith("line 1: [invalid-argument-type]")
 
 
 def test_a_finding_arrives_in_the_numbering_of_the_word_itself() -> None:
