@@ -12,12 +12,61 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-
 [project.urls]
 Source = "https://github.com/uael/furb"
 
-[tool.uv]
-package = false
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
 
 [dependency-groups]
-dev = ["pre-commit>=4.6.2"]
+dev = [
+  "pre-commit>=4.6.2",
+  "ruff>=0.16.2",
+  "ty>=0.0.70",
+]
+
+[tool.ruff]
+line-length = 120
+indent-width = 2
+target-version = "py314"
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+  "A", "ANN", "ARG", "B", "C4", "E", "EM", "ERA", "F", "FBT", "I", "N", "PERF", "PGH", "PL", "PT", "PTH", "RET", "RUF",
+  "S", "SIM", "T20", "TID", "TRY", "UP", "W",
+]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+# The surface speaks the engine's own vocabulary: its verbs shadow builtins on purpose, take the parameters the
+# contract names, and its exceptions are named as the contract names them.
+"src/furb/engine.pyi" = ["N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "E501", "PLR0904"]
+"src/furb/engine.py" = ["TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "ANN", "PLR0904", "EM101", "EM102", "TRY003", "PLR0917", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "SIM105", "C901", "SLF001"]
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 160
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = false
+known-first-party = ["furb", "conftest"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"typing.Any".msg = "Any defeats static typing; use a concrete type, a Protocol, or a TypeVar."
+"typing.cast".msg = "cast asserts what the checker cannot prove; narrow with isinstance or fix the type."
+"typing.no_type_check".msg = "Opting out of type checking is not permitted."
+"typing.TYPE_CHECKING".msg = "Import at runtime so annotations stay verifiable."
+
+[tool.ruff.lint.flake8-annotations]
+suppress-none-returning = true
+
+[tool.ruff.format]
+docstring-code-format = true
+skip-magic-trailing-comma = true
+
+[tool.ty.src]
+include = ["src"]
