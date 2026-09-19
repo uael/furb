@@ -83,7 +83,7 @@ impl<W: World, G: Gate> Outside<W, G> {
 /// One reply of the World, as the sandbox reads it.
 fn replied(reply: Reply) -> Value {
   let held = match reply {
-    Reply::Say(said) => said.into_iter().map(|one| Value::List(one.0)).collect(),
+    Reply::Say(said) => said.iter().map(|one| Value::List(one.said())).collect(),
     Reply::Nothing => Vec::new(),
     Reply::Ask { kind, on, words } => {
       let asked = vec![Value::Str("ask".to_owned()), Value::Str(kind), Value::Str(on), Value::List(words)];
@@ -173,7 +173,8 @@ mod tests {
     assert_eq!(outside.world.answered, vec![Value::Str("/w".to_owned())]);
     let done = Value::of_plain(&back);
     let facts = done.as_entries().unwrap()[1].as_entries().unwrap();
-    assert_eq!(facts[0].as_entries().unwrap()[3].field("path"), Some(&Value::Str("/w/a.txt".to_owned())));
+    // A yielded fact says its kind, the act it is about and its words, so its first word is the third slot.
+    assert_eq!(facts[0].as_entries().unwrap()[2].field("path"), Some(&Value::Str("/w/a.txt".to_owned())));
   }
 
   #[test]

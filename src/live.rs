@@ -174,9 +174,10 @@ impl<T: Talks> Live<T> {
   /// One path of the disk: the directory of the life, where the chain stands, and then the path.
   ///
   /// A chain holds the path a cd was given, which may name no directory of its own, and the World has one place
-  /// to stand such a path against: the directory every chain of the life started in.
+  /// to stand such a path against: the directory every chain of the life started in. A path that stands on its
+  /// own takes the place of the one before it, so a chain that stands in an absolute path stands there.
   fn at(&self, here: &str, path: &str) -> PathBuf {
-    self.directory.join(here.trim_start_matches('/')).join(path)
+    self.directory.join(here).join(path)
   }
 
   /// The text at a path: the file on the disk, and a refusal for the door of nothing that lives.

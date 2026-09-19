@@ -82,17 +82,20 @@ def outside(name: str, host: Host, names: Names) -> Generator[tuple | None, tupl
 
   The host answers one of three ways: it says facts, which this yields one by one, as any generator of a life does;
   it asks a question of the engine, which this puts and hands back the answer; or it says nothing at all.
+
+  What the host says is plain, as what it hears is, so nothing of python crosses in either direction and a host
+  of any language answers the same way.
   """
   while True:
     a = yield
     if a is None:
       continue
-    reply = host(name, wire(a))
+    reply = unwire(host(name, wire(a)), names)
     while True:
       match reply:
         case ("ask", str(kind), str(on), list(words)):
           got = verb(names, "ask")(kind, on, *[unwire(w, names) for w in words])
-          reply = host(name, wire(("answered", got[1] if isinstance(got, tuple) else got)))
+          reply = unwire(host(name, wire(("answered", got[1] if isinstance(got, tuple) else got))), names)
         case ("say", list(facts)):
           for one in facts:
             said = unwire(one, names)
@@ -203,7 +206,8 @@ def kernel(name: str, host: Host, names: Names) -> Generator[tuple | None, tuple
   while True:
     match (yield):
       case ("gate", qid, _, chain, word, returns):
-        yield "done", qid, host(name, wire(("gate", word, held.ladders.get(chain, []), returns)))
+        found = host(name, wire(("gate", word, held.ladders.get(chain, []), returns)))
+        yield "done", qid, unwire(found, names)
       case ("run", rung, _, chain, word):
         held.begin(rung, chain, word)
       case ("sent", rung, _, value) if rung in held.frames:

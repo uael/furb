@@ -265,6 +265,16 @@ impl Fact {
     self.0.get(3..).unwrap_or_default()
   }
 
+  /// The fact as a generator of the outside yields it: its kind, the act it is about, and its words.
+  ///
+  /// Who said it is no slot of a yielded fact. The bus fills it in from the generator that speaks, so a fact of
+  /// the World is the World's own without the World saying so, and a fact that says it again shifts every word.
+  pub fn said(&self) -> Vec<Value> {
+    let mut held = vec![Value::Str(self.kind().to_owned()), Value::Str(self.about().to_owned())];
+    held.extend(self.words().to_vec());
+    held
+  }
+
   /// Whether the fact is a question, which its name says: a question is about itself, under its kind.
   pub fn question(&self) -> bool {
     let (kind, about) = (self.kind(), self.about());

@@ -90,7 +90,8 @@ Run every command from the root of the repository.
 
 The crate is held by gates of its own, which the commit hook runs too:
 
-- `cargo test`: the tests of the crate.
+- `cargo test`: the tests of the crate, the unit tests and `tests/life.rs`, which drives one life of the real
+  engine from end to end through a sandbox of the tests.
 - `cargo fmt` then `cargo clippy --all-targets -- -D warnings`: format and lint the crate. Two spaces of
   indentation, 120 columns, as everywhere else.
 - `uv run python script/needs.py`: what the engine and the preamble need of the interpreter that runs them, read
@@ -110,7 +111,9 @@ the boundary: it runs in the sandbox, stands in for the two generators the engin
 plain. `src/fact.rs` is the plain form, `src/world.rs` the World a host implements, `src/host.rs` the side that
 answers the sandbox, `src/voice.rs` what a host says when nothing asked it, `src/life.rs` one life, `src/verb.rs`
 the typed surface of every verb, `src/turn.rs` what a model reads of a chain, `src/record.rs` the record, and
-`src/live.rs` a World of this machine.
+`src/live.rs` a World of this machine. `tests/sandbox.py` is a sandbox of the tests, one python namespace behind
+a pipe, which is no part of the crate and sandboxes nothing: it is how the crate is held to the real engine before
+a sandbox of monty can run it.
 
 Nothing of the engine crosses to the host: the word of a rung runs where the engine runs, and a fact crosses
 plain. The crate takes care of the Kernel, so a host writes the World alone.
