@@ -145,8 +145,13 @@ def life(world: Live, record: Sequence[tuple] = (), *, gated: bool = False) -> s
   return engine.boot(record, kernel=(Native() if gated else Quick()).kernel(), world=world.hears())
 
 
-async def settle(n: int = 200) -> None:
-  """Room for the loop to do what it still owes, so that finding nothing done means something."""
+async def settle(n: int = 2000) -> None:
+  """Room for the loop to do what it still owes, so that finding nothing done means something.
+
+  A turn of a model goes through the provider, which owes a number of turns of the loop that it alone knows, and
+  the most that was ever counted here is two hundred. The room is ten times that, since a turn of the loop that
+  nothing owes costs nothing and a count that is only just enough is a test that fails on another machine.
+  """
   for _ in range(n):
     await asyncio.sleep(0)
 

@@ -45,6 +45,14 @@ def commanded(proc: Process | None = None) -> Command:
   return Command("bash://operator.1", "chain://operator.1", "x", False, TIMEOUT, True, proc)
 
 
+async def drained() -> None:
+  """Room for the tasks the World still holds to end, since the machine takes a time of its own to grow a process."""
+  for _ in range(2000):
+    if len(asyncio.all_tasks()) == 1:
+      return
+    await asyncio.sleep(0.001)
+
+
 async def test_the_world_answers_what_a_chain_stands_on(yard: Path) -> None:
   """A chain asks what it stands on as it opens, and the World answers with its roster, its directory and its actor."""
   live = world(yard)
@@ -154,15 +162,31 @@ async def test_a_cancelled_command_dies_instead_of_running_on(yard: Path) -> Non
   """A cancel ends the command, and the World kills the whole group it grew rather than leave it running."""
   live = world(yard)
   root = life(live)
-  waits = engine.bash("sleep 30", timeout=60.0, on=root)
+  waits = engine.bash("echo up; sleep 30", timeout=60.0, on=root)
+  # What the command said is the one word that the machine has its group up, which is what the cancel must kill.
   for _ in range(2000):
     await asyncio.sleep(0.001)
-    if any(one[0] == "start" for one in live.calls):
+    if engine.read(f"{waits}/stdout", on=root).content:
       break
   engine.cancel(waits)
   with pytest.raises(asyncio.CancelledError):
     await waits
   await settle()
+
+
+async def test_a_command_cancelled_before_its_process_stood_dies_as_soon_as_it_stands(yard: Path) -> None:
+  """A cancel that lands before the machine has the command up kills the command where it stands, since the World
+  grows the group after the word that ended it."""
+  live = world(yard)
+  root = life(live)
+  # The start of a command is said as the command is made, and the World grows the group in a task after it, so a
+  # cancel with no turn of the loop between the two always lands first.
+  waits = engine.bash("sleep 30", timeout=60.0, on=root)
+  engine.cancel(waits)
+  with pytest.raises(asyncio.CancelledError):
+    await waits
+  await drained()
+  assert [one[0] for one in live.calls] == ["stand", "start"]
 
 
 async def test_slaying_what_already_died_harms_nobody(yard: Path) -> None:
@@ -439,7 +463,8 @@ async def test_a_stream_that_ends_in_the_middle_of_a_letter_still_tells_what_it_
   of it is told as the letter that stands for what could not be read."""
   live = world(yard)
   root = life(live)
-  got = await engine.bash(r"printf 'a\xc3'", on=root)
+  # The octal escape is the one printf of every shell reads, where \xc3 is bash's alone.
+  got = await engine.bash(r"printf 'a\303'", on=root)
   assert got.stdout.content == "a�"
 
 
