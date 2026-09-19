@@ -28,6 +28,7 @@ pub mod host;
 pub mod life;
 pub mod live;
 pub mod record;
+pub mod verb;
 pub mod voice;
 pub mod world;
 
@@ -37,6 +38,7 @@ pub use crate::{
   life::{Host, Life, Refusal, Session},
   live::{Live, Talks},
   record::{Drift, Entry},
+  verb::{Act, Exit, Filter, Show, Text, Verb},
   voice::{Ears, Said, Voice},
   world::{Reply, World},
 };

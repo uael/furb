@@ -59,6 +59,13 @@ pub enum Value {
   Held(String),
 }
 
+impl Default for Value {
+  /// A value that says nothing, which is what a word left unsaid carries.
+  fn default() -> Self {
+    Value::None
+  }
+}
+
 impl Value {
   /// A text of the engine, by its path and what stands at it.
   pub fn text(path: impl Into<String>, content: impl Into<String>) -> Self {

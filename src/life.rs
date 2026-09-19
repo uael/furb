@@ -13,6 +13,7 @@ use crate::{
   fact::Value,
   host::{Gate, Outside},
   record::Entry,
+  verb::{Verb, shown},
   voice::{Ears, Said},
   world::World,
 };
@@ -78,12 +79,21 @@ impl<S: Session, W: World, G: Gate> Life<S, W, G> {
     &self.root
   }
 
+  /// One verb of the engine, called, and what the verb gave.
+  ///
+  /// This is the way a host works a life: [`crate::verb`] holds one shape for each verb of the contract, and a
+  /// field of it left unsaid is a word the call never carries, so the engine takes its own.
+  pub fn calls<V: Verb>(&mut self, verb: V) -> Result<V::Gave, Refusal> {
+    let got = self.word(&verb.word())?;
+    V::gave(&got)
+  }
+
   /// One word of the operator, run on a chain, and what it gave.
   ///
-  /// This is the one way in: a verb of the engine is called by running a word that calls it, which is what an
-  /// operator does from python today.
+  /// A verb of the engine is called by running a word that calls it, which is what an operator does from python
+  /// today. [`Life::calls`] makes the word of every verb the contract declares, and this takes any other.
   pub fn word(&mut self, word: &str) -> Result<Value, Refusal> {
-    let asked = format!("asked(__engine, {word:?})");
+    let asked = format!("asked(__engine, {})", shown(&Value::Str(word.to_owned())));
     let said = self.session.run(&asked, &mut self.outside).map_err(Refusal)?;
     Ok(Value::of_plain(&said))
   }
@@ -139,26 +149,6 @@ impl<W: World, G: Gate> Host for Outside<W, G> {
 /// of a chain hold what the engine defines and nothing of the boundary.
 fn opening(record: &Value) -> String {
   format!("__engine = module({ENGINE:?})\n__root = opened(__engine, {}, host)\n", shown(record))
-}
-
-/// One value as the word that says it again, which is how a host hands a value to the sandbox.
-fn shown(value: &Value) -> String {
-  match value {
-    Value::None => "None".to_owned(),
-    Value::Bool(held) => if *held { "True" } else { "False" }.to_owned(),
-    Value::Int(held) => held.to_string(),
-    Value::Float(held) => format!("{held:?}"),
-    Value::Str(held) => format!("{held:?}"),
-    Value::List(held) | Value::Tuple(held) => {
-      let each: Vec<String> = held.iter().map(shown).collect();
-      format!("[{}]", each.join(", "))
-    }
-    Value::Map(held) => {
-      let each: Vec<String> = held.iter().map(|(key, one)| format!("{key:?}: {}", shown(one))).collect();
-      format!("{{{}}}", each.join(", "))
-    }
-    Value::Shape { .. } | Value::Error { .. } | Value::Show | Value::Held(_) => shown(&value.plain()),
-  }
 }
 
 #[cfg(test)]

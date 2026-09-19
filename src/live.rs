@@ -651,6 +651,15 @@ mod tests {
     panic!("the World never said a {kind}, and said {held:?}")
   }
 
+  /// What a command wrote to one of its streams, as the parts of it stand together.
+  fn wrote(held: &[Fact], stream: &str) -> String {
+    held
+      .iter()
+      .filter(|one| one.kind() == "out" && one.words()[1] == Value::Str(stream.to_owned()))
+      .map(|one| one.words()[0].as_str().unwrap_or_default())
+      .collect()
+  }
+
   /// One command, heard and then started, which is the two facts the engine says of every act.
   fn ran(world: &mut Live<Quiet>, command: &str, fed: bool, timeout: f64, merged: bool) -> String {
     let act = asks("bash", "1", vec![Value::Str(command.to_owned()), Value::Bool(fed), Value::Float(timeout)]);
@@ -718,10 +727,9 @@ mod tests {
     let (mut world, mut ears) = live("bash");
     let about = ran(&mut world, "echo hi; echo no 1>&2; exit 3", false, 30.0, false);
     let held = heard(&mut ears, "exited");
-    let out: Vec<&Fact> = held.iter().filter(|one| one.kind() == "out").collect();
-    assert_eq!(out[0].words(), [Value::Str("hi\n".to_owned()), Value::Str("stdout".to_owned())]);
-    let err: Vec<&Fact> = out.iter().copied().filter(|one| one.words()[1] == Value::Str("stderr".to_owned())).collect();
-    assert_eq!(err[0].words()[0], Value::Str("no\n".to_owned()));
+    // The two streams run at the same time, so the order of one against the other is the machine's to pick.
+    assert_eq!(wrote(&held, "stdout"), "hi\n");
+    assert_eq!(wrote(&held, "stderr"), "no\n");
     let exited: Vec<&Fact> = held.iter().filter(|one| one.kind() == "exited").collect();
     assert_eq!(exited[0].about(), about);
     assert_eq!(exited[0].words()[0], Value::Int(3));
@@ -732,9 +740,8 @@ mod tests {
     let (mut world, mut ears) = live("merged");
     ran(&mut world, "echo no 1>&2", false, 30.0, true);
     let held = heard(&mut ears, "exited");
-    let out: Vec<&Fact> = held.iter().filter(|one| one.kind() == "out").collect();
-    assert_eq!(out.len(), 1);
-    assert_eq!(out[0].words(), [Value::Str("no\n".to_owned()), Value::Str("stdout".to_owned())]);
+    assert_eq!(wrote(&held, "stdout"), "no\n");
+    assert_eq!(wrote(&held, "stderr"), "");
   }
 
   #[test]
@@ -743,9 +750,7 @@ mod tests {
     let about = ran(&mut world, "cat", true, 30.0, false);
     world.hears(&Fact::new("feed", &about, "operator", vec![Value::Str("one\n".to_owned())]));
     world.hears(&Fact::new("feed", &about, "operator", vec![Value::None]));
-    let held = heard(&mut ears, "exited");
-    let out: Vec<&Fact> = held.iter().filter(|one| one.kind() == "out").collect();
-    assert_eq!(out[0].words()[0], Value::Str("one\n".to_owned()));
+    assert_eq!(wrote(&heard(&mut ears, "exited"), "stdout"), "one\n");
   }
 
   #[test]
