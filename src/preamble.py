@@ -210,3 +210,46 @@ def kernel(name: str, host: Host, names: Names) -> Generator[tuple | None, tuple
         held.carry(rung, value)
       case ("cancel" | "close", about, *_):
         held.dropped(about)
+
+
+def module(source: str) -> dict[str, object]:
+  """One module of its own, from its source: a namespace nothing else shares.
+
+  The engine runs in one of these, so the globals of a chain hold what the engine defines and nothing of the
+  boundary, and what a chain copies of them is the engine's alone.
+  """
+  held: dict[str, object] = {}
+  exec(source, held)  # noqa: S102
+  return held
+
+
+def opened(engine: dict[str, object], record: object, host: Host) -> object:
+  """A life of that engine, opened from what a World kept of the life before it.
+
+  The World and the Kernel are the two generators the engine takes, and both of them reach the host from here.
+  """
+  world = outside("world", host, engine)
+  gated = kernel("kernel", host, engine)
+  return verb(engine, "boot")(unwire(record, engine), world=world, kernel=gated)
+
+
+def says(engine: dict[str, object], facts: object) -> None:
+  """Every fact a host said while nothing asked it, said into the life.
+
+  A fact says its kind, the act it is about, who said it and its words, and the bus is told who said it, since a
+  fact of the World is the World's own.
+  """
+  said = unwire(facts, engine)
+  assert isinstance(said, list)
+  for one in said:
+    kind, about, by, *words = one
+    verb(engine, "send")(kind, about, *words, by=by)
+
+
+def asked(engine: dict[str, object], word: str) -> object:
+  """One word of the operator, run in the globals of the engine, and what it gave, plain.
+
+  It runs in the engine's own globals and not in a copy of them, so what it binds stays bound, as a word of the
+  operator does when the operator is python.
+  """
+  return wire(eval(word, engine))  # noqa: S307

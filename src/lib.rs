@@ -25,6 +25,7 @@
 
 pub mod fact;
 pub mod host;
+pub mod life;
 pub mod record;
 pub mod voice;
 pub mod world;
@@ -32,6 +33,7 @@ pub mod world;
 pub use crate::{
   fact::{Fact, Value},
   host::{Gate, Outside},
+  life::{Host, Life, Refusal, Session},
   record::{Drift, Entry},
   voice::{Ears, Voice},
   world::{Reply, World},

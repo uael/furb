@@ -23,6 +23,15 @@ pub struct Entry {
 }
 
 impl Entry {
+  /// The entry as a value, which is the shape a life is given a record in.
+  pub fn as_value(&self) -> Value {
+    let mut held = vec![Value::Str(self.before.clone()), Value::List(self.fact.0.clone())];
+    if let Some(answer) = &self.answer {
+      held.push(answer.clone());
+    }
+    Value::List(held)
+  }
+
   /// The entry as the line a World writes, which is one json array.
   pub fn line(&self) -> String {
     let mut held = vec![
