@@ -86,7 +86,10 @@ impl Show {
 }
 
 /// What a chain is given to say which acts of the transcript its turns keep.
-#[derive(Debug, Clone, PartialEq, Default)]
+///
+/// It is made by [`Filter::take`] and by nothing else, since a filter that names no act keeps nothing, and a
+/// default of the shape would say the opposite of what the verb of the engine says.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Filter {
   /// The acts the filter names.
   pub ids: Vec<String>,

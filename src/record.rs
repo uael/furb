@@ -24,12 +24,15 @@ pub struct Entry {
 
 impl Entry {
   /// The entry as a value, which is the shape a life is given a record in.
+  ///
+  /// An entry is a tuple and its fact is a tuple, as the python World hands them, so that a life is given the
+  /// same thing whichever host opens it.
   pub fn as_value(&self) -> Value {
-    let mut held = vec![Value::Str(self.before.clone()), Value::List(self.fact.0.clone())];
+    let mut held = vec![Value::Str(self.before.clone()), Value::Tuple(self.fact.0.clone())];
     if let Some(answer) = &self.answer {
       held.push(answer.clone());
     }
-    Value::List(held)
+    Value::Tuple(held)
   }
 
   /// The entry as the line a World writes, which is one json array.
