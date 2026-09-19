@@ -264,3 +264,85 @@ fn what_the_engine_raised_reaches_the_host_as_the_exception_it_is() {
   let got = <Prompt as Verb>::gave(&Value::Int(3)).unwrap_err();
   assert_eq!(got.name(), "");
 }
+
+#[test]
+fn a_word_of_a_model_awaits_an_act_and_the_kernel_carries_the_run_forward() {
+  let (mut held, _) = life("await", &["close((await bash('echo hi')).code)"]);
+  let root = held.root().to_owned();
+  let act = held.calls(Prompt { shape: "int", message: "run it", on: &root, ..Prompt::default() }).unwrap();
+  assert_eq!(came(&mut held, &act), Value::Int(0));
+}
+
+#[test]
+fn a_word_that_raises_is_asked_again_and_the_model_reads_what_it_raised() {
+  let (mut held, _) = life("raises", &["close(1 // 0)", "close(5)"]);
+  let root = held.root().to_owned();
+  let act = held.calls(Prompt { shape: "int", message: "count", on: &root, ..Prompt::default() }).unwrap();
+  assert_eq!(came(&mut held, &act), Value::Int(5));
+  assert!(held.world().talks.read[1].contains("ZeroDivisionError"), "{:?}", held.world().talks.read[1]);
+}
+
+#[test]
+fn what_a_word_tells_stands_in_the_turns_the_model_reads_next() {
+  // A tell outside a run tells nothing, which the contract says, so the word of a rung says this one.
+  let (mut held, _) = life("tell", &["tell('noted', ('by', 'the word'), body='go on')", "close(1)"]);
+  let root = held.root().to_owned();
+  let act = held.calls(Prompt { shape: "int", message: "note it", on: &root, ..Prompt::default() }).unwrap();
+  assert_eq!(came(&mut held, &act), Value::Int(1));
+  assert!(
+    held.world().talks.read[1].contains("<noted by=\"the word\">\ngo on\n</noted>"),
+    "{:?}",
+    held.world().talks.read[1]
+  );
+}
+
+#[test]
+fn a_cancel_of_the_operator_ends_an_act_and_what_it_came_to_says_so() {
+  let (mut held, _) = life("cancel", &[]);
+  let root = held.root().to_owned();
+  let act = held.calls(furb::verb::Wait { seconds: 30.0, on: &root }).unwrap();
+  assert_eq!(held.came(&act).unwrap(), None);
+  held.calls(furb::verb::Cancel { id: &act }).unwrap();
+  assert_eq!(came(&mut held, &act), Value::Error { name: "CancelledError".to_owned(), args: vec![] });
+}
+
+#[test]
+fn a_chain_of_the_operator_has_a_transcript_of_its_own() {
+  let (mut held, _) = life("chain", &[]);
+  let root = held.root().to_owned();
+  let made = held.calls(furb::verb::Chain { label: "work", on: &root, ..furb::verb::Chain::default() }).unwrap();
+  assert_ne!(made.0, root);
+  assert_eq!(held.calls(Turns { on: &made }).unwrap().len(), 1);
+  let said: Vec<String> =
+    furb::Turn::every(&held.calls(Turns { on: &made }).unwrap()).iter().map(furb::Turn::rendered).collect();
+  assert!(said[0].contains("label=\"work\""), "{said:?}");
+}
+
+#[test]
+fn the_stdin_of_a_fed_command_takes_what_a_write_of_its_door_says() {
+  let (mut held, _) = life("fed", &[]);
+  let root = held.root().to_owned();
+  let act = held.calls(Bash { command: "cat", fed: true, on: &root, ..Bash::default() }).unwrap();
+  let door = format!("bash://{}/stdin", act.rsplit_once("://").map_or("", |(_, one)| one));
+  held.calls(Writes { text: furb::Text::new(&door, "one\n"), on: &root }).unwrap();
+  held.calls(Writes { text: furb::Text::new(&door, ""), on: &root }).unwrap();
+  let got = came(&mut held, &act);
+  assert_eq!(furb::Exit::of(&got).expect("an exit").stdout.content, "one\n");
+}
+
+#[test]
+fn a_show_says_which_lines_of_a_text_a_read_tells() {
+  // A read outside a run tells nothing, which the contract says, so the word of a rung says this one.
+  let (mut held, _) = life("show", &["close(len(read('a.txt', span(2, 3)).lines))"]);
+  let root = held.root().to_owned();
+  let text = furb::Text::new("a.txt", "one\ntwo\nthree\nfour\n");
+  held.calls(Writes { text, on: &root }).unwrap();
+  let act = held.calls(Prompt { shape: "int", message: "read it", on: &root, ..Prompt::default() }).unwrap();
+  assert_eq!(came(&mut held, &act), Value::Int(4));
+  let said: Vec<String> =
+    furb::Turn::every(&held.calls(Turns { on: &root }).unwrap()).iter().map(furb::Turn::rendered).collect();
+  let whole = said.join("\n");
+  // A read tells the lines the model has not seen, each by its number, so the show is read off those.
+  assert!(whole.contains("2 two\n3 three"), "{whole}");
+  assert!(!whole.contains("four"), "{whole}");
+}
