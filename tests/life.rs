@@ -383,3 +383,27 @@ fn a_record_that_holds_an_act_the_life_makes_otherwise_is_a_drift() {
     Ok(_) => panic!("a record that holds an act the life makes otherwise is a drift"),
   }
 }
+
+#[test]
+fn a_chain_with_a_source_keeps_the_acts_its_filter_names_and_no_others() {
+  let (mut held, _, _) = life("source", &[]);
+  let root = held.root().to_owned();
+  let command = held.calls(Bash { command: "echo one", on: &root, ..Bash::default() }).unwrap();
+  came(&mut held, &command);
+  let waiting = held.calls(furb::verb::Wait { seconds: 0.0, on: &root }).unwrap();
+  came(&mut held, &waiting);
+
+  let twin = held
+    .calls(furb::verb::Chain {
+      label: "twin",
+      source: &root,
+      filter: Some(furb::Filter::take([command.0.clone()])),
+      on: &root,
+    })
+    .unwrap();
+  let said: Vec<String> =
+    furb::Turn::every(&held.calls(Turns { on: &twin }).unwrap()).iter().map(furb::Turn::rendered).collect();
+  let whole = said.join("\n");
+  assert!(whole.contains(&command.0), "the twin keeps the act its filter names: {whole}");
+  assert!(!whole.contains(&waiting.0), "and keeps no other: {whole}");
+}
