@@ -162,8 +162,10 @@ async def test_a_cancelled_command_dies_instead_of_running_on(yard: Path) -> Non
   """A cancel ends the command, and the World kills the whole group it grew rather than leave it running."""
   live = world(yard)
   root = life(live)
-  waits = engine.bash("echo up; sleep 30", timeout=60.0, on=root)
-  # What the command said is the one word that the machine has its group up, which is what the cancel must kill.
+  waits = engine.bash("sleep 30 & echo up; wait", timeout=60.0, on=root)
+  # The shell grows the child before it says the word, so what the command said is the one word that the machine has
+  # the whole group up, which is what the cancel must kill. A word said before the fork proves nothing: a cancel that
+  # lands in that window kills the shell alone, and the child it grows after it holds the stdout of the command open.
   for _ in range(2000):
     await asyncio.sleep(0.001)
     if engine.read(f"{waits}/stdout", on=root).content:
