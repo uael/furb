@@ -12,6 +12,12 @@
 //! A show and a filter never cross: the engine keeps the one it was given, and no record holds one. So [`Show`]
 //! and [`Filter`] are no values of a host. They are what the operator writes in the word, and they stand in the
 //! word alone, which is how the engine sees the show the file names and the show a host asks for alike.
+//!
+//! Every verb of the contract that an operator calls has a shape here, and four have none, each for its own
+//! reason. `send`, `ask`, `act` and `drive` are the four names of the bus, which the life holds and no host
+//! calls. `span`, `grep`, `differs` and `take` make a show and a filter, which are [`Show`] and [`Filter`].
+//! `boot` opens a life, which is [`crate::Life::boot`]. And `debug` takes a template of a t-string, which a host
+//! that is not python cannot make, so a word of the operator writes one where a host wants it.
 
 use std::fmt;
 
