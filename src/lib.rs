@@ -20,11 +20,14 @@
 //! globals of a chain hold what the file defines and nothing more, which is what a model reads.
 
 pub mod fact;
+pub mod kernel;
 pub mod record;
+pub mod sandbox;
 pub mod world;
 
 pub use crate::{
   fact::{Fact, Value},
+  kernel::{Native, Sandbox, Step},
   record::{Drift, Entry},
   world::{Kernel, Reply, World},
 };
