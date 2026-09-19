@@ -52,6 +52,11 @@ pub enum Value {
   },
   /// A show or a filter: the verb that was given it keeps it, and nothing crosses but the mark.
   Show,
+  /// Something the host holds, by the name it holds it under, which crosses back to the host as itself.
+  ///
+  /// A show is one of these while a word carries it: the word takes it from a verb and hands it to another, and
+  /// the host keeps the callable itself, since nothing of it can cross.
+  Held(String),
 }
 
 impl Value {
@@ -120,7 +125,7 @@ impl Value {
         out.insert("args".to_owned(), Json::Array(args.iter().map(Value::record).collect()));
         Json::Object(out)
       }
-      Value::Show => Json::Object(serde_json::Map::new()),
+      Value::Show | Value::Held(_) => Json::Object(serde_json::Map::new()),
     }
   }
 

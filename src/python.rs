@@ -25,6 +25,11 @@ use crate::{
 struct Engine {
   /// The module of the engine, which holds every verb and every name a word may say.
   module: Py<PyAny>,
+  /// What the host holds for a word: a show a verb gave it, by the name the sandbox carries it under.
+  ///
+  /// Nothing of a callable can cross, so the word carries a name and the callable stays here, whole, and goes
+  /// back to the engine as itself wherever the word hands it to a verb.
+  holding: Py<PyDict>,
 }
 
 impl Engine {
@@ -76,7 +81,7 @@ impl Reach for Engine {
         return;
       };
       for (name, one) in held {
-        if let Ok(value) = into_py(py, module, &one) {
+        if let Ok(value) = into_py(py, module, Some(self.holding.bind(py)), &one) {
           let _ = bound.set_item(name, value);
         }
       }
@@ -85,7 +90,7 @@ impl Reach for Engine {
 
   fn field(&mut self, of: &Value, name: &str) -> Held {
     Python::attach(|py| {
-      let held = into_py(py, self.module.bind(py), of).and_then(|made| {
+      let held = into_py(py, self.module.bind(py), Some(self.holding.bind(py)), of).and_then(|made| {
         let bound = made.bind(py);
         if bound.hasattr(name)? { of_py(&bound.getattr(name)?).map(Held::Is) } else { Ok(Held::Nothing) }
       });
@@ -132,14 +137,15 @@ impl Engine {
     kwargs: &[(String, Value)],
   ) -> PyResult<Called> {
     let module = self.module.bind(py);
+    let table = self.holding.bind(py);
     let verb = module.getattr(name)?;
     // What the word says is said by the rung that runs it, which is what the site of the engine holds.
     let site = module.getattr("site")?;
     let token = site.call_method1("set", (rung,))?;
-    let held: Vec<Py<PyAny>> = args.iter().map(|one| into_py(py, module, one)).collect::<PyResult<_>>()?;
+    let held: Vec<Py<PyAny>> = args.iter().map(|one| into_py(py, module, Some(table), one)).collect::<PyResult<_>>()?;
     let named = PyDict::new(py);
     for (key, one) in kwargs {
-      named.set_item(key, into_py(py, module, one)?)?;
+      named.set_item(key, into_py(py, module, Some(table), one)?)?;
     }
     if takes_a_chain(py, &verb)? && !named.contains("on")? {
       named.set_item("on", chain)?;
@@ -150,7 +156,18 @@ impl Engine {
     if is_an_act(py, module, &got)? {
       return Ok(Called::Act(got.str()?.to_string()));
     }
+    if got.is_callable() {
+      return Ok(Called::Gave(self.holds_one(py, &got)?));
+    }
     Ok(Called::Gave(of_py(&got)?))
+  }
+
+  /// A show the host holds for a word, under a name of its own, since nothing of a callable can cross.
+  fn holds_one(&self, py: Python<'_>, got: &Bound<'_, PyAny>) -> PyResult<Value> {
+    let table = self.holding.bind(py);
+    let name = format!("held.{}", table.len() + 1);
+    table.set_item(&name, got)?;
+    Ok(Value::Held(name))
   }
 }
 
@@ -225,7 +242,12 @@ pub fn of_py(any: &Bound<'_, PyAny>) -> PyResult<Value> {
 }
 
 /// One value of the sandbox, as python holds it.
-pub fn into_py(py: Python<'_>, module: &Bound<'_, PyAny>, value: &Value) -> PyResult<Py<PyAny>> {
+pub fn into_py(
+  py: Python<'_>,
+  module: &Bound<'_, PyAny>,
+  table: Option<&Bound<'_, PyDict>>,
+  value: &Value,
+) -> PyResult<Py<PyAny>> {
   match value {
     Value::None | Value::Show => Ok(py.None()),
     Value::Bool(held) => Ok(held.into_pyobject(py)?.to_owned().into_any().unbind()),
@@ -233,17 +255,17 @@ pub fn into_py(py: Python<'_>, module: &Bound<'_, PyAny>, value: &Value) -> PyRe
     Value::Float(held) => Ok(held.into_pyobject(py)?.into_any().unbind()),
     Value::Str(held) => Ok(held.into_pyobject(py)?.into_any().unbind()),
     Value::List(held) => {
-      let made: Vec<Py<PyAny>> = held.iter().map(|one| into_py(py, module, one)).collect::<PyResult<_>>()?;
+      let made: Vec<Py<PyAny>> = held.iter().map(|one| into_py(py, module, table, one)).collect::<PyResult<_>>()?;
       Ok(PyList::new(py, made)?.into_any().unbind())
     }
     Value::Tuple(held) => {
-      let made: Vec<Py<PyAny>> = held.iter().map(|one| into_py(py, module, one)).collect::<PyResult<_>>()?;
+      let made: Vec<Py<PyAny>> = held.iter().map(|one| into_py(py, module, table, one)).collect::<PyResult<_>>()?;
       Ok(PyTuple::new(py, made)?.into_any().unbind())
     }
     Value::Map(held) => {
       let made = PyDict::new(py);
       for (key, one) in held {
-        made.set_item(key, into_py(py, module, one)?)?;
+        made.set_item(key, into_py(py, module, table, one)?)?;
       }
       Ok(made.into_any().unbind())
     }
@@ -251,13 +273,21 @@ pub fn into_py(py: Python<'_>, module: &Bound<'_, PyAny>, value: &Value) -> PyRe
       let kind = module.getattr(name.as_str())?;
       let named = PyDict::new(py);
       for (key, one) in fields {
-        named.set_item(key, into_py(py, module, one)?)?;
+        named.set_item(key, into_py(py, module, table, one)?)?;
       }
       Ok(kind.call((), Some(&named))?.unbind())
     }
+    Value::Held(name) => {
+      let found = table.and_then(|one| one.get_item(name).ok()).flatten();
+      match found {
+        Some(one) => Ok(one.unbind()),
+        None if module.hasattr(name.as_str())? => Ok(module.getattr(name.as_str())?.unbind()),
+        None => Ok(py.None()),
+      }
+    }
     Value::Error { name, args } => {
       let kind = builtin(py, module, name)?;
-      let made: Vec<Py<PyAny>> = args.iter().map(|one| into_py(py, module, one)).collect::<PyResult<_>>()?;
+      let made: Vec<Py<PyAny>> = args.iter().map(|one| into_py(py, module, table, one)).collect::<PyResult<_>>()?;
       Ok(kind.call1(PyTuple::new(py, made)?)?.unbind())
     }
   }
@@ -291,7 +321,10 @@ impl Kernel {
   #[new]
   fn new(engine: &Bound<'_, PyAny>) -> Self {
     Kernel {
-      native: Native::new(Monty::new(Engine { module: engine.clone().unbind() })),
+      native: Native::new(Monty::new(Engine {
+        module: engine.clone().unbind(),
+        holding: PyDict::new(engine.py()).unbind(),
+      })),
       said: Vec::new(),
       resuming: false,
     }
@@ -368,10 +401,10 @@ impl Kernel {
     let fact = self.said.remove(0);
     let module = self.native.sandbox.reach.module.clone_ref(py);
     let bound = module.bind(py);
-    let mut held: Vec<Py<PyAny>> = vec![into_py(py, bound, &Value::Str(fact.kind().to_owned()))?];
-    held.push(into_py(py, bound, &Value::Str(fact.about().to_owned()))?);
+    let mut held: Vec<Py<PyAny>> = vec![into_py(py, bound, None, &Value::Str(fact.kind().to_owned()))?];
+    held.push(into_py(py, bound, None, &Value::Str(fact.about().to_owned()))?);
     for one in fact.words() {
-      held.push(into_py(py, bound, one)?);
+      held.push(into_py(py, bound, None, one)?);
     }
     Ok(Some(PyTuple::new(py, held)?.into_any().unbind()))
   }
@@ -380,10 +413,10 @@ impl Kernel {
   fn say(&mut self, py: Python<'_>, fact: &Fact) -> PyResult<()> {
     let module = self.native.sandbox.reach.module.clone_ref(py);
     let bound = module.bind(py);
-    let mut held: Vec<Py<PyAny>> = vec![into_py(py, bound, &Value::Str(fact.kind().to_owned()))?];
-    held.push(into_py(py, bound, &Value::Str(fact.about().to_owned()))?);
+    let mut held: Vec<Py<PyAny>> = vec![into_py(py, bound, None, &Value::Str(fact.kind().to_owned()))?];
+    held.push(into_py(py, bound, None, &Value::Str(fact.about().to_owned()))?);
     for one in fact.words() {
-      held.push(into_py(py, bound, one)?);
+      held.push(into_py(py, bound, None, one)?);
     }
     let named = PyDict::new(py);
     named.set_item("by", fact.by())?;

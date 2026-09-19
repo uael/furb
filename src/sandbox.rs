@@ -322,12 +322,17 @@ impl<R: Reach> Monty<R> {
   fn of_sandbox(&self, said: &ObjectRef<'_>) -> Value {
     // A pending future has no form of its own at the boundary, and says what it is in its repr alone. A value
     // that is a string is itself, so a word that holds the name of an act never crosses as the act.
-    if said.as_str().is_none()
-      && let Some(act) = awaited(&said.py_repr()).and_then(|id| self.acts.get(&id))
-    {
+    if said.as_str().is_some() {
+      return of_monty(said);
+    }
+    let repr = said.py_repr();
+    if let Some(act) = awaited(&repr).and_then(|id| self.acts.get(&id)) {
       return Value::Str(act.clone());
     }
-    of_monty(said)
+    match held(&repr) {
+      Some(name) => Value::Held(name),
+      None => of_monty(said),
+    }
   }
 
   /// A value of the engine as the sandbox holds it.
@@ -337,6 +342,7 @@ impl<R: Reach> Monty<R> {
   fn into_monty(&mut self, value: &Value) -> MontyObject {
     match value {
       Value::None | Value::Show => MontyObject::none(),
+      Value::Held(name) => MontyObject::function(name.clone(), None),
       Value::Bool(said) => MontyObject::bool(*said),
       Value::Int(said) => MontyObject::int(*said),
       Value::Float(said) => MontyObject::float(*said),
@@ -377,6 +383,13 @@ fn settled(held: MontyObject, got: &Value) -> ExtFunctionResult {
     }
     _ => ExtFunctionResult::Return(held),
   }
+}
+
+/// The name a thing of the host stands under in the sandbox, which its own repr says.
+fn held(said: &str) -> Option<String> {
+  let rest = said.strip_prefix("<function '")?;
+  let name = rest.split('\'').next()?;
+  rest.ends_with("external>").then(|| name.to_owned())
 }
 
 /// Which act a pending future of the sandbox stands for, which its own repr says.
