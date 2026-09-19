@@ -1,5 +1,7 @@
 # furb
 
+[![gates](https://github.com/uael/furb/actions/workflows/gates.yml/badge.svg)](https://github.com/uael/furb/actions/workflows/gates.yml)
+
 The core of an AI harness, in one python file, `src/furb/engine.py`. A model does everything with python that it
 writes: the engine, minified, is its whole system prompt, and each word it answers with runs on a chain of the
 engine. The contract is `src/furb/engine.pyi`, whose docstrings hold every law, one sentence per line, and the suite
@@ -12,6 +14,9 @@ From a clone of this repository:
 - `uv sync` installs the environment, and `uv run pytest -q` runs the suite.
 - `uv run python script/smoke.py` runs one real life on opus/low through the claude command line.
 - `uv run python script/deepswe.py run <task>` runs one DeepSWE task and grades it.
+
+Every pull request, and every push to `main`, runs the gates in `.github/workflows/gates.yml`: the hooks, the type
+check, and the suite on linux and on macos.
 
 Copyright (C) 2026 Abel Lucas. furb is free software under the GNU Affero General Public License, version 3, which
 `LICENSE` holds: you may use, study, change and share it, and anyone who ships it or runs a changed furb as a
