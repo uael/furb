@@ -20,16 +20,6 @@ gate = [
   "dep:ty_python_semantic",
   "dep:ty_vendored",
 ]
-# A Session of monty, which is the sandbox the engine is meant to run in.
-#
-# It is off by default and takes the two crates by path, because the interpreter
-# it needs is a fork of monty that is not released: the coroutine a Kernel
-# drives, the `__await__` an act is said by, and the top level await a word of a
-# model is compiled with are all on `uael/monty`, branch
-# `claude/monty-furb-engine-api-6rbvfz`. It becomes an ordinary version
-# dependency when that lands, and the two repositories sit side by side until
-# then.
-monty = ["dep:monty", "dep:monty-types"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -42,8 +32,6 @@ ty_module_resolver = { version = "0.0.9", optional = true }
 ty_python_core = { version = "0.0.9", optional = true }
 ty_python_semantic = { version = "0.0.9", optional = true }
 ty_vendored = { version = "0.0.9", optional = true }
-monty = { path = "../monty/crates/monty", optional = true }
-monty-types = { path = "../monty/crates/monty-types", optional = true }
 
 [lib]
 name = "furb"

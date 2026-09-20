@@ -1,0 +1,26 @@
+[package]
+name = "furb-sand"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.87"
+description = "A Session of monty for furb: the engine in the sandbox it is meant to run in."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+publish = false
+
+# Its own workspace root, so nothing of `furb` resolves it.
+#
+# Cargo reads every path dependency of a manifest whether or not the feature
+# that needs it is on, so a `furb` that named monty by path would fail to build
+# anywhere monty is not checked out beside it, feature or no feature. This is
+# the crate that names monty, and `furb` does not name this one.
+[workspace]
+
+[dependencies]
+furb = { path = "..", default-features = false }
+monty = { path = "../../monty/crates/monty" }
+monty-types = { path = "../../monty/crates/monty-types" }
+
+[lib]
+name = "furb_sand"
+path = "src/lib.rs"

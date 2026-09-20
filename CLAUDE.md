@@ -93,8 +93,8 @@ The crate is held by gates of its own, which the commit hook runs too:
 - `cargo test`: the tests of the crate, the unit tests and `tests/life.rs`, which drives one life of the real
   engine from end to end through a sandbox of the tests. `--no-default-features` leaves the gate out, which is ty
   and the 190 crates under it, so the crate builds small where the disk is short.
-- `cargo test --features monty --no-default-features`: the same, with `tests/sand.rs` on top, which boots one
-  life of the real engine in a sandbox of monty. It needs the monty fork checked out beside this repository.
+- `cd sand && cargo test`: one life of the real engine in a sandbox of monty. It needs the monty fork checked
+  out beside this repository, and nothing of the crate's own gates reaches it.
 - `cargo fmt` then `cargo clippy --all-targets -- -D warnings`: format and lint the crate. Two spaces of
   indentation, 120 columns, as everywhere else.
 - `uv run python script/needs.py`: what the engine and the preamble need of the interpreter that runs them, and
@@ -120,11 +120,13 @@ the reading of a turn are the host's, so the crate ships the trait and the plain
 nothing, and a World of this machine written small. It holds the crate to the real engine without a sandbox at
 all, which is what makes a Session of any sandbox a drop-in.
 
-`src/sand.rs` is the Session of monty, which is the sandbox the engine is meant to run in. It is behind the
-`monty` feature, off by default, and it takes monty by path from `../monty`, because the interpreter it needs is
-a fork that is not released: the coroutine a Kernel drives, the `__await__` an act is said by, and the top level
-await a word of a model is compiled with are all on `uael/monty`, branch
-`claude/monty-furb-engine-api-6rbvfz`. `tests/sand.rs` boots one life of the real engine in there.
+`sand/` is the Session of monty, which is the sandbox the engine is meant to run in. It is a crate of its own,
+with a workspace of its own, and the crate does not name it: cargo reads every path dependency of a manifest
+whether or not the feature that needs it is on, so a `furb` that named monty by path would fail to build anywhere
+monty is not checked out beside it. It takes monty from `../../monty`, because the interpreter it needs is a fork
+that is not released: the coroutine a Kernel drives, the `__await__` an act is said by, and the top level await a
+word of a model is compiled with are all on `uael/monty`, branch `claude/monty-furb-engine-api-6rbvfz`. It folds
+back into the crate behind a feature when that lands.
 
 Nothing of the engine crosses to the host: the word of a rung runs where the engine runs, and a fact crosses
 plain. The crate takes care of the Kernel, so a host writes the World alone.
