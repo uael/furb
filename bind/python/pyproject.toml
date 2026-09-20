@@ -1,0 +1,30 @@
+[project]
+name = "furb-sand"
+version = "0.1.0"
+description = "furb for python: one life of the engine, in the sandbox, with a World you write in python."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "AGPL-3.0-only"
+license-files = ["../../LICENSE"]
+authors = [{ name = "Abel Lucas", email = "uaelucas@gmail.com" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: 3 :: Only",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Source = "https://github.com/uael/furb"
+Issues = "https://github.com/uael/furb/issues"
+
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+# The manifest is beside this file; the crate is a member of the workspace at the root of the repository.
+manifest-path = "Cargo.toml"
+module-name = "furb_sand"
+features = ["furb-sand/extension-module"]

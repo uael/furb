@@ -61,17 +61,23 @@ ignore = ["S101"]
 # The suite pins the contract's own literals, drives doubles that answer in one sentence where they stand, and
 # names its tests by the sentence they carry.
 "test/**" = ["PLR2004", "EM101", "EM102", "TRY003", "FBT001", "FBT003", "PT018", "ARG002", "RUF012", "PLR0911", "PLR0912", "A002", "E501"]
+# The surface of the binding speaks the engine's own vocabulary too, and its unions read as the engine writes
+# them: what a value can be, in the order the engine says it.
+"bind/python/furb_sand.pyi" = ["N818", "RUF036", "RUF041"]
 # The surface speaks the engine's own vocabulary: its verbs shadow builtins on purpose, take the parameters the
 # contract names, and its exceptions are named as the contract names them.
 "src/furb/engine.pyi" = ["N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "E501", "PLR0904"]
 "src/furb/engine.py" = ["TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "ANN", "PLR0904", "EM101", "EM102", "TRY003", "PLR0917", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "SIM105", "C901", "SLF001"]
+# The tests of the binding pin the engine's own literals and drive a World that answers in one sentence where it
+# stands, which is what the suite of the engine does too.
+"bind/python/test/**" = ["PLR2004", "EM101", "EM102", "TRY003", "ARG002", "PT011", "E501"]
 
 [tool.ruff.lint.pycodestyle]
 max-line-length = 160
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false
-known-first-party = ["furb", "conftest"]
+known-first-party = ["furb", "conftest", "yard"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"

@@ -102,6 +102,8 @@ The crate is held by gates of its own, which the commit hook runs too:
 - `uv run python script/kerneled.py`: the suite, with the Kernel of the crate in place of the harness's.
 - `uv run python script/inside.py`: the suite with no pytest at all, so that it runs where the engine runs.
 - `uv run python script/outside.py`: one life, opened the way the crate opens one, in this interpreter.
+- `uv run python script/bound.py`: the tests of the python binding, with the binding built for the interpreter
+  that runs them.
 
 ## The crate
 
@@ -125,6 +127,21 @@ dependency, and the revision becomes a version the day the fork lands.
 `tests/life.rs` drives one life of the real engine from end to end in that sandbox, on one double that is no part
 of the crate: a World of this machine, written small. What a life may touch is the host's to decide, so the crate
 ships the trait and every host writes one of these.
+
+## The bindings
+
+A binding is the surface of the crate for a host that is not rust. Each one lives under `bind/`, is a member of
+the workspace at the root, and says the same thing the crate says: one life, a World the host writes, a Voice the
+host speaks into, and every value plain.
+
+`bind/python` is the one for python. `furb_sand.pyi` is its whole surface, `src/value.rs` is what crosses,
+`src/outside.rs` is the World and the gate a host writes read as the crate reads them, and `src/lib.rs` is the
+life, the Voice and the module. It is a distribution of its own, `furb-sand`, and not of the `furb` package: that
+one is the engine and the harness in python, and this one is the engine in the sandbox, so one name is one thing.
+
+The module is compiled against one interpreter and imported by that one alone, so `script/bound.py` builds it for
+the interpreter that runs it and then puts `bind/python/test` on it. `bind/python/test/yard.py` is a World of this
+machine, written small, as the World of `tests/life.rs` is.
 
 Nothing of the engine crosses to the host: the word of a rung runs where the engine runs, and a fact crosses
 plain. The crate takes care of the Kernel, so a host writes the World alone.

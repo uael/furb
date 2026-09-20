@@ -56,6 +56,12 @@ repos:
         language: system
         types_or: [rust, python, toml]
         pass_filenames: false
+      - id: bound
+        name: bound
+        entry: uv run python script/bound.py
+        language: system
+        types_or: [rust, python, toml]
+        pass_filenames: false
       - id: verbs
         name: verbs
         entry: uv run python script/verbs.py
