@@ -11,9 +11,9 @@ def test_the_text_with_one_more_edit_an_edit_whose_lines_are_not_there_is_refuse
   """The text with one more edit; an edit whose lines are not there is refused."""
   made = ONE.edit(2, 2, ["TWO"])
   assert made.content == "one\nTWO\nthree\n" and made.before is ONE
-  with pytest.raises(Refused, match=r"/w/n\.txt has no lines 9 to 9"):
+  with pytest.raises(Refused, match=r"/w/n\.txt no lines 9:9"):
     ONE.edit(9, 9, ["x"])
-  with pytest.raises(Refused, match=r"/w/n\.txt has no lines 1 to 4"):
+  with pytest.raises(Refused, match=r"/w/n\.txt no lines 1:4"):
     ONE.edit(1, 4, ["x"])
 
 

@@ -230,29 +230,42 @@ def seen(held: list[tuple]):  # noqa: ANN201
   return keeps
 
 
+def gated(log: Sequence[tuple]) -> list[str]:
+  """Every word the gate was given in the life, in order, which the ready of each rung says."""
+  return [a[3] for a in said(log, "ready")]
+
+
+def ran(log: Sequence[tuple]) -> list[str]:
+  """Every word the Kernel ran in the life, in order, which the run of each rung says."""
+  return [a[4] for a in said(log, "run")]
+
+
+def findings(log: Sequence[tuple]) -> list[list[str]]:
+  """What the gate found against each word it was given, in order, which the done of each gate query says."""
+  return [a[3] for a in said(log, "done") if a[1].startswith("gate://")]
+
+
+def refusals(log: Sequence[tuple]) -> list[str]:
+  """The findings that refused a word, each as the body the refused tag tells them as."""
+  return ["\n".join(found) for found in findings(log) if found]
+
+
 class Py:
   """A Kernel that is python, outside the engine like the World.
 
   It answers a gate with its findings, begins a run by compiling the word with a top level await and running it in
   the module of its chain, says wants for the act the run waits for, carries the run forward at each sent, says ran
-  with what the word gave, and drops the frame of a run a cancel is over. `gated` lists every word it gated, `gates`
-  each gate whole as the word, the ladder and the shape, and `ran` every word it began.
+  with what the word gave, and drops the frame of a run a cancel is over. The ladder of a chain is the words the
+  gate accepted, so it grows where the gate accepts one, as the Kernel of this interpreter grows it.
   """
 
-  def __init__(self) -> None:
-    self.gated: list[str] = []
-    self.gates: list[tuple[str, list[str], str]] = []
-    self.ran: list[str] = []
-
-  def gate(self, rung: str, ladder: list[str], shape: str) -> list[str]:
+  def gate(self, word: str, ladder: list[str]) -> list[str]:
     """What it finds against a word: a word that is not python, and a word that holds BAD, and nothing else."""
-    self.gated.append(rung)
-    self.gates.append((rung, list(ladder), shape))
     try:
-      compile(rung, "<gate>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+      compile(word, "<gate>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
     except SyntaxError as no:
       return [f"not python: {no.msg} at line {no.lineno}"]
-    return [f"BAD in rung, against {shape} after {len(ladder)} rungs"] if "BAD" in rung else []
+    return [f"BAD in rung, after {len(ladder)} rungs"] if "BAD" in word else []
 
   def kernel(self) -> Kernel:
     """The Kernel as one generator for one life, which speaks from the run it steps."""
@@ -285,7 +298,6 @@ class Py:
 
     def begin(name: str, word: str, held: dict[str, object]) -> None:
       """A run begun: the word of it is python, and a word that awaits nothing is over where it is begun."""
-      self.ran.append(word)
       code = compile(word, "<rung>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
       token = site.set(name)
       try:
@@ -302,12 +314,14 @@ class Py:
     while True:
       match (yield):
         case ("run", rung, _, chain, word):
-          ladders.setdefault(chain, []).append(word)
           begin(rung, word, modules[chain])
         case ("sent", rung, _, value) if rung in frames:
           carry(rung, value)
-        case ("gate", qid, _, chain, word, returns):
-          yield "done", qid, self.gate(word, ladders.get(chain, []), returns)
+        case ("gate", qid, _, chain, word):
+          found = self.gate(word, ladders.setdefault(chain, []))
+          if not found:
+            ladders[chain].append(word)
+          yield "done", qid, found
         case ("cancel" | "close", about, *_):
           for one in [x for x in frames if under(x, about) and not getattr(frames[x], "cr_running", False)]:
             frames[one].close()
@@ -321,12 +335,12 @@ def watched(log: list[tuple]) -> Kernel:
       log.append(a)
 
 
-def life(world: Sand, record: Sequence[tuple] = (), kernel: Py | None = None) -> tuple[list[tuple], str]:
+def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   """A life: the engine opened from a record, with a Kernel that is python, a World in memory and a generator that
   keeps every fact said in it; it gives what was said and the id of the root.
   """
   log: list[tuple] = []
-  return log, engine.boot(record, kernel=(kernel or Py()).kernel(), probe=watched(log), world=world.hears())
+  return log, engine.boot(record, kernel=Py().kernel(), probe=watched(log), world=world.hears())
 
 
 async def settle(n: int = 80) -> None:
@@ -340,18 +354,18 @@ def sown() -> Sand:
   return Sand(files={"/w/a.txt": "one\ntwo\n"}, stands=STANDS)
 
 
-async def lived(sand: Sand, py: Py | None = None) -> tuple[list[tuple], str]:
+async def lived(sand: Sand) -> tuple[list[tuple], str]:
   """A life that reads a file, runs a command and returns what it came to."""
-  log, root = life(sand, kernel=py)
+  log, root = life(sand)
   sand.script[root] = [WORD, "close(None)"]
   assert await engine.prompt(int, "read and run", on=root) == 0
   await settle()
   return log, root
 
 
-async def relived(sand: Sand, record: Sequence[tuple], py: Py | None = None) -> tuple[list[tuple], str]:
+async def relived(sand: Sand, record: Sequence[tuple]) -> tuple[list[tuple], str]:
   """A later life on a kept record, with the World it is given."""
-  log, root = life(sand, record, kernel=py)
+  log, root = life(sand, record)
   await settle(300)
   return log, root
 

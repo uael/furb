@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Py, Sand, attr, life, said, settle, tags
+from conftest import STANDS, Sand, attr, life, ran, said, settle, tags
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -54,13 +54,13 @@ async def test_the_engine_enters_a_pause_on_the_chain_when_a_response_carries_th
 
 async def test_the_word_of_the_response_that_crossed_the_ceiling_runs() -> None:
   """The word of the response that crossed the ceiling runs."""
-  sand, py = Sand(stands=STANDS, cost=COST), Py()
-  _, root = life(sand, kernel=py)
+  sand = Sand(stands=STANDS, cost=COST)
+  log, root = life(sand)
   engine.grant(usd=1.0, on=root)
   sand.script[root] = ["a = 1", "close(2)"]
   act = engine.prompt(int, "count", on=root)
   await settle()
-  assert py.ran == ["a = 1"] and engine.modules[root]["a"] == 1
+  assert ran(log) == ["a = 1"] and engine.modules[root]["a"] == 1
   assert act not in engine.outcomes
 
 
@@ -95,13 +95,13 @@ async def test_the_model_continues_after_a_later_grant_and_a_wake() -> None:
 
 async def test_an_answer_that_carries_the_ledger_past_the_ceiling_pauses_the_chain() -> None:
   """An answer that carries the ledger past the ceiling pauses the chain, so the word that answer brought runs and what it gave waits, and no rung of the chain asks until the wake."""
-  sand, py = Sand(stands=STANDS, cost=COST), Py()
-  log, root = life(sand, kernel=py)
+  sand = Sand(stands=STANDS, cost=COST)
+  log, root = life(sand)
   engine.grant(usd=1.0, on=root)
   sand.script[root] = ["close(5)"]
   act = engine.prompt(int, "spend", on=root)
   await settle()
-  assert py.ran == ["close(5)"] and act not in engine.outcomes
+  assert ran(log) == ["close(5)"] and act not in engine.outcomes
   assert len(said(log, "ask")) == 1
   engine.wake(root)
   await settle()

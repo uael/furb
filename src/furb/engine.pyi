@@ -97,7 +97,7 @@ def ask(kind: str, on: str, *words: object) -> tuple[Question, object]:
   A query the operator asks from outside a run that names no chain is put to every generator, and no chain answers it.
   """
 
-def act[T = object](kind: str, on: str, ear: Callable[[str], Ear], *words: object) -> Act[T]:
+def act(kind: str, on: str, ear: Callable[[str], Ear], *words: object) -> Act[object]:
   """The way to make a question that lives: it takes a name when it is made, it is logged, its ear is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it.
   An act said: it is begun, and what the call gives is its name, which is awaited for what the act comes to.
   An act said twice under one name is one act, and the second saying brings no second ear and gives the name back.
@@ -200,15 +200,14 @@ def chance(on: str = "") -> float:
   chance tells the number it drew.
   """
 
-def gate(word: str, returns: str = "", on: str = "") -> list[str]:
-  """Whether the word of a rung may run: the Kernel reads it against the rungs of its chain before it and the name of the shape the word must give, and it finds nothing when the word may run.
+def gate(word: str, on: str = "") -> list[str]:
+  """Whether the word of a rung may run: the Kernel reads it against the rungs of its chain before it, and it finds nothing when the word may run.
   The word of a rung runs only if the gate accepts the word.
   The gate checks the word of a rung against the rungs before it in record order.
   A response that is not python is a finding like any other.
   The gate gives no finding when the gate accepts the rung.
   The word of a rung is gated again in every life that runs it, since the gate is of the moment and its findings are kept by nobody.
-  The gate refuses a word whose close carries a value that does not have the shape.
-  gate tells the shape it read against and the findings as its body.
+  gate tells the findings as its body.
   """
 
 def cd(path: str, on: str = "") -> str:
@@ -282,7 +281,8 @@ def close(value: object, id: str = "") -> None:
   The close of the operator stands in the transcript with the name of the operator.
   A prompt completes with the exception that the word of the prompt gave to close.
   close is given the value first, since a word that answers its own prompt names no act at all.
-  A value closes an act with that value, whatever the shape of the act.
+  A value closes an act with that value, and a prompt with a value that has its shape.
+  A close that answers a prompt with a value that does not have the shape of the prompt raises Refused in the word that said it, so the prompt asks again.
   A close on an act that is over reaches nothing.
   A close said from a word that names no act is over the prompt that asked for the word, and over the rung itself for a word its caller wrote, which answers no prompt.
   A close of the prompt of the running word stops that word where it stands, as a raise does, and nothing after the call runs.
@@ -316,7 +316,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
   The engine tells what a step raised.
   A step that raised nothing and debugged nothing tells nothing.
   The opened tag of a rung with a word carries that word as its body.
-  The opened tag of a rung with no word tells the actor that is asked and the close its word must say to answer the prompt, whose shape is what the gate reads that word against.
+  The opened tag of a rung with no word tells the actor that is asked and the close its word must say to answer the prompt.
   The raised tag tells the type and the message of the exception as attributes.
   A rung that retells another rung names its acts under that one, so it makes the same acts and shares them.
   A cancel of a rung is the Kernel's to do, since the Kernel is the one running the word.
@@ -375,14 +375,15 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A prompt to the operator completes when the operator closes the prompt.
   The response of a prompt on a chain with a source comes to the act that the caller holds.
   It is the ladder of its rungs and of the words written to it, so a write of its name makes a rung of what is written under it, and a read of its name the chain answers, which holds every word of every ladder for as long as the chain lives.
-  A word written to it answers it not, whoever wrote it, so it must give nothing, and the gate reads it against no shape, as it reads every word a caller wrote.
+  A word written to it answers it not, whoever wrote it, so it must give nothing.
   A prompt to the operator asks no model: the World is shown it, and it waits to be closed; one the record holds is shown no more, since the close it waits for stands there already.
   Its close tells what closed it from outside, which the one that closed it says, and nothing of what its rung gave, which the rung has told.
   A paused prompt makes no rung until the wake, and a cancel of it is over its rung too, which ends itself.
   The World closes with a refusal a prompt it cannot put to the operator; which shapes the operator answers is the World's law.
   The shape left unsaid is None, which the acknowledgment uses, and any value responds to it.
-  A prompt takes any shape, and the gate reads the word of a rung against the name of it.
+  A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one.
   A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the record replays it.
+  The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
   The acknowledgment carries no shape and a message that names the act that is done.
   The turns of the chain hold the result of the command that the acknowledgment names.
   A cancelled result is no orphan.
@@ -615,6 +616,7 @@ The tags of the file are opened, closed, shown, raised, debugged, refused, pause
 type Showing = tuple[Text, Show]
 """A text a tag shows, and the show of it, which is what a tell of a text carries and what the fold of the turns makes a tag of.
 The body of a closed tag holds one shown for each text told.
+A list body shows each showing in it, and anything else in it stands as it is.
 The shown tag holds as its body the lines that a show picked, with their numbers.
 The engine applies a show before it makes a tag, so the body holds the picked lines alone.
 A show applies to a text or to a stream.
@@ -725,8 +727,8 @@ type Answer = tuple[Literal["answer"], str, str, Turn]
 The World answers an ask with an answer that carries the response of the provider.
 The World answers with the turn, which carries its usage and the blocks of the provider.
 """
-type Ready = tuple[Literal["ready"], str, str, str, str]
-"""A ready says the word a rung holds and the name of the shape that word must give.
+type Ready = tuple[Literal["ready"], str, str, str]
+"""A ready says the word a rung holds.
 An accepted word of a rung enters the program of the chain and runs in the globals of the chain.
 The word of a rung that extends the engine is part of the program, so the extension returns in a later life.
 The old words stay in the program and in the turns after a rung rebinds a name.
@@ -785,7 +787,7 @@ type Holds = tuple[Literal["holds"], str, str, str, str]
 """A holds is the question of what the record kept of an act.
 The chain holds its holds in the transcript, where the ask stands in a life that asks, so the fold cuts a user turn there in every life.
 """
-type Gate = tuple[Literal["gate"], str, str, str, str, str]
+type Gate = tuple[Literal["gate"], str, str, str, str]
 """A gate is the question of whether a word may run, which the Kernel answers with its findings.
 The refused tag holds as its body the findings that refused the word of a rung.
 The chain has the Kernel gate the word of a rung before it runs, and a refused word runs never.

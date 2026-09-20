@@ -2,22 +2,22 @@
 
 from itertools import pairwise
 
-from conftest import STANDS, Py, Sand, life, plain, relived, said, settle, sown
+from conftest import STANDS, Sand, life, plain, ran, relived, said, settle, sown
 from furb import engine
 from furb.engine import WORLD
 
 
 async def test_a_run_tells_the_kernel_to_run_the_word_of_a_rung() -> None:
   """A run tells the Kernel to run the word of a rung, and says the chain whose module it runs in."""
-  sand, py = Sand(stands=STANDS), Py()
-  log, root = life(sand, kernel=py)
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
   laid = engine.rung("k = 1", on=root)
   await laid
   sand.script[root] = ["close(k + 1)"]
   assert await engine.prompt(int, "count", on=root) == 2
   _, asking, *_ = said(log, "rung")[-1]
   assert said(log, "run") == [("run", laid, root, root, "k = 1"), ("run", asking, root, root, "close(k + 1)")]
-  assert py.ran == ["k = 1", "close(k + 1)"]
+  assert ran(log) == ["k = 1", "close(k + 1)"]
 
 
 async def test_every_rung_of_a_chain_runs_in_the_globals_of_the_chain() -> None:
@@ -114,13 +114,13 @@ async def test_a_prompt_after_such_a_rung_finds_what_it_bound() -> None:
 
 async def test_the_chain_runs_one_word_at_a_time() -> None:
   """The chain runs one word at a time."""
-  sand, py = Sand(stands=STANDS, auto=False), Py()
-  log, root = life(sand, kernel=py)
+  sand = Sand(stands=STANDS, auto=False)
+  log, root = life(sand)
   first = engine.rung("x = bash('echo hi')\nclose(await x)", on=root)
   second = engine.rung("k = 2\nclose(k)", on=root)
   await settle()
   runs = [i for i, a in enumerate(log) if a[0] == "run"]
-  assert len(runs) == 2 and py.ran == ["x = bash('echo hi')\nclose(await x)", "k = 2\nclose(k)"]
+  assert len(runs) == 2 and ran(log) == ["x = bash('echo hi')\nclose(await x)", "k = 2\nclose(k)"]
   for one, two in pairwise(runs):
     assert [a for a in log[one:two] if a[0] in ("wants", "ran") and a[1] == log[one][1]]
   engine.send("exited", said(log, "bash")[0][1], 0, by=WORLD)

@@ -1,11 +1,11 @@
-"""Ready, the word a rung holds and the shape that word must give."""
+"""Ready, the word a rung holds."""
 
 from conftest import DOOR, STANDS, Sand, life, plain, relived, said, settle, sown, text_of
 from furb import engine
 
 
-async def test_a_ready_says_the_word_a_rung_holds_and_the_name_of_the_shape_that_word_must_give() -> None:
-  """A ready says the word a rung holds and the name of the shape that word must give."""
+async def test_a_ready_says_the_word_a_rung_holds() -> None:
+  """A ready says the word a rung holds."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   laid = engine.rung("k = 1", on=root)
@@ -13,7 +13,7 @@ async def test_a_ready_says_the_word_a_rung_holds_and_the_name_of_the_shape_that
   sand.script[root] = ["close(k + 1)"]
   assert await engine.prompt(int, "count", on=root) == 2
   _, asking, *_ = said(log, "rung")[-1]
-  assert [a[3:] for a in said(log, "ready")] == [("k = 1", ""), ("close(k + 1)", "int")]
+  assert [a[3:] for a in said(log, "ready")] == [("k = 1",), ("close(k + 1)",)]
   assert [a[1] for a in said(log, "ready")] == [laid, asking]
 
 

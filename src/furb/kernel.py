@@ -1,14 +1,12 @@
 """The Kernel of this interpreter: it gates a word with ty, and it runs the word in the module of its chain.
 
 The engine holds the laws of a chain. To judge a word before it runs, and to run it, are machinery, so they stand
-here, behind the Kernel that the contract declares. The gate reads the word on a sheet: the names of the engine,
-bound as a chain binds them, then the ladder of the chain, then the word, all inside one async body, so that the
-awaits of the word stand and ty proves the shape of the value the word closes with.
+here, behind the Kernel that the contract declares. The gate reads the word on the sheet of `furb.sheet`, with the
+ty command line reading it: the names of the engine, bound as a chain binds them, then the ladder of the chain,
+then the word, all inside one async body, so that the awaits of the word stand.
 
 A word answers by a close and never by a return: a body of a module takes no return, so a word that holds one is no
-python and the gate says so. The sheet binds close under the shape the word must give, so every close that names no
-act is read against it, and one that names another act is read against nothing, since its value answers no prompt
-of this word.
+python and the gate says so.
 """
 
 import ast
@@ -16,15 +14,14 @@ import re
 import shutil
 import subprocess
 import sys
-import traceback
 from asyncio import CancelledError
 from collections.abc import Generator
 from inspect import iscoroutine
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import CodeType, CoroutineType
+from types import CoroutineType
 
-from furb import engine
+from furb import engine, sheet
 from furb.engine import Act, Refused, modules, outcomes, site, under
 
 type Kernel = Generator[tuple | None, tuple]
@@ -32,20 +29,14 @@ type Kernel = Generator[tuple | None, tuple]
 
 SOURCE = Path(engine.__file__)
 """SOURCE is the engine, which names every name that the globals of a chain hold of it."""
-ENGINE = "__engine"
-"""ENGINE is the one name of the sheet: the module it binds the names of the engine from."""
-OWN = re.compile(rf"\b{ENGINE}\b")
-"""OWN finds the name of the sheet in a word, which no word may say."""
-CLOSE = "close"
-"""CLOSE is the verb a word answers by, which the sheet binds under the shape the word must give."""
-ANY = "object"
-"""ANY is the shape of a word that is read against no shape, which any value answers."""
 DIAG = re.compile(
   r"\A(?P<path>.+?):(?P<line>\d+):(?P<column>\d+): (?P<sort>error|warning)\[(?P<rule>[^\]]+)\] (?P<why>.*)\Z"
 )
 """DIAG reads one finding of ty in its concise form."""
 VERSION = ".".join(map(str, sys.version_info[:2]))
 """VERSION is the python that the gate reads a word for, which is the python that runs it."""
+NO_TY = "the gate did not run"
+"""NO_TY is what the life ends with when ty is not there to read a word, which is no finding against the word."""
 
 
 def declared(source: Path = SOURCE) -> list[str]:
@@ -64,56 +55,13 @@ def declared(source: Path = SOURCE) -> list[str]:
   return [name for i, name in enumerate(said) if name not in said[:i]]
 
 
-BOUND = ("actor", "raised")
-"""BOUND are the two names a chain binds of its own: the actor it stands on, and what the last rung raised."""
-NAMES = [*declared(), *BOUND]
-"""NAMES are the names the globals of a chain hold, which the sheet binds before it reads the ladder and the word."""
-HEAD = f"import typing\nimport furb.engine as {ENGINE}\nasync def __body():\n" + "".join(
-  f"  {x} = {ENGINE}.{x}\n" for x in NAMES if x != CLOSE
-)
-"""HEAD binds each name a chain holds on a line of its own, since an import declares a name that no word may rebind."""
-CLOSING = f"""  @typing.overload
-  def {CLOSE}(value: %s, id: typing.Literal[""] = "") -> None: ...
-  @typing.overload
-  def {CLOSE}(value: object, id: str) -> None: ...
-  def {CLOSE}(value: object, id: str = "") -> None: ...
-"""
-"""CLOSING binds close under the shape: a close that names an act takes any value, since it answers no prompt here."""
-OPENED = f"  try:\n    {ENGINE}.lineage('')\n"
-"""OPENED opens the ladder on a call, since ty reads an except that no statement before it can reach."""
-CAUGHT = "  except BaseException:\n    pass\n"
-"""CAUGHT closes the ladder, so that a rung which raised or which never ends leaves the word reachable."""
-
-
-def compiled(word: str, name: str) -> CodeType:
-  """The word as the interpreter runs it: a body of a module, with a top level await allowed.
-
-  A body of a module takes no return, so a word that holds one at its top level does not compile, which is what
-  makes a return no python here and a finding of the gate like any other.
-  """
-  return compile(word, name, "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
-
-
-def laid(text: str, depth: int) -> str:
-  """The text as it stands on the sheet, indented into the body, with every line where it was, so a finding keeps
-  the line it was found on."""
-  return "".join(f"{' ' * depth}{line}\n" if line.strip() else "\n" for line in text.split("\n"))
-
-
-def sheet(ladder: str, word: str, shape: str) -> tuple[str, range, int]:
-  """The word on a sheet of its own, the lines the shape stands on, and how many lines stand above the word, which
-  every finding is counted back by.
-
-  The shape is the gate's own writing and no word of anybody, so a finding on those lines is a finding against the
-  shape itself and never against the word.
-  """
-  closing, first = CLOSING % shape, HEAD.count("\n") + 1
-  above = HEAD + closing + OPENED + laid(ladder, 4) + CAUGHT
-  return above + laid(word, 2), range(first, first + closing.count("\n")), above.count("\n")
+NAMES = declared()
+"""NAMES are the names of the engine, which the sheet binds before it reads the ladder and the word."""
 
 
 def checked(text: str) -> list[tuple[int, str]]:
-  """What ty finds on one sheet, each finding by its line.
+  """What ty finds on one sheet, each finding by its line: the errors, and none of the warnings, since a warning
+  refuses no word.
 
   A tool that did not run has said nothing about the word, which is not the same as having found nothing, so the
   life ends there rather than refuse a word that nobody read.
@@ -135,14 +83,10 @@ def checked(text: str) -> list[tuple[int, str]]:
     why = f"{NO_TY}: {ran.stderr.decode(errors='replace').strip()}"
     raise RuntimeError(why)
   return [
-    (int(found["line"]), f"[{found['rule']}] {found['why']}")
+    (int(found["line"]), f"error[{found['rule']}] {found['why']}")
     for line in ran.stdout.decode(errors="replace").split("\n")
     if (found := DIAG.match(line.strip())) is not None and found["sort"] == "error"
   ]
-
-
-NO_TY = "the gate did not run"
-"""NO_TY is what the life ends with when ty is not there to read a word, which is no finding against the word."""
 
 
 class Native:
@@ -153,36 +97,16 @@ class Native:
   word that ran to its end and with the exception for one that raised, and drops the frame of a run a cancel is
   over. A frame that is mid step is never closed: the close of a word raises where that word stands, and what
   unwinds out of it is the drop. One of these serves one life, since the frames it holds and the ladders it gates
-  against are that life's own.
+  against are that life's own, and a ladder is the accepted words of its chain, which grows as the gate accepts.
   """
 
   def __init__(self) -> None:
     self.frames: dict[str, CoroutineType[object, object, object]] = {}
     self.ladders: dict[str, list[str]] = {}
 
-  def gate(self, word: str, ladder: list[str], shape: str) -> list[str]:
-    """What the gate finds against a word: the word is read for what the interpreter will take and for the name of
-    the sheet, and then ty reads it against the ladder of its chain and against the shape it must close with.
-
-    A shape that names nothing is no shape, whether the reading of it fails or ty cannot resolve it, since a word
-    read against a shape that nobody can read is a word nobody read.
-    """
-    try:
-      compiled(word, "<gate>")
-    except SyntaxError as bad:
-      return ["".join(traceback.format_exception_only(bad)).strip()]
-    if (hit := OWN.search(word)) is not None:
-      return [f"{hit.group()} is a name of the gate"]
-    given = ANY if shape in ("", "None") else shape
-    try:
-      ast.parse(given, mode="eval")
-    except SyntaxError:
-      return [f"{shape} is no shape"]
-    text, lines, above = sheet("\n".join(ladder), word, given)
-    found = checked(text)
-    if any(n in lines for n, _ in found):
-      return [f"{shape} is no shape"]
-    return [f"line {n - above}: {why}" for n, why in found if n > above]
+  def gate(self, word: str, ladder: list[str]) -> list[str]:
+    """What the gate finds against a word: the sheet of the engine, read by the ty command line."""
+    return sheet.gate(NAMES, ladder, word, checked)
 
   def ended(self, name: str, got: BaseException | None) -> None:
     """The run is over, and what it came to goes to the chain that had it run."""
@@ -215,7 +139,7 @@ class Native:
     token = site.set(name)
     try:
       # The compile stands inside, so a word the interpreter will not take is what the run came to and no more.
-      ran = eval(compiled(word, name), held)  # noqa: S307
+      ran = eval(compile(word, name, "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT), held)  # noqa: S307
     except BaseException as raised:
       return self.ended(name, raised)
     finally:
@@ -230,12 +154,15 @@ class Native:
     while True:
       match (yield):
         case ("run", rung, _, chain, word):
-          self.ladders.setdefault(chain, []).append(word)
           self.begin(rung, word, modules[chain])
         case ("sent", rung, _, value) if rung in self.frames:
           self.carry(rung, value)
-        case ("gate", qid, _, chain, word, returns):
-          yield "done", qid, self.gate(word, self.ladders.get(chain, []), returns)
+        case ("gate", qid, _, chain, word):
+          # The ladder is the accepted words of the chain, so an accepted word joins it here, before it runs.
+          found = self.gate(word, self.ladders.setdefault(chain, []))
+          if not found:
+            self.ladders[chain].append(word)
+          yield "done", qid, found
         case ("cancel" | "close", about, *_):
           # The frame of the word that says the close is mid step, and the CancelledError of close ends that one.
           for one in [x for x in self.frames if under(x, about) and not self.frames[x].cr_running]:

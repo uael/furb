@@ -123,7 +123,7 @@ async def test_outside_an_act_there_is_nothing_to_tell_of_so_it_is_refused() -> 
   """Outside an act there is nothing to tell of, so it is refused."""
   sand = Sand(stands=STANDS)
   _, _ = life(sand)
-  with pytest.raises(Refused, match="none outside one"):
+  with pytest.raises(Refused, match="no act"):
     engine.debug(t"{1}")
 
 

@@ -111,7 +111,7 @@ async def test_a_read_of_chain_lineage_gives_the_program_of_the_chain() -> None:
   """A read of chain://lineage gives the program of the chain, its accepted words in order."""
   sand = sown()
   _, root = life(sand)
-  sand.script[root] = ["BAD = 1", "a = 1", "close(a + 1)", "close(None)"]
+  sand.script[root] = ["k = BAD", "a = 1", "close(a + 1)", "close(None)"]
   assert await engine.prompt(int, "count", on=root) == 2
   assert engine.read(root, on=root) == Text(root, "a = 1\nclose(a + 1)")
 

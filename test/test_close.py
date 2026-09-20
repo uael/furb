@@ -2,9 +2,11 @@
 
 from asyncio import CancelledError
 
+import pytest
+
 from conftest import STANDS, Sand, attr, life, said, settle, tags
 from furb import engine
-from furb.engine import OPERATOR, Exit, Text
+from furb.engine import OPERATOR, Exit, Refused, Text
 
 
 async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
@@ -157,15 +159,31 @@ async def test_close_is_given_the_name_of_the_act_it_closes_and_the_value() -> N
   assert word[4] == [("closed", [("over", act)], "21")]
 
 
-async def test_a_value_closes_an_act_with_that_value_whatever_the_shape_of_the_act() -> None:
-  """A value closes an act with that value, whatever the shape of the act."""
+async def test_a_value_closes_an_act_with_that_value_and_a_prompt_with_a_value_that_has_its_shape() -> None:
+  """A value closes an act with that value, and a prompt with a value that has its shape."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
+  waiting = engine.wait(30.0, on=root)
+  engine.close("twenty one", waiting)
+  assert (await waiting) == "twenty one"
   act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
-  engine.close("twenty one", act)
+  with pytest.raises(Refused, match="'twenty one' not int"):
+    engine.close("twenty one", act)
+  engine.close(21, act)
+  assert (await act) == 21
+
+
+async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the_shape_of_the_prompt_raises() -> None:
+  """A close that answers a prompt with a value that does not have the shape of the prompt raises Refused in the word that said it, so the prompt asks again."""
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
+  sand.script[root] = ["close('nope')", "close(1)"]
+  assert await engine.prompt(int, "count", on=root) == 1
   await settle()
-  assert (await act) == "twenty one"
+  assert len(said(log, "ask")) == 2
+  raised = tags(engine.turns(on=root), "raised")
+  assert [(attr(tag, "type"), attr(tag, "message")) for tag in raised] == [("Refused", "'nope' not int")]
 
 
 async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:

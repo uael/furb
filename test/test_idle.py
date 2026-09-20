@@ -18,5 +18,5 @@ async def test_idle_hears_every_fact_and_says_nothing_of_its_own() -> None:
   act = engine.wait(0, on=root)
   assert (await act) is None
   assert [one for one in said(log, "tell") if one[1] == act] == []
-  with pytest.raises(Refused, match="operator hears already"):
+  with pytest.raises(Refused, match="operator hears"):
     engine.drive(engine.idle(OPERATOR), OPERATOR)

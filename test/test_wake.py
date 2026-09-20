@@ -1,6 +1,6 @@
 """wake, which ends a pause and gives what waited."""
 
-from conftest import STANDS, Py, Sand, life, said, settle, tags
+from conftest import STANDS, Sand, gated, life, ran, said, settle, tags
 from furb import engine
 from furb.engine import WORLD
 
@@ -28,7 +28,7 @@ async def test_delivery_carries_on_the_rungs_that_await_the_result_on_whatever_c
   sand.script[root] = ["x = bash('slow')\nclose(x)"]
   which = await engine.prompt(str, "start one", on=root)
   two = engine.chain("two")
-  sand.script[two] = [f"close((await Act({which!r})).code)"]
+  sand.script[two] = [f"out = await Act({which!r})\nassert isinstance(out, Exit)\nclose(out.code)"]
   act = engine.prompt(int, "await it", on=two)
   await settle()
   engine.pause(two)
@@ -91,16 +91,16 @@ async def test_a_wake_lifts_the_pause_and_delivers_every_held_result() -> None:
 
 async def test_a_wake_gates_and_runs_a_held_response() -> None:
   """A wake gates and runs a held response."""
-  sand, py = Sand(stands=STANDS), Py()
-  log, root = life(sand, kernel=py)
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
   sand.script[root] = ["close(7)"]
   act = engine.prompt(int, "count", on=root)
   engine.pause(root)
   await settle()
-  assert py.gated == [] and said(log, "run") == []
+  assert gated(log) == [] and said(log, "run") == []
   engine.wake(root)
   await settle()
-  assert py.gated == ["close(7)"] and py.ran == ["close(7)"] and (await act) == 7
+  assert gated(log) == ["close(7)"] and ran(log) == ["close(7)"] and (await act) == 7
 
 
 async def test_a_wake_makes_a_prompt_ask_with_the_transcript_as_it_grew() -> None:
