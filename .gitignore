@@ -10,3 +10,4 @@ traces/
 target/
 Cargo.lock
 node_modules/
+playground/

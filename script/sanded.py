@@ -1,10 +1,9 @@
 """The suite, with the engine itself in the sandbox, driven from here through the binding.
 
-`wired.py` puts the Worlds of the harness behind the plain boundary and `kerneled.py` puts the Kernel of the crate
-under every life, but both leave the engine in this interpreter. This rig moves the engine: every life the suite
-opens is a life of `furb_sand`, which is the engine running in monty with the Kernel of the crate, and every verb
-the suite calls is said as a word in there. The suite is not edited and never enters the sandbox: the tests, the
-World doubles and the assertions all stand here, in python, as they always did.
+This is the proof of the crate, and no other number is one. Every life the suite opens is a life of `furb_sand`,
+which is the engine running in monty with the Kernel of the crate, and every verb the suite calls is said as a
+word in there. The suite is not edited and never enters the sandbox: the tests, the World doubles and the
+assertions all stand here, in python, as they always did. `src/CLAUDE.md` says why this is the one that counts.
 
     uv run python script/sanded.py
 
@@ -19,6 +18,7 @@ what the Voice is for.
 """
 
 import asyncio
+import builtins
 import os
 import queue
 import subprocess
@@ -52,8 +52,6 @@ PURE = ("question", "covers", "site", "modules")
 """
 HELD = ("acts", "asked", "outcomes")
 """HELD are the maps of the life, which a test and a World both read, and which the sandbox holds."""
-ASKED = {"cwd": 1, "merged": 3}
-"""ASKED are the verbs a World reaches the engine by while it answers, and how many words each one carries."""
 
 
 class Source(str):
@@ -69,7 +67,7 @@ def made(got: object) -> object:
   if isinstance(got, furb_sand.Shape):
     return NAMES[got.name](*[made(one) for one in got.fields.values()])
   if isinstance(got, furb_sand.Fault):
-    return NAMES[got.name](*[made(one) for one in got.args])
+    return named(got.name)(*[made(one) for one in got.args])
   if isinstance(got, list):
     return [made(one) for one in got]
   if isinstance(got, tuple):
@@ -77,6 +75,17 @@ def made(got: object) -> object:
   if isinstance(got, dict):
     return {key: made(one) for key, one in got.items()}
   return got
+
+
+def named(name: str) -> object:
+  """One name of a shape or a fault, as this interpreter holds it: the engine's own, then the interpreter's.
+
+  A fault crosses by the name of its class, and a life raises the builtin ones as well as its own, so a name the
+  engine does not declare is looked for where every name of python is.
+  """
+  if name in NAMES:
+    return NAMES[name]
+  return getattr(builtins, name, Exception)
 
 
 def plainly(got: object) -> object:
@@ -268,9 +277,20 @@ class Held:
     self.life.word("None")
 
   def word(self, word: str) -> object:
-    """One verb, said as a word, and what it gave, made again as this interpreter holds it."""
+    """One verb, said as a word, and what it gave, made again as this interpreter holds it.
+
+    A word that does not parse is a fault of the rig and not of the engine, so the word itself is said with the
+    refusal: what is wrong is always in there.
+    """
     self.pump()
-    got = made(self.life.word(word))
+    try:
+      said = self.life.word(word)
+    except furb_sand.Refused as no:
+      if "SyntaxError" not in str(no):
+        raise
+      why = f"{no} in {word!r}"
+      raise furb_sand.Refused(why) from no
+    got = made(said)
     if isinstance(got, str) and got.startswith(("bash://", "wait://", "prompt://", "rung://")):
       held = Act(got)
       held.held = self
