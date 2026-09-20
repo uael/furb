@@ -172,19 +172,6 @@ impl<W: World, G: Gate> Life<W, G> {
   pub fn world_mut(&mut self) -> &mut W {
     &mut self.outside.world
   }
-
-  /// The gate of this life, to change: a host that holds state in its gate reaches it here.
-  pub fn gate_mut(&mut self) -> &mut G {
-    &mut self.outside.gate
-  }
-
-  /// The World and the gate of this life, taken out of it, which is the end of the life.
-  ///
-  /// A host that must release what its World or its gate holds does it here, since nothing of either is the
-  /// life's to release and the life is over once they are out of it.
-  pub fn outside(self) -> (W, G) {
-    (self.outside.world, self.outside.gate)
-  }
 }
 
 impl<W: World, G: Gate> Host for Outside<W, G> {

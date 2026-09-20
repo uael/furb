@@ -10,7 +10,7 @@
 mod outside;
 mod value;
 
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::{rc::Rc, time::Duration};
 
 use furb::{Ears, Entry, Life as Held, Refusal, Sand, Voice as Says, record};
 use napi::{
@@ -20,7 +20,7 @@ use napi::{
 use napi_derive::napi;
 
 use crate::{
-  outside::{Gates, Raised, Worlds},
+  outside::{Gates, Gave, Shared, Worlds},
   value::{of_js, refused, to_js},
 };
 
@@ -33,10 +33,10 @@ use crate::{
 pub struct Life {
   /// The life, which holds the sandbox, the World and the gate.
   held: Held<Worlds, Gates>,
-  /// The first fault of the World, shared with it; see [`Raised`].
-  world: Raised,
-  /// The first fault of the gate, shared with it; see [`Raised`].
-  gate: Raised,
+  /// What the host gave as the World, shared with the crate's side of it; see [`Gave`].
+  world: Shared,
+  /// What the host gave as the gate, shared with the crate's side of it; see [`Gave`].
+  gate: Shared,
 }
 
 impl ObjectFinalize for Life {
@@ -45,9 +45,8 @@ impl ObjectFinalize for Life {
   /// A reference holds an object of javascript against collection, and nothing releases one for you, so a life
   /// that is collected releases both of its own. It is the one place an env is at hand for that.
   fn finalize(self, env: Env) -> Result<()> {
-    let (world, gate) = self.held.outside();
-    world.done(&env)?;
-    gate.done(&env)
+    self.world.done(&env)?;
+    self.gate.done(&env)
   }
 }
 
@@ -73,22 +72,25 @@ impl Life {
       Some(held) => held.takes()?,
       None => Ears::made().1,
     };
-    let (threw, gated): (Raised, Raised) = (Rc::new(RefCell::new(None)), Rc::new(RefCell::new(None)));
-    let mut worlds = Worlds::new(world.create_ref()?, Rc::clone(&threw));
-    let mut gates = Gates::new(gate.map(|one| one.create_ref()).transpose()?, Rc::clone(&gated));
-    worlds.on(env);
-    gates.on(env);
-    let held = Held::boot(Sand::default(), worlds, gates, ears, &kept);
+    let threw = Gave::new(Some(world.create_ref()?));
+    let gated = Gave::new(gate.map(|one| one.create_ref()).transpose()?);
+    threw.on(env);
+    gated.on(env);
+    let held = Held::boot(Sand::default(), Worlds(Rc::clone(&threw)), Gates(Rc::clone(&gated)), ears, &kept);
+    threw.off();
+    gated.off();
     // A fault of the host is thrown before the refusal of the life: a life that is opening on a World which
     // threw fails for want of what the World never said, and the fault is what a host must be told.
-    caught(&threw, &gated)?;
-    let mut life = match held {
-      Ok(one) => Life { held: one, world: threw, gate: gated },
-      Err(why) => return Err(raised(&why)),
-    };
-    life.held.world_mut().off();
-    life.held.gate_mut().off();
-    Ok(life)
+    let opened = caught(&threw, &gated).and_then(|()| held.map_err(|why| raised(&why)));
+    match opened {
+      Ok(held) => Ok(Life { held, world: threw, gate: gated }),
+      Err(fault) => {
+        // The life never opened, so nothing else will release what the host gave it.
+        threw.done(env)?;
+        gated.done(env)?;
+        Err(fault)
+      }
+    }
   }
 
   /// The root chain of the life, which is the first act of any record.
@@ -141,7 +143,7 @@ impl Life {
   /// The World of this life, which is the object the host handed over.
   #[napi(getter)]
   pub fn world<'env>(&self, env: &Env) -> Result<Unknown<'env>> {
-    self.held.world().object(env)
+    self.world.object(env)
   }
 }
 
@@ -156,11 +158,11 @@ impl Life {
     env: &Env,
     call: impl FnOnce(&mut Held<Worlds, Gates>) -> std::result::Result<T, Refusal>,
   ) -> Result<T> {
-    self.held.world_mut().on(env);
-    self.held.gate_mut().on(env);
+    self.world.on(env);
+    self.gate.on(env);
     let got = call(&mut self.held);
-    self.held.world_mut().off();
-    self.held.gate_mut().off();
+    self.world.off();
+    self.gate.off();
     self.caught()?;
     got.map_err(|why| raised(&why))
   }
@@ -241,9 +243,9 @@ impl Voice {
 ///
 /// A fault of the host is the host's and not the life's, so it stands as it was thrown, and a life that heard
 /// nothing where the host threw goes on for whoever catches it.
-fn caught(world: &Raised, gate: &Raised) -> Result<()> {
+fn caught(world: &Shared, gate: &Shared) -> Result<()> {
   for one in [world, gate] {
-    if let Some(fault) = one.borrow_mut().take() {
+    if let Some(fault) = one.caught() {
       return Err(fault);
     }
   }

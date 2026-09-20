@@ -10,7 +10,10 @@
 
 #![expect(unsafe_code, reason = "the napi API is unsafe, and every cast below is guarded by the check above it")]
 
-use std::{cell::RefCell, rc::Rc};
+use std::{
+  cell::{Cell, RefCell},
+  rc::Rc,
+};
 
 use furb::{Fact, Gate, Reply, Value, World};
 use napi::{
@@ -27,94 +30,119 @@ use crate::value::{Fact as Held, made, of_js, refused, to_js};
 /// hands the answer back through `answered`, and a World never calls into a life that stands waiting for it.
 const ASK: &str = "ask";
 
-/// The first fault of a World or of a gate, held where the caller of the life reads it.
+/// What a host of javascript gave a life: an object of the interpreter, and what came of calling it.
 ///
-/// A life takes its World and gives it back only when it opened, so the fault of a World that throws while the
-/// life is opening would be lost with it. The slot is shared with the caller instead, and the caller reads it
-/// whether the life opened or not.
-pub type Raised = Rc<RefCell<Option<Error>>>;
+/// A life takes its World and gives it back only when it opened, so a World that throws while the life is
+/// opening would take its fault with it, and the reference it holds on the host's object would never be
+/// released. Both stand here instead, where the life and the crate's side of it reach the same one, whether the
+/// life opened or not.
+pub struct Gave {
+  /// The object the host wrote, until it is released. A gate the host left out has none.
+  object: RefCell<Option<ObjectRef>>,
+  /// The first fault of the object, which the caller of the life throws once the call is over.
+  raised: RefCell<Option<Error>>,
+  /// The env of the call that is running, and nothing between two calls.
+  ///
+  /// An object of javascript is reached through the env of the call that is running, and through no other, so a
+  /// call made while this holds nothing is no call at all: there is no interpreter on the stack to make it in.
+  env: Cell<Option<Env>>,
+}
+
+/// One [`Gave`], as the life and the crate's side of it both hold it.
+pub type Shared = Rc<Gave>;
+
+impl Gave {
+  /// What a host gave, held: the object, or nothing for a gate the host left out.
+  pub fn new(object: Option<ObjectRef>) -> Shared {
+    Rc::new(Gave { object: RefCell::new(object), raised: RefCell::new(None), env: Cell::new(None) })
+  }
+
+  /// The env of the call that is starting, which is how the object is reached while it runs.
+  pub fn on(&self, env: &Env) {
+    self.env.set(Some(*env));
+  }
+
+  /// The end of the call, after which the object is reached by nothing.
+  pub fn off(&self) {
+    self.env.set(None);
+  }
+
+  /// The first fault of the object, taken, which the caller throws once the call it was in is over.
+  pub fn caught(&self) -> Option<Error> {
+    self.raised.borrow_mut().take()
+  }
+
+  /// The object the host wrote, as the host reads it back.
+  pub fn object<'env>(&self, env: &Env) -> Result<Unknown<'env>> {
+    match self.object.borrow().as_ref() {
+      Some(held) => made(env, held.get_value(env)?),
+      None => made(env, napi::bindgen_prelude::Null),
+    }
+  }
+
+  /// The reference on the object, released, which is the end of what the host gave.
+  ///
+  /// A reference holds an object of javascript against collection, and nothing releases one for you, so the
+  /// life that made it releases it: when the life is collected, or when the life never opened at all.
+  pub fn done(&self, env: &Env) -> Result<()> {
+    match self.object.borrow_mut().take() {
+      Some(held) => held.unref(env),
+      None => Ok(()),
+    }
+  }
+
+  /// One call of the object, and what it gave, or `none` where there was no call to make.
+  ///
+  /// A fault is kept and answered with nothing, so that the life runs to the end of the call it is in and the
+  /// caller hears the fault whole. A life that carried on would hear a reply the host never gave.
+  fn calls<T>(&self, none: T, said: impl FnOnce(&Env, &Object<'_>) -> Result<T>) -> T {
+    if self.raised.borrow().is_some() {
+      return none;
+    }
+    let Some(env) = self.env.get() else { return none };
+    let got = self
+      .object
+      .borrow()
+      .as_ref()
+      .ok_or_else(|| refused("a host gave this life no object"))
+      .and_then(|held| held.get_value(&env))
+      .and_then(|held| said(&env, &held));
+    match got {
+      Ok(one) => one,
+      Err(fault) => {
+        // The first fault is the one that says what went wrong; every call after it was made on a host that had
+        // already thrown.
+        let mut held = self.raised.borrow_mut();
+        if held.is_none() {
+          *held = Some(fault);
+        }
+        none
+      }
+    }
+  }
+}
 
 /// A World of javascript, as the crate reads one.
 ///
 /// Every fault of the javascript object stands: a World that throws has said something a life cannot answer, and
 /// the life stops with it rather than carrying on with a reply that was never given.
-pub struct Worlds {
-  /// The object the host wrote.
-  held: ObjectRef,
-  /// The env of the call that is running, and nothing between two calls.
-  env: Option<Env>,
-  /// The first fault of the object, which the caller of the life throws once the call is over.
-  raised: Raised,
-}
-
-impl Worlds {
-  /// A World of the crate, over the object a host wrote, with the slot its faults are kept in.
-  pub fn new(held: ObjectRef, raised: Raised) -> Self {
-    Worlds { held, env: None, raised }
-  }
-
-  /// The env of the call that is starting, which is how the object is reached while it runs.
-  pub fn on(&mut self, env: &Env) {
-    self.env = Some(*env);
-  }
-
-  /// The end of the call, after which the object is reached by nothing.
-  pub fn off(&mut self) {
-    self.env = None;
-  }
-
-  /// The object the host wrote, as the host reads it back.
-  pub fn object<'env>(&self, env: &Env) -> Result<Unknown<'env>> {
-    made(env, self.held.get_value(env)?)
-  }
-
-  /// The reference on the object, released, which is the end of this World.
-  ///
-  /// A reference holds an object of javascript against collection, and nothing releases one for you: the life
-  /// that made it releases it when the life itself is collected.
-  pub fn done(self, env: &Env) -> Result<()> {
-    self.held.unref(env)
-  }
-
-  /// One call of the object, and the reply it gave.
-  ///
-  /// A fault is kept and answered with nothing, so that the life runs to the end of the call it is in and the
-  /// caller hears the fault whole. A life that carried on would hear a reply the host never gave.
-  fn calls(&mut self, name: &str, args: impl FnOnce(&Env) -> Result<Unknown<'static>>) -> Reply {
-    if already(&self.raised) {
-      return Reply::Nothing;
-    }
-    let Some(env) = self.env else { return Reply::Nothing };
-    match self.said(&env, name, args) {
-      Ok(reply) => reply,
-      Err(fault) => {
-        keeps(&self.raised, fault);
-        Reply::Nothing
-      }
-    }
-  }
-
-  /// One call of the object, which is the method of that name on it.
-  fn said(&self, env: &Env, name: &str, args: impl FnOnce(&Env) -> Result<Unknown<'static>>) -> Result<Reply> {
-    let held = self.held.get_value(env)?;
-    let one = args(env)?;
-    let call: Function<'_, Unknown<'_>, Unknown<'_>> = held
-      .get_named_property(name)
-      .map_err(|_| refused(&format!("a World of a host answers {name}, and this one does not")))?;
-    let said = call.apply(&held, one)?;
-    reply_of(env, &said)
-  }
-}
+pub struct Worlds(pub Shared);
 
 impl World for Worlds {
   fn hears(&mut self, fact: &Fact) -> Reply {
     let held = fact.clone();
-    self.calls("hears", move |env| made(env, Held { held }))
+    self.0.calls(Reply::Nothing, move |env, on| {
+      let one = made(env, Held { held })?;
+      answers(env, on, "hears", one)
+    })
   }
 
   fn answered(&mut self, got: &Value) -> Reply {
     let held = got.clone();
-    self.calls("answered", move |env| to_js(env, &held))
+    self.0.calls(Reply::Nothing, move |env, on| {
+      let one = to_js(env, &held)?;
+      answers(env, on, "answered", one)
+    })
   }
 }
 
@@ -122,83 +150,34 @@ impl World for Worlds {
 ///
 /// A host that reads no python leaves it out, and the word then runs and raises where it stands. One that reads
 /// python gives an object with `gate`, and the findings it gives are what the model is told.
-pub struct Gates {
-  /// The object the host wrote, and nothing for a host that gates no word.
-  held: Option<ObjectRef>,
-  /// The env of the call that is running, and nothing between two calls.
-  env: Option<Env>,
-  /// The first fault of the object, which the caller of the life throws once the call is over.
-  raised: Raised,
-}
-
-impl Gates {
-  /// A gate of the crate, over the object a host wrote, or over nothing, with the slot its faults are kept in.
-  pub fn new(held: Option<ObjectRef>, raised: Raised) -> Self {
-    Gates { held, env: None, raised }
-  }
-
-  /// The env of the call that is starting, which is how the object is reached while it runs.
-  pub fn on(&mut self, env: &Env) {
-    self.env = Some(*env);
-  }
-
-  /// The end of the call, after which the object is reached by nothing.
-  pub fn off(&mut self) {
-    self.env = None;
-  }
-
-  /// The reference on the object, released, which is the end of this gate.
-  pub fn done(self, env: &Env) -> Result<()> {
-    match self.held {
-      Some(held) => held.unref(env),
-      None => Ok(()),
-    }
-  }
-
-  /// One call of the object, which is the `gate` method on it.
-  fn found(&self, env: &Env, word: &str, ladder: &[String], shape: &str) -> Result<Vec<String>> {
-    let Some(held) = self.held.as_ref() else { return Ok(Vec::new()) };
-    let held = held.get_value(env)?;
-    let call: Function<'_, FnArgs<(String, Vec<String>, String)>, Array<'_>> =
-      held.get_named_property("gate").map_err(|_| refused("a gate of a host answers gate, and this one does not"))?;
-    let said = call.apply(&held, (word.to_owned(), ladder.to_vec(), shape.to_owned()).into())?;
-    let mut out = Vec::with_capacity(said.len() as usize);
-    for at in 0..said.len() {
-      let one: String = said.get(at)?.ok_or_else(|| refused("a finding of a gate is a text"))?;
-      out.push(one);
-    }
-    Ok(out)
-  }
-}
+pub struct Gates(pub Shared);
 
 impl Gate for Gates {
   fn gate(&mut self, word: &str, ladder: &[String], shape: &str) -> Vec<String> {
-    if already(&self.raised) {
+    if self.0.object.borrow().is_none() {
       return Vec::new();
     }
-    let Some(env) = self.env else { return Vec::new() };
-    match self.found(&env, word, ladder, shape) {
-      Ok(found) => found,
-      Err(fault) => {
-        keeps(&self.raised, fault);
-        Vec::new()
+    let (word, ladder, shape) = (word.to_owned(), ladder.to_vec(), shape.to_owned());
+    self.0.calls(Vec::new(), move |_env, on| {
+      let call: Function<'_, FnArgs<(String, Vec<String>, String)>, Array<'_>> =
+        on.get_named_property("gate").map_err(|_| refused("a gate of a host answers gate, and this one does not"))?;
+      let said = call.apply(on, (word, ladder, shape).into())?;
+      let mut out = Vec::with_capacity(said.len() as usize);
+      for at in 0..said.len() {
+        out.push(said.get::<String>(at)?.ok_or_else(|| refused("a finding of a gate is a text"))?);
       }
-    }
+      Ok(out)
+    })
   }
 }
 
-/// Whether a slot holds a fault already, which is what stops a second call of an object that threw.
-fn already(raised: &Raised) -> bool {
-  raised.borrow().is_some()
-}
-
-/// The first fault of an object, kept for the caller of the life. A later one is dropped: the first is the one
-/// that says what went wrong, and every call after it was made on a host that had already thrown.
-fn keeps(raised: &Raised, fault: Error) {
-  let mut held = raised.borrow_mut();
-  if held.is_none() {
-    *held = Some(fault);
-  }
+/// One call of a World, made and read: the method of that name, called with that one value.
+fn answers(env: &Env, on: &Object<'_>, name: &str, one: Unknown<'_>) -> Result<Reply> {
+  let call: Function<'_, Unknown<'_>, Unknown<'_>> = on
+    .get_named_property(name)
+    .map_err(|_| refused(&format!("a World of a host answers {name}, and this one does not")))?;
+  let said = call.apply(on, one)?;
+  reply_of(env, &said)
 }
 
 /// What a host said of a fact, as the crate reads it.
