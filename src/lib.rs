@@ -17,8 +17,8 @@
 //! The engine takes the World and the Kernel as generators. A host of another language is no generator, so the
 //! crate runs [`PREAMBLE`] in a module of its own and hands the engine the two generators that stand in its place.
 //! Every fact crosses that boundary as a [`fact::Value`], which is plain data, a shape such as a text, or an
-//! exception, and nothing of python. `script/wired.py` proves the boundary: it runs the whole suite of the engine
-//! with every World of the harness behind it.
+//! exception, and nothing of python. `script/sanded.py` proves the whole of it: it runs the suite of the engine,
+//! in this interpreter and unedited, against a life of the crate.
 //!
 //! Nothing of the preamble is bound in the engine, and nothing of the engine is bound in the preamble, so the
 //! globals of a chain hold what the file defines and nothing more, which is what a model reads.

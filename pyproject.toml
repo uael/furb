@@ -108,6 +108,20 @@ unresolved-attribute = "ignore"
 unsupported-operator = "ignore"
 invalid-argument-type = "ignore"
 
+# The rig reads `furb_sand`, which `script/bound.py` builds for the interpreter that runs it and which stands on
+# no path ty reads. Every value it drives crosses the boundary plain, so what its shape is the sandbox says and
+# not this interpreter.
+[[tool.ty.overrides]]
+include = ["script/sanded.py"]
+
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"
+unresolved-attribute = "ignore"
+not-iterable = "ignore"
+not-subscriptable = "ignore"
+no-matching-overload = "ignore"
+invalid-argument-type = "ignore"
+
 [tool.pytest.ini_options]
 minversion = "9.1"
 testpaths = ["test"]

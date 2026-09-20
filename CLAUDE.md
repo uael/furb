@@ -2,8 +2,8 @@
 
 The engine is `src/furb/engine.py`, one file, which depends only on the python interpreter and on two interfaces it
 declares, World and Kernel. It is derived from the contract, `src/furb/engine.pyi`, and proved by the suite in
-`test/`. `src/furb/CLAUDE.md` holds the technical names of the engine and the laws that no test can hold, and
-`script/CLAUDE.md` says how to run the rig.
+`test/`. `src/furb/CLAUDE.md` holds the technical names of the engine and the laws that no test can hold, `src/CLAUDE.md`
+says what proves the crate, and `script/CLAUDE.md` says how to run the DeepSWE rig.
 
 ## The contract
 
@@ -95,12 +95,11 @@ The crate is held by gates of its own, which the commit hook runs too:
   under it, so the crate builds small where the disk is short.
 - `cargo fmt` then `cargo clippy --all-targets -- -D warnings`: format and lint the crate. Two spaces of
   indentation, 120 columns, as everywhere else.
-- `uv run python script/needs.py`: what the engine and the preamble need of the interpreter that runs them, and
-  what the suite needs on top to run in there too, read off the files themselves.
+- `uv run python script/needs.py`: what the engine and the preamble need of the interpreter that runs them, read
+  off the two files themselves.
 - `uv run python script/verbs.py`: every word the crate makes, held against the engine that must take it.
-- `uv run python script/wired.py`: the suite, with every World of the harness behind the plain boundary.
-- `uv run python script/kerneled.py`: the suite, with the Kernel of the crate in place of the harness's.
-- `uv run python script/inside.py`: the suite with no pytest at all, so that it runs where the engine runs.
+- `uv run python script/sanded.py`: the suite of the engine, against the engine in the sandbox. This is the proof
+  of the crate, and no other number is one.
 - `uv run python script/outside.py`: one life, opened the way the crate opens one, in this interpreter.
 - `uv run python script/bound.py`: the tests of the bindings, with each one built for the interpreter that runs
   it.
@@ -126,7 +125,8 @@ dependency, and the revision becomes a version the day the fork lands.
 
 `tests/life.rs` drives one life of the real engine from end to end in that sandbox, on one double that is no part
 of the crate: a World of this machine, written small. What a life may touch is the host's to decide, so the crate
-ships the trait and every host writes one of these.
+ships the trait and every host writes one of these. It is 19 scenarios and it is no proof of the contract:
+`script/sanded.py` is, and `src/CLAUDE.md` says why.
 
 ## The bindings
 
