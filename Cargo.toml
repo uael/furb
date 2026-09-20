@@ -36,11 +36,12 @@ ty_vendored = { version = "0.0.9", optional = true }
 #
 # A revision of the fork and not a version, because the interpreter the engine
 # needs is not released: the coroutine a Kernel drives, the `__await__` an act
-# is said by, and the top level await a word of a model is compiled with are all
-# on `uael/monty`. A revision and not a branch, so a build of today and a build
-# of next month read the same interpreter.
-monty = { git = "https://github.com/uael/monty", rev = "99456fd8b74adf82636b4911ee19e99f40de8c95" }
-monty-types = { git = "https://github.com/uael/monty", rev = "99456fd8b74adf82636b4911ee19e99f40de8c95" }
+# is said by, the top level await a word of a model is compiled with, and the
+# lazy generator expression the engine reads a record with are all on
+# `uael/monty`. A revision and not a branch, so a build of today and a build of
+# next month read the same interpreter.
+monty = { git = "https://github.com/uael/monty", rev = "7601549" }
+monty-types = { git = "https://github.com/uael/monty", rev = "7601549" }
 
 [lib]
 name = "furb"

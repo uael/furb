@@ -4,15 +4,15 @@
 //! given the two generators the preamble makes. From then the host drives it by running one word at a time in
 //! that sandbox, the way an operator calls a verb, and by answering what the sandbox asks of it.
 //!
-//! What a sandbox is, this does not say. [`Session`] is the whole of it: run this code, and answer the host while
-//! it runs. A sandbox of monty is one of those, and a fake one is another, which is how the loop below is held to
-//! its behaviour without a sandbox at all.
+//! The sandbox is monty, and it is [`Sand`]. There is no other: a life runs where the engine runs, and the whole
+//! of the crate is the engine in that sandbox.
 
 use crate::{
   ENGINE, PREAMBLE,
   fact::Value,
   host::{Gate, Outside},
   record::Entry,
+  sand::Sand,
   verb::{Verb, shown},
   voice::{Ears, Said},
   world::World,
@@ -25,26 +25,6 @@ pub const HOST: &str = "host";
 pub trait Host {
   /// One call of the sandbox, answered: the name of the generator that made it, and what it handed over, plain.
   fn called(&mut self, name: &str, said: &Value) -> Value;
-}
-
-/// Where the engine runs.
-///
-/// One of these serves one life. Everything inside it is the life's own: the engine, the module of every chain,
-/// and every word a model wrote. Nothing of the host is in there, and the only way out is [`Host`].
-///
-/// A session does three things, and nothing else:
-///
-/// - It runs python in one namespace, which stands from one call to the next, so what one call binds a later
-///   call reads.
-/// - It binds [`HOST`] to a call of the host: one name and one plain value go in, and one plain value comes
-///   back. The preamble calls it, and that is how the World and the gate of the host are reached from inside.
-/// - It gives back the value of the last expression of the code, plain, and nothing for code that ends in none.
-pub trait Session {
-  /// One piece of code, run in the sandbox, and what the last expression of it gave.
-  ///
-  /// The host answers every call the code makes while it runs, which is how the World and the gate are reached.
-  /// What the code raises is the fault: the exception, plain, which is its name and what it was made with.
-  fn run(&mut self, code: &str, host: &mut dyn Host) -> Result<Value, Value>;
 }
 
 /// What a life could not do.
@@ -91,9 +71,9 @@ impl std::error::Error for Refusal {}
 
 /// One life: a sandbox with the engine in it, and the outside it reaches.
 #[derive(Debug)]
-pub struct Life<S, W, G> {
-  /// Where the engine runs.
-  session: S,
+pub struct Life<W, G> {
+  /// Where the engine runs, which is monty.
+  sand: Sand,
   /// The World it hears through and the gate its words are read by.
   outside: Outside<W, G>,
   /// What its host has said and it has not heard.
@@ -102,20 +82,20 @@ pub struct Life<S, W, G> {
   root: String,
 }
 
-impl<S: Session, W: World, G: Gate> Life<S, W, G> {
+impl<W: World, G: Gate> Life<W, G> {
   /// A life, opened from what a World kept of the life before it.
   ///
   /// The preamble runs in a module of its own, so the globals of a chain hold what the engine defines and nothing
   /// more. The engine runs next, and `boot` is given the two generators the preamble makes.
-  pub fn boot(mut session: S, world: W, gate: G, ears: Ears, record: &[Entry]) -> Result<Self, Refusal> {
+  pub fn boot(mut sand: Sand, world: W, gate: G, ears: Ears, record: &[Entry]) -> Result<Self, Refusal> {
     let mut outside = Outside::new(world, gate);
-    session.run(PREAMBLE, &mut outside).map_err(one)?;
+    sand.run(PREAMBLE, &mut outside).map_err(one)?;
     let kept: Vec<Value> = record.iter().map(Entry::as_value).collect();
-    let got = session.run(&opening(&Value::List(kept).plain()), &mut outside).map_err(one)?;
+    let got = sand.run(&opening(&Value::List(kept).plain()), &mut outside).map_err(one)?;
     let Some(root) = got.as_str().map(str::to_owned) else {
       return Err(Refusal::Read(format!("a life opens on a chain, and {got:?} is none")));
     };
-    Ok(Life { session, outside, ears, root })
+    Ok(Life { sand, outside, ears, root })
   }
 
   /// The root chain of the life, which is the first act of any record.
@@ -138,7 +118,7 @@ impl<S: Session, W: World, G: Gate> Life<S, W, G> {
   /// today. [`Life::calls`] makes the word of every verb the contract declares, and this takes any other.
   pub fn word(&mut self, word: &str) -> Result<Value, Refusal> {
     let asked = format!("asked(__engine, {})", shown(&Value::Str(word.to_owned())));
-    let said = self.session.run(&asked, &mut self.outside).map_err(one)?;
+    let said = self.sand.run(&asked, &mut self.outside).map_err(one)?;
     Ok(Value::of_plain(&said))
   }
 
@@ -155,7 +135,7 @@ impl<S: Session, W: World, G: Gate> Life<S, W, G> {
     }
     let held: Vec<Value> = said.iter().map(Said::plain).collect();
     let word = format!("does(__engine, {})", shown(&Value::List(held)));
-    self.session.run(&word, &mut self.outside).map_err(one)?;
+    self.sand.run(&word, &mut self.outside).map_err(one)?;
     Ok(said.len())
   }
 
@@ -215,163 +195,4 @@ fn opening(record: &Value) -> String {
     shown(&Value::Str(ENGINE.to_owned())),
     shown(record)
   )
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-  use crate::{
-    fact::Fact,
-    host::{KERNEL, WORLD},
-    voice::Voice,
-    world::Reply,
-  };
-
-  /// A sandbox of the test: it keeps every word it was given and answers by a script.
-  #[derive(Default)]
-  struct Spoke {
-    ran: Vec<String>,
-    gives: Vec<Value>,
-    asks: Vec<(String, Value)>,
-    raises: Option<Value>,
-  }
-
-  impl Session for Spoke {
-    fn run(&mut self, code: &str, host: &mut dyn Host) -> Result<Value, Value> {
-      self.ran.push(code.to_owned());
-      for (name, said) in std::mem::take(&mut self.asks) {
-        host.called(&name, &said);
-      }
-      if let Some(held) = self.raises.take() {
-        return Err(held);
-      }
-      Ok(if self.gives.is_empty() { Value::None } else { self.gives.remove(0) })
-    }
-  }
-
-  /// A World of the test that keeps what it heard.
-  #[derive(Default)]
-  struct Sand {
-    heard: Vec<String>,
-  }
-
-  impl World for Sand {
-    fn hears(&mut self, fact: &Fact) -> Reply {
-      self.heard.push(fact.kind().to_owned());
-      Reply::Nothing
-    }
-  }
-
-  /// A gate of the test that finds nothing.
-  struct Open;
-
-  impl Gate for Open {
-    fn gate(&mut self, _word: &str, _ladder: &[String], _shape: &str) -> Vec<String> {
-      Vec::new()
-    }
-  }
-
-  /// A life whose sandbox is the fake one, with the root it was scripted to give.
-  fn life(said: Spoke) -> (Life<Spoke, Sand, Open>, Voice) {
-    let (voice, ears) = Ears::made();
-    let held = Life::boot(said, Sand::default(), Open, ears, &[]).unwrap();
-    (held, voice)
-  }
-
-  #[test]
-  fn a_life_opens_the_preamble_in_a_module_of_its_own_then_the_engine_then_boot() {
-    let said = Spoke { gives: vec![Value::None, Value::Str("chain://operator.1".to_owned())], ..Spoke::default() };
-    let (held, _) = life(said);
-    assert_eq!(held.root(), "chain://operator.1");
-    assert!(held.session.ran[0].contains("def outside("), "the preamble is the session's own namespace");
-    let opened = &held.session.ran[1];
-    assert!(opened.contains("__engine = module("), "{opened}");
-    assert!(opened.contains("__root = opened(__engine, [], host)"), "{opened}");
-    assert!(opened.ends_with("__root\n"), "a life opens on the chain the last expression gives");
-  }
-
-  #[test]
-  fn what_the_engine_raised_is_what_the_call_could_not_do() {
-    let said = Spoke { gives: vec![Value::None, Value::Str("chain://operator.1".to_owned())], ..Spoke::default() };
-    let (mut held, _) = life(said);
-    held.session.raises = Some(Value::refused("a close of str is no int").plain());
-    let no = held.word("close('one')").unwrap_err();
-    assert!(no.refused(), "{no}");
-    assert_eq!(no.name(), "Refused");
-    assert_eq!(no.to_string(), "Refused: a close of str is no int");
-  }
-
-  #[test]
-  fn a_word_of_the_operator_runs_in_the_sandbox_and_what_it_gave_comes_back() {
-    let said = Spoke {
-      gives: vec![Value::None, Value::Str("chain://operator.1".to_owned()), Value::Int(42).plain()],
-      ..Spoke::default()
-    };
-    let (mut held, _) = life(said);
-    assert_eq!(held.word("close(42)").unwrap(), Value::Int(42));
-    assert_eq!(held.session.ran[2], "asked(__engine, \"close(42)\")");
-  }
-
-  #[test]
-  fn what_the_sandbox_asks_while_a_word_runs_is_answered_by_the_world() {
-    let heard =
-      Value::Tuple(vec![Value::Str("keep".to_owned()), Value::Str(String::new()), Value::Str("journal".to_owned())])
-        .plain();
-    let said = Spoke {
-      gives: vec![Value::None, Value::Str("chain://operator.1".to_owned()), Value::None],
-      asks: vec![(WORLD.to_owned(), heard)],
-      ..Spoke::default()
-    };
-    let (mut held, _) = life(said);
-    held.word("prompt(int, 'work')").unwrap();
-    assert_eq!(held.world().heard, vec!["keep".to_owned()]);
-  }
-
-  #[test]
-  fn what_a_host_says_into_its_voice_is_done_in_the_life_in_the_order_it_was_said() {
-    let said = Spoke { gives: vec![Value::None, Value::Str("chain://operator.1".to_owned())], ..Spoke::default() };
-    let (mut held, voice) = life(said);
-    assert_eq!(held.heard().unwrap(), 0);
-    voice.send(Fact::new("out", "bash://operator.1.1", WORLD, vec![Value::Str("one\n".to_owned())]));
-    voice.close("prompt://operator.2", Value::Int(3));
-    assert_eq!(held.heard().unwrap(), 2);
-    let word = held.session.ran.last().unwrap();
-    assert!(word.starts_with("does(__engine, "), "{word}");
-    assert!(word.find("\"out\"").unwrap() < word.find("\"close\"").unwrap(), "{word}");
-    assert_eq!(held.heard().unwrap(), 0);
-  }
-
-  #[test]
-  fn what_an_act_came_to_is_nothing_at_all_while_it_waits() {
-    let waiting = Value::Tuple(vec![Value::Bool(false), Value::None]).plain();
-    let over = Value::Tuple(vec![Value::Bool(true), Value::Int(3)]).plain();
-    let said = Spoke {
-      gives: vec![Value::None, Value::Str("chain://operator.1".to_owned()), waiting, over],
-      ..Spoke::default()
-    };
-    let (mut held, _) = life(said);
-    assert_eq!(held.came("prompt://operator.2").unwrap(), None);
-    assert_eq!(held.came("prompt://operator.2").unwrap(), Some(Value::Int(3)));
-    let asked = held.session.ran.last().unwrap();
-    assert!(asked.contains("\\\"prompt://operator.2\\\" in outcomes"), "{asked}");
-  }
-
-  #[test]
-  fn the_gate_is_the_one_question_the_kernel_asks_of_the_host() {
-    let asked = Value::Tuple(vec![
-      Value::Str("gate".to_owned()),
-      Value::Str("close(1)".to_owned()),
-      Value::List(vec![]),
-      Value::Str("int".to_owned()),
-    ])
-    .plain();
-    let said = Spoke {
-      gives: vec![Value::None, Value::Str("chain://operator.1".to_owned()), Value::None],
-      asks: vec![(KERNEL.to_owned(), asked)],
-      ..Spoke::default()
-    };
-    let (mut held, _) = life(said);
-    held.word("rung('close(1)')").unwrap();
-    assert!(held.world().heard.is_empty());
-  }
 }

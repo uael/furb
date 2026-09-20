@@ -25,10 +25,8 @@
 //!
 //! # Where it runs
 //!
-//! [`Sand`] is the sandbox, which is monty. [`Session`] says what a sandbox must be and stays a trait, because
-//! that is what lets the tests hold the crate to the real engine with no sandbox at all, but the crate ships one
-//! and it is not optional: a crate that gave a host the trait and no Session could not run the engine, which is
-//! the whole of what it is for.
+//! The sandbox is monty, and it is [`Sand`]. There is no other and no seam for one: the crate is the engine in
+//! that sandbox, so a build of it that could not run the engine would be a build of nothing.
 
 pub mod fact;
 #[cfg(feature = "gate")]
@@ -45,7 +43,7 @@ pub use crate::sand::Sand;
 pub use crate::{
   fact::{Fact, Value},
   host::{Gate, Outside},
-  life::{HOST, Host, Life, Refusal, Session},
+  life::{HOST, Host, Life, Refusal},
   record::{Drift, Entry},
   verb::{Act, Exit, Filter, Show, Text, Verb},
   voice::{Ears, Said, Voice},

@@ -90,10 +90,9 @@ Run every command from the root of the repository.
 
 The crate is held by gates of its own, which the commit hook runs too:
 
-- `cargo test`: the tests of the crate, the unit tests, `tests/life.rs`, which drives one life of the real engine
-  from end to end through a sandbox of the tests, and `tests/sand.rs`, which drives one through monty.
-  `--no-default-features` leaves the gate out, which is ty and the 190 crates under it, so the crate builds small
-  where the disk is short.
+- `cargo test`: the tests of the crate, the unit tests and `tests/life.rs`, which drives one life of the real
+  engine from end to end in monty. `--no-default-features` leaves the gate out, which is ty and the 190 crates
+  under it, so the crate builds small where the disk is short.
 - `cargo fmt` then `cargo clippy --all-targets -- -D warnings`: format and lint the crate. Two spaces of
   indentation, 120 columns, as everywhere else.
 - `uv run python script/needs.py`: what the engine and the preamble need of the interpreter that runs them, and
@@ -114,21 +113,18 @@ the typed surface of every verb, `src/gate.rs` the gate, which is ty reading the
 contract, and `src/record.rs` the record. Nothing else is in it: a World of a machine and
 the reading of a turn are the host's, so the crate ships the trait and the plain form and no more.
 
-`tests/life.rs` drives one life of the real engine from end to end, on two doubles that are no part of the crate:
-`tests/sandbox.py`, one python namespace behind a pipe, which is what a Session must be and which sandboxes
-nothing, and a World of this machine written small. It holds the crate to the real engine without a sandbox at
-all, which is what makes a Session of any sandbox a drop-in.
+`src/sand.rs` is the sandbox, which is monty, and monty is the reason the crate exists. There is no seam for
+another and no feature to turn it off: a build of the crate that could not run the engine would be a build of
+nothing. It takes monty from the fork by a pinned revision, because the interpreter the engine needs is not
+released: the coroutine a Kernel drives, the `__await__` an act is said by, the top level await a word of a model
+is compiled with, and the lazy generator expression the engine reads a record with are all on `uael/monty`. A
+revision and not a branch, so a build of today and a build of next month read the same interpreter, and a branch
+that is deleted breaks nothing. The crate cannot be published while that holds, since crates.io takes no git
+dependency, and the revision becomes a version the day the fork lands.
 
-`src/sand.rs` is the Session of monty, and monty is why the crate exists, so it is no feature: a crate that ships
-a Session trait and no Session cannot do its one job. It takes monty from the fork by a pinned revision, because
-the interpreter the engine needs is not released: the coroutine a Kernel drives, the `__await__` an act is said
-by, and the top level await a word of a model is compiled with are all on `uael/monty`. A revision and not a
-branch, so a build of today and a build of next month read the same interpreter, and a branch that is deleted
-breaks nothing. The crate cannot be published while that holds, since crates.io takes no git dependency, and the
-revision becomes a version the day the fork lands. `tests/sand.rs` boots one life of the real engine in there.
-
-`Session` stays a trait, which is what lets `tests/life.rs` hold the crate to the real engine with no sandbox at
-all, and what says exactly what a sandbox must be.
+`tests/life.rs` drives one life of the real engine from end to end in that sandbox, on one double that is no part
+of the crate: a World of this machine, written small. What a life may touch is the host's to decide, so the crate
+ships the trait and every host writes one of these.
 
 Nothing of the engine crosses to the host: the word of a rung runs where the engine runs, and a fact crosses
 plain. The crate takes care of the Kernel, so a host writes the World alone.

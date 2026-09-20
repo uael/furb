@@ -5,103 +5,26 @@
 //! word it wrote and runs it, a World does what the word asks of the disk and of the shell, and the record it
 //! kept opens a second life.
 //!
-//! Two doubles carry it, and neither is part of the crate. `tests/sandbox.py` is a sandbox: one python namespace
-//! behind a pipe, which is what [`furb::Session`] says a sandbox must be, and which sandboxes nothing. [`Yard`]
-//! is a World of this machine, small enough to read: what a life may touch is the host's to decide, so the crate
-//! ships the trait and every host writes one of these.
-//!
-//! What they are for is that the crate is held to the real engine today, and that a sandbox of monty has these
-//! tests waiting for it: they run against any `Session`, so the same ones point at monty with no change.
+//! It runs where a life runs, which is a sandbox of monty. The one double is [`Yard`], a World of this machine
+//! small enough to read: what a life may touch is the host's to decide, so the crate ships the trait and every
+//! host writes one of these.
 
 use std::{
   collections::HashMap,
   fs,
-  io::{BufRead, BufReader, Read, Write},
+  io::{Read, Write},
   path::PathBuf,
-  process::{Child, ChildStdin, Command, Stdio},
+  process::{Child, Command, Stdio},
   sync::{Arc, Mutex},
   thread,
   time::{Duration, Instant},
 };
 
 use furb::{
-  Ears, Entry, Fact, Life, Reply, Value, Voice, World,
+  Ears, Entry, Fact, Life, Reply, Sand, Value, Voice, World,
   host::{Gate, WORLD},
-  life::{Host, Session},
   verb::{Act, Bash, Cwd, Peek, Prompt, Read as Reads, Turns, Verb, Write as Writes},
 };
-
-/// The root of the repository, which holds the sandbox the tests open.
-fn root() -> PathBuf {
-  PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-}
-
-/// One sandbox of the tests: a python namespace behind a pipe.
-struct Far {
-  /// The process the namespace lives in.
-  child: Child,
-  /// What it says, a line to a message.
-  says: BufReader<std::process::ChildStdout>,
-  /// What it hears.
-  hears: ChildStdin,
-}
-
-impl Far {
-  /// One sandbox, up, with the fixture running in it.
-  fn open() -> Self {
-    let python = root().join(".venv").join("bin").join("python3");
-    let python = if python.is_file() { python } else { PathBuf::from("python3") };
-    let mut child = Command::new(python)
-      .arg(root().join("tests").join("sandbox.py"))
-      .stdin(Stdio::piped())
-      .stdout(Stdio::piped())
-      .spawn()
-      .expect("a python of this machine");
-    let says = BufReader::new(child.stdout.take().expect("the stdout of the sandbox"));
-    let hears = child.stdin.take().expect("the stdin of the sandbox");
-    Far { child, says, hears }
-  }
-
-  /// One message to the sandbox.
-  fn tells(&mut self, said: &serde_json::Value) {
-    writeln!(self.hears, "{said}").expect("the sandbox hears");
-    self.hears.flush().expect("the sandbox hears");
-  }
-
-  /// One message of the sandbox.
-  fn heard(&mut self) -> serde_json::Value {
-    let mut line = String::new();
-    self.says.read_line(&mut line).expect("the sandbox says");
-    serde_json::from_str(&line).unwrap_or_else(|_| panic!("the sandbox said {line:?}"))
-  }
-}
-
-impl Drop for Far {
-  fn drop(&mut self) {
-    let _ = self.child.kill();
-    let _ = self.child.wait();
-  }
-}
-
-impl Session for Far {
-  fn run(&mut self, code: &str, host: &mut dyn Host) -> Result<Value, Value> {
-    self.tells(&serde_json::json!({ "run": code }));
-    loop {
-      let said = self.heard();
-      if let Some(held) = said.get("call").and_then(serde_json::Value::as_array) {
-        let name = held[0].as_str().unwrap_or_default().to_owned();
-        // What the sandbox hands over is plain, and the mark of it is the boundary's to read, not this one's.
-        let got = host.called(&name, &Value::of_data(&held[1]));
-        self.tells(&serde_json::json!({ "said": got.record() }));
-        continue;
-      }
-      if let Some(held) = said.get("raised") {
-        return Err(Value::of_data(held));
-      }
-      return Ok(Value::of_data(said.get("gave").unwrap_or(&serde_json::Value::Null)));
-    }
-  }
-}
 
 /// A gate of the tests, which refuses a word that holds BAD, as the harness of the suite does.
 struct Strict;
@@ -397,26 +320,26 @@ fn text(got: &Value) -> String {
 }
 
 /// One life of the real engine, on a yard of the disk, with the model answering these words.
-fn life(yard: &str, words: &[&str]) -> (Life<Far, Yard, Strict>, PathBuf, Voice) {
+fn life(yard: &str, words: &[&str]) -> (Life<Yard, Strict>, PathBuf, Voice) {
   let at = std::env::temp_dir().join(format!("furb-life-{yard}"));
   let _ = fs::remove_dir_all(&at);
   fs::create_dir_all(&at).expect("a yard of the test");
   let (voice, ears) = Ears::made();
   let world = Yard::new(at.clone(), voice.clone(), words);
-  let held = Life::boot(Far::open(), world, Strict, ears, &[]).expect("a life of the real engine");
+  let held = Life::boot(Sand::default(), world, Strict, ears, &[]).expect("a life of the real engine");
   (held, at, voice)
 }
 
 /// A second life on what a World kept of the first.
-fn again(at: PathBuf, kept: &[Entry]) -> Result<Life<Far, Yard, Strict>, furb::Refusal> {
+fn again(at: PathBuf, kept: &[Entry]) -> Result<Life<Yard, Strict>, furb::Refusal> {
   let (voice, ears) = Ears::made();
   let mut world = Yard::new(at, voice, &[]);
   world.record = None;
-  Life::boot(Far::open(), world, Strict, ears, kept)
+  Life::boot(Sand::default(), world, Strict, ears, kept)
 }
 
 /// What an act came to, once the host has had its moment to answer for a model, a person and a command.
-fn came(held: &mut Life<Far, Yard, Strict>, act: &Act) -> Value {
+fn came(held: &mut Life<Yard, Strict>, act: &Act) -> Value {
   let waited = Instant::now();
   while waited.elapsed() < Duration::from_secs(30) {
     if let Some(got) = held.came(act).expect("the life answers what an act came to") {
@@ -428,7 +351,7 @@ fn came(held: &mut Life<Far, Yard, Strict>, act: &Act) -> Value {
 }
 
 /// What the turns of a chain say, as one text, which is what the model of that chain reads.
-fn told(held: &mut Life<Far, Yard, Strict>, on: &str) -> String {
+fn told(held: &mut Life<Yard, Strict>, on: &str) -> String {
   let got = held.calls(Turns { on }).expect("the turns of the chain");
   got.iter().map(text).collect::<Vec<String>>().join("\n")
 }

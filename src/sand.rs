@@ -1,4 +1,4 @@
-//! A [`Session`] of monty: the sandbox the engine is meant to run in.
+//! The sandbox: one session of monty, which is where the engine runs.
 //!
 //! Monty is a python interpreter written in rust that runs untrusted code, which is what the word of a model is.
 //! One [`Sand`] holds one monty session, and that session holds one life: the preamble in a module of its own,
@@ -16,7 +16,7 @@ use monty_types::{
 
 use crate::{
   fact::Value,
-  life::{HOST, Host, Session},
+  life::{HOST, Host},
 };
 
 /// One monty session, which is one life.
@@ -24,11 +24,14 @@ use crate::{
 /// The session stands from one call to the next, so what the preamble binds the engine reads, and what a word of
 /// a rung binds its chain reads. It is made empty: a caller runs the preamble and the engine through it in the
 /// order [`Life`](crate::life::Life) runs them.
+///
+/// It prints as the session it is and nothing of what is in it: what a life holds is the life's, and a session of
+/// monty says nothing of its heap.
 pub struct Sand {
   /// The session, which is taken out for the length of a run and put back when the run is over.
   ///
   /// Monty hands the session to whatever is driving a snippet and gives it back when the snippet is done, so it
-  /// is absent only while [`Session::run`] is between two steps of one run.
+  /// is absent only while [`Sand::run`] is between two steps of one run.
   repl: Option<MontyRepl>,
 }
 
@@ -42,20 +45,11 @@ impl Sand {
     Self { repl: Some(MontyRepl::new("furb", ResourceTracker::new(limits), CompileOptions::default())) }
   }
 
-  /// The session, which is there except between two steps of one run.
-  fn repl(&mut self) -> MontyRepl {
-    self.repl.take().expect("a sandbox holds its session between two runs")
-  }
-}
-
-impl Default for Sand {
-  fn default() -> Self {
-    Self::new(ResourceLimits::default())
-  }
-}
-
-impl Session for Sand {
-  fn run(&mut self, code: &str, host: &mut dyn Host) -> Result<Value, Value> {
+  /// One piece of code, run in the sandbox, and what the last expression of it gave.
+  ///
+  /// The host answers every call the code makes while it runs, which is how the World and the gate are reached.
+  /// What the code raises is the fault: the exception, plain, which is its name and what it was made with.
+  pub fn run(&mut self, code: &str, host: &mut dyn Host) -> Result<Value, Value> {
     let mut step = self.repl().feed_start(code, NamedValues::default(), PrintWriter::Disabled);
     loop {
       let progress = match step {
@@ -100,9 +94,12 @@ impl Session for Sand {
       }
     }
   }
-}
 
-impl Sand {
+  /// The session, which is there except between two steps of one run.
+  fn repl(&mut self) -> MontyRepl {
+    self.repl.take().expect("a sandbox holds its session between two runs")
+  }
+
   /// What the sandbox raised, as the plain exception a host reads, with the session kept for the next run.
   ///
   /// A fault of a run is the life's and not the session's: the engine goes on, so the session comes back from the
@@ -110,9 +107,23 @@ impl Sand {
   fn failed(&mut self, failed: ReplStartError) -> Value {
     self.repl = Some(failed.repl);
     Value::Error {
-      name: failed.error.exc_type().to_string(),
+      // The name of the class it was raised from, which is the name the engine gave it: a life raises `Refused`
+      // for a call it will not make, and a host reads which fault it was by that name.
+      name: failed.error.type_name().to_owned(),
       args: vec![Value::Str(failed.error.message().unwrap_or_default().to_owned())],
     }
+  }
+}
+
+impl Default for Sand {
+  fn default() -> Self {
+    Self::new(ResourceLimits::default())
+  }
+}
+
+impl std::fmt::Debug for Sand {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str("Sand")
   }
 }
 
