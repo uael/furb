@@ -80,6 +80,11 @@ impl Gave {
     }
   }
 
+  /// Whether the host gave an object at all, which a gate it left out did not.
+  pub fn given(&self) -> bool {
+    self.object.borrow().is_some()
+  }
+
   /// The reference on the object, released, which is the end of what the host gave.
   ///
   /// A reference holds an object of javascript against collection, and nothing releases one for you, so the
@@ -100,14 +105,13 @@ impl Gave {
       return none;
     }
     let Some(env) = self.env.get() else { return none };
-    let got = self
-      .object
-      .borrow()
-      .as_ref()
-      .ok_or_else(|| refused("a host gave this life no object"))
-      .and_then(|held| held.get_value(&env))
-      .and_then(|held| said(&env, &held));
-    match got {
+    // The object is read out before the call is made, and the borrow on it ends there: what a host does in the
+    // call is the host's, and nothing of it may find this held.
+    let on = match self.object.borrow().as_ref() {
+      Some(held) => held.get_value(&env),
+      None => Err(refused("a host gave this life no object")),
+    };
+    match on.and_then(|on| said(&env, &on)) {
       Ok(one) => one,
       Err(fault) => {
         // The first fault is the one that says what went wrong; every call after it was made on a host that had
@@ -154,7 +158,7 @@ pub struct Gates(pub Shared);
 
 impl Gate for Gates {
   fn gate(&mut self, word: &str, ladder: &[String], shape: &str) -> Vec<String> {
-    if self.0.object.borrow().is_none() {
+    if !self.0.given() {
       return Vec::new();
     }
     let (word, ladder, shape) = (word.to_owned(), ladder.to_vec(), shape.to_owned());
