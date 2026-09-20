@@ -14,11 +14,33 @@ from asyncio import CancelledError
 from collections.abc import Coroutine, Generator, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass
 from functools import partial
+from pathlib import Path
 
 import pytest
 
-from furb import engine
+import furb
+import furb_monty.engine
+from furb import engine, sheet
 from furb.engine import OPERATOR, WORLD, Act, Refused, Text, modules, outcomes, site, under
+from furb.kernel import NAMES
+from furb_monty import _monty
+
+HERE = Path(__file__).resolve().parent
+"""HERE is the directory of the suite, whose modules bind the names of the engine under test."""
+ENGINES = {"python": furb.python, "monty": furb_monty.engine}
+"""ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
+SURFACE = frozenset(furb_monty.engine.defined())
+"""SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
+MONTY_SKIPS: dict[str, str] = {
+  "test_every_name_that_the_file_defines_is_in_the_globals_of_a_chain": (
+    "the test reads the file of the engine through the module under test, and on monty that module is another file"
+  ),
+  "test_a_chain_with_a_source_holds_the_classes_its_origin_defined_before_that_source": (
+    "a class a word defined is the sandbox's own, and crosses to this interpreter as a callable and no type"
+  ),
+}
+"""MONTY_SKIPS names the tests the engine of monty does not run, each with why: what the test reads is a fact of one
+interpreter, which the boundary does not carry."""
 
 type World = Generator[tuple | None, tuple]
 """The World, as engine.pyi declares it: engine.py binds no such name, so the suite says the type itself."""
@@ -230,29 +252,42 @@ def seen(held: list[tuple]):  # noqa: ANN201
   return keeps
 
 
+GATE = _monty.Gate()
+"""GATE is the gate of the crate, which reads every word of the suite on either engine, so a word is judged the same."""
+
+
+def gated(log: Sequence[tuple]) -> list[str]:
+  """Every word the gate was given in the life, in order, which the ready of each rung says."""
+  return [a[3] for a in said(log, "ready")]
+
+
+def ran(log: Sequence[tuple]) -> list[str]:
+  """Every word the Kernel ran in the life, in order, which the run of each rung says."""
+  return [a[4] for a in said(log, "run")]
+
+
+def findings(log: Sequence[tuple]) -> list[list[str]]:
+  """What the gate found against each word it was given, in order, which the done of each gate query says."""
+  return [a[3] for a in said(log, "done") if a[1].startswith("gate://")]
+
+
+def refusals(log: Sequence[tuple]) -> list[str]:
+  """The findings that refused a word, each as the body the refused tag tells them as."""
+  return ["\n".join(found) for found in findings(log) if found]
+
+
 class Py:
   """A Kernel that is python, outside the engine like the World.
 
-  It answers a gate with its findings, begins a run by compiling the word with a top level await and running it in
-  the module of its chain, says wants for the act the run waits for, carries the run forward at each sent, says ran
-  with what the word gave, and drops the frame of a run a cancel is over. `gated` lists every word it gated, `gates`
-  each gate whole as the word, the ladder and the shape, and `ran` every word it began.
+  It answers a gate with what the gate of the crate finds on the sheet of the word, begins a run by compiling the
+  word with a top level await and running it in the module of its chain, says wants for the act the run waits for,
+  carries the run forward at each sent, says ran with what the word gave, and drops the frame of a run a cancel is
+  over.
   """
 
-  def __init__(self) -> None:
-    self.gated: list[str] = []
-    self.gates: list[tuple[str, list[str], str]] = []
-    self.ran: list[str] = []
-
-  def gate(self, rung: str, ladder: list[str], shape: str) -> list[str]:
-    """What it finds against a word: a word that is not python, and a word that holds BAD, and nothing else."""
-    self.gated.append(rung)
-    self.gates.append((rung, list(ladder), shape))
-    try:
-      compile(rung, "<gate>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
-    except SyntaxError as no:
-      return [f"not python: {no.msg} at line {no.lineno}"]
-    return [f"BAD in rung, against {shape} after {len(ladder)} rungs"] if "BAD" in rung else []
+  def gate(self, word: str, ladder: list[str]) -> list[str]:
+    """What the gate finds against a word: the sheet of the engine, read by the gate of the crate."""
+    return sheet.gate(NAMES, ladder, word, GATE.checked)
 
   def kernel(self) -> Kernel:
     """The Kernel as one generator for one life, which speaks from the run it steps."""
@@ -285,7 +320,6 @@ class Py:
 
     def begin(name: str, word: str, held: dict[str, object]) -> None:
       """A run begun: the word of it is python, and a word that awaits nothing is over where it is begun."""
-      self.ran.append(word)
       code = compile(word, "<rung>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
       token = site.set(name)
       try:
@@ -302,12 +336,14 @@ class Py:
     while True:
       match (yield):
         case ("run", rung, _, chain, word):
-          ladders.setdefault(chain, []).append(word)
           begin(rung, word, modules[chain])
         case ("sent", rung, _, value) if rung in frames:
           carry(rung, value)
-        case ("gate", qid, _, chain, word, returns):
-          yield "done", qid, self.gate(word, ladders.get(chain, []), returns)
+        case ("gate", qid, _, chain, word):
+          found = self.gate(word, ladders.setdefault(chain, []))
+          if not found:
+            ladders[chain].append(word)
+          yield "done", qid, found
         case ("cancel" | "close", about, *_):
           for one in [x for x in frames if under(x, about) and not getattr(frames[x], "cr_running", False)]:
             frames[one].close()
@@ -321,12 +357,18 @@ def watched(log: list[tuple]) -> Kernel:
       log.append(a)
 
 
-def life(world: Sand, record: Sequence[tuple] = (), kernel: Py | None = None) -> tuple[list[tuple], str]:
-  """A life: the engine opened from a record, with a Kernel that is python, a World in memory and a generator that
-  keeps every fact said in it; it gives what was said and the id of the root.
+def kernel() -> dict[str, Kernel]:
+  """The Kernel a life of the suite is given: the one that is python for the engine of this interpreter, and none
+  for the engine of monty, which holds its own."""
+  return {} if engine is not furb.python else {"kernel": Py().kernel()}
+
+
+def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
+  """A life: the engine opened from a record, with the Kernel it takes, a World in memory and a generator that keeps
+  every fact said in it; it gives what was said and the id of the root.
   """
   log: list[tuple] = []
-  return log, engine.boot(record, kernel=(kernel or Py()).kernel(), probe=watched(log), world=world.hears())
+  return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears())
 
 
 async def settle(n: int = 80) -> None:
@@ -340,18 +382,18 @@ def sown() -> Sand:
   return Sand(files={"/w/a.txt": "one\ntwo\n"}, stands=STANDS)
 
 
-async def lived(sand: Sand, py: Py | None = None) -> tuple[list[tuple], str]:
+async def lived(sand: Sand) -> tuple[list[tuple], str]:
   """A life that reads a file, runs a command and returns what it came to."""
-  log, root = life(sand, kernel=py)
+  log, root = life(sand)
   sand.script[root] = [WORD, "close(None)"]
   assert await engine.prompt(int, "read and run", on=root) == 0
   await settle()
   return log, root
 
 
-async def relived(sand: Sand, record: Sequence[tuple], py: Py | None = None) -> tuple[list[tuple], str]:
+async def relived(sand: Sand, record: Sequence[tuple]) -> tuple[list[tuple], str]:
   """A later life on a kept record, with the World it is given."""
-  log, root = life(sand, record, kernel=py)
+  log, root = life(sand, record)
   await settle(300)
   return log, root
 
@@ -403,6 +445,44 @@ def attr(tag: tuple, name: str) -> object:
 def text_of(turn: tuple) -> str:
   """The text of a turn, which is everything it holds that is text."""
   return "\n".join(x for x in turn[1] if isinstance(x, str))
+
+
+def swapped(to: object) -> None:
+  """Every name of the engine that a module of the suite bound at import, rebound to the engine under test.
+
+  A test reads the engine through the module it imported and through the names it took from it, so both are
+  rebound, by identity: a name that is the same object in both engines stays as it is.
+  """
+  fro = furb_monty.engine if to is furb.python else furb.python
+  seen: set[int] = set()
+  for mod in list(sys.modules.values()):
+    file = getattr(mod, "__file__", None)
+    if not file or id(mod) in seen or not str(file).startswith(str(HERE)):
+      continue
+    seen.add(id(mod))
+    for key, value in list(vars(mod).items()):
+      if value is fro:
+        setattr(mod, key, to)
+      elif key in SURFACE and value is getattr(fro, key):
+        setattr(mod, key, getattr(to, key))
+
+
+def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
+  """Every test of the suite runs once on each engine; the hygiene laws read the file and run once."""
+  path = metafunc.definition.path
+  if "engine_of" in metafunc.fixturenames and path.parent == HERE and path.name != "test_hygiene.py":
+    metafunc.parametrize("engine_of", list(ENGINES), indirect=True)
+
+
+@pytest.fixture(autouse=True)
+def engine_of(request: pytest.FixtureRequest) -> Generator[str]:
+  """The engine a test runs on, bound under every name the suite reads it by for the length of the test."""
+  which = getattr(request, "param", "python")
+  if which == "monty" and request.node.originalname in MONTY_SKIPS:
+    pytest.skip(MONTY_SKIPS[request.node.originalname])
+  swapped(ENGINES[which])
+  yield which
+  swapped(furb.python)
 
 
 @pytest.fixture

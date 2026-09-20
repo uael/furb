@@ -1,26 +1,27 @@
 //! What a fact is made of, outside python.
 //!
 //! Every fact of the engine is a tuple: its kind, the act it is about, who said it, and its words. A host that is
-//! not python hears the same fact with every value made plain, which [`Value`] is the shape of. The set is closed,
-//! and it was read off the suite rather than guessed: plain data, a tuple, a map, a shape such as a text or an
-//! exit, an exception, and the mark of a show, which no host reads and no record holds.
+//! not python hears the same fact with every value made plain, which [`Value`] is the shape of: plain data, a
+//! tuple, a map, a shape such as a text or an exit, an exception, and the mark of a callable, which no host reads.
 
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
-
 /// How the plain form says a tuple, which a list is not, since a host that says a fact back says the fact it was.
 pub const TUPLE: &str = "()";
-/// How the plain form says a show or a filter: a mark of what it was, and nothing a host can read.
+/// How the plain form says a callable of the sandbox, which is nothing a host can read.
 pub const SHOW: &str = "";
+/// How the plain form says the name of an act, which is a string to a host and an act to python.
+pub const ACT: &str = "Act";
+/// How the plain form says a name of the engine, such as a verb, which is a callable a host cannot read.
+pub const NAME: &str = "name";
 
 /// One value as it crosses to a host that is not python.
 ///
-/// A `Tuple` is kept apart from a `List` because the engine and its suite read the difference. The record on disk
-/// does not: [`Value::record`] writes a tuple as an array, which is the form the python World has always kept.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// A `Tuple` is kept apart from a `List` because the engine and its suite read the difference.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Value {
   /// None.
+  #[default]
   None,
   /// A truth.
   Bool(bool),
@@ -28,8 +29,10 @@ pub enum Value {
   Int(i64),
   /// A number with a fraction.
   Float(f64),
-  /// A text, which is also every name of an act.
+  /// A text.
   Str(String),
+  /// The name of an act, which a verb gives and a caller holds of the act: a text to a host, and an act to python.
+  Act(String),
   /// A list, which stays a list.
   List(Vec<Value>),
   /// A tuple, which every fact is one of.
@@ -50,19 +53,10 @@ pub enum Value {
     /// What the exception was made with.
     args: Vec<Value>,
   },
-  /// A show or a filter: the verb that was given it keeps it, and nothing crosses but the mark.
-  ///
-  /// Nothing of a host is ever one of these. The engine runs where the word of a rung runs, so a show a word
-  /// makes is made in there and handed to a verb in there, and it never reaches a boundary at all. What reaches
-  /// one is a show of the file that a record holds the mark of, which is a mark and nothing more.
+  /// A name of the engine, such as a verb, which a host of python reads as its own and a host of rust cannot call.
+  Name(String),
+  /// A callable of the sandbox that has no name: a show, a filter or an ear a word made, which no host reads.
   Show,
-}
-
-impl Default for Value {
-  /// A value that says nothing, which is what a word left unsaid carries.
-  fn default() -> Self {
-    Value::None
-  }
 }
 
 impl Value {
@@ -82,7 +76,7 @@ impl Value {
   /// The text of a value that is one, and nothing for a value that is none.
   pub fn as_str(&self) -> Option<&str> {
     match self {
-      Value::Str(said) => Some(said),
+      Value::Str(said) | Value::Act(said) => Some(said),
       _ => None,
     }
   }
@@ -95,16 +89,18 @@ impl Value {
     }
   }
 
-  /// One field of a shape, by its name.
+  /// One field of a shape, or one entry of a map, by its name.
   pub fn field(&self, want: &str) -> Option<&Value> {
     match self {
-      Value::Shape { fields, .. } => fields.iter().find(|(name, _)| name == want).map(|(_, held)| held),
+      Value::Shape { fields, .. } | Value::Map(fields) => {
+        fields.iter().find(|(name, _)| name == want).map(|(_, held)| held)
+      }
       _ => None,
     }
   }
 
   /// The plain form of the value, which is what crosses to a host: a tuple, a shape, an exception and the mark
-  /// of a show each stand under a name, and everything else is itself.
+  /// of a callable each stand under a name, and everything else is itself.
   ///
   /// This is the form `src/preamble.py` makes and reads, so what a host says back is made again as it was said.
   pub fn plain(&self) -> Value {
@@ -113,8 +109,12 @@ impl Value {
       Value::List(held) => Value::List(held.iter().map(Value::plain).collect()),
       Value::Map(held) => Value::Map(held.iter().map(|(key, one)| (key.clone(), one.plain())).collect()),
       Value::Tuple(held) => marked(TUPLE, Value::List(held.iter().map(Value::plain).collect())),
+      Value::Act(name) => marked(ACT, Value::List(vec![Value::Str(name.clone())])),
       Value::Error { name, args } => marked(name, Value::List(args.iter().map(Value::plain).collect())),
       Value::Show => Value::Map(vec![("is".to_owned(), Value::Str(SHOW.to_owned()))]),
+      Value::Name(name) => {
+        Value::Map(vec![("is".to_owned(), Value::Str(NAME.to_owned())), ("name".to_owned(), Value::Str(name.clone()))])
+      }
       Value::Shape { name, fields } => {
         let mut held = vec![("is".to_owned(), Value::Str(name.clone()))];
         held.extend(fields.iter().map(|(key, one)| (key.clone(), one.plain())));
@@ -132,81 +132,6 @@ impl Value {
       other => other.clone(),
     }
   }
-
-  /// The value a piece of json holds, read as the data it is: a map stays a map, and no mark is read.
-  ///
-  /// This is what a session that carries its values as text gives a host: the plain form, as a value, with every
-  /// mark still standing, which [`Value::of_plain`] is what reads. [`Value::of_record`] reads a mark as it reads
-  /// a record, so a session that used it would read every mark twice.
-  pub fn of_data(said: &serde_json::Value) -> Self {
-    use serde_json::Value as Json;
-    match said {
-      Json::Null => Value::None,
-      Json::Bool(held) => Value::Bool(*held),
-      Json::Number(held) => held.as_i64().map_or_else(|| Value::Float(held.as_f64().unwrap_or(0.0)), Value::Int),
-      Json::String(held) => Value::Str(held.clone()),
-      Json::Array(held) => Value::List(held.iter().map(Value::of_data).collect()),
-      Json::Object(held) => Value::Map(held.iter().map(|(key, one)| (key.clone(), Value::of_data(one))).collect()),
-    }
-  }
-
-  /// The value as the record holds it: the form the python World writes, where a tuple is an array.
-  pub fn record(&self) -> serde_json::Value {
-    use serde_json::Value as Json;
-    match self {
-      Value::None => Json::Null,
-      Value::Bool(said) => Json::Bool(*said),
-      Value::Int(said) => Json::from(*said),
-      Value::Float(said) => serde_json::Number::from_f64(*said).map_or(Json::Null, Json::Number),
-      Value::Str(said) => Json::String(said.clone()),
-      Value::List(held) | Value::Tuple(held) => Json::Array(held.iter().map(Value::record).collect()),
-      Value::Map(held) => Json::Object(held.iter().map(|(k, v)| (k.clone(), v.record())).collect()),
-      Value::Shape { name, fields } => {
-        let mut out = serde_json::Map::new();
-        out.insert("is".to_owned(), Json::String(name.clone()));
-        for (key, held) in fields {
-          out.insert(key.clone(), held.record());
-        }
-        Json::Object(out)
-      }
-      Value::Error { name, args } => {
-        let mut out = serde_json::Map::new();
-        out.insert("is".to_owned(), Json::String(name.clone()));
-        out.insert("args".to_owned(), Json::Array(args.iter().map(Value::record).collect()));
-        Json::Object(out)
-      }
-      Value::Show => Json::Object(serde_json::Map::new()),
-    }
-  }
-
-  /// The value again from the record, as the python World reads it back.
-  ///
-  /// An array is a list here: the record keeps no tuple apart, and what reads an entry of it makes the tuple that
-  /// entry is, exactly as the python World does when it gives a record to a later life.
-  pub fn of_record(said: &serde_json::Value) -> Self {
-    use serde_json::Value as Json;
-    match said {
-      Json::Null => Value::None,
-      Json::Bool(held) => Value::Bool(*held),
-      Json::Number(held) => held.as_i64().map_or_else(|| Value::Float(held.as_f64().unwrap_or(0.0)), Value::Int),
-      Json::String(held) => Value::Str(held.clone()),
-      Json::Array(held) => Value::List(held.iter().map(Value::of_record).collect()),
-      Json::Object(held) => match held.get("is").and_then(Json::as_str) {
-        Some(TUPLE) => Value::Tuple(shaped(held, "args")),
-        Some(SHOW) => Value::Show,
-        Some(name) if held.contains_key("args") => Value::Error { name: name.to_owned(), args: shaped(held, "args") },
-        Some(name) => Value::Shape {
-          name: name.to_owned(),
-          fields: held
-            .iter()
-            .filter(|(key, _)| key.as_str() != "is")
-            .map(|(key, one)| (key.clone(), Value::of_record(one)))
-            .collect(),
-        },
-        None => Value::Map(held.iter().map(|(key, one)| (key.clone(), Value::of_record(one))).collect()),
-      },
-    }
-  }
 }
 
 /// A value under a name, which is how the plain form says what is no plain data.
@@ -214,7 +139,7 @@ fn marked(name: &str, args: Value) -> Value {
   Value::Map(vec![("is".to_owned(), Value::Str(name.to_owned())), ("args".to_owned(), args)])
 }
 
-/// One map of the plain form, made again: a tuple, a show, an exception, a shape, or a map that is a map.
+/// One map of the plain form, made again: a tuple, an act, a callable, an exception, a shape, or a map.
 fn of_map(held: &[(String, Value)]) -> Value {
   let name = held.iter().find(|(key, _)| key == "is").and_then(|(_, one)| one.as_str());
   let args = || match held.iter().find(|(key, _)| key == "args") {
@@ -224,6 +149,12 @@ fn of_map(held: &[(String, Value)]) -> Value {
   match name {
     Some(TUPLE) => Value::Tuple(args()),
     Some(SHOW) => Value::Show,
+    Some(NAME) => Value::Name(
+      held.iter().find(|(key, _)| key == "name").and_then(|(_, one)| one.as_str()).unwrap_or_default().to_owned(),
+    ),
+    Some(ACT) => {
+      Value::Act(args().into_iter().next().and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default())
+    }
     Some(name) if held.iter().any(|(key, _)| key == "args") => Value::Error { name: name.to_owned(), args: args() },
     Some(name) => Value::Shape {
       name: name.to_owned(),
@@ -237,20 +168,11 @@ fn of_map(held: &[(String, Value)]) -> Value {
   }
 }
 
-/// The entries a key of a map holds, each made again, and none at all when the key holds no array.
-fn shaped(held: &serde_json::Map<String, serde_json::Value>, key: &str) -> Vec<Value> {
-  held
-    .get(key)
-    .and_then(serde_json::Value::as_array)
-    .map(|args| args.iter().map(Value::of_record).collect())
-    .unwrap_or_default()
-}
-
 /// One fact: its kind, the act it is about, who said it, and its words.
 ///
 /// A question carries the chain it is on as its first word, which [`Fact::on`] gives, and a fact that is no
 /// question carries none.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Fact(pub Vec<Value>);
 
 impl Fact {
@@ -259,6 +181,11 @@ impl Fact {
     let mut held = vec![Value::Str(kind.into()), Value::Str(about.into()), Value::Str(by.into())];
     held.extend(words);
     Fact(held)
+  }
+
+  /// A saying: a fact with nobody said in it, which the bus fills in from the ear that speaks.
+  pub fn says(kind: impl Into<String>, about: impl Into<String>, words: Vec<Value>) -> Self {
+    Fact::new(kind, about, "", words)
   }
 
   /// The kind of the fact, which is its first slot.
@@ -281,10 +208,10 @@ impl Fact {
     self.0.get(3..).unwrap_or_default()
   }
 
-  /// The fact as a generator of the outside yields it: its kind, the act it is about, and its words.
+  /// The fact as an ear yields it: its kind, the act it is about, and its words.
   ///
-  /// Who said it is no slot of a yielded fact. The bus fills it in from the generator that speaks, so a fact of
-  /// the World is the World's own without the World saying so, and a fact that says it again shifts every word.
+  /// Who said it is no slot of a saying. The bus fills it in from the ear that speaks, so a fact of the World
+  /// is the World's own without the World saying so, and a fact that says it again shifts every word.
   pub fn said(&self) -> Vec<Value> {
     let mut held = vec![Value::Str(self.kind().to_owned()), Value::Str(self.about().to_owned())];
     held.extend(self.words().to_vec());
@@ -338,27 +265,6 @@ mod tests {
     assert_eq!(a.on(), None);
   }
 
-  #[test]
-  fn the_record_keeps_a_tuple_as_an_array_and_a_shape_by_its_name() {
-    let held = Value::Tuple(vec![Value::Str("done".to_owned()), Value::text("a.txt", "x")]);
-    let said = held.record();
-    assert_eq!(said.to_string(), r#"["done",{"is":"Text","path":"a.txt","content":"x"}]"#);
-    let back = Value::of_record(&said);
-    assert_eq!(back, Value::List(vec![Value::Str("done".to_owned()), Value::text("a.txt", "x")]));
-  }
-
-  #[test]
-  fn an_exception_crosses_as_its_name_and_what_it_was_made_with() {
-    let held = Value::refused("a.txt is the door of nothing that lives");
-    assert_eq!(held.record().to_string(), r#"{"is":"Refused","args":["a.txt is the door of nothing that lives"]}"#);
-    assert_eq!(Value::of_record(&held.record()), held);
-  }
-}
-
-#[cfg(test)]
-mod plain {
-  use super::*;
-
   /// One fact as it crosses: a tell of a read, which carries a text and the show it was told by.
   fn told() -> Value {
     Value::Tuple(vec![
@@ -403,6 +309,14 @@ mod plain {
   #[test]
   fn what_no_host_reads_crosses_as_the_mark_of_what_it_was() {
     assert_eq!(Value::of_plain(&Value::Show.plain()), Value::Show);
-    assert_eq!(Value::of_plain(&Value::Show.plain()), Value::Show);
+    let verb = Value::Name("read".to_owned());
+    assert_eq!(Value::of_plain(&verb.plain()), verb);
+  }
+
+  #[test]
+  fn the_name_of_an_act_is_a_text_to_a_host_and_keeps_its_mark() {
+    let act = Value::Act("prompt://operator.2".to_owned());
+    assert_eq!(act.as_str(), Some("prompt://operator.2"));
+    assert_eq!(Value::of_plain(&act.plain()), act);
   }
 }

@@ -11,6 +11,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import furb
 from furb import engine
 from furb.engine import Act
 from furb.kernel import Native
@@ -28,10 +29,14 @@ def say(text: str) -> None:
 
 
 def lived(record: Path | None, cwd: Path, actor: str) -> tuple[Live, str, list[tuple]]:
-  """One life on the loop that runs: its World on the record, the Kernel of this interpreter, and its root."""
+  """One life on the loop that runs: its World on the record, the Kernel of the engine, and its root.
+
+  The engine of this interpreter takes the Kernel of this interpreter, and the engine of monty holds its own.
+  """
   held = kept(record) if record is not None and record.is_file() else []
   world = Live(str(cwd.absolute()), record, actor)
-  root = engine.boot(held, world=world.hears(), kernel=Native().kernel())
+  kernel = {} if furb.MONTY else {"kernel": Native().kernel()}
+  root = engine.boot(held, world=world.hears(), **kernel)
   return world, root, held
 
 

@@ -213,10 +213,10 @@ async def test_a_fed_command_takes_what_was_written_before_its_process_stood(yar
   assert engine.write(Text(f"{waits}/stdin"), on=root) == Text(f"{waits}/stdin")
   got = await waits
   assert (got.code, got.stdout.content) == (0, "one\n")
-  with pytest.raises(Refused, match="takes no word"):
+  with pytest.raises(Refused, match="ended"):
     engine.write(Text(f"{waits}/stdin", "more"), on=root)
   deaf = engine.bash("echo hi", on=root)
-  with pytest.raises(Refused, match="is not fed"):
+  with pytest.raises(Refused, match="not fed"):
     engine.write(Text(f"{deaf}/stdin", "x"), on=root)
   await deaf
 

@@ -1,50 +1,29 @@
-//! The gate: ty, as a library, reading the word of a rung before it runs.
+//! The gate: ty, as a library, reading a sheet.
 //!
 //! The contract says the word of a rung runs only if the gate accepts it, that the gate reads the word against
-//! the rungs before it and against the name of the shape it must give, and that a response which is not python is
-//! a finding like any other. Nothing of that is a policy of a host: it is the contract, and the crate carries it.
+//! the rungs before it, and that a response which is not python is a finding like any other. Nothing of that is
+//! a policy of a host: it is the contract, and the crate carries it.
 //!
-//! ty is a rust library, so the crate reads the word itself rather than asking a host to. What it reads against
-//! is `engine.pyi`, the contract, which the crate carries beside the engine and hands to ty as the stub of the
-//! module a word stands in.
+//! The sheet the word stands on is `furb.sheet`'s, written the same way by every Kernel, in this sandbox and in
+//! the python package alike, so this reads a text and says what ty found on it, each finding by its line. What it
+//! reads against is `engine.pyi`, the contract, which the crate carries beside the engine and hands to ty as the
+//! stub of the module a sheet imports.
 //!
-//! The word stands on a sheet of its own, which is what ty is given:
-//!
-//! ```text
-//! import typing
-//! import furb.engine as __engine
-//! async def __body():
-//!   send = __engine.send          # every name the globals of a chain hold, one to a line
-//!   ...
-//!   @typing.overload
-//!   def close(value: int, id: typing.Literal[""] = "") -> None: ...
-//!   ...
-//!   try:
-//!     __engine.lineage('')
-//!     <the ladder of the chain>
-//!   except BaseException:
-//!     pass
-//!   <the word>
-//! ```
-//!
-//! Every line of it is there for a reason. The body is async, so a word may await at its top level. A name is
-//! bound on a line of its own rather than imported, since a word may rebind a name and no word may rebind an
-//! import. `close` is overloaded under the shape, so a close that carries the wrong value is a finding while a
-//! close that names another act still takes anything. The ladder stands in a try, so a rung that raised or that
-//! never ends leaves the word reachable. And the word and the ladder keep their own lines, so a finding is
-//! counted back to the line the model wrote.
+//! ty is pinned to the commit the `ty` command line of the package is built from, so a word is judged the same
+//! by the crate and by the command line: the same engine, the same typeshed, the same python, and the errors
+//! alone, since a warning refuses no word.
 
 use std::{fmt::Write as _, sync::Arc};
 
 use ruff_db::{
   Db as SourceDb,
-  diagnostic::{Diagnostic, DiagnosticFormat, DisplayDiagnosticConfig, DisplayDiagnostics},
+  diagnostic::{Diagnostic, DiagnosticFormat, DisplayDiagnosticConfig, DisplayDiagnostics, Severity},
   file_revision::FileRevision,
   files::{File, FileRootKind, Files, system_path_to_file},
   system::{DbWithTestSystem, DbWithWritableSystem as _, System, SystemPathBuf, TestSystem},
   vendored::VendoredFileSystem,
 };
-use ruff_python_ast::{self as ast, PythonVersion, Stmt};
+use ruff_python_ast::{PythonVersion, Stmt};
 use ruff_python_parser::parse_module;
 use salsa::Setter as _;
 use ty_module_resolver::{Db as ModuleResolverDb, FallibleStrategy, SearchPathSettings};
@@ -55,31 +34,26 @@ use ty_python_core::{
 };
 use ty_python_semantic::{
   AnalysisSettings, Db, PythonVersionSource, PythonVersionWithSource, check_file_unwrap, default_lint_registry,
+  dependency::DependencyMetadata,
   lint::{LintRegistry, RuleSelection},
 };
 
-use crate::{CONTRACT, ENGINE, host::Gate};
+use crate::CONTRACT;
 
-/// The name the sheet holds the engine under, which no word may say.
-const ALIAS: &str = "__engine";
-/// The verb a word answers by, which the sheet binds under the shape the word must give.
-const CLOSE: &str = "close";
 /// The two names a chain binds of its own: the actor it stands on, and what the last rung raised.
 const BOUND: [&str; 2] = ["actor", "raised"];
 /// Where every file of the reading stands, since nothing of it is on a disk.
 const ROOT: &str = "/";
-/// The sheet the word stands on, which is the one file ty reads.
+/// The sheet, which is the one file ty reads.
 const SHEET: &str = "sheet.py";
 
-/// The gate of the crate: ty, reading a word against the contract and the ladder of its chain.
+/// The gate of the crate: ty, reading a sheet against the contract.
 ///
-/// One of these serves one life. It holds the reading of the contract, which is read once, and the names the
-/// globals of a chain hold, which are read off the engine once, so a gate of a word costs the reading alone.
+/// One of these serves one life. It holds the reading of the contract, which is read once, so a reading of a
+/// sheet costs the sheet alone.
 pub struct Ty {
   /// Where ty reads its files, which is a memory and no disk.
   db: Memory,
-  /// The names the globals of a chain hold, which the sheet binds before it reads the ladder and the word.
-  names: Vec<String>,
   /// The revision of the last write, so that two writes of one path are two writes to ty.
   revision: u128,
 }
@@ -91,13 +65,32 @@ impl Default for Ty {
 }
 
 impl Ty {
-  /// A gate that reads a word against the contract the crate carries.
+  /// A gate that reads a sheet against the contract the crate carries.
   #[must_use]
   pub fn new() -> Self {
-    let mut held = Ty { db: Memory::default(), names: named(ENGINE), revision: 0 };
+    let mut held = Ty { db: Memory::default(), revision: 0 };
     held.wrote("furb/__init__.pyi", "");
     held.wrote("furb/engine.pyi", CONTRACT);
     held
+  }
+
+  /// What ty found on a sheet: each error by the line it stands on, in the concise form ty writes, and no
+  /// warning, since a warning refuses no word.
+  pub fn checked(&mut self, sheet: &str) -> Vec<(usize, String)> {
+    let Some(file) = self.wrote(SHEET, sheet) else {
+      return vec![(0, "the gate could not be given the sheet".to_owned())];
+    };
+    let held: Vec<Diagnostic> = check_file_unwrap(&self.db, self.db.program_file(file))
+      .into_iter()
+      .filter(|one| one.severity() >= Severity::Error)
+      .collect();
+    if held.is_empty() {
+      return Vec::new();
+    }
+    let config = DisplayDiagnosticConfig::new("furb").format(DiagnosticFormat::Concise).color(false);
+    let mut said = String::new();
+    let _ = write!(said, "{}", DisplayDiagnostics::new(&self.db, &config, &held));
+    said.lines().filter_map(read).collect()
   }
 
   /// One file into the memory ty reads, under a revision of its own.
@@ -122,156 +115,12 @@ impl Ty {
     }
     system_path_to_file(&self.db, &at).ok()
   }
-
-  /// What ty found on the sheet, each finding as one line of the concise form it writes.
-  fn found(&mut self, sheet: &str) -> Vec<String> {
-    let Some(file) = self.wrote(SHEET, sheet) else {
-      return vec!["the gate could not be given the word".to_owned()];
-    };
-    let held: Vec<Diagnostic> = check_file_unwrap(&self.db, self.db.program_file(file));
-    if held.is_empty() {
-      return Vec::new();
-    }
-    let config = DisplayDiagnosticConfig::new("furb").format(DiagnosticFormat::Concise).color(false);
-    let mut said = String::new();
-    let _ = write!(said, "{}", DisplayDiagnostics::new(&self.db, &config, &held));
-    said.lines().filter(|one| !one.trim().is_empty()).map(str::to_owned).collect()
-  }
-}
-
-impl Gate for Ty {
-  fn gate(&mut self, word: &str, ladder: &[String], shape: &str) -> Vec<String> {
-    if word.contains(ALIAS) {
-      return vec![format!("{ALIAS} is a name of the gate")];
-    }
-    let said = python(word);
-    if !said.is_empty() {
-      return said;
-    }
-    let (sheet, closing, above) = sheet(&self.names, ladder, word, shape);
-    let mut said = Vec::new();
-    for one in self.found(&sheet) {
-      let Some((line, why)) = read(&one) else { continue };
-      if closing.contains(&line) {
-        return vec![format!("{shape} is no shape")];
-      }
-      if line > above {
-        said.push(format!("line {}: {why}", line - above));
-      }
-    }
-    said
-  }
-}
-
-/// The word on a sheet of its own: the sheet, the lines the shape stands on, and how many lines stand above the
-/// word, which every finding is counted back by.
-///
-/// The shape is the gate's own writing and no word of anybody, so a finding on those lines is a finding against
-/// the shape itself and never against the word.
-fn sheet(names: &[String], ladder: &[String], word: &str, shape: &str) -> (String, std::ops::Range<usize>, usize) {
-  let shape = if shape.is_empty() || shape == "None" { "object" } else { shape };
-  let mut head = format!("import typing\nimport furb.engine as {ALIAS}\nasync def __body():\n");
-  for name in names.iter().filter(|one| *one != CLOSE) {
-    let _ = writeln!(head, "  {name} = {ALIAS}.{name}");
-  }
-  let first = head.lines().count() + 1;
-  let closing = format!(
-    "  @typing.overload\n  def {CLOSE}(value: {shape}, id: typing.Literal[\"\"] = \"\") -> None: ...\n  \
-     @typing.overload\n  def {CLOSE}(value: object, id: str) -> None: ...\n  \
-     def {CLOSE}(value: object, id: str = \"\") -> None: ...\n"
-  );
-  let held = closing.lines().count();
-  let above = format!(
-    "{head}{closing}  try:\n    {ALIAS}.lineage('')\n{}  except BaseException:\n    pass\n",
-    laid(&ladder.join("\n"), 4)
-  );
-  let lines = above.lines().count();
-  (format!("{above}{}", laid(word, 2)), first..first + held, lines)
-}
-
-/// What the word is as python, before ty reads what it means.
-///
-/// The word of a rung runs as the body of a module, and the sheet stands it inside a function so that it may
-/// await, which makes a return legal there where the engine would not take one. So the word is read as the body
-/// it really is first, and what that reading finds is a finding of the gate like any other.
-fn python(word: &str) -> Vec<String> {
-  let held = match parse_module(word) {
-    Ok(held) => held,
-    Err(no) => return vec![format!("line {}: {no}", lined(word, no.location.start().into()))],
-  };
-  let mut said: Vec<String> =
-    held.errors().iter().map(|no| format!("line {}: {no}", lined(word, no.location.start().into()))).collect();
-  said.extend(
-    returns(&held.syntax().body).into_iter().map(|at| format!("line {}: 'return' outside function", lined(word, at))),
-  );
-  said
-}
-
-/// The line a place in the text stands on, counted from one.
-fn lined(text: &str, at: usize) -> usize {
-  text.bytes().take(at.min(text.len())).filter(|one| *one == b'\n').count() + 1
-}
-
-/// Every return of a body that stands in no function of its own, which is no python at the top of a module.
-fn returns(body: &[Stmt]) -> Vec<usize> {
-  let mut said = Vec::new();
-  for one in body {
-    match one {
-      Stmt::Return(held) => said.push(held.range.start().into()),
-      Stmt::FunctionDef(_) | Stmt::ClassDef(_) => {}
-      Stmt::If(held) => {
-        said.extend(returns(&held.body));
-        for clause in &held.elif_else_clauses {
-          said.extend(returns(&clause.body));
-        }
-      }
-      Stmt::For(held) => {
-        said.extend(returns(&held.body));
-        said.extend(returns(&held.orelse));
-      }
-      Stmt::While(held) => {
-        said.extend(returns(&held.body));
-        said.extend(returns(&held.orelse));
-      }
-      Stmt::With(held) => said.extend(returns(&held.body)),
-      Stmt::Match(held) => {
-        for case in &held.cases {
-          said.extend(returns(&case.body));
-        }
-      }
-      Stmt::Try(held) => {
-        said.extend(returns(&held.body));
-        said.extend(returns(&held.orelse));
-        said.extend(returns(&held.finalbody));
-        for handler in &held.handlers {
-          let ast::ExceptHandler::ExceptHandler(handler) = handler;
-          said.extend(returns(&handler.body));
-        }
-      }
-      _ => {}
-    }
-  }
-  said
-}
-
-/// The text as it stands on the sheet, indented into the body, with every line where it was, so a finding keeps
-/// the line it was found on.
-fn laid(text: &str, depth: usize) -> String {
-  let mut held = String::new();
-  for line in text.split('\n') {
-    if line.trim().is_empty() {
-      held.push('\n');
-    } else {
-      let _ = writeln!(held, "{}{line}", " ".repeat(depth));
-    }
-  }
-  held
 }
 
 /// One finding of ty in its concise form, as the line it stands on and what it says.
 ///
 /// The form is `path:line:column: severity[rule] why`, and a line that is not of that form is no finding of the
-/// word, so it is dropped rather than read as one.
+/// sheet, so it is dropped rather than read as one.
 fn read(said: &str) -> Option<(usize, String)> {
   let (_, rest) = said.split_once(':')?;
   let (line, rest) = rest.split_once(':')?;
@@ -279,11 +128,9 @@ fn read(said: &str) -> Option<(usize, String)> {
   Some((line.trim().parse().ok()?, rest.trim().to_owned()))
 }
 
-/// Every name the engine defines at its top, which is what the globals of a chain hold of the engine.
-///
-/// A chain holds what the file defines and the two names it binds of its own, so the sheet binds the same, and a
-/// word that reads a name no chain holds is a finding like any other.
-fn named(source: &str) -> Vec<String> {
+/// Every name the engine defines at its top, and the two a chain binds of its own, which is what the globals of a
+/// chain hold and what the sheet binds before it reads the ladder and the word.
+pub fn named(source: &str) -> Vec<String> {
   let Ok(held) = parse_module(source) else { return BOUND.iter().map(|one| (*one).to_owned()).collect() };
   let mut said: Vec<String> = Vec::new();
   for one in &held.syntax().body {
@@ -315,7 +162,6 @@ fn named(source: &str) -> Vec<String> {
       _ => {}
     }
   }
-  said.extend(BOUND.iter().map(|one| (*one).to_owned()));
   let mut seen = Vec::new();
   for one in said {
     if !seen.contains(&one) {
@@ -343,7 +189,7 @@ struct Memory {
   rules: Arc<RuleSelection>,
   /// How ty reads, which is how ty reads by default.
   analysis: Arc<AnalysisSettings>,
-  /// The python the word is read for, which is the python that runs it.
+  /// The python the sheet is read for, which is the python that runs the word.
   program: ProgramSettings,
 }
 
@@ -390,7 +236,7 @@ trait ProgramDb: Db {
 /// The program of the memory, made once and cached.
 #[salsa::tracked(returns(copy))]
 fn program(db: &dyn ProgramDb) -> Program<'_> {
-  Program::from_settings(db, db.settings().clone())
+  Program::from_settings(db, db.settings())
 }
 
 impl DbWithTestSystem for Memory {
@@ -451,6 +297,10 @@ impl Db for Memory {
     &self.analysis
   }
 
+  fn dependency_metadata(&self, _file: File) -> Option<&DependencyMetadata> {
+    None
+  }
+
   fn verbose(&self) -> bool {
     false
   }
@@ -482,67 +332,58 @@ impl salsa::Database for Memory {}
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::ENGINE;
+
+  /// The sheet of one word, on the ladder of no rung, as `furb.sheet` writes it.
+  fn sheet(word: &str) -> (String, usize) {
+    let mut head = String::from("import furb.engine as __engine\nasync def __body():\n");
+    for name in named(ENGINE) {
+      let _ = writeln!(head, "  {name} = __engine.{name}");
+    }
+    let above = format!("{head}  try:\n    __engine.lineage('')\n\n  except BaseException:\n    pass\n");
+    let lines = above.lines().count();
+    (format!("{above}  {word}\n"), lines)
+  }
 
   #[test]
   fn the_names_of_the_sheet_are_the_names_the_globals_of_a_chain_hold() {
     let held = named(ENGINE);
-    for one in ["send", "ask", "read", "bash", "prompt", "close", "Text", "Act", "actor", "raised"] {
+    for one in ["send", "ask", "read", "bash", "prompt", "close", "Text", "Act"] {
       assert!(held.iter().any(|name| name == one), "{one} is a name a chain holds");
     }
+    assert!(!held.iter().any(|name| name == "actor"), "the two names a chain binds of its own are the sheet's to add");
     assert_eq!(held.iter().filter(|one| *one == "send").count(), 1, "a name stands once");
   }
 
   #[test]
-  fn a_word_that_says_the_name_of_the_sheet_is_refused_before_it_is_read() {
+  fn a_sheet_the_gate_accepts_gives_no_finding() {
     let mut held = Ty::new();
-    assert_eq!(held.gate("__engine.acts", &[], "int"), [format!("{ALIAS} is a name of the gate")]);
+    let (text, _) = sheet("close(len(read('a.txt').lines))");
+    assert_eq!(held.checked(&text), Vec::<(usize, String)>::new());
   }
 
   #[test]
-  fn a_word_the_gate_accepts_gives_no_finding() {
+  fn a_finding_says_the_line_of_the_sheet_it_stands_on() {
     let mut held = Ty::new();
-    assert_eq!(held.gate("close(1)", &[], "int"), Vec::<String>::new());
-    assert_eq!(held.gate("x = read('a.txt')\nclose(len(x.lines))", &[], "int"), Vec::<String>::new());
-  }
-
-  #[test]
-  fn the_gate_refuses_a_word_whose_close_carries_a_value_that_does_not_have_the_shape() {
-    let mut held = Ty::new();
-    let said = held.gate("close('one')", &[], "int");
-    assert!(!said.is_empty(), "a close of str is no int");
-    assert!(said[0].starts_with("line 1: "), "{said:?}");
-  }
-
-  #[test]
-  fn a_response_that_is_not_python_is_a_finding_like_any_other() {
-    let mut held = Ty::new();
-    assert!(!held.gate("close(", &[], "int").is_empty());
-    assert!(!held.gate("return 1", &[], "int").is_empty(), "a top level return is no python");
+    let (text, above) = sheet("close(nowhere)");
+    let found = held.checked(&text);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].0, above + 1);
+    assert!(found[0].1.contains("unresolved-reference"), "{found:?}");
   }
 
   #[test]
   fn a_word_may_await_an_act_at_its_top_level() {
     let mut held = Ty::new();
-    // The code of an exit is a number or nothing, which is the shape the word must be read against.
-    assert_eq!(held.gate("close((await bash('ls')).code)", &[], "int | None"), Vec::<String>::new());
-    assert!(
-      !held.gate("close((await bash('ls')).code)", &[], "int").is_empty(),
-      "a code that may be nothing is no int"
-    );
+    let (text, _) = sheet("close((await bash('ls')).code)");
+    assert_eq!(held.checked(&text), Vec::<(usize, String)>::new());
   }
 
   #[test]
-  fn the_gate_reads_the_word_against_the_rungs_before_it() {
+  fn a_warning_refuses_no_word() {
     let mut held = Ty::new();
-    let ladder = ["held = 1".to_owned()];
-    assert_eq!(held.gate("close(held)", &ladder, "int"), Vec::<String>::new());
-    assert!(!held.gate("close(held)", &[], "int").is_empty(), "a name no rung bound is a finding");
-  }
-
-  #[test]
-  fn a_finding_keeps_the_line_the_model_wrote_it_on() {
-    let mut held = Ty::new();
-    let said = held.gate("x = 1\ny = 2\nclose(nowhere)", &[], "int");
-    assert!(said.iter().any(|one| one.starts_with("line 3: ")), "{said:?}");
+    // A name that may be unbound is a warning of ty, and a word that reads it is no word the gate refuses.
+    let (text, _) = sheet("if chance() > 0.5:\n    maybe = 1\n  close(maybe)");
+    assert_eq!(held.checked(&text), Vec::<(usize, String)>::new());
   }
 }

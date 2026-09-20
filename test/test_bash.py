@@ -55,7 +55,7 @@ async def test_a_feed_whose_text_is_none_closes_the_stdin_of_the_command() -> No
   engine.write(Text(door(one, "stdin")), on=root)
   assert [a[3] for a in said(log, "feed")] == ["go", None]
   assert sand.fed == ["go", None]
-  with pytest.raises(Refused, match="takes no word"):
+  with pytest.raises(Refused, match="closed"):
     engine.write(Text(door(one, "stdin"), "late"), on=root)
 
 
@@ -222,7 +222,7 @@ async def test_a_write_of_nothing_to_the_stdin_door_closes_the_stdin() -> None:
   assert engine.write(Text(door(one, "stdin"), "go"), on=root) == Text(door(one, "stdin"), "go")
   engine.write(Text(door(one, "stdin")), on=root)
   assert sand.fed == ["go", None]
-  with pytest.raises(Refused, match="takes no word"):
+  with pytest.raises(Refused, match="closed"):
     engine.write(Text(door(one, "stdin"), "late"), on=root)
 
 

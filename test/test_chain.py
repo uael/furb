@@ -5,7 +5,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import DOOR, STANDS, Py, Sand, attr, life, said, seen, settle, sown, tags
+from conftest import DOOR, STANDS, Sand, attr, kernel, life, ran, said, seen, settle, sown, tags
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Act, Refused, Text, take
 
@@ -88,33 +88,33 @@ async def test_boot_gives_the_root_as_an_act_of_never_and_the_root_never_complet
   _, root = life(sand)
   await engine.rung("k = 1", on=root)
   await settle()
-  one = engine.boot(list(sand.record), kernel=Py().kernel(), world=Sand(stands=STANDS).hears())
+  one = engine.boot(list(sand.record), **kernel(), world=Sand(stands=STANDS).hears())
   await settle(300)
   assert one == root and engine.peek(one) is None
 
 
 async def test_the_engine_makes_a_chain_in_one_way_by_running_its_ladder() -> None:
   """The engine makes a chain in one way: by running its ladder."""
-  sand, py = sown(), Py()
-  _, root = life(sand, kernel=py)
+  sand = sown()
+  log, root = life(sand)
   await engine.rung("k = 1", on=root)
   twin = engine.chain("twin", source=root)
   await settle()
-  assert py.ran == ["k = 1", "k = 1"] and engine.modules[twin]["k"] == 1
+  assert ran(log) == ["k = 1", "k = 1"] and engine.modules[twin]["k"] == 1
   await engine.rung("later = 2", on=root)
   assert "later" not in engine.modules[twin]
 
 
 async def test_in_a_chain_with_a_source_the_ladder_of_the_origin_runs_again_in_its_module() -> None:
   """In a chain with a source the ladder of the origin up to that source runs again in the module of the new chain."""
-  sand, py = sown(), Py()
-  _, root = life(sand, kernel=py)
+  sand = sown()
+  log, root = life(sand)
   sand.script[root] = ["a = 1", "close(a + 1)", "close(None)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   twin = engine.chain("twin", source=root)
   await settle()
-  assert py.ran == ["a = 1", "close(a + 1)", "a = 1", "close(a + 1)"]
+  assert ran(log) == ["a = 1", "close(a + 1)", "a = 1", "close(a + 1)"]
   assert engine.modules[twin]["a"] == 1 and engine.modules[twin]["__name__"] == twin
 
 
@@ -142,7 +142,7 @@ async def test_a_prompt_to_an_actor_its_roster_does_not_hold_it_closes_with_the_
   one = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
   got = engine.peek(one)
-  assert isinstance(got, Refused) and "no actor of the roster" in str(got)
+  assert isinstance(got, Refused) and "no actor" in str(got)
   wrong = engine.prompt(int, "hi", to="n/high", on=root)
   await settle()
   assert isinstance(engine.peek(wrong), Refused)
@@ -171,7 +171,7 @@ async def test_the_engine_refuses_a_prompt_to_an_actor_outside_the_roster() -> N
   one = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
   got = engine.peek(one)
-  assert isinstance(got, Refused) and str(got) == "ghost is no actor of the roster"
+  assert isinstance(got, Refused) and str(got) == "ghost no actor"
 
 
 async def test_the_chain_holds_the_control_it_says_itself() -> None:
@@ -182,7 +182,7 @@ async def test_the_chain_holds_the_control_it_says_itself() -> None:
   await settle()
   assert isinstance(engine.peek(ghost), Refused)
   assert [attr(tag, "over") for tag in tags(engine.turns(on=root), "closed")] == [ghost]
-  sand.script[root] = ["BAD = 1", "close(1)", "close(None)"]
+  sand.script[root] = ["k = BAD", "close(1)", "close(None)"]
   assert await engine.prompt(int, "try", on=root) == 1
   refused = [attr(tag, "id") for tag in tags(engine.turns(on=root), "refused")]
   shut = [attr(tag, "over") for tag in tags(engine.turns(on=root), "closed")]
@@ -579,7 +579,7 @@ async def test_a_chain_with_a_source_awaits_or_peeks_an_inherited_act_as_it_like
   command = said(log, "bash")[0][1]
   twin = engine.chain("twin", source=root)
   await settle()
-  sand.script[twin] = ["out = await x\nclose([out.code, peek(x).code])"]
+  sand.script[twin] = ["out = await x\nseen = peek(x)\nassert isinstance(seen, Exit)\nclose([out.code, seen.code])"]
   assert await engine.prompt(list, "look at it", on=twin) == [0, 0]
   assert [a[1] for a in said(log, "bash")] == [command]
 
@@ -870,9 +870,9 @@ async def test_a_source_that_names_no_chain_of_the_life_refuses_the_call() -> No
   log, root = life(sand)
   step = engine.rung("k = 1", on=root)
   assert await step is None
-  with pytest.raises(Refused, match="names no chain"):
+  with pytest.raises(Refused, match="no chain"):
     engine.chain("sub", source=step, on=root)
-  with pytest.raises(Refused, match="names no chain"):
+  with pytest.raises(Refused, match="no chain"):
     engine.chain("sub", source="chain://operator.9", on=root)
   sand.script[root] = ["chain('sub', source=acting())", "close(1)"]
   assert await engine.prompt(int, "fork", on=root) == 1

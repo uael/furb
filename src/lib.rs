@@ -1,53 +1,29 @@
-//! The core of an AI harness, with the engine in a sandbox and a World of your own.
+//! The core of an AI harness: the engine in a sandbox, and an ear of your own.
 //!
 //! The engine is one python file, `src/furb/engine.py`, which the contract beside it specifies. This crate runs
-//! that file inside a sandbox and gives its surface to a host that is not python: the verbs it calls, the World it
-//! implements, and the two bindings, one for typescript and one for python.
+//! that file inside monty, a python interpreter written in rust for untrusted code, and gives a host that is not
+//! python two things: [`Life`], which is one life of the engine, and [`Ear`], which is what the host writes.
 //!
-//! What the crate takes care of is the Kernel. The engine has the Kernel gate and run the word of every rung, and
-//! that word is written by a model, so it is the one part of a life that must not be trusted. The word runs in the
-//! sandbox where the engine itself runs, in the module of its chain, and it is gated before it runs.
+//! The engine takes the World and the Kernel as generators. The crate takes care of the Kernel: the word of a
+//! rung is gated by ty, reading it against the contract, and runs where the engine runs, in the module of its
+//! chain. A host writes the World, and any other ear it wants a life to have, and every value that crosses to
+//! it is plain: [`Value`] is the shape of one.
 //!
-//! Because the engine runs in there too, nothing of the engine crosses to the host: a text, an act and a refusal
-//! are the sandbox's own, the engine calls its own shows and filters in there, and the one thing that crosses is
-//! a fact, plain.
-//!
-//! # How a host reaches the engine
-//!
-//! The engine takes the World and the Kernel as generators. A host of another language is no generator, so the
-//! crate runs [`PREAMBLE`] in a module of its own and hands the engine the two generators that stand in its place.
-//! Every fact crosses that boundary as a [`fact::Value`], which is plain data, a shape such as a text, or an
-//! exception, and nothing of python. `script/sanded.py` proves the whole of it: it runs the suite of the engine,
-//! in this interpreter and unedited, against a life of the crate.
-//!
-//! Nothing of the preamble is bound in the engine, and nothing of the engine is bound in the preamble, so the
-//! globals of a chain hold what the file defines and nothing more, which is what a model reads.
-//!
-//! # Where it runs
-//!
-//! The sandbox is monty, and it is [`Sand`]. There is no other and no seam for one: the crate is the engine in
-//! that sandbox, so a build of it that could not run the engine would be a build of nothing.
+//! [`PREAMBLE`] is the boundary. It runs in the sandbox, in a module of its own, and stands in for every ear of
+//! the host: it hears a fact, hands it over plain, and says back what the host answers. Nothing of the boundary
+//! is bound in the engine, so the globals of a chain hold what the file defines and nothing more.
 
+pub mod ear;
 pub mod fact;
-#[cfg(feature = "gate")]
 pub mod gate;
-pub mod host;
 pub mod life;
-pub mod record;
 pub mod sand;
-pub mod verb;
-pub mod voice;
-pub mod world;
 
-pub use crate::sand::Sand;
 pub use crate::{
+  ear::{Ear, Ears, Host, Reply},
   fact::{Fact, Value},
-  host::{Gate, Outside},
-  life::{HOST, Host, Life, Refusal},
-  record::{Drift, Entry},
-  verb::{Act, Exit, Filter, Show, Text, Verb},
-  voice::{Ears, Said, Voice},
-  world::{Reply, World},
+  life::{Life, Refusal},
+  sand::Sand,
 };
 
 /// The engine: the one file the sandbox runs, and the whole system prompt of a model.
@@ -61,8 +37,11 @@ pub const ENGINE: &str = include_str!("furb/engine.py");
 /// The gate reads the word of a rung against this, since what a word may say is what the contract declares.
 pub const CONTRACT: &str = include_str!("furb/engine.pyi");
 
-/// The boundary of a host that is not python, which the crate runs in a module of its own.
+/// The boundary, which runs in the sandbox in a module of its own.
 pub const PREAMBLE: &str = include_str!("preamble.py");
+
+/// The sheet the gate reads a word on, which the Kernel of the sandbox writes the same way the python package does.
+pub const SHEET: &str = include_str!("furb/sheet.py");
 
 #[cfg(test)]
 mod tests {
@@ -76,8 +55,9 @@ mod tests {
   }
 
   #[test]
-  fn the_preamble_carries_the_two_marks_of_the_plain_form() {
-    assert!(PREAMBLE.contains("def outside("));
+  fn the_preamble_carries_the_marks_of_the_plain_form() {
+    assert!(PREAMBLE.contains("def opened("));
+    assert!(SHEET.contains("def gate("));
     assert!(PREAMBLE.contains(&format!("TUPLE = {:?}", fact::TUPLE)));
     assert!(PREAMBLE.contains(&format!("SHOW = {:?}", fact::SHOW)));
   }

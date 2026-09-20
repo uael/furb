@@ -25,14 +25,14 @@ async def test_a_closed_tag_tells_the_act_with_what_it_came_to_as_python_shows_i
   engine.close(21, act)
   assert await act == 21
   other = engine.prompt(str, "which?", to=OPERATOR, on=root)
-  engine.close({"k": 1}, other)
-  assert await other == {"k": 1}
+  engine.close("k", other)
+  assert await other == "k"
   command = engine.bash("echo hi", on=root)
   assert (await command).code == 0
   await settle()
   closed = tags(engine.turns(on=root), "closed")
   assert [(attr(tag, "over"), tag[2]) for tag in closed if ("over", act) in tag[1]] == [(act, "21")]
-  assert [(attr(tag, "over"), tag[2]) for tag in closed if ("over", other) in tag[1]] == [(other, "{'k': 1}")]
+  assert [(attr(tag, "over"), tag[2]) for tag in closed if ("over", other) in tag[1]] == [(other, "'k'")]
   assert [attr(tag, "code") for tag in closed if ("id", said(log, "bash")[0][1]) in tag[1]] == [0]
 
 

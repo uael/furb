@@ -1,9 +1,9 @@
 [project]
-name = "furb-sand"
+name = "furb-monty"
 version = "0.1.0"
-description = "furb for python: one life of the engine, in the sandbox, with a World you write in python."
+description = "furb for python, with the engine in monty: every name of engine.pyi, over one life in the sandbox."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 # The license of the repository stands over this too; maturin reads no file above its own directory, so the
 # distribution names the license and carries none of its own.
 license = "AGPL-3.0-only"
@@ -13,8 +13,10 @@ classifiers = [
   "Intended Audience :: Developers",
   "Programming Language :: Rust",
   "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
+dependencies = ["furb"]
 
 [project.urls]
 Source = "https://github.com/uael/furb"
@@ -27,5 +29,8 @@ build-backend = "maturin"
 [tool.maturin]
 # The manifest is beside this file; the crate is a member of the workspace at the root of the repository.
 manifest-path = "Cargo.toml"
-module-name = "furb_sand"
-features = ["furb-sand/extension-module"]
+module-name = "furb_monty._monty"
+features = ["furb-monty/extension-module"]
+
+[tool.uv.sources]
+furb = { workspace = true }

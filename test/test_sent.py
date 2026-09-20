@@ -14,5 +14,5 @@ async def test_a_sent_carries_to_a_run_what_the_act_it_waited_for_came_to() -> N
   _, command, *_ = said(log, "bash")[0]
   carried = said(log, "sent")
   assert [(a[1], a[2]) for a in carried] == [(act, act)]
-  assert carried[0][3] is engine.peek(command, on=root)
+  assert carried[0][3] == engine.peek(command, on=root)
   assert isinstance(carried[0][3], Exit) and carried[0][3].code == 0

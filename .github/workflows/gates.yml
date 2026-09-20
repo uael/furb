@@ -23,7 +23,7 @@ jobs:
   hooks:
     name: the hooks
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -33,6 +33,15 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
           cache-python: true
+      # The rust of rust-toolchain.toml, and what cargo built of the crate and its dependencies the last time.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+      - run: rustup show
       - run: uv python install
       - run: uv sync --locked
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -47,7 +56,7 @@ jobs:
   types:
     name: the types
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -57,15 +66,24 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
           cache-python: true
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+      - run: rustup show
       - run: uv python install
       - run: uv sync --locked
       - run: uv run ty check --error-on-warning
 
   suite:
-    # The engine speaks to a machine through the World, and a machine answers as itself: the suite runs on both.
+    # The engine speaks to a machine through the World, and a machine answers as itself: the suite runs on both,
+    # and on both engines, the one of the interpreter and the one in the sandbox of monty.
     name: the suite on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -79,6 +97,14 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
           cache-python: true
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+      - run: rustup show
       - run: uv python install
       - run: uv sync --locked
       - run: uv run pytest -q

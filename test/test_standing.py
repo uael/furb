@@ -45,5 +45,5 @@ async def test_a_standing_holds_no_source() -> None:
     (after, (*fact[:4], "echo other", *fact[5:]), *rest) if fact[0] == "bash" else (after, fact, *rest)
     for after, fact, *rest in plain(sand.record)
   ]
-  with pytest.raises(Drift, match="is not the bash://"):
+  with pytest.raises(Drift, match="not bash://"):
     life(Sand(stands=STANDS), kept)

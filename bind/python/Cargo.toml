@@ -1,26 +1,23 @@
 [package]
-name = "furb-sand"
+name = "furb-monty"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.87"
-description = "furb for python: one life of the engine, in the sandbox, with a World you write in python."
+rust-version = "1.95"
+description = "furb for python, with the engine in monty: every name of engine.pyi, over one life in the sandbox."
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
 
 [lib]
-name = "furb_sand"
+name = "_monty"
 path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["gate"]
-# The gate of the crate, which is ty. See the root manifest.
-gate = ["furb/gate"]
 # The module links no interpreter of its own, which is what a python extension
 # is. It is off here and on where maturin builds the wheel, so that a test
-# binary of the crate still links.
+# binary of the workspace still links.
 extension-module = ["pyo3/extension-module"]
 
 [dependencies]
-furb = { path = "../..", default-features = false }
+furb = { path = "../.." }
 pyo3 = { version = "0.29.2", features = ["generate-import-lib"] }

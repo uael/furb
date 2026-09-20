@@ -1,48 +1,35 @@
 [workspace]
-members = ["bind/js", "bind/python"]
+members = ["bind/python"]
 
 [package]
 name = "furb"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.87"
-description = "The core of an AI harness: the engine in a sandbox, and a World of your own."
+rust-version = "1.95"
+description = "The core of an AI harness: the engine in a sandbox, and an ear of your own."
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
 
-[features]
-default = ["gate"]
-# The gate of the crate: ty, as a library, reading the word of a rung before it runs.
-gate = [
-  "dep:ruff_db",
-  "dep:ruff_python_ast",
-  "dep:ruff_python_parser",
-  "dep:salsa",
-  "dep:ty_module_resolver",
-  "dep:ty_python_core",
-  "dep:ty_python_semantic",
-  "dep:ty_vendored",
-]
-
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
-ruff_db = { version = "0.0.9", optional = true }
-ruff_python_ast = { version = "0.0.9", optional = true }
-ruff_python_parser = { version = "0.0.9", optional = true }
-salsa = { version = "0.28.2", default-features = false, features = ["compact_str", "macros", "salsa_unstable", "inventory"], optional = true }
-ty_module_resolver = { version = "0.0.9", optional = true }
-ty_python_core = { version = "0.0.9", optional = true }
-ty_python_semantic = { version = "0.0.9", optional = true }
-ty_vendored = { version = "0.0.9", optional = true }
+# The gate of the Kernel: ty, as a library, reading the sheet of a word before it runs.
+#
+# The commit is the one the `ty` command line of the package is built from, so
+# a word is judged the same by the crate and by the command line: the same
+# engine, the same typeshed, the same python. `pyproject.toml` pins that
+# command line, and the two move together.
+ruff_db = { git = "https://github.com/astral-sh/ruff", rev = "160ffbf2cff30d7ff1c97f13d6f1ca9fe430fe48" }
+ruff_python_ast = { git = "https://github.com/astral-sh/ruff", rev = "160ffbf2cff30d7ff1c97f13d6f1ca9fe430fe48" }
+ruff_python_parser = { git = "https://github.com/astral-sh/ruff", rev = "160ffbf2cff30d7ff1c97f13d6f1ca9fe430fe48" }
+salsa = { version = "0.28", default-features = false, features = ["compact_str", "macros", "salsa_unstable", "inventory"] }
+ty_module_resolver = { git = "https://github.com/astral-sh/ruff", rev = "160ffbf2cff30d7ff1c97f13d6f1ca9fe430fe48" }
+ty_python_core = { git = "https://github.com/astral-sh/ruff", rev = "160ffbf2cff30d7ff1c97f13d6f1ca9fe430fe48" }
+ty_python_semantic = { git = "https://github.com/astral-sh/ruff", rev = "160ffbf2cff30d7ff1c97f13d6f1ca9fe430fe48" }
+ty_vendored = { git = "https://github.com/astral-sh/ruff", rev = "160ffbf2cff30d7ff1c97f13d6f1ca9fe430fe48" }
 # The sandbox the engine runs in, which is the reason the crate exists.
 #
 # A revision of the fork and not a version, because the interpreter the engine
-# needs is not released: the coroutine a Kernel drives, the `__await__` an act
-# is said by, the top level await a word of a model is compiled with, and the
-# lazy generator expression the engine reads a record with are all on
-# `uael/monty`. A revision and not a branch, so a build of today and a build of
-# next month read the same interpreter.
+# needs is not released. A revision and not a branch, so a build of today and a
+# build of next month read the same interpreter.
 monty = { git = "https://github.com/uael/monty", rev = "7601549" }
 monty-types = { git = "https://github.com/uael/monty", rev = "7601549" }
 

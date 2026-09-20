@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Py, Sand, attr, life, lived, plain, relived, said, settle, sown, tags
+from conftest import STANDS, Sand, attr, life, lived, plain, ran, refusals, relived, said, settle, sown, tags
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Act, Exit, Refused, Text
 
@@ -14,7 +14,7 @@ async def test_a_prompt_it_makes_the_rung_of_one_turn_of_its_model() -> None:
   """A prompt: it makes the rung of one turn of its model, makes another while the rung it made gives no value, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["BAD = 1", "raise ValueError('boom')", "close(7)"]
+  sand.script[root] = ["k = BAD", "raise ValueError('boom')", "close(7)"]
   assert await engine.prompt(int, "try", on=root) == 7
   assert len(said(log, "rung")) == 3 and len(said(log, "ask")) == 3
 
@@ -33,10 +33,10 @@ async def test_the_engine_asks_the_model_again_after_a_refusal() -> None:
   """The engine asks the model again after a refusal."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["BAD = 1", "close(7)"]
+  sand.script[root] = ["k = BAD", "close(7)"]
   assert await engine.prompt(int, "try", on=root) == 7
   assert len(said(log, "ask")) == 2
-  assert [tag[2] for tag in tags(engine.turns(on=root), "refused")] == ["BAD in rung, against int after 0 rungs"]
+  assert [tag[2] for tag in tags(engine.turns(on=root), "refused")] == refusals(log)
 
 
 async def test_the_operator_prompts_a_model_to_make_the_model_work() -> None:
@@ -302,16 +302,16 @@ async def test_it_is_the_ladder_of_its_rungs_and_of_the_words_written_to_it() ->
 
 
 async def test_a_word_written_to_it_answers_it_not_whoever_wrote_it() -> None:
-  """A word written to it answers it not, whoever wrote it, so it must give nothing, and the gate reads it against no shape, as it reads every word a caller wrote."""
-  sand, py = Sand(stands=STANDS), Py()
-  _, root = life(sand, kernel=py)
+  """A word written to it answers it not, whoever wrote it, so it must give nothing."""
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
   sand.script[root] = ["a = 1"]
   act = engine.prompt(int, "count", on=root)
   await settle()
   engine.write(Text(act, "close(5)"), on=root)
   await settle()
   assert act not in engine.outcomes
-  assert [shape for _, _, shape in py.gates] == ["int", ""]
+  assert ran(log) == ["a = 1", "close(5)"]
 
 
 async def test_a_prompt_to_the_operator_asks_no_model() -> None:
@@ -391,18 +391,27 @@ async def test_the_shape_left_unsaid_is_none() -> None:
   assert (await act) == "anything"
 
 
-async def test_a_prompt_takes_any_shape_and_the_gate_reads_the_word_against_the_name_of_it() -> None:
-  """A prompt takes any shape, and the gate reads the word of a rung against the name of it."""
-  sand, py = Sand(stands=STANDS), Py()
-  _, root = life(sand, kernel=py)
-  sand.script[root] = ["close(Text('p.txt', 'hi'))", "close([1, 2])", "close([])", "close(None)"]
+async def test_a_prompt_takes_any_shape_which_a_close_is_read_against_as_python_reads_an_instance() -> None:
+  """A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one."""
+  sand = Sand(stands=STANDS)
+  _, root = life(sand)
+  sand.script[root] = [
+    "close(Text('p.txt', 'hi'))",
+    "close([1, 2])",
+    "close([])",
+    "close(None)",
+    "close('no')",
+    "close(2)",
+  ]
   assert await engine.prompt(Text, "a text", on=root) == Text("p.txt", "hi")
   assert await engine.prompt(list[int], "some numbers", on=root) == [1, 2]
   # The name of a shape is the word a chain would say, and the globals of a chain hold no module, so a shape that
   # holds a name of the engine is said as the engine says it and never under the module it was defined in.
   assert await engine.prompt(list[Text], "texts", on=root) == []
   assert await engine.prompt(Text | None, "a text or nothing", on=root) is None
-  assert [shape for _, _, shape in py.gates] == ["Text", "list[int]", "list[Text]", "Text | None"]
+  assert await engine.prompt(int, "a number", on=root) == 2
+  raised = tags(engine.turns(on=root), "raised")
+  assert [(attr(tag, "type"), attr(tag, "message")) for tag in raised] == [("Refused", "'no' not int")]
 
 
 async def test_a_prompt_carries_the_name_of_its_shape_as_a_word() -> None:

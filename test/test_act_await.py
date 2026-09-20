@@ -24,7 +24,7 @@ async def test_an_act_is_awaited_from_any_chain() -> None:
   sand.script[root] = ["x = bash('echo hi')\nclose(x)"]
   which = await engine.prompt(str, "start one", on=root)
   two = engine.chain("two")
-  sand.script[two] = [f"close((await Act({which!r})).code)"]
+  sand.script[two] = [f"out = await Act({which!r})\nassert isinstance(out, Exit)\nclose(out.code)"]
   assert await engine.prompt(int, "await it", on=two) == 0
 
 

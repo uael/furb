@@ -14,10 +14,7 @@ use monty_types::{
   PrintWriter, ResourceLimits, ResourceTracker,
 };
 
-use crate::{
-  fact::Value,
-  life::{HOST, Host},
-};
+use crate::{ear::Host, fact::Value, life::HOST};
 
 /// One monty session, which is one life.
 ///
@@ -47,7 +44,7 @@ impl Sand {
 
   /// One piece of code, run in the sandbox, and what the last expression of it gave.
   ///
-  /// The host answers every call the code makes while it runs, which is how the World and the gate are reached.
+  /// The host answers every call the code makes while it runs, which is how the ears and the gate are reached.
   /// What the code raises is the fault: the exception, plain, which is its name and what it was made with.
   pub fn run(&mut self, code: &str, host: &mut dyn Host) -> Result<Value, Value> {
     let mut step = self.repl().feed_start(code, NamedValues::default(), PrintWriter::Disabled);
@@ -176,7 +173,9 @@ fn to_monty(said: &Value) -> MontyObject {
     Value::Map(held) => {
       MontyObject::dict(held.iter().map(|(key, one)| (MontyObject::string(key.clone()), to_monty(one))))
     }
-    // `plain` leaves none of these, since it is what makes them a map.
-    other => MontyObject::string(format!("{other:?}")),
+    // The plain form is plain data and nothing else, which the arms above are the whole of.
+    Value::Tuple(_) | Value::Act(_) | Value::Name(_) | Value::Shape { .. } | Value::Error { .. } | Value::Show => {
+      unreachable!("the plain form of a value holds no tuple, shape, exception or callable")
+    }
   }
 }

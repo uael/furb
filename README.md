@@ -20,25 +20,24 @@ check, and the suite on linux and on macos.
 
 ## The crate
 
-The crate beside the package runs that same engine in a sandbox and gives its surface to a host that is not
-python. `src/` serves both, and the crate carries the same file, so the engine a host runs and the engine a model
-reads are one thing.
+The crate beside the package runs that same engine in monty, a python interpreter written in rust for untrusted
+code, and gives one life of it to a host that is not python. The crate embeds the file, so the engine a host runs
+and the engine a model reads are one thing.
 
-What a host writes is a World: what a life may touch is the host's to decide. What the crate takes care of is the
-Kernel, which gates the word of a rung and runs it. The word of a model runs where the engine runs, in the globals
-of its chain, inside the sandbox, so nothing of it crosses to the host and nothing calls back into a life that
-stands waiting. What crosses is a fact, plain, and the gate.
+What a host writes is an ear: the World, which hears every fact and says what it will. What the crate takes care
+of is the Kernel, which gates the word of a rung against the contract and runs it where the engine runs, in the
+module of its chain, so nothing of the word crosses to the host. What crosses is a fact, plain.
 
 ```rust
-let (voice, ears) = furb::Ears::made();
-let world = furb::Live::new("/w", "opus/low", roster, talks, voice);
-let mut life = furb::Life::boot(session, world, gate, ears, &[])?;
-let root = life.root().to_owned();
-let act = life.calls(furb::verb::Prompt { shape: "int", message: "count the lines", on: &root, ..Default::default() })?;
-while life.came(&act)?.is_none() {
-  life.waits(std::time::Duration::from_millis(50));
-}
+let ears = furb::Ears::new().with("world", yard);
+let mut life = furb::Life::boot(furb::Sand::default(), ears, &["world".to_owned()], &furb::Value::List(vec![]))?;
+let act = life.word("prompt(int, \"count the lines\", on=\"chain://operator.1\")")?;
+let got = life.word(&format!("peek({:?})", act.as_str().unwrap()))?;
 ```
+
+`furb-monty`, under `bind/python`, is the same life for python: every name of `engine.pyi`, one to one, over the
+engine in the sandbox. `FURB_ENGINE=monty` makes `from furb import engine` give it, and the suite runs on both
+engines.
 
 - `cargo test` runs the tests of the crate, `tests/life.rs` among them, which drives one life of the real engine
   from end to end.

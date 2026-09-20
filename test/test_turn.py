@@ -75,7 +75,7 @@ async def test_the_engine_sends_the_response_to_the_provider_again_whole() -> No
   sand = Sand(stands=STANDS, cost=COST)
   log, _ = await spoke(sand, ["a = 1", "close(1)"])
   answered = said(log, "answer")[0][3]
-  assert said(log, "ask")[1][5][1] is answered
+  assert said(log, "ask")[1][5][1] == answered
   assert said(log, "ask")[1][5][1] == ("assistant", ["a = 1"], COST, ["signed 5"])
 
 

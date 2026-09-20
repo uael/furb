@@ -56,9 +56,3 @@ repos:
         language: system
         types_or: [rust, python, toml]
         pass_filenames: false
-      - id: verbs
-        name: verbs
-        entry: uv run python script/verbs.py
-        language: system
-        types_or: [rust, python, pyi]
-        pass_filenames: false

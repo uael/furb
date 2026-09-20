@@ -2,8 +2,8 @@
 
 The engine is `src/furb/engine.py`, one file, which depends only on the python interpreter and on two interfaces it
 declares, World and Kernel. It is derived from the contract, `src/furb/engine.pyi`, and proved by the suite in
-`test/`. `src/furb/CLAUDE.md` holds the technical names of the engine and the laws that no test can hold, `src/CLAUDE.md`
-says what proves the crate, and `script/CLAUDE.md` says how to run the DeepSWE rig.
+`test/`. `src/furb/CLAUDE.md` holds the technical names of the engine and the laws that no test can hold,
+`src/CLAUDE.md` says what the crate is and what proves it, and `script/CLAUDE.md` says how to run the DeepSWE rig.
 
 ## The contract
 
@@ -75,8 +75,9 @@ The suite drives the engine through its public API alone, end to end, from the m
 Run every command from the root of the repository.
 
 - `uv sync`: install the environment.
-- `uv run pytest -q`: the suite, with the coverage of `src/`, which must be whole but for the four stubs of the bus
-  that the toml excludes with their reason.
+- `uv run pytest -q`: the suite, on both engines, the one of this interpreter and the one in the sandbox of monty,
+  with the coverage of `src/` and of `furb_monty`, which must be whole but for the four stubs of the bus that the
+  toml excludes with their reason.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
 - `uv run ruff format src test script` then `uv run ruff check src test script`: format and lint. Two spaces of
   indentation, 120 columns.
@@ -90,75 +91,44 @@ Run every command from the root of the repository.
 
 The crate is held by gates of its own, which the commit hook runs too:
 
-- `cargo test`: the tests of the crate, the unit tests and `tests/life.rs`, which drives one life of the real
-  engine from end to end in monty. `--no-default-features` leaves the gate out, which is ty and the 190 crates
-  under it, so the crate builds small where the disk is short.
+- `cargo test`: the tests of the crate, and `tests/life.rs`, which drives one life of the real engine from end to
+  end in monty on an ear of this machine.
 - `cargo fmt` then `cargo clippy --all-targets -- -D warnings`: format and lint the crate. Two spaces of
   indentation, 120 columns, as everywhere else.
 - `uv run python script/needs.py`: what the engine and the preamble need of the interpreter that runs them, read
-  off the two files themselves.
-- `uv run python script/verbs.py`: every word the crate makes, held against the engine that must take it.
-- `uv run python script/sanded.py`: the suite of the engine, against the engine in the sandbox. This is the proof
-  of the crate, and no other number is one.
-- `uv run python script/outside.py`: one life, opened the way the crate opens one, in this interpreter.
-- `uv run python script/bound.py`: the tests of the bindings, with each one built for the interpreter that runs
-  it.
+  off the two files themselves, which is what the fork of monty must offer and no more.
 
 ## The crate
 
-The crate runs the engine in a sandbox and gives its surface to a host that is not python. `src/preamble.py` is
-the boundary: it runs in the sandbox, stands in for the two generators the engine takes, and makes every value
-plain. `src/fact.rs` is the plain form, `src/world.rs` the World a host implements, `src/host.rs` the side that
-answers the sandbox, `src/voice.rs` what a host says when nothing asked it, `src/life.rs` one life, `src/verb.rs`
-the typed surface of every verb, `src/gate.rs` the gate, which is ty reading the word of a rung against the
-contract, and `src/record.rs` the record. Nothing else is in it: a World of a machine and
-the reading of a turn are the host's, so the crate ships the trait and the plain form and no more.
+The crate runs the engine in monty, a python interpreter written in rust for untrusted code, and gives one life of
+it to a host that is not python. `src/lib.rs` stands beside `src/furb/engine.py`, and the crate embeds that same
+file, so the engine a host runs and the engine a model reads are one thing. `src/preamble.py` is the boundary: it
+runs in the sandbox, stands in for every ear of the host, holds the Kernel, and makes every value plain.
+`src/fact.rs` is the plain form, `src/ear.rs` the ear a host writes and the one call the sandbox reaches it by,
+`src/life.rs` one life, `src/gate.rs` the gate of the Kernel, which is ty reading the word of a rung against the
+contract, and `src/sand.rs` the session of monty. The Kernel runs the word of a rung where the engine runs, so
+nothing of it crosses to a host and no host writes one. `src/CLAUDE.md` says the rest.
 
-`src/sand.rs` is the sandbox, which is monty, and monty is the reason the crate exists. There is no seam for
-another and no feature to turn it off: a build of the crate that could not run the engine would be a build of
-nothing. It takes monty from the fork by a pinned revision, because the interpreter the engine needs is not
-released: the coroutine a Kernel drives, the `__await__` an act is said by, the top level await a word of a model
-is compiled with, and the lazy generator expression the engine reads a record with are all on `uael/monty`. A
-revision and not a branch, so a build of today and a build of next month read the same interpreter, and a branch
-that is deleted breaks nothing. The crate cannot be published while that holds, since crates.io takes no git
-dependency, and the revision becomes a version the day the fork lands.
+Monty comes from the fork by a pinned revision, because the interpreter the engine needs is not released: the
+coroutine a Kernel drives, the `__await__` an act is said by, the top level await a word of a model is compiled
+with, and the lazy generator expression the engine reads a record with are all on `uael/monty`. A revision and
+not a branch, so a build of today and a build of next month read the same interpreter. The crate cannot be
+published while that holds, since crates.io takes no git dependency, and the revision becomes a version the day
+the fork lands. `rust-toolchain.toml` names the one rust every build reads, and `Cargo.lock` the crates.
 
-`tests/life.rs` drives one life of the real engine from end to end in that sandbox, on one double that is no part
-of the crate: a World of this machine, written small. What a life may touch is the host's to decide, so the crate
-ships the trait and every host writes one of these. It is 19 scenarios and it is no proof of the contract:
-`script/sanded.py` is, and `src/CLAUDE.md` says why.
+## The engine of monty in python
 
-## The bindings
+`bind/python` is `furb-monty`, a distribution of its own and a member of the workspace, which `uv sync` builds
+with maturin. `furb_monty.engine` holds every name of `engine.pyi`, one to one, over one life of the crate: a verb
+runs its word in the sandbox, `acts`, `asked`, `outcomes` and `modules` read the maps of the life where they
+stand, and a value crosses plain and comes back as the shape the engine of this interpreter holds it in. A World
+of python is a generator, and it is heard from a thread of its own, so it reads the engine while it answers. A
+show, a filter or an ear a caller hands a verb is called back across the boundary. A life of monty needs no
+Kernel, since the crate holds one, and `boot` refuses a generator under that name.
 
-A binding is the surface of the crate for a host that is not rust. Each one lives under `bind/`, is a member of
-the workspace at the root, and says the same thing the crate says: one life, a World the host writes, a Voice the
-host speaks into, and every value plain.
-
-Each holds the same three files: `src/value.rs` is what crosses, `src/outside.rs` is the World and the gate a
-host writes read as the crate reads them, and `src/lib.rs` is the life, the Voice and the module. Beside them
-stands the whole surface, written out for a reader: `bind/python/furb_sand.pyi` and `bind/js/index.d.ts`.
-
-`bind/python` is the one for python, a distribution of its own named `furb-sand`, and not of the `furb` package:
-that one is the engine and the harness in python, and this one is the engine in the sandbox, so one name is one
-thing. `bind/js` is the one for javascript, a package named `@uael/furb`, over napi.
-
-A module of a binding is built for one interpreter and read by that one alone, so `script/bound.py` builds each
-for the interpreter that runs it, puts it where that interpreter reads it, and then runs the tests of each. It is
-a command and no hook of the commit, as the other rigs are: it builds two more modules from nothing, which the
-gate of the hooks has no room for.
-`bind/python/test/yard.py` and `bind/js/test/yard.mjs` are each a World of this machine, written small, as the
-World of `tests/life.rs` is, and the tests beside them are the same tests in each language.
-
-`bind/js/index.d.ts` is what a host of typescript reads, and `bind/js/test/check.ts` is a host written against it
-alone, so a fault in the declarations is a fault of that file. The rig reads it with the typescript under
-`bind/js/node_modules`, which `npm install` there puts in place, and says so where there is none.
-
-A World answers where it is asked, in every language, so `hears` gives a value and not a promise. The work that
-waits is what the Voice is for: a World starts it, says nothing, and says the fact of it into the Voice whenever
-it finishes, which the life hears at the next `heard`.
-
-Nothing of the engine crosses to the host: the word of a rung runs where the engine runs, and a fact crosses
-plain. The crate takes care of the Kernel, so a host writes the World alone.
+`FURB_ENGINE=monty` makes `from furb import engine` give it, read once at import. The suite runs every test on
+both engines, and a test that binds the Kernel double of the harness is skipped on monty by name, with the reason,
+in `test/conftest.py`.
 
 ## Prose
 

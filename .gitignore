@@ -8,6 +8,6 @@ dist/
 .coverage
 traces/
 target/
-Cargo.lock
-node_modules/
-playground/
+# The extension maturin builds into the binding: made by the build, never source.
+*.so
+*.pyd

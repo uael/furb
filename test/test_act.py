@@ -72,7 +72,7 @@ async def test_two_acts_that_say_the_same_words_under_one_name_are_one_act() -> 
   assert engine.get(one) == ("bash", one, first, root, "echo hi", False, TIMEOUT)
   await settle()
   got = engine.peek(one)
-  assert got is engine.peek(one) and isinstance(got, Exit) and got.code == 0
+  assert got == engine.peek(one) and isinstance(got, Exit) and got.code == 0
   assert [e[1][1] for e in sand.record if e[1][0] == "bash"] == [one]
 
 
@@ -81,7 +81,7 @@ async def test_the_engine_refuses_an_act_said_from_outside_a_run_that_names_no_c
   sand = Sand(stands=STANDS)
   log, _ = life(sand)
   heard: list[object] = []
-  with pytest.raises(Refused, match="names no chain"):
+  with pytest.raises(Refused, match="no chain"):
     engine.act("note", "", noting(heard))
   assert said(log, "note") == [] and heard == []
   assert engine.chain("two").startswith("chain://")

@@ -9,13 +9,14 @@ from conftest import (
   STANDS,
   WORD,
   Dead,
-  Py,
   Sand,
   attr,
+  gated,
   keeping,
   life,
   lived,
   pair,
+  ran,
   relived,
   said,
   settle,
@@ -237,9 +238,8 @@ async def test_the_engine_makes_a_chain_from_the_record_and_in_no_other_way() ->
   sand = sown()
   _, root = await lived(sand)
   was = engine.read(root, on=root)
-  py = Py()
-  _, over = await relived(Sand(stands=STANDS), list(sand.record), py)
-  assert py.ran == [WORD, "close(None)"]
+  again, over = await relived(Sand(stands=STANDS), list(sand.record))
+  assert ran(again) == [WORD, "close(None)"]
   assert engine.read(over, on=over) == was
 
 
@@ -250,9 +250,8 @@ async def test_the_rungs_of_the_ladder_run_in_record_order() -> None:
   sand.script[root] = ["a = 1", "b = a + 1", "close(b)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
-  py = Py()
-  await relived(Sand(stands=STANDS), list(sand.record), py)
-  assert py.ran == ["a = 1", "b = a + 1", "close(b)"]
+  again, _ = await relived(Sand(stands=STANDS), list(sand.record))
+  assert ran(again) == ["a = 1", "b = a + 1", "close(b)"]
 
 
 async def test_each_act_a_rung_makes_again_is_the_act_the_record_holds_at_that_place() -> None:
@@ -279,11 +278,10 @@ async def test_the_record_answers_what_it_holds_an_answer_for_and_the_gate_is_as
   """The record answers what it holds an answer for, and the gate is asked again."""
   sand = sown()
   await lived(sand)
-  py = Py()
   later = Sand(stands=STANDS)
-  again, _ = await relived(later, list(sand.record), py)
+  again, _ = await relived(later, list(sand.record))
   assert said(again, "ask") == [] and [a for a in later.calls if a[0] == "ask"] == []
-  assert py.gated == [WORD, "close(None)"]
+  assert gated(again) == [WORD, "close(None)"]
 
 
 async def test_a_later_life_on_a_kept_record_starts_nothing_and_keeps_the_ids_of_the_earlier_life() -> None:
@@ -306,9 +304,8 @@ async def test_in_a_later_life_the_ladder_of_every_chain_runs_again() -> None:
   assert await engine.prompt(int, "one", on=root) == 1
   assert await engine.prompt(int, "two", on=two) == 2
   await settle()
-  py = Py()
-  await relived(Sand(stands=STANDS), list(sand.record), py)
-  assert sorted(py.ran) == sorted(["here = 1\nclose(1)", "there = 2\nclose(2)"])
+  again, _ = await relived(Sand(stands=STANDS), list(sand.record))
+  assert sorted(ran(again)) == sorted(["here = 1\nclose(1)", "there = 2\nclose(2)"])
   assert engine.modules[root]["here"] == 1 and engine.modules[two]["there"] == 2
 
 
@@ -478,9 +475,9 @@ async def test_a_boot_is_a_life_a_second_boot_is_a_second_life_and_the_first_is_
 async def test_the_names_operator_record_and_journal_are_the_lifes_own_ears() -> None:
   """The names operator, record and journal are the life's own ears, and boot refuses a generator of the outside under one of them."""
   heard: list[tuple] = []
-  with pytest.raises(Refused, match="hears already"):
+  with pytest.raises(Refused, match="hears"):
     engine.boot(operator=keeping([]))
-  with pytest.raises(Refused, match="hears already"):
+  with pytest.raises(Refused, match="hears"):
     engine.boot(probe=keeping(heard), journal=pair())
   assert heard == []
 

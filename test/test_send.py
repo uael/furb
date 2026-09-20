@@ -1,6 +1,6 @@
 """send, the bus: the one way a fact is said to the living."""
 
-from conftest import DOOR, STANDS, Dead, Py, Sand, keeping, life, lived, pair, plain, relived, said, settle, sown
+from conftest import DOOR, STANDS, Dead, Sand, gated, keeping, life, lived, pair, plain, relived, said, settle, sown
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Exit, Text
 
@@ -13,7 +13,7 @@ async def test_the_one_way_to_speak_of_an_act() -> None:
   log, root = life(sand)
   made = engine.send("tell", root, [("noted", [], None)])
   assert made == ("tell", root, OPERATOR, [("noted", [], None)])
-  assert said(log, "tell")[-1] is made
+  assert said(log, "tell")[-1] == made
 
 
 async def test_every_verb_of_the_file_speaks_through_the_three_entries_of_the_bus() -> None:
@@ -35,12 +35,12 @@ async def test_every_verb_of_the_file_speaks_through_the_three_entries_of_the_bu
 
 async def test_a_fact_reaches_the_world_the_kernel_and_the_record_only_through_the_bus() -> None:
   """A fact reaches the World, the Kernel and the record only through the bus."""
-  sand, py = sown(), Py()
-  _, root = life(sand, kernel=py)
+  sand = sown()
+  log, root = life(sand)
   sand.script[root] = ["close(read('a.txt').content)"]
   assert await engine.prompt(str, "read it", on=root) == "one\ntwo\n"
   assert [a[0] for a in sand.calls] == ["stand", "ask", "read"]
-  assert [word for word, _, _ in py.gates] == ["close(read('a.txt').content)"]
+  assert gated(log) == ["close(read('a.txt').content)"]
   assert [entry[1][4] for entry in sand.record if entry[1][0] == "read"] == ["a.txt"]
 
 
@@ -145,4 +145,4 @@ async def test_a_done_said_of_a_question_that_has_no_outcome_yet_fills_its_outco
   got = engine.outcomes[act]
   assert isinstance(got, Exit) and got.code == 3
   engine.send("done", act, 9, by=WORLD)
-  assert engine.outcomes[act] is got
+  assert engine.outcomes[act] == got

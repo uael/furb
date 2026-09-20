@@ -1,31 +1,22 @@
 //! One life of the engine, driven from a host.
 //!
 //! A life runs in a sandbox: the preamble first, in a module of its own, then the engine, then `boot`, which is
-//! given the two generators the preamble makes. From then the host drives it by running one word at a time in
-//! that sandbox, the way an operator calls a verb, and by answering what the sandbox asks of it.
-//!
-//! The sandbox is monty, and it is [`Sand`]. There is no other: a life runs where the engine runs, and the whole
-//! of the crate is the engine in that sandbox.
+//! given the Kernel of the crate and one generator of the preamble for each ear of the host. From then the host
+//! drives it by running one word at a time in that sandbox, the way an operator calls a verb, and by answering
+//! what the sandbox asks of its ears.
 
 use crate::{
-  ENGINE, PREAMBLE,
+  ENGINE, PREAMBLE, SHEET,
+  ear::Host,
   fact::Value,
-  host::{Gate, Outside},
-  record::Entry,
+  gate::{Ty, named},
   sand::Sand,
-  verb::{Verb, shown},
-  voice::{Ears, Said},
-  world::World,
 };
 
 /// The name the sandbox reaches its host by, which the preamble calls and nothing else does.
 pub const HOST: &str = "host";
-
-/// What answers the sandbox while its code runs.
-pub trait Host {
-  /// One call of the sandbox, answered: the name of the generator that made it, and what it handed over, plain.
-  fn called(&mut self, name: &str, said: &Value) -> Value;
-}
+/// The name the Kernel hears by, whose one question, the gate, the crate answers itself.
+pub const KERNEL: &str = "kernel";
 
 /// What a life could not do.
 #[derive(Debug, Clone, PartialEq)]
@@ -69,33 +60,51 @@ impl std::fmt::Display for Refusal {
 
 impl std::error::Error for Refusal {}
 
-/// One life: a sandbox with the engine in it, and the outside it reaches.
+/// One life: a sandbox with the engine in it, and the host it reaches.
 #[derive(Debug)]
-pub struct Life<W, G> {
+pub struct Life<H> {
   /// Where the engine runs, which is monty.
   sand: Sand,
-  /// The World it hears through and the gate its words are read by.
-  outside: Outside<W, G>,
-  /// What its host has said and it has not heard.
-  ears: Ears,
+  /// The host, behind the gate of the Kernel.
+  gated: Gated<H>,
   /// The root chain, which every life opens under the one name.
   root: String,
+  /// What boot raised, if it raised, which comes out of the entry the host went in by while the life goes on.
+  raised: Option<Value>,
 }
 
-impl<W: World, G: Gate> Life<W, G> {
-  /// A life, opened from what a World kept of the life before it.
+impl<H: Host> Life<H> {
+  /// A life, opened from what a World kept of the life before it, on the ears of these names.
   ///
-  /// The preamble runs in a module of its own, so the globals of a chain hold what the engine defines and nothing
-  /// more. The engine runs next, and `boot` is given the two generators the preamble makes.
-  pub fn boot(mut sand: Sand, world: W, gate: G, ears: Ears, record: &[Entry]) -> Result<Self, Refusal> {
-    let mut outside = Outside::new(world, gate);
-    sand.run(PREAMBLE, &mut outside).map_err(one)?;
-    let kept: Vec<Value> = record.iter().map(Entry::as_value).collect();
-    let got = sand.run(&opening(&Value::List(kept).plain()), &mut outside).map_err(one)?;
-    let Some(root) = got.as_str().map(str::to_owned) else {
+  /// The record is the entries the World kept, as a list, each entry the act made last before its fact, the
+  /// fact, and for a query of a run what it was answered. The preamble runs in a module of its own, so the
+  /// globals of a chain hold what the engine defines and nothing more; the engine runs next, and `boot` is given
+  /// the Kernel and one generator for each name.
+  pub fn boot(mut sand: Sand, host: H, ears: &[String], record: &Value) -> Result<Self, Refusal> {
+    let mut gated = Gated { host, gate: Ty::new() };
+    sand.run(PREAMBLE, &mut gated).map_err(one)?;
+    let held = Value::List(named(ENGINE).into_iter().map(Value::Str).collect());
+    let names = Value::List(ears.iter().map(|name| Value::Str(name.clone())).collect());
+    let opening = format!(
+      "__engine = module({})\n__sheet = module({})\n__unwiring = unwiring(__engine, {HOST})\n__root = opened(__engine, __sheet, {}, {}, {HOST}, {})\n__root\n",
+      shown(&Value::Str(ENGINE.to_owned())),
+      shown(&Value::Str(SHEET.to_owned())),
+      shown(&held),
+      shown(&record.plain()),
+      shown(&names)
+    );
+    let got = sand.run(&opening, &mut gated).map_err(one)?;
+    let Some(root) = got.field("root").and_then(Value::as_str).map(str::to_owned) else {
       return Err(Refusal::Read(format!("a life opens on a chain, and {got:?} is none")));
     };
-    Ok(Life { sand, outside, ears, root })
+    let raised = got.field("raised").filter(|one| **one != Value::None).cloned();
+    Ok(Life { sand, gated, root, raised })
+  }
+
+  /// What boot raised, if it raised: a drift, which breaks the journal while the life goes on with nothing kept,
+  /// or a refusal of the ears it was given.
+  pub fn raised(&self) -> Option<&Value> {
+    self.raised.as_ref()
   }
 
   /// The root chain of the life, which is the first act of any record.
@@ -103,80 +112,53 @@ impl<W: World, G: Gate> Life<W, G> {
     &self.root
   }
 
-  /// One verb of the engine, called, and what the verb gave.
+  /// One word of the operator, run in the names of the engine, and what it gave.
   ///
-  /// This is the way a host works a life: [`crate::verb`] holds one shape for each verb of the contract, and a
-  /// field of it left unsaid is a word the call never carries, so the engine takes its own.
-  pub fn calls<V: Verb>(&mut self, verb: V) -> Result<V::Gave, Refusal> {
-    let got = self.word(&verb.word())?;
-    V::gave(&got)
-  }
-
-  /// One word of the operator, run on a chain, and what it gave.
-  ///
-  /// A verb of the engine is called by running a word that calls it, which is what an operator does from python
-  /// today. [`Life::calls`] makes the word of every verb the contract declares, and this takes any other.
+  /// This is how a host works a life: a verb of the engine is called by running a word that calls it, which is
+  /// what an operator does from python too. What the word binds stays bound, as a word of the operator does.
   pub fn word(&mut self, word: &str) -> Result<Value, Refusal> {
-    let asked = format!("asked(__engine, {})", shown(&Value::Str(word.to_owned())));
-    let said = self.sand.run(&asked, &mut self.outside).map_err(one)?;
+    let asked = format!("asked(__engine, {}, __unwiring)", shown(&Value::Str(word.to_owned())));
+    let said = self.sand.run(&asked, &mut self.gated).map_err(one)?;
     Ok(Value::of_plain(&said))
   }
 
-  /// Everything the host has said into its Voice, done in the life, in the order it was said.
-  ///
-  /// A command says what it wrote while it runs, a model answers an ask long after the ask was heard, and the
-  /// operator answers a prompt whenever the operator answers it. Nothing of the life hears any of that until it
-  /// is said in there, which is what this does, and it is the one door they come through, so what a host said
-  /// first is done first.
-  pub fn heard(&mut self) -> Result<usize, Refusal> {
-    let said = self.ears.drained();
-    if said.is_empty() {
-      return Ok(0);
-    }
-    let held: Vec<Value> = said.iter().map(Said::plain).collect();
-    let word = format!("does(__engine, {})", shown(&Value::List(held)));
-    self.sand.run(&word, &mut self.outside).map_err(one)?;
-    Ok(said.len())
+  /// The host of this life, which a host reads what its ears kept off.
+  pub fn host(&self) -> &H {
+    &self.gated.host
   }
 
-  /// Wait until the host says something, or until this long has passed, and say whether anything waits.
-  ///
-  /// A life goes on when a fact is said in it, so while it waits for a model, a command or a person, nothing of
-  /// it moves until its host speaks. This is how a host waits for its own work without asking over and over.
-  pub fn waits(&mut self, how_long: std::time::Duration) -> bool {
-    self.ears.waits(how_long)
-  }
-
-  /// What an act came to, and nothing at all while it waits.
-  ///
-  /// A host says what it owes first, since a fact it is holding may be the very one that settles the act, and
-  /// then asks. It never waits in here: how long to wait for a command or a model is the host's to decide, and
-  /// what this gives is one honest look.
-  pub fn came(&mut self, act: &str) -> Result<Option<Value>, Refusal> {
-    self.heard()?;
-    let asked = format!("({act:?} in outcomes, peek({act:?}))");
-    let said = self.word(&asked)?;
-    let held = said.as_entries().unwrap_or_default();
-    match held.first() {
-      Some(Value::Bool(true)) => Ok(Some(held.get(1).cloned().unwrap_or(Value::None))),
-      _ => Ok(None),
-    }
-  }
-
-  /// The World of this life, which a host reads what it kept of the life off.
-  pub fn world(&self) -> &W {
-    &self.outside.world
-  }
-
-  /// The World of this life, to change: a host that holds state in its World reaches it here.
-  pub fn world_mut(&mut self) -> &mut W {
-    &mut self.outside.world
+  /// The host of this life, to change.
+  pub fn host_mut(&mut self) -> &mut H {
+    &mut self.gated.host
   }
 }
 
-impl<W: World, G: Gate> Host for Outside<W, G> {
+/// The host, with the one call of the Kernel, which hands over the sheet of a word, answered by the gate of the crate
+/// before any ear hears it.
+struct Gated<H> {
+  host: H,
+  gate: Ty,
+}
+
+impl<H> std::fmt::Debug for Gated<H> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str("Gated")
+  }
+}
+
+impl<H: Host> Host for Gated<H> {
   fn called(&mut self, name: &str, said: &Value) -> Value {
-    Outside::called(self, name, said)
+    if name != KERNEL {
+      return self.host.called(name, said);
+    }
+    let sheet = said.as_str().unwrap_or_default();
+    let found = self.gate.checked(sheet);
+    Value::List(
+      found
+        .into_iter()
+        .map(|(line, why)| Value::List(vec![Value::Int(i64::try_from(line).unwrap_or_default()), Value::Str(why)]))
+        .collect(),
+    )
   }
 }
 
@@ -185,14 +167,75 @@ fn one(raised: Value) -> Refusal {
   Refusal::Raised(Value::of_plain(&raised))
 }
 
-/// The word that opens a life: the engine in a module of its own, and boot.
+/// One plain value as the python literal that says it again, which is how a host hands a value to the sandbox.
+pub(crate) fn shown(value: &Value) -> String {
+  match value {
+    Value::None => "None".to_owned(),
+    Value::Bool(held) => if *held { "True" } else { "False" }.to_owned(),
+    Value::Int(held) => held.to_string(),
+    Value::Float(held) => {
+      if held.is_finite() && held.fract() == 0.0 && held.abs() < 1e15 {
+        format!("{held:.1}")
+      } else {
+        format!("{held:?}")
+      }
+    }
+    Value::Str(held) => quoted(held),
+    Value::List(held) => {
+      let each: Vec<String> = held.iter().map(shown).collect();
+      format!("[{}]", each.join(", "))
+    }
+    Value::Map(held) => {
+      let each: Vec<String> = held.iter().map(|(key, one)| format!("{}: {}", quoted(key), shown(one))).collect();
+      format!("{{{}}}", each.join(", "))
+    }
+    Value::Tuple(_) | Value::Act(_) | Value::Name(_) | Value::Shape { .. } | Value::Error { .. } | Value::Show => {
+      shown(&value.plain())
+    }
+  }
+}
+
+/// One text as the python literal that says it again.
 ///
-/// The preamble is the session's own namespace, so the engine is given one of its own beside it, and the globals
-/// of a chain hold what the engine defines and nothing of the boundary.
-fn opening(record: &Value) -> String {
-  format!(
-    "__engine = module({})\n__root = opened(__engine, {}, {HOST})\n__root\n",
-    shown(&Value::Str(ENGINE.to_owned())),
-    shown(record)
-  )
+/// The escapes of python and of rust are not the same, so this writes the literal itself: a text of any character
+/// crosses to the sandbox as the text it was.
+fn quoted(said: &str) -> String {
+  let mut held = String::with_capacity(said.len() + 2);
+  held.push('"');
+  for one in said.chars() {
+    match one {
+      '"' => held.push_str("\\\""),
+      '\\' => held.push_str("\\\\"),
+      '\n' => held.push_str("\\n"),
+      '\r' => held.push_str("\\r"),
+      '\t' => held.push_str("\\t"),
+      one if (one as u32) < 0x20 || one as u32 == 0x7F => held.push_str(&format!("\\x{:02x}", one as u32)),
+      one => held.push(one),
+    }
+  }
+  held.push('"');
+  held
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn a_text_of_any_character_crosses_to_the_sandbox_as_the_text_it_was() {
+    assert_eq!(quoted("one\ntwo"), "\"one\\ntwo\"");
+    assert_eq!(quoted("a \"word\" and a \\"), "\"a \\\"word\\\" and a \\\\\"");
+    assert_eq!(quoted("a bell \u{7}"), "\"a bell \\x07\"");
+    assert_eq!(quoted("a face \u{1F600}"), "\"a face \u{1F600}\"");
+  }
+
+  #[test]
+  fn a_value_a_host_hands_over_is_the_word_that_says_it_again() {
+    assert_eq!(shown(&Value::None), "None");
+    assert_eq!(shown(&Value::Bool(true)), "True");
+    assert_eq!(shown(&Value::Float(30.0)), "30.0");
+    assert_eq!(shown(&Value::List(vec![Value::Int(1), Value::Str("two".to_owned())])), "[1, \"two\"]");
+    assert_eq!(shown(&Value::refused("no file")), "{\"is\": \"Refused\", \"args\": [\"no file\"]}");
+    assert_eq!(shown(&Value::Tuple(vec![Value::Int(1)])), "{\"is\": \"()\", \"args\": [1]}");
+  }
 }

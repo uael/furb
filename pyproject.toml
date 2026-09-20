@@ -41,14 +41,22 @@ dev = [
   "python-minifier>=3.2.0",
   "ruff>=0.16.2",
   "tiktoken>=0.13.0",
-  "ty>=0.0.70",
+  # The one ty the gate of this interpreter runs, which is the commit the crate's gate is built from; see Cargo.toml.
+  "ty==0.0.82",
+  "furb-monty",
 ]
+
+[tool.uv.workspace]
+members = ["bind/python"]
+
+[tool.uv.sources]
+furb-monty = { workspace = true }
 
 [tool.ruff]
 line-length = 120
 indent-width = 2
 target-version = "py314"
-src = ["src", "test"]
+src = ["src", "test", "bind/python"]
 
 [tool.ruff.lint]
 select = [
@@ -61,23 +69,23 @@ ignore = ["S101"]
 # The suite pins the contract's own literals, drives doubles that answer in one sentence where they stand, and
 # names its tests by the sentence they carry.
 "test/**" = ["PLR2004", "EM101", "EM102", "TRY003", "FBT001", "FBT003", "PT018", "ARG002", "RUF012", "PLR0911", "PLR0912", "A002", "E501"]
-# The surface of the binding speaks the engine's own vocabulary too, and its unions read as the engine writes
-# them: what a value can be, in the order the engine says it.
-"bind/python/furb_sand.pyi" = ["N818", "RUF036", "RUF041"]
+# The plain form has one arm for each kind of value, on both sides of the boundary, and a life opens on everything
+# it takes: the engine, the sheet, the names, the record, the host and the ears.
+"src/preamble.py" = ["PLR0911", "PLR0912", "PLR0913", "PLR0917"]
+"bind/python/furb_monty/engine.py" = ["PLR0911", "PLR0912"]
+# The stub of the extension names the exception as the contract names one, and reads a union as the engine writes it.
+"bind/python/furb_monty/_monty.pyi" = ["N818", "RUF036"]
 # The surface speaks the engine's own vocabulary: its verbs shadow builtins on purpose, take the parameters the
 # contract names, and its exceptions are named as the contract names them.
 "src/furb/engine.pyi" = ["N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "E501", "PLR0904"]
-"src/furb/engine.py" = ["TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "ANN", "PLR0904", "EM101", "EM102", "TRY003", "PLR0917", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "SIM105", "C901", "SLF001"]
-# The tests of the binding pin the engine's own literals and drive a World that answers in one sentence where it
-# stands, which is what the suite of the engine does too.
-"bind/python/test/**" = ["PLR2004", "EM101", "EM102", "TRY003", "ARG002", "PT011", "E501"]
+"src/furb/engine.py" = ["S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "ANN", "PLR0904", "EM101", "EM102", "TRY003", "PLR0917", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "SIM105", "C901", "SLF001"]
 
 [tool.ruff.lint.pycodestyle]
 max-line-length = 160
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false
-known-first-party = ["furb", "conftest", "yard"]
+known-first-party = ["furb", "furb_monty", "conftest"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -96,7 +104,7 @@ docstring-code-format = true
 skip-magic-trailing-comma = true
 
 [tool.ty.src]
-include = ["src", "test", "script"]
+include = ["src", "test", "script", "bind/python"]
 
 # The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
 # of an act, a task or a standing it reads after the check the sentence beside it makes.
@@ -108,26 +116,20 @@ unresolved-attribute = "ignore"
 unsupported-operator = "ignore"
 invalid-argument-type = "ignore"
 
-# The rig reads `furb_sand`, which `script/bound.py` builds for the interpreter that runs it and which stands on
-# no path ty reads. Every value it drives crosses the boundary plain, so what its shape is the sandbox says and
-# not this interpreter.
+# The engine of monty reads the engine of this interpreter as the module the switch keeps, whose names ty does not
+# see through a module object, and the extension it stands on is built and not read.
 [[tool.ty.overrides]]
-include = ["script/sanded.py"]
+include = ["bind/python/furb_monty/engine.py"]
 
 [tool.ty.overrides.rules]
-unresolved-import = "ignore"
 unresolved-attribute = "ignore"
-not-iterable = "ignore"
-not-subscriptable = "ignore"
-call-non-callable = "ignore"
-no-matching-overload = "ignore"
-invalid-argument-type = "ignore"
+unresolved-import = "ignore"
 
 [tool.pytest.ini_options]
 minversion = "9.1"
 testpaths = ["test"]
 pythonpath = [".", "test"]
-addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "--cov=furb", "--cov-report=term-missing", "--cov-fail-under=100"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing", "--cov-fail-under=100"]
 xfail_strict = true
 timeout = 30
 timeout_method = "thread"
@@ -140,4 +142,4 @@ filterwarnings = ["error"]
 # before a life is living: boot binds the four to itself before anything can call them, so the stubs stand only
 # to name the error of a call outside a life.
 fail_under = 100
-exclude_also = ['raise RuntimeError\("no life is living"\)']
+exclude_also = ['raise RuntimeError\("no life"\)']

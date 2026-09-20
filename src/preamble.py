@@ -1,23 +1,52 @@
-"""The boundary of a host that is not python: one generator of the outside, and the plain form of every value.
+"""The boundary of a host that is not python: the ears of the host, the Kernel, and the plain form of every value.
 
-The engine takes the World and the Kernel as generators, each under the name it hears by. A host written in another
-language is no generator, so this stands in its place: it hears every fact, makes it plain, hands it to the host,
-and says back what the host answers. Nothing of the engine is bound here, and nothing here is bound in the engine:
-the crate runs this in a module of its own and hands the two generators to boot, so the globals of a chain hold
-what the file defines and nothing more.
+The engine takes the World, and any other generator of the outside, as an ear under the name it hears by. A host
+written in another language is no generator, so this stands in its place: it hears every fact, makes it plain,
+hands it to the host under the name of the ear, and says back what the host answers. Nothing of the engine is
+bound here, and nothing here is bound in the engine: the crate runs this in a module of its own and hands the
+generators to boot, so the globals of a chain hold what the file defines and nothing more.
 
-A host that must ask the engine something while it answers says so and is asked, so it never calls into a life
-that stands waiting for it.
+The host answers a fact one of four ways: with nothing, with one saying, which the ear yields and the bus hands back
+whole as the next fact the ear hears; with a word to read in the names of the engine, whose value is handed back
+and the host asked again; or with what the ear raised, which is raised in the ear. A host that reads the engine
+never calls into a life that stands waiting for it.
+
+A callable of the host crosses as a name: a show, a filter or an ear a host hands a verb is called back through
+the host with plain arguments, and a generator of the host is heard the way an ear is. A template string cannot be
+made in this interpreter, so one of the host crosses as the interpolations it holds, which is all a tell of it reads.
 """
 
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
-from collections.abc import Callable, Coroutine, Generator, Mapping
+from collections.abc import Callable, Coroutine, Generator
 from contextvars import ContextVar
 
 type Host = Callable[[str, object], object]
-"""A host hears one fact, plain, under the name of the generator that carries it, and answers what to do."""
-type Names = Mapping[str, object]
+"""A host hears one plain value under the name of the ear it is for, and answers plain."""
+type Names = dict[str, object]
 """The names of the engine, by which a plain value is made again, and which the Kernel reaches the bus through."""
+type Channel = Callable[[object], object]
+"""One way to the host for one ear: what the ear was given, plain, and what the host answers, plain."""
+
+TUPLE = "()"
+"""TUPLE is how the plain form says a tuple, since a host that says a fact back must say it as the fact it was."""
+SHOW = ""
+"""SHOW is how the plain form says a callable of the engine that no host reads: a show, a filter, an ear."""
+NAME = "name"
+"""NAME is how the plain form says a name of the engine, such as a verb, which a host of python reads as its own."""
+ACT = "Act"
+"""ACT is how the plain form says the name of an act, which is a string to a host and an act to python."""
+CALL = "call"
+"""CALL is how the plain form says a callable of the host, which the engine calls back through the host by id."""
+GEN = "gen"
+"""GEN is how the plain form says a generator of the host, which the engine hears the way it hears an ear."""
+TEMPLATE = "Template"
+"""TEMPLATE is how the plain form says a template string of the host, by its interpolations."""
+MADE = "made"
+"""MADE is how the plain form says a callable of the engine that has no name, such as a show a word made, which a
+host of python calls back through a word by its id."""
+
+made: list[object] = []
+"""made holds every callable of the engine that crossed to the host by its id, for as long as the life lives."""
 
 
 def verb(names: Names, which: str) -> Callable[..., object]:
@@ -27,89 +56,155 @@ def verb(names: Names, which: str) -> Callable[..., object]:
   return got
 
 
-TUPLE = "()"
-"""TUPLE is how the plain form says a tuple, since a host that says a fact back must say it as the fact it was."""
-SHOW = ""
-"""SHOW is how the plain form says what no host reads: a show or a filter, which no record holds either."""
+def known(names: Names, x: object) -> str | None:
+  """The name of the engine a callable is bound under, and nothing for a callable of no name."""
+  return next((k for k, v in names.items() if v is x and not k.startswith("_")), None)
 
 
-def wire(x: object) -> object:
-  """The plain form of a value: an exception its name and what it was made with, a shape its name beside its
-  fields, a tuple its entries under its own mark, a list its entries, a map its entries, and plain data is plain.
+def wire(x: object, names: Names) -> object:
+  """The plain form of a value: an act its name, an exception its name and what it was made with, a shape its name
+  beside its fields, a tuple its entries under its own mark, a list its entries, a map its entries, a name of the
+  engine its name, and plain data is plain.
 
-  What is none of these is a show or a filter, which no host reads and no record holds, and it crosses as a mark
-  of what it was and nothing else.
+  What is none of these is a callable, which no host reads and no record holds, and it crosses as a mark of what
+  it was and nothing else.
   """
+  if type(x).__name__ == ACT:
+    return {"is": ACT, "args": [str(x)]}
   match x:
     case None | bool() | int() | float() | str():
       return x
     case BaseException():
-      return {"is": type(x).__name__, "args": [wire(i) for i in x.args]}
+      return {"is": type(x).__name__, "args": [wire(i, names) for i in x.args]}
     case dict():
-      return {k: wire(v) for k, v in x.items()}
+      return {k: wire(v, names) for k, v in x.items()}
     case tuple():
-      return {"is": TUPLE, "args": [wire(i) for i in x]}
+      return {"is": TUPLE, "args": [wire(i, names) for i in x]}
     case list():
-      return [wire(i) for i in x]
+      return [wire(i, names) for i in x]
   fields = getattr(x, "__dataclass_fields__", None)
-  return (
-    {"is": SHOW, "of": type(x).__name__}
-    if fields is None
-    else {"is": type(x).__name__} | {name: wire(getattr(x, name)) for name in fields}
-  )
+  if fields is not None and not isinstance(x, type):
+    return {"is": type(x).__name__} | {name: wire(getattr(x, name), names) for name in fields}
+  name = known(names, x)
+  if name is not None:
+    return {"is": NAME, "name": name}
+  if not callable(x):
+    return {"is": SHOW, "of": type(x).__name__}
+  made.append(x)
+  return {"is": MADE, "id": len(made) - 1}
 
 
-def unwire(x: object, names: Names) -> object:
-  """The value again from the plain form, made by what its name is known by, and nothing for what cannot be made."""
+def unwire(x: object, names: Names, host: Host) -> object:
+  """The value again from the plain form, made by what its name is known by: a name of the engine, or of the
+  interpreter when the engine holds none."""
   match x:
     case list():
-      return [unwire(i, names) for i in x]
+      return [unwire(i, names, host) for i in x]
     case {"is": str(mark), "args": list(held)} if mark == TUPLE:
-      return tuple(unwire(i, names) for i in held)
+      return tuple(unwire(i, names, host) for i in held)
+    case {"is": str(mark), "id": int(n)} if mark == CALL:
+      return calling(n, names, host)
+    case {"is": str(mark), "id": int(n), "started": bool(started)} if mark == GEN:
+      g = crossing(lambda a, n=n: host(GEN, [n, a]), names, host)
+      if started:
+        g.send(None)
+      return g
+    case {"is": str(mark), "interpolations": list(held)} if mark == TEMPLATE:
+      return Templated([Interpolated(unwire(v, names, host), e) for v, e in held])
+    case {"is": str(mark), "name": str(name)} if mark == NAME:
+      return names[name]
     case {"is": str(mark)} if mark == SHOW:
       return None
     case {"is": str(name), **rest}:
       held = rest.pop("args", [])
-      args = [unwire(i, names) for i in held] if isinstance(held, list) else []
-      return verb(names, name)(*args, **{str(k): unwire(v, names) for k, v in rest.items()})
+      args = [unwire(i, names, host) for i in held] if isinstance(held, list) else []
+      maker = names[name] if name in names else eval(name)  # noqa: S307
+      assert callable(maker), name
+      # An exception of this interpreter takes its arguments by position and no keyword at all.
+      return maker(*args) if not rest else maker(*args, **{str(k): unwire(v, names, host) for k, v in rest.items()})
     case dict():
-      return {k: unwire(v, names) for k, v in x.items()}
+      return {k: unwire(v, names, host) for k, v in x.items()}
   return x
 
 
-def outside(name: str, host: Host, names: Names) -> Generator[tuple | None, tuple]:
-  """One generator of the outside: every fact it hears goes to the host, and what the host says it says.
+class Interpolated:
+  """One interpolation of a template string of the host: its value and its expression, which a tell of it reads."""
 
-  The host answers one of four ways: it says facts, which this yields one by one, as any generator of a life does;
-  it asks a question of the engine, which this puts and hands back the answer; it reads the engine, which is a word
-  run in the names of the engine and handed back; or it says nothing at all.
+  def __init__(self, value: object, expression: str) -> None:
+    self.value = value
+    self.expression = expression
 
-  A World of python is a generator beside the engine, so it reads the engine where it answers: `acts` and `scope`
-  and `cwd` are all in its reach. A host of another language is not beside it, so the read is how it reaches the
-  same names, and the boundary is as wide as the World the contract declares.
 
-  What the host says is plain, as what it hears is, so nothing of python crosses in either direction and a host
-  of any language answers the same way.
+class Templated:
+  """A template string of the host, by its interpolations, since this interpreter makes one from a literal alone."""
+
+  def __init__(self, interpolations: list[Interpolated]) -> None:
+    self.interpolations = interpolations
+
+
+def calling(n: int, names: Names, host: Host) -> Callable[..., object]:
+  """One callable of the host, called back through the host with plain arguments, and what it gave, made again."""
+
+  def called(*args: object) -> object:
+    got = host(CALL, [n, [wire(a, names) for a in args]])
+    return answered(got, names, host)
+
+  return called
+
+
+def answered(got: object, names: Names, host: Host) -> object:
+  """What a call of the host came to: its value, or what it raised, which is raised here."""
+  match got:
+    case {"raised": no}:
+      raise raised(no, names, host)
+    case {"value": value}:
+      return unwire(value, names, host)
+  return None
+
+
+def raised(no: object, names: Names, host: Host) -> BaseException:
+  """What the host raised, made again as the exception it is."""
+  made = unwire(no, names, host)
+  assert isinstance(made, BaseException)
+  return made
+
+
+def unwiring(engine: dict[str, object], host: Host) -> Callable[[object], object]:
+  """The plain form read back for one life, which a word of the operator reaches under the name `unwire`.
+
+  It is made once for the life, since the sandbox counts the functions a session defines and a word of the
+  operator is said many times over.
   """
+  return lambda x: unwire(x, engine, host)
+
+
+def crossing(channel: Channel, names: Names, host: Host) -> Generator[tuple | None, tuple | None]:
+  """One generator of the host, heard through a channel.
+
+  The generator is on the other side, so this stands in for it: every fact it is given goes through the channel,
+  and what comes back is what the generator did with it. It yielded a saying, which this yields, and the bus hands
+  back the fact as it was said, which goes through the channel next. It yielded nothing, so this waits for the
+  next fact. It read the engine, which is a word run here in the names of the engine and handed back. It returned,
+  so this returns, and it raised, so this raises.
+  """
+  a, unwire_ = None, unwiring(names, host)
   while True:
-    a = yield
-    if a is None:
-      continue
-    reply = unwire(host(name, wire(a)), names)
+    reply = channel(wire(a, names))
     while True:
       match reply:
-        case ("ask", str(kind), str(on), list(words)):
-          got = verb(names, "ask")(kind, on, *[unwire(w, names) for w in words])
-          reply = unwire(host(name, wire(("answered", got[1] if isinstance(got, tuple) else got))), names)
-        case ("reads", str(word)):
-          reply = unwire(host(name, wire(("answered", eval(word, dict(names))))), names)  # noqa: S307
-        case ("say", list(facts)):
-          for one in facts:
-            said = unwire(one, names)
-            if isinstance(said, (list, tuple)):
-              yield tuple(said)
+        case {"reads": str(word)}:
+          reply = channel({"answered": wire(eval(word, names, {"unwire": unwire_, "made": made}), names)})  # noqa: S307
+        case {"raised": no}:
+          raise raised(no, names, host)
+        case {"say": list(saying)}:
+          said = unwire(saying, names, host)
+          assert isinstance(said, list)
+          a = yield tuple(said)
           break
+        case {"over": _}:
+          return
         case _:
+          a = yield
           break
 
 
@@ -179,7 +274,6 @@ class Running:
 
   def begin(self, rung: str, chain: str, word: str) -> None:
     """A run begun: the word runs in the globals of its chain, and one that awaits nothing is over where it began."""
-    self.ladders.setdefault(chain, []).append(word)
     token = self.site.set(rung)
     try:
       ran = ran_in(word, rung, self.modules[chain])
@@ -202,19 +296,29 @@ class Running:
       self.ended(one, got)
 
 
-def kernel(name: str, host: Host, names: Names) -> Generator[tuple | None, tuple]:
-  """The Kernel: it gates the word of a rung with the host, and it runs that word in the module of its chain.
+def kernel(name: str, host: Host, names: Names, sheet: Names, bound: list[str]) -> Generator[tuple | None, tuple]:
+  """The Kernel: it gates the word of a rung on its sheet, and it runs that word in the module of its chain.
 
-  The gate is machinery of the outside, since what a word is read against is the host's to decide, so it is asked
-  of the host and the chain waits for the answer. The run is not: the word runs where the engine runs, in the
-  globals of its chain, so nothing of it crosses and nothing calls back into a life that stands waiting.
+  The sheet is `furb.sheet`'s, written here as the python package writes it, and the reading of it is the crate's:
+  ty is asked of the host under the name of the Kernel, given the sheet, and answers each finding by its line. The
+  run is here: the word runs where the engine runs, in the globals of its chain, so nothing of it crosses and
+  nothing calls back into a life that stands waiting.
   """
   held = Running(names)
+
+  def checked(text: str) -> list[tuple[int, str]]:
+    found = unwire(host(name, text), names, host)
+    assert isinstance(found, list)
+    return [(line, why) for line, why in found]
+
   while True:
     match (yield):
-      case ("gate", qid, _, chain, word, returns):
-        found = host(name, wire(("gate", word, held.ladders.get(chain, []), returns)))
-        yield "done", qid, unwire(found, names)
+      case ("gate", qid, _, chain, word):
+        # The ladder is the accepted words of the chain, so an accepted word joins it here, before it runs.
+        found = verb(sheet, "gate")(bound, held.ladders.setdefault(chain, []), word, checked)
+        if not found:
+          held.ladders[chain].append(word)
+        yield "done", qid, found
       case ("run", rung, _, chain, word):
         held.begin(rung, chain, word)
       case ("sent", rung, _, value) if rung in held.frames:
@@ -234,39 +338,40 @@ def module(source: str) -> dict[str, object]:
   return held
 
 
-def opened(engine: dict[str, object], record: object, host: Host) -> object:
-  """A life of that engine, opened from what a World kept of the life before it.
+def opened(
+  engine: dict[str, object], sheet: dict[str, object], bound: list[str], record: object, host: Host, ears: list[str]
+) -> object:
+  """A life of that engine, opened from what a World kept of the life before it, on the ears of these names: the
+  root it opened on, and what boot raised, if it raised.
 
-  The World and the Kernel are the two generators the engine takes, and both of them reach the host from here.
+  The Kernel is the crate's and is given first, so that it answers the gate before any ear of the host hears it;
+  it writes the sheet of a word with the names the globals of a chain hold, which the crate read off the engine.
+  Each ear of the host is a generator of the host, heard through the host under its name. The record is the
+  entries as the World hands them: each the act made last before its fact, the fact as a tuple, and for a query
+  of a run what it was answered.
   """
-  world = outside("world", host, engine)
-  gated = kernel("kernel", host, engine)
-  return verb(engine, "boot")(unwire(record, engine), world=world, kernel=gated)
+  made.clear()
+  kept = unwire(record, engine, host)
+  assert isinstance(kept, list)
+  entries = [(e[0], tuple(e[1]), *e[2:]) for e in kept]
+  outside = {name: crossing(lambda a, name=name: host(name, a), engine, host) for name in ears}
+  try:
+    root = verb(engine, "boot")(entries, kernel=kernel("kernel", host, engine, sheet, bound), **outside)
+  except BaseException as no:
+    # What boot raised comes out of the entry the operator went in by, and the life goes on: a drift breaks the
+    # journal and keeps nothing more, so the root stands when the record held it.
+    acts = engine["acts"]
+    assert isinstance(acts, dict)
+    root = "chain://operator.1" if "chain://operator.1" in acts else ""
+    return {"root": root, "raised": wire(no, engine)}
+  return {"root": str(root), "raised": None}
 
 
-def does(engine: dict[str, object], held: object) -> None:
-  """Everything a host said while nothing asked it, done in the order it was said.
-
-  A host says a fact of its own, or it closes an act with what the work it started came to, or it pauses a chain
-  it cannot answer for. A fact says its kind, the act it is about, who said it and its words, and the bus is told
-  who said it, since a fact of the World is the World's own.
-  """
-  said = unwire(held, engine)
-  assert isinstance(said, list)
-  for one in said:
-    match one:
-      case ("fact", str(kind), str(about), str(by), list(words)):
-        verb(engine, "send")(kind, about, *words, by=by)
-      case ("close", str(name), value):
-        verb(engine, "close")(value, name)
-      case ("pause", str(name)):
-        verb(engine, "pause")(name)
-
-
-def asked(engine: dict[str, object], word: str) -> object:
+def asked(engine: dict[str, object], word: str, unwire_: Callable[[object], object]) -> object:
   """One word of the operator, run in the globals of the engine, and what it gave, plain.
 
   It runs in the engine's own globals and not in a copy of them, so what it binds stays bound, as a word of the
-  operator does when the operator is python.
+  operator does when the operator is python. The word reaches the plain form under one name of its own, so a
+  value of the host stands in it as the mark that says it.
   """
-  return wire(eval(word, engine))  # noqa: S307
+  return wire(eval(word, engine, {"unwire": unwire_, "made": made}), engine)  # noqa: S307
