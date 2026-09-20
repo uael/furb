@@ -2,21 +2,20 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Py, Sand, life, said, settle
+from conftest import STANDS, Sand, gated, life, ran, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Exit
 
 
 async def test_the_chain_has_the_kernel_gate_and_begin_every_rung_by_the_facts_gate_and_run() -> None:
   """The chain has the Kernel gate and begin every rung, by the facts gate and run."""
-  sand, py = Sand(stands=STANDS), Py()
-  log, root = life(sand, kernel=py)
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
   await engine.rung("k = 1", on=root)
   sand.script[root] = ["close(k + 1)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
-  assert py.gated == ["k = 1", "close(k + 1)"] and py.ran == py.gated
-  assert [one[4] for one in said(log, "run")] == py.ran
+  assert gated(log) == ["k = 1", "close(k + 1)"] and ran(log) == gated(log)
   assert [one[2] for one in said(log, "done") if one[1].startswith("gate://")] == ["kernel", "kernel"]
 
 

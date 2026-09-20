@@ -133,3 +133,14 @@ async def test_a_second_read_of_a_text_tells_the_model_no_line_that_an_earlier_r
   told = tags(engine.turns(on=root), "read")
   assert [body_of(tag) for tag in told] == ["1 one\n2 two", "3 three"]
   assert [attr(shown(tag)[0], "known") for tag in told] == [0, 2]
+
+
+async def test_a_list_body_shows_each_showing_in_it_and_anything_else_in_it_stands_as_it_is() -> None:
+  """A list body shows each showing in it, and anything else in it stands as it is."""
+  sand = sown()
+  _, root = life(sand)
+  sand.script[root] = ["tell('found', body=[1, 'x', (Text('p', 'a\\nb\\n'), TAIL)])\nclose(1)"]
+  assert await engine.prompt(int, "tell a list", on=root) == 1
+  await settle()
+  found = [tag[2] for tag in tags(engine.turns(on=root), "found")]
+  assert found == [[1, "x", ("shown", [("path", "p"), ("known", 0)], "1 a\n2 b")]]

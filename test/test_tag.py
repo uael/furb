@@ -91,7 +91,7 @@ async def test_the_tags_of_the_file() -> None:
   _, root = life(sand)
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
-  sand.script[root] = ["BAD = 1", "raise ValueError('boom')", EVERY]
+  sand.script[root] = ["k = BAD", "raise ValueError('boom')", EVERY]
   assert await engine.prompt(int, "everything", on=root) == 1
   await settle()
   engine.pause(root)

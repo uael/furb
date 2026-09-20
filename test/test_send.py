@@ -1,6 +1,6 @@
 """send, the bus: the one way a fact is said to the living."""
 
-from conftest import DOOR, STANDS, Dead, Py, Sand, keeping, life, lived, pair, plain, relived, said, settle, sown
+from conftest import DOOR, STANDS, Dead, Sand, gated, keeping, life, lived, pair, plain, relived, said, settle, sown
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Exit, Text
 
@@ -35,12 +35,12 @@ async def test_every_verb_of_the_file_speaks_through_the_three_entries_of_the_bu
 
 async def test_a_fact_reaches_the_world_the_kernel_and_the_record_only_through_the_bus() -> None:
   """A fact reaches the World, the Kernel and the record only through the bus."""
-  sand, py = sown(), Py()
-  _, root = life(sand, kernel=py)
+  sand = sown()
+  log, root = life(sand)
   sand.script[root] = ["close(read('a.txt').content)"]
   assert await engine.prompt(str, "read it", on=root) == "one\ntwo\n"
   assert [a[0] for a in sand.calls] == ["stand", "ask", "read"]
-  assert [word for word, _, _ in py.gates] == ["close(read('a.txt').content)"]
+  assert gated(log) == ["close(read('a.txt').content)"]
   assert [entry[1][4] for entry in sand.record if entry[1][0] == "read"] == ["a.txt"]
 
 

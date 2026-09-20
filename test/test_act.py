@@ -81,7 +81,7 @@ async def test_the_engine_refuses_an_act_said_from_outside_a_run_that_names_no_c
   sand = Sand(stands=STANDS)
   log, _ = life(sand)
   heard: list[object] = []
-  with pytest.raises(Refused, match="names no chain"):
+  with pytest.raises(Refused, match="no chain"):
     engine.act("note", "", noting(heard))
   assert said(log, "note") == [] and heard == []
   assert engine.chain("two").startswith("chain://")

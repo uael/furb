@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import STANDS, Py, Sand, attr, life, said, settle, tags, text_of
+from conftest import STANDS, Sand, attr, gated, life, ran, said, settle, tags, text_of
 from furb import engine
 from furb.engine import WORLD, Exit, Refused
 
@@ -23,15 +23,15 @@ async def test_the_run_of_a_word_on_a_chain() -> None:
 
 async def test_a_rung_is_an_act_the_run_of_one_word_in_the_globals_of_its_chain() -> None:
   """A rung is an act: the run of one word in the globals of its chain, which the chain has the Kernel run."""
-  sand, py = Sand(stands=STANDS), Py()
-  log, root = life(sand, kernel=py)
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
   act = engine.rung("k = 21", on=root)
   assert await act is None
   made = said(log, "rung")[0]
   assert made[1] == act and engine.acts[act] is made
   assert (made[3], made[4]) == (root, "k = 21")
   assert [a[1] for a in said(log, "run")] == [act]
-  assert py.ran == ["k = 21"] and engine.modules[root]["k"] == 21
+  assert ran(log) == ["k = 21"] and engine.modules[root]["k"] == 21
 
 
 async def test_the_engine_tells_what_a_step_raised() -> None:
@@ -63,7 +63,7 @@ async def test_the_opened_tag_of_a_rung_with_a_word_carries_that_word_as_its_bod
 
 
 async def test_the_opened_tag_of_a_rung_with_no_word_tells_the_actor_and_the_close_its_word_must_say() -> None:
-  """The opened tag of a rung with no word tells the actor that is asked and the close its word must say to answer the prompt, whose shape is what the gate reads that word against."""
+  """The opened tag of a rung with no word tells the actor that is asked and the close its word must say to answer the prompt."""
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
   engine.prompt(int, "count", "m/high", on=root)
@@ -157,8 +157,8 @@ async def test_the_kernel_gives_nothing_for_a_word_that_ran_to_its_end() -> None
 
 async def test_the_kernel_gives_what_a_word_raised() -> None:
   """The Kernel gives what a word raised, and a top-level return is no python, which the gate refuses as it refuses any word that is not python."""
-  sand, py = Sand(stands=STANDS), Py()
-  log, root = life(sand, kernel=py)
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
   assert await engine.rung("k = 1", on=root) is None
   assert [a[3] for a in said(log, "ran")] == [None]
   with pytest.raises(ValueError, match="boom"):
@@ -168,7 +168,7 @@ async def test_the_kernel_gives_what_a_word_raised() -> None:
     compile("return 1", "<rung>", "exec")
   with pytest.raises(Refused):
     await engine.rung("k = (", on=root)
-  assert py.gated[-1] == "k = (" and py.ran == ["k = 1", "raise ValueError('boom')"]
+  assert gated(log)[-1] == "k = (" and ran(log) == ["k = 1", "raise ValueError('boom')"]
 
 
 async def test_the_word_of_a_rung_runs_to_its_next_await_and_continues_when_the_close_it_awaits_comes() -> None:
@@ -226,13 +226,13 @@ async def test_rung_is_given_a_word_and_runs_it_on_a_chain_in_the_globals_of_tha
 
 async def test_the_kernel_gates_the_word_its_caller_wrote_like_any_word() -> None:
   """The Kernel gates the word its caller wrote like any word."""
-  sand, py = Sand(stands=STANDS), Py()
-  _, root = life(sand, kernel=py)
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
   await engine.rung("k = 1", on=root)
-  assert py.gated == ["k = 1"]
+  assert gated(log) == ["k = 1"]
   with pytest.raises(Refused):
-    await engine.rung("BAD = 1", on=root)
-  assert py.gated == ["k = 1", "BAD = 1"] and py.ran == ["k = 1"]
+    await engine.rung("k = BAD", on=root)
+  assert gated(log) == ["k = 1", "k = BAD"] and ran(log) == ["k = 1"]
 
 
 async def test_a_rung_with_a_word_completes_with_what_that_word_raises() -> None:
@@ -344,11 +344,11 @@ async def test_of_the_queries_its_word_asked_it_tells_nothing() -> None:
 
 async def test_an_answer_with_no_text_is_a_word_like_any_other() -> None:
   """An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the model is asked again."""
-  sand, py = Sand(stands=STANDS), Py()
-  _, root = life(sand, kernel=py)
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
   sand.script[root] = ["", "close(1)"]
   assert await engine.prompt(int, "work", on=root) == 1
-  assert py.gated == ["", "close(1)"] and py.ran == ["", "close(1)"]
+  assert gated(log) == ["", "close(1)"] and ran(log) == ["", "close(1)"]
 
 
 async def test_the_chain_with_a_source_makes_a_rung_of_its_own_retelling_each_rung() -> None:

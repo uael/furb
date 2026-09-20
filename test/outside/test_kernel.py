@@ -1,7 +1,7 @@
 """The Kernel of this interpreter: what a word is held to before it runs, and how it runs in the module of its chain.
 
-The gate reads a word on a sheet with ty, against the ladder of its chain and the shape its close must carry.
-The run is begun and carried by the facts of the engine, so it is driven through a life whose World answers a
+The gate reads a word on the sheet of `furb.sheet` with the ty command line, against the ladder of its chain. The
+run is begun and carried by the facts of the engine, so it is driven through a life whose World answers a
 standing and refuses everything else.
 """
 
@@ -10,81 +10,52 @@ from pathlib import Path
 
 import pytest
 
-from furb import engine
+from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
-from furb.kernel import ANY, CLOSE, HEAD, NAMES, Native, compiled, declared, sheet
+from furb.kernel import NAMES, Native, declared
 from outside.doubles import settle, stood, tags, worlds
 
 STANDS = (((OPERATOR, (), WINDOW), ("opus", ("low",), 1000)), "/w", "opus/low")
 
 
-def said(word: str, ladder: tuple[str, ...] = (), shape: str = "object") -> list[str]:
-  """What the gate finds against a word, read against the ladder of its chain and the shape it must give."""
-  return Native().gate(word, list(ladder), shape)
+def said(word: str, ladder: tuple[str, ...] = ()) -> list[str]:
+  """What the gate finds against a word, read against the ladder of its chain."""
+  return Native().gate(word, list(ladder))
 
 
 def test_the_sheet_binds_what_the_contract_declares() -> None:
   """The globals of a chain hold every name the contract declares, so the sheet binds the same names, one to a line,
   and ty reads a word in the vocabulary it will have when it runs."""
-  assert [*declared(), "actor", "raised"] == NAMES
-  assert {"bash", "Text", "HEAD", "read", "prompt", "actor", "raised"} <= set(NAMES)
+  assert declared() == NAMES
+  assert {"bash", "Text", "HEAD", "read", "prompt", "close"} <= set(NAMES)
   assert {"World", "Kernel"}.isdisjoint(NAMES)
-  assert all(f"  {name} = __engine.{name}\n" in HEAD for name in NAMES if name != CLOSE)
-  laid, lines, above = sheet("k = 1", "close(k)", "int")
-  assert above > lines.stop > lines.start == HEAD.count("\n") + 1
+  laid, above = sheet.sheet(NAMES, ["k = 1"], "close(k)")
+  assert all(f"  {name} = __engine.{name}\n" in laid for name in (*NAMES, "actor", "raised"))
+  assert above == laid.count("\n") - 1
   assert laid.endswith("  close(k)\n")
   assert "    k = 1\n" in laid
-  assert "def close(value: int" in laid
-  assert f"  {CLOSE} = __engine.{CLOSE}\n" not in HEAD
 
 
 def test_the_reading_of_a_word_comes_before_ty() -> None:
   """A word refused for what it says is a word no tool has anything to add about."""
-  assert "SyntaxError: invalid syntax" in said("def (")[0]
+  assert said("def (")[0].startswith("line 1: ")
   assert said("x = __engine.WINDOW") == ["__engine is a name of the gate"]
-  assert said("close(1)", shape="<class 'str'>") == ["<class 'str'> is no shape"]
 
 
 def test_a_word_the_interpreter_will_not_take_is_a_finding_like_any_other() -> None:
   """A pin: a body of a module takes no yield where the sheet, which lays the word inside a function of its own,
   takes one, so the gate compiles the word exactly as the run will and says what the compiler said."""
-  assert "SyntaxError: 'yield' outside function" in said("x = yield 1")[0]
-  assert "SyntaxError: 'return' outside function" in said("return 1")[0]
+  assert "'yield' outside function" in said("x = yield 1")[0]
+  assert "'return' outside function" in said("return 1")[0]
   assert said("x = 1") == []
-  assert compiled("close(1)", "<word>").co_filename == "<word>"
 
 
-def test_a_word_is_read_against_the_shape_it_must_give() -> None:
-  """The gate refuses a close whose value does not have the shape, and reads a word against no shape at all when
-  the shape is left unsaid, which is what a word its caller wrote is read against."""
-  assert said("close(1)", shape="int") == []
-  assert said("close('a')", shape="int")[0].startswith("line 1: [invalid-argument-type]")
-  assert said("close(1)", shape="str")[0].startswith("line 1: [invalid-argument-type]")
-  assert said("close(1)", shape="") == []
-  assert said("close(None)", shape="None") == []
-  assert said("close(1)", shape="None") == []
-  assert said("close(nowhere())")[0].startswith("line 1: [unresolved-reference]")
-  assert said("close('a', 'rung://elsewhere')", shape="int") == []
-  assert said("k = 1", shape="int") == []
-  assert ANY == "object"
-
-
-def test_a_shape_that_names_nothing_is_no_shape() -> None:
-  """A shape the sheet cannot resolve holds a word to nothing at all, since ty reads what it cannot resolve as any
-  value, so the gate says the shape is no shape rather than let every word through.
-
-  A name of a module is such a shape: the globals of a chain hold the names of the engine and no module, so a name
-  under one is a name of nobody, here and on the chain alike. A name that a rung of the chain made is no such
-  thing: the ladder stands on the sheet, so the shape resolves against it.
-  """
-  assert said("close('a string')", shape="Text")[0].startswith("line 1: [invalid-argument-type]")
-  assert said("close('a string')", shape="Text | None")[0].startswith("line 1: [invalid-argument-type]")
-  assert said("close('a string')", shape="Nope") == ["Nope is no shape"]
-  assert said("close('a string')", shape="furb.engine.Text") == ["furb.engine.Text is no shape"]
-  assert said("close('a string')", shape="furb.engine.Text | None") == ["furb.engine.Text | None is no shape"]
-  made = ("class Report:\n  n: int = 1",)
-  assert said("close(Report())", made, "Report") == []
-  assert said("close('a string')", made, "Report")[0].startswith("line 1: [invalid-argument-type]")
+def test_a_word_is_read_against_the_names_it_will_have() -> None:
+  """The gate reads a word in the names a chain holds, and a name of nobody is a finding."""
+  assert said("close(1)") == []
+  assert said("close(nowhere())")[0].startswith("line 1: error[unresolved-reference]")
+  assert said("close('a', 'rung://elsewhere')") == []
+  assert said("k = 1") == []
 
 
 def test_a_finding_arrives_in_the_numbering_of_the_word_itself() -> None:
@@ -92,28 +63,26 @@ def test_a_finding_arrives_in_the_numbering_of_the_word_itself() -> None:
   the word, and what ty says of the ladder is not the word's."""
   found = said("a = 1\ny: int = kept", ("kept = 'text'",))
   assert len(found) == 1
-  assert found[0].startswith("line 2: [invalid-assignment]")
+  assert found[0].startswith("line 2: error[invalid-assignment]")
   assert said("x = 1", ("bad: int = 'said'",)) == []
   assert said("y: int = x + 1", ("x = None\nx = 5",)) == []
-  assert said("y: str = 1", ("close(1)",))[0].startswith("line 1: [invalid-assignment]")
-  assert said("y: str = 1", ("raise ValueError('boom')",))[0].startswith("line 1: [invalid-assignment]")
-  assert said("close(1)", ("while True:\n  pass",), "str")[0].startswith("line 1: [invalid-argument-type]")
+  assert said("y: str = 1", ("close(1)",))[0].startswith("line 1: error[invalid-assignment]")
+  assert said("y: str = 1", ("raise ValueError('boom')",))[0].startswith("line 1: error[invalid-assignment]")
+  assert said("y: str = 1", ("while True:\n  pass",))[0].startswith("line 1: error[invalid-assignment]")
 
 
 def test_the_gate_reads_the_names_of_the_engine_as_a_chain_binds_them() -> None:
   """A name of the engine is a binding of the chain, so a word may read it, subclass it and rebind it."""
   assert said("got = span(1, 2)\nx: list[int] = got(['a', 'b'])") == []
-  assert said("x: str = span(1, 2)(['a'])")[0].startswith("line 1: [invalid-assignment]")
+  assert said("x: str = span(1, 2)(['a'])")[0].startswith("line 1: error[invalid-assignment]")
   assert said("old = HEAD\nHEAD = old\nx = TIMEOUT + 1") == []
   assert said("class Mine(Act): ...\nx: int = 1") == []
   assert said('x = 3\ndebug(t"{x}")') == []
 
 
-def test_a_class_the_ladder_defined_is_a_shape_the_gate_reads() -> None:
-  """A shape a word of the chain defined resolves on the sheet, since the ladder stands above the word."""
-  ladder = ("class Conf:\n  def __init__(self, a: int):\n    self.a = a",)
-  assert said("close(Conf(1))", ladder, "Conf") == []
-  assert said("close(1)", ladder, "Conf")[0].startswith("line 1: [invalid-argument-type]")
+def test_a_warning_of_ty_refuses_no_word() -> None:
+  """A warning is no finding: a name that may be unbound is a warning of ty, and a word that reads it runs."""
+  assert said("if chance() > 0.5:\n  maybe = 1\nclose(maybe)") == []
 
 
 def test_no_ty_on_the_path_ends_the_life_rather_than_refusing_the_word(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -142,8 +111,8 @@ def test_a_gate_that_ran_and_came_back_angry_says_so(monkeypatch: pytest.MonkeyP
 
 def test_a_return_inside_a_word_is_the_scope_it_stands_in() -> None:
   """A word answers by a close, so a return at its top level is no python; one inside a def is that def's own."""
-  assert said("def f():\n  return 1\nclose(f())", shape="int") == []
-  assert "SyntaxError" in said("if True:\n  return 2")[0]
+  assert said("def f():\n  return 1\nclose(f())") == []
+  assert "'return' outside function" in said("if True:\n  return 2")[0]
 
 
 async def test_a_word_runs_in_the_module_of_its_chain_and_what_it_binds_stays_bound() -> None:
