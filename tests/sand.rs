@@ -5,8 +5,6 @@
 //! and holds the two to the same answers: a life boots, a chain opens under the one name, and a World outside the
 //! sandbox says where it stands and is heard.
 
-#![cfg(feature = "monty")]
-
 use furb::{Ears, Fact, Gate, Life, Reply, Sand, Value, World, verb};
 
 /// A World of a few facts: it says where a chain stands, and hears everything else.

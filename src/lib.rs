@@ -22,6 +22,13 @@
 //!
 //! Nothing of the preamble is bound in the engine, and nothing of the engine is bound in the preamble, so the
 //! globals of a chain hold what the file defines and nothing more, which is what a model reads.
+//!
+//! # Where it runs
+//!
+//! [`Sand`] is the sandbox, which is monty. [`Session`] says what a sandbox must be and stays a trait, because
+//! that is what lets the tests hold the crate to the real engine with no sandbox at all, but the crate ships one
+//! and it is not optional: a crate that gave a host the trait and no Session could not run the engine, which is
+//! the whole of what it is for.
 
 pub mod fact;
 #[cfg(feature = "gate")]
@@ -29,13 +36,11 @@ pub mod gate;
 pub mod host;
 pub mod life;
 pub mod record;
-#[cfg(feature = "monty")]
 pub mod sand;
 pub mod verb;
 pub mod voice;
 pub mod world;
 
-#[cfg(feature = "monty")]
 pub use crate::sand::Sand;
 pub use crate::{
   fact::{Fact, Value},

@@ -90,11 +90,10 @@ Run every command from the root of the repository.
 
 The crate is held by gates of its own, which the commit hook runs too:
 
-- `cargo test`: the tests of the crate, the unit tests and `tests/life.rs`, which drives one life of the real
-  engine from end to end through a sandbox of the tests. `--no-default-features` leaves the gate out, which is ty
-  and the 190 crates under it, so the crate builds small where the disk is short.
-- `cargo test --features monty --no-default-features`: the same, with `tests/sand.rs` on top, which boots one
-  life of the real engine in a sandbox of monty.
+- `cargo test`: the tests of the crate, the unit tests, `tests/life.rs`, which drives one life of the real engine
+  from end to end through a sandbox of the tests, and `tests/sand.rs`, which drives one through monty.
+  `--no-default-features` leaves the gate out, which is ty and the 190 crates under it, so the crate builds small
+  where the disk is short.
 - `cargo fmt` then `cargo clippy --all-targets -- -D warnings`: format and lint the crate. Two spaces of
   indentation, 120 columns, as everywhere else.
 - `uv run python script/needs.py`: what the engine and the preamble need of the interpreter that runs them, and
@@ -120,13 +119,16 @@ the reading of a turn are the host's, so the crate ships the trait and the plain
 nothing, and a World of this machine written small. It holds the crate to the real engine without a sandbox at
 all, which is what makes a Session of any sandbox a drop-in.
 
-`src/sand.rs` is the Session of monty, which is the sandbox the engine is meant to run in. It is behind the
-`monty` feature, off by default, and it takes monty from the fork by a pinned revision, because the interpreter
-it needs is not released: the coroutine a Kernel drives, the `__await__` an act is said by, and the top level
-await a word of a model is compiled with are all on `uael/monty`. A revision and not a branch, so a build of
-today and a build of next month read the same interpreter, and a branch that is deleted breaks nothing. With the
-feature off, cargo fetches the fork to read its manifest and builds none of it. `tests/sand.rs` boots one life of
-the real engine in there.
+`src/sand.rs` is the Session of monty, and monty is why the crate exists, so it is no feature: a crate that ships
+a Session trait and no Session cannot do its one job. It takes monty from the fork by a pinned revision, because
+the interpreter the engine needs is not released: the coroutine a Kernel drives, the `__await__` an act is said
+by, and the top level await a word of a model is compiled with are all on `uael/monty`. A revision and not a
+branch, so a build of today and a build of next month read the same interpreter, and a branch that is deleted
+breaks nothing. The crate cannot be published while that holds, since crates.io takes no git dependency, and the
+revision becomes a version the day the fork lands. `tests/sand.rs` boots one life of the real engine in there.
+
+`Session` stays a trait, which is what lets `tests/life.rs` hold the crate to the real engine with no sandbox at
+all, and what says exactly what a sandbox must be.
 
 Nothing of the engine crosses to the host: the word of a rung runs where the engine runs, and a fact crosses
 plain. The crate takes care of the Kernel, so a host writes the World alone.
