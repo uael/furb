@@ -10,6 +10,8 @@
 
 #![expect(unsafe_code, reason = "the napi API is unsafe, and every cast below is guarded by the check above it")]
 
+use std::{cell::RefCell, rc::Rc};
+
 use furb::{Fact, Gate, Reply, Value, World};
 use napi::{
   Env, Error, JsValue, Result, Unknown,
@@ -25,6 +27,13 @@ use crate::value::{Fact as Held, made, of_js, refused, to_js};
 /// hands the answer back through `answered`, and a World never calls into a life that stands waiting for it.
 const ASK: &str = "ask";
 
+/// The first fault of a World or of a gate, held where the caller of the life reads it.
+///
+/// A life takes its World and gives it back only when it opened, so the fault of a World that throws while the
+/// life is opening would be lost with it. The slot is shared with the caller instead, and the caller reads it
+/// whether the life opened or not.
+pub type Raised = Rc<RefCell<Option<Error>>>;
+
 /// A World of javascript, as the crate reads one.
 ///
 /// Every fault of the javascript object stands: a World that throws has said something a life cannot answer, and
@@ -35,13 +44,13 @@ pub struct Worlds {
   /// The env of the call that is running, and nothing between two calls.
   env: Option<Env>,
   /// The first fault of the object, which the caller of the life throws once the call is over.
-  pub raised: Option<Error>,
+  raised: Raised,
 }
 
 impl Worlds {
-  /// A World of the crate, over the object a host wrote.
-  pub fn new(held: ObjectRef) -> Self {
-    Worlds { held, env: None, raised: None }
+  /// A World of the crate, over the object a host wrote, with the slot its faults are kept in.
+  pub fn new(held: ObjectRef, raised: Raised) -> Self {
+    Worlds { held, env: None, raised }
   }
 
   /// The env of the call that is starting, which is how the object is reached while it runs.
@@ -72,14 +81,14 @@ impl Worlds {
   /// A fault is kept and answered with nothing, so that the life runs to the end of the call it is in and the
   /// caller hears the fault whole. A life that carried on would hear a reply the host never gave.
   fn calls(&mut self, name: &str, args: impl FnOnce(&Env) -> Result<Unknown<'static>>) -> Reply {
-    if self.raised.is_some() {
+    if already(&self.raised) {
       return Reply::Nothing;
     }
     let Some(env) = self.env else { return Reply::Nothing };
     match self.said(&env, name, args) {
       Ok(reply) => reply,
       Err(fault) => {
-        self.raised = Some(fault);
+        keeps(&self.raised, fault);
         Reply::Nothing
       }
     }
@@ -119,13 +128,13 @@ pub struct Gates {
   /// The env of the call that is running, and nothing between two calls.
   env: Option<Env>,
   /// The first fault of the object, which the caller of the life throws once the call is over.
-  pub raised: Option<Error>,
+  raised: Raised,
 }
 
 impl Gates {
-  /// A gate of the crate, over the object a host wrote, or over nothing.
-  pub fn new(held: Option<ObjectRef>) -> Self {
-    Gates { held, env: None, raised: None }
+  /// A gate of the crate, over the object a host wrote, or over nothing, with the slot its faults are kept in.
+  pub fn new(held: Option<ObjectRef>, raised: Raised) -> Self {
+    Gates { held, env: None, raised }
   }
 
   /// The env of the call that is starting, which is how the object is reached while it runs.
@@ -164,17 +173,31 @@ impl Gates {
 
 impl Gate for Gates {
   fn gate(&mut self, word: &str, ladder: &[String], shape: &str) -> Vec<String> {
-    if self.raised.is_some() {
+    if already(&self.raised) {
       return Vec::new();
     }
     let Some(env) = self.env else { return Vec::new() };
     match self.found(&env, word, ladder, shape) {
       Ok(found) => found,
       Err(fault) => {
-        self.raised = Some(fault);
+        keeps(&self.raised, fault);
         Vec::new()
       }
     }
+  }
+}
+
+/// Whether a slot holds a fault already, which is what stops a second call of an object that threw.
+fn already(raised: &Raised) -> bool {
+  raised.borrow().is_some()
+}
+
+/// The first fault of an object, kept for the caller of the life. A later one is dropped: the first is the one
+/// that says what went wrong, and every call after it was made on a host that had already thrown.
+fn keeps(raised: &Raised, fault: Error) {
+  let mut held = raised.borrow_mut();
+  if held.is_none() {
+    *held = Some(fault);
   }
 }
 

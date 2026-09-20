@@ -173,11 +173,6 @@ impl<W: World, G: Gate> Life<W, G> {
     &mut self.outside.world
   }
 
-  /// The gate of this life, which a host reads what its gate held off.
-  pub fn gate(&self) -> &G {
-    &self.outside.gate
-  }
-
   /// The gate of this life, to change: a host that holds state in its gate reaches it here.
   pub fn gate_mut(&mut self) -> &mut G {
     &mut self.outside.gate

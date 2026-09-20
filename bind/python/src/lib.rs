@@ -10,7 +10,7 @@
 mod outside;
 mod value;
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use furb::{Ears, Entry, Life as Held, Refusal, Sand, Voice as Says, record};
 use pyo3::{
@@ -18,7 +18,7 @@ use pyo3::{
 };
 
 use crate::{
-  outside::{Ask, Gates, Worlds},
+  outside::{Ask, Gates, Raised, Worlds},
   value::{Fault, PyFact, Shape, Show, of_python, to_python},
 };
 
@@ -38,6 +38,10 @@ create_exception!(
 pub struct Life {
   /// The life, which holds the sandbox, the World and the gate.
   held: Held<Worlds, Gates>,
+  /// The first fault of the World, shared with it; see [`Raised`].
+  world: Raised,
+  /// The first fault of the gate, shared with it; see [`Raised`].
+  gate: Raised,
 }
 
 #[pymethods]
@@ -67,10 +71,14 @@ impl Life {
         .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("a Voice is heard by one life"))?,
       None => Ears::made().1,
     };
-    let held = Held::boot(Sand::default(), Worlds::new(world), Gates::new(gate), ears, &kept);
-    let mut life = Life { held: opened(held)? };
-    life.caught()?;
-    Ok(life)
+    let (raised, gated): (Raised, Raised) = (Arc::default(), Arc::default());
+    let worlds = Worlds::new(world, Arc::clone(&raised));
+    let gates = Gates::new(gate, Arc::clone(&gated));
+    let held = Held::boot(Sand::default(), worlds, gates, ears, &kept);
+    // A fault of the host is read before the refusal of the life: a life that is opening on a World which raised
+    // fails for want of what the World never said, and the fault is what a host must be told.
+    caught(&raised, &gated)?;
+    Ok(Life { held: opened(held)?, world: raised, gate: gated })
   }
 
   /// The root chain of the life, which is the first act of any record.
@@ -128,18 +136,9 @@ impl Life {
 }
 
 impl Life {
-  /// The first fault of the World or of the gate, raised now that the call they were in is over.
-  ///
-  /// A fault of the host is the host's and not the life's, so it stands as it was raised, and a life that heard
-  /// nothing where the host raised goes on for whoever catches it.
-  fn caught(&mut self) -> PyResult<()> {
-    if let Some(fault) = self.held.world_mut().raised.take() {
-      return Err(fault);
-    }
-    if let Some(fault) = self.held.gate_mut().raised.take() {
-      return Err(fault);
-    }
-    Ok(())
+  /// The first fault of this life's World or gate; see [`caught`].
+  fn caught(&self) -> PyResult<()> {
+    caught(&self.world, &self.gate)
   }
 }
 
@@ -190,6 +189,19 @@ impl Voice {
   fn waiting(&self) -> bool {
     self.says.waiting()
   }
+}
+
+/// The first fault of the World or of the gate, raised now that the call they were in is over.
+///
+/// A fault of the host is the host's and not the life's, so it stands as it was raised, and a life that heard
+/// nothing where the host raised goes on for whoever catches it.
+fn caught(world: &Raised, gate: &Raised) -> PyResult<()> {
+  for one in [world, gate] {
+    if let Some(fault) = one.lock().ok().and_then(|mut held| held.take()) {
+      return Err(fault);
+    }
+  }
+  Ok(())
 }
 
 /// The line a World writes for one entry it was told to keep.

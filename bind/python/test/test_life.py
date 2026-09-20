@@ -118,6 +118,21 @@ def test_a_fault_of_the_world_stands(yard: Path) -> None:
   assert str(caught.value) == "the clock of this World is broken"
 
 
+def test_a_fault_of_the_world_while_the_life_opens_stands(yard: Path) -> None:
+  """A World that raises while the life is opening is what the caller hears, and not the refusal that followed."""
+
+  class Broken(Yard):
+    def hears(self, fact: Fact) -> object:
+      if fact.kind == "stand":
+        raise ValueError("this World knows nowhere to stand")
+      return super().hears(fact)
+
+  voice = Voice()
+  with pytest.raises(ValueError) as caught:
+    Life(Broken(yard, voice), voice=voice)
+  assert str(caught.value) == "this World knows nowhere to stand"
+
+
 def test_every_plain_value_crosses_both_ways(yard: Path) -> None:
   """Every value of the plain form crosses to a host and back: the python ones, a shape, a fault and a show."""
   held, _ = life(yard)

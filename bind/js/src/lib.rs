@@ -10,7 +10,7 @@
 mod outside;
 mod value;
 
-use std::time::Duration;
+use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use furb::{Ears, Entry, Life as Held, Refusal, Sand, Voice as Says, record};
 use napi::{
@@ -20,7 +20,7 @@ use napi::{
 use napi_derive::napi;
 
 use crate::{
-  outside::{Gates, Worlds},
+  outside::{Gates, Raised, Worlds},
   value::{of_js, refused, to_js},
 };
 
@@ -33,6 +33,10 @@ use crate::{
 pub struct Life {
   /// The life, which holds the sandbox, the World and the gate.
   held: Held<Worlds, Gates>,
+  /// The first fault of the World, shared with it; see [`Raised`].
+  world: Raised,
+  /// The first fault of the gate, shared with it; see [`Raised`].
+  gate: Raised,
 }
 
 impl ObjectFinalize for Life {
@@ -69,16 +73,19 @@ impl Life {
       Some(held) => held.takes()?,
       None => Ears::made().1,
     };
-    let mut worlds = Worlds::new(world.create_ref()?);
-    let mut gates = Gates::new(gate.map(|one| one.create_ref()).transpose()?);
+    let (threw, gated): (Raised, Raised) = (Rc::new(RefCell::new(None)), Rc::new(RefCell::new(None)));
+    let mut worlds = Worlds::new(world.create_ref()?, Rc::clone(&threw));
+    let mut gates = Gates::new(gate.map(|one| one.create_ref()).transpose()?, Rc::clone(&gated));
     worlds.on(env);
     gates.on(env);
     let held = Held::boot(Sand::default(), worlds, gates, ears, &kept);
+    // A fault of the host is thrown before the refusal of the life: a life that is opening on a World which
+    // threw fails for want of what the World never said, and the fault is what a host must be told.
+    caught(&threw, &gated)?;
     let mut life = match held {
-      Ok(one) => Life { held: one },
+      Ok(one) => Life { held: one, world: threw, gate: gated },
       Err(why) => return Err(raised(&why)),
     };
-    life.caught()?;
     life.held.world_mut().off();
     life.held.gate_mut().off();
     Ok(life)
@@ -158,18 +165,9 @@ impl Life {
     got.map_err(|why| raised(&why))
   }
 
-  /// The first fault of the World or of the gate, thrown now that the call they were in is over.
-  ///
-  /// A fault of the host is the host's and not the life's, so it stands as it was thrown, and a life that heard
-  /// nothing where the host threw goes on for whoever catches it.
-  fn caught(&mut self) -> Result<()> {
-    if let Some(fault) = self.held.world_mut().raised.take() {
-      return Err(fault);
-    }
-    if let Some(fault) = self.held.gate_mut().raised.take() {
-      return Err(fault);
-    }
-    Ok(())
+  /// The first fault of this life's World or gate; see [`caught`].
+  fn caught(&self) -> Result<()> {
+    caught(&self.world, &self.gate)
   }
 }
 
@@ -237,6 +235,19 @@ impl Voice {
   fn takes(&mut self) -> Result<Ears> {
     self.ears.take().ok_or_else(|| refused("a Voice is heard by one life"))
   }
+}
+
+/// The first fault of the World or of the gate, thrown now that the call they were in is over.
+///
+/// A fault of the host is the host's and not the life's, so it stands as it was thrown, and a life that heard
+/// nothing where the host threw goes on for whoever catches it.
+fn caught(world: &Raised, gate: &Raised) -> Result<()> {
+  for one in [world, gate] {
+    if let Some(fault) = one.borrow_mut().take() {
+      return Err(fault);
+    }
+  }
+  Ok(())
 }
 
 /// The line a World writes for one entry it was told to keep.

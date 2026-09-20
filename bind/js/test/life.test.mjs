@@ -117,6 +117,21 @@ test('a value a life holds none of is refused', () => {
   )
 })
 
+test('a fault of the World while the life opens stands', () => {
+  const at = yard()
+  const voice = new Voice()
+  class Broken extends Yard {
+    hears(fact) {
+      if (fact.kind === 'stand') throw new Error('this World knows nowhere to stand')
+      return super.hears(fact)
+    }
+  }
+  assert.throws(
+    () => new Life(new Broken(at, voice), null, null, voice),
+    (one) => one.message.includes('this World knows nowhere to stand'),
+  )
+})
+
 test('every plain value crosses both ways', () => {
   const [held] = life(yard())
   assert.equal(held.word('None'), null)
