@@ -187,7 +187,7 @@ def prompt[T](shape: type[T] | None, message: str = "", to: str = "", on: str = 
     if isinstance(shape, str)
     else shape.__name__
     if isinstance(shape, type)
-    else repr(shape).replace(Text.__module__ + ".", "")
+    else re.sub(r"[\w.:/]*\.", "", repr(shape))
   )
 
   def ear(id):
@@ -308,7 +308,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       if to_run and not running:
         yield "run", (running := to_run.pop(0)), id, rungs[running]
       if unseen and not running and all(x[1] in spoken for x in each("prompt")):
-        prompt(None, f"{unseen} is done", on=id)
+        prompt(None, f"{unseen} done", on=id)
         unseen = ""
 
   return act("chain", on, ear, label, source)
@@ -318,7 +318,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
   def ear(id):
     here = scope(id)
     if not (usd or share) or (usd or 0) < 0 or not 0 <= (share or 0) <= 1:
-      yield "done", id, Refused(f"{usd}/{share} is no ceiling")
+      yield "done", id, Refused(f"{usd}/{share} no ceiling")
       return
     _, transcript = ask("transcript", here, here)
     if not isinstance(transcript, list):
@@ -369,7 +369,7 @@ def bash(
           if takes := not (gone or mute):
             yield "feed", id, text or None
             mute = "" if text else "closed"
-          yield "done", qid, Text(path, text) if takes else Refused(f"{stdin}: {gone or mute}")
+          yield "done", qid, Text(path, text) if takes else Refused(gone or mute)
         case _ if gone:
           continue
         case ("peek", qid, _, _, at) if at == id:
@@ -405,7 +405,7 @@ class Text:
 
   def edit(self, lo: int, hi: int, lines: list[str]) -> Text:
     if not 1 <= lo <= hi + 1 <= len(self.lines) + 1:
-      raise Refused(f"{self.path} has no lines {lo} to {hi}")
+      raise Refused(f"{self.path} no lines {lo}:{hi}")
     now = self.content.splitlines(True)
     now[lo - 1 : hi] = [x.removesuffix("\n") + "\n" for x in lines]
     return Text(self.path, "".join(now), self)
@@ -504,12 +504,18 @@ def showing(got, show):
 
 
 def shown(pair, seen):
-  text, show = pair
-  old, lines = seen.setdefault(text.path, {}), text.lines
-  picked = show(lines)
-  new = {i: line for i in picked if old.get(i) != (line := lines[i - 1])}
-  old.update(new)
-  return ("shown", [("path", text.path), ("known", len(picked) - len(new))], "\n".join(f"{i} {new[i]}" for i in new))
+  match pair:
+    case (Text() as text, show):
+      old, lines = seen.setdefault(text.path, {}), text.lines
+      picked = show(lines)
+      new = {i: line for i in picked if old.get(i) != (line := lines[i - 1])}
+      old.update(new)
+      return (
+        "shown",
+        [("path", text.path), ("known", len(picked) - len(new))],
+        "\n".join(f"{i} {new[i]}" for i in new),
+      )
+  return pair
 
 
 def turns_of(heard):
@@ -646,7 +652,7 @@ def boot(record=(), **outside):
       match a:
         case (_, qid, by, *words) if question(a):
           if qid in acts and qid in facts and list(words[1:]) != list(facts[qid][4:]):
-            raise Drift(f"{words[1:]} not {qid}")
+            raise Drift(f"{qid} drifts")
           if qid in acts or by.startswith("rung://"):
             said.add(qid)
             facts.setdefault(qid, a)
@@ -700,7 +706,7 @@ def boot(record=(), **outside):
     return Act(a[1])
 
   def ears():
-    return sorted(alive.items(), key=lambda ear: (ear[0] not in acts, ear[0] in outside))
+    return sorted(alive.items(), key=lambda pair: (pair[0] not in acts, pair[0] in outside))
 
   def put(a):
     for name, g in ears():

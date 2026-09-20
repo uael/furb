@@ -314,6 +314,12 @@ class Live:
       await asyncio.get_running_loop().connect_read_pipe(lambda: made, sys.stdin)
     return (await self.reader.readline()).decode(errors="replace").strip()
 
+  def serves(self, path: str) -> bool:
+    """Whether the World answers for a path: a path of the disk, and a door of an act of the life, which it refuses
+    once nothing lives behind it. A door of no act of the life is another ear's to answer, so the World says nothing
+    of it, whatever the order the ears were given in."""
+    return "://" not in path or path.rsplit("/", 1)[0] in engine.acts
+
   def read(self, here: str, path: str) -> Text | Refused:
     """The text at a path: the file on the disk, and a refusal for the door of nothing that lives."""
     if "://" in path:
@@ -484,9 +490,9 @@ class Live:
               start(self.show(about, shape, message))
         case ("stand", qid, *_):
           yield "done", qid, (self.roster, self.directory, self.actor)
-        case ("read", qid, _, on, path):
+        case ("read", qid, _, on, path) if self.serves(path):
           yield "done", qid, self.read(engine.cwd(on=on), path)
-        case ("write", qid, _, on, Text(path=path, content=content)):
+        case ("write", qid, _, on, Text(path=path, content=content)) if self.serves(path):
           yield "done", qid, self.write(engine.cwd(on=on), path, content)
         case ("ask", rung, _, on, actor, turns):
           start(self.asked(rung, on, actor, turns))

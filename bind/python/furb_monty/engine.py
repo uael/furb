@@ -22,6 +22,7 @@ import builtins
 import inspect
 import math
 import queue
+import re
 import threading
 import types
 from collections.abc import Callable, Generator, Iterator, Mapping
@@ -56,8 +57,9 @@ LIFE: Living | None = None
 
 
 def named(shape: object) -> str:
-  """The name of a shape, as the engine names one: a type by its name, and anything else as python shows it."""
-  return shape.__name__ if isinstance(shape, type) else repr(shape).replace(python.Text.__module__ + ".", "")
+  """The name of a shape, as the engine names one: a type by its name, and anything else as python shows it, under no
+  module, since the word of a chain says a class of the engine or of the chain by its bare name."""
+  return shape.__name__ if isinstance(shape, type) else re.sub(r"[\w.:/]*\.", "", repr(shape))
 
 
 def wire(x: object) -> object:

@@ -97,7 +97,7 @@ def ask(kind: str, on: str, *words: object) -> tuple[Question, object]:
   A query the operator asks from outside a run that names no chain is put to every generator, and no chain answers it.
   """
 
-def act[T = object](kind: str, on: str, ear: Callable[[str], Ear], *words: object) -> Act[T]:
+def act(kind: str, on: str, ear: Callable[[str], Ear], *words: object) -> Act[object]:
   """The way to make a question that lives: it takes a name when it is made, it is logged, its ear is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it.
   An act said: it is begun, and what the call gives is its name, which is awaited for what the act comes to.
   An act said twice under one name is one act, and the second saying brings no second ear and gives the name back.
@@ -383,6 +383,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The shape left unsaid is None, which the acknowledgment uses, and any value responds to it.
   A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one.
   A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the record replays it.
+  The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
   The acknowledgment carries no shape and a message that names the act that is done.
   The turns of the chain hold the result of the command that the acknowledgment names.
   A cancelled result is no orphan.
@@ -615,6 +616,7 @@ The tags of the file are opened, closed, shown, raised, debugged, refused, pause
 type Showing = tuple[Text, Show]
 """A text a tag shows, and the show of it, which is what a tell of a text carries and what the fold of the turns makes a tag of.
 The body of a closed tag holds one shown for each text told.
+A list body shows each showing in it, and anything else in it stands as it is.
 The shown tag holds as its body the lines that a show picked, with their numbers.
 The engine applies a show before it makes a tag, so the body holds the picked lines alone.
 A show applies to a text or to a stream.

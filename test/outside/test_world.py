@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 from asyncio.subprocess import Process
+from collections.abc import Generator
 from itertools import pairwise
 from pathlib import Path
 
@@ -25,7 +26,7 @@ from furb import engine
 from furb.engine import OPERATOR, TIMEOUT, Exit, Refused, Text
 from furb.provider.claude import FAMILY, Claude, canon, limits
 from furb.world import CAP, SYSTEM, Command, Live, kept, rendered, shown, truth, unwire, wire, worded
-from outside.doubles import broken, life, mute, scripted, settle, speaking, tags, watched
+from outside.doubles import Quick, broken, life, mute, scripted, settle, speaking, tags, watched
 
 
 def world(yard: Path, model: Model[object] | None = None, record: Path | None = None) -> Live:
@@ -81,14 +82,14 @@ async def test_a_text_is_read_and_written_on_the_disk_it_names(yard: Path) -> No
 
 
 async def test_a_reading_refuses_what_no_text_could_be(yard: Path) -> None:
-  """A file that is not there, one past the cap, one that is no utf-8, and a door nobody serves are each refused."""
+  """A file that is not there, one past the cap and one that is no utf-8 are each refused, and a door of no act of the
+  life the World says nothing of, so nobody answers it and the read gives nothing."""
   live = world(yard)
   root = life(live)
-  for path, why in (("nowhere.txt", "no file at"), ("mem://x", "the door of nothing that lives")):
-    with pytest.raises(Refused, match=why):
-      engine.read(path, on=root)
-  with pytest.raises(Refused, match="the door of nothing that takes a word"):
-    engine.write(Text("mem://x", "no"), on=root)
+  with pytest.raises(Refused, match="no file at"):
+    engine.read("nowhere.txt", on=root)
+  assert engine.read("mem://x", on=root) is None
+  assert engine.write(Text("mem://x", "no"), on=root) is None
   (yard / "big.txt").write_bytes(b"x" * (CAP + 1))
   with pytest.raises(Refused, match=f"over the {CAP} the World reads"):
     engine.read("big.txt", on=root)
@@ -545,3 +546,43 @@ def test_the_plain_form_of_a_value_leaves_as_json_and_comes_back_whole() -> None
   assert isinstance(back[5], ValueError) and back[5].args == ("x", 1)
   assert back[6] == {"k": [1, None]}
   assert wire(Text("a", "b", Text("a", "c"))) == {"is": "Text", "path": "a", "content": "b"}
+
+
+async def test_the_plain_form_of_a_whole_record_is_a_fixed_point_of_json(yard: Path) -> None:
+  """Every entry a life kept leaves as json through wire and comes back equal, so a record holds nothing that json
+  changes: no key that is no string, and no value that is not plain."""
+  record = yard / "record.jsonl"
+  live = world(yard, record=record, model=scripted(["x = bash('echo hi')\nclose((await x).code)"]))
+  root = life(live)
+  assert await engine.prompt(int, "run", on=root) == 0
+  await settle()
+  plain = wire(kept(record))
+  assert {"chain", "prompt", "rung", "bash", "answer", "out", "exited"} <= {fact[0] for _, fact, *_ in kept(record)}
+  assert json.loads(json.dumps(plain)) == plain
+
+
+def note(kept_: list[tuple]) -> Generator[tuple | None, tuple]:
+  """An ear of the outside that answers a read of a door of its own, and keeps every fact it hears."""
+  while True:
+    match a := (yield):
+      case ("read", qid, _, _, path) if path.startswith("note://"):
+        kept_.append(a)
+        yield "done", qid, Text(path, "kept")
+      case (_, _, _, *_):
+        kept_.append(a)
+
+
+async def test_the_world_says_nothing_of_a_door_of_no_act_so_an_ear_of_the_outside_answers_its_own(yard: Path) -> None:
+  """The World refuses a door of an act of the life that lives no more, and says nothing of a path of no act, so an
+  ear of the outside answers a door of its own whatever the order the ears were given in."""
+  live = world(yard)
+  heard: list[tuple] = []
+  root = engine.boot((), kernel=Quick().kernel(), world=live.hears(), note=note(heard))
+  assert engine.read("note://one", on=root) == Text("note://one", "kept")
+  assert [a[4] for a in heard if a[0] == "read"] == ["note://one"]
+  over = engine.wait(0.0, on=root)
+  await over
+  with pytest.raises(Refused, match="nothing that lives"):
+    engine.read(f"{over}/stdout", on=root)
+  with pytest.raises(Refused, match="nothing that takes a word"):
+    engine.write(Text(f"{over}/stdin", "late"), on=root)

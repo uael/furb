@@ -434,7 +434,7 @@ async def test_the_acknowledgment_carries_no_shape_and_a_message_that_names_the_
   sand = sown()
   log, _ = await lived(sand)
   command = said(log, "bash")[0][1]
-  assert [(one[4], one[5]) for one in said(log, "prompt")] == [("int", "read and run"), ("None", f"{command} is done")]
+  assert [(one[4], one[5]) for one in said(log, "prompt")] == [("int", "read and run"), ("None", f"{command} done")]
 
 
 async def test_the_turns_of_the_chain_hold_the_result_of_the_command_the_acknowledgment_names() -> None:
@@ -442,7 +442,7 @@ async def test_the_turns_of_the_chain_hold_the_result_of_the_command_the_acknowl
   sand = sown()
   log, root = await lived(sand)
   command = said(log, "bash")[0][1]
-  assert said(log, "prompt")[-1][5] == f"{command} is done"
+  assert said(log, "prompt")[-1][5] == f"{command} done"
   shut = [tag for tag in tags(engine.turns(on=root), "closed") if ("id", command) in tag[1]]
   assert [attr(tag, "code") for tag in shut] == [0]
 
@@ -467,7 +467,7 @@ async def test_the_response_of_an_acknowledgment_is_no_orphan() -> None:
   sand = sown()
   log, root = await lived(sand)
   command = said(log, "bash")[0][1]
-  assert [one[5] for one in said(log, "prompt")] == ["read and run", f"{command} is done"]
+  assert [one[5] for one in said(log, "prompt")] == ["read and run", f"{command} done"]
   await settle(200)
   assert len(said(log, "prompt")) == 2 and engine.turns(on=root)[-1][0] == "user"
 
@@ -484,7 +484,7 @@ async def test_when_an_act_a_rung_of_the_chain_made_is_done_the_chain_prompts_no
   assert [one[5] for one in said(log, "prompt")] == ["start one"]
   engine.send("exited", command, 0, by=WORLD)
   await settle()
-  assert [one[5] for one in said(log, "prompt")] == ["start one", f"{command} is done"]
+  assert [one[5] for one in said(log, "prompt")] == ["start one", f"{command} done"]
 
 
 async def test_a_pause_stands_over_the_close_that_answers_a_prompt_too() -> None:
@@ -499,3 +499,18 @@ async def test_a_pause_stands_over_the_close_that_answers_a_prompt_too() -> None
   engine.wake(root)
   await settle()
   assert (await act) == 5
+
+
+async def test_the_name_of_a_shape_is_the_word_a_chain_says_it_by() -> None:
+  """The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module."""
+  sand = sown()
+  log, root = life(sand)
+  sand.script[root] = [
+    "class Foo:\n  pass\nclose([await prompt(list[Foo], 'items'), await prompt(Foo | None, 'maybe')])",
+    "close([])",
+    "close(None)",
+  ]
+  assert await engine.prompt(list, "work", on=root) == [[], None]
+  # The chain acknowledges each act a rung made once it is done, with a prompt of no shape, which is not one of these.
+  assert [one[4] for one in said(log, "prompt") if one[4] != "None"] == ["list", "list[Foo]", "Foo | None"]
+  assert tags(engine.turns(on=root), "raised") == []
