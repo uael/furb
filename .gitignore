@@ -9,4 +9,3 @@ dist/
 traces/
 target/
 Cargo.lock
-sand/target/

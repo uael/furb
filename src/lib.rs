@@ -29,10 +29,14 @@ pub mod gate;
 pub mod host;
 pub mod life;
 pub mod record;
+#[cfg(feature = "monty")]
+pub mod sand;
 pub mod verb;
 pub mod voice;
 pub mod world;
 
+#[cfg(feature = "monty")]
+pub use crate::sand::Sand;
 pub use crate::{
   fact::{Fact, Value},
   host::{Gate, Outside},

@@ -20,6 +20,15 @@ gate = [
   "dep:ty_python_semantic",
   "dep:ty_vendored",
 ]
+# A Session of monty, which is the sandbox the engine is meant to run in.
+#
+# It is off by default, and it takes monty from the fork by a pinned revision
+# because the interpreter it needs is not released: the coroutine a Kernel
+# drives, the `__await__` an act is said by, and the top level await a word of a
+# model is compiled with are all on `uael/monty`. A revision rather than a
+# branch, so a build of today and a build of next month read the same
+# interpreter. It becomes an ordinary version dependency when that lands.
+monty = ["dep:monty", "dep:monty-types"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -32,6 +41,8 @@ ty_module_resolver = { version = "0.0.9", optional = true }
 ty_python_core = { version = "0.0.9", optional = true }
 ty_python_semantic = { version = "0.0.9", optional = true }
 ty_vendored = { version = "0.0.9", optional = true }
+monty = { git = "https://github.com/uael/monty", rev = "99456fd8b74adf82636b4911ee19e99f40de8c95", optional = true }
+monty-types = { git = "https://github.com/uael/monty", rev = "99456fd8b74adf82636b4911ee19e99f40de8c95", optional = true }
 
 [lib]
 name = "furb"

@@ -1,4 +1,4 @@
-//! A [`Session`](furb::Session) of monty: the sandbox the engine is meant to run in.
+//! A [`Session`] of monty: the sandbox the engine is meant to run in.
 //!
 //! Monty is a python interpreter written in rust that runs untrusted code, which is what the word of a model is.
 //! One [`Sand`] holds one monty session, and that session holds one life: the preamble in a module of its own,
@@ -14,13 +14,16 @@ use monty_types::{
   PrintWriter, ResourceLimits, ResourceTracker,
 };
 
-use furb::{HOST, Host, Session, Value};
+use crate::{
+  fact::Value,
+  life::{HOST, Host, Session},
+};
 
 /// One monty session, which is one life.
 ///
 /// The session stands from one call to the next, so what the preamble binds the engine reads, and what a word of
 /// a rung binds its chain reads. It is made empty: a caller runs the preamble and the engine through it in the
-/// order [`Life`](furb::Life) runs them.
+/// order [`Life`](crate::life::Life) runs them.
 pub struct Sand {
   /// The session, which is taken out for the length of a run and put back when the run is over.
   ///
