@@ -87,6 +87,21 @@ def noded(held: dict[str, str]) -> int:
     env=held,
     check=False,
   )
+  return ran.returncode if ran.returncode != 0 else typed(held)
+
+
+def typed(held: dict[str, str]) -> int:
+  """The declarations of the javascript binding, read by typescript.
+
+  `bind/js/test/check.ts` is a host written against `index.d.ts` alone, so a fault in the declarations is a fault
+  of that file. A machine with no typescript installed for the package runs nothing here and says so.
+  """
+  where = ROOT / "bind" / "js"
+  tsc = where / "node_modules" / ".bin" / "tsc"
+  if not tsc.is_file():
+    sys.stderr.write("no typescript under bind/js/node_modules, so the declarations are not read\n")
+    return 0
+  ran = subprocess.run([str(tsc), "-p", "tsconfig.json"], cwd=where, env=held, check=False)  # noqa: S603
   return ran.returncode
 
 

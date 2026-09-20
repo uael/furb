@@ -47,6 +47,7 @@ work into the Voice whenever it finishes.
 
 ```sh
 uv run python script/bound.py
+npm install && npm run typecheck   # in bind/js, to read index.d.ts as a host of typescript does
 ```
 
 The module is one library for one platform, and node reads it by the name `furb.node`, so the rig builds it and

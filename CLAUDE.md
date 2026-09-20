@@ -149,6 +149,10 @@ gate of the hooks has no room for.
 `bind/python/test/yard.py` and `bind/js/test/yard.mjs` are each a World of this machine, written small, as the
 World of `tests/life.rs` is, and the tests beside them are the same tests in each language.
 
+`bind/js/index.d.ts` is what a host of typescript reads, and `bind/js/test/check.ts` is a host written against it
+alone, so a fault in the declarations is a fault of that file. The rig reads it with the typescript under
+`bind/js/node_modules`, which `npm install` there puts in place, and says so where there is none.
+
 A World answers where it is asked, in every language, so `hears` gives a value and not a promise. The work that
 waits is what the Voice is for: a World starts it, says nothing, and says the fact of it into the Voice whenever
 it finishes, which the life hears at the next `heard`.
