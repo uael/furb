@@ -1,0 +1,15 @@
+{
+  "name": "@uael/furb",
+  "version": "0.1.0",
+  "description": "furb for javascript: one life of the engine, in the sandbox, with a World you write in javascript.",
+  "license": "AGPL-3.0-only",
+  "repository": "https://github.com/uael/furb",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "files": ["index.cjs", "index.d.ts", "README.md"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "cargo build -p furb-js",
+    "test": "node --test test"
+  }
+}

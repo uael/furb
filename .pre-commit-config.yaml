@@ -60,7 +60,7 @@ repos:
         name: bound
         entry: uv run python script/bound.py
         language: system
-        types_or: [rust, python, toml]
+        types_or: [rust, python, toml, ts, javascript]
         pass_filenames: false
       - id: verbs
         name: verbs

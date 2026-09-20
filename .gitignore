@@ -9,3 +9,4 @@ dist/
 traces/
 target/
 Cargo.lock
+node_modules/

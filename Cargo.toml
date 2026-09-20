@@ -1,5 +1,5 @@
 [workspace]
-members = ["bind/python"]
+members = ["bind/js", "bind/python"]
 
 [package]
 name = "furb"

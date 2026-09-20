@@ -102,8 +102,8 @@ The crate is held by gates of its own, which the commit hook runs too:
 - `uv run python script/kerneled.py`: the suite, with the Kernel of the crate in place of the harness's.
 - `uv run python script/inside.py`: the suite with no pytest at all, so that it runs where the engine runs.
 - `uv run python script/outside.py`: one life, opened the way the crate opens one, in this interpreter.
-- `uv run python script/bound.py`: the tests of the python binding, with the binding built for the interpreter
-  that runs them.
+- `uv run python script/bound.py`: the tests of the bindings, with each one built for the interpreter that runs
+  it.
 
 ## The crate
 
@@ -134,14 +134,22 @@ A binding is the surface of the crate for a host that is not rust. Each one live
 the workspace at the root, and says the same thing the crate says: one life, a World the host writes, a Voice the
 host speaks into, and every value plain.
 
-`bind/python` is the one for python. `furb_sand.pyi` is its whole surface, `src/value.rs` is what crosses,
-`src/outside.rs` is the World and the gate a host writes read as the crate reads them, and `src/lib.rs` is the
-life, the Voice and the module. It is a distribution of its own, `furb-sand`, and not of the `furb` package: that
-one is the engine and the harness in python, and this one is the engine in the sandbox, so one name is one thing.
+Each holds the same three files: `src/value.rs` is what crosses, `src/outside.rs` is the World and the gate a
+host writes read as the crate reads them, and `src/lib.rs` is the life, the Voice and the module. Beside them
+stands the whole surface, written out for a reader: `bind/python/furb_sand.pyi` and `bind/js/index.d.ts`.
 
-The module is compiled against one interpreter and imported by that one alone, so `script/bound.py` builds it for
-the interpreter that runs it and then puts `bind/python/test` on it. `bind/python/test/yard.py` is a World of this
-machine, written small, as the World of `tests/life.rs` is.
+`bind/python` is the one for python, a distribution of its own named `furb-sand`, and not of the `furb` package:
+that one is the engine and the harness in python, and this one is the engine in the sandbox, so one name is one
+thing. `bind/js` is the one for javascript, a package named `@uael/furb`, over napi.
+
+A module of a binding is built for one interpreter and read by that one alone, so `script/bound.py` builds each
+for the interpreter that runs it, puts it where that interpreter reads it, and then runs the tests of each.
+`bind/python/test/yard.py` and `bind/js/test/yard.mjs` are each a World of this machine, written small, as the
+World of `tests/life.rs` is, and the tests beside them are the same tests in each language.
+
+A World answers where it is asked, in every language, so `hears` gives a value and not a promise. The work that
+waits is what the Voice is for: a World starts it, says nothing, and says the fact of it into the Voice whenever
+it finishes, which the life hears at the next `heard`.
 
 Nothing of the engine crosses to the host: the word of a rung runs where the engine runs, and a fact crosses
 plain. The crate takes care of the Kernel, so a host writes the World alone.
