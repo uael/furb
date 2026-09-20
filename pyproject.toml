@@ -38,6 +38,7 @@ dev = [
   "pytest-asyncio>=1.4.0",
   "pytest-cov>=7.1.0",
   "pytest-timeout>=2.4.0",
+  "pytest-xdist>=3.8.0",
   "python-minifier>=3.2.0",
   "ruff>=0.16.2",
   "tiktoken>=0.13.0",
@@ -129,7 +130,8 @@ unresolved-import = "ignore"
 minversion = "9.1"
 testpaths = ["test"]
 pythonpath = [".", "test"]
-addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing", "--cov-fail-under=100"]
+# The suite runs on every core: a test opens a life of its own and leaves nothing behind, so the tests are independent.
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing", "--cov-fail-under=100"]
 xfail_strict = true
 timeout = 30
 timeout_method = "thread"

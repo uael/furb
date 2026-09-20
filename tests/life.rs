@@ -10,7 +10,7 @@
 
 use std::{cell::RefCell, fs, path::PathBuf, rc::Rc};
 
-use furb::{Ear, Ears, Fact, Life, Refusal, Reply, Sand, Value};
+use furb::{Ear, Ears, Fact, Life, Refusal, Reply, Sand, Value, gate::Ty};
 
 /// A World of this machine, for the tests: a directory, and a model that answers by a script.
 struct Yard {
@@ -131,7 +131,7 @@ impl Lived {
     let world = Yard::new(at.clone(), words);
     let (read, kept) = (Rc::clone(&world.read), Rc::clone(&world.kept));
     let ears = Ears::new().with("world", world);
-    let held = Life::boot(Sand::default(), ears, &["world".to_owned()], record)?;
+    let held = Life::boot(Sand::default(), ears, &["world".to_owned()], record, Ty::new())?;
     Ok(Lived { held, at, read, kept })
   }
 

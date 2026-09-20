@@ -74,14 +74,16 @@ pub struct Life<H> {
 }
 
 impl<H: Host> Life<H> {
-  /// A life, opened from what a World kept of the life before it, on the ears of these names.
+  /// A life, opened from what a World kept of the life before it, on the ears of these names, with the gate it
+  /// reads a word by.
   ///
   /// The record is the entries the World kept, as a list, each entry the act made last before its fact, the
   /// fact, and for a query of a run what it was answered. The preamble runs in a module of its own, so the
   /// globals of a chain hold what the engine defines and nothing more; the engine runs next, and `boot` is given
-  /// the Kernel and one generator for each name.
-  pub fn boot(mut sand: Sand, host: H, ears: &[String], record: &Value) -> Result<Self, Refusal> {
-    let mut gated = Gated { host, gate: Ty::new() };
+  /// the Kernel and one generator for each name. The gate is a host's to share across its lives, since the
+  /// reading it holds costs once and a clone of it is the same gate.
+  pub fn boot(mut sand: Sand, host: H, ears: &[String], record: &Value, gate: Ty) -> Result<Self, Refusal> {
+    let mut gated = Gated { host, gate };
     sand.run(PREAMBLE, &mut gated).map_err(one)?;
     let held = Value::List(named(ENGINE).into_iter().map(Value::Str).collect());
     let names = Value::List(ears.iter().map(|name| Value::Str(name.clone())).collect());

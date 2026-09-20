@@ -13,7 +13,7 @@
 //! by the crate and by the command line: the same engine, the same typeshed, the same python, and the errors
 //! alone, since a warning refuses no word.
 
-use std::{fmt::Write as _, sync::Arc};
+use std::{cell::RefCell, fmt::Write as _, rc::Rc, sync::Arc};
 
 use ruff_db::{
   Db as SourceDb,
@@ -49,13 +49,13 @@ const SHEET: &str = "sheet.py";
 
 /// The gate of the crate: ty, reading a sheet against the contract.
 ///
-/// One of these serves one life. It holds the reading of the contract, which is read once, so a reading of a
-/// sheet costs the sheet alone.
+/// One of these serves every life of a thread. It holds one reading of the contract and of the typeshed, which
+/// cost once, so a reading of a sheet costs the sheet alone, in every life after the first as in the first. A
+/// clone is the same gate, and a life is given one.
+#[derive(Clone)]
 pub struct Ty {
-  /// Where ty reads its files, which is a memory and no disk.
-  db: Memory,
-  /// The revision of the last write, so that two writes of one path are two writes to ty.
-  revision: u128,
+  /// The reading, which every clone shares, and which one clone reads at a time.
+  held: Rc<RefCell<Reading>>,
 }
 
 impl Default for Ty {
@@ -68,15 +68,30 @@ impl Ty {
   /// A gate that reads a sheet against the contract the crate carries.
   #[must_use]
   pub fn new() -> Self {
-    let mut held = Ty { db: Memory::default(), revision: 0 };
+    let mut held = Reading { db: Memory::default(), revision: 0 };
     held.wrote("furb/__init__.pyi", "");
     held.wrote("furb/engine.pyi", CONTRACT);
-    held
+    Ty { held: Rc::new(RefCell::new(held)) }
   }
 
   /// What ty found on a sheet: each error by the line it stands on, in the concise form ty writes, and no
   /// warning, since a warning refuses no word.
-  pub fn checked(&mut self, sheet: &str) -> Vec<(usize, String)> {
+  pub fn checked(&self, sheet: &str) -> Vec<(usize, String)> {
+    self.held.borrow_mut().checked(sheet)
+  }
+}
+
+/// One reading of ty: where it reads its files, and the revision of the last write.
+struct Reading {
+  /// Where ty reads its files, which is a memory and no disk.
+  db: Memory,
+  /// The revision of the last write, so that two writes of one path are two writes to ty.
+  revision: u128,
+}
+
+impl Reading {
+  /// What ty found on a sheet, as [`Ty::checked`] says it.
+  fn checked(&mut self, sheet: &str) -> Vec<(usize, String)> {
     let Some(file) = self.wrote(SHEET, sheet) else {
       return vec![(0, "the gate could not be given the sheet".to_owned())];
     };
@@ -174,7 +189,7 @@ pub fn named(source: &str) -> Vec<String> {
 /// The memory ty reads its files from, which is no disk and holds one reading of the contract.
 ///
 /// It is the database of ty, wired to the typeshed that ty carries. One of these belongs to one gate: salsa
-/// gives one owner of a storage, so it is never cloned and never shared.
+/// gives one owner of a storage, so it is never cloned, and the gate shares it by handing out handles to itself.
 #[salsa::db]
 struct Memory {
   /// The storage of salsa, which every reading is cached in.
@@ -357,14 +372,24 @@ mod tests {
 
   #[test]
   fn a_sheet_the_gate_accepts_gives_no_finding() {
-    let mut held = Ty::new();
+    let held = Ty::new();
     let (text, _) = sheet("close(len(read('a.txt').lines))");
     assert_eq!(held.checked(&text), Vec::<(usize, String)>::new());
   }
 
   #[test]
+  fn a_clone_of_the_gate_is_the_same_gate_and_reads_a_sheet_the_same() {
+    let held = Ty::new();
+    let same = held.clone();
+    let (text, above) = sheet("close(nowhere)");
+    assert_eq!(same.checked(&text).len(), 1);
+    assert_eq!(held.checked(&text)[0].0, above + 1);
+    assert_eq!(same.checked(&sheet("close(1)").0), Vec::<(usize, String)>::new());
+  }
+
+  #[test]
   fn a_finding_says_the_line_of_the_sheet_it_stands_on() {
-    let mut held = Ty::new();
+    let held = Ty::new();
     let (text, above) = sheet("close(nowhere)");
     let found = held.checked(&text);
     assert_eq!(found.len(), 1, "{found:?}");
@@ -374,14 +399,14 @@ mod tests {
 
   #[test]
   fn a_word_may_await_an_act_at_its_top_level() {
-    let mut held = Ty::new();
+    let held = Ty::new();
     let (text, _) = sheet("close((await bash('ls')).code)");
     assert_eq!(held.checked(&text), Vec::<(usize, String)>::new());
   }
 
   #[test]
   fn a_warning_refuses_no_word() {
-    let mut held = Ty::new();
+    let held = Ty::new();
     // A name that may be unbound is a warning of ty, and a word that reads it is no word the gate refuses.
     let (text, _) = sheet("if chance() > 0.5:\n    maybe = 1\n  close(maybe)");
     assert_eq!(held.checked(&text), Vec::<(usize, String)>::new());

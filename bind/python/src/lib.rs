@@ -5,7 +5,7 @@
 //! that crosses is plain data: none, a truth, a number, a text, a list, and a map from a text to plain data. What
 //! a tuple, a shape, an exception or a callable is in that form is `furb_monty.engine`'s to say, on both sides.
 
-use furb::{Host, Life as Held, Refusal, Sand, Value};
+use furb::{Host, Life as Held, Refusal, Sand, Value, gate::Ty};
 use pyo3::{
   Bound, Py, PyAny, PyResult, Python, create_exception,
   exceptions::{PyException, PyRuntimeError, PyTypeError},
@@ -19,6 +19,12 @@ create_exception!(
   PyException,
   "What the engine raised, as its name and what it was made with, which furb_monty.engine raises as the exception it is."
 );
+
+thread_local! {
+  /// The one gate of this thread: one reading of the contract and of the typeshed, which every life and every
+  /// Gate of the thread shares, so the reading costs once for the process and not once for each life.
+  static GATE: Ty = Ty::new();
+}
 
 /// The callable of the host, which every ear of the life reaches through.
 struct Hosted(Py<PyAny>);
@@ -56,7 +62,7 @@ impl Life {
   #[new]
   fn new(host: Py<PyAny>, ears: Vec<String>, record: Bound<'_, PyAny>) -> PyResult<Self> {
     let kept = of_python(&record)?;
-    let held = Held::boot(Sand::default(), Hosted(host), &ears, &kept).map_err(raised)?;
+    let held = Held::boot(Sand::default(), Hosted(host), &ears, &kept, GATE.with(Ty::clone)).map_err(raised)?;
     Ok(Life { held })
   }
 
@@ -84,21 +90,22 @@ impl Life {
 
 /// The gate of the crate, for the Kernel of this interpreter to read a sheet with.
 ///
-/// One reading of the contract, held for as many sheets as a host reads: what ty found on each, by its line.
+/// The one reading of the contract of this thread, which every life of monty shares too: what ty found on each
+/// sheet, by its line.
 #[pyclass(module = "furb_monty._monty", name = "Gate", unsendable)]
 pub struct Gate {
-  held: furb::gate::Ty,
+  held: Ty,
 }
 
 #[pymethods]
 impl Gate {
   #[new]
   fn new() -> Self {
-    Gate { held: furb::gate::Ty::new() }
+    Gate { held: GATE.with(Ty::clone) }
   }
 
   /// What ty found on a sheet, each finding by its line, and none of the warnings.
-  fn checked(&mut self, sheet: &str) -> Vec<(usize, String)> {
+  fn checked(&self, sheet: &str) -> Vec<(usize, String)> {
     self.held.checked(sheet)
   }
 }
