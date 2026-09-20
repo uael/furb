@@ -18,12 +18,12 @@ use napi::{
 
 use crate::value::{Fact as Held, made, of_js, refused, to_js};
 
-/// A question of the engine, which a World answers a fact with when it must know something first.
+/// The name a question of the engine is said under.
 ///
-/// The boundary puts the question and hands the answer back through `answered`, so a World never calls into a
-/// life that stands waiting for it. A host says one as a plain object, `{ ask, on, words }`, since it carries
-/// three words and nothing else.
-pub const ASK: &str = "ask";
+/// A World that must know something before it answers a fact says a plain object, `{ ask, on, words }`, which
+/// carries three words and nothing else, so it needs no class of its own. The boundary puts the question and
+/// hands the answer back through `answered`, and a World never calls into a life that stands waiting for it.
+const ASK: &str = "ask";
 
 /// A World of javascript, as the crate reads one.
 ///
