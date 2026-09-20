@@ -58,6 +58,31 @@ impl Ask {
   }
 }
 
+/// One word, read in the names of the engine, which a World answers a fact with when it must read the life.
+///
+/// A World of python is a generator beside the engine, so it reads the engine where it answers. A World of a host
+/// is not beside it, and this is how it reaches the same names. The boundary reads the word and hands the value
+/// back through `answered`, so a World never calls into a life that stands waiting for it.
+#[pyclass(module = "furb_sand", name = "Reads", frozen, from_py_object)]
+#[derive(Debug, Clone)]
+pub struct Reads {
+  /// The word, read in the names of the engine.
+  #[pyo3(get)]
+  pub word: String,
+}
+
+#[pymethods]
+impl Reads {
+  #[new]
+  fn new(word: String) -> Self {
+    Reads { word }
+  }
+
+  fn __repr__(&self) -> String {
+    format!("Reads({:?})", self.word)
+  }
+}
+
 /// The first fault of a World or of a gate, held where the caller of the life reads it.
 ///
 /// A life takes its World and gives it back only when it opened, so the fault of a World that raises while the
@@ -181,6 +206,9 @@ fn reply_of(said: &Bound<'_, PyAny>) -> PyResult<Reply> {
   if let Ok(one) = said.extract::<Ask>() {
     return Ok(Reply::Ask { kind: one.kind, on: one.on, words: one.words });
   }
+  if let Ok(one) = said.extract::<Reads>() {
+    return Ok(Reply::Reads(one.word));
+  }
   if let Ok(one) = said.extract::<PyFact>() {
     return Ok(Reply::say(one.0));
   }
@@ -191,5 +219,7 @@ fn reply_of(said: &Bound<'_, PyAny>) -> PyResult<Reply> {
     }
     return Ok(Reply::Say(held));
   }
-  Err(PyTypeError::new_err(format!("a World says nothing, a fact, a list of facts or an Ask, and {said} is none")))
+  Err(PyTypeError::new_err(format!(
+    "a World says nothing, a fact, a list of facts, an Ask or a Reads, and {said} is none"
+  )))
 }

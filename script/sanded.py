@@ -45,11 +45,13 @@ from furb import engine as real  # noqa: E402
 
 NAMES = dict(vars(real))
 """NAMES are the names of the engine, which is what a shape that crosses is made again by."""
-PURE = ("question", "covers", "acts", "asked", "outcomes", "site", "modules")
+PURE = ("question", "covers", "site", "modules")
 """PURE are the names of the engine that read no life, so this side answers them itself.
 
-`scope` is not one of them: it reads `acts` and `asked`, which stand in the sandbox.
+`scope`, `acts`, `asked` and `outcomes` are not among them: each reads the life, which stands in the sandbox.
 """
+HELD = ("acts", "asked", "outcomes")
+"""HELD are the maps of the life, which a test and a World both read, and which the sandbox holds."""
 ASKED = {"cwd": 1, "merged": 3}
 """ASKED are the verbs a World reaches the engine by while it answers, and how many words each one carries."""
 
@@ -176,6 +178,15 @@ class Crossing:
     self.from_world.put(("ask", kind, on, list(words)))
     return self.answers.get()
 
+  def reads(self, word: str) -> object:
+    """One word of the engine, read from the World thread, and the value, which wakes it.
+
+    A World of python reads the engine where it answers, since it is a generator beside it. This is that reach
+    for a World the engine cannot see, and it is what `acts[one]` and `scope(one)` go through.
+    """
+    self.from_world.put(("reads", word))
+    return self.answers.get()
+
   def hears(self, fact: object) -> object:
     """One fact, heard by the double, and what it says of it or the question it must ask first."""
     held = tuple(made(one) for one in (fact.kind, fact.about, fact.by, *fact.words))
@@ -197,6 +208,8 @@ class Crossing:
     said = self.from_world.get()
     if said[0] == "raised":
       raise said[1]
+    if said[0] == "reads":
+      return furb_sand.Reads(said[1])
     if said[0] == "ask":
       _, kind, on, words = said
       return furb_sand.Ask(kind, str(on), *[plainly(one) for one in words])
@@ -291,6 +304,36 @@ def on_world() -> object:
   return getattr(threading.current_thread(), "crossing", None)
 
 
+class Mapping:
+  """One map of the life, read where it stands, which is the sandbox.
+
+  `acts`, `asked` and `outcomes` are the life's own, and a test reads them and so does a World while it answers.
+  Neither holds a copy: every read is a word.
+  """
+
+  def __init__(self, name: str) -> None:
+    self.name = name
+
+  def __contains__(self, key: object) -> bool:
+    return bool(reading(f"{written(key)} in {self.name}"))
+
+  def __getitem__(self, key: object) -> object:
+    if key not in self:
+      raise KeyError(key)
+    return reading(f"{self.name}[{written(key)}]")
+
+  def get(self, key: object, default: object = None) -> object:
+    """What the map holds under a key, or this instead, as a map of python answers."""
+    held = reading(f"({written(key)} in {self.name}, {self.name}.get({written(key)}))")
+    return held[1] if held[0] else default
+
+  def __iter__(self):  # noqa: ANN204
+    return iter(reading(f"list({self.name})"))
+
+  def __len__(self) -> int:
+    return int(reading(f"len({self.name})"))
+
+
 class Shim:
   """What the suite reads as `furb.engine`: the names of the engine, over a life in the sandbox.
 
@@ -300,6 +343,8 @@ class Shim:
   """
 
   def __getattr__(self, name: str):  # noqa: ANN204
+    if name in HELD:
+      return Mapping(name)
     if name in PURE or name not in NAMES or not callable(NAMES[name]) or isinstance(NAMES[name], type):
       return NAMES[name]
     if name in SHOWS:
@@ -344,11 +389,15 @@ def verbed(name: str, args: tuple, kwargs: dict) -> object:
   if name == "close":
     living().voice.close(str(args[1]), plainly(args[0]))
     return None
-  if crossing is not None and name in ("cwd", "ask"):
-    if name == "ask":
-      return crossing.asks(str(args[0]), str(args[1]), args[2:])
-    return crossing.asks("cwd", str(kwargs.get("on", args[0] if args else "")), ())
-  return living().word(call(name, args, kwargs))
+  return reading(call(name, args, kwargs), crossing)
+
+
+def reading(word: str, crossing: object = None) -> object:
+  """One word of the engine, read where the caller stands: in the life, or through the World that is waiting."""
+  held = crossing if crossing is not None else on_world()
+  if held is not None:
+    return made(held.reads(word))
+  return living().word(word)
 
 
 def text_of(record: object) -> str | None:

@@ -34,6 +34,12 @@ pub enum Reply {
     /// The words of the question.
     words: Vec<Value>,
   },
+  /// One word, read in the names of the engine, handed back through [`World::answered`].
+  ///
+  /// A World of python is a generator beside the engine, so it reads the engine where it answers. A host of
+  /// another language is not beside it, and this is how it reaches the same names: `acts[one]`, `scope(one)` and
+  /// any other reading of the life a World of python makes for itself.
+  Reads(String),
 }
 
 impl Reply {
@@ -45,6 +51,11 @@ impl Reply {
   /// A question of the engine on a chain, with no words but the chain.
   pub fn ask(kind: impl Into<String>, on: impl Into<String>) -> Self {
     Reply::Ask { kind: kind.into(), on: on.into(), words: Vec::new() }
+  }
+
+  /// One word, read in the names of the engine.
+  pub fn reads(word: impl Into<String>) -> Self {
+    Reply::Reads(word.into())
   }
 }
 

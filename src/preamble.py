@@ -80,8 +80,13 @@ def unwire(x: object, names: Names) -> object:
 def outside(name: str, host: Host, names: Names) -> Generator[tuple | None, tuple]:
   """One generator of the outside: every fact it hears goes to the host, and what the host says it says.
 
-  The host answers one of three ways: it says facts, which this yields one by one, as any generator of a life does;
-  it asks a question of the engine, which this puts and hands back the answer; or it says nothing at all.
+  The host answers one of four ways: it says facts, which this yields one by one, as any generator of a life does;
+  it asks a question of the engine, which this puts and hands back the answer; it reads the engine, which is a word
+  run in the names of the engine and handed back; or it says nothing at all.
+
+  A World of python is a generator beside the engine, so it reads the engine where it answers: `acts` and `scope`
+  and `cwd` are all in its reach. A host of another language is not beside it, so the read is how it reaches the
+  same names, and the boundary is as wide as the World the contract declares.
 
   What the host says is plain, as what it hears is, so nothing of python crosses in either direction and a host
   of any language answers the same way.
@@ -96,6 +101,8 @@ def outside(name: str, host: Host, names: Names) -> Generator[tuple | None, tupl
         case ("ask", str(kind), str(on), list(words)):
           got = verb(names, "ask")(kind, on, *[unwire(w, names) for w in words])
           reply = unwire(host(name, wire(("answered", got[1] if isinstance(got, tuple) else got))), names)
+        case ("reads", str(word)):
+          reply = unwire(host(name, wire(("answered", eval(word, dict(names))))), names)  # noqa: S307
         case ("say", list(facts)):
           for one in facts:
             said = unwire(one, names)

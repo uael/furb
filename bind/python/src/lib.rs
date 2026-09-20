@@ -19,7 +19,7 @@ use pyo3::{
 };
 
 use crate::{
-  outside::{Ask, Gates, Raised, Worlds},
+  outside::{Ask, Gates, Raised, Reads, Worlds},
   value::{Fault, PyFact, Shape, Show, of_python, to_python},
 };
 
@@ -257,6 +257,7 @@ fn furb_sand(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<Voice>()?;
   module.add_class::<PyFact>()?;
   module.add_class::<Ask>()?;
+  module.add_class::<Reads>()?;
   module.add_class::<Shape>()?;
   module.add_class::<Fault>()?;
   module.add_class::<Show>()?;

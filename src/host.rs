@@ -95,6 +95,9 @@ fn replied(reply: Reply) -> Value {
       let asked = vec![Value::Str("ask".to_owned()), Value::Str(kind), Value::Str(on), Value::List(words)];
       return Value::Tuple(asked).plain();
     }
+    Reply::Reads(word) => {
+      return Value::Tuple(vec![Value::Str("reads".to_owned()), Value::Str(word)]).plain();
+    }
   };
   Value::Tuple(vec![Value::Str("say".to_owned()), Value::List(held)]).plain()
 }
