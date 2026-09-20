@@ -13,7 +13,10 @@ mod value;
 use std::time::Duration;
 
 use furb::{Ears, Entry, Life as Held, Refusal, Sand, Voice as Says, record};
-use napi::{Env, Error, Result, Status, Unknown, bindgen_prelude::Object};
+use napi::{
+  Env, Error, Result, Status, Unknown,
+  bindgen_prelude::{Object, ObjectFinalize},
+};
 use napi_derive::napi;
 
 use crate::{
@@ -26,10 +29,22 @@ use crate::{
 /// A host opens one with a World of its own and drives it by calling words on it, the way an operator calls a
 /// verb. What the host started and has not finished it says through its [`Voice`], and the life hears all of it
 /// in the order it was said.
-#[napi]
+#[napi(custom_finalize)]
 pub struct Life {
   /// The life, which holds the sandbox, the World and the gate.
   held: Held<Worlds, Gates>,
+}
+
+impl ObjectFinalize for Life {
+  /// The end of the life, where the references it holds on the World and the gate are released.
+  ///
+  /// A reference holds an object of javascript against collection, and nothing releases one for you, so a life
+  /// that is collected releases both of its own. It is the one place an env is at hand for that.
+  fn finalize(self, env: Env) -> Result<()> {
+    let (world, gate) = self.held.outside();
+    world.done(&env)?;
+    gate.done(&env)
+  }
 }
 
 #[napi]

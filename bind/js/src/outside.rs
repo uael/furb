@@ -31,7 +31,7 @@ pub const ASK: &str = "ask";
 /// the life stops with it rather than carrying on with a reply that was never given.
 pub struct Worlds {
   /// The object the host wrote.
-  held: ObjectRef<false>,
+  held: ObjectRef,
   /// The env of the call that is running, and nothing between two calls.
   env: Option<Env>,
   /// The first fault of the object, which the caller of the life throws once the call is over.
@@ -40,7 +40,7 @@ pub struct Worlds {
 
 impl Worlds {
   /// A World of the crate, over the object a host wrote.
-  pub fn new(held: ObjectRef<false>) -> Self {
+  pub fn new(held: ObjectRef) -> Self {
     Worlds { held, env: None, raised: None }
   }
 
@@ -57,6 +57,14 @@ impl Worlds {
   /// The object the host wrote, as the host reads it back.
   pub fn object<'env>(&self, env: &Env) -> Result<Unknown<'env>> {
     made(env, self.held.get_value(env)?)
+  }
+
+  /// The reference on the object, released, which is the end of this World.
+  ///
+  /// A reference holds an object of javascript against collection, and nothing releases one for you: the life
+  /// that made it releases it when the life itself is collected.
+  pub fn done(self, env: &Env) -> Result<()> {
+    self.held.unref(env)
   }
 
   /// One call of the object, and the reply it gave.
@@ -107,7 +115,7 @@ impl World for Worlds {
 /// python gives an object with `gate`, and the findings it gives are what the model is told.
 pub struct Gates {
   /// The object the host wrote, and nothing for a host that gates no word.
-  held: Option<ObjectRef<false>>,
+  held: Option<ObjectRef>,
   /// The env of the call that is running, and nothing between two calls.
   env: Option<Env>,
   /// The first fault of the object, which the caller of the life throws once the call is over.
@@ -116,7 +124,7 @@ pub struct Gates {
 
 impl Gates {
   /// A gate of the crate, over the object a host wrote, or over nothing.
-  pub fn new(held: Option<ObjectRef<false>>) -> Self {
+  pub fn new(held: Option<ObjectRef>) -> Self {
     Gates { held, env: None, raised: None }
   }
 
@@ -128,6 +136,14 @@ impl Gates {
   /// The end of the call, after which the object is reached by nothing.
   pub fn off(&mut self) {
     self.env = None;
+  }
+
+  /// The reference on the object, released, which is the end of this gate.
+  pub fn done(self, env: &Env) -> Result<()> {
+    match self.held {
+      Some(held) => held.unref(env),
+      None => Ok(()),
+    }
   }
 
   /// One call of the object, which is the `gate` method on it.

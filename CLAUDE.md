@@ -143,7 +143,9 @@ that one is the engine and the harness in python, and this one is the engine in 
 thing. `bind/js` is the one for javascript, a package named `@uael/furb`, over napi.
 
 A module of a binding is built for one interpreter and read by that one alone, so `script/bound.py` builds each
-for the interpreter that runs it, puts it where that interpreter reads it, and then runs the tests of each.
+for the interpreter that runs it, puts it where that interpreter reads it, and then runs the tests of each. It is
+a command and no hook of the commit, as the other rigs are: it builds two more modules from nothing, which the
+gate of the hooks has no room for.
 `bind/python/test/yard.py` and `bind/js/test/yard.mjs` are each a World of this machine, written small, as the
 World of `tests/life.rs` is, and the tests beside them are the same tests in each language.
 
