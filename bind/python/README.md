@@ -43,8 +43,11 @@ leaves it out: the word then runs, raises where it stands, and the engine asks t
 ## Build
 
 ```sh
-maturin develop -m bind/python/Cargo.toml
+maturin build -m bind/python/Cargo.toml
 ```
 
-The module is compiled against one interpreter and imported by that one alone. `script/bound.py` builds it for
-the interpreter that runs it and puts the tests of the binding on it.
+The module is compiled against one interpreter and imported by that one alone, so the wheel is for one
+interpreter and one platform.
+
+In a checkout, `uv run python script/bound.py` builds it for the interpreter that runs the rig, puts it where that
+interpreter reads it, and runs the tests of the binding on it.

@@ -4,8 +4,9 @@ version = "0.1.0"
 description = "furb for python: one life of the engine, in the sandbox, with a World you write in python."
 readme = "README.md"
 requires-python = ">=3.10"
+# The license of the repository stands over this too; maturin reads no file above its own directory, so the
+# distribution names the license and carries none of its own.
 license = "AGPL-3.0-only"
-license-files = ["../../LICENSE"]
 authors = [{ name = "Abel Lucas", email = "uaelucas@gmail.com" }]
 classifiers = [
   "Development Status :: 3 - Alpha",
