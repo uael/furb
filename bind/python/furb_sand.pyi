@@ -198,8 +198,12 @@ class Life:
   def waits(self, seconds: float) -> bool:
     """Wait until the host says something, or until this long has passed, and say whether anything waits."""
 
-  def came(self, act: str) -> Value:
-    """What an act came to, and nothing at all while it waits."""
+  def came(self, act: str) -> tuple[Value] | None:
+    """What an act came to, held in a tuple of one, and nothing at all while it waits.
+
+    The value is in a tuple because an act may come to nothing, and a host that read a bare `None` could not
+    tell that from an act that still waits.
+    """
 
 def line(entry: Value) -> str:
   """The line a World writes for one entry it was told to keep."""

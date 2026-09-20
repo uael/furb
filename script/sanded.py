@@ -46,7 +46,10 @@ from furb import engine as real  # noqa: E402
 NAMES = dict(vars(real))
 """NAMES are the names of the engine, which is what a shape that crosses is made again by."""
 PURE = ("question", "covers", "acts", "asked", "outcomes", "site", "modules")
-"""PURE are the names of the engine that read no life, so this side answers them itself."""
+"""PURE are the names of the engine that read no life, so this side answers them itself.
+
+`scope` is not one of them: it reads `acts` and `asked`, which stand in the sandbox.
+"""
 ASKED = {"cwd": 1, "merged": 3}
 """ASKED are the verbs a World reaches the engine by while it answers, and how many words each one carries."""
 
@@ -107,6 +110,8 @@ def held_out(got: object) -> str:
 
 def alone(got: object) -> str:
   """One value that holds no other, written out: a shape of the engine, an exception, or a plain one."""
+  if isinstance(got, type):
+    return got.__name__
   name = type(got).__name__
   if hasattr(got, "__dataclass_fields__") and name in NAMES:
     held = ", ".join(written(getattr(got, one)) for one in got.__dataclass_fields__)
@@ -173,7 +178,7 @@ class Crossing:
 
   def hears(self, fact: object) -> object:
     """One fact, heard by the double, and what it says of it or the question it must ask first."""
-    held = tuple(made(one) for one in (fact.kind, fact.about, *fact.words))
+    held = tuple(made(one) for one in (fact.kind, fact.about, fact.by, *fact.words))
     if self.probe is not None:
       self.probe.send(held)
     if not self.started:
@@ -218,10 +223,10 @@ class Act(str):
   async def came(self) -> object:
     """What the act came to, once the host has said everything it owes."""
     for _ in range(4000):
-      self.held.pump()
+      self.held.turn()
       got = self.held.life.came(str(self))
       if got is not None:
-        return raised(made(got))
+        return raised(made(got[0]))
       await asyncio.sleep(0)
     why = f"{self} never came to anything"
     raise AssertionError(why)
@@ -239,6 +244,15 @@ class Held:
   def pump(self) -> int:
     """Everything the host has said into its Voice, done in the life."""
     return self.life.heard()
+
+  def turn(self) -> None:
+    """What the host owes, said, and room for the loop of the engine, which turns in the sandbox alone.
+
+    Nothing of a life moves between two calls of it, so a wait for an act is a call: the word says nothing and
+    is there to be entered.
+    """
+    self.pump()
+    self.life.word("None")
 
   def word(self, word: str) -> object:
     """One verb, said as a word, and what it gave, made again as this interpreter holds it."""
@@ -330,13 +344,10 @@ def verbed(name: str, args: tuple, kwargs: dict) -> object:
   if name == "close":
     living().voice.close(str(args[1]), plainly(args[0]))
     return None
-  if crossing is not None:
-    on = kwargs.get("on", args[1] if len(args) > 1 else "")
-    words = args[2:] if name == "ask" else ()
-    kind = str(args[0]) if name == "ask" else name
+  if crossing is not None and name in ("cwd", "ask"):
     if name == "ask":
-      on = str(args[1])
-    return crossing.asks(kind, str(on or ""), words)
+      return crossing.asks(str(args[0]), str(args[1]), args[2:])
+    return crossing.asks("cwd", str(kwargs.get("on", args[0] if args else "")), ())
   return living().word(call(name, args, kwargs))
 
 

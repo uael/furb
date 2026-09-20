@@ -119,6 +119,6 @@ def came(held: Life, act: str, tries: int = 200) -> object:
     held.heard()
     got = held.came(act)
     if got is not None:
-      return got
+      return got[0]
     held.waits(0.05)
   raise AssertionError(f"{act} never came to anything")

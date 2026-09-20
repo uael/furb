@@ -14,7 +14,8 @@ use std::{sync::Arc, time::Duration};
 
 use furb::{Ears, Entry, Life as Held, Refusal, Sand, Voice as Says, record};
 use pyo3::{
-  Bound, Py, PyAny, PyResult, Python, create_exception, exceptions::PyException, prelude::*, wrap_pyfunction,
+  Bound, Py, PyAny, PyResult, Python, create_exception, exceptions::PyException, prelude::*, types::PyTuple,
+  wrap_pyfunction,
 };
 
 use crate::{
@@ -115,7 +116,11 @@ impl Life {
     py.detach(|| self.held.waits(Duration::from_secs_f64(seconds.max(0.0))))
   }
 
-  /// What an act came to, and nothing at all while it waits.
+  /// What an act came to, held in a tuple of one, and nothing at all while it waits.
+  ///
+  /// The value is in a tuple because an act may come to nothing: `close(None)` is an answer and so is a word
+  /// that gives nothing back, and a host that read a bare `None` could not tell either from an act that still
+  /// waits. So a tuple is an answer and nothing is a wait.
   ///
   /// A host says what it owes first, since a fact it is holding may be the very one that settles the act, and
   /// then asks. It never waits in here: how long to wait is the host's to decide.
@@ -123,7 +128,7 @@ impl Life {
     let got = self.held.came(act);
     self.caught()?;
     match raised(got)? {
-      Some(value) => Ok(Some(to_python(py, &value)?)),
+      Some(value) => Ok(Some(PyTuple::new(py, [to_python(py, &value)?])?.into_any())),
       None => Ok(None),
     }
   }
