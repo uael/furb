@@ -17,15 +17,15 @@ async def test_a_ready_says_the_word_a_rung_holds() -> None:
   assert [a[1] for a in said(log, "ready")] == [laid, asking]
 
 
-async def test_an_accepted_word_of_a_rung_enters_the_program_of_the_chain() -> None:
-  """An accepted word of a rung enters the program of the chain and runs in the globals of the chain."""
+async def test_the_word_of_a_rung_enters_the_program_of_the_chain() -> None:
+  """The word of a rung enters the program of the chain, and it runs in the globals of the chain when the gate accepts it."""
   sand = sown()
   _, root = life(sand)
-  sand.script[root] = ["a = 1", "close(a + 1)", "close(None)"]
+  sand.script[root] = ["a = BAD", "a = 1", "close(a + 1)", "close(None)"]
   assert await engine.prompt(int, "count", on=root) == 2
   _, program = engine.ask("program", root, root)
   assert isinstance(program, dict)
-  assert list(program.values()) == ["a = 1", "close(a + 1)"]
+  assert list(program.values()) == ["a = BAD", "a = 1", "close(a + 1)"]
   assert engine.modules[root]["a"] == 1
 
 
@@ -36,7 +36,9 @@ async def test_the_word_of_a_rung_that_extends_the_engine_is_part_of_the_program
   sand.script[root] = [DOOR, "close(None)"]
   assert await engine.prompt(int, "a door", on=root) == 1
   await settle()
-  assert DOOR in engine.read(root, on=root).content
+  _, program = engine.ask("program", root, root)
+  assert isinstance(program, dict)
+  assert DOOR in "\n".join(program.values())
   _, over = await relived(Sand(stands=STANDS), plain(sand.record))
   assert engine.read("note://a", on=over).content == "kept"
 

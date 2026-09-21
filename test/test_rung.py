@@ -4,9 +4,9 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import STANDS, Sand, attr, gated, life, ran, said, settle, sown, tags, text_of
+from conftest import STANDS, Py, Sand, attr, gated, kept, life, ran, said, settle, sown, tags, text_of, watched
 from furb import engine
-from furb.engine import WORLD, Exit, Refused
+from furb.engine import OPERATOR, WORLD, Exit, Refused, Text
 
 
 async def test_the_run_of_a_word_on_a_chain() -> None:
@@ -363,6 +363,46 @@ async def test_a_replay_makes_a_rung_of_its_own_retelling_each_rung_of_the_donor
   mine = [a for a in said(log, "rung") if a[3] == side]
   assert {a[5]: a[4] for a in mine} == engine.ask("program", root, root)[1]
   assert mine and all(a[1] != a[5] for a in mine)
+
+
+async def test_a_rung_that_retells_names_the_rung_the_record_holds() -> None:
+  """A rung that retells names the rung the record holds and never another rung that retells it, so a second replay makes the same acts and asks the World nothing twice."""
+  sand = sown()
+  log, root = life(sand)
+  act = engine.prompt(int, "read it", to=OPERATOR, on=root)
+  engine.write(Text(act, "t = read('a.txt')"), on=root)
+  await settle()
+  engine.write(Text(act, "t = read('a.txt')\nn = len(t.lines)"), on=root)
+  await settle()
+  engine.write(Text(act, "t = read('a.txt')\nn = len(t.lines)\nm = n + 1"), on=root)
+  await settle()
+  laid = said(log, "rung")
+  assert [a[5] for a in laid] == ["", laid[0][1], "", laid[0][1], laid[2][1], ""]
+  assert [a[0] for a in sand.calls].count("read") == 1
+  assert engine.modules[root]["m"] == 3
+
+
+async def test_a_rung_that_retells_is_done_with_nothing() -> None:
+  """A rung that retells is done with nothing when its word answers or runs to its end, whatever the Kernel makes of the word, and with what that word raised."""
+  sand = sown()
+  log, root = life(sand)
+  sand.script[root] = ["k = 1\nclose(21)", "close(None)"]
+  assert await engine.prompt(int, "count", on=root) == 21
+  with pytest.raises(ValueError, match="boom"):
+    await engine.rung("raise ValueError('boom')", on=root)
+  twin = engine.chain("twin", source=root)
+  await settle(300)
+  theirs = [a[1] for a in said(log, "rung") if a[3] == twin]
+  assert [type(engine.outcomes[one]).__name__ for one in theirs] == ["NoneType", "ValueError"]
+  other = sown()
+  mine: list[tuple] = []
+  over = engine.boot(kernel=kept(Py().kernel()), probe=watched(mine), world=other.hears())
+  other.script[over] = ["k = 1\nclose(21)", "close(None)"]
+  assert await engine.prompt(int, "count", on=over) == 21
+  await settle()
+  side = engine.chain("side", source=over)
+  await settle(300)
+  assert [engine.outcomes[a[1]] for a in said(mine, "rung") if a[3] == side] == [None]
 
 
 async def test_a_rung_that_awaits_an_act_nobody_settles_waits_until_the_operator_cancels_it() -> None:

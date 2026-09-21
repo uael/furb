@@ -4,7 +4,7 @@ import pytest
 
 from conftest import STANDS, Dead, Sand, World, life, said, settle, shown, sown, tags
 from furb import engine
-from furb.engine import Refused, Text
+from furb.engine import OPERATOR, Refused, Text
 
 KEPT = (
   "def kept(id):\n"
@@ -58,10 +58,11 @@ async def test_a_write_whoever_serves_the_path_of_the_text_takes_its_content() -
   _, root = life(sand)
   assert engine.write(Text("b.txt", "one\n"), on=root) == Text("/w/b.txt", "one\n")
   assert sand.files == {"/w/b.txt": "one\n"}
-  assert engine.write(Text(root, "k = 1"), on=root) == Text(root, "k = 1")
+  act = engine.prompt(int, "count", to=OPERATOR, on=root)
+  assert engine.write(Text(act, "k = 1"), on=root) == Text(act, "k = 1")
   await settle()
   assert engine.modules[root]["k"] == 1
-  assert engine.read(root, on=root) == Text(root, "k = 1")
+  assert engine.read(act, on=root) == Text(act, "k = 1")
 
 
 async def test_write_is_given_a_text_and_gives_the_text_as_it_is_on_disk_after_the_write() -> None:
@@ -128,41 +129,61 @@ async def test_a_door_that_answers_a_write_with_more_than_it_was_asked_for() -> 
   assert shown(made) == [("shown", [("path", "b.txt"), ("known", 2)], "3 three")]
 
 
-async def test_a_write_to_a_door_of_a_chain_edits_the_program_of_that_chain() -> None:
-  """A write to a door of a chain edits the program of that chain, so the door and the verb are one act."""
+async def test_a_write_to_the_door_of_a_prompt_edits_the_program_of_its_ladder() -> None:
+  """A write to the door of a prompt edits the program of its ladder, so the door and the verb are one act."""
   sand = sown()
   log, root = life(sand)
-  got = engine.write(Text(root, "k = 21"), on=root)
+  act = engine.prompt(int, "count", to=OPERATOR, on=root)
+  got = engine.write(Text(act, "k = 21"), on=root)
   await settle()
-  assert got == Text(root, "k = 21")
+  assert got == Text(act, "k = 21")
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
   asked = said(held, "write")[0]
-  assert (asked[1], asked[4]) == ("write://operator.2", Text(root, "k = 21"))
-  assert [(a[1], a[2], a[4]) for a in said(log, "rung")] == [("rung://operator.1.2", root, "k = 21")]
-  engine.write(Text(root, "k = 21\nk = 22"), on=root)
+  assert (asked[1], asked[4]) == ("write://operator.3", Text(act, "k = 21"))
+  assert [(a[1], a[2], a[4]) for a in said(log, "rung")] == [("rung://operator.2.2", act, "k = 21")]
+  engine.write(Text(act, "k = 21\nk = 22"), on=root)
   await settle()
-  assert engine.read(root, on=root) == Text(root, "k = 21\nk = 22") and engine.modules[root]["k"] == 22
-  word = "write(Text(__name__, read(__name__).content + '\\nk = 23'))"
-  assert await engine.rung(word, on=root) is None
-  await settle(300)
-  assert engine.read(root, on=root) == Text(root, f"k = 21\nk = 22\n{word}\nk = 23")
-  assert engine.modules[root]["k"] == 23
+  assert engine.read(act, on=root) == Text(act, "k = 21\nk = 22") and engine.modules[root]["k"] == 22
 
 
-async def test_the_chain_answers_a_write_of_one_of_its_names_with_the_text_it_took() -> None:
-  """The chain answers a write of one of its names with the text it took, and makes its ladder again from it."""
+async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_the_text_it_took() -> None:
+  """The chain answers a write of the door of one of its prompts with the text it took, and makes its rungs again from it."""
   sand = sown()
   log, root = life(sand)
-  got = engine.write(Text(root, "k = 21"), on=root)
+  act = engine.prompt(int, "count", to=OPERATOR, on=root)
+  got = engine.write(Text(act, "k = 21"), on=root)
   await settle()
   assert engine.modules[root]["k"] == 21
   assert [a[4] for a in said(log, "rung")] == ["k = 21"]
-  assert got == Text(root, "k = 21") and [a[0] for a in sand.calls] == ["stand"]
-  laid = said(log, "rung")[0][1]
-  again = engine.write(Text(laid, "k = 22"), on=root)
+  assert got == Text(act, "k = 21") and [a[0] for a in sand.calls] == ["stand", "start"]
+  again = engine.write(Text(act, "k = 22"), on=root)
   await settle()
-  assert again == Text(laid, "k = 22") and engine.read(root, on=root) == Text(root, "k = 22")
+  assert again == Text(act, "k = 22") and engine.read(act, on=root) == Text(act, "k = 22")
+
+
+async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_of_that_rung_out() -> None:
+  """A write of a door that a rung of that ladder says leaves the word of that rung out, and that rung is no rung of the chain after it."""
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
+  sand.script[root] = [
+    "k = 1",
+    "BAD = 2",
+    "mine = get(acting())[2]\nwrite(read(mine).replace('B' + 'AD', 'ok'))",
+    "close((k, ok, read(get(acting())[2]).content))",
+  ]
+  act = engine.prompt(object, "fix it", on=root)
+  assert await act == (1, 2, "k = 1\nok = 2")
+  await settle()
+  assert [a[4].splitlines()[0] for a in said(log, "run")] == [
+    "k = 1",
+    "mine = get(acting())[2]",
+    "k = 1",
+    "ok = 2",
+    "close((k, ok, read(get(acting())[2]).content))",
+  ]
+  assert [a[5] != "" for a in said(log, "run")] == [False, False, True, False, False]
+  assert engine.read(act, on=root).content == "k = 1\nok = 2\nclose((k, ok, read(get(acting())[2]).content))"
 
 
 async def test_a_new_file_is_a_write_of_a_text_made_of_its_path_and_its_content() -> None:

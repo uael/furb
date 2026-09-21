@@ -198,7 +198,7 @@ async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
 
 
 async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_that_asked_for_it() -> None:
-  """A close said from a word that names no act is over the prompt that asked for the word, and over the rung itself for a word its caller wrote, which answers no prompt."""
+  """A close said from a word that names no act is over the prompt that made the rung of the word, and over the rung itself for a word its caller wrote, which answers no prompt."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["close(21)"]
@@ -209,6 +209,22 @@ async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_tha
   mine = engine.rung("close(9)", on=root)
   assert await mine == 9
   assert [one[1] for one in said(log, "close")] == [act, mine]
+
+
+async def test_a_close_said_from_a_word_that_retells_is_over_that_rung_and_carries_nothing() -> None:
+  """A close said from a word that retells is over that rung and carries nothing, so it answers no prompt and stops the word where it stands."""
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
+  sand.script[root] = ["k = 1\nclose(21)\nj = 2"]
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 21
+  await settle()
+  twin = engine.chain("twin", source=root)
+  await settle(300)
+  copy = next(a[1] for a in said(log, "rung") if a[3] == twin)
+  assert engine.modules[twin]["k"] == 1 and "j" not in engine.modules[twin]
+  assert engine.outcomes[copy] is None
+  assert [(one[1], one[3]) for one in said(log, "close")] == [(act, 21), (copy, None)]
 
 
 async def test_a_close_of_the_prompt_of_the_running_word_stops_that_word_where_it_stands() -> None:

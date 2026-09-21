@@ -328,6 +328,29 @@ class Py:
             ended(one, CancelledError())
 
 
+def kept(inner: Kernel) -> Kernel:
+  """A Kernel that keeps what each run left in the module of its chain, and answers a run that retells one it kept
+  with that module again, so the word of a retold rung never runs a second time.
+  """
+  held: dict[str, dict[str, object]] = {}
+  where: dict[str, str] = {}
+  engine.lives(inner, None)
+  while True:
+    match a := (yield):
+      case ("run", rung, _, chain, _, whose):
+        where[rung] = chain
+        if whose in held:
+          modules[chain].update(held[whose])
+          engine.send("ran", rung, None, by=rung)
+        else:
+          engine.lives(inner, a)
+      case ("ran", rung, *_) if rung in where:
+        held[rung] = dict(modules[where[rung]])
+        engine.lives(inner, a)
+      case _:
+        engine.lives(inner, a)
+
+
 def watched(log: list[tuple]) -> Kernel:
   """A generator of the suite that says nothing and keeps every fact it hears."""
   while True:

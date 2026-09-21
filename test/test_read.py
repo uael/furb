@@ -4,7 +4,7 @@ import pytest
 
 from conftest import STANDS, Dead, Sand, attr, life, said, settle, shown, sown, tags
 from furb import engine
-from furb.engine import HEAD, HIDDEN, Refused, Text, span, take
+from furb.engine import HEAD, HIDDEN, OPERATOR, Refused, Text, span, take
 
 BIG = "".join(f"line {i}\n" for i in range(1, 2101))
 NUMS = (
@@ -107,40 +107,52 @@ async def test_a_text_without_a_show_is_told_as_head() -> None:
   assert len(body.splitlines()) == 2000
 
 
-async def test_a_read_of_chain_lineage_gives_the_program_of_the_chain() -> None:
-  """A read of chain://lineage gives the program of the chain, the words of its ladder in order."""
+async def test_a_read_of_prompt_lineage_gives_the_program_of_that_ladder() -> None:
+  """A read of prompt://lineage gives the program of that ladder, the words of its rungs in order."""
   sand = sown()
   _, root = life(sand)
   sand.script[root] = ["k = BAD", "a = 1", "close(a + 1)", "close(None)"]
-  assert await engine.prompt(int, "count", on=root) == 2
-  assert engine.read(root, on=root) == Text(root, "a = 1\nclose(a + 1)")
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 2
+  assert engine.read(act, on=root) == Text(act, "k = BAD\na = 1\nclose(a + 1)")
 
 
-async def test_whether_a_name_is_the_chains_own_or_one_of_the_acts_it_has_heard_on_itself() -> None:
-  """Whether a name is the chain's own or one of the acts it has heard on itself, which is what its doors serve and no other path, a path of no name being none of them."""
+async def test_whether_a_name_is_one_of_the_prompts_a_chain_has_heard_on_itself() -> None:
+  """Whether a name is one of the prompts a chain has heard on itself, which is what its doors serve and no other path, a path of no name being none of them."""
   sand = sown()
-  _, root = life(sand)
+  log, root = life(sand)
   sand.script[root] = ["a = 1", "close(a + 1)", "close(None)"]
   act = engine.prompt(int, "count", on=root)
   assert await act == 2
   await settle()
-  assert engine.read(root, on=root).content == "a = 1\nclose(a + 1)"
   assert engine.read(act, on=root).content == "a = 1\nclose(a + 1)"
   assert engine.read("", on=root) is None and engine.read("nowhere://x", on=root) is None
+  with pytest.raises(Refused, match="no door"):
+    engine.read(said(log, "rung")[0][1], on=root)
 
 
-async def test_the_chain_is_the_door_of_its_program() -> None:
-  """The chain is the door of its program, so a read of its name gives the words of its ladder in order, and a read of the name of any act it has heard gives the words of that ladder alone, which are none at all for an act that ran no word."""
+async def test_a_prompt_is_the_door_of_the_program_of_its_ladder() -> None:
+  """A prompt is the door of the program of its ladder, so a read of its name gives the word of every rung of it in order, the words the gate refused among them, which are none at all for a prompt that ran no word."""
   sand = sown()
-  log, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]
+  _, root = life(sand)
+  sand.script[root] = ["x = BAD", "x = bash('echo hi')\nclose(1)", "close(None)"]
   act = engine.prompt(int, "work", on=root)
   assert await act == 1
   await settle()
-  _, command, *_ = said(log, "bash")[0]
-  assert engine.read(root, on=root).content == "x = bash('echo hi')\nclose(1)\nclose(None)"
-  assert engine.read(act, on=root).content == "x = bash('echo hi')\nclose(1)"
-  assert engine.read(command, on=root).content == ""
+  assert engine.read(act, on=root).content == "x = BAD\nx = bash('echo hi')\nclose(1)"
+  bare = engine.prompt(int, "later", to=OPERATOR, on=root)
+  assert engine.read(bare, on=root) == Text(bare, "")
+
+
+async def test_a_read_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_of_that_rung_out() -> None:
+  """A read of a door that a rung of that ladder says leaves the word of that rung out, since a rung is no part of the program it reads."""
+  sand = sown()
+  _, root = life(sand)
+  sand.script[root] = ["a = 1", "close(read(get(acting())[2]).content)", "close(None)"]
+  act = engine.prompt(str, "read it", on=root)
+  assert await act == "a = 1"
+  await settle()
+  assert engine.read(act, on=root).content == "a = 1\nclose(read(get(acting())[2]).content)"
 
 
 async def test_one_asked_from_inside_an_act_tells_itself() -> None:

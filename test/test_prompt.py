@@ -286,7 +286,7 @@ async def test_the_response_of_a_prompt_on_a_chain_with_a_source_comes_to_the_ac
 
 
 async def test_it_is_the_ladder_of_its_rungs_and_its_name_is_a_door_of_the_program() -> None:
-  """It is the ladder of its rungs, and its name is a door of the program the chain answers for, which holds every word of every ladder for as long as the chain lives."""
+  """It is the ladder of its rungs, and its name is the door of the program of that ladder, which holds the word of every rung of it for as long as the chain lives."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   sand.script[root] = ["a = 1"]
@@ -295,24 +295,24 @@ async def test_it_is_the_ladder_of_its_rungs_and_its_name_is_a_door_of_the_progr
   assert engine.read(act, on=root).content == "a = 1"
   engine.write(Text(act, "a = 1\nb = 2"), on=root)
   await settle()
-  assert engine.read(root, on=root).content == "a = 1\nb = 2"
+  assert engine.read(act, on=root).content == "a = 1\nb = 2"
   assert engine.modules[root]["b"] == 2
   engine.close(3, act)
   await settle()
-  assert engine.read(root, on=root).content == "a = 1\nb = 2"
+  assert engine.read(act, on=root).content == "a = 1\nb = 2"
 
 
-async def test_a_word_written_to_it_answers_it_not_whoever_wrote_it() -> None:
-  """A word written to it answers it not, whoever wrote it, so it must give nothing."""
+async def test_a_word_written_to_its_door_is_a_rung_of_it() -> None:
+  """A word written to its door is a rung of it, which answers it as the word of its model does."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["a = 1"]
   act = engine.prompt(int, "count", on=root)
   await settle()
-  engine.write(Text(act, "close(5)"), on=root)
+  engine.write(Text(act, "a = 1\nclose(5)"), on=root)
   await settle()
-  assert act not in engine.outcomes
-  assert ran(log) == ["a = 1", "close(5)"]
+  assert (await act) == 5 and ran(log) == ["a = 1", "a = 1", "close(5)"]
+  assert [a[2] for a in said(log, "rung") if a[4] == "close(5)"] == [act]
 
 
 async def test_a_prompt_to_the_operator_asks_no_model() -> None:

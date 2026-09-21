@@ -34,16 +34,17 @@ async def test_the_chain_has_the_kernel_gate_the_word_of_a_rung_before_it_runs()
   assert "k" not in engine.modules[root]
 
 
-async def test_a_refused_word_of_a_rung_is_not_part_of_the_program_of_the_chain() -> None:
-  """A refused word of a rung is not part of the program of the chain."""
+async def test_a_refused_word_of_a_rung_is_part_of_the_program_of_the_chain() -> None:
+  """A refused word of a rung is part of the program of the chain, and it runs never."""
   sand = sown()
-  _, root = life(sand)
+  log, root = life(sand)
   sand.script[root] = ["k = BAD", "close(7)", "close(None)"]
-  assert await engine.prompt(int, "try", on=root) == 7
-  assert engine.read(root, on=root).content == "close(7)"
+  act = engine.prompt(int, "try", on=root)
+  assert await act == 7
+  assert engine.read(act, on=root).content == "k = BAD\nclose(7)"
   _, program = engine.ask("program", root, root)
   assert isinstance(program, dict)
-  assert list(program.values()) == ["close(7)"]
+  assert list(program.values()) == ["k = BAD", "close(7)"] and ran(log) == ["close(7)"]
 
 
 async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:

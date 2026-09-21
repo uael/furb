@@ -2,7 +2,7 @@
 
 from conftest import life, said, settle, sown, tags
 from furb import engine
-from furb.engine import Text
+from furb.engine import OPERATOR, Text
 
 
 async def test_what_a_query_tells_of_itself() -> None:
@@ -27,7 +27,8 @@ async def test_a_query_is_put_to_the_living_generators_in_turn_the_acts_first_an
   _, root = life(sand)
   assert engine.cwd(on=root) == "/w"
   assert engine.turns(on=root) != []
-  assert engine.read(root, on=root) == Text(root, "")
-  assert [a[0] for a in sand.calls] == ["stand"]
+  act = engine.prompt(int, "count", to=OPERATOR, on=root)
+  assert engine.read(act, on=root) == Text(act, "")
+  assert [a[0] for a in sand.calls] == ["stand", "start"]
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
-  assert [a[0] for a in sand.calls] == ["stand", "read"]
+  assert [a[0] for a in sand.calls] == ["stand", "start", "read"]

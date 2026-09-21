@@ -55,7 +55,7 @@ async def test_an_act_said_twice_under_one_name_is_one_act() -> None:
   log, root = life(sand)
   first = engine.rung("close(bash('echo hi'))", on=root)
   again = engine.rung("close(bash('echo hi'))", retells=first, on=root)
-  assert (await first) == (await again) == "bash://operator.2.1"
+  assert (await first) == "bash://operator.2.1" and (await again) is None
   assert len(said(log, "bash")) == 1
   assert [a[1] for a in sand.calls if a[0] == "start"] == ["bash://operator.2.1"]
 
@@ -68,7 +68,7 @@ async def test_two_acts_that_say_the_same_words_under_one_name_are_one_act() -> 
   again = engine.rung("close(bash('echo hi'))", retells=first, on=root)
   one = await first
   assert isinstance(one, str)
-  assert (await again) == one
+  assert (await again) is None
   assert engine.get(one) == ("bash", one, first, root, "echo hi", False, TIMEOUT)
   await settle()
   got = engine.peek(one)
