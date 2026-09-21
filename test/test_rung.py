@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import STANDS, Sand, attr, gated, life, ran, said, settle, tags, text_of
+from conftest import STANDS, Sand, attr, gated, life, ran, said, settle, sown, tags, text_of
 from furb import engine
 from furb.engine import WORLD, Exit, Refused
 
@@ -351,8 +351,8 @@ async def test_an_answer_with_no_text_is_a_word_like_any_other() -> None:
   assert gated(log) == ["", "close(1)"] and ran(log) == ["", "close(1)"]
 
 
-async def test_the_chain_with_a_source_makes_a_rung_of_its_own_retelling_each_rung() -> None:
-  """The chain with a source makes a rung of its own retelling each rung of the ladder it is given."""
+async def test_a_replay_makes_a_rung_of_its_own_retelling_each_rung_of_the_donor_it_keeps() -> None:
+  """A replay makes a rung of its own retelling each rung of the donor it keeps."""
   sand = Sand(files={"/w/a.txt": "one\n"}, stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["k = 1\nclose(1)", "close(None)"]
@@ -361,7 +361,7 @@ async def test_the_chain_with_a_source_makes_a_rung_of_its_own_retelling_each_ru
   side = engine.chain("side", source=root)
   await settle(300)
   mine = [a for a in said(log, "rung") if a[3] == side]
-  assert [(a[5], a[4]) for a in mine] == engine.ask("program", root, root)[1]
+  assert {a[5]: a[4] for a in mine} == engine.ask("program", root, root)[1]
   assert mine and all(a[1] != a[5] for a in mine)
 
 
@@ -392,3 +392,19 @@ async def test_the_lineage_a_rung_names_its_acts_under() -> None:
   retold = next(a for a in said(log, "rung") if a[3] == twin)
   assert retold[5] == step and engine.lineage(retold[1]) != engine.lineage(step)
   assert [a[1] for a in said(log, "bash")] == [command]
+
+
+async def test_what_a_rung_that_retells_asks_is_named_under_the_one_it_retells() -> None:
+  """What a rung that retells asks is named under the one it retells, so the life answers it with what it answered then and the World is asked nothing twice."""
+  sand = sown()
+  log, root = life(sand)
+  sand.script[root] = ["t = read('a.txt')\nclose(len(t.lines))", "close(None)"]
+  assert await engine.prompt(int, "read it", on=root) == 2
+  await settle()
+  first = said(log, "rung")[0][1]
+  twin = engine.chain("twin", source=root)
+  await settle(300)
+  asked = [one[1] for one in engine.asked.values() if one[0] == "read"]
+  assert asked == [f"read://{engine.lineage(first)}.1"]
+  assert [a[0] for a in sand.calls].count("read") == 1
+  assert engine.modules[twin]["t"] == engine.modules[root]["t"]

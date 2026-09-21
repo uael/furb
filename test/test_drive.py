@@ -6,7 +6,7 @@ import pytest
 
 from conftest import STANDS, Sand, keeping, life, said, settle
 from furb import engine
-from furb.engine import Text
+from furb.engine import Refused
 
 
 def ends(mark: list[tuple]) -> Generator[tuple | None, tuple | None]:
@@ -87,10 +87,11 @@ async def test_it_lives_until_it_returns() -> None:
   engine.drive(keeping(heard), "keeper")
   act = engine.prompt(None, "hi", to="operator", on=root)
   await settle()
-  assert engine.write(Text(act, "k = 1"), on=root) is not None
+  with pytest.raises(Refused, match="hears"):
+    engine.drive(engine.idle(act), act)
   engine.close(None, act)
   await settle()
-  assert engine.write(Text(act, "k = 2"), on=root) is None
+  engine.drive(engine.idle(act), act)
   assert heard and heard[-1] is log[-1]
 
 

@@ -6,7 +6,7 @@ import pytest
 
 from conftest import STANDS, Sand, life, settle
 from furb import engine
-from furb.engine import OPERATOR, Act, Text
+from furb.engine import OPERATOR, Act, Refused, Text
 
 
 async def test_the_name_of_an_act() -> None:
@@ -64,10 +64,13 @@ async def test_only_a_command_lives_past_its_done_and_every_other_act_is_dropped
   _, root = life(sand)
   one = engine.prompt(None, "hi", to=OPERATOR, on=root)
   await settle()
-  assert engine.write(Text(one, "k = 1"), on=root) is not None
+  with pytest.raises(Refused, match="hears"):
+    engine.drive(engine.idle(one), one)
   engine.close(None, one)
   await settle()
-  assert engine.write(Text(one, "k = 2"), on=root) is None
+  engine.drive(engine.idle(one), one)
   two = engine.bash("echo hi", on=root)
   assert (await two).code == 0
+  with pytest.raises(Refused, match="hears"):
+    engine.drive(engine.idle(two), two)
   assert engine.read(f"{two}/stdout", on=root).content == "ran echo hi\n"

@@ -206,8 +206,8 @@ def ledger(root: str, record: Path) -> float:
   say("")
   say("=== the program of the root: every word the model wrote that the gate took ===")
   _, program = engine.ask("program", root, root)
-  assert isinstance(program, list), program
-  for name, word in program:
+  assert isinstance(program, dict), program
+  for name, word in program.items():
     say(f"--- {name}")
     say(str(word))
   say("")

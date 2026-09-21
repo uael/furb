@@ -924,15 +924,15 @@ async def test_the_chain_answers_a_transcript_asked_of_one_of_its_names() -> Non
 
 
 async def test_the_chain_answers_a_program_asked_of_one_of_its_names() -> None:
-  """The chain answers a program asked of one of its names with the accepted words of that ladder, each with the name of the rung that ran it."""
+  """The chain answers a program asked of one of its names with the words of that ladder, each with the name of the rung that ran it."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(a + 1)", "close(None)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   rungs = [a[1] for a in said(log, "rung")]
-  assert engine.ask("program", root, root)[1] == [(rungs[0], "a = 1"), (rungs[1], "close(a + 1)")]
-  assert engine.ask("program", root, rungs[0])[1] == [(rungs[0], "a = 1")]
+  assert engine.ask("program", root, root)[1] == {rungs[0]: "a = 1", rungs[1]: "close(a + 1)"}
+  assert engine.ask("program", root, rungs[0])[1] == {rungs[0]: "a = 1"}
 
 
 async def test_the_chain_retells_the_ladder_of_its_origin_through_the_program() -> None:
@@ -947,7 +947,74 @@ async def test_the_chain_retells_the_ladder_of_its_origin_through_the_program() 
   asked = [a for a in engine.asked.values() if a[0] == "program"]
   assert [a[2:] for a in asked] == [(twin, root, root)]
   retold = [a[1] for a in said(log, "rung") if a[3] == twin]
-  assert engine.ask("program", twin, twin)[1] == [(retold[0], "a = 1"), (retold[1], "close(a + 1)")]
+  assert engine.ask("program", twin, twin)[1] == {retold[0]: "a = 1", retold[1]: "close(a + 1)"}
   held = engine.ask("transcript", twin, twin)[1]
   assert isinstance(held, list)
   assert [a for a in held if a[1] in retold] == []
+
+
+async def test_a_replay_makes_the_ladder_of_a_chain_again_from_its_donor() -> None:
+  """A replay makes the ladder of a chain again from its donor: it keeps each rung while the words it is given repeat it, it makes one rung of what is left, and the rungs after the first word that differs are gone."""
+  sand = sown()
+  log, root = life(sand)
+  sand.script[root] = ["a = 1", "b = 2", "c = 3", "close(None)"]
+  assert await engine.prompt(None, "count", on=root) is None
+  await settle()
+  was = [a[1] for a in said(log, "rung")]
+  engine.write(Text(root, "a = 1\nb = 20\nc = 30"), on=root)
+  await settle()
+  kept = engine.ask("program", root, root)[1]
+  assert isinstance(kept, dict)
+  assert list(kept.values()) == ["a = 1", "b = 20\nc = 30"]
+  assert next(iter(kept)) not in was and engine.get(next(iter(kept)))[5] == was[0]
+  assert (engine.modules[root]["b"], engine.modules[root]["c"]) == (20, 30)
+
+
+async def test_the_donor_of_a_replay_is_the_ladder_of_the_origin_or_the_ladder_as_it_stands() -> None:
+  """The donor of a replay is the ladder of the origin for a chain with a source, and the ladder as it stands for a write of one of its names."""
+  sand = sown()
+  log, root = life(sand)
+  await engine.rung("k = 1", on=root)
+  twin = engine.chain("twin", source=root)
+  await settle(300)
+  theirs = [a for a in said(log, "rung") if a[3] == twin]
+  assert [a[5] for a in theirs] == [a[1] for a in said(log, "rung") if a[3] == root]
+  engine.write(Text(twin, "k = 1\nk = 2"), on=twin)
+  await settle()
+  mine = [a for a in said(log, "rung") if a[3] == twin]
+  assert [a[5] for a in mine[1:]] == [theirs[0][1], ""]
+  assert engine.modules[twin]["k"] == 2 and engine.modules[root]["k"] == 1
+
+
+async def test_a_write_of_one_of_its_names_gives_the_words_of_that_ladder_alone() -> None:
+  """A write of one of its names gives the words of that ladder alone, so the rungs that name does not hold stand as they did, and a name that holds no rung, as the name of a rung the gate refused, takes what is written after every word that stands."""
+  sand = sown()
+  log, root = life(sand)
+  sand.script[root] = ["a = 1", "b = BAD", "close(None)"]
+  assert await engine.prompt(None, "count", on=root) is None
+  await settle()
+  bad = next(a[1] for a in said(log, "ready") if "BAD" in a[3])
+  assert engine.read(bad, on=root) == Text(bad, "")
+  engine.write(Text(bad, "b = 2"), on=root)
+  await settle()
+  assert engine.read(root, on=root) == Text(root, "a = 1\nclose(None)\nb = 2")
+  assert engine.modules[root]["b"] == 2
+
+
+async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_birth() -> None:
+  """A replay makes the module of the chain again, as it was at its birth, and makes its ladder in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in."""
+  sand = sown()
+  _, root = life(sand)
+  engine.write(Text(root, "a = 1\nb = 2"), on=root)
+  await settle()
+  was = engine.modules[root]
+  engine.write(Text(root, "a = 1"), on=root)
+  await settle()
+  assert engine.read(root, on=root) == Text(root, "a = 1")
+  assert engine.modules[root] is not was and was["b"] == 2
+  assert engine.modules[root]["a"] == 1 and "b" not in engine.modules[root]
+  assert await engine.rung("write(Text(__name__, 'c = 3'))\nd = 4", on=root) is None
+  await settle(300)
+  assert engine.read(root, on=root) == Text(root, "c = 3")
+  assert engine.modules[root]["c"] == 3
+  assert "d" not in engine.modules[root] and "a" not in engine.modules[root]

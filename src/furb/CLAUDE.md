@@ -54,8 +54,12 @@ Each name has one meaning, which the contract's sentences use as given here.
 - acknowledgment: the prompt of nothing a chain makes when an act a rung made is done and no ask has shown it.
 - rung: the run of one word on a chain, and the verb that runs a word its caller wrote.
 - step: one turn of a model and the run of its word, which is one rung.
-- ladder: the rungs of a chain in record order.
-- program: the words the rungs of a chain accepted, the model's and its caller's alike, in the order of acceptance.
+- ladder: the rungs a chain runs, in order, which a replay makes again.
+- program: the words of the ladder of a chain, the model's and its caller's alike, in order.
+- replay: the making of the ladder of a chain again from a donor, which is how a chain with a source stands on its
+  origin and how a write of a door edits a program.
+- donor: the ladder a replay retells, and, for one rung, the rung it stands for, whose acts it shares and whose run
+  a Kernel may answer from what it kept.
 - globals: python's globals, the dict a rung runs in, which is the engine's module copied for the chain.
 - gate: what the Kernel reads a word against before it runs: the rungs of its chain before it and the shape it must
   give.

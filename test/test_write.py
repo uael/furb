@@ -18,6 +18,23 @@ KEPT = (
 )
 
 
+class Hoard(Sand):
+  """A World that keeps what stands at a path and gives it back with what is written after it."""
+
+  def hears(self) -> World:
+    """The World that answers a standing, a read of what it holds, and a write with the whole of what it holds."""
+    while True:
+      a = yield
+      match a:
+        case ("stand", qid, *_):
+          yield "done", qid, self.stands or ((), "", "")
+        case ("read", qid, _, _, path):
+          yield "done", qid, Text(path, self.files.get(path, ""))
+        case ("write", qid, _, _, Text(path=path, content=content)):
+          self.files[path] = self.files.get(path, "") + content
+          yield "done", qid, Text(path, self.files[path])
+
+
 class Firm(Sand):
   """A World whose disk holds one line more than it was asked to write."""
 
@@ -100,20 +117,19 @@ async def test_a_write_takes_no_show() -> None:
 
 
 async def test_a_door_that_answers_a_write_with_more_than_it_was_asked_for() -> None:
-  """A door that answers a write with more than it was asked for, as a chain answers a write of its program with the whole of it, tells the lines it added and no line the model read before."""
-  sand = Sand(stands=STANDS)
+  """A door that answers a write with more than it was asked for tells the lines it added and no line the model read before."""
+  sand = Hoard(files={"b.txt": "one\ntwo\n"}, stands=STANDS)
   _, root = life(sand)
-  assert await engine.rung("read(__name__)\nwrite(Text(__name__, 'k = 4'))", on=root) is None
+  assert await engine.rung("read('b.txt')\nwrite(Text('b.txt', 'three\\n'))", on=root) is None
   await settle()
   told = tags(engine.turns(on=root), "read")[0]
   made = tags(engine.turns(on=root), "write")[0]
-  first = "1 read(__name__)\n2 write(Text(__name__, 'k = 4'))"
-  assert shown(told) == [("shown", [("path", root), ("known", 0)], first)]
-  assert shown(made) == [("shown", [("path", root), ("known", 2)], "3 k = 4")]
+  assert shown(told) == [("shown", [("path", "b.txt"), ("known", 0)], "1 one\n2 two")]
+  assert shown(made) == [("shown", [("path", "b.txt"), ("known", 2)], "3 three")]
 
 
-async def test_a_write_to_chain_lineage_makes_a_rung_of_what_is_written() -> None:
-  """A write to chain://lineage makes a rung of what is written, so the door and the verb are one act."""
+async def test_a_write_to_a_door_of_a_chain_edits_the_program_of_that_chain() -> None:
+  """A write to a door of a chain edits the program of that chain, so the door and the verb are one act."""
   sand = sown()
   log, root = life(sand)
   got = engine.write(Text(root, "k = 21"), on=root)
@@ -124,10 +140,18 @@ async def test_a_write_to_chain_lineage_makes_a_rung_of_what_is_written() -> Non
   asked = said(held, "write")[0]
   assert (asked[1], asked[4]) == ("write://operator.2", Text(root, "k = 21"))
   assert [(a[1], a[2], a[4]) for a in said(log, "rung")] == [("rung://operator.1.2", root, "k = 21")]
+  engine.write(Text(root, "k = 21\nk = 22"), on=root)
+  await settle()
+  assert engine.read(root, on=root) == Text(root, "k = 21\nk = 22") and engine.modules[root]["k"] == 22
+  word = "write(Text(__name__, read(__name__).content + '\\nk = 23'))"
+  assert await engine.rung(word, on=root) is None
+  await settle(300)
+  assert engine.read(root, on=root) == Text(root, f"k = 21\nk = 22\n{word}\nk = 23")
+  assert engine.modules[root]["k"] == 23
 
 
-async def test_the_chain_answers_a_write_of_its_name_by_making_a_rung_of_what_is_written() -> None:
-  """The chain answers a write of its name by making a rung of what is written."""
+async def test_the_chain_answers_a_write_of_one_of_its_names_with_the_text_it_took() -> None:
+  """The chain answers a write of one of its names with the text it took, and makes its ladder again from it."""
   sand = sown()
   log, root = life(sand)
   got = engine.write(Text(root, "k = 21"), on=root)
@@ -135,6 +159,10 @@ async def test_the_chain_answers_a_write_of_its_name_by_making_a_rung_of_what_is
   assert engine.modules[root]["k"] == 21
   assert [a[4] for a in said(log, "rung")] == ["k = 21"]
   assert got == Text(root, "k = 21") and [a[0] for a in sand.calls] == ["stand"]
+  laid = said(log, "rung")[0][1]
+  again = engine.write(Text(laid, "k = 22"), on=root)
+  await settle()
+  assert again == Text(laid, "k = 22") and engine.read(root, on=root) == Text(root, "k = 22")
 
 
 async def test_a_new_file_is_a_write_of_a_text_made_of_its_path_and_its_content() -> None:
