@@ -234,17 +234,17 @@ async def test_what_the_word_of_a_rung_made_or_computed_a_later_life_makes_again
 
 
 async def test_the_engine_makes_a_chain_from_the_record_and_in_no_other_way() -> None:
-  """The engine makes a chain from the record and in no other way, by running the ladder again."""
+  """The engine makes a chain from the record and in no other way, by running its rungs again."""
   sand = sown()
   _, root = await lived(sand)
-  was = engine.read(root, on=root)
+  was = engine.ask("program", root, root)[1]
   again, over = await relived(Sand(stands=STANDS), list(sand.record))
   assert ran(again) == [WORD, "close(None)"]
-  assert engine.read(over, on=over) == was
+  assert engine.ask("program", over, over)[1] == was
 
 
 async def test_the_rungs_of_the_ladder_run_in_record_order() -> None:
-  """The rungs of the ladder run in record order."""
+  """The rungs of a chain run in record order."""
   sand = sown()
   _, root = life(sand)
   sand.script[root] = ["a = 1", "b = a + 1", "close(b)"]
@@ -295,7 +295,7 @@ async def test_a_later_life_on_a_kept_record_starts_nothing_and_keeps_the_ids_of
 
 
 async def test_in_a_later_life_the_ladder_of_every_chain_runs_again() -> None:
-  """In a later life the ladder of every chain runs again from the record that the World kept."""
+  """In a later life the rungs of every chain run again from the record that the World kept."""
   sand = sown()
   _, root = life(sand)
   two = engine.chain("two")
@@ -316,7 +316,7 @@ async def test_the_engine_serves_the_doors_of_the_file_itself_and_asks_the_world
   command = said(log, "bash")[0][1]
   before = len(sand.calls)
   assert engine.read(f"{command}/stdout", on=root).content == "ran echo hi\n"
-  assert engine.read(root, on=root).content == WORD + "\nclose(None)"
+  assert engine.read(said(log, "prompt")[0][1], on=root).content == WORD
   assert engine.ask("transcript", root, root)[1]
   assert len(sand.calls) == before
 

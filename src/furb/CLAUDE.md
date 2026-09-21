@@ -54,19 +54,20 @@ Each name has one meaning, which the contract's sentences use as given here.
 - acknowledgment: the prompt of nothing a chain makes when an act a rung made is done and no ask has shown it.
 - rung: the run of one word on a chain, and the verb that runs a word its caller wrote.
 - step: one turn of a model and the run of its word, which is one rung.
-- ladder: the rungs a chain runs, in order, which a replay makes again.
-- program: the words of the ladder of a chain, the model's and its caller's alike, in order.
-- replay: the making of the ladder of a chain again from a donor, which is how a chain with a source stands on its
-  origin and how a write of a door edits a program.
-- donor: the ladder a replay retells, and, for one rung, the rung it stands for, whose acts it shares and whose run
-  a Kernel may answer from what it kept.
+- ladder: the rungs of one prompt, in order, which the name of that prompt is the door of.
+- program: the words of rungs, in order, each under the name of its rung; the program of a ladder is the words of
+  its rungs, the words the gate refused among them, and the program of a chain is the words of every rung it ran.
+- replay: the making of the rungs of a chain again from a donor, which is how a chain with a source stands on its
+  origin and how a write of a door edits the program of a ladder.
+- donor: the rungs a replay retells, and, for one rung, the rung of the record it stands for, whose acts it shares
+  and whose run a Kernel may answer from what it kept.
 - globals: python's globals, the dict a rung runs in, which is the engine's module copied for the chain.
 - gate: what the Kernel reads a word against before it runs: the rungs of its chain before it and the shape it must
   give.
 - command: what bash runs on the machine.
 - merged: the state of a command whose stderr flows into its stdout, in the order the command wrote them.
-- door: the name of an act, with a part after it or without; the word of a rung adds a door by making an act whose
-  ear answers reads of a scheme, and the World serves the rest.
+- door: the name of an act, with a part after it or without; the name of a prompt is the door of its ladder, the
+  word of a rung adds a door by making an act whose ear answers reads of a scheme, and the World serves the rest.
 - text: what read gives, and what write is given and gives back as it landed; a Text, with a path and a content.
 - show: a callable given the lines of a text, which gives the numbers of the lines the engine tells; span, grep and
   differs make the shows of the file.
