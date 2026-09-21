@@ -285,20 +285,21 @@ async def test_the_response_of_a_prompt_on_a_chain_with_a_source_comes_to_the_ac
   assert await act == 21 and act.startswith("prompt://")
 
 
-async def test_it_is_the_ladder_of_its_rungs_and_of_the_words_written_to_it() -> None:
-  """It is the ladder of its rungs and of the words written to it, so a write of its name makes a rung of what is written under it, and a read of its name the chain answers, which holds every word of every ladder for as long as the chain lives."""
+async def test_it_is_the_ladder_of_its_rungs_and_its_name_is_a_door_of_the_program() -> None:
+  """It is the ladder of its rungs, and its name is a door of the program the chain answers for, which holds every word of every ladder for as long as the chain lives."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   sand.script[root] = ["a = 1"]
   act = engine.prompt(int, "count", on=root)
   await settle()
-  engine.write(Text(act, "b = 2"), on=root)
+  assert engine.read(act, on=root).content == "a = 1"
+  engine.write(Text(act, "a = 1\nb = 2"), on=root)
   await settle()
-  assert engine.read(act, on=root).content == "a = 1\nb = 2"
+  assert engine.read(root, on=root).content == "a = 1\nb = 2"
   assert engine.modules[root]["b"] == 2
   engine.close(3, act)
   await settle()
-  assert engine.read(act, on=root).content == "a = 1\nb = 2"
+  assert engine.read(root, on=root).content == "a = 1\nb = 2"
 
 
 async def test_a_word_written_to_it_answers_it_not_whoever_wrote_it() -> None:

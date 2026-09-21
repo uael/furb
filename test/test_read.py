@@ -108,7 +108,7 @@ async def test_a_text_without_a_show_is_told_as_head() -> None:
 
 
 async def test_a_read_of_chain_lineage_gives_the_program_of_the_chain() -> None:
-  """A read of chain://lineage gives the program of the chain, its accepted words in order."""
+  """A read of chain://lineage gives the program of the chain, the words of its ladder in order."""
   sand = sown()
   _, root = life(sand)
   sand.script[root] = ["k = BAD", "a = 1", "close(a + 1)", "close(None)"]
@@ -130,7 +130,7 @@ async def test_whether_a_name_is_the_chains_own_or_one_of_the_acts_it_has_heard_
 
 
 async def test_the_chain_is_the_door_of_its_program() -> None:
-  """The chain is the door of its program, so a read of its name gives its accepted words in order, and a read of the name of any act it has heard gives the words of that ladder alone, which are none at all for an act that ran no word."""
+  """The chain is the door of its program, so a read of its name gives the words of its ladder in order, and a read of the name of any act it has heard gives the words of that ladder alone, which are none at all for an act that ran no word."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]

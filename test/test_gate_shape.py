@@ -42,8 +42,8 @@ async def test_a_refused_word_of_a_rung_is_not_part_of_the_program_of_the_chain(
   assert await engine.prompt(int, "try", on=root) == 7
   assert engine.read(root, on=root).content == "close(7)"
   _, program = engine.ask("program", root, root)
-  assert isinstance(program, list)
-  assert [word for _, word in program] == ["close(7)"]
+  assert isinstance(program, dict)
+  assert list(program.values()) == ["close(7)"]
 
 
 async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:

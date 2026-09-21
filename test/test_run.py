@@ -2,9 +2,32 @@
 
 from itertools import pairwise
 
-from conftest import STANDS, Sand, life, plain, ran, relived, said, settle, sown
+from conftest import STANDS, Kernel, Py, Sand, life, plain, ran, relived, said, settle, sown, watched
 from furb import engine
-from furb.engine import WORLD
+from furb.engine import WORLD, modules
+
+
+def kept(inner: Kernel) -> Kernel:
+  """A Kernel that keeps what each run left in the module of its chain, and answers a run that retells one it kept
+  with that module again, so the word of a retold rung never runs a second time.
+  """
+  held: dict[str, dict[str, object]] = {}
+  where: dict[str, str] = {}
+  engine.lives(inner, None)
+  while True:
+    match a := (yield):
+      case ("run", rung, _, chain, _, whose):
+        where[rung] = chain
+        if whose in held:
+          modules[chain].update(held[whose])
+          engine.send("ran", rung, None, by=rung)
+        else:
+          engine.lives(inner, a)
+      case ("ran", rung, *_) if rung in where:
+        held[rung] = dict(modules[where[rung]])
+        engine.lives(inner, a)
+      case _:
+        engine.lives(inner, a)
 
 
 async def test_a_run_tells_the_kernel_to_run_the_word_of_a_rung() -> None:
@@ -16,8 +39,23 @@ async def test_a_run_tells_the_kernel_to_run_the_word_of_a_rung() -> None:
   sand.script[root] = ["close(k + 1)"]
   assert await engine.prompt(int, "count", on=root) == 2
   _, asking, *_ = said(log, "rung")[-1]
-  assert said(log, "run") == [("run", laid, root, root, "k = 1"), ("run", asking, root, root, "close(k + 1)")]
+  assert said(log, "run") == [("run", laid, root, root, "k = 1", ""), ("run", asking, root, root, "close(k + 1)", "")]
   assert ran(log) == ["k = 1", "close(k + 1)"]
+
+
+async def test_a_run_names_the_rung_that_the_word_retells() -> None:
+  """A run names the rung that the word retells, so a Kernel may answer a retold run from what it kept of that one instead of running the word again."""
+  sand = sown()
+  log: list[tuple] = []
+  root = engine.boot(kernel=kept(Py().kernel()), probe=watched(log), world=sand.hears())
+  await engine.rung("t = read('a.txt')", on=root)
+  twin = engine.chain("twin", source=root)
+  await settle(300)
+  mine = [a for a in said(log, "run") if a[3] == twin]
+  theirs = [a for a in said(log, "run") if a[3] == root]
+  assert [a[5] for a in theirs] == [""] and [a[5] for a in mine] == [theirs[0][1]]
+  assert [a[0] for a in sand.calls].count("read") == 1
+  assert modules[twin]["t"] == modules[root]["t"]
 
 
 async def test_every_rung_of_a_chain_runs_in_the_globals_of_the_chain() -> None:

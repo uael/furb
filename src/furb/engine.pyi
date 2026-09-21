@@ -150,9 +150,9 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   read is given a path and a show.
   read gives a Text.
   A text without a show is told as HEAD, which is the span of its first 2000 lines.
-  A read of chain://lineage gives the program of the chain, its accepted words in order.
+  A read of chain://lineage gives the program of the chain, the words of its ladder in order.
   Whether a name is the chain's own or one of the acts it has heard on itself, which is what its doors serve and no other path, a path of no name being none of them.
-  The chain is the door of its program, so a read of its name gives its accepted words in order, and a read of the name of any act it has heard gives the words of that ladder alone, which are none at all for an act that ran no word.
+  The chain is the door of its program, so a read of its name gives the words of its ladder in order, and a read of the name of any act it has heard gives the words of that ladder alone, which are none at all for an act that ran no word.
   One asked from inside an act tells itself, with its path and what it was answered, on the scope of that act; one asked from outside an act tells nothing, and neither does one whose show is hidden.
   A read answered with what is no text gives that value, and tells it as python shows it.
   """
@@ -163,9 +163,9 @@ def write(text: Text, on: str = "") -> Text:
   A write that the World refuses raises Refused in the caller.
   The engine tells of a write of a text only the lines that differ from what the caller asked, and of a write a door answers with a value, that value.
   A write takes no show, since what a write would show the word of the model already said: it tells the lines of what came back that differ from what it asked for, and of those, the lines the model has not seen, so a write that the disk took as it was asked tells nothing at all.
-  A door that answers a write with more than it was asked for, as a chain answers a write of its program with the whole of it, tells the lines it added and no line the model read before.
-  A write to chain://lineage makes a rung of what is written, so the door and the verb are one act.
-  The chain answers a write of its name by making a rung of what is written.
+  A door that answers a write with more than it was asked for tells the lines it added and no line the model read before.
+  A write to a door of a chain edits the program of that chain, so the door and the verb are one act.
+  The chain answers a write of one of its names with the text it took, and makes its ladder again from it.
   A new file is a write of a Text made of its path and its content.
   """
 
@@ -341,7 +341,8 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
   It is done with what the word gave, nothing for a word that ran to its end and the exception for a raise, which it tells with its type and its message, which its close then holds none of.
   Of the queries its word asked it tells nothing, since they tell themselves.
   An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the model is asked again.
-  The chain with a source makes a rung of its own retelling each rung of the ladder it is given.
+  A replay makes a rung of its own retelling each rung of the donor it keeps.
+  What a rung that retells asks is named under the one it retells, so the life answers it with what it answered then and the World is asked nothing twice.
   A rung that awaits an act nobody settles waits until the operator cancels it, and holds nothing else of the chain.
   The lineage a rung names its acts under is the lineage of its own name, and of the name of the one it retells for a rung that retells.
   """
@@ -374,7 +375,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A rung prompts on any chain, by the id of the chain.
   A prompt to the operator completes when the operator closes the prompt.
   The response of a prompt on a chain with a source comes to the act that the caller holds.
-  It is the ladder of its rungs and of the words written to it, so a write of its name makes a rung of what is written under it, and a read of its name the chain answers, which holds every word of every ladder for as long as the chain lives.
+  It is the ladder of its rungs, and its name is a door of the program the chain answers for, which holds every word of every ladder for as long as the chain lives.
   A word written to it answers it not, whoever wrote it, so it must give nothing.
   A prompt to the operator asks no model: the World is shown it, and it waits to be closed; one the record holds is shown no more, since the close it waits for stands there already.
   Its close tells what closed it from outside, which the one that closed it says, and nothing of what its rung gave, which the rung has told.
@@ -469,8 +470,12 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A chain with a source asks its origin what it stands on, and the origin answers with its standing as it stands.
   The chain answers a stand asked on it with what it stands on, so a grant reads the roster off the chain it is on.
   The chain answers a transcript asked of one of its names with its transcript up to that act, and whole for the chain itself.
-  The chain answers a program asked of one of its names with the accepted words of that ladder, each with the name of the rung that ran it.
+  The chain answers a program asked of one of its names with the words of that ladder, each with the name of the rung that ran it.
   The chain retells the ladder of its origin through the program the origin answers, and it owns the rungs it retells, though it holds nothing of them.
+  A replay makes the ladder of a chain again from its donor: it keeps each rung while the words it is given repeat it, it makes one rung of what is left, and the rungs after the first word that differs are gone.
+  A replay makes the module of the chain again, as it was at its birth, and makes its ladder in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in.
+  The donor of a replay is the ladder of the origin for a chain with a source, and the ladder as it stands for a write of one of its names.
+  A write of one of its names gives the words of that ladder alone, so the rungs that name does not hold stand as they did, and a name that holds no rung, as the name of a rung the gate refused, takes what is written after every word that stands.
   """
 
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
@@ -733,8 +738,9 @@ An accepted word of a rung enters the program of the chain and runs in the globa
 The word of a rung that extends the engine is part of the program, so the extension returns in a later life.
 The old words stay in the program and in the turns after a rung rebinds a name.
 """
-type Run = tuple[Literal["run"], str, str, str, str]
+type Run = tuple[Literal["run"], str, str, str, str, str]
 """A run tells the Kernel to run the word of a rung, and says the chain whose module it runs in.
+A run names the rung that the word retells, so a Kernel may answer a retold run from what it kept of that one instead of running the word again.
 Every rung of a chain runs in the globals of the chain, the word of a model and a word its caller wrote alike.
 What a rung binds stays bound for every later rung of the chain.
 The last rung to bind a name wins.
@@ -801,7 +807,7 @@ type Cwd = tuple[Literal["cwd"], str, str, str]
 type Transcript = tuple[Literal["transcript"], str, str, str, str]
 """A transcript is the question of the transcript of a chain up to an act, which the chain answers, and which a chain with a source and a grant ask."""
 type Program = tuple[Literal["program"], str, str, str, str]
-"""A program is the question of the accepted words of a ladder, each with the name of its rung, which the chain answers, and which a chain with a source asks of its origin."""
+"""A program is the question of the words of a ladder, each with the name of its rung, which the chain answers, and which a chain with a source asks of its origin."""
 type Merged = tuple[Literal["merged"], str, str, str, str]
 """A merged is the question of whether the stderr of a command flows into its stdout, which the command answers from what its verb was given, and which the World asks before it starts the command."""
 type Wait = tuple[Literal["wait"], str, str, str, float]

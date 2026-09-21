@@ -24,8 +24,8 @@ async def test_an_accepted_word_of_a_rung_enters_the_program_of_the_chain() -> N
   sand.script[root] = ["a = 1", "close(a + 1)", "close(None)"]
   assert await engine.prompt(int, "count", on=root) == 2
   _, program = engine.ask("program", root, root)
-  assert isinstance(program, list)
-  assert [word for _, word in program] == ["a = 1", "close(a + 1)"]
+  assert isinstance(program, dict)
+  assert list(program.values()) == ["a = 1", "close(a + 1)"]
   assert engine.modules[root]["a"] == 1
 
 
@@ -49,9 +49,6 @@ async def test_the_old_words_stay_in_the_program_and_in_the_turns_after_a_rung_r
   assert await engine.prompt(None, "bind it", on=root) is None
   await engine.rung("def twice(x):\n  return x * 3", on=root)
   _, program = engine.ask("program", root, root)
-  assert isinstance(program, list)
-  assert [word for _, word in program] == [
-    "def twice(x):\n  return x * 2\nclose(None)",
-    "def twice(x):\n  return x * 3",
-  ]
+  assert isinstance(program, dict)
+  assert list(program.values()) == ["def twice(x):\n  return x * 2\nclose(None)", "def twice(x):\n  return x * 3"]
   assert "def twice(x):\n  return x * 2\nclose(None)" in [text_of(turn) for turn in engine.turns(on=root)]

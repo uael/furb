@@ -313,7 +313,7 @@ class Py:
 
     while True:
       match (yield):
-        case ("run", rung, _, chain, word):
+        case ("run", rung, _, chain, word, _):
           begin(rung, word, modules[chain])
         case ("sent", rung, _, value) if rung in frames:
           carry(rung, value)

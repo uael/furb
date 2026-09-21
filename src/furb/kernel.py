@@ -153,7 +153,8 @@ class Native:
     """The Kernel as one generator for one life, which speaks from the run it steps."""
     while True:
       match (yield):
-        case ("run", rung, _, chain, word):
+        case ("run", rung, _, chain, word, _):
+          # This Kernel runs every word, retold or not, so it reads no donor off the run.
           self.begin(rung, word, modules[chain])
         case ("sent", rung, _, value) if rung in self.frames:
           self.carry(rung, value)
