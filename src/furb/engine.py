@@ -313,7 +313,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("prompt", pid, _, _, _, _, to) if to and offered(standing, to) is None:
           close(Refused(f"{to} no actor"), pid)
         case ("done", about, _, value):
-          if isinstance(value, Exception) and about in rungs:
+          if isinstance(value, Exception) and about in program():
             modules[id]["raised"] = value
           if about == running:
             running = ""
