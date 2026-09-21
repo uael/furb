@@ -91,9 +91,9 @@ class Quick(Native):
   What it runs it runs the one way the Kernel does, so a World is driven by the words a model would write.
   """
 
-  def gate(self, word: str, ladder: list[str]) -> list[str]:
+  def gate(self, word: str, program: list[str]) -> list[str]:
     """Nothing, since a World under test is held to what the words of a model do and not to what a gate says."""
-    del word, ladder
+    del word, program
     return []
 
 

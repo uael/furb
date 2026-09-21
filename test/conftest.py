@@ -255,17 +255,17 @@ class Py:
 
   It answers a gate with its findings, begins a run by compiling the word with a top level await and running it in
   the module of its chain, says wants for the act the run waits for, carries the run forward at each sent, says ran
-  with what the word gave, and drops the frame of a run a cancel is over. The ladder of a chain is the words the
-  gate accepted, so it grows where the gate accepts one, as the Kernel of this interpreter grows it.
+  with what the word gave, and drops the frame of a run a cancel is over. It keeps no program of its own: the gate
+  says the one it reads the word after, as the Kernel of this interpreter is told it.
   """
 
-  def gate(self, word: str, ladder: list[str]) -> list[str]:
+  def gate(self, word: str, program: list[str]) -> list[str]:
     """What it finds against a word: a word that is not python, and a word that holds BAD, and nothing else."""
     try:
       compile(word, "<gate>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
     except SyntaxError as no:
       return [f"not python: {no.msg} at line {no.lineno}"]
-    return [f"BAD in rung, after {len(ladder)} rungs"] if "BAD" in word else []
+    return [f"BAD in rung, after {len(program)} rungs"] if "BAD" in word else []
 
   def kernel(self) -> Kernel:
     """The Kernel as one generator for one life, which speaks from the run it steps."""

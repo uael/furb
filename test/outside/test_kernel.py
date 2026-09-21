@@ -1,6 +1,6 @@
 """The Kernel of this interpreter: what a word is held to before it runs, and how it runs in the module of its chain.
 
-The gate reads a word on the sheet of `furb.sheet` with the ty command line, against the ladder of its chain. The
+The gate reads a word on the sheet of `furb.sheet` with the ty command line, after the program of its chain. The
 run is begun and carried by the facts of the engine, so it is driven through a life whose World answers a
 standing and refuses everything else.
 """
@@ -18,9 +18,9 @@ from outside.doubles import settle, stood, tags, worlds
 STANDS = (((OPERATOR, (), WINDOW), ("opus", ("low",), 1000)), "/w", "opus/low")
 
 
-def said(word: str, ladder: tuple[str, ...] = ()) -> list[str]:
-  """What the gate finds against a word, read against the ladder of its chain."""
-  return Native().gate(word, list(ladder))
+def said(word: str, program: tuple[str, ...] = ()) -> list[str]:
+  """What the gate finds against a word, read after the program of its chain."""
+  return Native().gate(word, list(program))
 
 
 def test_the_sheet_binds_what_the_contract_declares() -> None:
@@ -59,8 +59,8 @@ def test_a_word_is_read_against_the_names_it_will_have() -> None:
 
 
 def test_a_finding_arrives_in_the_numbering_of_the_word_itself() -> None:
-  """The sheet above the word and the ladder below it count for nothing: a finding is handed back in the lines of
-  the word, and what ty says of the ladder is not the word's."""
+  """The sheet above the word and the program below it count for nothing: a finding is handed back in the lines of
+  the word, and what ty says of the program is not the word's."""
   found = said("a = 1\ny: int = kept", ("kept = 'text'",))
   assert len(found) == 1
   assert found[0].startswith("line 2: error[invalid-assignment]")

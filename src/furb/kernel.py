@@ -2,7 +2,7 @@
 
 The engine holds the laws of a chain. To judge a word before it runs, and to run it, are machinery, so they stand
 here, behind the Kernel that the contract declares. The gate reads the word on the sheet of `furb.sheet`, with the
-ty command line reading it: the names of the engine, bound as a chain binds them, then the ladder of the chain,
+ty command line reading it: the names of the engine, bound as a chain binds them, then the program of the chain,
 then the word, all inside one async body, so that the awaits of the word stand.
 
 A word answers by a close and never by a return: a body of a module takes no return, so a word that holds one is no
@@ -56,7 +56,7 @@ def declared(source: Path = SOURCE) -> list[str]:
 
 
 NAMES = declared()
-"""NAMES are the names of the engine, which the sheet binds before it reads the ladder and the word."""
+"""NAMES are the names of the engine, which the sheet binds before it reads the program and the word."""
 
 
 def checked(text: str) -> list[tuple[int, str]]:
@@ -97,15 +97,15 @@ class Native:
   word that ran to its end and with the exception for one that raised, and drops the frame of a run a cancel is
   over. A frame that is mid step is never closed: the close of a word raises where that word stands, and what
   unwinds out of it is the drop. One of these serves one life, since the frames it holds are that life's own. It
-  keeps no ladder: the gate says the words it reads the word after, which the chain holds.
+  keeps no program of its own: the gate says the one it reads the word after, which the chain holds.
   """
 
   def __init__(self) -> None:
     self.frames: dict[str, CoroutineType[object, object, object]] = {}
 
-  def gate(self, word: str, ladder: list[str]) -> list[str]:
+  def gate(self, word: str, program: list[str]) -> list[str]:
     """What the gate finds against a word: the sheet of the engine, read by the ty command line."""
-    return sheet.gate(NAMES, ladder, word, checked)
+    return sheet.gate(NAMES, program, word, checked)
 
   def ended(self, name: str, got: BaseException | None) -> None:
     """The run is over, and what it came to goes to the chain that had it run."""

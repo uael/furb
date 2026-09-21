@@ -13,15 +13,15 @@ The word stands on a sheet of its own::
     ...
     try:
       __engine.lineage('')
-      <the ladder of the chain>
+      <the program of the chain before the word>
     except BaseException:
       pass
     <the word>
 
 Every line of it is there for a reason. The body is async, so a word may await at its top level. A name is bound
 on a line of its own rather than imported, since a word may rebind a name and no word may rebind an import. The
-ladder stands in a try, so a rung that raised or that never ends leaves the word reachable. And the word and the
-ladder keep their own lines, so a finding is counted back to the line the model wrote.
+program stands in a try, so a rung that raised or that never ends leaves the word reachable. And the word and
+the program keep their own lines, so a finding is counted back to the line the model wrote.
 
 The word is read as the body of a module before ty reads what it means: the sheet stands it inside a function,
 where a return is legal and the engine takes none, so a word the interpreter will not take as a body is a finding
@@ -43,9 +43,9 @@ OWN = re.compile(rf"\b{ENGINE}\b")
 BOUND = ("actor", "raised")
 """BOUND are the two names a chain binds of its own: the actor it stands on, and what the last rung raised."""
 OPENED = f"  try:\n    {ENGINE}.lineage('')\n"
-"""OPENED opens the ladder on a call, since ty reads an except that no statement before it can reach."""
+"""OPENED opens the program on a call, since ty reads an except that no statement before it can reach."""
 CAUGHT = "  except BaseException:\n    pass\n"
-"""CAUGHT closes the ladder, so that a rung which raised or which never ends leaves the word reachable."""
+"""CAUGHT closes the program, so that a rung which raised or which never ends leaves the word reachable."""
 
 
 def python(word: str) -> list[str]:
@@ -67,20 +67,20 @@ def laid(text: str, depth: int) -> str:
   return "".join(f"{' ' * depth}{line}\n" if line.strip() else "\n" for line in text.split("\n"))
 
 
-def sheet(names: Sequence[str], ladder: Sequence[str], word: str) -> tuple[str, int]:
+def sheet(names: Sequence[str], program: Sequence[str], word: str) -> tuple[str, int]:
   """The word on a sheet of its own, and how many lines stand above the word, which every finding is counted back
-  by: the names a chain holds, bound one to a line, then the ladder of the chain, then the word."""
+  by: the names a chain holds, bound one to a line, then the program of the chain before the word, then the word."""
   head = f"import furb.engine as {ENGINE}\nasync def __body():\n" + "".join(
     f"  {x} = {ENGINE}.{x}\n" for x in (*names, *BOUND)
   )
-  above = head + OPENED + laid("\n".join(ladder), 4) + CAUGHT
+  above = head + OPENED + laid("\n".join(program), 4) + CAUGHT
   return above + laid(word, 2), above.count("\n")
 
 
-def gate(names: Sequence[str], ladder: Sequence[str], word: str, checked: Checked) -> list[str]:
+def gate(names: Sequence[str], program: Sequence[str], word: str, checked: Checked) -> list[str]:
   """What the gate finds against a word: the word is read for what the interpreter will take, and then ty reads it
-  on its sheet against the ladder of its chain, and each finding below the word is counted back to its line."""
+  on its sheet after the program of its chain, and each finding below the word is counted back to its line."""
   if found := python(word):
     return found
-  text, above = sheet(names, ladder, word)
+  text, above = sheet(names, program, word)
   return [f"line {n - above}: {why}" for n, why in checked(text) if n > above]
