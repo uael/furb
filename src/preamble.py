@@ -8,7 +8,9 @@ the engine itself for what a World reads, which is where a path resolves and whe
 other ear is heard by name through the ears of the host, which hear every fact and say what they will.
 
 The Kernel is here too, since the word of a rung runs where the engine runs, in the module of its chain, and so
-is the gate, an ear of its own, which reads a word with the checker of the host on the sheet of the engine.
+is the gate, an ear of its own, which reads a word with the checker of the host on the sheet of the engine. The
+Kernel keeps what each run left, so a run that retells a rung it kept is answered from that and the word runs no
+second time: the replay of a chain restores the module rung by rung, as the dump of a life restores the life.
 
 What crosses, crosses as the interpreter carries it, but for the callables, which it carries no way back. An
 instance of a class of the engine comes in as a map that names its class under `is`, with its fields, since the
@@ -21,6 +23,7 @@ name the ears of the host call it back by.
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from collections.abc import Callable, Coroutine, Generator
 from contextvars import ContextVar
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 type Names = dict[str, object]
@@ -252,11 +255,23 @@ def ran_in(word: str, rung: str, module: dict[str, object]) -> object:
   return eval(compile(word, rung, "exec", flags=PyCF_ALLOW_TOP_LEVEL_AWAIT), module)  # noqa: S307
 
 
+type Kept = tuple[dict[str, object], list[str], BaseException | None]
+"""What a run left: the bindings of its module beyond the birth of that module, copied deep, the names of the
+engine it unbound, and what the run came to."""
+
+
 class Running:
-  """The runs of one life: the word of each rung that stands.
+  """The runs of one life: the word of each rung that stands, and what each run that is over left.
 
   A run is begun in the globals of its chain and carried forward at the done of every act its word waits for, and
-  what it says it says under the name of its rung, which is what makes a fact of the word the rung's own.
+  what it says it says under the name of its rung, which is what makes a fact of the word the rung's own. When it
+  is over, what it left is kept: the bindings of the module it ran in beyond the birth of that module, copied deep
+  so that no later run changes them, and what it came to. A run that retells a rung so kept is answered from that:
+  the module of its chain takes those bindings again, and the run comes to what the kept run came to, so the word
+  runs no second time. A run that a close stopped came to nothing, as the copy of it does under any Kernel, and so
+  did a word that raised a CancelledError of its own, which stops as a close stops it. A run whose bindings cannot
+  be copied, one that holds a generator, is kept not, and a run that retells it runs the word, as the Kernel of
+  this interpreter does for every word.
   """
 
   def __init__(self, names: Names) -> None:
@@ -271,6 +286,43 @@ class Running:
     # rebound name is used from the next use on, so a verb kept here would be the one that stood before it.
     self.names = names
     self.frames: dict[str, Coroutine[object, object, object]] = {}
+    # The module each run runs in, since a replay the word causes swaps the module of the chain from under it.
+    self.ran_in: dict[str, dict[str, object]] = {}
+    self.kept: dict[str, Kept] = {}
+
+  def shared(self) -> dict[int, object]:
+    """The memo of a deep copy: every value of the engine stands for itself, so a binding of one is shared."""
+    return {id(value): value for value in self.names.values()}
+
+  def keep(self, rung: str, got: BaseException | None) -> None:
+    """What the run left, kept; nothing is kept of a run whose bindings cannot be copied."""
+    module = self.ran_in.pop(rung)
+    left = {n: v for n, v in module.items() if n != "__name__" and (n not in self.names or self.names[n] is not v)}
+    try:
+      copied = deepcopy(left, self.shared())
+    except Exception:  # a generator, an open handle: what cannot be copied leaves the copy to run the word
+      return
+    gone = [name for name in self.names if name not in module]
+    stop = self.names["CancelledError"]
+    assert isinstance(stop, type)
+    self.kept[rung] = (copied, gone, None if isinstance(got, stop) else got)
+
+  def restore(self, rung: str, chain: str, whose: str) -> None:
+    """A run that retells a kept rung, answered from what that rung left: the module takes the bindings again."""
+    left, gone, got = self.kept[whose]
+    module = self.modules[chain]
+    for name in [n for n in module if n != "__name__" and n not in self.names]:
+      del module[name]
+    module.update(self.names)
+    module.update(deepcopy(left, self.shared()))
+    for name in gone:
+      del module[name]
+    self.ended(rung, got)
+
+  def over(self, rung: str, got: BaseException | None) -> None:
+    """The run ran to its end, or raised, or a close stopped it: what it left is kept, and it is over."""
+    self.keep(rung, got)
+    self.ended(rung, got)
 
   def ended(self, rung: str, got: BaseException | None) -> None:
     """The run is over, and what it came to goes to the chain that had it run."""
@@ -289,9 +341,9 @@ class Running:
           while not isinstance(got, str):
             got = frame.throw(self.refusal(got))
         except StopIteration:
-          return self.ended(rung, None)
+          return self.over(rung, None)
         except BaseException as raised:
-          return self.ended(rung, raised)
+          return self.over(rung, raised)
         if got not in self.outcomes:
           verb(self.names, "send")("wants", rung, got, by=rung)
           return None
@@ -306,15 +358,16 @@ class Running:
 
   def begin(self, rung: str, chain: str, word: str) -> None:
     """A run begun: the word runs in the globals of its chain, and one that awaits nothing is over where it began."""
+    module = self.ran_in[rung] = self.modules[chain]
     token = self.site.set(rung)
     try:
-      ran = ran_in(word, rung, self.modules[chain])
+      ran = ran_in(word, rung, module)
     except BaseException as raised:
-      return self.ended(rung, raised)
+      return self.over(rung, raised)
     finally:
       self.site.reset(token)
     if not isinstance(ran, Coroutine):
-      return self.ended(rung, None)
+      return self.over(rung, None)
     self.frames[rung] = ran
     return self.carry(rung, None)
 
@@ -323,6 +376,7 @@ class Running:
     under = verb(self.names, "under")
     for one in [x for x in self.frames if under(x, about) and not getattr(self.frames[x], "cr_running", False)]:
       self.frames[one].close()
+      self.ran_in.pop(one, None)
       got = verb(self.names, "CancelledError")()
       assert isinstance(got, BaseException)
       self.ended(one, got)
@@ -352,8 +406,9 @@ def kernel(names: Names) -> Ear:
   held = Running(names)
   while True:
     match (yield):
+      case ("run", rung, _, chain, _, whose) if whose in held.kept:
+        held.restore(rung, chain, whose)
       case ("run", rung, _, chain, word, _):
-        # This Kernel runs every word, retold or not, so it reads no donor off the run.
         held.begin(rung, chain, word)
       case ("sent", rung, _, value) if rung in held.frames:
         held.carry(rung, value)
