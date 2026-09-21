@@ -43,6 +43,12 @@ MONTY_SKIPS: dict[str, str] = {
   "test_boot_gives_the_root_as_an_act_of_never_and_the_root_never_completes": (
     "the test boots on a Kernel of this interpreter, and the engine of monty holds its own"
   ),
+  "test_a_run_names_the_rung_that_the_word_retells": (
+    "the test boots on a Kernel of this interpreter, and the engine of monty holds its own"
+  ),
+  "test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_birth": (
+    "the test keeps the module a replay drops by the map it read it from, and on monty a map reads the module where it stands"
+  ),
 }
 """MONTY_SKIPS names the tests the engine of monty does not run, each with why: what the test reads is a fact of one
 interpreter, which the boundary does not carry."""

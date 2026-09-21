@@ -349,7 +349,8 @@ def kernel(gate: Gate, names: Names, sheet: Names, bound: list[str]) -> Ear:
         if not found:
           held.ladders[chain].append(word)
         yield "done", qid, found
-      case ("run", rung, _, chain, word):
+      case ("run", rung, _, chain, word, _):
+        # This Kernel runs every word, retold or not, so it reads no donor off the run.
         held.begin(rung, chain, word)
       case ("sent", rung, _, value) if rung in held.frames:
         held.carry(rung, value)
