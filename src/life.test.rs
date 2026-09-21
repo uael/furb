@@ -20,7 +20,7 @@ use std::{
   time::Duration,
 };
 
-use furb::{
+use crate::{
   Actor, Command, Exit, Fault, Later, Life, Object, ObjectRef, Running, Standing, Text, Voice,
   World,
 };

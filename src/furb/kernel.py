@@ -18,9 +18,9 @@ from inspect import iscoroutine
 from pathlib import Path
 from types import CoroutineType
 
+import furb_monty
 from furb import engine, sheet
 from furb.engine import Act, Refused, modules, outcomes, site, under
-from furb_monty import _monty
 
 type Kernel = Generator[tuple | None, tuple]
 """The Kernel, as engine.pyi declares it: engine.py binds no such name, so this module says the type itself."""
@@ -39,7 +39,7 @@ def checked(text: str) -> list[tuple[int, str]]:
   warnings, since a warning refuses no word. A gate that could not read the sheet has said nothing about the word,
   which is not the same as having found nothing, so it raises and the life ends there rather than refuse a word
   that nobody read."""
-  return _monty.gate(text)
+  return furb_monty.gate(text)
 
 
 class Native:

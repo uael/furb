@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
+import furb_monty
 from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
 from furb.kernel import NAMES, Native, checked, declared
-from furb_monty import _monty
 from outside.doubles import settle, stood, tags, worlds
 
 STANDS = (((OPERATOR, (), WINDOW), ("opus", ("low",), 1000)), "/w", "opus/low")
@@ -104,7 +104,7 @@ def test_the_kernel_reads_a_sheet_through_the_gate_of_the_crate() -> None:
     ("x: str = span(1, 2)(['a'])", ()),
     ("close((await bash('ls')).code)", ()),
   ]:
-    assert sheet.gate(NAMES, list(ladder), word, _monty.gate) == sheet.gate(NAMES, list(ladder), word, checked)
+    assert sheet.gate(NAMES, list(ladder), word, furb_monty.gate) == sheet.gate(NAMES, list(ladder), word, checked)
 
 
 def test_a_word_that_imports_what_the_sandbox_does_not_run_is_refused() -> None:

@@ -23,7 +23,6 @@ import furb_monty.engine
 from furb import engine, sheet
 from furb.engine import OPERATOR, WORLD, Act, Refused, Text, modules, outcomes, site, under
 from furb.kernel import NAMES
-from furb_monty import _monty
 
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
@@ -289,7 +288,7 @@ class Py:
 
   def gate(self, word: str, program: list[str]) -> list[str]:
     """What the gate finds against a word: the sheet of the engine, read by the gate of the crate."""
-    return sheet.gate(NAMES, program, word, _monty.gate)
+    return sheet.gate(NAMES, program, word, furb_monty.gate)
 
   def kernel(self) -> Kernel:
     """The Kernel as one generator for one life, which speaks from the run it steps."""

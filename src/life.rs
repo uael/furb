@@ -830,3 +830,7 @@ impl<T: Came + Unpin> Future for Act<'_, T> {
     }
   }
 }
+
+#[cfg(test)]
+#[path = "life.test.rs"]
+mod test;

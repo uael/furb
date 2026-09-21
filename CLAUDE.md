@@ -9,8 +9,8 @@ The crate at the root, `furb`, runs the same file in monty, a python interpreter
 API of its own. `src/lib.rs` says what it gives: `Life`, whose methods are the verbs of the contract, and `World`,
 one trait a host writes. `src/preamble.py` runs in the sandbox and stands in for the ears of a host, and the Kernel
 is the crate's, with the type checker of monty as its gate, which reads a word against the typeshed of the sandbox
-and which the Kernel of the python package reads through too. `src/bindings.rs`, behind the `python` feature, is
-the door to python: `bind/python` is the package `furb-monty`, whose `furb_monty.engine` gives every name of the
+and which the Kernel of the python package reads through too. `src/binding/py.rs`, behind the `python` feature,
+is the door to python: `bind/python` is the package `furb-monty`, whose `furb_monty.engine` gives every name of the
 contract over one life in the sandbox, and `FURB_ENGINE=monty` makes `from furb import engine` give it. The suite
 runs on both engines, and `test/outside/test_monty.py` proves what the door carries that no sentence of the
 contract says.
@@ -93,7 +93,8 @@ Run every command from the root of the repository.
   indentation, 120 columns.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`.
 - `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test`: the gates of the crate. The
-  tests in `tests/` drive a life of the real engine on a World in rust.
+  tests of a module stand beside it, `src/life.test.rs` beside `src/life.rs`, and those of the life drive the real
+  engine on a World in rust.
 - `uv run pre-commit run --all-files`: every gate the commit hook runs.
 - `uv run python script/smoke.py`: one real life on opus/low through the claude command line on PATH, or the one
   `FURB_CLAUDE_BIN` names. It is no test of the suite and spends one prompt.

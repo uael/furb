@@ -27,8 +27,7 @@ mod sand;
 pub mod value;
 pub mod world;
 
-#[cfg(feature = "python")]
-pub mod bindings;
+pub mod binding;
 
 pub use crate::{
   ear::{Ears, Reply},
