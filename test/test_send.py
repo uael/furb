@@ -13,7 +13,7 @@ async def test_the_one_way_to_speak_of_an_act() -> None:
   log, root = life(sand)
   made = engine.send("tell", root, [("noted", [], None)])
   assert made == ("tell", root, OPERATOR, [("noted", [], None)])
-  assert said(log, "tell")[-1] is made
+  assert said(log, "tell")[-1] == made
 
 
 async def test_every_verb_of_the_file_speaks_through_the_three_entries_of_the_bus() -> None:
@@ -145,4 +145,4 @@ async def test_a_done_said_of_a_question_that_has_no_outcome_yet_fills_its_outco
   got = engine.outcomes[act]
   assert isinstance(got, Exit) and got.code == 3
   engine.send("done", act, 9, by=WORLD)
-  assert engine.outcomes[act] is got
+  assert engine.outcomes[act] == got

@@ -92,7 +92,7 @@ async def test_it_lives_until_it_returns() -> None:
   engine.close(None, act)
   await settle()
   engine.drive(engine.idle(act), act)
-  assert heard and heard[-1] is log[-1]
+  assert heard and heard[-1] == log[-1]
 
 
 async def test_a_generator_that_yields_a_saying_is_given_the_fact_as_the_bus_said_it() -> None:

@@ -1,0 +1,36 @@
+[project]
+name = "furb-monty"
+version = "0.1.0"
+description = "furb for python, with the engine in monty: every name of engine.pyi, over one life in the sandbox."
+readme = "README.md"
+requires-python = ">=3.14"
+# The license of the repository stands over this too; maturin reads no file above its own directory, so the
+# distribution names the license and carries none of its own.
+license = "AGPL-3.0-only"
+authors = [{ name = "Abel Lucas", email = "uaelucas@gmail.com" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
+]
+dependencies = ["furb"]
+
+[project.urls]
+Source = "https://github.com/uael/furb"
+Issues = "https://github.com/uael/furb/issues"
+
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+# The one crate, at the root of the repository, built with its python feature: there is no second crate.
+manifest-path = "../../Cargo.toml"
+module-name = "furb_monty._monty"
+features = ["extension-module"]
+
+[tool.uv.sources]
+furb = { workspace = true }

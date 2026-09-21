@@ -14,7 +14,7 @@ async def test_a_fact_that_takes_a_name_of_its_own_when_it_is_said_and_is_answer
   assert (await act).code == 0
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
   asked = said(log, "read")[0]
-  assert engine.asked[asked[1]] is asked and asked[1] not in engine.acts
+  assert engine.asked[asked[1]] == asked and asked[1] not in engine.acts
   assert engine.outcomes[asked[1]] == Text("/w/a.txt", "one\ntwo\n")
 
 

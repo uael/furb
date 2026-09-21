@@ -12,7 +12,8 @@ import pytest
 
 from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
-from furb.kernel import ENGINE, gate
+from furb.kernel import NAMES, Native, checked, declared
+from furb_monty import _monty
 from outside.doubles import settle, stood, tags, worlds
 
 STANDS = (((OPERATOR, (), WINDOW), ("opus", ("low",), 1000)), "/w", "opus/low")
@@ -92,6 +93,20 @@ def test_the_gate_reads_the_names_of_the_engine_as_a_chain_binds_them() -> None:
 def test_a_warning_of_ty_refuses_no_word() -> None:
   """A warning is no finding: a name that may be unbound is a warning of ty, and a word that reads it runs."""
   assert said("if chance() > 0.5:\n  maybe = 1\nclose(maybe)") == []
+
+
+def test_the_gate_of_the_crate_and_the_command_line_read_a_sheet_the_same() -> None:
+  """The crate's ty is pinned to the commit the command line is built from, so the two find the same on a sheet."""
+  crate = _monty.Gate()
+  for word, ladder in [
+    ("close(1)", ()),
+    ("close(nowhere())", ()),
+    ("a = 1\ny: int = kept", ("kept = 'text'",)),
+    ("x: str = span(1, 2)(['a'])", ()),
+    ("if chance() > 0.5:\n  maybe = 1\nclose(maybe)", ()),
+    ("close((await bash('ls')).code)", ()),
+  ]:
+    assert sheet.gate(NAMES, list(ladder), word, crate.checked) == sheet.gate(NAMES, list(ladder), word, checked)
 
 
 def test_no_ty_on_the_path_ends_the_life_rather_than_refusing_the_word(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -28,7 +28,7 @@ async def test_a_rung_is_an_act_the_run_of_one_word_in_the_globals_of_its_chain(
   act = engine.rung("k = 21", on=root)
   assert await act is None
   made = said(log, "rung")[0]
-  assert made[1] == act and engine.acts[act] is made
+  assert made[1] == act and engine.acts[act] == made
   assert (made[3], made[4]) == (root, "k = 21")
   assert [a[1] for a in said(log, "run")] == [act]
   assert ran(log) == ["k = 21"] and engine.modules[root]["k"] == 21

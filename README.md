@@ -9,6 +9,10 @@ in `test/` holds one test per sentence.
 
 `pip install furb` installs the engine and the `furb` command. It needs python 3.14.
 
+The crate at the root runs the same engine in monty, a python interpreter written in rust, behind an async API: a
+host writes one `World` trait, and a `Life` gives the verbs of the contract. Built with its `python` feature it is
+`furb-monty`, and `FURB_ENGINE=monty` makes `from furb import engine` give the engine in the sandbox.
+
 From a clone of this repository:
 
 - `uv sync` installs the environment, and `uv run pytest -q` runs the suite.

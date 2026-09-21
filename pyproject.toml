@@ -44,13 +44,20 @@ dev = [
   "tiktoken>=0.13.0",
   # The one ty the gate of this interpreter runs, so that a word is read the same on every machine.
   "ty==0.0.82",
+  "furb-monty",
 ]
+
+[tool.uv.workspace]
+members = ["bind/python"]
+
+[tool.uv.sources]
+furb-monty = { workspace = true }
 
 [tool.ruff]
 line-length = 120
 indent-width = 2
 target-version = "py314"
-src = ["src", "test"]
+src = ["src", "test", "bind/python"]
 
 [tool.ruff.lint]
 select = [
@@ -63,6 +70,12 @@ ignore = ["S101"]
 # The suite pins the contract's own literals, drives doubles that answer in one sentence where they stand, and
 # names its tests by the sentence they carry.
 "test/**" = ["PLR2004", "EM101", "EM102", "TRY003", "FBT001", "FBT003", "PT018", "ARG002", "RUF012", "PLR0911", "PLR0912", "A002", "E501"]
+# The stand-in has one arm for each kind of value it makes again, and a life opens on everything it takes: the
+# engine, the sheet, the names, the record, and the three objects of the host. The World of the host is called by
+# position, as the interpreter hands the words of a call. The sandbox makes no class from a class of the
+# interpreter, so the protocols of the three objects are read by ty and never run.
+"src/preamble.py" = ["PLR0911", "PLR0912", "PLR0913", "PLR0917", "FBT001", "TID251"]
+"bind/python/furb_monty/engine.py" = ["PLR0911", "PLR0912"]
 # The surface speaks the engine's own vocabulary: its verbs shadow builtins on purpose, take the parameters the
 # contract names, and its exceptions are named as the contract names them.
 "src/furb/engine.pyi" = ["N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "E501", "PLR0904"]
@@ -73,7 +86,7 @@ max-line-length = 160
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false
-known-first-party = ["furb", "conftest"]
+known-first-party = ["furb", "furb_monty", "conftest"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -92,7 +105,7 @@ docstring-code-format = true
 skip-magic-trailing-comma = true
 
 [tool.ty.src]
-include = ["src", "test", "script"]
+include = ["src", "test", "script", "bind/python"]
 
 # The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
 # of an act, a task or a standing it reads after the check the sentence beside it makes.
@@ -104,12 +117,21 @@ unresolved-attribute = "ignore"
 unsupported-operator = "ignore"
 invalid-argument-type = "ignore"
 
+# The engine of monty reads the engine of this interpreter as the module the switch keeps, whose names ty does not
+# see through a module object, and the extension it stands on is built and not read.
+[[tool.ty.overrides]]
+include = ["bind/python/furb_monty/engine.py"]
+
+[tool.ty.overrides.rules]
+unresolved-attribute = "ignore"
+unresolved-import = "ignore"
+
 [tool.pytest.ini_options]
 minversion = "9.1"
 testpaths = ["test"]
 pythonpath = [".", "test"]
 # The suite runs on every core: a test opens a life of its own and leaves nothing behind, so the tests are independent.
-addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--cov=furb", "--cov-report=term-missing", "--cov-fail-under=100"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing", "--cov-fail-under=100"]
 xfail_strict = true
 timeout = 30
 timeout_method = "thread"

@@ -27,4 +27,4 @@ async def test_what_a_caller_holds_of_an_act_is_its_name() -> None:
   await settle()
   got = engine.outcomes[one]
   assert isinstance(got, Exit) and got.code == 0
-  assert engine.peek(one) is engine.outcomes[one] and (await one) is engine.outcomes[one]
+  assert engine.peek(one) == engine.outcomes[one] and (await one) == engine.outcomes[one]

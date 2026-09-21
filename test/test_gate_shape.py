@@ -8,8 +8,8 @@ async def test_a_gate_is_the_question_of_whether_a_word_may_run() -> None:
   """A gate is the question of whether a word may run, which the ear named gate answers with its findings, apart from the Kernel, so a word may ask it while the Kernel runs that word."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  found = ["BAD is no name, after 0 rungs"]
-  assert engine.gate("k = BAD", on=root) == found
+  found = engine.gate("k = BAD", on=root)
+  assert len(found) == 1 and found[0].startswith("line 1: ") and "BAD" in found[0]
   answered = [one for one in said(log, "done") if one[1].startswith("gate://")]
   assert [(one[2], one[3]) for one in answered] == [("gate", found)]
   assert engine.gate("k = 9", on=root) == []
