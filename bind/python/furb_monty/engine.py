@@ -100,14 +100,16 @@ class Crossing:
   doors, and its value wakes the thread.
   """
 
-  def __init__(self, gen: Generator[tuple | None, tuple]) -> None:
+  def __init__(self, gen: Generator[tuple | None, tuple], *, born: bool = False) -> None:
     self.gen = gen
     self.inbox: queue.Queue[object] = queue.Queue()
     self.outbox: queue.Queue[object] = queue.Queue()
     # A generator that was started already stands at a yield, and so does its stand-in.
     started = inspect.getgeneratorstate(gen) != inspect.GEN_CREATED
     self.first = None if started else self.stepped(None)
-    self.born = False
+    # An ear of a restored life was born in the life that was dumped: what this generator said at its birth was
+    # said then, and it hears from the next fact on.
+    self.born = born
     threading.Thread(target=self.serve, daemon=True).start()
 
   def stepped(self, sent: object) -> object:
@@ -163,8 +165,8 @@ class Crossing:
 class Living:
   """One life of the engine in the sandbox, and the ears of this interpreter it hears, by name."""
 
-  def __init__(self, outside: dict[str, Generator[tuple | None, tuple]]) -> None:
-    self.crossings = {name: Crossing(gen) for name, gen in outside.items()}
+  def __init__(self, outside: dict[str, Generator[tuple | None, tuple]], *, born: bool = False) -> None:
+    self.crossings = {name: Crossing(gen, born=born) for name, gen in outside.items()}
     self.callables: dict[str, Callable[..., object]] = {}
     self.life: _monty.Life | None = None
 
@@ -299,6 +301,30 @@ def boot(record: Iterable[object] = (), **outside: Generator[tuple | None, tuple
   under a name of its own ears. A second boot is a second life, and the first is gone with the threads of its
   generators.
   """
+  living = opened(outside)
+  living.life = _monty.Life(living, list(outside), list(record))
+  if (no := living.life.raised) is not None:
+    raise no
+  return Act(living.life.root)
+
+
+def restore(dump: bytes, **outside: Generator[tuple | None, tuple]) -> Act:
+  """A life of the engine in the sandbox, restored from a dump of one that stood still, on ears under the names
+  it was dumped with, which gives the root. An ear hears from the next fact on: what it says at its birth was
+  said in the life the dump came from."""
+  living = opened(outside, born=True)
+  living.life = _monty.Life.restored(living, list(outside), dump)
+  return Act(living.life.root)
+
+
+def dump() -> bytes:
+  """The life as bytes, where it stands still, for `restore` to go on from without the record replayed."""
+  return living().life.dump()
+
+
+def opened(outside: dict[str, Generator[tuple | None, tuple]], *, born: bool = False) -> Living:
+  """The life this process holds from now on, on these ears: the one before it is gone with the threads of its
+  generators, and a Kernel among the ears is refused, since the engine of monty holds its own."""
   asyncio.get_running_loop()
   for name in ("kernel", "gate"):
     if name in outside:
@@ -307,11 +333,8 @@ def boot(record: Iterable[object] = (), **outside: Generator[tuple | None, tuple
   global LIFE  # noqa: PLW0603
   if LIFE is not None:
     LIFE.end()
-  LIFE = Living(outside)
-  LIFE.life = _monty.Life(LIFE, list(outside), list(record))
-  if (no := LIFE.life.raised) is not None:
-    raise no
-  return Act(LIFE.life.root)
+  LIFE = Living(outside, born=born)
+  return LIFE
 
 
 def worded(name: str) -> Callable[..., object]:

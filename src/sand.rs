@@ -10,7 +10,7 @@
 //! sandbox calls by name, and the loop below hands every such call to the closure the caller gave, with the id
 //! of the object it is on.
 
-use monty::{MontyRepl, ReplProgress, ReplStartError};
+use monty::{Dump, MontyRepl, ReplProgress, ReplStartError, Session, SessionRef, dump};
 use monty_types::{
   CompileOptions, ExcType, MontyException, MontyUuid, NameLookupResult, NamedValues, PrintWriter,
   ResourceLimits, ResourceTracker,
@@ -35,6 +35,25 @@ impl Sand {
     Self {
       repl: Some(MontyRepl::new("furb", ResourceTracker::new(limits), CompileOptions::default())),
     }
+  }
+
+  /// A sandbox restored from a dump: the session where it stood, with the limits it was dumped with.
+  pub(crate) fn restore(bytes: &[u8]) -> Result<Self, Fault> {
+    let held =
+      Dump::load(bytes).map_err(|why| Fault::refused(format!("no dump of a life: {why}")))?;
+    match held.state {
+      Session::Idle(repl) => Ok(Self { repl: Some(*repl) }),
+      Session::Suspended(_) | Session::Running(_) => {
+        Err(Fault::refused("a dump of a life stands still, and this one stands mid-run"))
+      }
+    }
+  }
+
+  /// The session as bytes, between two runs, for a life to be restored from.
+  pub(crate) fn dump(&self) -> Result<Vec<u8>, Fault> {
+    let repl = self.repl.as_ref().expect("a sandbox holds its session between two runs");
+    dump("furb", None, SessionRef::Idle(repl))
+      .map_err(|why| Fault::refused(format!("the life could not be dumped: {why}")))
   }
 
   /// One piece of code, run in the sandbox with these names bound, and what its last expression gave.

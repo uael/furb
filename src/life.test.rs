@@ -192,6 +192,15 @@ impl Lived {
     Ok(Lived { life, at, read, kept })
   }
 
+  /// A life restored from a dump, on a yard of the same name.
+  fn restored(yard: &str, words: &[&str], dump: &[u8]) -> Result<Self, Fault> {
+    let at = std::env::temp_dir().join(format!("furb-life-{yard}"));
+    let world = Yard::new(at.clone(), words);
+    let (read, kept) = (Rc::clone(&world.read), Rc::clone(&world.kept));
+    let life = Life::open(world).restore(dump)?;
+    Ok(Lived { life, at, read, kept })
+  }
+
   fn root(&self) -> String {
     self.life.root().to_owned()
   }
@@ -334,4 +343,27 @@ fn a_second_life_on_the_record_the_world_kept_makes_the_same_acts_again() {
   assert_eq!(again.kind(), "prompt");
   assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
   assert_eq!(second.life.outcome(&id).unwrap().and_then(|one| one.as_ref().as_int()), Some(2));
+}
+
+#[test]
+fn a_life_dumped_where_it_stands_still_is_restored_and_goes_on() {
+  let mut first = Lived::new("dumped", &[], vec![]).unwrap();
+  let root = first.root();
+  fs::write(first.at.join("a.txt"), "one\ntwo\n").unwrap();
+  block_on(first.life.rung("k = len(read('a.txt').lines)", "", "", "", &root).unwrap()).unwrap();
+  let id = first.life.bash("echo still", false, None, &root).unwrap().id().to_owned();
+  let no = first.life.dump().unwrap_err();
+  assert!(no.message().contains("a command runs"), "{no}");
+  let exit: Exit = block_on(first.life.awaiting(&id)).unwrap();
+  assert_eq!(exit.stdout.content, "still\n");
+  let dump = first.life.dump().unwrap();
+  let mut second = Lived::restored("dumped", &[], &dump).unwrap();
+  assert_eq!(second.root(), root);
+  assert!(second.life.raised().is_none());
+  let k =
+    second.life.held("modules", vec![Object::string(&root), Object::string("k")], "at").unwrap();
+  assert_eq!(k.as_ref().as_int(), Some(2));
+  assert_eq!(second.read.borrow().len(), 0, "a restored life replays nothing and asks no model");
+  let got = block_on(second.life.rung("close(k + 1)", "", "", "", &root).unwrap()).unwrap();
+  assert_eq!(got.as_ref().as_int(), Some(3));
 }

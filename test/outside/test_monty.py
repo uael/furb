@@ -17,6 +17,12 @@ from furb import engine
 from furb.engine import Refused
 
 
+def asking() -> Generator[tuple | None, tuple | None]:
+  """An ear that hears and says nothing."""
+  while True:
+    yield
+
+
 @pytest.fixture(autouse=True)
 def on_monty() -> Generator[None]:
   """Every name this module reads the engine by, bound to the engine of monty for the length of the test."""
@@ -29,7 +35,7 @@ async def test_an_ear_that_says_a_verb_the_world_refuses_is_answered_with_the_re
   """A verb an ear says from its thread raises in the ear what it raised in the life, where the ear said it."""
   caught: list[str] = []
 
-  def asking() -> Generator[tuple | None, tuple | None]:
+  def poked() -> Generator[tuple | None, tuple | None]:
     while True:
       if (a := (yield)) is not None and a[0] == "poke":
         try:
@@ -37,7 +43,7 @@ async def test_an_ear_that_says_a_verb_the_world_refuses_is_answered_with_the_re
         except Refused as no:
           caught.append(str(no))
 
-  root = engine.boot((), world=Dead(stands=STANDS).hears(), asking=asking())
+  root = engine.boot((), world=Dead(stands=STANDS).hears(), asking=poked())
   engine.send("poke", root, by=OPERATOR)
   await settle()
   assert caught == ["a dead World answers no read"]
@@ -67,6 +73,29 @@ async def test_a_map_of_the_life_refuses_a_key_it_does_not_hold() -> None:
   with pytest.raises(KeyError):
     engine.acts["none://x"]
   assert repr(engine.acts) == "acts of the life"
+
+
+async def test_a_life_dumped_where_it_stands_still_is_restored_and_goes_on() -> None:
+  """A life dumped where it stands still is restored on ears under the names it was dumped with, and goes on from
+  there: nothing of the record is replayed, no model is asked, and an ear hears from the next fact on."""
+  sand = Sand(files={"/w/a.txt": "one\ntwo\n"}, stands=STANDS)
+  root = engine.boot((), world=sand.hears())
+  await engine.rung("k = len(read('a.txt').lines)", on=root)
+  await settle()
+  dump = furb_monty.engine.dump()
+  later = Sand(stands=STANDS)
+  assert furb_monty.engine.restore(dump, world=later.hears()) == root
+  assert engine.modules[root]["k"] == 2
+  assert await engine.rung("close(k + 1)", on=root) == 3
+  assert later.calls == []
+  with pytest.raises(Refused, match="names it was dumped with"):
+    furb_monty.engine.restore(dump, world=Sand(stands=STANDS).hears(), probe=asking())
+
+
+async def test_a_dump_is_no_dump_of_a_life_when_it_is_not_one() -> None:
+  """What is not a dump of a life is refused as one."""
+  with pytest.raises(Refused, match="no dump of a life"):
+    furb_monty.engine.restore(b"not a dump", world=Sand(stands=STANDS).hears())
 
 
 async def test_boot_refuses_a_kernel_or_a_gate_of_this_interpreter() -> None:
