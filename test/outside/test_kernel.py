@@ -97,14 +97,14 @@ def test_a_warning_of_ty_refuses_no_word() -> None:
 
 def test_the_kernel_reads_a_sheet_through_the_gate_of_the_crate() -> None:
   """The Kernel gates through the crate's checker, so the two find the same on a sheet: one gate, one reading."""
-  for word, ladder in [
+  for word, program in [
     ("close(1)", ()),
     ("close(nowhere())", ()),
     ("a = 1\ny: int = kept", ("kept = 'text'",)),
     ("x: str = span(1, 2)(['a'])", ()),
     ("close((await bash('ls')).code)", ()),
   ]:
-    assert sheet.gate(NAMES, list(ladder), word, furb_monty.gate) == sheet.gate(NAMES, list(ladder), word, checked)
+    assert sheet.gate(NAMES, list(program), word, furb_monty.gate) == sheet.gate(NAMES, list(program), word, checked)
 
 
 def test_a_word_that_imports_what_the_sandbox_does_not_run_is_refused() -> None:

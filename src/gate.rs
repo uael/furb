@@ -62,7 +62,7 @@ fn read(said: &str) -> Option<(usize, String)> {
 }
 
 /// Every name the engine defines at its top, and the two a chain binds of its own, which is what the globals of a
-/// chain hold and what the sheet binds before it reads the ladder and the word.
+/// chain hold and what the sheet binds before it reads the program and the word.
 ///
 /// The same walk as `furb.kernel.declared`, in rust, since the sandbox parses no python of its own.
 pub fn named(source: &str) -> Vec<String> {
@@ -118,7 +118,7 @@ mod tests {
   use super::*;
   use crate::ENGINE;
 
-  /// The sheet of one word, on the ladder of no rung, as `furb.sheet` writes it.
+  /// The sheet of one word, after the program of no rung, as `furb.sheet` writes it.
   fn sheet(word: &str) -> (String, usize) {
     let mut head = String::from("import furb.engine as __engine\nasync def __body():\n");
     for name in named(ENGINE) {
