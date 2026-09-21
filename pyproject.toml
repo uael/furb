@@ -15,6 +15,8 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
+    # The Kernel gates a word through the gate of the crate, so the package stands on the extension.
+    "furb-monty",
     "pydantic>=2.13.5",
     "pydantic-ai-slim>=2.27.1",
     "python-minifier>=3.3.0",
@@ -42,9 +44,8 @@ dev = [
   "python-minifier>=3.2.0",
   "ruff>=0.16.2",
   "tiktoken>=0.13.0",
-  # The one ty the gate of this interpreter runs, so that a word is read the same on every machine.
-  "ty==0.0.82",
-  "furb-monty",
+  # The type checker of the repository, which reads the package and the suite; the gate of a word is the crate's.
+  "ty>=0.0.82",
 ]
 
 [tool.uv.workspace]

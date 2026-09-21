@@ -25,7 +25,7 @@ use crate::{
   ENGINE, PREAMBLE, SHEET,
   ear::{Ears, Reply},
   fact::Fact,
-  gate::{Ty, named},
+  gate::{checked, named},
   sand::{Sand, id, object},
   value::{Exit, Fault, Object, ObjectRef, Text, entry, inward},
   world::{Command, Later, Running, Said, Voice, World},
@@ -36,17 +36,6 @@ pub const WORLD: &str = "world";
 
 /// The prefix of the name a callable of the host crosses in under: `call:` and its number.
 const CALL: &str = "call:";
-
-thread_local! {
-  /// The one gate of this thread: one reading of the contract and of the typeshed, which every life shares, so
-  /// the reading costs once for the thread and not once for each life.
-  static GATE: Ty = Ty::new();
-}
-
-/// The gate of this thread, for a host that reads a sheet itself.
-pub fn gate() -> Ty {
-  GATE.with(Ty::clone)
-}
 
 /// A callable of the host, as the sandbox may call it back.
 type Callable = Box<dyn FnMut(Vec<Object>) -> Result<Object, Fault>>;
@@ -81,9 +70,8 @@ enum Worldly {
   Heard,
 }
 
-/// The host, as the sandbox reaches it: the World, the ears, the gate, and everything in flight.
+/// The host, as the sandbox reaches it: the World, the ears, and everything in flight. The gate is the thread's.
 struct Hosting {
-  gate: Ty,
   world: Worldly,
   ears: Option<Box<dyn Ears>>,
   voice: Voice,
@@ -111,7 +99,7 @@ impl Hosting {
     };
     if on == id(objects::GATE) {
       let sheet = text(args.first().map(Object::as_ref));
-      let found = self.gate.checked(&sheet);
+      let found = checked(&sheet)?;
       return Ok(Object::list(found.into_iter().map(|(line, why)| {
         Object::tuple([Object::int(i64::try_from(line).unwrap_or_default()), Object::string(why)])
       })));
@@ -397,15 +385,8 @@ impl Opening {
       names.insert(0, WORLD.to_owned());
     }
     let typed = matches!(world, Worldly::Typed(_));
-    let host = Hosting {
-      gate: gate(),
-      world,
-      ears,
-      voice,
-      later: Vec::new(),
-      running: HashMap::new(),
-      calls: Vec::new(),
-    };
+    let host =
+      Hosting { world, ears, voice, later: Vec::new(), running: HashMap::new(), calls: Vec::new() };
     let mut inner = Inner { sand: Sand::new(limits), host, watchers: HashMap::new() };
     inner.ran(PREAMBLE, vec![])?;
     let bound = Object::list(named(ENGINE).into_iter().map(Object::string));

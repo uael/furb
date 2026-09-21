@@ -44,10 +44,6 @@ class Life:
   def watch(self, act: str, then: Callable[[object], object]) -> None:
     """What to call when an act is done, with what it came to: at once for one done already, and once otherwise."""
 
-@final
-class Gate:
-  """The gate of the crate, for the Kernel of this interpreter to read a sheet with."""
-
-  def __init__(self) -> None: ...
-  def checked(self, sheet: str) -> list[tuple[int, str]]:
-    """What ty found on a sheet, each finding by its line, and none of the warnings."""
+def gate(sheet: str) -> list[tuple[int, str]]:
+  """The gate of the crate, for the Kernel of this interpreter to read a sheet with: what the checker found on the
+  sheet, each error by its line, and no warning. It raises when the checker could not read the sheet."""

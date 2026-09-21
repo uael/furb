@@ -12,7 +12,7 @@
 //! answers at once, it returns; what takes time, it gives back as a future, which the life drives. A command
 //! speaks while it runs through a [`Voice`].
 //!
-//! The Kernel is the crate's. The word of a rung is gated by ty, embedded as a library and reading the word on
+//! The Kernel is the crate's. The word of a rung is gated by the type checker of monty, reading the word on
 //! the sheet of `furb.sheet` against the contract, and it runs where the engine runs, in the module of its chain.
 //!
 //! What crosses is what monty carries, [`Object`], and the engine's own classes read as [`Text`], [`Exit`] and

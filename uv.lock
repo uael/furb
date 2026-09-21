@@ -252,6 +252,7 @@ name = "furb"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "furb-monty" },
     { name = "pydantic" },
     { name = "pydantic-ai-slim" },
     { name = "python-minifier" },
@@ -259,7 +260,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "furb-monty" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -274,6 +274,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "furb-monty", editable = "bind/python" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-ai-slim", specifier = ">=2.27.1" },
     { name = "python-minifier", specifier = ">=3.3.0" },
@@ -281,7 +282,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "furb-monty", editable = "bind/python" },
     { name = "pre-commit", specifier = ">=4.6.2" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
@@ -291,7 +291,7 @@ dev = [
     { name = "python-minifier", specifier = ">=3.2.0" },
     { name = "ruff", specifier = ">=0.16.2" },
     { name = "tiktoken", specifier = ">=0.13.0" },
-    { name = "ty", specifier = "==0.0.82" },
+    { name = "ty", specifier = ">=0.0.82" },
 ]
 
 [[package]]

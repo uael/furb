@@ -360,23 +360,14 @@ impl Life {
   }
 }
 
-/// The gate of the crate, for the Kernel of this interpreter to read a sheet with: the one reading of the contract
-/// of this thread, which every life of monty shares too.
-#[pyclass(module = "furb_monty._monty", name = "Gate", unsendable)]
-pub struct Gate {
-  held: crate::gate::Ty,
-}
-
-#[pymethods]
-impl Gate {
-  #[new]
-  fn new() -> Self {
-    Gate { held: life::gate() }
-  }
-
-  /// What ty found on a sheet, each finding by its line, and none of the warnings.
-  fn checked(&self, sheet: &str) -> Vec<(usize, String)> {
-    self.held.checked(sheet)
+/// The gate of the crate, for the Kernel of this interpreter to read a sheet with: what the checker of this thread
+/// found on the sheet, each error by its line, and no warning. The checker is the one every life of monty on the
+/// thread gates with, so a word is judged once and the same.
+#[pyfunction]
+fn gate(py: Python<'_>, sheet: &str) -> PyResult<Vec<(usize, String)>> {
+  match crate::gate::checked(sheet) {
+    Ok(found) => Ok(found),
+    Err(fault) => Err(raised(py, &Made::new(py)?, &fault)),
   }
 }
 
@@ -601,6 +592,6 @@ fn bare(shown: &str) -> String {
 #[pymodule]
 fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<Life>()?;
-  module.add_class::<Gate>()?;
+  module.add_function(wrap_pyfunction!(gate, module)?)?;
   Ok(())
 }

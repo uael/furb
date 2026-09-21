@@ -258,10 +258,6 @@ def seen(held: list[tuple]):  # noqa: ANN201
   return keeps
 
 
-GATE = _monty.Gate()
-"""GATE is the gate of the crate, which reads every word of the suite on either engine, so a word is judged the same."""
-
-
 def gated(log: Sequence[tuple]) -> list[str]:
   """Every word the gate was given in the life, in order, which the ready of each rung says."""
   return [a[3] for a in said(log, "ready")]
@@ -293,7 +289,7 @@ class Py:
 
   def gate(self, word: str, program: list[str]) -> list[str]:
     """What the gate finds against a word: the sheet of the engine, read by the gate of the crate."""
-    return sheet.gate(NAMES, program, word, GATE.checked)
+    return sheet.gate(NAMES, program, word, _monty.gate)
 
   def kernel(self) -> Kernel:
     """The Kernel as one generator for one life, which speaks from the run it steps."""

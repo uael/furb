@@ -7,7 +7,8 @@ writes: the engine, minified, is its whole system prompt, and each word it answe
 engine. The contract is `src/furb/engine.pyi`, whose docstrings hold every law, one sentence per line, and the suite
 in `test/` holds one test per sentence.
 
-`pip install furb` installs the engine and the `furb` command. It needs python 3.14.
+`pip install furb` installs the engine, the `furb` command and `furb-monty`, the crate built for python, whose
+type checker gates every word a model writes. It needs python 3.14.
 
 The crate at the root runs the same engine in monty, a python interpreter written in rust, behind an async API: a
 host writes one `World` trait, and a `Life` gives the verbs of the contract. Built with its `python` feature it is
