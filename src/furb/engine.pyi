@@ -477,7 +477,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The chain answers a transcript asked of one of its names with its transcript up to that act, and whole for the chain itself.
   The chain answers a program asked of its own name with the word of every rung it holds, each under the name of that rung, in order.
   The chain retells the rungs of its origin through the program the origin answers, and it owns the rungs it retells, though it holds nothing of them.
-  A chain is no door: it refuses a read and a write of its own name, and of every other name it holds that is no prompt.
   A replay makes the rungs of a chain again from its donor: it keeps each rung of the ladder while the words it is given repeat it, it makes one rung of what is left, and every rung of the chain after the first word that differs is gone.
   A replay makes the module of the chain again, as it was at its birth, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in.
   The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.

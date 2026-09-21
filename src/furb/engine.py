@@ -228,9 +228,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       match a:
         case ("program", *_) if a[4] == id:
           return dict(rungs)
-        case ("read", _, by, _, path) | ("write", _, by, _, Text(path)) if path in mine:
-          if not path.startswith("prompt://"):
-            return Refused(f"{path} no door")
+        case ("read", _, by, _, path) | ("write", _, by, _, Text(path)) if path in mine and path.startswith(
+          "prompt://"
+        ):
           if a[0] == "write":
             replay(path, a[4].content, by)
             return a[4]

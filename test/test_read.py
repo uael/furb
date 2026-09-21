@@ -126,9 +126,8 @@ async def test_whether_a_name_is_one_of_the_prompts_a_chain_has_heard_on_itself(
   assert await act == 2
   await settle()
   assert engine.read(act, on=root).content == "a = 1\nclose(a + 1)"
-  assert engine.read("", on=root) is None and engine.read("nowhere://x", on=root) is None
-  with pytest.raises(Refused, match="no door"):
-    engine.read(said(log, "rung")[0][1], on=root)
+  for path in ("", "nowhere://x", root, said(log, "rung")[0][1]):
+    assert engine.read(path, on=root) is None
 
 
 async def test_a_prompt_is_the_door_of_the_program_of_its_ladder() -> None:

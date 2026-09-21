@@ -1010,22 +1010,6 @@ async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
   assert engine.modules[root]["mine"] == 1 and engine.modules[root]["a"] == 2
 
 
-async def test_a_chain_is_no_door() -> None:
-  """A chain is no door: it refuses a read and a write of its own name, and of every other name it holds that is no prompt."""
-  sand = sown()
-  log, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]
-  act = engine.prompt(int, "work", on=root)
-  assert await act == 1
-  await settle()
-  for one in (root, said(log, "bash")[0][1], said(log, "rung")[0][1]):
-    with pytest.raises(Refused, match="no door"):
-      engine.read(one, on=root)
-    with pytest.raises(Refused, match="no door"):
-      engine.write(Text(one, "k = 1"), on=root)
-  assert engine.read(act, on=root).content == "x = bash('echo hi')\nclose(1)"
-
-
 async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_birth() -> None:
   """A replay makes the module of the chain again, as it was at its birth, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in."""
   sand = sown()
