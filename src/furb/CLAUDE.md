@@ -56,7 +56,8 @@ Each name has one meaning, which the contract's sentences use as given here.
 - step: one turn of a model and the run of its word, which is one rung.
 - ladder: the rungs of one prompt, in order, which the name of that prompt is the door of.
 - program: the words of rungs, in order, each under the name of its rung; the program of a ladder is the words of
-  its rungs, the words the gate refused among them, and the program of a chain is the words of every rung it ran.
+  its rungs, the words the gate refused among them, which its door shows, and the program of a chain is the words
+  of every rung the gate let run, which the gate reads a word after.
 - replay: the making of the rungs of a chain again from a donor, which is how a chain with a source stands on its
   origin and how a write of a door edits the program of a ladder.
 - donor: the rungs a replay retells, and, for one rung, the rung of the record it stands for, whose acts it shares

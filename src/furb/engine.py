@@ -93,7 +93,7 @@ def chance(on: str = "") -> float:
 
 
 def gate(word: str, on: str = "") -> list[str]:
-  _, got = ask("gate", on, word)
+  _, got = ask("gate", on, word, ask("program", on)[1] or {})
   tell("gate", body="\n".join(got or ()))
   return got
 
@@ -211,7 +211,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     raise Refused(f"no chain {source}")
 
   def ear(id):
-    transcript, rungs, retold, paused, mine = [], {}, set(), set(), {id}
+    transcript, rungs, refused, retold, paused, mine = [], {}, set(), set(), set(), {id}
     asking, running, to_run, unseen = None, "", [], ""
 
     def hold(fact):
@@ -224,18 +224,22 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     def stands(name):
       return any(under(name, x) or x == id for x in paused)
 
+    def program():
+      return {one: rungs[one] for one in rungs if one not in refused}
+
     def answers():
       match a:
-        case ("program", *_) if a[4] == id:
-          return dict(rungs)
+        case ("program", *_):
+          return program()
         case ("read", _, by, _, path) | ("write", _, by, _, Text(path)) if path in mine and path.startswith(
           "prompt://"
         ):
           if a[0] == "write":
             replay(path, a[4].content, by)
             return a[4]
-          program = "\n".join(said for one, said in rungs.items() if one != by and under(acts[one][5] or one, path))
-          return Text(path, program)
+          return Text(
+            path, "\n".join(said for one, said in rungs.items() if one != by and under(acts[one][5] or one, path))
+          )
         case ("transcript", _, _, _, at) if at in mine:
           return transcript[
             : transcript.index(where) + 1 if (where := acts.get(at) or asked.get(at)) in transcript else None
@@ -248,7 +252,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           return next((x[4] for x in reversed(transcript) if x[0] == "cd"), directory)
         case ("turns", *_):
           return turns_of(transcript)
-      return None
 
     def replay(of="", words="", by=""):
       for whose, said in rungs.items():
@@ -272,12 +275,11 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       _, theirs = ask("transcript", source, source)
       picked = (filter or (lambda x: x))([x for x in theirs if question(x)])
       transcript += [it for it in theirs if it[1] == source or any(under(one[1], it[1]) for one in picked)]
+      rungs.update(ask("program", source)[1])
     start = len(transcript)
     hold(told("opened", id, ("label", label), ("source", source)))
     _, standing = ask("stand", source or id)
-    if source:
-      rungs.update(ask("program", source, source)[1])
-    else:
+    if not source:
       hold(told("opened", id, *zip(("roster", "directory", "actor"), standing, strict=True)))
     _, directory, actor = standing
     replay()
@@ -293,14 +295,17 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           yield "done", about, got
       if a[1] in mine and not (a[0] == "tell" and a[2] == id):
         hold(a)
+      if a[0] in ("ready", "done") and a[1] == asking:
+        asking = None
       match a:
         case ("rung", rid, _, _, "", _, who, returns):
           unseen = ""
           hold(told("opened", rid, ("actor", who or modules[id]["actor"]), ("says", f"close({returns})")))
         case ("ready", rid, _, word):
-          asking = None if rid == asking else asking
+          refusals = ask("gate", id, word, program())[1]
           rungs[rid] = word
-          if refusals := ask("gate", id, word)[1]:
+          if refusals:
+            refused.add(rid)
             hold(told("refused", rid, body="\n".join(refusals)))
             close(Refused(), rid)
           else:
@@ -308,7 +313,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("prompt", pid, _, _, _, _, to) if to and offered(standing, to) is None:
           close(Refused(f"{to} no actor"), pid)
         case ("done", about, _, value):
-          asking = None if about == asking else asking
           if isinstance(value, Exception) and about in rungs:
             modules[id]["raised"] = value
           if about == running:
@@ -694,13 +698,13 @@ def boot(record=(), **outside):
           if not answer:
             keep((after, a))
 
-  def named(kind, by):
-    stem = by
+  def named(kind, on, *words):
+    stem = by = site.get()
     match acts.get(by):
       case ("rung", _, _, _, _, retells, *_) if retells:
         stem = retells
     made[by] += 1
-    return f"{kind}://{lineage(stem)}.{made[by]}"
+    return (kind, f"{kind}://{lineage(stem)}.{made[by]}", by, on or scope(by), *words)
 
   def says(kind, about, *words, by=""):
     a = (kind, about, by or site.get(), *words)
@@ -711,23 +715,20 @@ def boot(record=(), **outside):
     return a
 
   def asks(kind, on, *words):
-    by = site.get()
-    a = (kind, named(kind, by), by, on or scope(by), *words)
+    a = named(kind, on, *words)
     asked[a[1]] = a
     if isinstance(got := put(a), Refused) and kind != "peek":
       raise got
     return a, got
 
   def makes(kind, on, ear, *words):
-    by = site.get()
-    a = (kind, named(kind, by), by, on or scope(by), *words)
+    a = named(kind, on, *words)
     if not a[3] and kind != "chain":
       raise Refused(f"no chain {a[1]}")
-    if acts.setdefault(a[1], a) is not a:
-      return Act(a[1])
-    log.append(a)
-    live(ear(a[1]), a[1])
-    dispatch()
+    if acts.setdefault(a[1], a) is a:
+      log.append(a)
+      live(ear(a[1]), a[1])
+      dispatch()
     return Act(a[1])
 
   def ears():

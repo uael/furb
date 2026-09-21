@@ -96,13 +96,12 @@ class Native:
   chain, says wants for the act a run waits for, carries the run forward at each sent, says ran with nothing for a
   word that ran to its end and with the exception for one that raised, and drops the frame of a run a cancel is
   over. A frame that is mid step is never closed: the close of a word raises where that word stands, and what
-  unwinds out of it is the drop. One of these serves one life, since the frames it holds and the ladders it gates
-  against are that life's own, and a ladder is the accepted words of its chain, which grows as the gate accepts.
+  unwinds out of it is the drop. One of these serves one life, since the frames it holds are that life's own. It
+  keeps no ladder: the gate says the words it reads the word after, which the chain holds.
   """
 
   def __init__(self) -> None:
     self.frames: dict[str, CoroutineType[object, object, object]] = {}
-    self.ladders: dict[str, list[str]] = {}
 
   def gate(self, word: str, ladder: list[str]) -> list[str]:
     """What the gate finds against a word: the sheet of the engine, read by the ty command line."""
@@ -158,12 +157,8 @@ class Native:
           self.begin(rung, word, modules[chain])
         case ("sent", rung, _, value) if rung in self.frames:
           self.carry(rung, value)
-        case ("gate", qid, _, chain, word):
-          # The ladder is the accepted words of the chain, so an accepted word joins it here, before it runs.
-          found = self.gate(word, self.ladders.setdefault(chain, []))
-          if not found:
-            self.ladders[chain].append(word)
-          yield "done", qid, found
+        case ("gate", qid, _, _, word, program):
+          yield "done", qid, self.gate(word, [*program.values()])
         case ("cancel" | "close", about, *_):
           # The frame of the word that says the close is mid step, and the CancelledError of close ends that one.
           for one in [x for x in self.frames if under(x, about) and not self.frames[x].cr_running]:

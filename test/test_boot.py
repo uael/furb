@@ -237,10 +237,10 @@ async def test_the_engine_makes_a_chain_from_the_record_and_in_no_other_way() ->
   """The engine makes a chain from the record and in no other way, by running its rungs again."""
   sand = sown()
   _, root = await lived(sand)
-  was = engine.ask("program", root, root)[1]
+  was = engine.ask("program", root)[1]
   again, over = await relived(Sand(stands=STANDS), list(sand.record))
   assert ran(again) == [WORD, "close(None)"]
-  assert engine.ask("program", over, over)[1] == was
+  assert engine.ask("program", over)[1] == was
 
 
 async def test_the_rungs_of_the_ladder_run_in_record_order() -> None:

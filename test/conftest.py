@@ -270,7 +270,6 @@ class Py:
   def kernel(self) -> Kernel:
     """The Kernel as one generator for one life, which speaks from the run it steps."""
     frames: dict[str, Coroutine[object, object, object]] = {}
-    ladders: dict[str, list[str]] = {}
 
     def ended(name: str, got: BaseException | None) -> None:
       """The run is over, and what it came to goes to the chain that had it run."""
@@ -317,11 +316,8 @@ class Py:
           begin(rung, word, modules[chain])
         case ("sent", rung, _, value) if rung in frames:
           carry(rung, value)
-        case ("gate", qid, _, chain, word):
-          found = self.gate(word, ladders.setdefault(chain, []))
-          if not found:
-            ladders[chain].append(word)
-          yield "done", qid, found
+        case ("gate", qid, _, _, word, program):
+          yield "done", qid, self.gate(word, [*program.values()])
         case ("cancel" | "close", about, *_):
           for one in [x for x in frames if under(x, about) and not getattr(frames[x], "cr_running", False)]:
             frames[one].close()

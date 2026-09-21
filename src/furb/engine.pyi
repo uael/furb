@@ -475,7 +475,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A chain with a source asks its origin what it stands on, and the origin answers with its standing as it stands.
   The chain answers a stand asked on it with what it stands on, so a grant reads the roster off the chain it is on.
   The chain answers a transcript asked of one of its names with its transcript up to that act, and whole for the chain itself.
-  The chain answers a program asked of its own name with the word of every rung it holds, each under the name of that rung, in order.
+  The chain answers a program asked on it with the word of every rung it holds that the gate let run, each under the name of that rung, in order.
   The chain retells the rungs of its origin through the program the origin answers, and it owns the rungs it retells, though it holds nothing of them.
   A replay makes the rungs of a chain again from its donor: it keeps each rung of the ladder while the words it is given repeat it, it makes one rung of what is left, and every rung of the chain after the first word that differs is gone.
   A replay makes the module of the chain again, as it was at its birth, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in.
@@ -739,7 +739,7 @@ The World answers with the turn, which carries its usage and the blocks of the p
 """
 type Ready = tuple[Literal["ready"], str, str, str]
 """A ready says the word a rung holds.
-The word of a rung enters the program of the chain, and it runs in the globals of the chain when the gate accepts it.
+The word of a rung enters the program of the chain when the gate accepts it, and runs in the globals of the chain.
 The word of a rung that extends the engine is part of the program, so the extension returns in a later life.
 The old words stay in the program and in the turns after a rung rebinds a name.
 """
@@ -798,11 +798,12 @@ type Holds = tuple[Literal["holds"], str, str, str, str]
 """A holds is the question of what the record kept of an act.
 The chain holds its holds in the transcript, where the ask stands in a life that asks, so the fold cuts a user turn there in every life.
 """
-type Gate = tuple[Literal["gate"], str, str, str, str]
+type Gate = tuple[Literal["gate"], str, str, str, str, dict[str, str]]
 """A gate is the question of whether a word may run, which the Kernel answers with its findings.
+A gate says the program of the chain before that rung, whose words the Kernel reads the word after, so the Kernel keeps no ladder of its own and a word of a program made again is read after the rungs that stand.
 The refused tag holds as its body the findings that refused the word of a rung.
 The chain has the Kernel gate the word of a rung before it runs, and a refused word runs never.
-A refused word of a rung is part of the program of the chain, and it runs never.
+A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run.
 The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the prompt of it asks again as it does for a word that gave no value.
 """
 type Cd = tuple[Literal["cd"], str, str, str, str]
@@ -811,8 +812,9 @@ type Cwd = tuple[Literal["cwd"], str, str, str]
 """A cwd gives the working directory of the chain it is on."""
 type Transcript = tuple[Literal["transcript"], str, str, str, str]
 """A transcript is the question of the transcript of a chain up to an act, which the chain answers, and which a chain with a source and a grant ask."""
-type Program = tuple[Literal["program"], str, str, str, str]
-"""A program is the question of the words of the rungs of a chain, each with the name of its rung, which the chain answers, and which a chain with a source asks of its origin."""
+type Program = tuple[Literal["program"], str, str, str]
+"""A program is the question of the words of the rungs of a chain that the gate let run, each with the name of its rung, which the chain answers.
+A chain with a source asks the program of its origin, and gate asks the program of the chain before it asks the Kernel."""
 type Merged = tuple[Literal["merged"], str, str, str, str]
 """A merged is the question of whether the stderr of a command flows into its stdout, which the command answers from what its verb was given, and which the World asks before it starts the command."""
 type Wait = tuple[Literal["wait"], str, str, str, float]

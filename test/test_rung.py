@@ -361,7 +361,7 @@ async def test_a_replay_makes_a_rung_of_its_own_retelling_each_rung_of_the_donor
   side = engine.chain("side", source=root)
   await settle(300)
   mine = [a for a in said(log, "rung") if a[3] == side]
-  assert {a[5]: a[4] for a in mine} == engine.ask("program", root, root)[1]
+  assert {a[5]: a[4] for a in mine} == engine.ask("program", root)[1]
   assert mine and all(a[1] != a[5] for a in mine)
 
 

@@ -34,17 +34,47 @@ async def test_the_chain_has_the_kernel_gate_the_word_of_a_rung_before_it_runs()
   assert "k" not in engine.modules[root]
 
 
-async def test_a_refused_word_of_a_rung_is_part_of_the_program_of_the_chain() -> None:
-  """A refused word of a rung is part of the program of the chain, and it runs never."""
+async def test_a_refused_word_of_a_rung_stands_in_the_ladder_of_its_prompt() -> None:
+  """A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["k = BAD", "close(7)", "close(None)"]
   act = engine.prompt(int, "try", on=root)
   assert await act == 7
   assert engine.read(act, on=root).content == "k = BAD\nclose(7)"
-  _, program = engine.ask("program", root, root)
+  _, program = engine.ask("program", root)
   assert isinstance(program, dict)
-  assert list(program.values()) == ["k = BAD", "close(7)"] and ran(log) == ["close(7)"]
+  assert list(program.values()) == ["close(7)"] == ran(log)
+
+
+async def test_a_gate_says_the_program_of_the_chain_before_that_rung() -> None:
+  """A gate says the program of the chain before that rung, whose words the Kernel reads the word after, so the Kernel keeps no ladder of its own and a word of a program made again is read after the rungs that stand."""
+  sand = sown()
+  _, root = life(sand)
+  sand.script[root] = [
+    "k = 1",
+    "x = BAD",
+    "y = 2",
+    "write(read(get(acting())[2]).replace('y = 2', 'k = 3'))",
+    "close(k)",
+  ]
+  assert await engine.prompt(int, "edit", on=root) == 3
+  await settle()
+  asked = []
+  for one in engine.asked.values():
+    match one:
+      case ("gate", _, _, _, word, dict(program)):
+        asked.append((word, list(program.values())))
+  assert asked == [
+    ("k = 1", []),
+    ("x = BAD", ["k = 1"]),
+    ("y = 2", ["k = 1"]),
+    ("write(read(get(acting())[2]).replace('y = 2', 'k = 3'))", ["k = 1", "y = 2"]),
+    ("k = 1", []),
+    ("x = BAD", ["k = 1"]),
+    ("k = 3", ["k = 1"]),
+    ("close(k)", ["k = 1", "k = 3"]),
+  ]
 
 
 async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:
