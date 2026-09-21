@@ -252,7 +252,7 @@ def ran_in(word: str, rung: str, module: dict[str, object]) -> object:
 
 
 class Running:
-  """The runs of one life: the word of each rung that stands, and the ladder of each chain.
+  """The runs of one life: the word of each rung that stands.
 
   A run is begun in the globals of its chain and carried forward at the done of every act its word waits for, and
   what it says it says under the name of its rung, which is what makes a fact of the word the rung's own.
@@ -270,7 +270,6 @@ class Running:
     # rebound name is used from the next use on, so a verb kept here would be the one that stood before it.
     self.names = names
     self.frames: dict[str, Coroutine[object, object, object]] = {}
-    self.ladders: dict[str, list[str]] = {}
 
   def ended(self, rung: str, got: BaseException | None) -> None:
     """The run is over, and what it came to goes to the chain that had it run."""
@@ -343,12 +342,8 @@ def kernel(gate: Gate, names: Names, sheet: Names, bound: list[str]) -> Ear:
 
   while True:
     match (yield):
-      case ("gate", qid, _, chain, word):
-        # The ladder is the accepted words of the chain, so an accepted word joins it here, before it runs.
-        found = verb(sheet, "gate")(bound, held.ladders.setdefault(chain, []), word, checked)
-        if not found:
-          held.ladders[chain].append(word)
-        yield "done", qid, found
+      case ("gate", qid, _, _, word, program):
+        yield "done", qid, verb(sheet, "gate")(bound, [*program.values()], word, checked)
       case ("run", rung, _, chain, word, _):
         # This Kernel runs every word, retold or not, so it reads no donor off the run.
         held.begin(rung, chain, word)
