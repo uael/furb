@@ -367,3 +367,32 @@ fn a_life_dumped_where_it_stands_still_is_restored_and_goes_on() {
   let got = block_on(second.life.rung("close(k + 1)", "", "", "", &root).unwrap()).unwrap();
   assert_eq!(got.as_ref().as_int(), Some(3));
 }
+
+/// The ints of a list the engine gave, in order.
+fn ints(got: &Object) -> Option<Vec<i64>> {
+  got.as_ref().items()?.iter().map(ObjectRef::as_int).collect()
+}
+
+#[test]
+fn a_chain_with_a_source_on_a_restored_life_holds_what_the_kernel_kept_of_its_origin() {
+  let mut first = Lived::new("kept", &[], vec![]).unwrap();
+  let root = first.root();
+  fs::write(first.at.join("a.txt"), "one\ntwo\n").unwrap();
+  block_on(first.life.rung("xs = [len(read('a.txt').lines)]", "", "", "", &root).unwrap()).unwrap();
+  block_on(first.life.rung("xs.append(3)", "", "", "", &root).unwrap()).unwrap();
+  let dump = first.life.dump().unwrap();
+  let mut second = Lived::restored("kept", &[], &dump).unwrap();
+  fs::remove_file(second.at.join("a.txt")).unwrap();
+  let twin = second.life.chain("twin", &root, None, &root).unwrap().id().to_owned();
+  let got =
+    block_on(second.life.rung("xs.append(4)\nclose(xs)", "", "", "", &twin).unwrap()).unwrap();
+  assert_eq!(ints(&got), Some(vec![2, 3, 4]));
+  let theirs =
+    second.life.held("modules", vec![Object::string(&root), Object::string("xs")], "at").unwrap();
+  assert_eq!(ints(&theirs), Some(vec![2, 3]), "the origin keeps its own");
+  assert_eq!(
+    second.read.borrow().len(),
+    0,
+    "a chain with a source asks no model and reads no file again"
+  );
+}
