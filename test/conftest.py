@@ -31,9 +31,6 @@ ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
 MONTY_SKIPS: dict[str, str] = {
-  "test_every_name_that_the_file_defines_is_in_the_globals_of_a_chain": (
-    "the test reads the file of the engine through the module under test, and on monty that module is another file"
-  ),
   "test_a_chain_with_a_source_holds_the_classes_its_origin_defined_before_that_source": (
     "a class a word defined is the sandbox's own, and crosses to this interpreter as a callable and no type"
   ),
@@ -48,9 +45,6 @@ MONTY_SKIPS: dict[str, str] = {
   ),
   "test_a_rung_that_retells_is_done_with_nothing": (
     "the test boots on a Kernel of this interpreter, and the engine of monty holds its own"
-  ),
-  "test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_birth": (
-    "the test keeps the module a replay drops by the map it read it from, and on monty a map reads the module where it stands"
   ),
 }
 """MONTY_SKIPS names the tests the engine of monty does not run, each with why: what the test reads is a fact of one

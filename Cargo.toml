@@ -32,6 +32,4 @@ extension-module = ["python", "pyo3/extension-module"]
 monty = { git = "https://github.com/uael/monty", rev = "959c7b65" }
 monty-type-checking = { git = "https://github.com/uael/monty", rev = "959c7b65" }
 monty-types = { git = "https://github.com/uael/monty", rev = "959c7b65" }
-# The names the engine defines at its top, read from its file, at the versions
-# monty reads python with, so the tree holds one parser.
 pyo3 = { version = "0.29.2", features = ["generate-import-lib"], optional = true }
