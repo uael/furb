@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
+import { dirname } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoWorkspace, seedDemo } from "../src/demo.ts";
+import { sessionChoices } from "../src/sessions.ts";
 import { Workspace } from "../src/workspace.ts";
 
 test("the real native life drives conversation, program, activity, search, and responsive views", async () => {
@@ -47,7 +49,7 @@ test("the real native life drives conversation, program, activity, search, and r
 
 test("operator answers and program edits act through the binding", async () => {
   const workspace = await demoWorkspace();
-  const test = await createTestRenderer({ width: 120, height: 40 });
+  const test = await createTestRenderer({ width: 120, height: 40, exitOnCtrlC: false });
   const app = new App(test.renderer, workspace, { quit() {} });
   try {
     const id = await workspace.life.prompt("bool", "Continue with the change?", { to: "operator" });
@@ -66,6 +68,13 @@ test("operator answers and program edits act through the binding", async () => {
     const error = await workspace.command("/run this is invalid python !!!").catch((error: unknown) => error);
     expect(error).toBeInstanceOf(Error);
     expect(workspace.findings.join("\n")).toContain("line 1");
+    app.render();
+    await test.flush();
+    expect(test.captureCharFrame()).toContain("this is invalid python");
+    app.composer.setText("keep the session open");
+    test.mockInput.pressCtrlC();
+    await test.flush();
+    expect(app.composer.plainText).toBe("");
   } finally {
     app.dispose();
     test.renderer.destroy();
@@ -92,6 +101,14 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
   app.dispose();
   screen.renderer.destroy();
   await first.dispose();
+  if (!record) throw new Error("No saved record.");
+  const choices = await sessionChoices(
+    dirname(record),
+    async () => {},
+    async () => {},
+  );
+  expect(choices.filter((choice) => choice.detail.includes("Paused"))).toHaveLength(1);
+  expect(choices).toHaveLength(2);
   const opened = await openEngine({ record, demo: true });
   const second = new Workspace(opened.life, opened.world, true);
   await second.refresh();
@@ -110,6 +127,29 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
     view.dispose();
     next.renderer.destroy();
     await second.dispose();
+  }
+}, 30000);
+
+test("rewind picks an act and filters the new chain's transcript without changing the source", async () => {
+  const workspace = await demoWorkspace(true);
+  const screen = await createTestRenderer({ width: 140, height: 42 });
+  const app = new App(screen.renderer, workspace, { quit() {} });
+  const source = workspace.selected;
+  const original = await workspace.life.rendered(source);
+  try {
+    app.rewind();
+    await screen.flush();
+    expect(screen.captureCharFrame()).toContain("REWIND TRANSCRIPT");
+    screen.mockInput.pressEnter();
+    for (let attempt = 0; attempt < 50 && workspace.selected === source; attempt++) await Bun.sleep(20);
+    await workspace.refresh();
+    expect(workspace.selected).not.toBe(source);
+    expect(await workspace.life.rendered(source)).toEqual(original);
+    expect(workspace.turns.length).toBeGreaterThan(0);
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await workspace.dispose();
   }
 }, 30000);
 

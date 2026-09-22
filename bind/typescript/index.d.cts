@@ -36,7 +36,7 @@ export declare class Life {
   rung(word: string, options?: RungOptions | undefined | null): Act & PromiseLike<unknown>
   /** Read one name from the chain without calling it. Unrepresentable values still expose their Python repr. */
   inspect(name: string, chain?: string | undefined | null): Inspection
-  chain(label: string, source?: string | null, filter?: unknown): Act & PromiseLike<never>
+  chain(label: string, source?: string | null, filter?: unknown, on?: string | null): Act & PromiseLike<never>
   grant(options: GrantOptions): Act & PromiseLike<null>
   bash(command: string, options?: BashOptions | undefined | null): Act & PromiseLike<ExitValue>
   wait(seconds: number, chain?: string | undefined | null): Act & PromiseLike<null>
@@ -45,6 +45,8 @@ export declare class Life {
   peek<T = unknown>(id: string, chain?: string | undefined | null): T | null
   get(id: string): [string, string, string, string, ...unknown[]]
   turns(chain?: string | undefined | null): Array<['user' | 'assistant', Array<string | [string, Array<[string, unknown]>, unknown]>, [number, number, number, number, number] | null, unknown]>
+  /** Exact model text, rendered before Python values cross to JavaScript. */
+  rendered(chain?: string | undefined | null): Array<string>
   scope(id: string): string
   cwd(chain?: string | undefined | null): string
   cd(path: string, chain?: string | undefined | null): string

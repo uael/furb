@@ -11,7 +11,7 @@ test("the pi-ai Claude provider forwards normalized system text, reuses a sessio
   await chmod(path, 0o755);
   const log = join(cwd, "cli.jsonl");
   process.env.FURB_FAKE_LOG = log;
-  const cli = claudeProvider({ bin: path });
+  const cli = claudeProvider({ bin: path, stallMs: 1000 });
   const models = createModels();
   models.setProvider(cli.provider);
   const model = models.getModel("claude-cli", "sonnet");
@@ -46,6 +46,22 @@ test("the pi-ai Claude provider forwards normalized system text, reuses a sessio
     expect(lines[0].args).toContain("xhigh");
     expect(lines[0].args[lines[0].args.indexOf("--tools") + 1]).toBe("");
     expect(JSON.stringify(lines.at(-1))).not.toContain("first");
+    const duplicate = await models.completeSimple(
+      model,
+      { systemPrompt: "ENGINE ONLY", messages },
+      { sessionId: "chain", reasoning: "xhigh" },
+    );
+    expect(duplicate.stopReason).toBe("stop");
+    expect((await readFile(log, "utf8")).split("\n").filter((line) => line.includes('"pid"'))).toHaveLength(
+      1,
+    );
+    const stalled = await models.completeSimple(
+      model,
+      { messages: [{ role: "user", content: "WAIT", timestamp: 0 }] },
+      { sessionId: "stall" },
+    );
+    expect(stalled.stopReason).toBe("error");
+    expect(stalled.errorMessage).toContain("no progress");
     const signal = new AbortController();
     const waiting = models.completeSimple(
       model,

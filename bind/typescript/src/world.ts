@@ -6,12 +6,13 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { Api, AssistantMessage, Message, Model, Models, ThinkingLevel } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { Life } from "../index.cjs";
+import { type FileChange, FileChanges } from "./changes.js";
 import { WorldAdapter, type WorldHandler, type WorldRequest } from "./ears.js";
 import { type ClaudeOptions, claudeProvider, zeroUsage } from "./providers/claude.js";
 import { RecordFile } from "./record.js";
-import { type Entry, type Fact, type OperatorPrompt, rendered, type Turn } from "./types.js";
+import { type Entry, efforts, type Fact, type OperatorPrompt, shapes, type Turn } from "./types.js";
 
-export { display, isTag, rendered, safeText } from "./types.js";
+export { display, isTag, safeText } from "./types.js";
 
 export interface WorldOptions {
   cwd?: string;
@@ -22,18 +23,20 @@ export interface WorldOptions {
   roster?: string[];
   claude?: ClaudeOptions;
   /** Replace only the model request, for a deterministic test or another host. */
-  answer?: (actor: string, chain: string, turns: Turn[], signal: AbortSignal) => Promise<Turn>;
+  answer?: (
+    actor: string,
+    chain: string,
+    turns: Turn[],
+    signal: AbortSignal,
+    rendered: readonly string[],
+  ) => Promise<Turn>;
   operator?: (
     prompt: { id: string; shape: string; message: string },
     signal: AbortSignal,
   ) => Promise<unknown>;
 }
 
-export interface FileChange {
-  path: string;
-  before: string;
-  after: string;
-}
+export type { FileChange } from "./changes.js";
 
 interface Command {
   id: string;
@@ -60,7 +63,7 @@ export class World extends EventEmitter {
   readonly prompts = new Map<string, OperatorPrompt>();
   readonly facts: Fact[] = [];
   readonly streams = new Map<string, { chain: string; text: string; thinking: string }>();
-  readonly changes: FileChange[] = [];
+  readonly changes: FileChanges;
   readonly held = new Map<string, string>();
   private life?: Life;
   private readonly controller = new AbortController();
@@ -75,31 +78,37 @@ export class World extends EventEmitter {
   private release?: () => void;
   private readonly resumeGate: Promise<void>;
   private readonly deferredCommands = new Map<string, Command>();
+  private readonly feeds = new Map<string, (string | null)[]>();
   private readonly deadlines = new Map<string, number>();
   private readonly waits = new Set<string>();
 
   constructor(options: WorldOptions = {}) {
     super();
+    let legacyChanges: FileChange[] = [];
     if (options.record && existsSync(`${resolve(options.record)}.world.json`)) {
       const saved = JSON.parse(readFileSync(`${resolve(options.record)}.world.json`, "utf8")) as {
         options: WorldOptions;
         changes?: FileChange[];
         deadlines?: [string, number][];
         streams?: [string, { chain: string; text: string; thinking: string }][];
+        held?: [string, string][];
       };
       options = {
         ...saved.options,
         ...Object.fromEntries(Object.entries(options).filter(([, value]) => value !== undefined)),
       };
-      this.changes.push(...(saved.changes ?? []));
+      options.roster = [...new Set([...(saved.options.roster ?? []), ...(options.roster ?? [])])];
+      legacyChanges = saved.changes ?? [];
       for (const [id, deadline] of saved.deadlines ?? []) this.deadlines.set(id, deadline);
       for (const [id, stream] of saved.streams ?? []) this.streams.set(id, stream);
+      for (const [id, kind] of saved.held ?? []) this.held.set(id, kind);
     }
     this.options = options;
     this.directory = resolve(options.cwd ?? process.cwd());
     this.model = options.model ?? "claude-cli:sonnet";
     this.effort = options.effort ?? "low";
     let records: RecordFile | undefined;
+    let changes: FileChanges | undefined;
     try {
       if (options.models) this.models = options.models;
       else {
@@ -117,6 +126,8 @@ export class World extends EventEmitter {
       ];
       for (const name of this.roster) this.route(name);
       this.records = records = new RecordFile(options.record ? resolve(options.record) : undefined);
+      this.changes = changes = new FileChanges(this.records.path);
+      if (!this.changes.length) for (const change of legacyChanges) this.changes.append(change);
       this.holding = this.records.entries.length > 0;
       this.resumeGate = new Promise((resolve) => {
         this.release = resolve;
@@ -125,6 +136,7 @@ export class World extends EventEmitter {
       this.save();
     } catch (error) {
       records?.dispose();
+      changes?.dispose();
       this.cli?.dispose();
       throw error;
     }
@@ -155,7 +167,7 @@ export class World extends EventEmitter {
             chains.add(act[3]);
           }
         }
-        for (const chain of chains) this.life.pause(chain);
+        for (const chain of chains) this.pause(chain);
         if (!this.held.size) {
           this.holding = false;
           this.release?.();
@@ -166,6 +178,7 @@ export class World extends EventEmitter {
       if (this.adapter) this.adapter.stopped = true;
       this.life?.dispose();
       this.records.dispose();
+      this.changes.dispose();
       this.cli?.dispose();
       this.controller.abort();
       this.stopped = true;
@@ -178,11 +191,7 @@ export class World extends EventEmitter {
       case "Stand":
         return [
           [
-            ...this.roster.map((name) => [
-              name,
-              ["minimal", "low", "medium", "high", "xhigh", "max"],
-              this.route(name).contextWindow,
-            ]),
+            ...this.roster.map((name) => [name, efforts, this.route(name).contextWindow]),
             ["operator", [], 200000],
           ],
           this.directory,
@@ -212,13 +221,18 @@ export class World extends EventEmitter {
         }
         mkdirSync(dirname(path), { recursive: true });
         writeFileSync(path, String(args[2]));
-        this.changes.push({ path, before, after: String(args[2]) });
-        this.save();
+        this.changes.append({ path, before, after: String(args[2]) });
         this.emit("change");
         return { path, content: readFileSync(path, "utf8") };
       }
       case "Ask":
-        return this.ask(String(args[0]), String(args[1]), String(args[2]), args[3] as Turn[]);
+        return this.ask(
+          String(args[0]),
+          String(args[1]),
+          String(args[2]),
+          args[3] as Turn[],
+          args[4] as string[],
+        );
       case "Wait": {
         const id = String(args[1]);
         this.waits.add(id);
@@ -241,13 +255,18 @@ export class World extends EventEmitter {
         return null;
       }
       case "Feed": {
-        const child = this.commands.get(String(args[0]))?.child;
-        if (args[1] === null) child?.stdin.end();
-        else child?.stdin.write(String(args[1]));
+        const id = String(args[0]);
+        const child = this.commands.get(id)?.child;
+        if (!child)
+          this.feeds.set(id, [...(this.feeds.get(id) ?? []), args[1] === null ? null : String(args[1])]);
+        else if (args[1] === null) child.stdin.end();
+        else child.stdin.write(String(args[1]));
         return null;
       }
       case "Slay":
         this.commands.get(String(args[0]))?.stop();
+        this.deferredCommands.delete(String(args[0]));
+        this.feeds.delete(String(args[0]));
         return null;
       case "Prompt":
         return this.prompt(String(args[0]), String(args[1]), String(args[2]));
@@ -269,6 +288,7 @@ export class World extends EventEmitter {
         this.held.delete(id);
         this.streams.delete(id);
         this.deferredCommands.delete(id);
+        this.feeds.delete(id);
         this.asks.get(id)?.abort();
         this.asks.delete(id);
         const prompt = this.prompts.get(id);
@@ -286,7 +306,7 @@ export class World extends EventEmitter {
     this.emit("change");
   };
 
-  private async ask(id: string, chain: string, actor: string, turns: Turn[]): Promise<Turn> {
+  private async ask(id: string, chain: string, actor: string, turns: Turn[], texts: string[]): Promise<Turn> {
     await this.resumeGate;
     if (this.stopped) throw new Error("The World was disposed.");
     if (this.life?.outcome(id).done) throw new Error("The act is no longer pending.");
@@ -296,9 +316,9 @@ export class World extends EventEmitter {
     this.streams.set(id, { chain, text: "", thinking: "" });
     this.emit("change");
     try {
-      if (this.options.answer) return await this.options.answer(actor, chain, turns, signal);
+      if (this.options.answer) return await this.options.answer(actor, chain, turns, signal, texts);
       const model = this.route(actor);
-      const messages: Message[] = turns.map(([role, content, usage, blocks]) => {
+      const messages: Message[] = turns.map(([role, , usage, blocks], index) => {
         if (
           role === "assistant" &&
           blocks &&
@@ -307,10 +327,10 @@ export class World extends EventEmitter {
           blocks.role === "assistant"
         )
           return blocks as AssistantMessage;
-        if (role === "user") return { role, content: rendered(content), timestamp: 0 };
+        if (role === "user") return { role, content: texts[index] ?? "", timestamp: 0 };
         return {
           role,
-          content: [{ type: "text", text: rendered(content) }],
+          content: [{ type: "text", text: texts[index] ?? "" }],
           api: model.api,
           provider: model.provider,
           model: model.id,
@@ -381,7 +401,7 @@ export class World extends EventEmitter {
     if (this.stopped) throw new Error("The World was disposed.");
     if (this.life?.outcome(id).done) throw new Error("The prompt is no longer pending.");
     if (this.options.operator) return this.options.operator({ id, shape, message }, this.controller.signal);
-    if (!["None", "str", "int", "float", "bool", "list", "dict"].includes(shape))
+    if (!shapes.some((name) => name === shape))
       return Promise.reject(new Error(`The operator cannot answer ${shape}.`));
     return new Promise((resolve, reject) => {
       this.prompts.set(id, { id, shape, message, resolve, reject });
@@ -428,9 +448,9 @@ export class World extends EventEmitter {
       `${path}.tmp`,
       JSON.stringify({
         options: { cwd: this.directory, model: this.model, effort: this.effort, roster: this.roster },
-        changes: this.changes,
         deadlines: [...this.deadlines],
         streams: [...this.streams],
+        held: [...this.held],
       }),
       { mode: 0o600 },
     );
@@ -489,11 +509,15 @@ export class World extends EventEmitter {
   }
 
   private run(command: Command): void {
-    const child = spawn("/bin/sh", ["-c", command.merged ? `(${command.command}\n) 2>&1` : command.command], {
-      cwd: resolve(this.directory, command.here),
-      stdio: "pipe",
-      detached: process.platform !== "win32",
-    });
+    const child = spawn(
+      "/bin/sh",
+      ["-c", command.merged ? `exec 2>&1\n${command.command}` : command.command],
+      {
+        cwd: resolve(this.directory, command.here),
+        stdio: "pipe",
+        detached: process.platform !== "win32",
+      },
+    );
     let late = false;
     const stop = () => {
       try {
@@ -508,6 +532,11 @@ export class World extends EventEmitter {
     this.commands.set(command.id, { child, timeout, stop });
     if (!command.fed) child.stdin.end();
     child.stdin.on("error", () => {});
+    for (const text of this.feeds.get(command.id) ?? []) {
+      if (text === null) child.stdin.end();
+      else child.stdin.write(text);
+    }
+    this.feeds.delete(command.id);
     for (const name of ["stdout", "stderr"] as const) {
       child[name].setEncoding("utf8");
       child[name].on("data", (text: string) => this.send("out", command.id, [text, name]));
@@ -533,9 +562,12 @@ export class World extends EventEmitter {
       const chains = new Set<string>();
       for (const id of ids) {
         const act = this.life.get(id);
-        if (!["chain", "grant"].includes(act[0]) && !this.life.outcome(id).done) chains.add(act[3]);
+        if (!["chain", "grant"].includes(act[0]) && !this.life.outcome(id).done) {
+          chains.add(act[3]);
+          this.held.set(id, act[0]);
+        }
       }
-      for (const chain of chains) this.life.pause(chain);
+      for (const chain of chains) this.pause(chain);
     }
     this.stopped = true;
     this.save();
@@ -551,8 +583,16 @@ export class World extends EventEmitter {
     }
     this.commands.clear();
     this.cli?.dispose();
+    this.changes.dispose();
     this.records.dispose();
     this.removeAllListeners();
+  }
+
+  private pause(chain: string): void {
+    const last = this.records.entries
+      .map((entry) => entry[1])
+      .findLast((fact) => ["pause", "wake"].includes(fact[0]) && fact[1] === chain);
+    if (last?.[0] !== "pause") this.life?.pause(chain);
   }
 }
 

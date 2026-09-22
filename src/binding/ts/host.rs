@@ -61,7 +61,19 @@ impl Ears for Host {
       })
       .transpose()
     {
-      Ok(value) => self.reply(json!(["hears", name, value])),
+      Ok(value) => {
+        let rendered = fact
+          .filter(|fact| fact.kind() == "ask")
+          .map(|fact| {
+            let values = fact.0.as_ref().items().ok_or_else(|| Fault::refused("invalid ask"))?;
+            super::render::turns(*values.get(5).ok_or_else(|| Fault::refused("invalid ask"))?)
+          })
+          .transpose();
+        match rendered {
+          Ok(rendered) => self.reply(json!(["hears", name, value, rendered])),
+          Err(fault) => Reply::Raised(fault),
+        }
+      }
       Err(fault) => Reply::Raised(fault),
     }
   }

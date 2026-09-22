@@ -3,8 +3,10 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 import type { Fact, Turn, Usage } from "@furb/engine";
+import { shapes } from "@furb/engine";
+import type { FileChange } from "@furb/engine/world";
 import type { Engine, HostView } from "./bridge.ts";
-import type { ThemeName } from "./theme.ts";
+import { palettes, type ThemeName } from "./theme.ts";
 
 export type View = "conversation" | "program" | "activity" | "facts" | "transcript" | "changes";
 export interface ActRow {
@@ -24,11 +26,15 @@ export class Workspace extends EventEmitter {
   sessionName: string;
   acts: ActRow[] = [];
   turns: Turn[] = [];
+  rendered: string[] = [];
+  changes: FileChange[] = [];
+  changePage = 0;
   program: Record<string, string> = {};
   query = "";
   notice = "Ready when you are.";
   error = "";
   editing?: string;
+  ladder?: string;
   theme: ThemeName = "forest";
   mode: "prompt" | "python" = "prompt";
   shape = "str";
@@ -37,6 +43,12 @@ export class Workspace extends EventEmitter {
   panes = { sidebar: 25, inspector: 31 };
   collapsed: string[] = [];
   findings: string[] = [];
+  rejectedWord = "";
+  rejectedAct = "";
+  repls: Record<string, string[]> = {};
+  private savedCost = 0;
+  histories: Record<string, string[]> = {};
+  started: Record<string, number> = {};
   directory = "";
   private refreshTask?: Promise<void>;
   private dirty = false;
@@ -53,7 +65,10 @@ export class Workspace extends EventEmitter {
     this.sessionName = basename(world.directory);
     const path = world.records.path;
     if (path && existsSync(`${path}.ui.json`)) {
-      const saved = JSON.parse(readFileSync(`${path}.ui.json`, "utf8")) as Partial<Workspace>;
+      const saved = JSON.parse(readFileSync(`${path}.ui.json`, "utf8")) as Partial<Workspace> & {
+        cost?: number;
+      };
+      this.savedCost = saved.cost ?? 0;
       this.selected = saved.selected ?? this.selected;
       this.actor = saved.actor ?? this.actor;
       this.demo = saved.demo ?? this.demo;
@@ -63,6 +78,10 @@ export class Workspace extends EventEmitter {
       this.mode = saved.mode ?? this.mode;
       this.shape = saved.shape ?? this.shape;
       this.editing = saved.editing;
+      this.histories = saved.histories ?? {};
+      this.started = saved.started ?? {};
+      this.repls = saved.repls ?? {};
+      this.ladder = saved.ladder;
       this.drafts = saved.drafts ?? {};
       this.scrolls = saved.scrolls ?? {};
       this.panes = saved.panes ?? this.panes;
@@ -112,25 +131,10 @@ export class Workspace extends EventEmitter {
     this.refreshTask = (async () => {
       do {
         this.dirty = false;
-        const ids = (await this.life.held("acts", [], "keys")) as string[];
-        const rows = await Promise.all(
-          ids.map(async (id) => {
-            const [fact, outcome] = await Promise.all([this.life.get(id), this.life.outcome(id)]);
-            const value = !outcome.done && fact[0] === "bash" ? await this.life.peek(id) : outcome.value;
-            return {
-              id,
-              kind: fact[0],
-              by: fact[2],
-              on: fact[0] === "chain" ? id : fact[3],
-              words: fact.slice(4),
-              done: outcome.done,
-              value,
-            };
-          }),
-        );
-        this.acts = rows;
-        if (!rows.some((act) => act.id === this.selected)) this.selected = this.life.root;
-        this.turns = await this.life.turns(this.selected);
+        Object.assign(this, await this.world.snapshot(this.selected));
+        if (this.view === "changes") this.changes = await this.world.readChanges(this.changePage * 20, 20);
+        const rows = this.acts;
+        for (const act of rows) if (!act.done) this.started[act.id] ??= Date.now();
         const lastWord = rows
           .filter((act) => act.on === this.selected && act.kind === "rung" && act.by === "operator")
           .at(-1);
@@ -150,13 +154,8 @@ export class Workspace extends EventEmitter {
                 ? refused[2].map(String)
                 : []
             : [];
-        const [, program] = (await this.life.call("ask", ["program", this.selected], {})) as [
-          unknown,
-          Record<string, string>,
-        ];
-        this.program = program ?? {};
-        this.actor = (await this.life.held("modules", [this.selected, "actor"], "at")) as string;
-        this.directory = await this.life.cwd(this.selected);
+        this.rejectedWord = this.findings.length ? String(lastWord?.words[0] ?? "") : "";
+        this.rejectedAct = this.findings.length ? (lastWord?.id ?? "") : "";
         this.emit("change");
       } while (this.dirty && !this.closed);
     })().finally(() => {
@@ -198,6 +197,10 @@ export class Workspace extends EventEmitter {
       : String(this.chains.find((chain) => chain.id === id)?.words[0] || "Chain");
   }
   async select(id: string): Promise<void> {
+    if (id !== this.selected) {
+      this.ladder = undefined;
+      this.editing = undefined;
+    }
     this.selected = id;
     this.query = "";
     await this.refresh();
@@ -206,6 +209,7 @@ export class Workspace extends EventEmitter {
     this.view = view;
     this.query = "";
     this.emit("change");
+    if (view === "changes") void this.refresh().catch(this.fail);
   }
 
   private track(id: string): void {
@@ -235,12 +239,9 @@ export class Workspace extends EventEmitter {
       const pending = this.operatorPrompt;
       if (pending) await this.world.answer(pending.id, input);
       else {
-        const active = this.activity.some((act) => act.kind === "prompt" && !act.done);
         const held = this.world.held.size > 0;
-        if (active || held) await this.life.pause(this.selected);
         const id = await this.life.prompt(this.shape, input, { on: this.selected, to: this.actor });
         if (held) this.emit("resume");
-        else if (active) await this.life.wake(this.selected);
         this.track(id);
         this.notice = "The model is working.";
       }
@@ -279,6 +280,9 @@ export class Workspace extends EventEmitter {
       case "fork":
         await this.select(await this.life.chain(argument || `${this.label} fork`, this.selected));
         break;
+      case "rewind":
+        this.emit("rewind");
+        break;
       case "grant": {
         const amount = Number(argument);
         if (!argument || !Number.isFinite(amount) || amount < 0)
@@ -307,6 +311,10 @@ export class Workspace extends EventEmitter {
       case "run": {
         this.findings = [];
         const id = await this.life.rung(argument, { on: this.selected });
+        if (this.ladder) {
+          this.repls[this.ladder] ??= [];
+          this.repls[this.ladder]?.push(id);
+        }
         this.view = "program";
         if ((await this.life.outcome(id)).done) {
           try {
@@ -319,16 +327,14 @@ export class Workspace extends EventEmitter {
         break;
       }
       case "shape":
-        if (!["None", "str", "int", "float", "bool", "list", "dict"].includes(argument))
-          throw new Error("Choose None, str, int, float, bool, list, or dict.");
+        if (!shapes.some((name) => name === argument)) throw new Error(`Choose ${shapes.join(", ")}.`);
         this.shape = argument;
         break;
       case "inspect":
         this.emit("inspect", argument);
         break;
       case "theme":
-        if (!["forest", "paper", "midnight"].includes(argument))
-          throw new Error("Choose forest, paper, or midnight.");
+        if (!(argument in palettes)) throw new Error(`Choose ${Object.keys(palettes).join(", ")}.`);
         this.theme = argument as ThemeName;
         break;
       case "bash":
@@ -394,14 +400,18 @@ export class Workspace extends EventEmitter {
     const record = this.world.records.path;
     if (!record) return;
     const path = `${record}.ui.json`;
+    this.savedCost = Math.max(
+      this.savedCost,
+      this.world.facts
+        .filter((fact) => fact[0] === "answer")
+        .reduce((sum, fact) => sum + ((fact[3] as Turn)[2]?.[4] ?? 0), 0),
+    );
     writeFileSync(
       `${path}.tmp`,
       JSON.stringify({
         sessionName: this.sessionName,
         demo: this.demo,
-        cost: this.world.facts
-          .filter((fact) => fact[0] === "answer")
-          .reduce((sum, fact) => sum + ((fact[3] as Turn)[2]?.[4] ?? 0), 0),
+        cost: this.savedCost,
         selected: this.selected,
         actor: this.actor,
         view: this.view,
@@ -409,6 +419,10 @@ export class Workspace extends EventEmitter {
         mode: this.mode,
         shape: this.shape,
         editing: this.editing,
+        histories: this.histories,
+        started: this.started,
+        ladder: this.ladder,
+        repls: this.repls,
         drafts: this.drafts,
         scrolls: this.scrolls,
         panes: this.panes,

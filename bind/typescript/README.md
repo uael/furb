@@ -50,7 +50,9 @@ World and stops when that World closes. No CLI process starts until a model is a
 Pass `answer` to replace only model requests, `operator` to supply operator answers, or `models` to use your
 own pi-ai collection. With no `operator`, questions stand in `world.prompts`; call `world.answer(id, text)`
 to parse and validate an answer. `world` emits `change`, `facts`, and `fault` events. A `Keep` writes and syncs
-one complete record entry before it returns.
+one complete record entry before it returns. The `answer` callback also receives the exact rendered turns
+as its fifth argument. `life.rendered(chain)` gives that text from the native values, so Python floats,
+tuples, and instances retain their representations before they cross to JavaScript.
 
 Pass `world` to `boot` to replace the whole World. It receives these operations:
 
@@ -86,5 +88,6 @@ across a later open, perform its `write` in a `rung`.
 Only one process owns a record. A torn final line is removed before an append; a damaged complete line fails.
 Closing a durable World pauses its chains. A later open holds unfinished work before any model or command
 runs, and `world.resume()` explicitly releases it. Interrupted commands keep their recorded output and end
-with a refusal on resume; they are never run twice without a new act. Wait deadlines and file diffs live in
-the record's `.world.json` companion. Keep that file with the JSONL record.
+with a refusal on resume; they are never run twice without a new act. Wait deadlines and partial streams
+live in the record's `.world.json` companion. File snapshots append to `.changes.jsonl`; `world.changes.read`
+loads a page of them. Keep both companions with the JSONL record.

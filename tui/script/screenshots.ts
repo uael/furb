@@ -1,11 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { Resvg } from "@resvg/resvg-js";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoWorkspace, seedDemo } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
+import { sessionChoices } from "../src/sessions.ts";
 import { Workspace } from "../src/workspace.ts";
 
 const output = resolve("docs/screenshots");
@@ -159,14 +160,24 @@ try {
   app = new App(test.renderer, workspace, { quit() {} });
   await capture("20-paused-resume");
   app.closeOverlay();
-  app.openPalette("Sessions", [
-    {
-      label: workspace.sessionName,
-      detail: `Paused  ·  ${workspace.world.held.size} unfinished acts  ·  ${record}`,
-      run() {},
-    },
-  ]);
+  app.openPalette(
+    "Sessions",
+    await sessionChoices(
+      dirname(record),
+      async () => {},
+      async () => {},
+    ),
+  );
   await capture("21-sessions");
+  app.closeOverlay();
+  app.rewind();
+  await capture("24-rewind-transcript");
+  app.closeOverlay();
+  app.ladders();
+  test.mockInput.pressEnter();
+  await test.flush();
+  app.composer.setText("result = len(notes.lines)\nprint(result)");
+  await capture("25-prompt-repl");
 } finally {
   app.dispose();
   test.renderer.destroy();

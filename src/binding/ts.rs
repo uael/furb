@@ -1,6 +1,7 @@
 //! Native TypeScript bindings. N-API generates the package loader and declarations from this surface.
 //! Queries and controls are synchronous. Acts carry their name and are awaited through a native Promise.
 mod host;
+mod render;
 mod wire;
 
 use napi::{
@@ -299,7 +300,7 @@ impl JsLife {
   }
 
   #[napi(
-    ts_args_type = "label: string, source?: string | null, filter?: unknown",
+    ts_args_type = "label: string, source?: string | null, filter?: unknown, on?: string | null",
     ts_return_type = "Act & PromiseLike<never>"
   )]
   pub fn chain(
@@ -307,16 +308,14 @@ impl JsLife {
     label: String,
     source: Option<String>,
     filter: Option<Value>,
+    chain: Option<String>,
   ) -> napi::Result<JsAct> {
     self
       .held
       .call(move |life| {
-        invoke(
-          life,
-          "chain",
-          vec![json!(label), json!(source.unwrap_or_default())],
-          json!({"filter": filter}),
-        )
+        let mut named = on(life, chain);
+        named["filter"] = json!(filter);
+        invoke(life, "chain", vec![json!(label), json!(source.unwrap_or_default())], named)
       })
       .and_then(string)
       .map(|id| JsAct { id, held: self.held.clone() })
@@ -347,7 +346,9 @@ impl JsLife {
           on: None,
         });
         let mut named = on(life, options.on);
-        named["fed"] = json!(options.fed.unwrap_or(false));
+        if let Some(fed) = options.fed {
+          named["fed"] = json!(fed);
+        }
         if let Some(timeout) = options.timeout {
           named["timeout"] = json!(timeout);
         }
@@ -428,6 +429,15 @@ impl JsLife {
     self.held.call(move |life| {
       let named = on(life, chain);
       invoke(life, "turns", vec![], named)
+    })
+  }
+
+  /// Exact model text, rendered before Python values cross to JavaScript.
+  #[napi]
+  pub fn rendered(&self, chain: Option<String>) -> napi::Result<Vec<String>> {
+    self.held.call(move |life| {
+      let chain = chain.unwrap_or_else(|| life.root().to_owned());
+      render::turns(life.turns(&chain)?.as_ref())
     })
   }
 
@@ -597,8 +607,7 @@ pub fn engine_source() -> &'static str {
 
 #[napi(ts_return_type = "unknown")]
 pub fn decode_record(line: String) -> napi::Result<Value> {
-  let value = serde_json::from_str(&line)
+  let value: &serde_json::value::RawValue = serde_json::from_str(&line)
     .map_err(|error| napi::Error::new(napi::Status::InvalidArg, error.to_string()))?;
-  wire::check_numbers(&line).map_err(error)?;
   wire::decoded(value, 0).map_err(error)
 }

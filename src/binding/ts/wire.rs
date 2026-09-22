@@ -99,72 +99,48 @@ fn fault_value(fault: &Fault, depth: usize, durable: bool) -> Result<Value, Faul
   Ok(json!({"is": fault.name, "args": args}))
 }
 
-/// Preserve Python JSON floats before JavaScript can erase their decimal point.
-pub fn decoded(value: Value, depth: usize) -> Result<Value, Fault> {
+/// Read numbers from serde's raw values before JavaScript can round them or erase a decimal point.
+pub fn decoded(value: &serde_json::value::RawValue, depth: usize) -> Result<Value, Fault> {
   if depth > 64 {
     return Err(Fault::refused("the record exceeds 64 levels"));
   }
-  Ok(match value {
-    Value::Number(number) => {
-      if number.to_string().contains(['.', 'e', 'E']) {
-        let value = number
-          .as_f64()
-          .filter(|value| value.is_finite())
-          .ok_or_else(|| Fault::refused("invalid float"))?;
-        if value.fract() == 0.0 {
-          json!({"is": "float", "args": [value.to_string()]})
-        } else {
-          json!(value)
-        }
-      } else {
-        let value = number
-          .as_i64()
-          .filter(|value| value.unsigned_abs() <= 9_007_199_254_740_991)
-          .ok_or_else(|| {
-          Fault::refused("the number exceeds the safe integer range of JavaScript")
-        })?;
-        json!(value)
-      }
-    }
-    Value::Array(items) => Value::Array(
-      items.into_iter().map(|item| decoded(item, depth + 1)).collect::<Result<_, _>>()?,
+  let raw = value.get();
+  let invalid = |error: serde_json::Error| Fault::refused(error.to_string());
+  Ok(match raw.as_bytes()[0] {
+    b'[' => Value::Array(
+      serde_json::from_str::<Vec<&serde_json::value::RawValue>>(raw)
+        .map_err(invalid)?
+        .into_iter()
+        .map(|item| decoded(item, depth + 1))
+        .collect::<Result<_, _>>()?,
     ),
-    Value::Object(items) => Value::Object(
-      items
+    b'{' => Value::Object(
+      serde_json::from_str::<indexmap::IndexMap<String, &serde_json::value::RawValue>>(raw)
+        .map_err(invalid)?
         .into_iter()
         .map(|(key, item)| Ok((key, decoded(item, depth + 1)?)))
         .collect::<Result<_, Fault>>()?,
     ),
-    value => value,
-  })
-}
-
-/// JSON has already been parsed. Check integer lexemes before a large one can cross as a rounded float.
-pub fn check_numbers(line: &str) -> Result<(), Fault> {
-  let bytes = line.as_bytes();
-  let mut at = 0;
-  while at < bytes.len() {
-    if bytes[at] == b'"' {
-      at += 1;
-      while at < bytes.len() && bytes[at] != b'"' {
-        at += if bytes[at] == b'\\' { 2 } else { 1 };
-      }
-      at += 1;
-    } else if bytes[at] == b'-' || bytes[at].is_ascii_digit() {
-      let start = at;
-      while at < bytes.len() && matches!(bytes[at], b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-')
-      {
-        at += 1;
-      }
-      let number = &line[start..at];
-      if !number.contains(['.', 'e', 'E'])
-        && !number.parse::<i64>().is_ok_and(|value| value.unsigned_abs() <= 9_007_199_254_740_991)
-      {
-        return Err(Fault::refused("the number exceeds the safe integer range of JavaScript"));
-      }
-    } else {
-      at += 1;
+    b'-' | b'0'..=b'9' if !raw.contains(['.', 'e', 'E']) => {
+      let number = raw
+        .parse::<i64>()
+        .ok()
+        .filter(|number| number.unsigned_abs() <= 9_007_199_254_740_991)
+        .ok_or_else(|| Fault::refused("the number exceeds the safe integer range of JavaScript"))?;
+      json!(number)
     }
-  }
-  Ok(())
+    b'-' | b'0'..=b'9' => {
+      let number = raw
+        .parse::<f64>()
+        .ok()
+        .filter(|number| number.is_finite())
+        .ok_or_else(|| Fault::refused("invalid float"))?;
+      if number.fract() == 0.0 {
+        json!({"is": "float", "args": [number.to_string()]})
+      } else {
+        json!(number)
+      }
+    }
+    _ => serde_json::from_str(raw).map_err(invalid)?,
+  })
 }

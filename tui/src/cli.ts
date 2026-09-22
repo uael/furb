@@ -1,13 +1,15 @@
 #!/usr/bin/env bun
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, stat } from "node:fs/promises";
-import { basename, dirname, resolve } from "node:path";
+import { mkdir, readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import type { WorldOptions } from "@furb/engine";
+import { efforts, type WorldOptions } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
 import { App } from "./app.ts";
 import { openEngine } from "./bridge.ts";
 import { demoWorkspace } from "./demo.ts";
+import { sessionChoices } from "./sessions.ts";
+import { palettes } from "./theme.ts";
 import { Workspace } from "./workspace.ts";
 
 const { values } = parseArgs({
@@ -24,7 +26,7 @@ const { values } = parseArgs({
   },
 });
 if (values.help) {
-  console.log(`furb-tui [--demo] [--cwd path] [--model provider:model] [--effort low|medium|high|xhigh]
+  console.log(`furb-tui [--demo] [--cwd path] [--model provider:model] [--effort ${efforts.join("|")}]
          [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...]
 
 Enter sends a prompt. Shift+Enter adds a line. Ctrl+P opens actions. F1 shows all keys.
@@ -32,8 +34,7 @@ The default model is claude-cli:sonnet, through your Claude CLI subscription.
 Other providers use pi-ai and its environment credentials.`);
   process.exit(0);
 }
-if (values.effort && !["minimal", "low", "medium", "high", "xhigh"].includes(values.effort))
-  throw new Error("Invalid effort.");
+if (values.effort && !efforts.some((effort) => effort === values.effort)) throw new Error("Invalid effort.");
 if (values.resume && !existsSync(resolve(values.resume))) throw new Error(`No session at ${values.resume}.`);
 const directory = resolve(values.cwd ?? process.cwd());
 const sessionsDirectory = resolve(directory, ".furb/sessions");
@@ -65,7 +66,7 @@ workspace = values.demo
     );
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
-  backgroundColor: "#101817",
+  backgroundColor: palettes[workspace.theme].background,
   targetFps: 30,
   useMouse: true,
 });
@@ -80,36 +81,18 @@ const quit = async () => {
 };
 const sessions = async () => {
   const location = workspace.world.records.path ? dirname(workspace.world.records.path) : sessionsDirectory;
-  const paths = (await readdir(location))
-    .filter((file) => file.endsWith(".jsonl"))
-    .sort()
-    .reverse();
-  const saved = await Promise.all(
-    paths.map(async (file) => {
-      const path = resolve(location, file);
-      const info = await stat(path);
-      const metadata = await readFile(`${path}.ui.json`, "utf8")
-        .then((text) => JSON.parse(text) as { sessionName?: string; cost?: number })
-        .catch(() => ({}) as { sessionName?: string; cost?: number });
-      return {
-        label: metadata.sessionName ?? basename(file, ".jsonl"),
-        detail: `${info.mtime.toLocaleString()}  ·  $${(metadata.cost ?? 0).toFixed(4)}  ·  ${(info.size / 1024).toFixed(1)} KiB`,
-        run: async () => {
-          if (path === workspace.world.records.path) return;
-          // Open the next record first, so a bad record leaves the current workspace available.
-          const next = await open(path);
-          app.dispose();
-          await workspace.dispose();
-          workspace = next;
-          app = new App(renderer, workspace, { quit, sessions, newSession });
-        },
-      };
-    }),
+  return sessionChoices(
+    location,
+    async (path) => {
+      if (path === workspace.world.records.path) return;
+      const next = await open(path);
+      app.dispose();
+      await workspace.dispose();
+      workspace = next;
+      app = new App(renderer, workspace, { quit, sessions, newSession });
+    },
+    newSession,
   );
-  return [
-    { label: "+ New session", detail: "Start a fresh life in this project", run: newSession },
-    ...saved,
-  ];
 };
 const newSession = async () => {
   const next = values.demo

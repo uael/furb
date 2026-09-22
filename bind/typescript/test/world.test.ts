@@ -84,6 +84,137 @@ test("record ownership, a torn last line, and a damaged complete line are distin
   }
 });
 
+test("one failed model ask retries, while two consecutive failures pause with a reason", async () => {
+  let calls = 0;
+  const session = boot({
+    answer: async () => {
+      if (++calls === 1) throw new Error("temporary outage");
+      return ["assistant", ['close("recovered")'], null, null];
+    },
+  });
+  try {
+    expect(await session.life.prompt<string>("str", "try")).toBe("recovered");
+    expect(session.world?.facts.some((fact) => fact[0] === "pause")).toBe(false);
+    expect(calls).toBe(2);
+  } finally {
+    await session.dispose();
+  }
+  calls = 0;
+  const broken = boot({
+    answer: async () => {
+      calls++;
+      throw new Error("unavailable");
+    },
+  });
+  try {
+    const prompt = broken.life.prompt("str", "try");
+    await Bun.sleep(50);
+    expect(calls).toBe(2);
+    expect(broken.life.outcome(prompt.id).done).toBe(false);
+    expect(broken.world?.facts.filter((fact) => fact[0] === "pause")).toHaveLength(1);
+    expect(broken.life.rendered().join("\n")).toContain("answered nothing: unavailable");
+  } finally {
+    await broken.dispose();
+  }
+});
+
+test("reopening unfinished work does not add another pause to the record", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-pause-"));
+  const record = join(cwd, "life.jsonl");
+  try {
+    const first = new World({ cwd, record });
+    first.open().wait(60);
+    await Bun.sleep(5);
+    await first.dispose();
+    const original = await readFile(record, "utf8");
+    for (let index = 0; index < 2; index++) {
+      const later = new World({ record });
+      later.open();
+      await later.dispose();
+    }
+    expect(await readFile(record, "utf8")).toBe(original);
+  } finally {
+    await rm(cwd, { recursive: true });
+  }
+});
+
+test("native transcript rendering retains Python values and chain accepts its parent", async () => {
+  const rendered: string[] = [];
+  const session = boot({
+    answer: async (_actor, _chain, _turns, _signal, texts) => {
+      rendered.push(...texts);
+      return ["assistant", ['close("ok")'], null, null];
+    },
+  });
+  try {
+    const child = session.life.chain("child", null, null, session.life.root);
+    expect(session.life.get(child.id)[3]).toBe(session.life.root);
+    await session.life.rung(
+      `tell("values", ("f", 1.0), ("t", (1, 2)), body=[['a', 'b']])\nresult = await bash("printf hi")\ntell("exit", body=result)`,
+      { on: child.id },
+    );
+    const text = session.life.rendered(child.id).join("\n");
+    expect(text).toContain('f="1.0"');
+    expect(text).toContain('t="(1, 2)"');
+    expect(text).toContain("['a', 'b']");
+    expect(text).toContain("Exit(code=0, stdout=Text(");
+    await session.life.prompt<string>("str", "finish", { on: child.id });
+    expect(rendered.join("\n")).toContain('f="1.0"');
+    expect(rendered.join("\n")).toContain("Exit(code=0, stdout=Text(");
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("input sent before a held command starts reaches its process after resume", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-fed-"));
+  const record = join(cwd, "life.jsonl");
+  const first = new World({ cwd, record });
+  first.open().wait(60);
+  await Bun.sleep(5);
+  await first.dispose();
+  const second = new World({ record });
+  try {
+    const life = second.open();
+    const command = life.bash("cat", { fed: true });
+    life.wake(life.root);
+    life.write({ path: `${command.id}/stdin`, content: "before start\n" });
+    life.write({ path: `${command.id}/stdin`, content: "" });
+    await second.resume();
+    const result = await command;
+    expect(result.stdout.content).toBe("before start\n");
+  } finally {
+    await second.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
+test("file changes append once and reopen in pages without growing the World metadata", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-changes-test-"));
+  const record = join(cwd, "life.jsonl");
+  const first = new World({ cwd, record });
+  const life = first.open();
+  const metadata = await readFile(`${record}.world.json`, "utf8");
+  for (let number = 0; number < 25; number++) life.write({ path: "file", content: String(number) });
+  expect(await readFile(`${record}.world.json`, "utf8")).toBe(metadata);
+  await first.dispose();
+  const second = new World({ record });
+  try {
+    second.open();
+    expect(second.changes.length).toBe(25);
+    expect(second.changes.read(20, 20).map((change) => [change.before, change.after])).toEqual([
+      ["19", "20"],
+      ["20", "21"],
+      ["21", "22"],
+      ["22", "23"],
+      ["23", "24"],
+    ]);
+  } finally {
+    await second.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
 test("record numbers refuse precision loss and map keys keep their identity", () => {
   expect(decodeRecord('{"$serde_json::private::Number":"10"}')).toEqual({
     "$serde_json::private::Number": "10",

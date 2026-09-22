@@ -1,4 +1,4 @@
-import { SyntaxStyle } from "@opentui/core";
+import { RGBA, SyntaxStyle } from "@opentui/core";
 
 const forest = {
   background: "#101817",
@@ -14,6 +14,7 @@ const forest = {
   yellow: "#e5c28a",
   red: "#eea79a",
   blue: "#a5bdd4",
+  removed: "#392924",
 };
 export const palettes = {
   forest,
@@ -31,6 +32,7 @@ export const palettes = {
     yellow: "#896123",
     red: "#ac4238",
     blue: "#325f92",
+    removed: "#f4d9d1",
   },
   midnight: {
     background: "#141722",
@@ -46,12 +48,17 @@ export const palettes = {
     yellow: "#e6c38b",
     red: "#f09eac",
     blue: "#99bfff",
+    removed: "#392934",
   },
 };
 export type ThemeName = keyof typeof palettes;
-export const theme = { ...forest };
+// Each role has its own color object, even when two roles have the same RGB value.
+export const theme = Object.fromEntries(
+  Object.entries(forest).map(([role, hex]) => [role, RGBA.fromHex(hex)]),
+) as Record<keyof typeof forest, RGBA>;
 export function setTheme(name: ThemeName): void {
-  Object.assign(theme, palettes[name]);
+  for (const role of Object.keys(theme) as (keyof typeof theme)[])
+    theme[role] = RGBA.fromHex(palettes[name][role]);
 }
 export function syntax(): SyntaxStyle {
   return SyntaxStyle.fromStyles({
@@ -64,6 +71,8 @@ export function syntax(): SyntaxStyle {
     type: { fg: theme.blue },
     operator: { fg: theme.muted },
     punctuation: { fg: theme.muted },
+    diagnostic: { fg: theme.red, bg: theme.removed, underline: true },
+    matching: { fg: theme.accent, bg: theme.selected, bold: true },
     "markup.heading": { fg: theme.accent, bold: true },
     "markup.strong": { fg: theme.text, bold: true },
     "markup.list": { fg: theme.teal },

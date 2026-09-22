@@ -1,6 +1,17 @@
 import { EventEmitter } from "node:events";
 import type { Act, Fact, Life, World, WorldOptions } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
+import type { ActRow } from "./workspace.ts";
+
+export interface Snapshot {
+  acts: ActRow[];
+  selected: string;
+  turns: ReturnType<Life["turns"]>;
+  rendered: string[];
+  program: Record<string, string>;
+  actor: string;
+  directory: string;
+}
 
 type Returned<T> = T extends Act ? string : Awaited<T>;
 /** Async calls are a choice of the TUI. The library's methods remain synchronous. */
@@ -19,7 +30,7 @@ export interface WorldState {
   prompts: { id: string; shape: string; message: string }[];
   streams: [string, { chain: string; text: string; thinking: string }][];
   held: [string, string][];
-  changes: FileChange[];
+  changes: string[];
   models: ReturnType<World["route"]>[];
 }
 
@@ -33,7 +44,7 @@ export class HostView extends EventEmitter {
   prompts = new Map<string, { id: string; shape: string; message: string }>();
   streams = new Map<string, { chain: string; text: string; thinking: string }>();
   held = new Map<string, string>();
-  changes: FileChange[] = [];
+  changes: string[] = [];
   private models: ReturnType<World["route"]>[] = [];
   constructor(private request: (target: string, method: string, args: unknown[]) => Promise<unknown>) {
     super();
@@ -68,6 +79,12 @@ export class HostView extends EventEmitter {
   }
   source(): Promise<string> {
     return this.request("library", "source", []) as Promise<string>;
+  }
+  snapshot(chain: string): Promise<Snapshot> {
+    return this.request("library", "snapshot", [chain]) as Promise<Snapshot>;
+  }
+  readChanges(start: number, count: number): Promise<FileChange[]> {
+    return this.request("library", "changes", [start, count]) as Promise<FileChange[]>;
   }
   async dispose(): Promise<void> {
     await this.request("world", "dispose", []);

@@ -25,6 +25,7 @@ export interface Call {
   kwargs?: Record<string, unknown>;
 }
 export type Ear = Generator<Saying | Call | null | undefined, void, unknown>;
+const transcripts = new WeakMap<Fact, string[]>();
 const fault = (error: unknown) =>
   error && typeof error === "object" && "is" in error && "args" in error
     ? error
@@ -59,6 +60,8 @@ export class Ears {
       }
       const ear = this.ears.get(String(name));
       if (!ear) throw new Error(`Unknown ear ${name}.`);
+      if (kind === "hears" && Array.isArray(value) && Array.isArray(kwargs))
+        transcripts.set(value as Fact, kwargs as string[]);
       const answer = value as [string, unknown];
       const next =
         kind === "answered"
@@ -163,7 +166,7 @@ export class WorldAdapter {
       } else if (kind === "keep") synchronous(this.handle({ kind: "Keep", args: [words[0]] }));
       else if (kind === "ask") {
         this.later(
-          { kind: "Ask", args: [id, ...words] },
+          { kind: "Ask", args: [id, ...words, transcripts.get(fact)] },
           (value) => {
             if (Array.isArray(value) && Array.isArray(value[2]) && typeof value[2][4] === "number") {
               const reply = [...value];
@@ -175,8 +178,17 @@ export class WorldAdapter {
             if (!this.life?.outcome(id).done) this.life?.send("answer", id, [value], "world");
           },
           (error) => {
-            this.life?.pause(String(words[0]));
-            this.life?.close(fault(error), id);
+            const actor = String(words[1]);
+            const mute = `${actor} answered nothing`;
+            const turns = words[2] as import("./types.js").Turn[];
+            const repeated = turns
+              .at(-1)?.[1]
+              .some((tag) => typeof tag !== "string" && String(tag[2]).includes(mute));
+            if (repeated) this.life?.pause(String(words[0]));
+            this.life?.close(
+              { is: "Refused", args: [`${mute}: ${error instanceof Error ? error.message : String(error)}`] },
+              id,
+            );
           },
         );
       } else if (kind === "start") {

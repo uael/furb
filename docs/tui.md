@@ -141,3 +141,16 @@ Read stdout while the command is still running.
 Keep using the workspace while a model request is in flight.
 
 ![Model progress](screenshots/23-model-progress.png)
+
+## Rewind transcript
+
+Choose an act by lineage. The engine's filter selects what the new chain reads; its module and files keep
+their current state.
+
+![Rewind transcript](screenshots/24-rewind-transcript.png)
+
+## Prompt REPL
+
+Open a prompt's program with its own input draft. Run operator Python or edit the prompt's door.
+
+![Prompt REPL](screenshots/25-prompt-repl.png)

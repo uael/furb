@@ -160,12 +160,15 @@ class Session {
   private cost = 0;
   private resumed = false;
   private streamingBase: number | null = null;
+  private again = false;
+  private heartbeat?: () => void;
   constructor(
     readonly model: Model<Api>,
     readonly system: string,
     readonly effort: string | undefined,
     readonly bin: string,
     private parent?: string,
+    private readonly stallMs = 900000,
   ) {}
 
   async run(
@@ -179,15 +182,18 @@ class Session {
     const prefix = (held: string[]) =>
       held.length <= incoming.length && held.every((value, index) => value === incoming[index]);
     let start = prefix(this.chain) ? this.chain.length : prefix(this.requested) ? this.requested.length : -1;
-    // A changed transcript or an exact duplicate gets a fresh conversation, never an empty delta.
-    if (start < 0 || (start > 0 && start === incoming.length)) {
+    if (start < 0 || (start > 0 && start === incoming.length && this.again)) {
       this.stop();
       this.id = randomUUID();
       this.resumed = false;
       this.parent = undefined;
       this.chain = [];
       this.requested = [];
+      this.again = false;
       start = 0;
+    } else if (start > 0 && start === incoming.length) {
+      this.again = true;
+      start = incoming.length - 1;
     }
     const message: AssistantMessage = {
       role: "assistant",
@@ -201,10 +207,20 @@ class Session {
     };
     this.streamingBase = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    let completed = false;
+    this.heartbeat = () => {
+      clearTimeout(watchdog);
+      watchdog = setTimeout(
+        () => this.stop(new Error(`Claude made no progress for ${this.stallMs / 1000}s.`)),
+        this.stallMs,
+      );
+    };
     const abort = () => this.stop(new Error("The model request was cancelled."));
     try {
       await new Promise<void>((resolve, reject) => {
         this.flight = { stream, message, resolve, reject };
+        this.heartbeat?.();
         stream.push({ type: "start", partial: message });
         options.signal?.addEventListener("abort", abort, { once: true });
         if (options.timeoutMs)
@@ -218,12 +234,16 @@ class Session {
           this.stop(error instanceof Error ? error : new Error(String(error)));
         }
       });
-      this.requested = incoming;
-      this.chain = [...incoming, canonical(message)];
+      completed = true;
       stream.push({ type: "done", reason: "stop", message });
       stream.end();
     } finally {
       if (timer) clearTimeout(timer);
+      clearTimeout(watchdog);
+      this.heartbeat = undefined;
+      this.requested = incoming;
+      this.chain = completed ? [...incoming, canonical(message)] : incoming;
+      if (completed) this.again = false;
       options.signal?.removeEventListener("abort", abort);
       this.flight = undefined;
       this.used = Date.now();
@@ -302,6 +322,7 @@ class Session {
   private event(event: CliEvent): void {
     const flight = this.flight;
     if (!flight) return;
+    if (["stream_event", "assistant", "result"].includes(event.type ?? "")) this.heartbeat?.();
     if (event.type === "stream_event" && event.event) {
       const update = event.event;
       if (update.type === "message_start") this.streamingBase = flight.message.content.length;
@@ -441,6 +462,7 @@ export interface ClaudeOptions {
   maxWarm?: number;
   maxSessions?: number;
   idleMs?: number;
+  stallMs?: number;
 }
 export function claudeProvider(options: ClaudeOptions = {}): { provider: Provider; dispose(): void } {
   const sessions = new Map<string, Session>();
@@ -487,7 +509,14 @@ export function claudeProvider(options: ClaudeOptions = {}): { provider: Provide
                 incoming.slice(held.chain.length).every((message) => message.role !== "assistant"),
             )
             .sort((a, b) => b.chain.length - a.chain.length)[0];
-          session = new Session(model, system, effort, options.bin ?? claudeBinary(), donor?.id);
+          session = new Session(
+            model,
+            system,
+            effort,
+            options.bin ?? claudeBinary(),
+            donor?.id,
+            options.stallMs,
+          );
           if (donor) session.chain = [...donor.chain];
           sessions.set(key, session);
         }

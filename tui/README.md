@@ -14,7 +14,7 @@ bun run tui -- --resume .furb/sessions/example.jsonl
 
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
 a new life. Sessions are saved under `.furb/sessions` in the selected directory. Keep the `.jsonl`,
-`.world.json`, and `.ui.json` files together. The last file saves the selected chain, view, theme, prompt
+`.world.json`, `.changes.jsonl`, and `.ui.json` files together. The last file saves the selected chain, view, theme, prompt
 shape, drafts, scroll positions, and pane widths. An unfinished session opens paused and offers a resume
 choice. The native engine replays completed work from the record.
 
@@ -37,18 +37,54 @@ to copy it through OSC 52, where the terminal supports it.
 | Ctrl+L | Prompt programs and editing |
 | Ctrl+A | Answer an operator question |
 | Ctrl+G / Ctrl+Y | Inspect a name / copy selection |
+| Ctrl+Alt+Left | Return from a definition jump |
+| Alt+[ / Alt+] | Previous / next prompt REPL |
+| Alt+Up / Alt+Down | Previous / next submitted input |
+| Ctrl+PageUp / Ctrl+PageDown | Previous / next file-change page |
+| Ctrl+C | Clear input, close a dialog, or cancel current work |
 | Tab after `/` | Complete a slash command |
 | Escape | Close a dialog or pause current model work |
 | F1 / Ctrl+Q | Help / save and quit |
 
-Slash commands expose `pause`, `wake`, `cancel`, `chain`, `fork`, `grant`, `share`, `model`, `shape`, `run`,
-`bash`, `read`, `cd`, `edit`, `feed`, `close`, `export`, `inspect`, `theme`, `name`, and `new`. The command palette shows the
-main actions. A message sent while work runs pauses delivery, adds the new prompt, then wakes the chain.
-Editing a prompt's program writes its door and uses the engine's replay. Python input uses the same gate
-as a model's word and shows its findings before an accepted word runs.
+<!-- commands:start -->
+
+| Command | Action |
+| --- | --- |
+| `/new` | Start a fresh life |
+| `/name name` | Set a name in the session picker |
+| `/chain label` | A conversation with its own state |
+| `/fork label` | Copy this chain's current transcript and program |
+| `/rewind` | Choose the last act the new chain should read |
+| `/pause [id]` | Hold delivery while work completes |
+| `/wake [id]` | Deliver pending work |
+| `/cancel [id]` | End an act or the selected chain's work |
+| `/grant dollars` | Pause at a dollar ceiling |
+| `/share fraction` | Pause at a share of the model window |
+| `/run python` | Write a rung through the gate |
+| `/bash command` | Stream a shell command |
+| `/read path` | Show a file to this chain |
+| `/cd path` | Change this chain's working directory |
+| `/edit [prompt id]` | Change a prompt's program and replay it |
+| `/feed id text` | Send input to a command; empty text closes input |
+| `/close id JSON` | Close an act with a JSON value |
+| `/export path` | Write the transcript and program to a new JSON file |
+| `/model model/effort` | Use a model from the life's roster |
+| `/shape type` | Choose the result type of the next prompt |
+| `/inspect name` | Read a value from this chain's module |
+| `/theme name` | Change the palette of every surface |
+
+<!-- commands:end -->
+
+The command table comes from the same source as completion, the palette, and help. Run `bun run docs` after
+changing that source. A message sent while work runs enters the engine's queue. The engine gives the next
+ask to the rung that has waited longest. Editing a prompt's program writes its door and uses the engine's
+replay. Python input uses the same gate as a model's word and marks a refused line in the word and editor.
+The editor keeps submitted input history, matches brackets, and indents a new Python line.
 
 The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
-historical checkpoint. The TUI does not add a separate permission or tool protocol to the engine.
+historical checkpoint. `/rewind` offers an act picker and uses the engine's `take` filter to choose which
+acts the new chain reads. Its module and files keep their current state. The TUI does not add a separate
+permission or tool protocol to the engine.
 
 `bun run screenshots` captures the real rendered views through OpenTUI's test renderer. The screenshots use
 a scripted World, real native engine, temporary files, and real local commands. See [the gallery](../docs/tui.md).

@@ -10,6 +10,7 @@
     "tui": "bun run tui/src/cli.ts",
     "demo": "bun run tui/src/cli.ts --demo",
     "screenshots": "bun run tui/script/screenshots.ts",
+    "docs": "bun run tui/script/docs.ts",
     "check": "tsc --noEmit",
     "test": "bun test bind/typescript/test tui/test",
     "format": "biome format --write bind/typescript tui package.json tsconfig.json biome.json",

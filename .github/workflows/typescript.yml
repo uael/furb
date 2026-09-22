@@ -34,7 +34,11 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --features typescript -- -D warnings
+      - run: cargo test --features typescript
       - run: bun run build
+      - run: bun run docs
+      - run: git diff --exit-code -- bind/typescript/index.cjs bind/typescript/index.d.cts bind/typescript/system.json
+      - run: git diff --exit-code -- tui/README.md
       - run: bun run check
       - run: bun run lint
       - run: bun test bind/typescript/test tui/test
