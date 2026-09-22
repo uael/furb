@@ -16,12 +16,12 @@ Each name has one meaning, which the contract's sentences use as given here.
 - standing: what a chain stands on, which the World answers it, or its origin for a chain with a source: the roster,
   the directory and the default actor.
 - default actor: the actor a prompt goes to when the prompt leaves the actor unsaid, bound as `actor` in the chain.
-- World: the interface to the disk, the machine, the actors and the record; it keeps what the journal says it keeps,
-  and does what it hears it is started to do.
-- Kernel: the interface that runs rungs, an ear of the outside.
-- gate: the interface that reads a word before it runs, an ear of the outside apart from the Kernel, so a word may
-  ask it while the Kernel runs that word; what it reads with is its own. It reads the word after the program of its
-  chain, and it finds nothing when the word may run.
+- World: the ear of the outside that boot takes under the name WORLD, which reaches the disk, the machine, the
+  actors and the record; it keeps what the journal says it keeps, and does what it hears it is started to do.
+- Kernel: the ear of the outside that runs rungs: it hears a run, and says wants and ran.
+- gate: the ear of the outside that answers a gate, apart from the Kernel, so a word may ask it while the Kernel
+  runs that word; what it reads with is its own. It reads the word after the program of its chain, and it finds
+  nothing when the word may run.
 - boot: the life, given the record and the generators of the outside, which gives the root.
 - bus: the three entries every verb speaks through: send for a fact, ask for a query, act for an act.
 - fact: what is said to the life, inert, with no response, and queried later; a tuple of its kind, the act it is
@@ -117,10 +117,10 @@ Each name has one meaning, which the contract's sentences use as given here.
 - When its share of the window is high, a model opens a chain with a source and a take that is not inside.
 - Compaction is not in the core.
 - engine.pyi is the specification of engine.py: it says what the engine is, what is always true of it and what its
-  surface is, and never how it is made; it names the interfaces and the facts as python reads them, and holds every law,
-  so engine.py holds no sentence and no comment.
-- engine.py depends only on the python interpreter and on the interfaces the contract names, World, Kernel and the gate,
-  which are ears given to boot, held by no verb and bound to no name of the engine.
+  surface is, and never how it is made; it names the ears and the facts as python reads them, and holds every law, so
+  engine.py holds no sentence and no comment.
+- engine.py depends only on the python interpreter and on the ears of the outside that boot is given, the World, the
+  Kernel and the gate among them, which are held by no verb and bound to no name of the engine.
 - A fact is a tuple, its kind first, deconstructed only by match, and nothing of the engine is a class but a text, an
   exit, the name of an act, and the two exceptions.
 - The verbs and Text carry their signatures, typed, since a model reads them; nothing else in engine.py has a type

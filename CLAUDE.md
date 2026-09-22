@@ -1,9 +1,9 @@
 # furb
 
-The engine is `src/furb/engine.py`, one file. It depends only on the python interpreter and on the interfaces that
-the contract names: the World, the Kernel and the gate. It is derived from the contract, `src/furb/engine.pyi`, and
-the suite in `test/` proves it. `src/furb/CLAUDE.md` holds the technical names of the engine and the laws that no
-test can hold. `script/CLAUDE.md` says how to run the DeepSWE rig.
+The engine is `src/furb/engine.py`, one file. It depends only on the python interpreter and on the ears of the outside
+that boot is given, each a generator under a name: the World, the Kernel and the gate among them. It is derived from the
+contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/CLAUDE.md` holds the technical names of
+the engine and the laws that no test can hold. `script/CLAUDE.md` says how to run the DeepSWE rig.
 
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
