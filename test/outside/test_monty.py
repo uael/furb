@@ -2,8 +2,9 @@
 
 The suite proves the contract on both engines, sentence for sentence. What is proved here is the door itself: an
 ear of this interpreter that says a verb from its thread and is answered with what the verb raised, a show the
-engine made that an ear calls back from its thread, a map of the life read where it stands, and the Kernel of
-this interpreter refused, since the engine of monty holds its own.
+engine made that an ear calls back from its thread, a class a word defined held as a type of this interpreter
+and its instances as objects of it, both ways, a map of the life read where it stands, and the Kernel of this
+interpreter refused, since the engine of monty holds its own.
 """
 
 from collections.abc import Generator
@@ -57,6 +58,71 @@ async def test_a_show_the_engine_made_is_called_back_from_the_thread_of_an_ear()
   sand.script[root] = ["read('n.txt', span(2, 2))\nclose(1)"]
   assert await engine.prompt(int, "read it", on=root) == 1
   assert picked == [[2]]
+
+
+async def test_a_class_a_word_defined_is_a_type_of_this_interpreter_and_its_instances_are_objects_of_it() -> None:
+  """A class a word defined crosses as a type of this interpreter, one for the class, whose call makes the instance
+  in the sandbox; an instance of it crosses as an object of that type with its fields; and both go back in as
+  themselves, the class by its handle and the instance made from its fields."""
+  sand = Sand(stands=STANDS)
+  root = engine.boot((), world=sand.hears())
+  word = "class Plan:\n  n = 21\n  def __init__(self, x=1):\n    self.x = x\n  def total(self):\n    return self.n + self.x\np = Plan(3)"
+  await engine.rung(word, on=root)
+  plan = engine.modules[root]["Plan"]
+  assert isinstance(plan, type) and plan.__name__ == "Plan" and plan is engine.modules[root]["Plan"]
+  p = engine.modules[root]["p"]
+  assert isinstance(p, plan) and vars(p) == {"x": 3}
+  made = plan(5)
+  assert isinstance(made, plan) and vars(made) == {"x": 5}
+  assert await engine.rung("close(p.total())", on=root) == 24
+  act = engine.prompt(None, "give", to=OPERATOR, on=root)
+  engine.close(made, act)
+  await settle()
+  back = engine.outcomes[act]
+  assert isinstance(back, plan) and vars(back) == {"x": 5}
+  assert await engine.rung(f"close((isinstance(outcomes[{act!r}], Plan), outcomes[{act!r}].total()))", on=root) == (
+    True,
+    26,
+  )
+  cls = engine.prompt(None, "which", to=OPERATOR, on=root)
+  engine.close(plan, cls)
+  await settle()
+  assert engine.outcomes[cls] is plan
+  assert await engine.rung(f"close(outcomes[{cls!r}] is Plan)", on=root) is True
+  twin = engine.chain("twin", source=root)
+  await settle(300)
+  theirs = engine.modules[twin]["Plan"]
+  assert isinstance(theirs, type) and theirs is not plan and isinstance(engine.modules[twin]["p"], theirs)
+
+
+async def test_a_class_a_word_defined_derives_from_the_type_its_base_is_here() -> None:
+  """The type a class a word defined is here derives from the type its base is here: a builtin, a class of the
+  engine, or the type of another class a word defined; so an exception class raises what the builtin it derives
+  from catches, a subclass of a class of a word is one of its type, and a string of a class that inherits str is
+  a string."""
+  sand = Sand(stands=STANDS)
+  root = engine.boot((), world=sand.hears())
+  word = (
+    "class Boom(ValueError):\n  pass\nclass Plan:\n  n = 21\nclass Sub(Plan):\n  pass\nclass Hurt(Refused):\n  pass\n"
+    "class Word(str):\n  pass\ne = Boom('boom')\ns = Sub()\nw = Word('x')"
+  )
+  await engine.rung(word, on=root)
+  boom, plan, sub, hurt = (engine.modules[root][name] for name in ("Boom", "Plan", "Sub", "Hurt"))
+  assert isinstance(boom, type) and issubclass(boom, ValueError) and boom.__name__ == "Boom"
+  assert isinstance(plan, type) and isinstance(sub, type) and issubclass(sub, plan) and sub is not plan
+  assert isinstance(hurt, type) and issubclass(hurt, Refused)
+  assert isinstance(engine.modules[root]["s"], sub) and isinstance(engine.modules[root]["s"], plan)
+  assert engine.modules[root]["w"] == "x" and isinstance(engine.modules[root]["w"], str)
+  with pytest.raises(ValueError, match="boom") as caught:
+    await engine.rung("raise Boom('boom')", on=root)
+  assert isinstance(caught.value, boom) and caught.value.args == ("boom",)
+  e = engine.modules[root]["e"]
+  assert isinstance(e, boom) and e.args == ("boom",)
+  act = engine.prompt(None, "give", to=OPERATOR, on=root)
+  engine.close(caught.value, act)
+  await settle()
+  told = await engine.rung(f"close((isinstance(outcomes[{act!r}], Boom), outcomes[{act!r}].args))", on=root)
+  assert told == (True, ("boom",))
 
 
 async def test_a_map_of_the_life_refuses_a_key_it_does_not_hold() -> None:

@@ -31,9 +31,6 @@ ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
 MONTY_SKIPS: dict[str, str] = {
-  "test_a_chain_with_a_source_holds_the_classes_its_origin_defined_before_that_source": (
-    "a class a word defined is the sandbox's own, and crosses to this interpreter as a callable and no type"
-  ),
   "test_an_ear_is_any_generator_of_that_shape": (
     "the test boots on a Kernel of this interpreter, and the engine of monty holds its own"
   ),
