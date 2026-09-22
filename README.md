@@ -11,8 +11,11 @@ in `test/` holds one test per sentence.
 type checker gates every word a model writes. It needs python 3.14.
 
 The crate at the root runs the same engine in monty, a python interpreter written in rust, behind an async API: a
-host writes one `World` trait, and a `Life` gives the verbs of the contract. Built with its `python` feature it is
-`furb-monty`, and `FURB_ENGINE=monty` makes `from furb import engine` give the engine in the sandbox.
+host writes one `World` trait, and a `Life` gives the verbs of the contract. A life is dumped where it stands and
+restored later, and its Kernel keeps what each run left, so a replay of a chain restores the module rung by rung
+and runs no word a second time, with what a word made, a function or a class, made again in the copy. Built with
+its `python` feature it is `furb-monty`, and `FURB_ENGINE=monty` makes
+`from furb import engine` give the engine in the sandbox.
 
 From a clone of this repository:
 
