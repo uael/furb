@@ -8,11 +8,14 @@ record file, and the operator at its terminal.
 
 import ast
 import asyncio
+import gc
+import inspect
 import json
 import os
 import subprocess
 import sys
 import time
+import warnings
 from asyncio.subprocess import Process
 from collections.abc import Generator
 from itertools import pairwise
@@ -177,6 +180,38 @@ async def test_a_cancelled_command_dies_instead_of_running_on(yard: Path) -> Non
     await waits
   # A child the kill missed holds the stdout of the command open, so the stream never ends and the drain of the
   # World never returns: the tasks of the life fall to the test alone only when the whole group is dead.
+  await drained()
+  assert asyncio.all_tasks() == {asyncio.current_task()}
+
+
+async def test_a_command_still_up_when_its_run_is_cancelled_is_reaped(yard: Path) -> None:
+  """The loop of a life that ends cancels the run of a command still up: the World kills the command and reads its
+  streams to their end, so no pipe of it outlives the loop and nothing of it warns of itself at the next garbage
+  collection."""
+  live = world(yard)
+  root = life(live)
+  waits = engine.bash("sleep 30 & echo up; wait", timeout=60.0, on=root)
+  for _ in range(2000):
+    await asyncio.sleep(0.001)
+    if engine.read(f"{waits}/stdout", on=root).content:
+      break
+  runs = [
+    one
+    for one in asyncio.all_tasks()
+    if one is not asyncio.current_task()
+    and inspect.iscoroutine(held := one.get_coro())
+    and held.__qualname__ == "Live.ran"
+  ]
+  assert len(runs) == 1
+  runs[0].cancel()
+  await asyncio.gather(*runs, return_exceptions=True)
+  with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always")
+    gc.collect()
+  assert [str(one.message) for one in caught if issubclass(one.category, ResourceWarning)] == []
+  engine.cancel(waits)
+  with pytest.raises(asyncio.CancelledError):
+    await waits
   await drained()
   assert asyncio.all_tasks() == {asyncio.current_task()}
 

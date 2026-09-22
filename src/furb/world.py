@@ -374,13 +374,14 @@ class Live:
     one.stands(proc)
     if one.over:
       one.slay()
-      return
 
     async def drained() -> None:
       """Both streams to their end, and then the code of the command."""
       await asyncio.gather(self.told(proc.stdout, one.id, "stdout"), self.told(proc.stderr, one.id, "stderr"))
       await proc.wait()
 
+    # Every way out reads both streams to their end and reaps the process, the one ended before it stood and the
+    # one the life leaves up too, since a pipe of a command that outlives the loop is a pipe nobody closes.
     job = asyncio.ensure_future(drained())
     late = False
     try:
@@ -390,6 +391,10 @@ class Live:
       late = True
       one.slay()
       await job
+    except asyncio.CancelledError:
+      one.slay()
+      await job
+      raise
     if not one.over:
       engine.send("exited", one.id, None if late else proc.returncode, by=WORLD)
 
