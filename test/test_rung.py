@@ -391,7 +391,7 @@ async def test_a_rung_that_retells_is_done_with_nothing() -> None:
   with pytest.raises(ValueError, match="boom"):
     await engine.rung("raise ValueError('boom')", on=root)
   with pytest.raises(CancelledError):
-    await engine.rung("raise CancelledError()", on=root)
+    await engine.rung("import asyncio\nraise asyncio.CancelledError()", on=root)
   twin = engine.chain("twin", source=root)
   await settle(300)
   theirs = [a[1] for a in said(log, "rung") if a[3] == twin]
