@@ -5,7 +5,8 @@ ear of this interpreter that says a verb from its thread and is answered with wh
 engine made that an ear calls back from its thread, a map of the life read where it stands, and the Kernel of
 this interpreter refused, since the engine of monty holds its own. And what that Kernel makes of a word, which
 the contract leaves to it: a run that retells a rung it kept is answered from what the rung left, so the word
-runs no second time, a life dumped carries what the Kernel kept, and a run it could not keep runs its word.
+runs no second time, what a word made is made again in the copy, a life dumped carries what the Kernel kept, and
+a run it could not keep runs its word.
 """
 
 from collections.abc import Generator
@@ -155,6 +156,41 @@ async def test_a_run_that_a_close_stopped_is_answered_as_a_run_that_came_to_noth
   assert [type(engine.outcomes[one]).__name__ for one in theirs] == ["NoneType", "ValueError"]
   assert [a[5] != "" for a in log if a[0] == "run"] == [False, False, True, True]
   assert type(engine.modules[twin]["raised"]).__name__ == "ValueError" and engine.modules[twin]["k"] == 21
+
+
+async def test_what_a_word_made_is_made_again_in_the_copy_and_bound_to_it() -> None:
+  """A function or a class a word made is made again in the module of a copy and bound to it, so the copy and
+  its origin share nothing: a class attribute the copy sets stays the copy's, a function of the copy reads the
+  copy's module, and the word ran once."""
+  sand = Sand(stands=STANDS)
+  log: list[tuple] = []
+  root = engine.boot((), world=sand.hears(), probe=hearing(log))
+  await engine.rung(
+    'class Plan:\n  n = 21\n  def m(self):\n    return k\ndef f():\n  return k\nk = 1\np = Plan()\ndebug(t"{k}")',
+    on=root,
+  )
+  twin = engine.chain("twin", source=root)
+  await settle(300)
+  assert debugged(log) == [1]
+  assert [a[5] != "" for a in log if a[0] == "run"] == [False, True]
+  assert await engine.rung("Plan.n = 5\nk = 2\nclose((f(), p.m(), Plan().m()))", on=twin) == (2, 2, 2)
+  assert await engine.rung("close((Plan.n, f(), p.m()))", on=root) == (21, 1, 1)
+  assert await engine.rung("close(isinstance(p, Plan))", on=twin) is True
+
+
+async def test_a_run_that_bound_a_module_is_kept() -> None:
+  """A module a word imported is the session's own, shared by the copy, so a run that bound one is kept and every
+  run after it too."""
+  sand = Sand(stands=STANDS)
+  log: list[tuple] = []
+  root = engine.boot((), world=sand.hears(), probe=hearing(log))
+  await engine.rung('import math\nk = math.floor(2.5)\ndebug(t"{k}")', on=root)
+  await engine.rung('j = k + 1\ndebug(t"{j}")', on=root)
+  twin = engine.chain("twin", source=root)
+  await settle(300)
+  assert debugged(log) == [2, 3]
+  assert [a[5] != "" for a in log if a[0] == "run"] == [False, False, True, True]
+  assert await engine.rung("close((math.floor(j + 0.5), k))", on=twin) == (3, 2)
 
 
 async def test_a_run_the_kernel_could_not_keep_runs_its_word_again() -> None:

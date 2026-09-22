@@ -9,8 +9,10 @@ other ear is heard by name through the ears of the host, which hear every fact a
 
 The Kernel is here too, since the word of a rung runs where the engine runs, in the module of its chain, and so
 is the gate, an ear of its own, which reads a word with the checker of the host on the sheet of the engine. The
-Kernel keeps what each run left, so a run that retells a rung it kept is answered from that and the word runs no
-second time: the replay of a chain restores the module rung by rung, as the dump of a life restores the life.
+Kernel keeps what each run left, made again by the interpreter under a namespace of the kept run's own, so a run
+that retells a rung it kept is answered from that and the word runs no second time: the replay of a chain restores
+the module rung by rung, as the dump of a life restores the life, and a function or a class the word made is made
+again in the module of the copy, bound to it, as running the word there would make it.
 
 What crosses, crosses as the interpreter carries it, but for the callables, which it carries no way back. An
 instance of a class of the engine comes in as a map that names its class under `is`, with its fields, since the
@@ -23,8 +25,9 @@ name the ears of the host call it back by.
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from collections.abc import Callable, Coroutine, Generator
 from contextvars import ContextVar
-from copy import deepcopy
 from typing import TYPE_CHECKING
+
+from monty import rebound
 
 type Names = dict[str, object]
 """The names of the engine: its module, in which every word of the operator and every stand-in runs."""
@@ -256,8 +259,8 @@ def ran_in(word: str, rung: str, module: dict[str, object]) -> object:
 
 
 type Kept = tuple[dict[str, object], list[str], BaseException | None]
-"""What a run left: the bindings of its module beyond the birth of that module, copied deep, the names of the
-engine it unbound, and what the run came to."""
+"""What a run left: the bindings of its module beyond the birth of that module, made again under a namespace of
+their own, the names of the engine it unbound, and what the run came to."""
 
 
 class Running:
@@ -265,11 +268,13 @@ class Running:
 
   A run is begun in the globals of its chain and carried forward at the done of every act its word waits for, and
   what it says it says under the name of its rung, which is what makes a fact of the word the rung's own. When it
-  is over, what it left is kept: the bindings of the module it ran in beyond the birth of that module, copied deep
-  so that no later run changes them, and what it came to. A run that retells a rung so kept is answered from that:
-  the module of its chain takes those bindings again, and the run comes to what the kept run came to, so the word
-  runs no second time; what that is for a copy is the engine's law and not this Kernel's, so a cancel it kept is
-  said again as it was. A run whose bindings cannot be copied, one that holds a generator, is kept not, and a run
+  is over, what it left is kept: the bindings of the module it ran in beyond the birth of that module, made again
+  by the interpreter under a namespace of the kept run's own, so that no later run changes them and what the word
+  made, a function or a class, is bound to no module a later word runs in; and what it came to. A run that retells
+  a rung so kept is answered from that: the module of its chain takes those bindings made again under it, so a
+  function of the copy reads the copy's module, and the run comes to what the kept run came to, so the word runs
+  no second time; what that is for a copy is the engine's law and not this Kernel's, so a cancel it kept is said
+  again as it was. A run whose bindings cannot be made again, one that holds a generator, is kept not, and a run
   that retells it runs the word, as the Kernel of this interpreter does for every word.
   """
 
@@ -290,28 +295,31 @@ class Running:
     self.kept: dict[str, Kept] = {}
 
   def shared(self) -> dict[int, object]:
-    """The memo of a deep copy: every value of the engine stands for itself, so a binding of one is shared."""
+    """The memo of a copy: every value of the engine stands for itself, so a binding of one is shared."""
     return {id(value): value for value in self.names.values()}
 
   def keep(self, rung: str, got: BaseException | None) -> None:
-    """What the run left, kept; nothing is kept of a run whose bindings cannot be copied."""
+    """What the run left, kept under a namespace of its own; nothing is kept of a run whose bindings cannot be
+    made again."""
     module = self.ran_in.pop(rung)
     left = {n: v for n, v in module.items() if n != "__name__" and (n not in self.names or self.names[n] is not v)}
+    home: dict[str, object] = {}
     try:
-      copied = deepcopy(left, self.shared())
-    except Exception:  # a generator, an open handle: what cannot be copied leaves the copy to run the word
+      home.update(rebound(left, module, home, self.shared()))
+    except Exception:  # a generator, an open handle: what cannot be made again leaves the copy to run the word
       return
     gone = [name for name in self.names if name not in module]
-    self.kept[rung] = (copied, gone, got)
+    self.kept[rung] = (home, gone, got)
 
   def restore(self, rung: str, chain: str, whose: str) -> None:
-    """A run that retells a kept rung, answered from what that rung left: the module takes the bindings again."""
-    left, gone, got = self.kept[whose]
+    """A run that retells a kept rung, answered from what that rung left: the module takes the bindings again,
+    made again under it."""
+    home, gone, got = self.kept[whose]
     module = self.modules[chain]
     for name in [n for n in module if n != "__name__" and n not in self.names]:
       del module[name]
     module.update(self.names)
-    module.update(deepcopy(left, self.shared()))
+    module.update(rebound(home, home, module, self.shared()))
     for name in gone:
       del module[name]
     self.ended(rung, got)

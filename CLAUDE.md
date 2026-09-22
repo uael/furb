@@ -11,11 +11,15 @@ one trait a host writes. A life is dumped where it stands still and restored lat
 `boot` with nothing replayed, since a run of monty replays the same; the python door has `dump` and `restore`
 beside `boot`. `src/preamble.py` runs in the sandbox and stands in for the ears of a host, and the Kernel
 and the gate are the crate's: the gate is the type checker of monty, which reads a word on the sheet of the engine
-against the typeshed of the sandbox, and which the gate of the python package reads through too. The Kernel keeps what each run left, the bindings
-of its module copied deep and what it came to, so a replay of a chain, at the birth of a chain with a source or at
-the edit of a program, is answered rung by rung from what it kept and runs no word a second time; what it kept
-goes with the dump of the life. A run it cannot keep, one that binds a generator, runs its word again, as the
-Kernel of the python package does for every word. `src/binding/py.rs`, behind the `python` feature,
+against the typeshed of the sandbox, and which the gate of the python package reads through too. The Kernel keeps
+what each run left, the bindings of its module made again by the interpreter under a namespace of the kept run's
+own, and what it came to, so a replay of a chain, at the birth of a chain with a source or at the edit of a
+program, is answered rung by rung from what it kept and runs no word a second time: a function or a class a word
+made is made again in the module of the copy, bound to it, as running the word there would make it, so the copy
+and its origin share nothing. What it kept goes with the dump of the life. A run it cannot keep, one that binds a
+generator, runs its word again, as the Kernel of the python package does for every word. The interpreter makes
+again what was made under one namespace under another with `monty.rebound`, a function of the fork the crate
+pins, whose stub for the type checker is `typings/monty.pyi`. `src/binding/py.rs`, behind the `python` feature,
 is the door to python: `bind/python` is the package `furb-monty`, whose `furb_monty.engine` gives every name of the
 contract over one life in the sandbox, and `FURB_ENGINE=monty` makes `from furb import engine` give it. The suite
 runs on both engines, and `test/outside/test_monty.py` proves what the door carries that no sentence of the
