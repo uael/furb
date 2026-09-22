@@ -21,6 +21,14 @@ From a clone of this repository:
 - `uv run python script/smoke.py` runs one real life on opus/low through the claude command line.
 - `uv run python script/deepswe.py run <task>` runs one DeepSWE task and grades it.
 
+The [TypeScript package](bind/typescript/README.md) reaches the same crate through N-API. Its queries and
+controls are synchronous, its acts can be awaited, and it includes a World with pi-ai models, files, commands,
+and records. `uv sync`, `bun install`, and `bun run build` build it from a clone.
+
+`bun run tui` opens the [OpenTUI application](tui/README.md). `bun run demo` opens a local scripted life that
+asks no model. The TUI has one view per chain, Python programs, act output, an exact transcript, file diffs,
+live value inspection, themes, and saved sessions. See [the screenshot gallery](docs/tui.md).
+
 Every pull request, and every push to `main`, runs the gates in `.github/workflows/gates.yml`: the hooks, which
 include the gates of the crate, the type check, and the suite on linux and on macos.
 

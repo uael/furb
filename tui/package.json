@@ -1,0 +1,16 @@
+{
+  "name": "@furb/tui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "bin": {
+    "furb-tui": "src/cli.ts"
+  },
+  "dependencies": {
+    "@furb/engine": "workspace:*",
+    "@opentui/core": "0.5.11",
+    "diff": "^9.0.0",
+    "tree-sitter-python": "^0.25.0"
+  }
+}

@@ -11,3 +11,6 @@ target/
 # The extension maturin builds into the binding: made by the build, never source.
 *.so
 *.pyd
+*.node
+node_modules/
+.furb/
