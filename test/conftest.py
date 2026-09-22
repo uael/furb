@@ -48,9 +48,9 @@ MONTY_SKIPS: dict[str, str] = {
 interpreter, which the boundary does not carry."""
 
 type World = Generator[tuple | None, tuple]
-"""The World, as engine.pyi declares it: engine.py binds no such name, so the suite says the type itself."""
+"""The World, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
 type Kernel = Generator[tuple | None, tuple]
-"""The Kernel, as engine.pyi declares it: engine.py binds no such name, so the suite says the type itself."""
+"""The Kernel, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
 
 STANDS = (((OPERATOR, (), 200000), ("m", ("low", "high"), 400000), ("n", ("low",), 200000)), "/w", "m/low")
 """A standing of three actors, a directory and a default actor, which a test takes when it needs a roster."""

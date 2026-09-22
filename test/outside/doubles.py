@@ -23,7 +23,7 @@ from furb.kernel import Native, gating
 from furb.world import Live
 
 type Words = Generator[tuple | None, tuple]
-"""The World, as engine.pyi declares it: engine.py binds no such name, so the suite says the type itself."""
+"""The World, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
 
 
 def scripted(words: Sequence[str], usd: float = 0.0) -> FunctionModel:
