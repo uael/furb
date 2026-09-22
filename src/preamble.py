@@ -7,8 +7,8 @@ every life has, and what the engine asks of it is known, so its stand-in asks th
 the engine itself for what a World reads, which is where a path resolves and whether a command is merged. Any
 other ear is heard by name through the ears of the host, which hear every fact and say what they will.
 
-The Kernel is here too, since the word of a rung runs where the engine runs, in the module of its chain; the gate
-it reads a word with is the host's.
+The Kernel is here too, since the word of a rung runs where the engine runs, in the module of its chain, and so
+is the gate, an ear of its own, which reads a word with the checker of the host on the sheet of the engine.
 
 What crosses, crosses as the interpreter carries it, but for the callables, which it carries no way back. An
 instance of a class of the engine comes in as a map that names its class under `is`, with its fields, since the
@@ -65,8 +65,9 @@ if TYPE_CHECKING:
 
 IS = "is"
 """IS marks a map that is an instance of a class of the engine, by the name of that class."""
-MADE: list[object] = []
-"""MADE holds every callable the engine made that crossed to the host, by its handle, for as long as the life lives."""
+MADE: dict[int, object] = {}
+"""MADE holds every callable the engine made that crossed to the host, by its handle, which is its identity, for
+as long as the host holds the handle: the host says when it forgot one, and it is dropped then."""
 
 
 def verb(names: Names, which: str) -> Callable[..., object]:
@@ -92,8 +93,8 @@ def outward(x: object, names: Names) -> object:
   for name, held in names.items():
     if held is x and not name.startswith("_"):
       return {IS: "name", "name": name}
-  MADE.append(x)
-  return {IS: "made", "id": len(MADE) - 1}
+  MADE[id(x)] = x
+  return {IS: "made", "id": id(x)}
 
 
 def known(names: Names, name: str) -> object:
@@ -327,13 +328,13 @@ class Running:
       self.ended(one, got)
 
 
-def kernel(gate: Gate, names: Names, sheet: Names, bound: list[str]) -> Ear:
-  """The Kernel: it gates the word of a rung on its sheet, and it runs that word in the module of its chain.
+def gating(gate: Gate, sheet: Names, source: str) -> Ear:
+  """The gate as the ear of a life: it reads the word of a rung on its sheet, after the program the gate says.
 
-  The sheet is `furb.sheet`'s, written here as the python package writes it, and the reading of it is the gate of
-  the host, given the sheet, which answers each finding by its line.
+  The sheet is `furb.sheet`'s, written here as the python package writes it, with the engine laid first as the
+  first rung of the chain, and the reading of it is the gate of the host, given the sheet, which answers each
+  finding by its line.
   """
-  held = Running(names)
 
   def checked(text: str) -> list[tuple[int, str]]:
     found = gate.checked(text)
@@ -343,7 +344,14 @@ def kernel(gate: Gate, names: Names, sheet: Names, bound: list[str]) -> Ear:
   while True:
     match (yield):
       case ("gate", qid, _, _, word, program):
-        yield "done", qid, verb(sheet, "gate")(bound, [*program.values()], word, checked)
+        yield "done", qid, verb(sheet, "gate")(source, [*program.values()], word, checked)
+
+
+def kernel(names: Names) -> Ear:
+  """The Kernel: it runs the word of a rung in the module of its chain, and carries the run at every done."""
+  held = Running(names)
+  while True:
+    match (yield):
       case ("run", rung, _, chain, word, _):
         # This Kernel runs every word, retold or not, so it reads no donor off the run.
         held.begin(rung, chain, word)
@@ -363,7 +371,7 @@ def module(source: str) -> dict[str, object]:
 def opened(
   engine: Names,
   sheet: Names,
-  bound: list[str],
+  source: str,
   record: object,
   world: World | None,
   gate: Gate,
@@ -374,8 +382,8 @@ def opened(
   this order: the root it opened on, and what boot raised, if it raised.
 
   The World of the host stands under the name `world` when the host has one; otherwise the ears of the host hear
-  that name too, as they hear every other. The Kernel is given first, so that it answers the gate before any ear
-  hears it. The record is the entries as the World hands them: each the act made last before its fact, the fact as
+  that name too, as they hear every other. The Kernel and the gate are given first, so that the gate answers
+  before any ear hears it. The record is the entries as the World hands them: each the act made last before its fact, the fact as
   a tuple, and for a query of a run what it was answered.
   """
   MADE.clear()
@@ -387,7 +395,7 @@ def opened(
     for name in names
   }
   try:
-    root = verb(engine, "boot")(entries, kernel=kernel(gate, engine, sheet, bound), **outside)
+    root = verb(engine, "boot")(entries, kernel=kernel(engine), gate=gating(gate, sheet, source), **outside)
   except BaseException as no:
     # What boot raised comes out of the entry the operator went in by, and the life goes on: a drift breaks the
     # journal and keeps nothing more, so the root stands when the record held it.
@@ -413,6 +421,11 @@ def made_called(engine: Names, ears: Ears, n: int, args: list, kwargs: dict) -> 
   made = MADE[n]
   assert callable(made)
   return outward(made(*words, **held), engine)
+
+
+def forgotten(n: int) -> None:
+  """One handle the host holds no more, so the callable it named is the sandbox's to drop."""
+  MADE.pop(n, None)
 
 
 def asked(engine: Names, ears: Ears, which: str, args: list, kwargs: dict) -> object:

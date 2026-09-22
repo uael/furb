@@ -35,6 +35,9 @@ class Life:
   def made(self, n: int, args: Sequence[object], kwargs: dict[str, object]) -> object:
     """One callable the engine made, called back by its handle with these words, and what it gave."""
 
+  def forget(self, n: int) -> None:
+    """A callable the engine made, forgotten: this interpreter holds its handle no more, so the sandbox drops it."""
+
   def held(self, name: str, keys: Sequence[str], ask: str) -> object:
     """One reading of a map of the life where it stands, under these keys: `in`, `at`, `keys` or `len`."""
 

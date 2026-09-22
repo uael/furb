@@ -1,17 +1,17 @@
-"""The Kernel of this interpreter: it gates a word with the gate of the crate, and it runs the word in the module
-of its chain.
+"""The Kernel of this interpreter, which runs a word in the module of its chain, and the gate, which reads it with
+the gate of the crate.
 
 The engine holds the laws of a chain. To judge a word before it runs, and to run it, are machinery, so they stand
-here, behind the Kernel that the contract declares. The gate reads the word on the sheet of `furb.sheet`, with
-the type checker of monty reading it, the one the crate carries and the engine of monty gates with too, so a word
-is judged once and the same: the names of the engine, bound as a chain binds them, then the program of the chain,
-then the word, all inside one async body, so that the awaits of the word stand.
+here, behind the Kernel and the gate that the contract declares. The gate reads the word on the sheet of
+`furb.sheet`, with the type checker of monty reading it, the one the crate carries and the engine of monty gates
+with too, so a word is judged once and the same: the engine itself, laid as the first rung of the chain, then the
+program of the chain, then the word, all inside one async body, so that the awaits of the word stand.
 
 A word answers by a close and never by a return: a body of a module takes no return, so a word that holds one is no
 python and the gate says so.
 """
 
-import ast
+from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from asyncio import CancelledError
 from collections.abc import Generator
 from inspect import iscoroutine
@@ -55,10 +55,6 @@ class Native:
 
   def __init__(self) -> None:
     self.frames: dict[str, CoroutineType[object, object, object]] = {}
-
-  def gate(self, word: str, program: list[str]) -> list[str]:
-    """What the gate finds against a word: the sheet of the engine, read by the gate of the crate."""
-    return sheet.gate(NAMES, program, word, checked)
 
   def ended(self, name: str, got: BaseException | None) -> None:
     """The run is over, and what it came to goes to the chain that had it run."""

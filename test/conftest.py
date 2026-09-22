@@ -22,7 +22,7 @@ import furb
 import furb_monty.engine
 from furb import engine, sheet
 from furb.engine import OPERATOR, WORLD, Act, Refused, Text, modules, outcomes, site, under
-from furb.kernel import NAMES
+from furb.kernel import ENGINE
 
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
@@ -289,15 +289,22 @@ def refusals(log: Sequence[tuple]) -> list[str]:
 class Py:
   """A Kernel that is python, outside the engine like the World.
 
-  It answers a gate with what the gate of the crate finds on the sheet of the word, begins a run by compiling the
-  word with a top level await and running it in the module of its chain, says wants for the act the run waits for,
-  carries the run forward at each sent, says ran with what the word gave, and drops the frame of a run a cancel is
-  over.
+  Its Kernel begins a run by compiling the word with a top level await and running it in the module of its chain,
+  says wants for the act the run waits for, carries the run forward at each sent, says ran with what the word
+  gave, and drops the frame of a run a cancel is over. Its gate is an ear of its own, which reads a word on the
+  sheet of the engine with the gate of the crate.
   """
 
   def gate(self, word: str, program: list[str]) -> list[str]:
     """What the gate finds against a word: the sheet of the engine, read by the gate of the crate."""
-    return sheet.gate(NAMES, program, word, furb_monty.gate)
+    return sheet.gate(ENGINE, program, word, furb_monty.gate)
+
+  def gating(self) -> Kernel:
+    """The gate as the ear of a life, which answers each gate with what it finds against the word."""
+    while True:
+      match (yield):
+        case ("gate", qid, _, _, word, program):
+          yield "done", qid, self.gate(word, [*program.values()])
 
   def kernel(self) -> Kernel:
     """The Kernel as one generator for one life, which speaks from the run it steps."""
@@ -385,9 +392,9 @@ def watched(log: list[tuple]) -> Kernel:
 
 
 def kernel() -> dict[str, Kernel]:
-  """The Kernel a life of the suite is given: the one that is python for the engine of this interpreter, and none
-  for the engine of monty, which holds its own."""
-  return {} if engine is not furb.python else {"kernel": Py().kernel()}
+  """The Kernel and the gate a life of the suite is given: the ones that are python for the engine of this
+  interpreter, and none for the engine of monty, which holds its own."""
+  return {} if engine is not furb.python else {"kernel": Py().kernel(), "gate": Py().gating()}
 
 
 def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:

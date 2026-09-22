@@ -82,6 +82,6 @@ async def test_gate_tells_the_findings_as_its_body() -> None:
   sand.script[root] = ["found = gate('BAD')\nclose(len(found))"]
   assert await engine.prompt(int, "ask the gate", on=root) == 1
   await settle()
-  found = engine.read("check://one", on=root).content
-  assert "BAD" in found and found.startswith("line 1: ")
-  assert [tag[2] for tag in tags(engine.turns(on=root), "gate")] == [found]
+  found = engine.modules[root]["found"]
+  assert isinstance(found, list) and len(found) == 1 and found[0].startswith("line 1: ") and "BAD" in found[0]
+  assert [tag[2] for tag in tags(engine.turns(on=root), "gate")] == found

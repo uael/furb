@@ -13,7 +13,7 @@
 //! speaks while it runs through a [`Voice`].
 //!
 //! The Kernel is the crate's. The word of a rung is gated by the type checker of monty, reading the word on
-//! the sheet of `furb.sheet` against the contract, and it runs where the engine runs, in the module of its chain.
+//! the sheet of `furb.sheet`, the engine laid first, and it runs where the engine runs, in the module of its chain.
 //!
 //! What crosses is what monty carries, [`Object`], and the engine's own classes read as [`Text`], [`Exit`] and
 //! [`Fault`]. Inside the sandbox, [`PREAMBLE`] stands in for every ear of the host, in a module of its own, so the
@@ -42,11 +42,6 @@ pub use crate::{
 /// The crate carries the same file the python package ships, so the engine a host runs and the engine a model
 /// reads are one thing.
 pub const ENGINE: &str = include_str!("furb/engine.py");
-
-/// The contract: the typed surface of the engine, whose docstrings hold every law.
-///
-/// The gate reads the word of a rung against this, since what a word may say is what the contract declares.
-pub const CONTRACT: &str = include_str!("furb/engine.pyi");
 
 /// The sheet the gate reads a word on, which the Kernel of the sandbox writes the same way the python package does.
 pub const SHEET: &str = include_str!("furb/sheet.py");

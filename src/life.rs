@@ -25,7 +25,7 @@ use crate::{
   ENGINE, PREAMBLE, SHEET,
   ear::{Ears, Reply},
   fact::Fact,
-  gate::{checked, named},
+  gate::checked,
   sand::{Sand, id, object},
   value::{Exit, Fault, Object, ObjectRef, Text, entry, inward},
   world::{Command, Later, Running, Said, Voice, World},
@@ -389,17 +389,15 @@ impl Opening {
       Hosting { world, ears, voice, later: Vec::new(), running: HashMap::new(), calls: Vec::new() };
     let mut inner = Inner { sand: Sand::new(limits), host, watchers: HashMap::new() };
     inner.ran(PREAMBLE, vec![])?;
-    let bound = Object::list(named(ENGINE).into_iter().map(Object::string));
     // The three objects of the host and the two modules are bound as names of the session, which every later
     // piece of code of the stand-in reads.
-    let opening = "__engine = module(__source)\n__sheet = module(__sheet_source)\n__world, __gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __bound, __record, __world, __gate, __ears, __names)\n(__root, __raised)";
+    let opening = "__engine = module(__source)\n__sheet = module(__sheet_source)\n__world, __gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __source, __record, __world, __gate, __ears, __names)\n(__root, __raised)";
     let world = if typed { object("World", id(objects::WORLD)) } else { Object::none() };
     let got = inner.ran(
       opening,
       vec![
         ("__source", Object::string(ENGINE)),
         ("__sheet_source", Object::string(SHEET)),
-        ("__bound", bound),
         ("__record", Object::list(record)),
         (
           "__given",
@@ -507,6 +505,11 @@ impl Life {
       "made_called(__engine, __ears, __n, __args, __kwargs)",
       vec![("__n", Object::int(n)), ("__args", Object::list(args)), ("__kwargs", kwargs)],
     )
+  }
+
+  /// A callable the engine made, forgotten: the host holds its handle no more, so the sandbox holds it no more.
+  pub fn forget(&mut self, n: i64) -> Result<(), Fault> {
+    self.held.run("forgotten(__n)", vec![("__n", Object::int(n))]).map(|_| ())
   }
 
   /// One reading of a map of the life where it stands: `acts`, `asked`, `outcomes` or `modules`, under these

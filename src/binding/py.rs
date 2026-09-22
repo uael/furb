@@ -326,6 +326,11 @@ impl Life {
     to_python(py, &self.made, got.as_ref())
   }
 
+  /// A callable the engine made, forgotten: this interpreter holds its handle no more.
+  fn forget(&mut self, py: Python<'_>, n: i64) -> PyResult<()> {
+    self.held.forget(n).map_err(|fault| raised(py, &self.made, &fault))
+  }
+
   /// One reading of a map of the life where it stands, under these keys: `in`, `at`, `keys` or `len`.
   fn held<'py>(
     &mut self,

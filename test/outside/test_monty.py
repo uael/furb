@@ -69,7 +69,9 @@ async def test_a_map_of_the_life_refuses_a_key_it_does_not_hold() -> None:
   assert repr(engine.acts) == "acts of the life"
 
 
-async def test_boot_refuses_a_kernel_of_this_interpreter() -> None:
-  """boot refuses a Kernel of this interpreter, since the engine of monty holds its own."""
-  with pytest.raises(Refused, match="the engine of monty holds its Kernel"):
+async def test_boot_refuses_a_kernel_or_a_gate_of_this_interpreter() -> None:
+  """boot refuses a Kernel or a gate of this interpreter, since the engine of monty holds its own."""
+  with pytest.raises(Refused, match="kernel hears: the engine of monty holds its Kernel and its gate"):
     engine.boot((), world=Sand(stands=STANDS).hears(), kernel=Py().kernel())
+  with pytest.raises(Refused, match="gate hears: the engine of monty holds its Kernel and its gate"):
+    engine.boot((), world=Sand(stands=STANDS).hears(), gate=Py().gating())

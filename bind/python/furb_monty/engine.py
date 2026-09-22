@@ -19,6 +19,7 @@ import asyncio
 import inspect
 import queue
 import threading
+import weakref
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from pathlib import Path
 
@@ -42,6 +43,9 @@ END = object()
 """END is what a thread of a generator is given when the life it was heard in is over."""
 LOCAL = threading.local()
 """LOCAL holds, on the thread of a generator, the crossing that generator is heard through."""
+FORGOTTEN: list[int] = []
+"""FORGOTTEN holds the handles of the callables the engine made that this interpreter dropped since the life last
+heard of them, which the next verb of the operator says into the sandbox, so the sandbox drops them too."""
 LIFE: Living | None = None
 """LIFE is the life this process holds, and a second boot ends it."""
 
@@ -63,7 +67,10 @@ def call(name: str, args: tuple, kwargs: dict[str, object]) -> object:
   held = getattr(LOCAL, "crossing", None)
   if held is not None:
     return held.calls(name, list(args), dict(kwargs))
-  return living().life.verb(name, list(args), dict(kwargs))
+  life = living().life
+  while FORGOTTEN:
+    life.forget(FORGOTTEN.pop())
+  return life.verb(name, list(args), dict(kwargs))
 
 
 def stands(name: str, under: list[str], ask: str) -> object:
@@ -206,6 +213,8 @@ def made(n: int) -> Callable[..., object]:
       return held.calls("made", [n, list(args), dict(kwargs)], {})
     return living().life.made(n, list(args), dict(kwargs))
 
+  # When this interpreter drops the last reference, the handle is forgotten at the next verb of the operator.
+  weakref.finalize(back, FORGOTTEN.append, n)
   return back
 
 
@@ -286,13 +295,15 @@ class Site:
 def boot(record: Iterable[object] = (), **outside: Generator[tuple | None, tuple]) -> Act:
   """A life of the engine in the sandbox, opened from the record and on the ears given, which gives the root.
 
-  The Kernel is the crate's, so a generator under that name is refused as the engine refuses one under a name of
-  its own ears. A second boot is a second life, and the first is gone with the threads of its generators.
+  The Kernel and the gate are the crate's, so a generator under either name is refused as the engine refuses one
+  under a name of its own ears. A second boot is a second life, and the first is gone with the threads of its
+  generators.
   """
   asyncio.get_running_loop()
-  if "kernel" in outside:
-    why = "kernel hears: the engine of monty holds its Kernel"
-    raise python.Refused(why)
+  for name in ("kernel", "gate"):
+    if name in outside:
+      why = f"{name} hears: the engine of monty holds its Kernel and its gate"
+      raise python.Refused(why)
   global LIFE  # noqa: PLW0603
   if LIFE is not None:
     LIFE.end()

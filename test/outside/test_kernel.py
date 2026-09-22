@@ -6,14 +6,13 @@ standing and refuses everything else.
 """
 
 import asyncio
-from pathlib import Path
 
 import pytest
 
 import furb_monty
 from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
-from furb.kernel import NAMES, Native, checked, declared
+from furb.kernel import ENGINE, checked, gate
 from outside.doubles import settle, stood, tags, worlds
 
 STANDS = (((OPERATOR, (), WINDOW), ("opus", ("low",), 1000)), "/w", "opus/low")
@@ -104,7 +103,7 @@ def test_the_kernel_reads_a_sheet_through_the_gate_of_the_crate() -> None:
     ("x: str = span(1, 2)(['a'])", ()),
     ("close((await bash('ls')).code)", ()),
   ]:
-    assert sheet.gate(NAMES, list(program), word, furb_monty.gate) == sheet.gate(NAMES, list(program), word, checked)
+    assert sheet.gate(ENGINE, list(program), word, furb_monty.gate) == sheet.gate(ENGINE, list(program), word, checked)
 
 
 def test_a_word_that_imports_what_the_sandbox_does_not_run_is_refused() -> None:
@@ -186,13 +185,6 @@ async def test_the_kernel_speaks_from_the_run_it_steps() -> None:
   waits = engine.rung('x = 3\ndebug(t"{x}")', on=root)
   await waits
   assert [one[1] for one in tags(root, "debugged")] == [[("id", waits), ("x", 3)]]
-
-
-def test_a_name_the_contract_declares_by_a_plain_assignment_is_a_name_of_the_engine(tmp_path: Path) -> None:
-  """The contract names its own by an annotation or by a plain assignment, and either way a chain binds it."""
-  stub = tmp_path / "said.pyi"
-  stub.write_text("WIDE = 3\nnarrow: int = 4\ndef verb() -> None: ...\nclass Shape: ...\ntype Alias = int\n")
-  assert declared(stub) == ["WIDE", "narrow", "verb", "Shape", "Alias"]
 
 
 async def test_a_word_that_awaits_and_then_ends_gives_nothing() -> None:
