@@ -31,8 +31,9 @@ def test_the_sheet_lays_the_engine_as_the_first_rung() -> None:
   assert laid.startswith("async def __body():\n  import re\n")
   assert "".join(line[2:] + "\n" if line.strip() else "\n" for line in laid.split("\n")[1:]).startswith(ENGINE)
   assert (
-    '  actor = ""\n  raised: BaseException | None = None\n  if lineage(""):\n    pass\n    k = 1\n  close(k)\n' in laid
-  )
+    '  actor = ""\n  raised: BaseException | None = None\n  try:\n    lineage("")\n    k = 1\n  except BaseException:\n'
+    "    pass\n  close(k)\n"
+  ) in laid
   assert above == laid.count("\n") - 1
   assert laid.endswith("  close(k)\n")
 

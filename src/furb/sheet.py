@@ -11,18 +11,22 @@ The word stands on a sheet of its own::
     <the engine>
     actor = ""
     raised: BaseException | None = None
-    if lineage(""):
-      pass
+    try:
+      lineage("")
       <the program of the chain before the word>
+    except BaseException:
+      pass
     <the word>
 
 Every line of it is there for a reason. The body is async, so a word may await at its top level. The engine is
 laid first, whole, as the first rung of every chain: the module of a chain is the engine run as a word, so every
 name the engine binds, an import of its own among them, is a name the word may say, with the type the engine
 gives it. The two names a chain binds of its own come next, with the types the contract gives them. The program
-stands under a condition ty cannot decide, so a rung that raised or that never ends leaves the word reachable. And
-the engine, the program and the word keep their own lines, so a finding is counted back to the line the model
-wrote.
+stands in a try, since a rung that raised keeps what it bound before the raise and the word after it runs all the
+same: ty reads the word through the except, with every name the program bound before it raised, and a rung that
+never ends leaves the word reachable the same way. A call opens the try, since ty reads an except that no
+statement before it can reach, and an empty program still has a body. And the engine, the program and the word
+keep their own lines, so a finding is counted back to the line the model wrote.
 
 The word is read as the body of a module before ty reads what it means: the sheet stands it inside a function,
 where a return is legal and the engine takes none, so a word the interpreter will not take as a body is a finding
@@ -41,9 +45,11 @@ type Ear = Generator[tuple | None, tuple | None]
 BOUND = '  actor = ""\n  raised: BaseException | None = None\n'
 """BOUND binds the two names a chain binds of its own, the actor it stands on and what the last rung raised, with
 the types the contract gives them."""
-OPENED = '  if lineage(""):\n    pass\n'
-"""OPENED opens the program under a condition ty cannot decide, so the word after it is reachable whatever the
-program did, and a name the program bound is a warning to read, never an error."""
+OPENED = '  try:\n    lineage("")\n'
+"""OPENED opens the program in a try, on a call, since ty reads an except that no statement before it can reach: a
+name the program bound before it raised reaches the word, and an empty program still has a body."""
+CAUGHT = "  except BaseException:\n    pass\n"
+"""CAUGHT closes the program, so that a rung which raised or which never ends leaves the word reachable."""
 
 
 def python(word: str) -> list[str]:
@@ -67,7 +73,7 @@ def sheet(engine: str, program: Sequence[str], word: str) -> tuple[str, int]:
   """The word on a sheet of its own, and how many lines stand above the word, which every finding is counted back
   by: the engine, as the first rung of the chain, then the two names the chain binds, then the program of the chain
   before the word, then the word."""
-  above = "async def __body():\n" + laid(engine, 2) + BOUND + OPENED + laid("\n".join(program), 4)
+  above = "async def __body():\n" + laid(engine, 2) + BOUND + OPENED + laid("\n".join(program), 4) + CAUGHT
   return above + laid(word, 2), above.count("\n")
 
 
