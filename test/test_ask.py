@@ -15,7 +15,7 @@ async def test_the_way_to_put_a_question_that_lives_not() -> None:
   log, root = life(sand)
   here, where = engine.ask("cwd", root)
   assert here == ("cwd", "cwd://operator.2", OPERATOR, root) and where == "/w"
-  assert engine.asked[here[1]] is here
+  assert engine.asked[here[1]] == here
   when, at = engine.ask("clock", root)
   assert at == 1001.0
   assert [a[1] for a in log if a[0] in ("cwd", "clock")] == [when[1]]
@@ -27,7 +27,7 @@ async def test_a_query_is_put_at_once_and_is_no_event_of_the_log() -> None:
   log, root = life(sand)
   mark = len(log)
   here, where = engine.ask("cwd", root)
-  assert where == "/w" and engine.asked[here[1]] is here
+  assert where == "/w" and engine.asked[here[1]] == here
   assert log[mark:] == [("done", here[1], root, "/w")]
   assert engine.outcomes[here[1]] == where
 

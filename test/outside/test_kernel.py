@@ -1,18 +1,18 @@
 """The Kernel of this interpreter: what a word is held to before it runs, and how it runs in the module of its chain.
 
-The gate reads a word on the sheet of `furb.sheet` with the ty command line, after the program of its chain. The
+The gate reads a word on the sheet of `furb.sheet` with the gate of the crate, after the program of its chain. The
 run is begun and carried by the facts of the engine, so it is driven through a life whose World answers a
 standing and refuses everything else.
 """
 
 import asyncio
-from pathlib import Path
 
 import pytest
 
+import furb_monty
 from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
-from furb.kernel import ENGINE, gate
+from furb.kernel import ENGINE, checked, gate
 from outside.doubles import settle, stood, tags, worlds
 
 STANDS = (((OPERATOR, (), WINDOW), ("opus", ("low",), 1000)), "/w", "opus/low")
@@ -94,28 +94,25 @@ def test_a_warning_of_ty_refuses_no_word() -> None:
   assert said("if chance() > 0.5:\n  maybe = 1\nclose(maybe)") == []
 
 
-def test_no_ty_on_the_path_ends_the_life_rather_than_refusing_the_word(monkeypatch: pytest.MonkeyPatch) -> None:
-  """A tool that did not run has said nothing about the word, which is not the same as having found nothing in it,
-  so the life ends there rather than refuse a word that nobody read and ask the model again for ever."""
+def test_the_kernel_reads_a_sheet_through_the_gate_of_the_crate() -> None:
+  """The Kernel gates through the crate's checker, so the two find the same on a sheet: one gate, one reading."""
+  for word, program in [
+    ("close(1)", ()),
+    ("close(nowhere())", ()),
+    ("a = 1\ny: int = kept", ("kept = 'text'",)),
+    ("x: str = span(1, 2)(['a'])", ()),
+    ("close((await bash('ls')).code)", ()),
+  ]:
+    assert sheet.gate(ENGINE, list(program), word, furb_monty.gate) == sheet.gate(ENGINE, list(program), word, checked)
 
-  def nowhere(name: str) -> None:
-    assert name == "ty"
 
-  monkeypatch.setattr("furb.kernel.shutil.which", nowhere)
-  with pytest.raises(RuntimeError, match="the gate did not run"):
-    said("x = 1")
-
-
-def test_a_gate_that_ran_and_came_back_angry_says_so(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-  """A tool that ran and failed has said nothing about the word either, and what it said on the way out is told."""
-
-  def folder(name: str) -> str:
-    assert name == "ty"
-    return str(tmp_path)
-
-  monkeypatch.setattr("furb.kernel.shutil.which", folder)
-  with pytest.raises(RuntimeError, match="the gate did not run"):
-    said("x = 1")
+def test_a_word_that_imports_what_the_sandbox_does_not_run_is_refused() -> None:
+  """The gate reads a word against the typeshed of the sandbox, so a word that imports what monty does not run is
+  refused before it runs, and a word that imports what it runs is not."""
+  assert said("import subprocess\nclose(subprocess.run)") == [
+    "line 1: error[unresolved-import] Cannot resolve imported module `subprocess`"
+  ]
+  assert said("import re\nclose(re.compile('a'))") == []
 
 
 def test_a_return_inside_a_word_is_the_scope_it_stands_in() -> None:
@@ -188,18 +185,6 @@ async def test_the_kernel_speaks_from_the_run_it_steps() -> None:
   waits = engine.rung('x = 3\ndebug(t"{x}")', on=root)
   await waits
   assert [one[1] for one in tags(root, "debugged")] == [[("id", waits), ("x", 3)]]
-
-
-def test_a_gate_whose_tool_came_back_angry_ends_the_life(monkeypatch: pytest.MonkeyPatch) -> None:
-  """A tool that ran and failed has said nothing about the word, so the life ends with what it said on the way out."""
-
-  def cross(name: str) -> str:
-    assert name == "ty"
-    return "/usr/bin/false"
-
-  monkeypatch.setattr("furb.kernel.shutil.which", cross)
-  with pytest.raises(RuntimeError, match="the gate did not run"):
-    said("x = 1")
 
 
 async def test_a_word_that_awaits_and_then_ends_gives_nothing() -> None:

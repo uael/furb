@@ -1,0 +1,35 @@
+[package]
+name = "furb"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+description = "The core of an AI harness: the engine in a sandbox, behind an async API, with a World of your own."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+
+[lib]
+name = "furb"
+path = "src/lib.rs"
+# A library to a Rust host, and the extension module of the python distribution when the python feature is on.
+crate-type = ["rlib", "cdylib"]
+
+[features]
+# The python binding: the same crate, reached from python. It links no interpreter of its own, which is what an
+# extension module is, so the module feature is on only where maturin builds the wheel.
+python = ["dep:pyo3"]
+extension-module = ["python", "pyo3/extension-module"]
+
+[dependencies]
+# The sandbox the engine runs in, which is the reason the crate exists, and its
+# type checker, which is the gate of the Kernel: ty as a library, reading the
+# sheet of a word against the typeshed of the sandbox, so that a word which
+# imports what monty does not run is refused before it runs. The python
+# package gates through the same checker, so a word is judged once and the same.
+#
+# A revision of the fork and not a version, because the interpreter the engine
+# needs is not released. A revision and not a branch, so a build of today and a
+# build of next month read the same interpreter.
+monty = { git = "https://github.com/uael/monty", rev = "959c7b65" }
+monty-type-checking = { git = "https://github.com/uael/monty", rev = "959c7b65" }
+monty-types = { git = "https://github.com/uael/monty", rev = "959c7b65" }
+pyo3 = { version = "0.29.2", features = ["generate-import-lib"], optional = true }

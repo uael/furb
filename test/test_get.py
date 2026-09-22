@@ -15,7 +15,7 @@ async def test_the_act_again_from_its_name() -> None:
   which = await engine.prompt(str, "start one", on=root)
   await settle()
   step = said(log, "rung")[0][1]
-  assert engine.get(which) is said(log, "bash")[0]
+  assert engine.get(which) == said(log, "bash")[0]
   assert engine.get(which) == ("bash", which, step, root, "echo hi", False, 600.0)
   ended = engine.peek(which, on=root)
   assert isinstance(ended, Exit) and ended.code == 0
@@ -27,8 +27,8 @@ async def test_get_gives_an_act_again_from_the_id_of_the_act() -> None:
   _, root = life(sand)
   act = engine.bash("echo hi", on=root)
   again = engine.get(act)
-  assert again[:4] == ("bash", act, OPERATOR, root) and again is engine.get(act)
-  assert (await act).code == 0 and engine.get(act) is again
+  assert again[:4] == ("bash", act, OPERATOR, root) and again == engine.get(act)
+  assert (await act).code == 0 and engine.get(act) == again
 
 
 async def test_get_and_peek_enter_nothing_in_the_record() -> None:

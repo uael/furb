@@ -2,6 +2,12 @@ version = 1
 revision = 3
 requires-python = ">=3.14"
 
+[manifest]
+members = [
+    "furb",
+    "furb-monty",
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.8.0"
@@ -246,6 +252,7 @@ name = "furb"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "furb-monty" },
     { name = "pydantic" },
     { name = "pydantic-ai-slim" },
     { name = "python-minifier" },
@@ -267,6 +274,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "furb-monty", editable = "bind/python" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-ai-slim", specifier = ">=2.27.1" },
     { name = "python-minifier", specifier = ">=3.3.0" },
@@ -283,8 +291,19 @@ dev = [
     { name = "python-minifier", specifier = ">=3.2.0" },
     { name = "ruff", specifier = ">=0.16.2" },
     { name = "tiktoken", specifier = ">=0.13.0" },
-    { name = "ty", specifier = "==0.0.82" },
+    { name = "ty", specifier = ">=0.0.82" },
 ]
+
+[[package]]
+name = "furb-monty"
+version = "0.1.0"
+source = { editable = "bind/python" }
+dependencies = [
+    { name = "furb" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "furb", editable = "." }]
 
 [[package]]
 name = "genai-prices"

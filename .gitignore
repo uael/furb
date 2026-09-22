@@ -7,3 +7,7 @@ __pycache__/
 dist/
 .coverage
 traces/
+target/
+# The extension maturin builds into the binding: made by the build, never source.
+*.so
+*.pyd

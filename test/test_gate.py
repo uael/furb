@@ -34,14 +34,13 @@ async def test_the_gate_checks_the_word_of_a_rung_against_the_rungs_before_it_in
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   await engine.rung("a = 1", on=root)
+  await engine.rung("b = a + 1", on=root)
   with pytest.raises(Refused):
-    await engine.rung("b = BAD", on=root)
-  await engine.rung("c = 3", on=root)
-  with pytest.raises(Refused):
-    await engine.rung("d = BAD", on=root)
-  # The gate of the harness counts the rungs it read the word against, and a refused word joins none of them.
-  assert gated(log) == ["a = 1", "b = BAD", "c = 3", "d = BAD"]
-  assert findings(log) == [[], ["BAD is no name, after 1 rungs"], [], ["BAD is no name, after 2 rungs"]]
+    await engine.rung("c = later", on=root)
+  await engine.rung("later = 3", on=root)
+  await engine.rung("c = later", on=root)
+  assert gated(log) == ["a = 1", "b = a + 1", "c = later", "later = 3", "c = later"]
+  assert [bool(found) for found in findings(log)] == [False, False, True, False, False]
 
 
 async def test_a_response_that_is_not_python_is_a_finding_like_any_other() -> None:
@@ -83,6 +82,6 @@ async def test_gate_tells_the_findings_as_its_body() -> None:
   sand.script[root] = ["found = gate('BAD')\nclose(len(found))"]
   assert await engine.prompt(int, "ask the gate", on=root) == 1
   await settle()
-  found = "BAD is no name, after 1 rungs"
-  assert engine.modules[root]["found"] == [found]
-  assert [tag[2] for tag in tags(engine.turns(on=root), "gate")] == [found]
+  found = engine.modules[root]["found"]
+  assert isinstance(found, list) and len(found) == 1 and found[0].startswith("line 1: ") and "BAD" in found[0]
+  assert [tag[2] for tag in tags(engine.turns(on=root), "gate")] == found

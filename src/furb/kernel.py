@@ -1,26 +1,24 @@
-"""The Kernel of this interpreter, which runs a word in the module of its chain, and the gate, which reads it with ty.
+"""The Kernel of this interpreter, which runs a word in the module of its chain, and the gate, which reads it with
+the gate of the crate.
 
 The engine holds the laws of a chain. To judge a word before it runs, and to run it, are machinery, so they stand
 here, behind the Kernel and the gate that the contract declares. The gate reads the word on the sheet of
-`furb.sheet`, with the ty command line reading it: the engine itself, laid as the first rung of the chain, then
-the program of the chain, then the word, all inside one async body, so that the awaits of the word stand.
+`furb.sheet`, with the type checker of monty reading it, the one the crate carries and the engine of monty gates
+with too, so a word is judged once and the same: the engine itself, laid as the first rung of the chain, then the
+program of the chain, then the word, all inside one async body, so that the awaits of the word stand.
 
 A word answers by a close and never by a return: a body of a module takes no return, so a word that holds one is no
 python and the gate says so.
 """
 
-import re
-import shutil
-import subprocess
-import sys
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from asyncio import CancelledError
 from collections.abc import Generator
 from inspect import iscoroutine
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from types import CoroutineType
 
+import furb_monty
 from furb import engine, sheet
 from furb.engine import Act, Refused, modules, outcomes, site, under
 
@@ -29,14 +27,6 @@ type Kernel = Generator[tuple | None, tuple]
 
 SOURCE = Path(engine.__file__)
 """SOURCE is the engine, which names every name that the globals of a chain hold of it."""
-DIAG = re.compile(
-  r"\A(?P<path>.+?):(?P<line>\d+):(?P<column>\d+): (?P<sort>error|warning)\[(?P<rule>[^\]]+)\] (?P<why>.*)\Z"
-)
-"""DIAG reads one finding of ty in its concise form."""
-VERSION = ".".join(map(str, sys.version_info[:2]))
-"""VERSION is the python that the gate reads a word for, which is the python that runs it."""
-NO_TY = "the gate did not run"
-"""NO_TY is what the life ends with when ty is not there to read a word, which is no finding against the word."""
 
 
 ENGINE = SOURCE.read_text(encoding="utf-8")
@@ -45,33 +35,11 @@ in the names the engine binds, with the types the engine gives them."""
 
 
 def checked(text: str) -> list[tuple[int, str]]:
-  """What ty finds on one sheet, each finding by its line: the errors, and none of the warnings, since a warning
-  refuses no word.
-
-  A tool that did not run has said nothing about the word, which is not the same as having found nothing, so the
-  life ends there rather than refuse a word that nobody read.
-  """
-  ty = shutil.which("ty")
-  if ty is None:
-    raise RuntimeError(NO_TY)
-  with TemporaryDirectory(prefix="furb-gate-") as yard:
-    at = Path(yard, "sheet.py")
-    at.write_text(text, encoding="utf-8")
-    args = [ty, "check", "--python", sys.prefix, "--python-version", VERSION, "--output-format", "concise"]
-    # The gate answers while the one that asked waits, so it reads the sheet here and not on the loop.
-    try:
-      ran = subprocess.run([*args, "--exit-zero", str(at)], capture_output=True, check=False)  # noqa: S603
-    except OSError as no:
-      why = f"{NO_TY}: {no}"
-      raise RuntimeError(why) from no
-  if ran.returncode:
-    why = f"{NO_TY}: {ran.stderr.decode(errors='replace').strip()}"
-    raise RuntimeError(why)
-  return [
-    (int(found["line"]), f"error[{found['rule']}] {found['why']}")
-    for line in ran.stdout.decode(errors="replace").split("\n")
-    if (found := DIAG.match(line.strip())) is not None and found["sort"] == "error"
-  ]
+  """What the gate of the crate finds on one sheet, each finding by its line: the errors, and none of the
+  warnings, since a warning refuses no word. A gate that could not read the sheet has said nothing about the word,
+  which is not the same as having found nothing, so it raises and the life ends there rather than refuse a word
+  that nobody read."""
+  return furb_monty.gate(text)
 
 
 class Native:
