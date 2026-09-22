@@ -262,9 +262,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       to_run.clear()
       modules[id] = {**globals(), "__name__": id, "actor": standing[2], "raised": None}
       if words:
-        token = site.set(of)
-        rung(words)
-        site.reset(token)
+        with site.set(of):
+          rung(words)
 
     if source:
       _, theirs = ask("transcript", source, source)
@@ -639,7 +638,7 @@ def boot(record=(), **outside):
   log, alive, made, busy, heard = [], {}, Counter(), set(), 0
 
   def door():
-    answers = {e[1][1]: (*e[2:], *e[1][3:])[0] for e in kept if len(e) == 3 or e[1][0] == "done"}
+    answers = {e[1][1]: e[2] for e in kept if len(e) == 3}
     while True:
       match a := (yield):
         case ("holds", qid, _, _, about):
@@ -650,34 +649,32 @@ def boot(record=(), **outside):
           yield "done", qid, answers[qid]
 
   def journal():
-    facts = {e[1][1]: e[1] for e in kept if question(e[1])}
-    said, cursor, copies, after, held = set(), 0, set(), "", set(facts)
+    facts = {one[1]: one for _, one, *_ in kept if question(one)}
+    said, cursor, after, held = set(), 0, "", set(facts)
 
     def keep(entry):
       kept.append(entry)
       send("keep", "", entry)
 
     while True:
-      while cursor < past:
+      while cursor < past and heard == len(log):
         match kept[cursor]:
           case (_, q, _):
             said.add(q[1])
           case (_, (kind, _, "operator", on, *words) as then) if question(then) and (not on or on in said):
-            token = site.set(OPERATOR)
-            try:
+            with site.set(OPERATOR):
+              made[OPERATOR] = int(then[1].rpartition(".")[2]) - 1
               globals()[kind](*words, on=on)
-            finally:
-              site.reset(token)
           case (before, (_, about, *_)) if not (about in said and before in said):
             break
-          case (_, (kind, about, by, *words) as then) if not question(then) and kind != "done":
-            copies.add(id(send(kind, about, *words, by=by)))
+          case (_, (kind, about, by, *words) as then) if not question(then):
+            held.add(id(send(kind, about, *words, by="record" if kind == "done" else by)))
         cursor += 1
       a = yield
       match a:
         case (_, qid, by, *words) if question(a):
           ours = qid in acts
-          if ours and qid in facts and list(words[1:]) != list(facts[qid][4:]):
+          if ours and qid in facts and words[1:] != [*facts[qid][4:]]:
             raise Drift(f"{qid} drifts")
           if ours or by.startswith("rung://"):
             said.add(qid)
@@ -687,7 +684,7 @@ def boot(record=(), **outside):
               keep((after, a))
           if ours:
             after = qid
-        case (kind, about, by, *words) if by in (WORLD, OPERATOR) and about in facts and id(a) not in copies:
+        case (kind, about, by, *words) if by in (WORLD, OPERATOR) and about in facts and id(a) not in held:
           answer = [words[0]] if kind == "done" and about in asked else []
           if about not in held:
             held.add(about)
@@ -719,13 +716,14 @@ def boot(record=(), **outside):
 
   def makes(kind, on, ear, *words):
     a = named(kind, on, *words)
+    id = a[1]
     if not a[3] and kind != "chain":
-      raise Refused(f"no chain {a[1]}")
-    if acts.setdefault(a[1], a) is a:
+      raise Refused(f"no chain {id}")
+    if acts.setdefault(id, a) is a:
       log.append(a)
-      live(ear(a[1]), a[1])
+      live(ear(id), id)
       dispatch()
-    return Act(a[1])
+    return Act(id)
 
   def ears():
     return sorted(alive.items(), key=lambda pair: (pair[0] not in acts, pair[0] in outside))
@@ -739,22 +737,27 @@ def boot(record=(), **outside):
 
   def dispatch():
     nonlocal heard
-    while not busy and heard < len(log):
+    while not busy:
+      if heard == len(log):
+        if g := alive.get("journal"):
+          hears("journal", g, None)
+        if heard == len(log):
+          break
       for name, g in ears():
         if alive.get(name) is g:
           hears(name, g, log[heard])
       heard += 1
 
   def hears(name, g, a):
-    token, living = site.set(name), False
-    busy.add(name)
-    try:
-      living = lives(g, a)
-    finally:
-      site.reset(token)
-      busy.discard(name)
-      if not living:
-        alive.pop(name, None)
+    with site.set(name):
+      living = False
+      busy.add(name)
+      try:
+        living = lives(g, a)
+      finally:
+        busy.discard(name)
+        if not living:
+          alive.pop(name, None)
 
   def live(g, name):
     if name in alive or (name in outside and name in (OPERATOR, "record", "journal")):

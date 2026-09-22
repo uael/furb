@@ -103,8 +103,14 @@ async def test_a_later_life_gives_the_same_names() -> None:
   """A later life gives the same names, since the same acts make them again."""
   sand = sown()
   log, root = await lived(sand)
+  engine.cwd(on=root)
+  engine.turns(on=root)
+  engine.peek(root, on=root)
+  fork = engine.chain("fork", source=root)
+  await engine.rung("saved = 7", on=fork)
+  await settle()
   again, over = await relived(Sand(stands=STANDS), list(sand.record))
-  assert made(again) == made(log)[: len(made(again))] and over == root
+  assert made(again) == made(log) and over == root
 
 
 async def test_the_root_has_no_parent() -> None:
@@ -433,6 +439,26 @@ async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> No
   heard, over = await relived(Sand(stands=STANDS), list(play.record))
   assert over == root and [a[1] for a in said(heard, "grant")] == [top]
   assert [a for a in said(heard, "done") if a[1] == top] == []
+  outside = sown()
+  life(outside)
+  token = engine.site.set("outside")
+  try:
+    child = engine.chain("outside")
+  finally:
+    engine.site.reset(token)
+  engine.pause(child)
+  ceiling = engine.grant(1.0, on=child)
+  later = Sand(stands=STANDS)
+  waiting, _ = await relived(later, list(outside.record))
+  assert said(waiting, "grant") == []
+  token = engine.site.set("outside")
+  try:
+    assert engine.chain("outside") == child
+  finally:
+    engine.site.reset(token)
+  await settle()
+  assert [a[1] for a in said(waiting, "grant")] == [ceiling]
+  assert later.record == []
 
 
 async def test_the_act_made_last_before_an_entry_is_the_last_act_the_journal_heard() -> None:

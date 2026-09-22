@@ -313,9 +313,8 @@ fn what_the_engine_raised_reaches_the_host_as_the_fault_it_is() {
 fn a_second_life_on_the_record_the_world_kept_makes_the_same_acts_again() {
   let mut first = Lived::new("again", &["close(len(read('a.txt').lines))"], vec![]).unwrap();
   let root = first.root();
-  // The file is put there by hand: a write of the operator is a query, which takes a number of the operator's,
-  // and a later life that says it not would name its acts otherwise.
-  fs::write(first.at.join("a.txt"), "one\ntwo\n").unwrap();
+  first.life.write(&Text::new("a.txt", "one\ntwo\n"), &root).unwrap();
+  first.life.cwd(&root).unwrap();
   let act = first.life.prompt("int", "count", "", &root).unwrap();
   let id = act.id().to_owned();
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(2));
