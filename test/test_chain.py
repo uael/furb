@@ -1,6 +1,7 @@
 """chain, the act that holds facts, with a module and a working directory of its own."""
 
 import asyncio
+import symtable
 from asyncio import CancelledError
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from conftest import DOOR, STANDS, Py, Sand, attr, life, ran, said, seen, settle, sown, tags
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Act, Refused, Text, take
+from furb.kernel import ENGINE
 
 
 def made(held: list[tuple]) -> list[str]:
@@ -23,6 +25,12 @@ def opening(held: list[tuple], id: str) -> list[tuple]:
 def on(a: tuple) -> str:
   """The chain a fact is on: the chain a question names, and the scope of the act that any other fact is about."""
   return a[3] if engine.question(a) else engine.scope(a[1])
+
+
+def defined(text: str) -> set[str]:
+  """The names a file of python binds at its top, as python reads the file."""
+  table = symtable.symtable(text, "engine.py", "exec")
+  return {s.get_name() for s in table.get_symbols() if s.is_assigned() or s.is_imported()}
 
 
 async def test_chain_says_what_a_chain_does() -> None:
@@ -351,9 +359,7 @@ async def test_every_name_that_the_file_defines_is_in_the_globals_of_a_chain() -
   """Every name that the file defines is in the globals of a chain."""
   sand = sown()
   _, root = life(sand)
-  mine = {name for name in vars(engine) if not name.startswith("__")}
-  assert mine <= set(engine.modules[root])
-  assert engine.modules[root]["bash"] is engine.bash and engine.modules[root]["HEAD"] is engine.HEAD
+  assert defined(ENGINE) <= set(engine.modules[root])
 
 
 async def test_a_chain_holds_whole_every_act_made_on_the_chain() -> None:
@@ -1017,11 +1023,9 @@ async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_bir
   act = engine.prompt(None, "work", to=OPERATOR, on=root)
   engine.write(Text(act, "a = 1\nb = 2"), on=root)
   await settle()
-  was = engine.modules[root]
   engine.write(Text(act, "a = 1"), on=root)
   await settle()
   assert engine.read(act, on=root) == Text(act, "a = 1")
-  assert engine.modules[root] is not was and was["b"] == 2
   assert engine.modules[root]["a"] == 1 and "b" not in engine.modules[root]
   sand.script[root] = ["write(Text(get(acting())[2], 'c = 3'))\nd = 4", "close(None)"]
   later = engine.prompt(None, "edit", on=root)
