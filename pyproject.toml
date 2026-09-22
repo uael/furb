@@ -109,6 +109,10 @@ skip-magic-trailing-comma = true
 [tool.ty.src]
 include = ["src", "test", "script", "bind/python"]
 
+# The stand-in imports the module of the sandbox, which this interpreter has not: `typings` holds its stub.
+[tool.ty.environment]
+extra-paths = ["typings"]
+
 # The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
 # of an act, a task or a standing it reads after the check the sentence beside it makes.
 [[tool.ty.overrides]]

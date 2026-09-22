@@ -456,6 +456,34 @@ fn to_python<'py>(
         {
           return py.import("furb_monty.engine")?.call_method1("made", (n,));
         }
+        // A class a word defined, as the type python holds it by its handle, and an instance of one, as an
+        // object of that type holding the fields the sandbox carries out.
+        if mark == "class"
+          && let Some(n) = at("id").and_then(|one| one.as_int())
+          && let Some(name) = at("name").and_then(|one| one.as_str())
+          && let Some(raises) = at("raises").and_then(|one| one.as_bool())
+        {
+          let raising = PyDict::new(py);
+          raising.set_item("raises", raises)?;
+          return py.import("furb_monty.engine")?.call_method("classed", (n, name), Some(&raising));
+        }
+        if mark == "instance"
+          && let Some(n) = at("class").and_then(|one| one.as_int())
+          && let Some(value) = at("value")
+          && let Some(raises) = at("raises").and_then(|one| one.as_bool())
+        {
+          let fields = PyDict::new(py);
+          for (key, one) in value.pairs().unwrap_or_default() {
+            fields.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
+          }
+          let raising = PyDict::new(py);
+          raising.set_item("raises", raises)?;
+          return py.import("furb_monty.engine")?.call_method(
+            "instanced",
+            (n, value.type_name(), fields),
+            Some(&raising),
+          );
+        }
       }
       let held = PyDict::new(py);
       for (key, one) in pairs {
@@ -475,17 +503,24 @@ fn to_python<'py>(
           }
           made.class(py, said.type_name())?.call((), Some(&kwargs))
         }
-        // A class of the engine crosses as its name, which python holds as the class its instances are; anything
-        // else that has no fields, a coroutine, a function that crossed by no mark, shows as what it is.
+        // A class of the engine crosses as its name, which python holds as the class its instances are, and a
+        // builtin type as the builtin it is; anything else that has no fields, a coroutine, a function that
+        // crossed by no mark, shows as what it is.
         None => {
           let shown = said.py_repr();
           let name =
             shown.strip_prefix("Repr(\"<class '").and_then(|rest| rest.split('\'').next()).filter(
               |name| !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_'),
             );
-          match name.and_then(|name| made.named(py, name).transpose()) {
-            Some(held) => held,
-            None => Ok(PyString::new(py, &shown).into_any()),
+          let Some(name) = name else {
+            return Ok(PyString::new(py, &shown).into_any());
+          };
+          match made.named(py, name)? {
+            Some(held) => Ok(held),
+            None => match py.import("builtins")?.getattr(name) {
+              Ok(held) => Ok(held),
+              Err(_) => Ok(PyString::new(py, &shown).into_any()),
+            },
           }
         }
       },
@@ -516,6 +551,24 @@ fn of_python(made: &Made, ears: &Py<PyAny>, value: &Bound<'_, PyAny>) -> PyResul
   }
   if let Ok(held) = value.cast::<PyString>() {
     return Ok(Object::string(held.to_str()?));
+  }
+  // A class a word defined goes back in by its handle, and an instance of one by the handle of its class and its
+  // fields; any other type goes in as its name, which is how a shape is said.
+  if let Ok(n) = value.getattr("__monty__").and_then(|n| n.extract::<i64>())
+    && value.is_instance_of::<PyType>()
+  {
+    return Ok(marked("made", [("id", Object::int(n))]));
+  }
+  if let Ok(n) = value.get_type().getattr("__monty__").and_then(|n| n.extract::<i64>()) {
+    let mut fields = Vec::new();
+    for (key, one) in value.getattr("__dict__")?.cast::<PyDict>()?.iter() {
+      fields.push((of_python(made, ears, &key)?, of_python(made, ears, &one)?));
+    }
+    // An exception holds what it was made with apart from its fields.
+    if value.is_instance_of::<PyBaseException>() {
+      fields.push((Object::string("args"), of_python(made, ears, &value.getattr("args")?)?));
+    }
+    return Ok(marked("instance", [("class", Object::int(n)), ("fields", Object::dict(fields))]));
   }
   if value.is_instance_of::<PyType>() {
     return Ok(Object::string(value.getattr("__name__")?.extract::<String>()?));

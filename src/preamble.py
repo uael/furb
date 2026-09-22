@@ -15,13 +15,18 @@ instance of a class of the engine comes in as a map that names its class under `
 interpreter makes no instance of a class of the sandbox on a host's behalf, and so the instance is made here. A
 name of the engine crosses as its name, both ways, so a show of the engine is the same show on both sides. A
 callable the engine made goes out as a handle the host calls it back by, and a callable of the host comes in as a
-name the ears of the host call it back by.
+name the ears of the host call it back by. A class a word defined goes out by a handle too, which the host holds
+as a type of its own, an exception type when the class is one, and the class comes back in by, and an instance of
+one goes out with its fields under the handle of its class and comes back in made here from them, with no
+`__init__` run.
 """
 
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from collections.abc import Callable, Coroutine, Generator
 from contextvars import ContextVar
 from typing import TYPE_CHECKING
+
+from monty import instance
 
 type Names = dict[str, object]
 """The names of the engine: its module, in which every word of the operator and every stand-in runs."""
@@ -66,8 +71,9 @@ if TYPE_CHECKING:
 IS = "is"
 """IS marks a map that is an instance of a class of the engine, by the name of that class."""
 MADE: dict[int, object] = {}
-"""MADE holds every callable the engine made that crossed to the host, by its handle, which is its identity, for
-as long as the host holds the handle: the host says when it forgot one, and it is dropped then."""
+"""MADE holds every callable the engine made and every class a word defined that crossed to the host, by its
+handle, which is its identity, for as long as the host holds the handle: the host says when it forgot one, and it
+is dropped then."""
 
 
 def verb(names: Names, which: str) -> Callable[..., object]:
@@ -77,10 +83,32 @@ def verb(names: Names, which: str) -> Callable[..., object]:
   return got
 
 
+def named(x: object, names: Names) -> str | None:
+  """The name of the engine a value is bound to, when it is one, by identity."""
+  return next((name for name, held in names.items() if held is x and not name.startswith("_")), None)
+
+
+def worded(cls: type, names: Names) -> bool:
+  """Whether a class is one a word defined: a class of the session, which the interpreter says is written in
+  `__main__` as it says of the engine's, and no name of the engine. A builtin type has no module."""
+  try:
+    cls.__module__  # noqa: B018  # the read is the test: a builtin type raises
+  except AttributeError:
+    return False
+  return named(cls, names) is None
+
+
+def handled(x: object) -> int:
+  """The handle a value goes out by, which is its identity, held here for as long as the host holds it."""
+  MADE[id(x)] = x
+  return id(x)
+
+
 def outward(x: object, names: Names) -> object:
-  """A value as it goes out to the host: a callable of the engine as its name, a callable the engine made as the
-  handle the host calls it back by, and the entries of a container each as they go out. Anything else the
-  interpreter carries out as it is."""
+  """A value as it goes out to the host: a callable or a class of the engine as its name, a callable the engine
+  made or a class a word defined as the handle the host holds it by, an instance of such a class with its fields
+  under the handle of its class, and the entries of a container each as they go out. Anything else the interpreter
+  carries out as it is."""
   match x:
     case dict():
       return {k: outward(v, names) for k, v in x.items()}
@@ -88,13 +116,17 @@ def outward(x: object, names: Names) -> object:
       return [outward(v, names) for v in x]
     case tuple():
       return tuple(outward(v, names) for v in x)
-  if not callable(x) or isinstance(x, type):
+  if (name := named(x, names)) is not None and callable(x):
+    return {IS: "name", "name": name}
+  if isinstance(x, type):
+    if not worded(x, names):
+      return x
+    return {IS: "class", "id": handled(x), "name": x.__name__, "raises": issubclass(x, BaseException)}
+  if worded(type(x), names):
+    return {IS: "instance", "class": handled(type(x)), "value": x, "raises": isinstance(x, BaseException)}
+  if not callable(x):
     return x
-  for name, held in names.items():
-    if held is x and not name.startswith("_"):
-      return {IS: "name", "name": name}
-  MADE[id(x)] = x
-  return {IS: "made", "id": id(x)}
+  return {IS: "made", "id": handled(x)}
 
 
 def known(names: Names, name: str) -> object:
@@ -113,9 +145,15 @@ def again(x: object, names: Names, ears: Ears) -> object:
     # A name of the engine crosses as its name, so a show of the engine is the engine's own here.
     case {"is": "name", "name": str(name)} if name in names:
       return names[name]
-    # A callable the engine made, back from the host by the handle it crossed under.
+    # A callable the engine made, or a class a word defined, back from the host by the handle it crossed under.
     case {"is": "made", "id": int(n)}:
       return MADE[n]
+    # An instance of a class a word defined, back from the host by the handle of its class and its fields, made
+    # here from them as the interpreter makes one, with no `__init__` run.
+    case {"is": "instance", "class": int(n), "fields": dict(fields)}:
+      cls = MADE[n]
+      assert isinstance(cls, type)
+      return instance(cls, {str(k): again(v, names, ears) for k, v in fields.items()})
     case {"is": "ear", "name": str(name), "started": bool(started)}:
       ear = crossing(name, ears, names)
       # A generator that was started already stands at a yield, and so must its stand-in.
@@ -424,7 +462,7 @@ def made_called(engine: Names, ears: Ears, n: int, args: list, kwargs: dict) -> 
 
 
 def forgotten(n: int) -> None:
-  """One handle the host holds no more, so the callable it named is the sandbox's to drop."""
+  """One handle the host holds no more, so the callable or the class it named is the sandbox's to drop."""
   MADE.pop(n, None)
 
 
