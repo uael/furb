@@ -332,11 +332,11 @@ async def test_a_later_life_reads_the_same_text_from_a_door() -> None:
 
 
 async def test_it_is_given_what_the_world_kept_of_the_life_before_it() -> None:
-  """It is given what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own."""
+  """It is given what the World kept of the life before it, and the generators of the outside, the Kernel, the gate and the World among them, each under the name it is to hear by, and it brings them to life with its own."""
   sand = sown()
   log, _ = await lived(sand)
   assert said(log, "answer")[0][2] == WORLD
-  assert [a[2] for a in said(log, "done") if a[1].startswith("gate://")][:1] == ["kernel"]
+  assert [a[2] for a in said(log, "done") if a[1].startswith("gate://")][:1] == ["gate"]
   later = Sand(stands=STANDS)
   again, _ = await relived(later, list(sand.record))
   assert [a[1] for a in said(again, "bash")] == [a[1] for a in said(log, "bash")]

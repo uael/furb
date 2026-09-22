@@ -6,25 +6,9 @@ from conftest import STANDS, Sand, findings, gated, life, ran, refusals, relived
 from furb import engine
 from furb.engine import Refused
 
-CHECKS = (
-  "def checks(id):\n"
-  "  while True:\n"
-  "    match (yield):\n"
-  "      case ('read', qid, _, _, path) if path.startswith('check://'):\n"
-  "        yield 'done', qid, Text(path, '\\n'.join(gate('BA' 'D')))\n"
-  "\n"
-  "act('check', '', checks)\n"
-  "close(1)\n"
-)
-"""A word that opens an act which reads a word of its own against the gate when a door of that act is read.
-
-The word it gates is spelled in two parts, so that the gate of the suite accepts this word itself. A word says a
-gate only from an act of its own, since the Kernel is busy with the word while the word runs.
-"""
-
 
 async def test_whether_the_word_of_a_rung_may_run() -> None:
-  """Whether the word of a rung may run: the Kernel reads it against the rungs of its chain before it, and it finds nothing when the word may run."""
+  """Whether the word of a rung may run: the gate reads it after the program of its chain, and it finds nothing when the word may run."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   await engine.rung("k = 1", on=root)
@@ -57,7 +41,7 @@ async def test_the_gate_checks_the_word_of_a_rung_against_the_rungs_before_it_in
     await engine.rung("d = BAD", on=root)
   # The gate of the harness counts the rungs it read the word against, and a refused word joins none of them.
   assert gated(log) == ["a = 1", "b = BAD", "c = 3", "d = BAD"]
-  assert findings(log) == [[], ["BAD in rung, after 1 rungs"], [], ["BAD in rung, after 2 rungs"]]
+  assert findings(log) == [[], ["BAD is no name, after 1 rungs"], [], ["BAD is no name, after 2 rungs"]]
 
 
 async def test_a_response_that_is_not_python_is_a_finding_like_any_other() -> None:
@@ -96,9 +80,9 @@ async def test_gate_tells_the_findings_as_its_body() -> None:
   """gate tells the findings as its body."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  sand.script[root] = [CHECKS]
-  assert await engine.prompt(int, "open a door", on=root) == 1
+  sand.script[root] = ["found = gate('BAD')\nclose(len(found))"]
+  assert await engine.prompt(int, "ask the gate", on=root) == 1
   await settle()
-  found = "BAD in rung, after 1 rungs"
-  assert engine.read("check://one", on=root).content == found
+  found = "BAD is no name, after 1 rungs"
+  assert engine.modules[root]["found"] == [found]
   assert [tag[2] for tag in tags(engine.turns(on=root), "gate")] == [found]

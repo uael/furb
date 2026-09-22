@@ -12,7 +12,7 @@ import pytest
 
 from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
-from furb.kernel import NAMES, Native, declared
+from furb.kernel import ENGINE, gate
 from outside.doubles import settle, stood, tags, worlds
 
 STANDS = (((OPERATOR, (), WINDOW), ("opus", ("low",), 1000)), "/w", "opus/low")
@@ -20,26 +20,34 @@ STANDS = (((OPERATOR, (), WINDOW), ("opus", ("low",), 1000)), "/w", "opus/low")
 
 def said(word: str, program: tuple[str, ...] = ()) -> list[str]:
   """What the gate finds against a word, read after the program of its chain."""
-  return Native().gate(word, list(program))
+  return gate(word, list(program))
 
 
-def test_the_sheet_binds_what_the_contract_declares() -> None:
-  """The globals of a chain hold every name the contract declares, so the sheet binds the same names, one to a line,
-  and ty reads a word in the vocabulary it will have when it runs."""
-  assert declared() == NAMES
-  assert {"bash", "Text", "HEAD", "read", "prompt", "close"} <= set(NAMES)
-  assert {"World", "Kernel"}.isdisjoint(NAMES)
-  laid, above = sheet.sheet(NAMES, ["k = 1"], "close(k)")
-  assert all(f"  {name} = __engine.{name}\n" in laid for name in (*NAMES, "actor", "raised"))
+def test_the_sheet_lays_the_engine_as_the_first_rung() -> None:
+  """The module of a chain is the engine run as a word, so the sheet lays the engine itself first, whole and line
+  for line, then the two names the chain binds, then the program, then the word, and ty reads a word in the
+  vocabulary it will have when it runs."""
+  laid, above = sheet.sheet(ENGINE, ["k = 1"], "close(k)")
+  assert laid.startswith("async def __body():\n  import re\n")
+  assert "".join(line[2:] + "\n" if line.strip() else "\n" for line in laid.split("\n")[1:]).startswith(ENGINE)
+  assert (
+    '  actor = ""\n  raised: BaseException | None = None\n  if lineage(""):\n    pass\n    k = 1\n  close(k)\n' in laid
+  )
   assert above == laid.count("\n") - 1
   assert laid.endswith("  close(k)\n")
-  assert "    k = 1\n" in laid
+
+
+def test_every_name_the_engine_binds_is_a_name_a_word_may_say() -> None:
+  """A word runs in the module of its chain, which holds every name the engine binds, an import of its own among
+  them, so the gate reads those as bound; a name the contract alone declares is nobody's."""
+  assert said("x = re.compile('a')\nclose(CancelledError)") == []
+  assert said("close(Counter())") == []
+  assert said("close(Question)")[0].startswith("line 1: error[unresolved-reference]")
 
 
 def test_the_reading_of_a_word_comes_before_ty() -> None:
   """A word refused for what it says is a word no tool has anything to add about."""
   assert said("def (")[0].startswith("line 1: ")
-  assert said("x = __engine.WINDOW") == ["__engine is a name of the gate"]
 
 
 def test_a_word_the_interpreter_will_not_take_is_a_finding_like_any_other() -> None:
@@ -179,13 +187,6 @@ async def test_the_kernel_speaks_from_the_run_it_steps() -> None:
   waits = engine.rung('x = 3\ndebug(t"{x}")', on=root)
   await waits
   assert [one[1] for one in tags(root, "debugged")] == [[("id", waits), ("x", 3)]]
-
-
-def test_a_name_the_contract_declares_by_a_plain_assignment_is_a_name_of_the_engine(tmp_path: Path) -> None:
-  """The contract names its own by an annotation or by a plain assignment, and either way a chain binds it."""
-  stub = tmp_path / "said.pyi"
-  stub.write_text("WIDE = 3\nnarrow: int = 4\ndef verb() -> None: ...\nclass Shape: ...\ntype Alias = int\n")
-  assert declared(stub) == ["WIDE", "narrow", "verb", "Shape", "Alias"]
 
 
 def test_a_gate_whose_tool_came_back_angry_ends_the_life(monkeypatch: pytest.MonkeyPatch) -> None:

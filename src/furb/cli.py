@@ -13,7 +13,7 @@ from pathlib import Path
 
 from furb import engine
 from furb.engine import Act
-from furb.kernel import Native
+from furb.kernel import Native, gating
 from furb.provider.claude import ACTOR, cool
 from furb.world import Live, kept, rendered
 
@@ -31,7 +31,7 @@ def lived(record: Path | None, cwd: Path, actor: str) -> tuple[Live, str, list[t
   """One life on the loop that runs: its World on the record, the Kernel of this interpreter, and its root."""
   held = kept(record) if record is not None and record.is_file() else []
   world = Live(str(cwd.absolute()), record, actor)
-  root = engine.boot(held, world=world.hears(), kernel=Native().kernel())
+  root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating())
   return world, root, held
 
 

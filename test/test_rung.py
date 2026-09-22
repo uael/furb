@@ -225,7 +225,7 @@ async def test_rung_is_given_a_word_and_runs_it_on_a_chain_in_the_globals_of_tha
 
 
 async def test_the_kernel_gates_the_word_its_caller_wrote_like_any_word() -> None:
-  """The Kernel gates the word its caller wrote like any word."""
+  """The gate reads the word its caller wrote like any word."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   await engine.rung("k = 1", on=root)

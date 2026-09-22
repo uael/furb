@@ -168,8 +168,8 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
   log, root = life(sand)
   sand.script[root] = [
     "k = 1",
-    "BAD = 2",
-    "mine = get(acting())[2]\nwrite(read(mine).replace('B' + 'AD', 'ok'))",
+    "ok = BAD",
+    "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))",
     "close((k, ok, read(get(acting())[2]).content))",
   ]
   act = engine.prompt(object, "fix it", on=root)

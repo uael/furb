@@ -5,13 +5,13 @@ from furb import engine
 
 
 async def test_a_gate_is_the_question_of_whether_a_word_may_run() -> None:
-  """A gate is the question of whether a word may run, which the Kernel answers with its findings."""
+  """A gate is the question of whether a word may run, which the ear named gate answers with its findings, apart from the Kernel, so a word may ask it while the Kernel runs that word."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  found = ["BAD in rung, after 0 rungs"]
+  found = ["BAD is no name, after 0 rungs"]
   assert engine.gate("k = BAD", on=root) == found
   answered = [one for one in said(log, "done") if one[1].startswith("gate://")]
-  assert [(one[2], one[3]) for one in answered] == [("kernel", found)]
+  assert [(one[2], one[3]) for one in answered] == [("gate", found)]
   assert engine.gate("k = 9", on=root) == []
 
 
@@ -24,8 +24,8 @@ async def test_the_refused_tag_holds_as_its_body_the_findings_that_refused_the_w
   assert [tag[2] for tag in tags(engine.turns(on=root), "refused")] == refusals(log) != []
 
 
-async def test_the_chain_has_the_kernel_gate_the_word_of_a_rung_before_it_runs() -> None:
-  """The chain has the Kernel gate the word of a rung before it runs, and a refused word runs never."""
+async def test_the_chain_has_the_word_of_a_rung_gated_before_it_runs() -> None:
+  """The chain has the word of a rung gated before it runs, and a refused word runs never."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["k = BAD", "close(7)", "close(None)"]

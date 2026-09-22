@@ -1,19 +1,19 @@
-"""The Kernel of this interpreter: it gates a word with ty, and it runs the word in the module of its chain.
+"""The Kernel of this interpreter, which runs a word in the module of its chain, and the gate, which reads it with ty.
 
 The engine holds the laws of a chain. To judge a word before it runs, and to run it, are machinery, so they stand
-here, behind the Kernel that the contract declares. The gate reads the word on the sheet of `furb.sheet`, with the
-ty command line reading it: the names of the engine, bound as a chain binds them, then the program of the chain,
-then the word, all inside one async body, so that the awaits of the word stand.
+here, behind the Kernel and the gate that the contract declares. The gate reads the word on the sheet of
+`furb.sheet`, with the ty command line reading it: the engine itself, laid as the first rung of the chain, then
+the program of the chain, then the word, all inside one async body, so that the awaits of the word stand.
 
 A word answers by a close and never by a return: a body of a module takes no return, so a word that holds one is no
 python and the gate says so.
 """
 
-import ast
 import re
 import shutil
 import subprocess
 import sys
+from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from asyncio import CancelledError
 from collections.abc import Generator
 from inspect import iscoroutine
@@ -39,24 +39,9 @@ NO_TY = "the gate did not run"
 """NO_TY is what the life ends with when ty is not there to read a word, which is no finding against the word."""
 
 
-def declared(source: Path = SOURCE) -> list[str]:
-  """Every name the engine defines at its top, which is what the globals of a chain hold of the engine."""
-  said: list[str] = []
-  for node in ast.parse(source.read_text(encoding="utf-8")).body:
-    match node:
-      case ast.FunctionDef() | ast.AsyncFunctionDef() | ast.ClassDef() | ast.TypeAlias():
-        said.append(node.name if not isinstance(node, ast.TypeAlias) else node.name.id)
-      case ast.AnnAssign(target=ast.Name(id=name)):
-        said.append(name)
-      case ast.Assign(targets=[ast.Name(id=name)]):
-        said.append(name)
-      case ast.Assign(targets=[ast.Tuple(elts=elts)]):
-        said.extend(one.id for one in elts if isinstance(one, ast.Name))
-  return [name for i, name in enumerate(said) if name not in said[:i]]
-
-
-NAMES = declared()
-"""NAMES are the names of the engine, which the sheet binds before it reads the program and the word."""
+ENGINE = SOURCE.read_text(encoding="utf-8")
+"""ENGINE is the engine as a text, which the sheet lays as the first rung of every chain, so that a word is read
+in the names the engine binds, with the types the engine gives them."""
 
 
 def checked(text: str) -> list[tuple[int, str]]:
@@ -92,20 +77,16 @@ def checked(text: str) -> list[tuple[int, str]]:
 class Native:
   """The Kernel of the interpreter this process runs in, where the module of a chain is a dict.
 
-  It answers a gate with what ty finds against the word, begins a run by compiling the word in the module of its
-  chain, says wants for the act a run waits for, carries the run forward at each sent, says ran with nothing for a
-  word that ran to its end and with the exception for one that raised, and drops the frame of a run a cancel is
-  over. A frame that is mid step is never closed: the close of a word raises where that word stands, and what
-  unwinds out of it is the drop. One of these serves one life, since the frames it holds are that life's own. It
-  keeps no program of its own: the gate says the one it reads the word after, which the chain holds.
+  It begins a run by compiling the word in the module of its chain, says wants for the act a run waits for, carries
+  the run forward at each sent, says ran with nothing for a word that ran to its end and with the exception for one
+  that raised, and drops the frame of a run a cancel is over. A frame that is mid step is never closed: the close
+  of a word raises where that word stands, and what unwinds out of it is the drop. One of these serves one life,
+  since the frames it holds are that life's own. The gate is no part of it: an ear of its own, so a word may ask it
+  while the Kernel runs that word.
   """
 
   def __init__(self) -> None:
     self.frames: dict[str, CoroutineType[object, object, object]] = {}
-
-  def gate(self, word: str, program: list[str]) -> list[str]:
-    """What the gate finds against a word: the sheet of the engine, read by the ty command line."""
-    return sheet.gate(NAMES, program, word, checked)
 
   def ended(self, name: str, got: BaseException | None) -> None:
     """The run is over, and what it came to goes to the chain that had it run."""
@@ -138,7 +119,7 @@ class Native:
     token = site.set(name)
     try:
       # The compile stands inside, so a word the interpreter will not take is what the run came to and no more.
-      ran = eval(compile(word, name, "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT), held)  # noqa: S307
+      ran = eval(compile(word, name, "exec", flags=PyCF_ALLOW_TOP_LEVEL_AWAIT), held)  # noqa: S307
     except BaseException as raised:
       return self.ended(name, raised)
     finally:
@@ -157,10 +138,18 @@ class Native:
           self.begin(rung, word, modules[chain])
         case ("sent", rung, _, value) if rung in self.frames:
           self.carry(rung, value)
-        case ("gate", qid, _, _, word, program):
-          yield "done", qid, self.gate(word, [*program.values()])
         case ("cancel" | "close", about, *_):
           # The frame of the word that says the close is mid step, and the CancelledError of close ends that one.
           for one in [x for x in self.frames if under(x, about) and not self.frames[x].cr_running]:
             self.frames[one].close()
             self.ended(one, CancelledError())
+
+
+def gate(word: str, program: list[str]) -> list[str]:
+  """What the gate finds against a word: the sheet of the engine, read by the ty command line."""
+  return sheet.gate(ENGINE, program, word, checked)
+
+
+def gating() -> Kernel:
+  """The gate as the ear of a life, which reads every word on the sheet of the engine with the ty command line."""
+  return sheet.gating(ENGINE, checked)

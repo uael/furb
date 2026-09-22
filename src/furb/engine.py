@@ -1,10 +1,11 @@
 import re
 from asyncio import CancelledError, current_task, get_running_loop
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from contextvars import ContextVar
 from dataclasses import dataclass
 from string.templatelib import Template
+from typing import Any
 
 WINDOW = 200000
 OPERATOR = "operator"
@@ -185,7 +186,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
   return act("rung", on, ending(pausing(ear)), word, retells, actor, returns)
 
 
-def prompt[T](shape: type[T] | None, message: str = "", to: str = "", on: str = "") -> Act[T]:
+def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str = "") -> Act[T]:
   named = (
     shape
     if isinstance(shape, str)
@@ -214,9 +215,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   def ear(id):
     transcript, rungs, refused, retold, paused, mine = [], {}, {}, set(), set(), {id}
     waiting, asking, running, to_run, unseen = [], None, "", [], ""
-
-    def each(*kinds):
-      return [x for x in transcript[start:] if x[0] in kinds]
 
     def stands(name):
       return any(under(name, x) or x == id for x in paused)
@@ -262,7 +260,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         retold.add(rung(said, donor))
       rungs.clear()
       to_run.clear()
-      modules[id] = {**globals(), "__name__": id, "actor": standing[2]}
+      modules[id] = {**globals(), "__name__": id, "actor": standing[2], "raised": None}
       if words:
         token = site.set(of)
         rung(words)
@@ -334,7 +332,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           yield "ask", asking, id, acts[asking][6] or modules[id]["actor"], turns_of(transcript)
       if to_run and not running:
         yield "run", (running := to_run.pop(0)), id, rungs[running], acts[running][5]
-      if unseen and not running and all(x[1] in outcomes for x in each("prompt")):
+      if unseen and not running and all(x[1] in outcomes for x in transcript[start:] if x[0] == "prompt"):
         prompt(None, f"{unseen} done", on=id)
         unseen = ""
 
@@ -464,7 +462,7 @@ class Exit:
 
 
 class Act[T = object](str):
-  def __await__(self):
+  def __await__(self) -> Generator[object, Any, T]:
     if acting():
       if self.startswith("chain://"):
         raise Refused(f"{self} never settles")
@@ -493,7 +491,7 @@ def lineage(name):
 
 
 def under(name, of):
-  return bool(of) and (lineage(name) + ".").startswith(lineage(of) + ".")
+  return bool(of) and f"{lineage(name)}.".startswith(f"{lineage(of)}.")
 
 
 def acting():
@@ -501,7 +499,7 @@ def acting():
 
 
 def question(a):
-  return a[1].startswith(a[0] + "://")
+  return a[1].startswith(f"{a[0]}://")
 
 
 def scope(name):
@@ -540,7 +538,7 @@ def shown(pair, seen):
       return (
         "shown",
         [("path", text.path), ("known", len(picked) - len(new))],
-        "\n".join(f"{i} {new[i]}" for i in new),
+        "\n".join(f"{i} {line}" for i, line in new.items()),
       )
   return pair
 
@@ -641,7 +639,7 @@ def boot(record=(), **outside):
   log, alive, made, busy, heard = [], {}, Counter(), set(), 0
 
   def door():
-    answers = {e[1][1]: e[2] if len(e) == 3 else e[1][3] for e in kept if len(e) == 3 or e[1][0] == "done"}
+    answers = {e[1][1]: (*e[2:], *e[1][3:])[0] for e in kept if len(e) == 3 or e[1][0] == "done"}
     while True:
       match a := (yield):
         case ("holds", qid, _, _, about):
