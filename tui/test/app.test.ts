@@ -140,8 +140,17 @@ test("rewind picks an act and filters the new chain's transcript without changin
     app.rewind();
     await screen.flush();
     expect(screen.captureCharFrame()).toContain("REWIND TRANSCRIPT");
+    const selected = new Promise<void>((resolve, reject) => {
+      const changed = () => {
+        if (workspace.selected === source && !workspace.error) return;
+        workspace.off("change", changed);
+        if (workspace.error) reject(new Error(workspace.error));
+        else resolve();
+      };
+      workspace.on("change", changed);
+    });
     screen.mockInput.pressEnter();
-    for (let attempt = 0; attempt < 50 && workspace.selected === source; attempt++) await Bun.sleep(20);
+    await selected;
     await workspace.refresh();
     expect(workspace.selected).not.toBe(source);
     expect(await workspace.life.rendered(source)).toEqual(original);
@@ -149,6 +158,43 @@ test("rewind picks an act and filters the new chain's transcript without changin
   } finally {
     app.dispose();
     screen.renderer.destroy();
+    await workspace.dispose();
+  }
+}, 30000);
+
+test("a delayed snapshot cannot restore the chain selected before a switch", async () => {
+  const workspace = await demoWorkspace();
+  try {
+    const child = await workspace.life.chain("next");
+    await workspace.refresh();
+    const original = workspace.world.snapshot.bind(workspace.world);
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered = () => {};
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let first = true;
+    workspace.world.snapshot = async (chain) => {
+      if (first) {
+        first = false;
+        const before = await original(chain);
+        entered();
+        await gate;
+        return before;
+      }
+      return original(chain);
+    };
+    const reading = workspace.refresh();
+    await started;
+    const switching = workspace.select(child);
+    release();
+    await Promise.all([reading, switching]);
+    expect(workspace.selected).toBe(child);
+    expect(workspace.label).toBe("next");
+  } finally {
     await workspace.dispose();
   }
 }, 30000);

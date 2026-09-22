@@ -131,7 +131,13 @@ export class Workspace extends EventEmitter {
     this.refreshTask = (async () => {
       do {
         this.dirty = false;
-        Object.assign(this, await this.world.snapshot(this.selected));
+        const selected = this.selected;
+        const snapshot = await this.world.snapshot(selected);
+        if (this.selected !== selected) {
+          this.dirty = true;
+          continue;
+        }
+        Object.assign(this, snapshot);
         if (this.view === "changes") this.changes = await this.world.readChanges(this.changePage * 20, 20);
         const rows = this.acts;
         for (const act of rows) if (!act.done) this.started[act.id] ??= Date.now();
