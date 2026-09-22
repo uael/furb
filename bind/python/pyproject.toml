@@ -16,7 +16,8 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-dependencies = ["furb"]
+# The package of the engine, at its own version: both carry the engine, and a release is the two together.
+dependencies = ["furb==0.1.0"]
 
 [project.urls]
 Source = "https://github.com/uael/furb"

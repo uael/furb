@@ -15,8 +15,9 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-    # The Kernel gates a word through the gate of the crate, so the package stands on the extension.
-    "furb-monty",
+    # The Kernel gates a word through the gate of the crate, so the package stands on the extension, at its own
+    # version: both carry the engine, and a release is the two together.
+    "furb-monty==0.1.0",
     "pydantic>=2.13.5",
     "pydantic-ai-slim>=2.27.1",
     "python-minifier>=3.3.0",
