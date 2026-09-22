@@ -287,7 +287,7 @@ def close(value: object, id: str = "") -> None:
   A close that answers a prompt with a value that does not have the shape of the prompt raises Refused in the word that said it, so the prompt asks again.
   A close on an act that is over reaches nothing.
   A close said from a word that names no act is over the prompt that made the rung of the word, and over the rung itself for a word its caller wrote, which answers no prompt.
-  A close said from a word that retells is over that rung and carries nothing, so it answers no prompt and stops the word where it stands.
+  A close said from a word that retells reaches nothing and says nothing: it stops the word where it stands, so the rung is done with nothing and answers no prompt.
   A close of the prompt of the running word stops that word where it stands, as a raise does, and nothing after the call runs.
   """
 
@@ -349,7 +349,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
   A rung that awaits an act nobody settles waits until the operator cancels it, and holds nothing else of the chain.
   The lineage a rung names its acts under is the lineage of its own name, and of the name of the one it retells for a rung that retells.
   A rung that retells names the rung the record holds and never another rung that retells it, so a second replay makes the same acts and asks the World nothing twice.
-  A rung that retells is done with nothing when its word answers or runs to its end, whatever the Kernel makes of the word, and with what that word raised.
+  A rung that retells is done with nothing when its word answers, runs to its end or is cancelled, whatever the Kernel makes of the word, and with what that word raised.
   """
 
 @overload
@@ -803,6 +803,7 @@ type Gate = tuple[Literal["gate"], str, str, str, str, dict[str, str]]
 A gate says the program of the chain before that rung, whose words the Kernel reads the word after, so the Kernel keeps no ladder of its own and a word of a program made again is read after the rungs that stand.
 The refused tag holds as its body the findings that refused the word of a rung.
 The chain has the Kernel gate the word of a rung before it runs, and a refused word runs never.
+A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a copy of a refused word is refused again and tells its findings not again.
 A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run.
 The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the prompt of it asks again as it does for a word that gave no value.
 """

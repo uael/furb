@@ -70,11 +70,28 @@ async def test_a_gate_says_the_program_of_the_chain_before_that_rung() -> None:
     ("x = BAD", ["k = 1"]),
     ("y = 2", ["k = 1"]),
     ("write(read(get(acting())[2]).replace('y = 2', 'k = 3'))", ["k = 1", "y = 2"]),
-    ("k = 1", []),
-    ("x = BAD", ["k = 1"]),
     ("k = 3", ["k = 1"]),
     ("close(k)", ["k = 1", "k = 3"]),
   ]
+
+
+async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells_stood() -> None:
+  """A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a copy of a refused word is refused again and tells its findings not again."""
+  sand = sown()
+  log, root = life(sand)
+  sand.script[root] = ["k = 1", "x = BAD", "close(k)", "close(None)"]
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 1
+  await settle()
+  engine.write(engine.read(act, on=root), on=root)
+  await settle(300)
+  assert gated(log) == ["k = 1", "x = BAD", "close(k)", "k = 1", "x = BAD", "close(k)"]
+  assert [a[4] for a in engine.asked.values() if a[0] == "gate"] == ["k = 1", "x = BAD", "close(k)"]
+  copies = [a[1] for a in said(log, "rung") if a[5]]
+  assert [type(engine.outcomes[one]).__name__ for one in copies] == ["NoneType", "Refused", "NoneType"]
+  assert [a[1] for a in log if a[0] == "tell" and a[3][0][0] == "refused"] == [said(log, "rung")[1][1]]
+  assert engine.read(act, on=root).content == "k = 1\nx = BAD\nclose(k)"
+  assert engine.ask("program", root)[1] == {copies[0]: "k = 1", copies[2]: "close(k)"}
 
 
 async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:

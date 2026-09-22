@@ -132,14 +132,13 @@ def close(value: object, id: str = "") -> None:
   match acts.get(who):
     case ("rung", _, by, _, _, retells, *_) if id == who:
       if retells:
-        value = None
-      elif by.startswith("prompt://"):
+        raise CancelledError()
+      if by.startswith("prompt://"):
         id = by
   match acts.get(id):
     case ("prompt", _, _, on, shape, *_) if shape != "None" and not isinstance(value, BaseException):
-      s = eval(shape, modules[on])
       try:
-        fits = isinstance(value, s)
+        fits = isinstance(value, s := eval(shape, modules[on]))
       except TypeError:
         fits = isinstance(value, s.__origin__)
       if not fits:
@@ -175,6 +174,8 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
           wants = None
           yield "sent", id, value
         case ("ran", about, _, value) if about == id:
+          if retells and isinstance(value, CancelledError):
+            value = None
           if isinstance(value, BaseException):
             told("raised", id, ("type", type(value).__name__), ("message", str(value)))
           told("closed", id)
@@ -211,12 +212,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     raise Refused(f"no chain {source}")
 
   def ear(id):
-    transcript, rungs, refused, retold, paused, mine = [], {}, set(), set(), set(), {id}
-    asking, running, to_run, unseen = None, "", [], ""
-
-    def hold(fact):
-      if fact[1] not in retold:
-        transcript.append(fact)
+    transcript, rungs, refused, retold, paused, mine = [], {}, {}, set(), set(), {id}
+    waiting, asking, running, to_run, unseen = [], None, "", [], ""
 
     def each(*kinds):
       return [x for x in transcript[start:] if x[0] in kinds]
@@ -249,7 +246,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("cd", *_):
           return a[4]
         case ("cwd", *_):
-          return next((x[4] for x in reversed(transcript) if x[0] == "cd"), directory)
+          return next((x[4] for x in reversed(transcript) if x[0] == "cd"), standing[1])
         case ("turns", *_):
           return turns_of(transcript)
 
@@ -265,11 +262,11 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         retold.add(rung(said, donor))
       rungs.clear()
       to_run.clear()
-      modules[id] = {**globals(), "__name__": id, "actor": actor}
+      modules[id] = {**globals(), "__name__": id, "actor": standing[2]}
       if words:
-        site.set(of)
+        token = site.set(of)
         rung(words)
-        site.set(id)
+        site.reset(token)
 
     if source:
       _, theirs = ask("transcript", source, source)
@@ -277,11 +274,10 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       transcript += [it for it in theirs if it[1] == source or any(under(one[1], it[1]) for one in picked)]
       rungs.update(ask("program", source)[1])
     start = len(transcript)
-    hold(told("opened", id, ("label", label), ("source", source)))
+    transcript.append(told("opened", id, ("label", label), ("source", source)))
     _, standing = ask("stand", source or id)
     if not source:
-      hold(told("opened", id, *zip(("roster", "directory", "actor"), standing, strict=True)))
-    _, directory, actor = standing
+      transcript.append(told("opened", id, *zip(("roster", "directory", "actor"), standing, strict=True)))
     replay()
     while True:
       a = yield
@@ -293,26 +289,31 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           yield "pause", about, []
         if (got := answers()) is not None:
           yield "done", about, got
-      if a[1] in mine and not (a[0] == "tell" and a[2] == id):
-        hold(a)
+      if a[1] in mine and a[1] not in retold and not (a[0] == "tell" and a[2] == id):
+        transcript.append(a)
       if a[0] in ("ready", "done") and a[1] == asking:
         asking = None
       match a:
         case ("rung", rid, _, _, "", _, who, returns):
           unseen = ""
-          hold(told("opened", rid, ("actor", who or modules[id]["actor"]), ("says", f"close({returns})")))
+          waiting.append(rid)
+          transcript.append(told("opened", rid, ("actor", who or modules[id]["actor"]), ("says", f"close({returns})")))
         case ("ready", rid, _, word):
-          refusals = ask("gate", id, word, program())[1]
+          retells = acts[rid][5]
+          found = refused.get(retells, []) if retells else ask("gate", id, word, program())[1]
           rungs[rid] = word
-          if refusals:
-            refused.add(rid)
-            hold(told("refused", rid, body="\n".join(refusals)))
+          if found:
+            refused[rid] = found
+            if not retells:
+              transcript.append(told("refused", rid, body="\n".join(found)))
             close(Refused(), rid)
           else:
             to_run.append(rid)
         case ("prompt", pid, _, _, _, _, to) if to and offered(standing, to) is None:
           close(Refused(f"{to} no actor"), pid)
         case ("done", about, _, value):
+          if about in waiting:
+            waiting.remove(about)
           if isinstance(value, Exception) and about in program():
             modules[id]["raised"] = value
           if about == running:
@@ -325,17 +326,15 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           paused.add(about)
         case ("wake", about, *_):
           paused.discard(about)
-      spoken = {x[1] for x in each("done", "ask", "ready")}
-      mute = [x for x in each("rung") if not x[4] and x[1] not in spoken and not stands(x[1])]
-      if not asking and mute:
-        _, asking, _, _, _, _, who, _ = mute[0]
+      if not asking and (mute := [x for x in waiting if not stands(x)]):
+        waiting.remove(asking := mute[0])
         q, held = ask("holds", id, asking)
-        hold(q)
+        transcript.append(q)
         if not held:
-          yield "ask", asking, id, who or modules[id]["actor"], turns_of(transcript)
+          yield "ask", asking, id, acts[asking][6] or modules[id]["actor"], turns_of(transcript)
       if to_run and not running:
         yield "run", (running := to_run.pop(0)), id, rungs[running], acts[running][5]
-      if unseen and not running and all(x[1] in spoken for x in each("prompt")):
+      if unseen and not running and all(x[1] in outcomes for x in each("prompt")):
         prompt(None, f"{unseen} done", on=id)
         unseen = ""
 
@@ -383,7 +382,7 @@ def bash(
   on: str = "",
 ) -> Act[Exit]:
   def ear(id):
-    out, err, stdin = (f"{id}/{one}" for one in ("stdout", "stderr", "stdin"))
+    out, err, stdin = f"{id}/stdout", f"{id}/stderr", f"{id}/stdin"
     streams, gone, mute = {out: Text(out), err: Text(err)}, "", "" if fed else "not fed"
     if show is not HIDDEN:
       told("opened", id, ("command", command))
@@ -639,7 +638,7 @@ def boot(record=(), **outside):
   kept, past = list(record), len(record)
   for table in (modules, acts, asked, outcomes):
     table.clear()
-  log, alive, made, busy, hearing, heard = [], {}, Counter(), set(), set(), 0
+  log, alive, made, busy, heard = [], {}, Counter(), set(), 0
 
   def door():
     answers = {e[1][1]: e[2] if len(e) == 3 else e[1][3] for e in kept if len(e) == 3 or e[1][0] == "done"}
@@ -700,9 +699,8 @@ def boot(record=(), **outside):
 
   def named(kind, on, *words):
     stem = by = site.get()
-    match acts.get(by):
-      case ("rung", _, _, _, _, retells, *_) if retells:
-        stem = retells
+    if (a := acts.get(by)) and a[0] == "rung" and a[5]:
+      stem = a[5]
     made[by] += 1
     return (kind, f"{kind}://{lineage(stem)}.{made[by]}", by, on or scope(by), *words)
 
@@ -745,11 +743,9 @@ def boot(record=(), **outside):
     nonlocal heard
     while not busy and heard < len(log):
       for name, g in ears():
-        if alive.get(name) is g and name not in hearing:
-          hearing.add(name)
+        if alive.get(name) is g:
           hears(name, g, log[heard])
       heard += 1
-      hearing.clear()
 
   def hears(name, g, a):
     token, living = site.set(name), False
