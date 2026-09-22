@@ -305,6 +305,12 @@ impl Inner {
     loop {
       let mut moved = false;
       for said in self.host.voice.drained(cx.waker()) {
+        // A command is over when the World says it exited, and only its doors live on, which the engine holds.
+        if let Said::Fact(fact) = &said
+          && fact.kind() == "exited"
+        {
+          self.host.running.remove(fact.about());
+        }
         self.deliver(&said)?;
         moved = true;
       }
@@ -372,21 +378,55 @@ impl Opening {
     self
   }
 
-  /// The life, opened from what a World kept of the life before it.
-  ///
-  /// The record is the entries the World kept, each the act made last before its fact, the fact, and for a
-  /// query of a run what it was answered. The stand-in runs first in a module of its own, then the engine, and
-  /// `boot` is given the Kernel of the crate and one generator for the World and for each ear.
-  pub fn boot(self, record: impl IntoIterator<Item = Object>) -> Result<Life, Fault> {
+  /// The host of a life: its World, given the Voice it speaks through, and its ears, with the names the
+  /// engine hears them by, the World's first when the host has one.
+  fn hosting(self) -> (Hosting, Vec<String>, ResourceLimits) {
     let Opening { mut world, ears, mut names, limits } = self;
     let voice = Voice::default();
     if let Worldly::Typed(world) = &mut world {
       world.opened(voice.clone());
       names.insert(0, WORLD.to_owned());
     }
-    let typed = matches!(world, Worldly::Typed(_));
     let host =
       Hosting { world, ears, voice, later: Vec::new(), running: HashMap::new(), calls: Vec::new() };
+    (host, names, limits)
+  }
+
+  /// The life, restored from a dump of one that stood still, on this host.
+  ///
+  /// The session goes on where it stood, and the host is given as it was to the life that was dumped: the same
+  /// World, typed or heard, and ears under the same names, which are refused otherwise. What the host held of
+  /// its own starts over: no command runs, no work is owed, nobody watches an act, and a callable the host
+  /// handed the life before is no callable of this host. The limits are the dump's. A restored life raised
+  /// nothing, since its boot is the one the dump came from.
+  pub fn restore(self, dump: &[u8]) -> Result<Life, Fault> {
+    let (host, names, _) = self.hosting();
+    let mut inner = Inner { sand: Sand::restore(dump)?, host, watchers: HashMap::new() };
+    let got = inner.ran("(__root, __names)", vec![])?;
+    let got = got.as_ref();
+    let heard: Vec<String> = entry(&got, 1)
+      .and_then(|one| one.items())
+      .unwrap_or_default()
+      .into_iter()
+      .filter_map(|one| one.as_str().map(str::to_owned))
+      .collect();
+    if heard != names {
+      return Err(Fault::refused(format!(
+        "a restored life hears by the names it was dumped with, {heard:?}, and not {names:?}"
+      )));
+    }
+    let root = entry(&got, 0).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
+    Ok(Life { held: inner, root, raised: None })
+  }
+
+  /// The life, opened from what a World kept of the life before it.
+  ///
+  /// The record is the entries the World kept, each the act made last before its fact, the fact, and for a
+  /// query of a run what it was answered. The stand-in runs first in a module of its own, then the engine, and
+  /// `boot` is given the Kernel of the crate and one generator for the World and for each ear.
+  pub fn boot(self, record: impl IntoIterator<Item = Object>) -> Result<Life, Fault> {
+    let typed = matches!(self.world, Worldly::Typed(_));
+    let (host, names, limits) = self.hosting();
     let mut inner = Inner { sand: Sand::new(limits), host, watchers: HashMap::new() };
     inner.ran(PREAMBLE, vec![])?;
     // The three objects of the host and the two modules are bound as names of the session, which every later
@@ -464,6 +504,30 @@ impl Life {
   /// The root chain of the life, which is the first act of any record.
   pub fn root(&self) -> &str {
     &self.root
+  }
+
+  /// The life as bytes, where it stands still, for a later life to go on from without the record replayed.
+  ///
+  /// A life stands still when no command runs, the World owes it no work, and nothing the World said waits to
+  /// be heard; a dump taken elsewhere is refused, since what a restored life could not find again would be
+  /// lost without a word. What the host holds of its own, a watcher of an act or a callable it handed over, is
+  /// not in the dump.
+  pub fn dump(&self) -> Result<Vec<u8>, Fault> {
+    let host = &self.held.host;
+    if !host.running.is_empty() {
+      return Err(Fault::refused("a life is dumped where it stands still, and a command runs"));
+    }
+    if !host.later.is_empty() {
+      return Err(Fault::refused(
+        "a life is dumped where it stands still, and the World owes it work",
+      ));
+    }
+    if !host.voice.quiet() {
+      return Err(Fault::refused(
+        "a life is dumped where it stands still, and the World said something",
+      ));
+    }
+    self.held.sand.dump()
   }
 
   /// What boot raised, if it raised: a drift, which breaks the journal while the life goes on with nothing kept,
@@ -572,6 +636,12 @@ impl Life {
     std::future::poll_fn(|cx| Poll::Ready(self.held.pump(cx))).await
   }
 
+  /// The act of this name, to be awaited: what a host holds of an act it started and let go of, or of one that
+  /// was started before the life was dumped.
+  pub fn awaiting<T>(&mut self, id: &str) -> Act<'_, T> {
+    Act { life: self, id: id.to_owned(), came: PhantomData }
+  }
+
   /// One act the operator made, to await.
   fn act<T>(&mut self, got: Object) -> Result<Act<'_, T>, Fault> {
     let id = got
@@ -579,7 +649,7 @@ impl Life {
       .as_str()
       .map(str::to_owned)
       .ok_or_else(|| Fault::refused("a verb gave no act"))?;
-    Ok(Act { life: self, id, came: PhantomData })
+    Ok(self.awaiting(&id))
   }
 
   /// The chain a verb is on, as its keyword: none for the operator's own.

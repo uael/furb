@@ -163,6 +163,11 @@ impl Voice {
   }
 
   /// Everything said and not yet heard, and the waker to wake when more is said.
+  /// Whether nothing said is still to be heard.
+  pub(crate) fn quiet(&self) -> bool {
+    self.waiting.lock().map_or(true, |held| held.said.is_empty())
+  }
+
   pub(crate) fn drained(&self, waker: &Waker) -> Vec<Said> {
     let Ok(mut held) = self.waiting.lock() else { return Vec::new() };
     held.waker = Some(waker.clone());

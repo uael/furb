@@ -18,6 +18,14 @@ class Life:
     record a World kept. The ears are one object with `hears(name, fact)`, `answered(name, value)`,
     `called(name, args, kwargs)`, `ear(generator)` and `callable(function)`."""
 
+  @staticmethod
+  def restored(ears: object, names: Sequence[str], dump: bytes) -> Life:
+    """A life restored from a dump of one that stood still, on the ears of the host under the names it was
+    dumped with."""
+
+  def dump(self) -> bytes:
+    """The life as bytes, where it stands still, for a later life to go on from."""
+
   @property
   def root(self) -> str:
     """The root chain of the life, which is the first act of any record."""

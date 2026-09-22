@@ -7,7 +7,9 @@ declares, World and Kernel. It is derived from the contract, `src/furb/engine.py
 
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own. `src/lib.rs` says what it gives: `Life`, whose methods are the verbs of the contract, and `World`,
-one trait a host writes. `src/preamble.py` runs in the sandbox and stands in for the ears of a host, and the Kernel
+one trait a host writes. A life is dumped where it stands still and restored later on the same ears, which is
+`boot` with nothing replayed, since a run of monty replays the same; the python door has `dump` and `restore`
+beside `boot`. `src/preamble.py` runs in the sandbox and stands in for the ears of a host, and the Kernel
 and the gate are the crate's: the gate is the type checker of monty, which reads a word on the sheet of the engine
 against the typeshed of the sandbox, and which the gate of the python package reads through too. `src/binding/py.rs`, behind the `python` feature,
 is the door to python: `bind/python` is the package `furb-monty`, whose `furb_monty.engine` gives every name of the
