@@ -59,7 +59,15 @@ A question is named by its kind, so a rung is rung://, a prompt prompt://, a rea
 type Saying = tuple[str, str, *tuple[object, ...]]
 """What an ear says: the kind of the fact, the act it is about, and the words, and nothing of who says it, which the bus fills in from whoever is speaking."""
 type Ear = Generator[Saying | None, Fact]
-"""An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by."""
+"""An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by.
+The World hears every fact: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory it asks the chain for; it starts a command it is started with, asking it whether it is merged, feeds it, ends it at its timeout and at a cancel; it answers an ask with the turn of the model; and it shows a prompt to the operator.
+The World performs any fact that an extension defines and that the World knows.
+The facts that the World says of its own are for the acts that complete later.
+The World speaks by yielding a saying, or by calling send under its own name when it speaks from its loop.
+The chain has the gate read and the Kernel begin every rung, by the facts gate and run.
+The Kernel runs the word of a run in the module of the chain the run names, says wants for the act a run waits for, takes a sent of what that act came to, and says ran with what the word gave.
+The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung.
+"""
 
 type Show = Callable[[list[str]], list[int]]
 """A show is given the lines of a text and gives the numbers of the lines to tell.
@@ -972,15 +980,3 @@ The program rebinds actor like any name, and the last binding wins.
 raised: BaseException | None
 """raised is the exception object that the last rung raised, rebound at each raise.
 raised is None at the birth of the module of a chain, so a word reads it before any rung raised."""
-
-type World = Ear
-"""The World hears every fact: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory it asks the chain for; it starts a command it is started with, asking it whether it is merged, feeds it, ends it at its timeout and at a cancel; it answers an ask with the turn of the model; and it shows a prompt to the operator.
-The World performs any fact that an extension defines and that the World knows.
-The facts that the World says of its own are for the acts that complete later.
-The World speaks by yielding a saying, or by calling send under its own name when it speaks from its loop.
-"""
-type Kernel = Ear
-"""The chain has the gate read and the Kernel begin every rung, by the facts gate and run.
-The Kernel runs the word of a run in the module of the chain the run names, says wants for the act a run waits for, takes a sent of what that act came to, and says ran with what the word gave.
-The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung.
-"""

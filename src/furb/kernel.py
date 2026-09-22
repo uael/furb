@@ -2,7 +2,7 @@
 the gate of the crate.
 
 The engine holds the laws of a chain. To judge a word before it runs, and to run it, are machinery, so they stand
-here, behind the Kernel and the gate that the contract declares. The gate reads the word on the sheet of
+here, in the Kernel and the gate, two ears that boot is given. The gate reads the word on the sheet of
 `furb.sheet`, with the type checker of monty reading it, the one the crate carries and the engine of monty gates
 with too, so a word is judged once and the same: the engine itself, laid as the first rung of the chain, then the
 program of the chain, then the word, all inside one async body, so that the awaits of the word stand.
@@ -23,7 +23,7 @@ from furb import engine, sheet
 from furb.engine import Act, Refused, modules, outcomes, site, under
 
 type Kernel = Generator[tuple | None, tuple]
-"""The Kernel, as engine.pyi declares it: engine.py binds no such name, so this module says the type itself."""
+"""The Kernel, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
 
 SOURCE = Path(engine.__file__)
 """SOURCE is the engine, which names every name that the globals of a chain hold of it."""

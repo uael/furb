@@ -1,9 +1,9 @@
 //! The core of an AI harness: the engine in a sandbox, behind an async API, with a World of your own.
 //!
 //! The engine is one python file, `src/furb/engine.py`, which the contract beside it specifies: it is the whole
-//! system prompt of a model, and it takes two things from the outside, a World and a Kernel, as generators that
-//! hear every fact. This crate runs that file inside monty, a python interpreter written in rust for untrusted
-//! code, and gives a host three things.
+//! system prompt of a model, and all it takes from the outside is ears: generators that hear every fact, each
+//! under a name, the World, the Kernel and the gate among them. This crate runs that file inside monty, a python
+//! interpreter written in rust for untrusted code, and gives a host three things.
 //!
 //! [`Life`] is one life of the engine. Its methods are the verbs of the contract, `read`, `bash`, `prompt` and
 //! the rest, with the same names and the same words, and what an act comes to is awaited as an [`Act`].

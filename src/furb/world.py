@@ -43,7 +43,7 @@ from furb.engine import WORLD, Drift, Refused, Text, under
 from furb.provider.claude import ACTOR, Claude, Settings, actors
 
 type World = Generator[tuple | None, tuple]
-"""The World, as engine.pyi declares it: engine.py binds no such name, so this module says the type itself."""
+"""The World, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
 
 CAP = 524288
 """CAP is the most bytes the World reads of one file, since a text a model cannot hold is no answer."""
