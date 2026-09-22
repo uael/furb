@@ -15,10 +15,10 @@ instance of a class of the engine comes in as a map that names its class under `
 interpreter makes no instance of a class of the sandbox on a host's behalf, and so the instance is made here. A
 name of the engine crosses as its name, both ways, so a show of the engine is the same show on both sides. A
 callable the engine made goes out as a handle the host calls it back by, and a callable of the host comes in as a
-name the ears of the host call it back by. A class a word defined goes out by a handle too, which the host holds
-as a type of its own, an exception type when the class is one, and the class comes back in by, and an instance of
-one goes out with its fields under the handle of its class and comes back in made here from them, with no
-`__init__` run.
+name the ears of the host call it back by. A class a word defined goes out by a handle too, with the class it
+was made with, which the host holds as a type of its own derived from the type that base is there, and the class
+comes back in by; an instance of one goes out with its fields under its class and comes back in made here from
+them, with no `__init__` run. An instance of a class that inherits `str` is a string, and crosses as one.
 """
 
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
@@ -106,9 +106,9 @@ def handled(x: object) -> int:
 
 def outward(x: object, names: Names) -> object:
   """A value as it goes out to the host: a callable or a class of the engine as its name, a callable the engine
-  made or a class a word defined as the handle the host holds it by, an instance of such a class with its fields
-  under the handle of its class, and the entries of a container each as they go out. Anything else the interpreter
-  carries out as it is."""
+  made as the handle the host holds it by, a class a word defined as that handle with the class it was made with
+  as it goes out, an instance of such a class with its fields under its class, and the entries of a container
+  each as they go out. Anything else the interpreter carries out as it is, a string of any class among it."""
   match x:
     case dict():
       return {k: outward(v, names) for k, v in x.items()}
@@ -116,14 +116,16 @@ def outward(x: object, names: Names) -> object:
       return [outward(v, names) for v in x]
     case tuple():
       return tuple(outward(v, names) for v in x)
+    case str():
+      return x
   if (name := named(x, names)) is not None and callable(x):
     return {IS: "name", "name": name}
   if isinstance(x, type):
     if not worded(x, names):
       return x
-    return {IS: "class", "id": handled(x), "name": x.__name__, "raises": issubclass(x, BaseException)}
+    return {IS: "class", "id": handled(x), "name": x.__name__, "base": outward(x.__bases__[0], names)}
   if worded(type(x), names):
-    return {IS: "instance", "class": handled(type(x)), "value": x, "raises": isinstance(x, BaseException)}
+    return {IS: "instance", "class": outward(type(x), names), "value": x}
   if not callable(x):
     return x
   return {IS: "made", "id": handled(x)}

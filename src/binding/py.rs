@@ -456,33 +456,26 @@ fn to_python<'py>(
         {
           return py.import("furb_monty.engine")?.call_method1("made", (n,));
         }
-        // A class a word defined, as the type python holds it by its handle, and an instance of one, as an
-        // object of that type holding the fields the sandbox carries out.
+        // A class a word defined, as the type python holds it by its handle, derived from the type its base is
+        // here, and an instance of one, as an object of that type holding the fields the sandbox carries out.
         if mark == "class"
           && let Some(n) = at("id").and_then(|one| one.as_int())
           && let Some(name) = at("name").and_then(|one| one.as_str())
-          && let Some(raises) = at("raises").and_then(|one| one.as_bool())
+          && let Some(base) = at("base")
         {
-          let raising = PyDict::new(py);
-          raising.set_item("raises", raises)?;
-          return py.import("furb_monty.engine")?.call_method("classed", (n, name), Some(&raising));
+          let base = to_python(py, made, base)?;
+          return py.import("furb_monty.engine")?.call_method1("classed", (n, name, base));
         }
         if mark == "instance"
-          && let Some(n) = at("class").and_then(|one| one.as_int())
+          && let Some(class) = at("class")
           && let Some(value) = at("value")
-          && let Some(raises) = at("raises").and_then(|one| one.as_bool())
         {
+          let class = to_python(py, made, class)?;
           let fields = PyDict::new(py);
           for (key, one) in value.pairs().unwrap_or_default() {
             fields.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
           }
-          let raising = PyDict::new(py);
-          raising.set_item("raises", raises)?;
-          return py.import("furb_monty.engine")?.call_method(
-            "instanced",
-            (n, value.type_name(), fields),
-            Some(&raising),
-          );
+          return py.import("furb_monty.engine")?.call_method1("instanced", (class, fields));
         }
       }
       let held = PyDict::new(py);
@@ -507,9 +500,11 @@ fn to_python<'py>(
         // builtin type as the builtin it is; anything else that has no fields, a coroutine, a function that
         // crossed by no mark, shows as what it is.
         None => {
+          // The interpreter shows a class of the session wrapped as `Repr("<class 'X'>")` and a builtin type
+          // bare as `<class 'X'>`, and the name stands the same in both.
           let shown = said.py_repr();
           let name =
-            shown.strip_prefix("Repr(\"<class '").and_then(|rest| rest.split('\'').next()).filter(
+            shown.split_once("<class '").and_then(|(_, rest)| rest.split('\'').next()).filter(
               |name| !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_'),
             );
           let Some(name) = name else {

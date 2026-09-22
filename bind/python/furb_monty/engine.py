@@ -11,9 +11,9 @@ A generator of this interpreter, which a World is, is heard from the sandbox on 
 reads the engine while it answers and nothing may call into a life that stands waiting for it: a verb the thread
 says is said by its name to the sandbox, which says it on the thread's behalf and answers. A callable of this
 interpreter is called back from the sandbox by name, and a callable the engine made is called back by its handle,
-so a show crosses either way as itself. A class a word defined is a type of this interpreter, one per class, whose
-call makes the instance in the sandbox by the handle of the class, and an instance of one is an object of that
-type holding its fields, which goes back in made from them.
+so a show crosses either way as itself. A class a word defined is a type of this interpreter, one per class,
+derived from the type its base is here, whose call makes the instance in the sandbox by the handle of the class,
+and an instance of one is an object of that type holding its fields, which goes back in made from them.
 """
 
 import ast
@@ -229,11 +229,12 @@ def made(n: int) -> Callable[..., object]:
   return back
 
 
-def classed(n: int, name: str, *, raises: bool) -> type:
-  """One class a word defined, as this interpreter holds it: a type of that name, one for the class for as long as
-  this interpreter holds it, whose call makes the instance in the sandbox by the handle of the class, and which
-  goes back in by that handle, which it carries as `__monty__`. A class that is an exception in the sandbox is an
-  exception here, so what a word raised raises, though the builtin it derives from there is not carried."""
+def classed(n: int, name: str, base: type) -> type:
+  """One class a word defined, as this interpreter holds it: a type of that name derived from the type its base is
+  here, a builtin, a class of the engine or the type of another class a word defined, one for the class for as
+  long as this interpreter holds it, whose call makes the instance in the sandbox by the handle of the class, and
+  which goes back in by that handle, which it carries as `__monty__`. A class that is an exception in the sandbox
+  is an exception here, so what a word raised raises, and is caught by the builtin it derives from."""
   if (held := CLASSES.get(n)) is not None:
     return held
 
@@ -242,16 +243,15 @@ def classed(n: int, name: str, *, raises: bool) -> type:
     assert isinstance(handle, int)
     return calling(handle, args, kwargs)
 
-  cls = type(name, (Exception,) if raises else (), {"__new__": new, "__monty__": n})
+  cls = type(name, (base,), {"__new__": new, "__monty__": n})
   weakref.finalize(cls, FORGOTTEN.append, n)
   CLASSES[n] = cls
   return cls
 
 
-def instanced(n: int, name: str, fields: dict[str, object], *, raises: bool) -> object:
+def instanced(cls: type, fields: dict[str, object]) -> object:
   """One instance of a class a word defined, as this interpreter holds it: an object of the type that class is
   here, holding the fields, with no `__init__` run; an exception is made with what it was made with."""
-  cls = classed(n, name, raises=raises)
   held = dict(fields)
   args = held.pop("args", ())
   assert isinstance(args, tuple)
