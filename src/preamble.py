@@ -308,10 +308,9 @@ class Running:
   is over, what it left is kept: the bindings of the module it ran in beyond the birth of that module, copied deep
   so that no later run changes them, and what it came to. A run that retells a rung so kept is answered from that:
   the module of its chain takes those bindings again, and the run comes to what the kept run came to, so the word
-  runs no second time. A run that a close stopped came to nothing, as the copy of it does under any Kernel, and so
-  did a word that raised a CancelledError of its own, which stops as a close stops it. A run whose bindings cannot
-  be copied, one that holds a generator, is kept not, and a run that retells it runs the word, as the Kernel of
-  this interpreter does for every word.
+  runs no second time; what that is for a copy is the engine's law and not this Kernel's, so a cancel it kept is
+  said again as it was. A run whose bindings cannot be copied, one that holds a generator, is kept not, and a run
+  that retells it runs the word, as the Kernel of this interpreter does for every word.
   """
 
   def __init__(self, names: Names) -> None:
@@ -343,9 +342,7 @@ class Running:
     except Exception:  # a generator, an open handle: what cannot be copied leaves the copy to run the word
       return
     gone = [name for name in self.names if name not in module]
-    stop = self.names["CancelledError"]
-    assert isinstance(stop, type)
-    self.kept[rung] = (copied, gone, None if isinstance(got, stop) else got)
+    self.kept[rung] = (copied, gone, got)
 
   def restore(self, rung: str, chain: str, whose: str) -> None:
     """A run that retells a kept rung, answered from what that rung left: the module takes the bindings again."""

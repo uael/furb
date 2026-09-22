@@ -43,9 +43,6 @@ MONTY_SKIPS: dict[str, str] = {
   "test_a_rung_that_retells_is_done_with_nothing": (
     "the test boots on a Kernel of this interpreter, and the engine of monty holds its own"
   ),
-  "test_a_close_said_from_a_word_that_retells_is_over_that_rung_and_carries_nothing": (
-    "the test reads the close the word of a copy says, and the Kernel of monty runs no word of a copy it kept"
-  ),
 }
 """MONTY_SKIPS names the tests the engine of monty does not run, each with why: what the test reads is a fact of one
 interpreter, which the boundary does not carry."""
