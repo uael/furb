@@ -253,24 +253,33 @@ def refusals(log: Sequence[tuple]) -> list[str]:
 class Py:
   """A Kernel that is python, outside the engine like the World.
 
-  It answers a gate with its findings, begins a run by compiling the word with a top level await and running it in
-  the module of its chain, says wants for the act the run waits for, carries the run forward at each sent, says ran
-  with what the word gave, and drops the frame of a run a cancel is over. The ladder of a chain is the words the
-  gate accepted, so it grows where the gate accepts one, as the Kernel of this interpreter grows it.
+  Its Kernel begins a run by compiling the word with a top level await and running it in the module of its chain,
+  says wants for the act the run waits for, carries the run forward at each sent, says ran with what the word
+  gave, and drops the frame of a run a cancel is over. Its gate is an ear of its own, as the gate of this
+  interpreter is, and it reads a word after the program the gate says.
   """
 
-  def gate(self, word: str, ladder: list[str]) -> list[str]:
-    """What it finds against a word: a word that is not python, and a word that holds BAD, and nothing else."""
+  def gate(self, word: str, program: list[str]) -> list[str]:
+    """What it finds against a word: a word that is not python, and a word that reads the name BAD, which nobody
+    binds, as the gate of the crate refuses a name nobody bound, and nothing else."""
     try:
-      compile(word, "<gate>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+      tree = ast.parse(word)
     except SyntaxError as no:
       return [f"not python: {no.msg} at line {no.lineno}"]
-    return [f"BAD in rung, after {len(ladder)} rungs"] if "BAD" in word else []
+    if any(isinstance(n, ast.Name) and n.id == "BAD" and isinstance(n.ctx, ast.Load) for n in ast.walk(tree)):
+      return [f"BAD is no name, after {len(program)} rungs"]
+    return []
+
+  def gating(self) -> Kernel:
+    """The gate as the ear of a life, which answers each gate with what it finds against the word."""
+    while True:
+      match (yield):
+        case ("gate", qid, _, _, word, program):
+          yield "done", qid, self.gate(word, [*program.values()])
 
   def kernel(self) -> Kernel:
     """The Kernel as one generator for one life, which speaks from the run it steps."""
     frames: dict[str, Coroutine[object, object, object]] = {}
-    ladders: dict[str, list[str]] = {}
 
     def ended(name: str, got: BaseException | None) -> None:
       """The run is over, and what it came to goes to the chain that had it run."""
@@ -317,11 +326,6 @@ class Py:
           begin(rung, word, modules[chain])
         case ("sent", rung, _, value) if rung in frames:
           carry(rung, value)
-        case ("gate", qid, _, chain, word):
-          found = self.gate(word, ladders.setdefault(chain, []))
-          if not found:
-            ladders[chain].append(word)
-          yield "done", qid, found
         case ("cancel" | "close", about, *_):
           for one in [x for x in frames if under(x, about) and not getattr(frames[x], "cr_running", False)]:
             frames[one].close()
@@ -363,7 +367,7 @@ def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   keeps every fact said in it; it gives what was said and the id of the root.
   """
   log: list[tuple] = []
-  return log, engine.boot(record, kernel=Py().kernel(), probe=watched(log), world=world.hears())
+  return log, engine.boot(record, kernel=Py().kernel(), gate=Py().gating(), probe=watched(log), world=world.hears())
 
 
 async def settle(n: int = 80) -> None:

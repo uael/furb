@@ -237,10 +237,10 @@ async def test_the_engine_makes_a_chain_from_the_record_and_in_no_other_way() ->
   """The engine makes a chain from the record and in no other way, by running its rungs again."""
   sand = sown()
   _, root = await lived(sand)
-  was = engine.ask("program", root, root)[1]
+  was = engine.ask("program", root)[1]
   again, over = await relived(Sand(stands=STANDS), list(sand.record))
   assert ran(again) == [WORD, "close(None)"]
-  assert engine.ask("program", over, over)[1] == was
+  assert engine.ask("program", over)[1] == was
 
 
 async def test_the_rungs_of_the_ladder_run_in_record_order() -> None:
@@ -332,11 +332,11 @@ async def test_a_later_life_reads_the_same_text_from_a_door() -> None:
 
 
 async def test_it_is_given_what_the_world_kept_of_the_life_before_it() -> None:
-  """It is given what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own."""
+  """It is given what the World kept of the life before it, and the generators of the outside, the Kernel, the gate and the World among them, each under the name it is to hear by, and it brings them to life with its own."""
   sand = sown()
   log, _ = await lived(sand)
   assert said(log, "answer")[0][2] == WORLD
-  assert [a[2] for a in said(log, "done") if a[1].startswith("gate://")][:1] == ["kernel"]
+  assert [a[2] for a in said(log, "done") if a[1].startswith("gate://")][:1] == ["gate"]
   later = Sand(stands=STANDS)
   again, _ = await relived(later, list(sand.record))
   assert [a[1] for a in said(again, "bash")] == [a[1] for a in said(log, "bash")]

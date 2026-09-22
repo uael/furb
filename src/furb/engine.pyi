@@ -203,7 +203,7 @@ def chance(on: str = "") -> float:
   """
 
 def gate(word: str, on: str = "") -> list[str]:
-  """Whether the word of a rung may run: the Kernel reads it against the rungs of its chain before it, and it finds nothing when the word may run.
+  """Whether the word of a rung may run: the gate reads it after the program of its chain, and it finds nothing when the word may run.
   The word of a rung runs only if the gate accepts the word.
   The gate checks the word of a rung against the rungs before it in record order.
   A response that is not python is a finding like any other.
@@ -287,7 +287,7 @@ def close(value: object, id: str = "") -> None:
   A close that answers a prompt with a value that does not have the shape of the prompt raises Refused in the word that said it, so the prompt asks again.
   A close on an act that is over reaches nothing.
   A close said from a word that names no act is over the prompt that made the rung of the word, and over the rung itself for a word its caller wrote, which answers no prompt.
-  A close said from a word that retells is over that rung and carries nothing, so it answers no prompt and stops the word where it stands.
+  A close said from a word that retells reaches nothing and says nothing: it stops the word where it stands, so the rung is done with nothing and answers no prompt.
   A close of the prompt of the running word stops that word where it stands, as a raise does, and nothing after the call runs.
   """
 
@@ -334,7 +334,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
   The turns of the chain of another prompt tell the rung of a word its caller wrote.
   A word its caller wrote is a user turn, the opened tag of its rung.
   rung is given a word and runs it on a chain in the globals of that chain.
-  The Kernel gates the word its caller wrote like any word.
+  The gate reads the word its caller wrote like any word.
   A rung with a word completes with what that word raises, and with nothing when the word runs to its end.
   A close ends the rung that runs in a prompt at its next await.
   A chain with a source and its origin share the one act, the record's.
@@ -349,7 +349,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
   A rung that awaits an act nobody settles waits until the operator cancels it, and holds nothing else of the chain.
   The lineage a rung names its acts under is the lineage of its own name, and of the name of the one it retells for a rung that retells.
   A rung that retells names the rung the record holds and never another rung that retells it, so a second replay makes the same acts and asks the World nothing twice.
-  A rung that retells is done with nothing when its word answers or runs to its end, whatever the Kernel makes of the word, and with what that word raised.
+  A rung that retells is done with nothing when its word answers, runs to its end or is cancelled, whatever the Kernel makes of the word, and with what that word raised.
   """
 
 @overload
@@ -475,7 +475,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A chain with a source asks its origin what it stands on, and the origin answers with its standing as it stands.
   The chain answers a stand asked on it with what it stands on, so a grant reads the roster off the chain it is on.
   The chain answers a transcript asked of one of its names with its transcript up to that act, and whole for the chain itself.
-  The chain answers a program asked of its own name with the word of every rung it holds, each under the name of that rung, in order.
+  The chain answers a program asked on it with the word of every rung it holds that the gate let run, each under the name of that rung, in order.
   The chain retells the rungs of its origin through the program the origin answers, and it owns the rungs it retells, though it holds nothing of them.
   A replay makes the rungs of a chain again from its donor: it keeps each rung of the ladder while the words it is given repeat it, it makes one rung of what is left, and every rung of the chain after the first word that differs is gone.
   A replay makes the module of the chain again, as it was at its birth, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in.
@@ -739,7 +739,7 @@ The World answers with the turn, which carries its usage and the blocks of the p
 """
 type Ready = tuple[Literal["ready"], str, str, str]
 """A ready says the word a rung holds.
-The word of a rung enters the program of the chain, and it runs in the globals of the chain when the gate accepts it.
+The word of a rung enters the program of the chain when the gate accepts it, and runs in the globals of the chain.
 The word of a rung that extends the engine is part of the program, so the extension returns in a later life.
 The old words stay in the program and in the turns after a rung rebinds a name.
 """
@@ -798,11 +798,13 @@ type Holds = tuple[Literal["holds"], str, str, str, str]
 """A holds is the question of what the record kept of an act.
 The chain holds its holds in the transcript, where the ask stands in a life that asks, so the fold cuts a user turn there in every life.
 """
-type Gate = tuple[Literal["gate"], str, str, str, str]
-"""A gate is the question of whether a word may run, which the Kernel answers with its findings.
+type Gate = tuple[Literal["gate"], str, str, str, str, dict[str, str]]
+"""A gate is the question of whether a word may run, which the ear named gate answers with its findings, apart from the Kernel, so a word may ask it while the Kernel runs that word.
+A gate says the program of the chain before that rung, whose words the Kernel reads the word after, so the Kernel keeps no ladder of its own and a word of a program made again is read after the rungs that stand.
 The refused tag holds as its body the findings that refused the word of a rung.
-The chain has the Kernel gate the word of a rung before it runs, and a refused word runs never.
-A refused word of a rung is part of the program of the chain, and it runs never.
+The chain has the word of a rung gated before it runs, and a refused word runs never.
+A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a copy of a refused word is refused again and tells its findings not again.
+A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run.
 The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the prompt of it asks again as it does for a word that gave no value.
 """
 type Cd = tuple[Literal["cd"], str, str, str, str]
@@ -811,8 +813,9 @@ type Cwd = tuple[Literal["cwd"], str, str, str]
 """A cwd gives the working directory of the chain it is on."""
 type Transcript = tuple[Literal["transcript"], str, str, str, str]
 """A transcript is the question of the transcript of a chain up to an act, which the chain answers, and which a chain with a source and a grant ask."""
-type Program = tuple[Literal["program"], str, str, str, str]
-"""A program is the question of the words of the rungs of a chain, each with the name of its rung, which the chain answers, and which a chain with a source asks of its origin."""
+type Program = tuple[Literal["program"], str, str, str]
+"""A program is the question of the words of the rungs of a chain that the gate let run, each with the name of its rung, which the chain answers.
+A chain with a source asks the program of its origin, and gate asks the program of the chain before it asks the Kernel."""
 type Merged = tuple[Literal["merged"], str, str, str, str]
 """A merged is the question of whether the stderr of a command flows into its stdout, which the command answers from what its verb was given, and which the World asks before it starts the command."""
 type Wait = tuple[Literal["wait"], str, str, str, float]
@@ -945,7 +948,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   In a later life the rungs of every chain run again from the record that the World kept.
   The engine serves the doors of the file itself, and asks the World for nothing.
   A later life reads the same text from a door.
-  It is given what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own.
+  It is given what the World kept of the life before it, and the generators of the outside, the Kernel, the gate and the World among them, each under the name it is to hear by, and it brings them to life with its own.
   It opens the root, the first act of any record, which every life opens under the one name, and which a record that holds it already gives back, and that root is what it gives back.
   What the record says a question came to, if it says anything, the facts this life kept among it, so that a chain with a source which asks again what its origin asked is answered from the record too.
   The record a life was opened from, which answers what it holds of an act, so that an act the World did once is done no more.
@@ -967,7 +970,8 @@ actor: str
 The program rebinds actor like any name, and the last binding wins.
 """
 raised: BaseException | None
-"""raised is the exception object that the last rung raised, rebound at each raise."""
+"""raised is the exception object that the last rung raised, rebound at each raise.
+raised is None at the birth of the module of a chain, so a word reads it before any rung raised."""
 
 type World = Ear
 """The World hears every fact: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory it asks the chain for; it starts a command it is started with, asking it whether it is merged, feeds it, ends it at its timeout and at a cancel; it answers an ask with the turn of the model; and it shows a prompt to the operator.
@@ -976,7 +980,7 @@ The facts that the World says of its own are for the acts that complete later.
 The World speaks by yielding a saying, or by calling send under its own name when it speaks from its loop.
 """
 type Kernel = Ear
-"""The chain has the Kernel gate and begin every rung, by the facts gate and run.
-The Kernel answers a gate with its findings, runs the word of a run in the module of the chain the run names, says wants for the act a run waits for, takes a sent of what that act came to, and says ran with what the word gave.
+"""The chain has the gate read and the Kernel begin every rung, by the facts gate and run.
+The Kernel runs the word of a run in the module of the chain the run names, says wants for the act a run waits for, takes a sent of what that act came to, and says ran with what the word gave.
 The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung.
 """

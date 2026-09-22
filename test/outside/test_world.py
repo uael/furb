@@ -24,9 +24,10 @@ from pydantic_ai.models import Model
 
 from furb import engine
 from furb.engine import OPERATOR, TIMEOUT, Exit, Refused, Text
+from furb.kernel import Native
 from furb.provider.claude import FAMILY, Claude, canon, limits
 from furb.world import CAP, SYSTEM, Command, Live, kept, rendered, shown, truth, unwire, wire, worded
-from outside.doubles import Quick, broken, life, mute, scripted, settle, speaking, tags, watched
+from outside.doubles import broken, life, mute, scripted, settle, speaking, tags, watched
 
 
 def world(yard: Path, model: Model[object] | None = None, record: Path | None = None) -> Live:
@@ -577,7 +578,7 @@ async def test_the_world_says_nothing_of_a_door_of_no_act_so_an_ear_of_the_outsi
   ear of the outside answers a door of its own whatever the order the ears were given in."""
   live = world(yard)
   heard: list[tuple] = []
-  root = engine.boot((), kernel=Quick().kernel(), world=live.hears(), note=note(heard))
+  root = engine.boot((), kernel=Native().kernel(), world=live.hears(), note=note(heard))
   assert engine.read("note://one", on=root) == Text("note://one", "kept")
   assert [a[4] for a in heard if a[0] == "read"] == ["note://one"]
   over = engine.wait(0.0, on=root)

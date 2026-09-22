@@ -15,7 +15,9 @@ Each name has one meaning, which the contract's sentences use as given here.
 - default actor: the actor a prompt goes to when the prompt leaves the actor unsaid, bound as `actor` in the chain.
 - World: the interface to the disk, the machine, the actors and the record; it keeps what the journal says it keeps,
   and does what it hears it is started to do.
-- Kernel: the interface that gates and runs rungs, and what it gates with is its own.
+- Kernel: the interface that runs rungs, an ear of the outside.
+- gate, the ear: the interface that reads a word before it runs, an ear of the outside apart from the Kernel, so a
+  word may ask it while the Kernel runs that word; what it reads with is its own.
 - boot: the life, given the record and the generators of the outside, which gives the root.
 - bus: the three entries every verb speaks through: send for a fact, ask for a query, act for an act.
 - fact: what is said to the life, inert, with no response, and queried later; a tuple of its kind, the act it is
@@ -56,13 +58,14 @@ Each name has one meaning, which the contract's sentences use as given here.
 - step: one turn of a model and the run of its word, which is one rung.
 - ladder: the rungs of one prompt, in order, which the name of that prompt is the door of.
 - program: the words of rungs, in order, each under the name of its rung; the program of a ladder is the words of
-  its rungs, the words the gate refused among them, and the program of a chain is the words of every rung it ran.
+  its rungs, the words the gate refused among them, which its door shows, and the program of a chain is the words
+  of every rung the gate let run, which the gate reads a word after.
 - replay: the making of the rungs of a chain again from a donor, which is how a chain with a source stands on its
   origin and how a write of a door edits the program of a ladder.
 - donor: the rungs a replay retells, and, for one rung, the rung of the record it stands for, whose acts it shares
   and whose run a Kernel may answer from what it kept.
 - globals: python's globals, the dict a rung runs in, which is the engine's module copied for the chain.
-- gate: what the Kernel reads a word against before it runs: the rungs of its chain before it and the shape it must
+- gate: what the gate reads a word against before it runs: the rungs of its chain before it and the shape it must
   give.
 - command: what bash runs on the machine.
 - merged: the state of a command whose stderr flows into its stdout, in the order the command wrote them.
@@ -102,7 +105,7 @@ Within a chain, a rung binds, passes and returns any python value, plain or not.
 When its share of the window is high, a model opens a chain with a source and a take that is not inside.
 Compaction is not in the core.
 engine.pyi is the specification of engine.py: it says what the engine is, what is always true of it and what its surface is, and never how it is made; it names the interfaces and the facts as python reads them, and holds every law, so engine.py holds no sentence and no comment.
-engine.py depends only on the python interpreter and on the two interfaces the contract names, World and Kernel, which are ears given to boot, held by no verb and bound to no name of the engine.
+engine.py depends only on the python interpreter and on the interfaces the contract names, World, Kernel and the gate, which are ears given to boot, held by no verb and bound to no name of the engine.
 A fact is a tuple, its kind first, deconstructed only by match, and nothing of the engine is a class but a text, an exit, the name of an act, and the two exceptions.
 The verbs and Text carry their signatures, typed, since a model reads them; nothing else in engine.py has a type annotation but what ty and a dataclass need.
 engine.py has no private names, and a name one thing alone uses lives inside it.

@@ -225,7 +225,7 @@ async def test_rung_is_given_a_word_and_runs_it_on_a_chain_in_the_globals_of_tha
 
 
 async def test_the_kernel_gates_the_word_its_caller_wrote_like_any_word() -> None:
-  """The Kernel gates the word its caller wrote like any word."""
+  """The gate reads the word its caller wrote like any word."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   await engine.rung("k = 1", on=root)
@@ -361,7 +361,7 @@ async def test_a_replay_makes_a_rung_of_its_own_retelling_each_rung_of_the_donor
   side = engine.chain("side", source=root)
   await settle(300)
   mine = [a for a in said(log, "rung") if a[3] == side]
-  assert {a[5]: a[4] for a in mine} == engine.ask("program", root, root)[1]
+  assert {a[5]: a[4] for a in mine} == engine.ask("program", root)[1]
   assert mine and all(a[1] != a[5] for a in mine)
 
 
@@ -383,17 +383,19 @@ async def test_a_rung_that_retells_names_the_rung_the_record_holds() -> None:
 
 
 async def test_a_rung_that_retells_is_done_with_nothing() -> None:
-  """A rung that retells is done with nothing when its word answers or runs to its end, whatever the Kernel makes of the word, and with what that word raised."""
+  """A rung that retells is done with nothing when its word answers, runs to its end or is cancelled, whatever the Kernel makes of the word, and with what that word raised."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["k = 1\nclose(21)", "close(None)"]
   assert await engine.prompt(int, "count", on=root) == 21
   with pytest.raises(ValueError, match="boom"):
     await engine.rung("raise ValueError('boom')", on=root)
+  with pytest.raises(CancelledError):
+    await engine.rung("raise CancelledError()", on=root)
   twin = engine.chain("twin", source=root)
   await settle(300)
   theirs = [a[1] for a in said(log, "rung") if a[3] == twin]
-  assert [type(engine.outcomes[one]).__name__ for one in theirs] == ["NoneType", "ValueError"]
+  assert [type(engine.outcomes[one]).__name__ for one in theirs] == ["NoneType", "ValueError", "NoneType"]
   other = sown()
   mine: list[tuple] = []
   over = engine.boot(kernel=kept(Py().kernel()), probe=watched(mine), world=other.hears())

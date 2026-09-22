@@ -5,13 +5,13 @@ from furb import engine
 
 
 async def test_a_gate_is_the_question_of_whether_a_word_may_run() -> None:
-  """A gate is the question of whether a word may run, which the Kernel answers with its findings."""
+  """A gate is the question of whether a word may run, which the ear named gate answers with its findings, apart from the Kernel, so a word may ask it while the Kernel runs that word."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  found = ["BAD in rung, after 0 rungs"]
+  found = ["BAD is no name, after 0 rungs"]
   assert engine.gate("k = BAD", on=root) == found
   answered = [one for one in said(log, "done") if one[1].startswith("gate://")]
-  assert [(one[2], one[3]) for one in answered] == [("kernel", found)]
+  assert [(one[2], one[3]) for one in answered] == [("gate", found)]
   assert engine.gate("k = 9", on=root) == []
 
 
@@ -24,8 +24,8 @@ async def test_the_refused_tag_holds_as_its_body_the_findings_that_refused_the_w
   assert [tag[2] for tag in tags(engine.turns(on=root), "refused")] == refusals(log) != []
 
 
-async def test_the_chain_has_the_kernel_gate_the_word_of_a_rung_before_it_runs() -> None:
-  """The chain has the Kernel gate the word of a rung before it runs, and a refused word runs never."""
+async def test_the_chain_has_the_word_of_a_rung_gated_before_it_runs() -> None:
+  """The chain has the word of a rung gated before it runs, and a refused word runs never."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["k = BAD", "close(7)", "close(None)"]
@@ -34,17 +34,64 @@ async def test_the_chain_has_the_kernel_gate_the_word_of_a_rung_before_it_runs()
   assert "k" not in engine.modules[root]
 
 
-async def test_a_refused_word_of_a_rung_is_part_of_the_program_of_the_chain() -> None:
-  """A refused word of a rung is part of the program of the chain, and it runs never."""
+async def test_a_refused_word_of_a_rung_stands_in_the_ladder_of_its_prompt() -> None:
+  """A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["k = BAD", "close(7)", "close(None)"]
   act = engine.prompt(int, "try", on=root)
   assert await act == 7
   assert engine.read(act, on=root).content == "k = BAD\nclose(7)"
-  _, program = engine.ask("program", root, root)
+  _, program = engine.ask("program", root)
   assert isinstance(program, dict)
-  assert list(program.values()) == ["k = BAD", "close(7)"] and ran(log) == ["close(7)"]
+  assert list(program.values()) == ["close(7)"] == ran(log)
+
+
+async def test_a_gate_says_the_program_of_the_chain_before_that_rung() -> None:
+  """A gate says the program of the chain before that rung, whose words the Kernel reads the word after, so the Kernel keeps no ladder of its own and a word of a program made again is read after the rungs that stand."""
+  sand = sown()
+  _, root = life(sand)
+  sand.script[root] = [
+    "k = 1",
+    "x = BAD",
+    "y = 2",
+    "write(read(get(acting())[2]).replace('y = 2', 'k = 3'))",
+    "close(k)",
+  ]
+  assert await engine.prompt(int, "edit", on=root) == 3
+  await settle()
+  asked = []
+  for one in engine.asked.values():
+    match one:
+      case ("gate", _, _, _, word, dict(program)):
+        asked.append((word, list(program.values())))
+  assert asked == [
+    ("k = 1", []),
+    ("x = BAD", ["k = 1"]),
+    ("y = 2", ["k = 1"]),
+    ("write(read(get(acting())[2]).replace('y = 2', 'k = 3'))", ["k = 1", "y = 2"]),
+    ("k = 3", ["k = 1"]),
+    ("close(k)", ["k = 1", "k = 3"]),
+  ]
+
+
+async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells_stood() -> None:
+  """A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a copy of a refused word is refused again and tells its findings not again."""
+  sand = sown()
+  log, root = life(sand)
+  sand.script[root] = ["k = 1", "x = BAD", "close(k)", "close(None)"]
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 1
+  await settle()
+  engine.write(engine.read(act, on=root), on=root)
+  await settle(300)
+  assert gated(log) == ["k = 1", "x = BAD", "close(k)", "k = 1", "x = BAD", "close(k)"]
+  assert [a[4] for a in engine.asked.values() if a[0] == "gate"] == ["k = 1", "x = BAD", "close(k)"]
+  copies = [a[1] for a in said(log, "rung") if a[5]]
+  assert [type(engine.outcomes[one]).__name__ for one in copies] == ["NoneType", "Refused", "NoneType"]
+  assert [a[1] for a in log if a[0] == "tell" and a[3][0][0] == "refused"] == [said(log, "rung")[1][1]]
+  assert engine.read(act, on=root).content == "k = 1\nx = BAD\nclose(k)"
+  assert engine.ask("program", root)[1] == {copies[0]: "k = 1", copies[2]: "close(k)"}
 
 
 async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:

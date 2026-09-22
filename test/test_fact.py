@@ -26,7 +26,7 @@ async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
   assert all(isinstance(one, tuple) and isinstance(one[0], str) for one in log)
-  assert {OPERATOR, WORLD, "kernel", root, "journal"} <= {one[2] for one in log}
+  assert {OPERATOR, WORLD, "gate", root, "journal"} <= {one[2] for one in log}
   assert {"chain", "stand", "prompt", "rung", "ask", "answer", "ready", "run", "ran", "keep"} <= {one[0] for one in log}
   assert all(one[1].startswith(one[0] + "://") for one in log if engine.question(one))
 
@@ -40,7 +40,7 @@ async def test_a_fact_says_who_said_it() -> None:
   step = said(log, "rung")[0][1]
   assert said(log, "read")[0][2] == step
   assert said(log, "answer")[0][2] == WORLD
-  assert [one[2] for one in said(log, "done") if one[1].startswith("gate://")] == ["kernel"]
+  assert [one[2] for one in said(log, "done") if one[1].startswith("gate://")] == ["gate"]
   assert said(log, "ran")[0][2] == step
   engine.read("a.txt", on=root)
   assert said(log, "read")[-1][2] == OPERATOR

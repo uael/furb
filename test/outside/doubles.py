@@ -19,7 +19,7 @@ from pydantic_ai.usage import RequestUsage
 
 from furb import engine
 from furb.engine import WORLD, Refused
-from furb.kernel import Native
+from furb.kernel import Native, gating
 from furb.world import Live
 
 type Words = Generator[tuple | None, tuple]
@@ -62,7 +62,8 @@ def reply(text: str) -> ModelResponse:
 
 
 def worlds(stands: tuple) -> Words:
-  """A World of the suite: it answers a stand, it does a wait, and it refuses every other question it is put.
+  """A World of the suite: it answers a stand, it does a wait, and it refuses every other question it is put but a
+  gate, which is the gate's to answer and none of the World's.
 
   It is what a test of the Kernel stands a life on, since the Kernel neither reads a disk nor asks a model, and a
   word that awaits needs one act of the World that comes to something.
@@ -80,21 +81,8 @@ def worlds(stands: tuple) -> Words:
             loop.call_later(seconds, partial(engine.send, "done", about, None, by=WORLD))
       case ("stand", qid, *_):
         yield "done", qid, stands
-      case (kind, qid, *_) if engine.question(a) and qid in engine.asked:
+      case (kind, qid, *_) if engine.question(a) and qid in engine.asked and kind != "gate":
         yield "done", qid, Refused(f"the suite answers no {kind}")
-
-
-class Quick(Native):
-  """A Kernel of the suite: the Kernel of this interpreter with its gate open.
-
-  A World under test is no gate, and reading every word with ty would spend a second of the suite on each of them.
-  What it runs it runs the one way the Kernel does, so a World is driven by the words a model would write.
-  """
-
-  def gate(self, word: str, ladder: list[str]) -> list[str]:
-    """Nothing, since a World under test is held to what the words of a model do and not to what a gate says."""
-    del word, ladder
-    return []
 
 
 def broken(why: str = "the model was not there") -> FunctionModel:
@@ -136,13 +124,16 @@ def speaking(text: str) -> Iterator[None]:
 
 
 def stood(said: Words, *, gated: bool = True) -> str:
-  """A life on a World of the suite, with the Kernel of this interpreter, and the id of its root."""
-  return engine.boot((), kernel=(Native() if gated else Quick()).kernel(), world=said)
+  """A life on a World of the suite, with the Kernel of this interpreter and its gate when it is gated, and the id
+  of its root; a life with no gate refuses no word, since a question nobody answers is answered with nothing."""
+  return engine.boot((), kernel=Native().kernel(), world=said, **({"gate": gating()} if gated else {}))
 
 
 def life(world: Live, record: Sequence[tuple] = (), *, gated: bool = False) -> str:
-  """A life on the World under test, with the Kernel of this interpreter, and the id of its root."""
-  return engine.boot(record, kernel=(Native() if gated else Quick()).kernel(), world=world.hears())
+  """A life on the World under test, with the Kernel of this interpreter and its gate when it is gated, and the id
+  of its root. A World under test is no gate, and reading every word with ty would spend a second of the suite on
+  each of them, so it is driven by the words a model would write."""
+  return engine.boot(record, kernel=Native().kernel(), world=world.hears(), **({"gate": gating()} if gated else {}))
 
 
 async def settle(n: int = 2000) -> None:
