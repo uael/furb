@@ -30,7 +30,7 @@ from furb import engine
 from furb.engine import OPERATOR, TIMEOUT, Exit, Refused, Text
 from furb.kernel import Native
 from furb.provider.claude import ACTOR, FAMILY, Claude, canon, limits
-from furb.world import CAP, SYSTEM, Command, Live, kept, truth, unwire, wire, worded
+from furb.world import CAP, INTERRUPTED, SYSTEM, Command, Live, kept, truth, unwire, wire, worded
 from outside.doubles import broken, heads, life, mute, scripted, settle, speaking, watched
 
 
@@ -42,6 +42,17 @@ def world(yard: Path, model: Model[object] | None = None, record: Path | None = 
 def commanded(proc: Process | None = None) -> Command:
   """One command of the World, merged and unfed, with the process it is given or with none at all."""
   return Command("bash1", "x", False, TIMEOUT, True, proc)
+
+
+def runs() -> list[asyncio.Task]:
+  """The run of every command the World holds up, which the loop of a life cancels when it ends."""
+  return [
+    one
+    for one in asyncio.all_tasks()
+    if one is not asyncio.current_task()
+    and inspect.iscoroutine(held := one.get_coro())
+    and held.__qualname__ == "Live.ran"
+  ]
 
 
 async def drained() -> None:
@@ -210,16 +221,10 @@ async def test_a_command_still_up_when_its_run_is_cancelled_is_reaped(yard: Path
     await asyncio.sleep(0.001)
     if engine.read(f"{waits}/stdout", on=root).content:
       break
-  runs = [
-    one
-    for one in asyncio.all_tasks()
-    if one is not asyncio.current_task()
-    and inspect.iscoroutine(held := one.get_coro())
-    and held.__qualname__ == "Live.ran"
-  ]
-  assert len(runs) == 1
-  runs[0].cancel()
-  await asyncio.gather(*runs, return_exceptions=True)
+  up = runs()
+  assert len(up) == 1
+  up[0].cancel()
+  await asyncio.gather(*up, return_exceptions=True)
   with warnings.catch_warnings(record=True) as caught:
     warnings.simplefilter("always")
     gc.collect()
@@ -229,6 +234,37 @@ async def test_a_command_still_up_when_its_run_is_cancelled_is_reaped(yard: Path
     await waits
   await drained()
   assert asyncio.all_tasks() == {asyncio.current_task()}
+
+
+async def test_a_later_life_ends_a_command_that_an_earlier_world_spawned_and_never_runs_it_twice(yard: Path) -> None:
+  """The World notes each command beside the record before it spawns it. A later life ends a command that an earlier
+  World spawned and that never ended with a refusal, whether the command told anything or not, and never runs it
+  again; what the command told stands, and the life after it reads the refusal from the record."""
+  record, notes = yard / "record.jsonl", yard / "record.jsonl.spawned.json"
+  live = world(yard, scripted([]), record)
+  root = life(live)
+  # Each command grows its child before it says its word, so the end of the World kills the whole group of it.
+  await engine.rung("a = bash('sleep 30 & printf once >> count; wait')\nb = bash('sleep 30 & echo up; wait')", on=root)
+  for _ in range(2000):
+    await asyncio.sleep(0.001)
+    if (yard / "count").is_file() and engine.read("bash2/stdout", on=root).content:
+      break
+  up = runs()
+  for one in up:
+    one.cancel()
+  await asyncio.gather(*up, return_exceptions=True)
+  assert live.notes == notes
+  assert json.loads(notes.read_text(encoding="utf-8")) == ["bash1", "bash2"]
+  for _ in ("the life after the World ended", "the life after that one"):
+    live = world(yard, scripted([]), record)
+    root = life(live, kept(record))
+    await settle()
+    for one in ("bash1", "bash2"):
+      with pytest.raises(Refused, match=INTERRUPTED):
+        await engine.Act(one)
+    assert engine.read("bash2/stdout", on=root).content == "up\n"
+    assert (yard / "count").read_text(encoding="utf-8") == "once"
+    assert json.loads(notes.read_text(encoding="utf-8")) == []
 
 
 async def test_a_command_cancelled_before_its_process_stood_dies_as_soon_as_it_stands(yard: Path) -> None:

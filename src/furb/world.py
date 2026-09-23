@@ -51,6 +51,8 @@ PIPE = 65536
 """PIPE is the bytes the World reads of a stream at a time, which is one Out word of the command."""
 MUTE = "{} answered nothing"
 """MUTE is how the World says an actor gave no turn."""
+INTERRUPTED = "the World that ran this command ended before the command did, and no World runs a command twice"
+"""INTERRUPTED is why a later World ends a command that an earlier World spawned and that never ended."""
 
 
 SYSTEM = minify(
@@ -213,6 +215,9 @@ class Live:
   every fact it answered or performed, in order, and `model` is the one model it asks, when it is given one.
   `mute` holds, for each chain, the actor whose last ask on that chain answered nothing, so a second such ask in a
   row pauses the chain, and an answer between the two ends the row.
+  `spawned` holds every command that this World or an earlier World of the record spawned and that is not done. The
+  World keeps it in the file `notes` names beside the record, and notes a command there before it spawns it, so a
+  later life ends such a command with a refusal and never runs it twice.
   `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
   """
 
@@ -224,8 +229,30 @@ class Live:
   model: Model[object] | None = None
   bought: dict[str, Model[object]] = field(default_factory=dict)
   mute: dict[str, str] = field(default_factory=dict)
+  spawned: set[str] = field(init=False, default_factory=set)
   reader: asyncio.StreamReader | None = None
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+  def __post_init__(self) -> None:
+    if self.notes is not None and self.notes.is_file():
+      self.spawned = set(json.loads(self.notes.read_text(encoding="utf-8")))
+
+  @property
+  def notes(self) -> Path | None:
+    """The file beside the record that holds `spawned`, and nothing when the World keeps no record."""
+    return None if self.record is None else self.record.with_name(f"{self.record.name}.spawned.json")
+
+  def note(self) -> None:
+    """`spawned` onto its file, whole, and on the disk before this gives back."""
+    if self.notes is None:
+      return
+    held = self.notes.with_name(f"{self.notes.name}.tmp")
+    held.parent.mkdir(parents=True, exist_ok=True)
+    with held.open("w", encoding="utf-8") as file:
+      json.dump(sorted(self.spawned), file)
+      file.flush()
+      os.fsync(file.fileno())
+    held.replace(self.notes)
 
   def buys(self, name: str) -> Model[object]:
     """The model a name asks for, bought once, or the one model the World was given for every name it hears."""
@@ -427,7 +454,7 @@ class Live:
     except ValueError as no:
       engine.close(Refused(f"{line!r} is no {shape}: {no}"), about)
 
-  def hears(self) -> World:  # noqa: PLR0912
+  def hears(self) -> World:  # noqa: PLR0912, PLR0915
     """The World as one generator for one life: it does the act a start names, answers the questions that are its
     own, feeds and ends its commands, answers an ask with the turn of a model, and keeps what it is told.
     """
@@ -448,11 +475,17 @@ class Live:
       if a[0] in ("start", "stand", "read", "write", "ask", "feed", "clock", "chance"):
         self.calls.append(a)
       match a:
-        case (_, id, *_) if engine.question(a) and id in engine.acts:
+        case (kind, id, *_) if engine.question(a) and id in engine.acts:
           acts[id] = a
+          if kind == "bash" and id in self.spawned:
+            # An earlier World spawned it and ended first, so its process is gone. The close waits for the loop,
+            # since the record says what the command told after its act, and that comes first.
+            loop.call_soon(engine.close, Refused(INTERRUPTED), id)
         case ("start", about, _):
           match acts[about]:
-            case ("bash", _, _, on, command, fed, timeout):
+            case ("bash", _, _, on, command, fed, timeout) if about not in self.spawned:
+              self.spawned.add(about)
+              self.note()
               merged = engine.ask("merged", on, about)[1]
               running[about] = held = Command(about, command, fed, timeout, bool(merged))
               start(self.ran(held, engine.cwd(on=on)))
@@ -477,6 +510,9 @@ class Live:
             yield "exited", one.id, None
         case ("exited", about, *_):
           running.pop(about, None)
+        case ("done", about, *_) if about in self.spawned:
+          self.spawned.discard(about)
+          self.note()
         case ("keep", _, _, entry):
           self.keep(entry)
         case ("clock", qid, *_):
