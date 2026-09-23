@@ -127,8 +127,9 @@ A record whose replay drifts gives a life all the same, and `life.raised` holds 
 nothing more. `World.open` refuses such a record with the drift.
 
 Only one process owns a record. Its `RecordLock` holds a lock on `<record>.lock`, which the system releases
-when the process ends, so a lease of a process that ended never blocks an open. The lock file stays beside the
-record. A torn final line is removed before an append; a damaged complete line fails.
+when the process ends, so a lease of a process that ended never blocks an open. The holder may move the lock file
+with the record, and a process that locked the moved file opens the path again. A torn final line is removed before
+an append; a damaged complete line fails.
 A later open holds unfinished work, in `world.held`, before any model, command, wait or operator question
 starts, and `world.resume()` explicitly releases it. The World pauses no chain to hold work, so every pause
 that the record holds stands after resume: one of the operator, of a grant, or of two failed asks in a row.

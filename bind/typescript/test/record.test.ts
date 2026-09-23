@@ -55,3 +55,26 @@ test("one holder at a time owns a record, and a holder that ends ends only its o
     await rm(cwd, { recursive: true });
   }
 });
+
+test("a holder may move the lock file, and two processes never own the record at once", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-lease-"));
+  const path = join(cwd, "record.jsonl");
+  const racer = new URL("lease-racer.ts", import.meta.url).pathname;
+  try {
+    const until = String(Date.now() + 1500);
+    const racers = ["", "", "", "", "", "", "move", "move"].map((role) =>
+      Bun.spawn([process.execPath, racer, path, until, role], { stdout: "pipe", stderr: "pipe" }),
+    );
+    const ends = await Promise.all(
+      racers.map(async (child) => ({
+        code: await child.exited,
+        taken: Number(await new Response(child.stdout).text()),
+        error: await new Response(child.stderr).text(),
+      })),
+    );
+    expect(ends.map(({ code, error }) => (code ? error : ""))).toEqual(ends.map(() => ""));
+    expect(ends.every(({ taken }) => taken > 0)).toBe(true);
+  } finally {
+    await rm(cwd, { recursive: true });
+  }
+}, 30000);
