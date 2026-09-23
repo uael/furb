@@ -1,8 +1,8 @@
 //! One process at a time owns a record, by a lease that the kernel holds for it.
 use napi_derive::napi;
-use std::fs::{File, OpenOptions, TryLockError, create_dir_all, metadata};
+use same_file::Handle;
+use std::fs::{OpenOptions, TryLockError, create_dir_all};
 use std::io::ErrorKind;
-use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 /// The lease of one record: a lock on the file beside the record, `<record>.lock`, which the process holds until
@@ -11,7 +11,7 @@ use std::path::Path;
 #[napi]
 pub struct RecordLock {
   path: String,
-  file: Option<File>,
+  file: Option<Handle>,
 }
 
 #[napi]
@@ -41,12 +41,11 @@ impl RecordLock {
       }
       // The lock is the lease only while its file is the one at the path. A holder that moved or removed the file
       // after this process opened it leaves a lock that no later process meets, so this process opens the path
-      // again.
-      let held = file.metadata().map_err(failed)?;
-      match metadata(&lock) {
-        Ok(now) if (now.dev(), now.ino()) == (held.dev(), held.ino()) => {
-          return Ok(Self { file: Some(file), path });
-        }
+      // again. On Windows the identity of a file holds only while a handle keeps the file open, as both handles do
+      // here.
+      let held = Handle::from_file(file).map_err(failed)?;
+      match Handle::from_path(&lock) {
+        Ok(now) if now == held => return Ok(Self { file: Some(held), path }),
         Ok(_) => {}
         Err(error) if error.kind() == ErrorKind::NotFound => {}
         Err(error) => return Err(failed(error)),
