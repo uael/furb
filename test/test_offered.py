@@ -13,6 +13,11 @@ async def test_the_window_an_actor_reads() -> None:
   assert engine.offered(STANDS, OPERATOR) == 200000
   assert engine.offered(STANDS, "n/high") is None
   assert engine.offered(STANDS, "ghost") is None
+  slashed = (((OPERATOR, (), 200000), ("p:org/model", ("low",), 1000000)), "/w", "p:org/model/low")
+  assert engine.offered(slashed, "p:org/model/low") == 1000000
+  assert engine.offered(slashed, "p:org/model") == 1000000
+  assert engine.offered(slashed, "p:org/model/high") is None
+  assert engine.offered(slashed, "p:org") is None
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   ghost = engine.prompt(int, "hi", to="ghost", on=root)

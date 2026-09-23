@@ -558,8 +558,7 @@ def turns_of(heard):
 
 
 def offered(standing, to):
-  who, effort = to.partition("/")[::2]
-  return next((w for name, efforts, w in standing[0] if name == who and (not effort or effort in efforts)), None)
+  return next((w for name, efforts, w in standing[0] if to in (name, *(f"{name}/{e}" for e in efforts))), None)
 
 
 def covers(a, id):

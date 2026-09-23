@@ -2,7 +2,7 @@
 
 from conftest import STANDS, Sand, attr, life, said, settle, tags
 from furb import engine
-from furb.engine import Refused
+from furb.engine import OPERATOR, Refused
 
 
 async def test_an_actor_the_world_offers() -> None:
@@ -43,6 +43,11 @@ async def test_what_a_prompt_names_is_one_of_these_names_and_one_effort_of_that_
   await settle()
   assert isinstance(engine.peek(ghost), Refused)
   engine.cancel(right)
+  slashed = Sand(stands=(((OPERATOR, (), 200000), ("p:org/model", ("low",), 1000000)), "/w", "p:org/model/low"))
+  log, root = life(slashed)
+  slashed.script[root] = ["close(1)"]
+  assert await engine.prompt(int, "hi", to="p:org/model/low", on=root) == 1
+  assert [a[4] for a in said(log, "ask")] == ["p:org/model/low"]
 
 
 async def test_an_actor_takes_an_effort_of_its_own_and_any_actor_takes_the_effort_that_is_not_named() -> None:
