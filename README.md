@@ -30,7 +30,8 @@ asks no model. The TUI has one view per chain, Python programs, act output, an e
 live value inspection, themes, and saved sessions. See [the screenshot gallery](docs/tui.md).
 
 Every pull request, and every push to `main`, runs the gates in `.github/workflows/gates.yml`: the hooks, which
-include the gates of the crate, the type check, and the suite on linux and on macos.
+include the gates of the crate, and the type check. On linux and on macos, they run the suite, and the gates of the
+TypeScript bindings and of the TUI.
 
 Copyright (C) 2026 Abel Lucas. furb is free software under the GNU Affero General Public License, version 3, which
 `LICENSE` holds: you may use, study, change and share it, and anyone who ships it or runs a changed furb as a
