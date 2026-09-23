@@ -37,7 +37,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models import Model
 from python_minifier import minify
 
-from furb import engine
+from furb import engine, python
 from furb.engine import WORLD, Drift, Refused, Text, under
 from furb.provider.claude import ACTOR, Claude, Settings, actors
 
@@ -53,7 +53,7 @@ MUTE = "{} answered nothing"
 
 
 SYSTEM = minify(
-  Path(engine.__file__).read_text(encoding="utf-8"),
+  Path(python.__file__).read_text(encoding="utf-8"),
   remove_annotations=False,
   remove_pass=False,
   combine_imports=False,

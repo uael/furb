@@ -290,6 +290,18 @@ def test_the_engine_the_model_reads_is_the_engine_that_runs() -> None:
   assert len(SYSTEM) < len(source)
 
 
+def test_the_engine_the_model_reads_is_the_engine_of_this_interpreter_whatever_the_switch_says() -> None:
+  """A World of a process whose engine runs in monty gives the models the same system prompt, the engine file."""
+  said = subprocess.run(
+    [sys.executable, "-c", "from furb.world import SYSTEM; print(SYSTEM, end='')"],
+    env={**os.environ, "FURB_ENGINE": "monty"},
+    capture_output=True,
+    text=True,
+    check=True,
+  ).stdout
+  assert said == SYSTEM
+
+
 def test_what_the_model_reads_of_a_tag_is_its_name_its_attributes_and_its_body() -> None:
   """A tag crosses as a block named by its name, its short attributes beside the name, and everything else inside.
 
