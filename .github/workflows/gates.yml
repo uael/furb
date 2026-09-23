@@ -123,11 +123,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # A python restored from the cache on Windows holds a link to its directory that the restore breaks, so uv
+      # install fails there on every run after the first: Windows installs its python each time.
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
-          cache-python: true
+          cache-python: ${{ runner.os != 'Windows' }}
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
         with:
           cache-key: >-
