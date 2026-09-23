@@ -1,4 +1,6 @@
-import { type SessionEntry, statusLabels, type Workspace } from "./workspaces.ts";
+import { dollars, kibibytes } from "./format.ts";
+import { statusLabels } from "./session.ts";
+import type { SessionEntry, Workspace } from "./workspaces.ts";
 
 /** All pickers read the same inventory as the workspace tree. */
 export function sessionChoices(
@@ -13,12 +15,7 @@ export function sessionChoices(
       : "";
     return {
       label: entry.name,
-      detail: [
-        statusLabels[entry.status],
-        at,
-        `$${(entry.cost ?? 0).toFixed(4)}`,
-        `${((entry.size ?? 0) / 1024).toFixed(1)} KiB`,
-      ]
+      detail: [statusLabels[entry.status], at, dollars(entry.cost ?? 0), kibibytes(entry.size ?? 0)]
         .filter(Boolean)
         .join(" · "),
       run: () => open(entry),

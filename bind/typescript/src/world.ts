@@ -20,6 +20,7 @@ import { Activity, type RunState } from "./activity.js";
 import { FileChanges } from "./changes.js";
 import { type Ears, WorldAdapter, type WorldHandler, type WorldRequest } from "./ears.js";
 import { attachImage, type ImageAttachment, ImageCache, turnImages } from "./images.js";
+import { furbDirectory } from "./project.js";
 import { RecordFile } from "./record.js";
 import {
   actorParts,
@@ -257,6 +258,8 @@ export class World extends EventEmitter {
   }
   attachImage(path: string): ImageAttachment {
     if (this.options.readOnly) throw new Error("Record inspection cannot attach an image.");
+    // With no record, the images stay in the .furb of the directory, which is made with its ignore rule.
+    if (!this.records.path) furbDirectory(this.directory);
     return attachImage(this.imageDirectory, resolve(this.directory, path));
   }
 

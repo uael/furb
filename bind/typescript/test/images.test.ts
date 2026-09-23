@@ -7,11 +7,14 @@ import { ImageCache } from "../src/images.ts";
 import { imageContent, imagePath, imageReference, imageReferences, World } from "../src/index.ts";
 import { claudeProvider } from "../src/providers/claude.ts";
 
+/** A PNG of one pixel, in base64. */
+const pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
+
 test("image attachments reach pi-ai and the Claude CLI as image blocks and remain available after replay", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-images-"));
   const record = join(directory, "session.jsonl");
   const path = join(directory, "pixel.png");
-  const data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
+  const data = pixel;
   await writeFile(path, Buffer.from(data, "base64"));
   const bin = new URL("fake-claude.ts", import.meta.url).pathname;
   await chmod(bin, 0o755);
@@ -72,4 +75,25 @@ test("an image attachment is written and read back by one grammar, and a bare ur
   ]);
   expect(imagePath("/images", image.uri)).toEqual({ path: `/images/${digest}.png`, digest });
   expect(() => imagePath("/images", "furb-image://short.png")).toThrow("Invalid image attachment.");
+});
+
+test("a World with no record keeps its images in a .furb that keeps itself out of version control", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-images-"));
+  const world = new World({ cwd: directory });
+  try {
+    Bun.spawnSync(["git", "init", "-q"], { cwd: directory });
+    const path = join(directory, "pixel.png");
+    await writeFile(path, Buffer.from(pixel, "base64"));
+    const image = world.attachImage(path);
+    expect(imageContent(world.imageDirectory, image.uri).data).toBe(pixel);
+    expect(world.imageDirectory).toBe(join(directory, ".furb/images"));
+    expect(await readFile(join(directory, ".furb/.gitignore"), "utf8")).toBe("*\n");
+    const status = Bun.spawnSync(["git", "status", "--porcelain", "--untracked-files=all"], {
+      cwd: directory,
+    });
+    expect(status.stdout.toString()).toBe("?? pixel.png\n");
+  } finally {
+    await world.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
 });

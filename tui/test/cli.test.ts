@@ -43,15 +43,10 @@ for (const signal of ["SIGHUP", "SIGTERM"] as const)
     );
     try {
       await eventually(() => screen.includes("Workspaces"), "the first frame");
-      const sent = screen.length;
       terminal.write(`!echo $$ > '${pidFile}'; sleep 30\r`);
       const pid = async () => Number(await readFile(pidFile, "utf8").catch(() => ""));
       await eventually(async () => (await pid()) > 0, "the command to start");
-      // The composer shows its placeholder once the submit has emptied it, and a draft typed then stays.
-      await eventually(
-        () => screen.slice(sent).includes("Ask anything, or type / for a command..."),
-        "the composer to empty",
-      );
+      // The submit takes its text from the composer at once, so a draft typed after it stays.
       terminal.write("draftmarker");
       await eventually(() => screen.includes("draftmarker"), "the draft on the screen");
       child.kill(signal);

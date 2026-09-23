@@ -21,13 +21,22 @@ import {
   type TextChunk,
   TextRenderable,
 } from "@opentui/core";
-import { createTwoFilesPatch } from "diff";
 import { clipboardImage } from "./clipboard.ts";
 import { commands } from "./commands.ts";
 import { externalEditor } from "./editor.ts";
 import type { Extensions } from "./extensions.ts";
+import { clip, count, dollars, graphemes, kibibytes, share } from "./format.ts";
+import { chords, keys } from "./keys.ts";
 import { loadParsers } from "./parsers.ts";
-import type { ActRow, Session, View } from "./session.ts";
+import {
+  type ActRow,
+  failed,
+  type Session,
+  type SessionStatus,
+  statusLabels,
+  type View,
+  working,
+} from "./session.ts";
 import { publishShare } from "./share.ts";
 import {
   theme as c,
@@ -38,18 +47,12 @@ import {
   syntax,
   type ThemeName,
 } from "./theme.ts";
-import { type SessionStatus, statusLabels, type Workspaces } from "./workspaces.ts";
+import type { Workspaces } from "./workspaces.ts";
 
 const exitNotice = "Press Ctrl+D again to exit.";
 const views: View[] = ["conversation", "program", "activity", "facts", "transcript", "changes"];
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const short = (id: string) => id.replace(/^[^:]+:\/\//, "");
-const count = (value: number) =>
-  value >= 1_000_000
-    ? `${Number((value / 1_000_000).toFixed(1))}M`
-    : value >= 1000
-      ? `${Number((value / 1000).toFixed(1))}k`
-      : String(value);
 interface BlockOptions {
   compact?: boolean;
   collapsible?: boolean;
@@ -59,6 +62,8 @@ interface BlockOptions {
   prompt?: boolean;
   preview?: (box: BoxRenderable) => void;
   act?: ActRow;
+  /** The label again, which the tick reads while the label moves with time. */
+  title?: () => string;
 }
 interface Choice {
   label: string;
@@ -66,12 +71,13 @@ interface Choice {
   run(): void | Promise<void>;
   toggle?: () => void;
 }
-/** One suggestion for the token before the cursor: what Tab puts in its place, and what Enter does with it. */
+/** One suggestion for the token before the cursor: the text that Tab puts in its place, and what Enter does when it
+ * does more than that. */
 interface Suggestion {
   label: string;
   detail: string;
-  complete(): void;
-  submit(): void;
+  text: string;
+  submit?: () => void;
 }
 
 export interface AppOptions {
@@ -122,6 +128,10 @@ export class App {
     {
       node: BoxRenderable;
       heading: TextRenderable;
+      /** The text of the heading, set again only when it changes. */
+      label: string;
+      title?: () => string;
+      marker: string;
       key: string;
       compact: boolean;
       collapsible: boolean;
@@ -129,6 +139,8 @@ export class App {
       closed: boolean;
     }
   >();
+  /** The offset the view scrolls to once the scroll box has laid out its new cards. */
+  private scrollTarget?: number;
   private overlay?: BoxRenderable;
   private paletteInput?: InputRenderable;
   private paletteList?: BoxRenderable;
@@ -144,7 +156,7 @@ export class App {
   private readonly navigation: {
     chain: string;
     view: View;
-    query: string;
+    search: string;
     top: number;
     ladder?: string;
     mode: "prompt" | "python";
@@ -230,7 +242,7 @@ export class App {
       placeholderColor: c.muted,
     });
     this.search.on(InputRenderableEvents.INPUT, (value: string) => {
-      session.query = value;
+      session.search = value;
       this.renderContent();
     });
     center.add(this.search);
@@ -349,25 +361,14 @@ export class App {
     session.on("change", this.schedule);
     options.workspaces?.on("change", this.schedule);
     session.on("compose", this.compose);
-    session.on("inspect", this.inspect);
     session.on("resume", this.resume);
-    session.on("rewind", this.rewind);
-    session.on("models", this.models);
-    session.on("efforts", this.effortPicker);
-    session.on("details", this.details);
-    session.on("queue", this.queuePicker);
-    session.on("tree", this.chainTree);
     session.on("shared", this.shared);
     renderer.keyInput.on("keypress", this.key);
     renderer.on("resize", this.render);
+    // A label that moves with time is read again, and no other part of the view is drawn again.
     this.tick = setInterval(() => {
-      if (
-        !this.session.paused &&
-        this.session.activity.some(
-          (act) => !act.done && ["prompt", "bash", "wait", "rung"].includes(act.kind),
-        )
-      )
-        this.schedule();
+      for (const card of this.cards.values())
+        if (card.title) this.label(card, `${card.marker}${card.title()}`);
     }, 250);
     this.render();
     this.composer.focus();
@@ -415,10 +416,21 @@ export class App {
   private clear(node: Renderable): void {
     for (const child of [...node.getChildren()]) child.destroyRecursively();
   }
-  private compose = (text: string) => {
-    if (this.draftKey) this.session.drafts[this.draftKey] = this.composer.plainText;
-    this.draftKey = `${this.session.selected}:${this.session.editing ?? this.session.ladder ?? this.session.mode}`;
+  /** The text of the composer kept as the draft it shows. An empty draft is none, so that a program to edit
+   * opens from its door. */
+  private keepDraft(): void {
+    const text = this.composer.plainText;
+    if (text) this.session.drafts[this.draftKey] = text;
+    else delete this.session.drafts[this.draftKey];
+  }
+  /** The composer shows the draft of a key, and the draft it showed stays under its own key. */
+  private showDraft(key: string, text = this.session.drafts[key] ?? ""): void {
+    if (this.draftKey) this.keepDraft();
+    this.draftKey = key;
     this.composer.setText(text);
+  }
+  private compose = (text: string) => {
+    this.showDraft(this.session.draftKey, text);
     this.composer.focus();
   };
   private schedule = () => {
@@ -432,23 +444,23 @@ export class App {
   async submit(): Promise<void> {
     if (this.submitting) return;
     this.submitting = true;
+    const key = this.draftKey;
     const content = this.composer.plainText;
+    const python = this.session.mode === "python" && !this.session.editing && !content.startsWith("/");
+    // The text leaves its draft as it is sent, so what is typed while it is sent stays in the composer.
+    this.composer.setText("");
     try {
-      if (await this.globalCommand(content.trim())) {
-        return;
-      }
-      await this.session.submit(
-        this.session.mode === "python" && !this.session.editing && !content.startsWith("/")
-          ? `/run ${content}`
-          : content,
-      );
-      const history = this.session.histories[this.draftKey] ?? [];
-      this.session.histories[this.draftKey] = history;
+      if (!(await this.globalCommand(content.trim())))
+        await this.session.submit(python ? `/run ${content}` : content);
+      const history = this.session.histories[key] ?? [];
+      this.session.histories[key] = history;
       if (content && history.at(-1) !== content) history.push(content);
       if (history.length > 200) history.shift();
       this.historyIndex = -1;
-      if (!content.startsWith("/edit") && content.trim() !== "/undo") this.composer.setText("");
     } catch (error) {
+      // A text that was not sent goes back to its draft, unless that draft holds new text by now.
+      if (this.draftKey === key && !this.composer.plainText) this.composer.setText(content);
+      else if (this.draftKey !== key && !this.session.drafts[key]) this.session.drafts[key] = content;
       this.report(error);
     } finally {
       this.submitting = false;
@@ -460,12 +472,7 @@ export class App {
     if (this.closed) return;
     const w = this.session;
     if (w.theme !== this.theme) this.applyTheme(w.theme);
-    const draftKey = `${w.selected}:${w.editing ?? w.ladder ?? w.mode}`;
-    if (this.draftKey !== draftKey) {
-      if (this.draftKey) w.drafts[this.draftKey] = this.composer.plainText;
-      this.draftKey = draftKey;
-      this.composer.setText(w.drafts[draftKey] ?? "");
-    }
+    if (this.draftKey !== w.draftKey) this.showDraft(w.draftKey);
     this.sidebar.visible = Boolean(
       this.options.workspaces && w.preferences.sidebar && this.renderer.width >= 110,
     );
@@ -512,7 +519,7 @@ export class App {
                 "Image attachments",
                 images.map((image) => ({
                   label: image.name,
-                  detail: `${image.mimeType} · ${(image.size / 1024).toFixed(1)} KiB`,
+                  detail: `${image.mimeType} · ${kibibytes(image.size)}`,
                   run: () => this.imageActions(image.uri),
                 })),
               );
@@ -553,17 +560,7 @@ export class App {
       space.inset * 2 +
       Math.min(6, Math.max(space.bar, this.composer.lineCount, this.composer.lineInfo.lineSources.length));
     const { model, effort } = w.actorChoice;
-    const state = w.loading
-      ? "loading"
-      : w.error
-        ? "error"
-        : w.paused
-          ? "paused"
-          : pending
-            ? "input needed"
-            : w.activity.some((act) => !act.done && ["prompt", "rung", "bash", "wait"].includes(act.kind))
-              ? "working"
-              : "ready";
+    const state = w.loading ? "Loading" : statusLabels[w.status(w.selected)];
     this.status.content = `${w.error ? state : w.notice || state} · model ${model} · effort ${effort}${pending ? "" : ` · ${w.mode === "python" || w.editing ? "Python" : `returns ${w.shape}`}`}${w.world.records.path ? ` · ${basename(w.world.records.path)}` : ""}`;
     this.renderContent();
     this.renderInspector();
@@ -576,6 +573,12 @@ export class App {
     }
   };
 
+  /** The heading of a card set to a text, only when the text changed. */
+  private label(card: { heading: TextRenderable; label: string }, text: string): void {
+    if (card.label === text) return;
+    card.label = text;
+    card.heading.content = safeText(text);
+  }
   private card(
     id: string,
     key: string,
@@ -596,15 +599,17 @@ export class App {
       options.compact && closed && !options.preview
         ? "closed"
         : `${key}:${closed}:${options.preview && closed ? this.scroll.width : ""}`;
-    const heading = `${rung || options.compact || options.collapsible ? (closed ? "▸ " : "▾ ") : ""}${label}`;
+    const marker = rung || options.compact || options.collapsible ? (closed ? "▸ " : "▾ ") : "";
+    const heading = `${marker}${label}`;
     const visible = Boolean(label) && (options.compact || options.heading !== false || closed);
     const prior = this.cards.get(id);
     if (prior?.key === key) {
-      prior.heading.content = heading;
-      prior.heading.fg = color;
-      prior.heading.visible = visible;
-      prior.closed = closed;
-      prior.node.marginTop = options.separate ? space.section : space.stack;
+      this.label(prior, heading);
+      Object.assign(prior, { marker, title: options.title, closed });
+      if (prior.heading.fg !== color) prior.heading.fg = color;
+      if (prior.heading.visible !== visible) prior.heading.visible = visible;
+      const margin = options.separate ? space.section : space.stack;
+      if (prior.node.marginTop !== margin) prior.node.marginTop = margin;
       if (this.scroll.getChildren()[index] !== prior.node) this.scroll.add(prior.node, index);
       return;
     }
@@ -639,6 +644,9 @@ export class App {
       key,
       node: box,
       heading: labelNode,
+      label: heading,
+      marker,
+      title: options.title,
       compact: options.compact ?? false,
       collapsible: Boolean(rung || options.collapsible),
       state,
@@ -702,12 +710,13 @@ export class App {
     const w = this.session;
     const view = `${w.selected}:${w.view}:${w.ladder ?? ""}`;
     if (this.lastView !== view) {
-      if (this.lastView) w.scrolls[this.lastView] = this.scroll.scrollTop;
+      if (this.lastView) w.scrolls[this.lastView] = this.scrollTarget ?? this.scroll.scrollTop;
       this.clear(this.scroll);
       this.cards.clear();
       this.lastView = view;
       this.scroll.stickyScroll = w.view === "conversation";
       this.scroll.scrollTo(w.scrolls[view] ?? 0);
+      this.scrollAfterLayout(w.scrolls[view]);
     }
     const existing = new Set(this.cards.keys());
     let order = 0,
@@ -730,7 +739,9 @@ export class App {
       });
       order++;
     };
-    const matches = (text: string) => !w.query || text.toLowerCase().includes(w.query.toLowerCase());
+    const matches = (text: string) => !w.search || text.toLowerCase().includes(w.search.toLowerCase());
+    // The label of an act that works moves with time, so the tick reads it again.
+    const moving = (act?: ActRow) => (act && working(act) ? () => this.actSummary(act) : undefined);
     if (w.preferences.notice)
       add("preferences-notice", w.preferences.notice, "", c.warning, (box) =>
         box.add(
@@ -778,6 +789,7 @@ export class App {
               {
                 collapsible: true,
                 act: rung,
+                title: moving(rung),
               },
             );
             continue;
@@ -788,14 +800,14 @@ export class App {
           const actId = String(fields.id ?? fields.over ?? "");
           const act = w.acts.find((act) => act.id === actId);
           if (act?.kind === "rung" && name === "opened") rung = act;
-          if (act && ["raised", "refused"].includes(name) && this.failure(act) && seen.has(act.id)) continue;
+          if (act && ["raised", "refused"].includes(name) && failed(act) && seen.has(act.id)) continue;
           if (
             name === "ledger" ||
             (act &&
               (["chain", "grant"].includes(act.kind) ||
                 (act.kind === "rung" &&
                   (act.by !== "operator" || !act.words[0]) &&
-                  (name === "opened" || !this.failure(act) || seen.has(act.id)))) &&
+                  (name === "opened" || !failed(act) || seen.has(act.id)))) &&
               ["opened", "closed"].includes(name))
           )
             continue;
@@ -837,7 +849,7 @@ export class App {
               this.actSummary(act),
               this.actColor(act),
               (box) => this.actDetails(box, act),
-              { compact: true, group: "tools", preview: this.actPreview(act), act },
+              { compact: true, group: "tools", preview: this.actPreview(act), act, title: moving(act) },
             );
           } else {
             items++;
@@ -888,10 +900,10 @@ export class App {
             if (stream.thinking) box.add(this.text(stream.thinking, c.muted));
             if (stream.text) box.add(this.code(stream.text));
           },
-          { act, collapsible: true },
+          { act, collapsible: true, title: () => (act ? this.actSummary(act) : this.progress(id)) },
         );
       }
-      if (!items && !w.query && !w.loading && !w.error) {
+      if (!items && !w.search && !w.loading && !w.error) {
         add("welcome", "welcome", "", c.muted, (box) => {
           for (const [label, prompt] of [
             ["Explore a codebase", "Read the README and explain how this project works."],
@@ -934,7 +946,7 @@ export class App {
             act ? this.actSummary(act) : `rung · ${short(id)} · done`,
             act ? this.actColor(act) : c.muted,
             (box) => box.add(this.numbered(word)),
-            { collapsible: true, act },
+            { collapsible: true, act, title: moving(act) },
           );
         }
     } else if (w.view === "activity") {
@@ -947,7 +959,7 @@ export class App {
             this.actSummary(act),
             this.actColor(act),
             (box) => this.actDetails(box, act),
-            { compact: true, preview: this.actPreview(act), act },
+            { compact: true, preview: this.actPreview(act), act, title: moving(act) },
           );
         }
     } else if (w.view === "transcript") {
@@ -982,11 +994,12 @@ export class App {
       for (const [index, change] of w.changes.entries())
         if (matches(change.path)) {
           items++;
-          const diff = createTwoFilesPatch(change.path, change.path, change.before, change.after);
-          add(`change-${index}`, diff, change.path, c.muted, (box) =>
+          // A change never changes once it is written, so its position in the life keys its card.
+          const position = String(w.changePage * 20 + index);
+          add(`change-${position}`, position, change.path, c.muted, (box) =>
             box.add(
               new DiffRenderable(this.renderer, {
-                diff,
+                diff: change.patch,
                 view: this.renderer.width > 145 ? "split" : "unified",
                 syntaxStyle: this.style,
                 fg: c.text,
@@ -1031,7 +1044,7 @@ export class App {
         transcript: "No transcript yet.",
         changes: "No file changes yet.",
       };
-      const message = w.query ? `No matching ${w.view} for “${w.query}”.` : empty[w.view];
+      const message = w.search ? `No matching ${w.view} for “${w.search}”.` : empty[w.view];
       add("empty", message, "", c.muted, (box) => box.add(this.text(message, c.muted)));
     }
     for (const id of existing) {
@@ -1041,16 +1054,7 @@ export class App {
   }
 
   private preview(text: string, reserve = 2): string {
-    return this.clip(text.replace(/\s+/g, " "), Math.max(8, this.scroll.width - reserve));
-  }
-  private clip(line: string, width: number): string {
-    if (Bun.stringWidth(line) <= width) return line;
-    let result = "";
-    for (const character of line) {
-      if (Bun.stringWidth(result + character) >= width - 1) break;
-      result += character;
-    }
-    return `${result}…`;
+    return clip(text.replace(/\s+/g, " "), Math.max(8, this.scroll.width - reserve));
   }
   private excerpt(box: BoxRenderable, content: string, python = false, tail = false, color = c.text): void {
     const lines = content.trimEnd().split("\n");
@@ -1061,7 +1065,7 @@ export class App {
       else selected[selected.length - 1] += " …";
     }
     const visible = selected
-      .map((line) => this.clip(line, Math.max(8, this.scroll.width - space.between)))
+      .map((line) => clip(line, Math.max(8, this.scroll.width - space.between)))
       .join("\n");
     const preview = this.box({ paddingLeft: space.between });
     preview.add(python ? this.code(visible) : this.text(visible, color));
@@ -1072,7 +1076,7 @@ export class App {
       return act.run.reason
         ? (box) => this.excerpt(box, act.run?.reason ?? "", false, false, c.danger)
         : undefined;
-    if (this.failure(act)) {
+    if (failed(act)) {
       const fault = act.value as { is: string; args: unknown[] };
       return (box) =>
         this.excerpt(box, `${fault.is}: ${fault.args.map(display).join(", ")}`, false, false, c.danger);
@@ -1086,23 +1090,13 @@ export class App {
       return (box) => this.excerpt(box, display(act.value));
     return undefined;
   }
-  private failure(act: ActRow): boolean {
-    if (act.run) return act.run.status === "failed";
-    return Boolean(
-      act.value &&
-        typeof act.value === "object" &&
-        "is" in act.value &&
-        "args" in act.value &&
-        act.value.is !== "CancelledError",
-    );
-  }
   private actColor(act: ActRow): RGBA {
-    if (this.failure(act)) return c.danger;
+    if (failed(act)) return c.danger;
     return this.session.world.prompts.has(act.id) ? c.warning : c.muted;
   }
   private actSummary(act: ActRow): string {
     const held = this.session.world.held.has(act.id);
-    const fault = this.failure(act);
+    const fault = failed(act);
     const cancelled =
       act.value && typeof act.value === "object" && "is" in act.value && act.value.is === "CancelledError";
     const state =
@@ -1122,7 +1116,7 @@ export class App {
               ? "held"
               : this.session.world.prompts.has(act.id)
                 ? "needs input"
-                : this.session.paused && act.kind !== "bash"
+                : act.paused && act.kind !== "bash"
                   ? "paused"
                   : `running ${this.progress(act.id)}`;
     const words =
@@ -1130,8 +1124,8 @@ export class App {
         ? String(act.words[1])
         : act.kind === "grant"
           ? [
-              act.words[0] === null ? "" : `$${act.words[0]}`,
-              act.words[1] === null ? "" : `${Number(act.words[1]) * 100}% context`,
+              act.words[0] === null ? "" : dollars(Number(act.words[0])),
+              act.words[1] === null ? "" : share(Number(act.words[1])),
             ]
               .filter(Boolean)
               .join(" · ")
@@ -1169,16 +1163,29 @@ export class App {
     if (act.kind === "rung" && (this.session.program[act.id] || act.words[0]))
       box.add(this.numbered(String(this.session.program[act.id] || act.words[0])));
     if (act.kind === "bash" && act.value && typeof act.value === "object") {
-      const exit = act.value as { stdout?: { content: string }; stderr?: { content: string }; code?: number };
-      if (exit.stdout?.content) {
-        box.add(this.text("stdout", c.muted));
-        box.add(this.text(exit.stdout.content));
-      }
-      if (exit.stderr?.content) {
-        box.add(this.text("stderr", c.danger));
-        box.add(this.text(exit.stderr.content, c.danger));
+      type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
+      const exit = act.value as Exit;
+      const shown: TextRenderable[] = [];
+      for (const [name, color] of [
+        ["stdout", c.text],
+        ["stderr", c.danger],
+      ] as const) {
+        const content = exit[name]?.content;
+        if (!content) continue;
+        box.add(this.text(name, name === "stdout" ? c.muted : c.danger));
+        const node = this.text(content, color);
+        box.add(node);
+        shown.push(node);
       }
       if (act.done) box.add(this.text(`exit: ${exit.code ?? "timeout"}`, c.muted));
+      // The row holds the tail of what the command printed, and the card reads the whole of it once it opens.
+      if (act.output !== undefined)
+        void this.session.world.act(act.id).then((whole) => {
+          const streams = whole?.value as Exit | undefined;
+          const contents = [streams?.stdout?.content, streams?.stderr?.content].filter(Boolean) as string[];
+          for (const [index, node] of shown.entries())
+            if (!node.isDestroyed && contents[index] !== undefined) node.content = safeText(contents[index]);
+        }, this.report);
     } else if (act.done && act.value !== null) box.add(this.text(display(act.value), this.actColor(act)));
   }
 
@@ -1386,10 +1393,8 @@ export class App {
       );
     this.inspector.add(this.text("Directory", c.text, { attributes: 1, marginTop: space.section }));
     const directory = w.directory || w.world.directory;
-    const width = w.panes.inspector - space.inset * 2;
-    const path = Bun.stringWidth(directory) > width ? `…${directory.slice(1 - width)}` : directory;
     this.inspector.add(
-      this.text(path, c.muted, {
+      this.text(clip(directory, w.panes.inspector - space.inset * 2, "end"), c.muted, {
         height: space.bar,
         truncate: true,
         onMouseDown: () => this.showValue("Directory", directory),
@@ -1400,14 +1405,14 @@ export class App {
       const ledger = w.turns
         .flatMap((turn) => turn[1])
         .findLast((part) => isTag(part) && part[0] === "ledger");
-      const share =
+      const filled =
         ledger && isTag(ledger) ? Number(ledger[1].find(([name]) => name === "filled")?.[1]) : undefined;
       this.inspector.add(
         this.text(w.demo ? "Simulated usage" : "Usage", c.text, { attributes: 1, marginTop: space.section }),
       );
       this.inspector.add(
         this.text(
-          `$${usage[4].toFixed(4)}${share !== undefined && Number.isFinite(share) ? ` · ${(share * 100).toFixed(1)}% context` : ""}`,
+          `${dollars(usage[4])}${filled !== undefined && Number.isFinite(filled) ? ` · ${share(filled)}` : ""}`,
         ),
       );
       this.inspector.add(this.text(`${count(usage[0])} in · ${count(usage[1])} out`, c.muted));
@@ -1416,13 +1421,15 @@ export class App {
     const grant = w.activity.find((act) => act.kind === "grant" && !act.done);
     if (grant) {
       this.inspector.add(this.text("Ceiling", c.text, { attributes: 1, marginTop: space.section }));
-      if (grant.words[0] !== null) this.inspector.add(this.text(`$${grant.words[0]}`));
-      if (grant.words[1] !== null) this.inspector.add(this.text(`${Number(grant.words[1]) * 100}% context`));
+      if (grant.words[0] !== null) this.inspector.add(this.text(dollars(Number(grant.words[0]))));
+      if (grant.words[1] !== null) this.inspector.add(this.text(share(Number(grant.words[1]))));
     }
   }
+  /** The composer holds a text in place of the draft that the session shows, and an undo gives the draft back. */
   private insert(text: string): void {
     this.closeOverlay();
-    this.composer.setText(text);
+    if (this.draftKey !== this.session.draftKey) this.showDraft(this.session.draftKey);
+    this.composer.replaceText(text);
     this.composer.focus();
   }
   private statusColor(status: SessionStatus): RGBA {
@@ -1485,12 +1492,13 @@ export class App {
       );
       this.sidebar.add(row);
       const path = this.box({ paddingLeft: space.between, height: space.bar });
-      const width = this.session.preferences.sidebarWidth - space.inset * 2 - space.between;
       path.add(
         this.text(
-          Bun.stringWidth(group.directory) > width
-            ? `…${[...group.directory].slice(1 - width).join("")}`
-            : group.directory,
+          clip(
+            group.directory,
+            this.session.preferences.sidebarWidth - space.inset * 2 - space.between,
+            "end",
+          ),
           c.muted,
           { height: space.bar, truncate: true },
         ),
@@ -1569,45 +1577,54 @@ export class App {
       )
       .catch(this.report);
   };
+  /** The commands that the view answers itself, by their text. */
   private async globalCommand(text: string): Promise<boolean> {
-    const consume = () => {
-      if (this.composer.plainText.trim() === text) this.composer.setText("");
-    };
     const extensions = this.options.extensions;
     if (text.startsWith("/extension ") && extensions) {
-      consume();
-      await extensions.load(text.slice(11).trim());
+      await extensions.load(this.session.path(text.slice(11).trim()));
       this.session.notice = "Extension loaded.";
       return true;
     }
     const [name, ...words] = text.startsWith("/") ? text.slice(1).split(" ") : [];
+    const argument = words.join(" ").trim();
     if (name && extensions?.commands.has(name)) {
-      consume();
       await extensions.run(name, words.join(" "));
       return true;
     }
+    // A command with no argument that opens a picker, and /inspect, which opens the value it names.
+    const pickers: Record<string, () => unknown> = {
+      details: this.details,
+      rewind: this.rewind,
+      tree: () => this.chainTree(),
+      queue: this.queuePicker,
+      model: this.models,
+      effort: this.effortPicker,
+    };
+    if (name && !argument && Object.hasOwn(pickers, name)) {
+      pickers[name]?.();
+      return true;
+    }
+    if (name === "inspect" && argument) {
+      await this.inspect(argument);
+      return true;
+    }
     if (text === "/exit") {
-      consume();
       await this.options.quit();
       return true;
     }
     if (text === "/editor") {
-      consume();
       await this.editDraft();
       return true;
     }
     if (text === "/files") {
-      consume();
       await this.filesPicker();
       return true;
     }
     if (text === "/new" && this.options.newSession) {
-      consume();
       await this.options.newSession();
       return true;
     }
     if (text === "/image" || text.startsWith("/image ")) {
-      consume();
       const path = text.slice(6).trim();
       if (path) await this.session.attachImage(path);
       else await clipboardImage((path) => this.session.attachImage(path));
@@ -1616,7 +1633,6 @@ export class App {
     const library = this.options.workspaces;
     if (!library) return false;
     if (text === "/delete") {
-      consume();
       this.openPalette(
         "Delete a session",
         library.groups.flatMap((group) =>
@@ -1640,17 +1656,14 @@ export class App {
       return true;
     }
     if (text === "/sidebar") {
-      consume();
       library.toggle();
       return true;
     }
     if (text === "/workspace") {
-      consume();
       await this.workspacePicker();
       return true;
     }
     if (text.startsWith("/workspace ")) {
-      consume();
       const group = await library.add(text.slice(11).trim());
       const entry = group.sessions[0];
       if (entry) await library.select(entry);
@@ -1666,7 +1679,7 @@ export class App {
     this.openPalette(pending?.name ?? "Image attachment", [
       {
         label: "Open image",
-        detail: `${content.mimeType} · ${(Buffer.byteLength(content.data, "base64") / 1024).toFixed(1)} KiB`,
+        detail: `${content.mimeType} · ${kibibytes(Buffer.byteLength(content.data, "base64"))}`,
         run: async () => {
           const child = Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", file], {
             stdout: "ignore",
@@ -1700,8 +1713,7 @@ export class App {
       this.session.directory || this.session.world.directory,
     );
     if (!this.closed) {
-      this.composer.setText(value);
-      this.composer.focus();
+      this.insert(value);
       this.render();
     }
   }
@@ -1714,10 +1726,8 @@ export class App {
         label: path,
         detail: "Read into this chain with the next message",
         run: () => {
-          const before = this.composer.plainText.slice(0, this.composer.cursorOffset);
-          const token = before.match(/(?:^|\s)(@[^\s]*)$/)?.[1];
-          if (token) for (const _ of token) this.composer.deleteCharBackward();
-          this.composer.insertText(`@${/\s/.test(path) ? JSON.stringify(path) : path} `);
+          const token = this.beforeCursor().match(/(?:^|\s)(@[^\s]*)$/)?.[1] ?? "";
+          this.replaceBefore(token, `@${/\s/.test(path) ? JSON.stringify(path) : path} `);
         },
       })),
     );
@@ -1881,16 +1891,20 @@ export class App {
   }
   /** How a command runs when it is picked from a list: one that needs its argument waits for it in the input. */
   private command(name: string, argument: string): () => void {
-    return () =>
-      name === "rewind"
-        ? this.rewind()
-        : argument && !argument.startsWith("[")
-          ? this.insert(`/${name} `)
-          : this.action(`/${name}`);
+    return () => (argument && !argument.startsWith("[") ? this.insert(`/${name} `) : this.action(`/${name}`));
+  }
+  /** The text before the cursor. The offset of the cursor counts cells of the terminal, not units of the text. */
+  private beforeCursor(): string {
+    return this.composer.getTextRange(0, this.composer.cursorOffset);
+  }
+  /** The text before the cursor that ends with `old` replaced. The composer deletes one grapheme at a time. */
+  private replaceBefore(old: string, replacement: string): void {
+    for (const _ of graphemes.segment(old)) this.composer.deleteCharBackward();
+    this.composer.insertText(replacement);
   }
   /** The token the cursor ends: a `/command` that opens the input, or an `@path` that starts a word of a prompt. */
   private token(): { kind: "/" | "@"; text: string } | undefined {
-    const before = this.composer.plainText.slice(0, this.composer.cursorOffset);
+    const before = this.beforeCursor();
     const slash = before.match(/^\/([\w-]*)$/);
     if (slash) return { kind: "/", text: slash[1] ?? "" };
     const at = before.match(/(?:^|\s)@([^\s"']*)$/);
@@ -1898,10 +1912,10 @@ export class App {
       return { kind: "@", text: at[1] ?? "" };
     return undefined;
   }
-  /** The token before the cursor, replaced with what a suggestion completes it to. */
-  private replaceToken(text: string, replacement: string): void {
-    for (const _ of text) this.composer.deleteCharBackward();
-    this.composer.insertText(replacement);
+  /** The token before the cursor as it is now, replaced with the text of a suggestion. */
+  private complete(suggestion: Suggestion): void {
+    const token = this.token();
+    if (token) this.replaceBefore(`${token.kind}${token.text}`, suggestion.text);
   }
   private suggest = (): void => {
     const token = this.token();
@@ -1925,12 +1939,14 @@ export class App {
           detail: command.description,
         })),
       ];
+      // The command that the token names whole comes first.
       this.suggestions = names
         .filter(({ name }) => name.startsWith(token.text))
+        .sort((one, other) => Number(other.name === token.text) - Number(one.name === token.text))
         .map(({ name, argument, detail }) => ({
           label: `/${name}${argument ? ` ${argument}` : ""}`,
           detail,
-          complete: () => this.replaceToken(`/${token.text}`, `/${name} `),
+          text: `/${name} `,
           submit: () => {
             this.composer.setText("");
             this.command(name, argument)();
@@ -1956,11 +1972,11 @@ export class App {
       this.suggestions = (this.files.paths ?? [])
         .filter((path) => path.toLowerCase().includes(wanted))
         .slice(0, 50)
-        .map((path) => {
-          const complete = () =>
-            this.replaceToken(`@${token.text}`, `@${/\s/.test(path) ? JSON.stringify(path) : path} `);
-          return { label: `@${path}`, detail: "", complete, submit: complete };
-        });
+        .map((path) => ({
+          label: `@${path}`,
+          detail: "",
+          text: `@${/\s/.test(path) ? JSON.stringify(path) : path} `,
+        }));
     }
     this.suggestionIndex = Math.min(this.suggestionIndex, Math.max(0, this.suggestions.length - 1));
     this.renderSuggestions();
@@ -2005,7 +2021,7 @@ export class App {
         backgroundColor: selected ? c.selected : c.panel,
         onMouseDown: () => {
           this.suggestionIndex = index;
-          one.complete();
+          this.complete(one);
         },
       });
       row.add(
@@ -2127,7 +2143,7 @@ export class App {
   private async highlightEditor(): Promise<void> {
     if (this.closed) return;
     const content = this.composer.plainText;
-    this.session.drafts[this.draftKey] = content;
+    this.keepDraft();
     const version = ++this.editorVersion;
     for (let line = 0; line < this.composer.lineCount; line++) this.composer.clearLineHighlights(line);
     if (this.session.mode !== "python" && !this.session.editing && !content.startsWith("/run ")) return;
@@ -2154,7 +2170,7 @@ export class App {
         }
       }
     }
-    const cursor = this.composer.cursorOffset;
+    const cursor = this.beforeCursor().length;
     const at = "()[]{}".includes(content[cursor] ?? " ") ? cursor : cursor - 1;
     const bracket = content[at] ?? "";
     const pair = "()[]{}".indexOf(bracket);
@@ -2409,8 +2425,7 @@ export class App {
   }
   private async completeNames(): Promise<void> {
     const names = (await this.session.life.held("modules", [this.session.selected], "keys")) as string[];
-    const before = this.composer.plainText.slice(0, this.composer.cursorOffset);
-    const prefix = before.match(/[\p{L}_][\p{L}\p{N}_]*$/u)?.[0] ?? "";
+    const prefix = this.beforeCursor().match(/[\p{L}_][\p{L}\p{N}_]*$/u)?.[0] ?? "";
     this.openPalette(
       "Complete Python name",
       names
@@ -2419,8 +2434,7 @@ export class App {
           label: name,
           detail: "Insert this name at the cursor",
           run: () => {
-            for (const _ of prefix) this.composer.deleteCharBackward();
-            this.composer.insertText(name);
+            this.replaceBefore(prefix, name);
             this.composer.focus();
           },
         })),
@@ -2471,16 +2485,10 @@ export class App {
             this.rewind();
             return;
           }
-          const source = this.session.selected;
-          const omitted = acts.slice(index + 1).map((later) => JSON.stringify(later.id));
-          const filter = `take(${omitted.length ? `${omitted.join(", ")}, ` : ""}inside=False)`;
-          const word = `chain(${JSON.stringify(`${this.session.label} through ${short(act.id)}`)}, ${JSON.stringify(source)}, ${filter})`;
-          const rung = await this.session.life.rung(word, { on: source });
-          await this.session.life.result(rung);
-          await this.session.refresh();
-          const next = this.session.chains.find((chain) => chain.by === rung);
-          if (!next) throw new Error("The rewind word created no chain.");
-          await this.session.select(next.id);
+          await this.session.branch(
+            `${this.session.label} through ${short(act.id)}`,
+            acts.slice(index + 1).map((later) => later.id),
+          );
           this.session.notice =
             "The new chain reads the selected transcript prefix. Its module and files keep current state.";
         },
@@ -2491,8 +2499,8 @@ export class App {
     this.navigation.push({
       chain: this.session.selected,
       view: this.session.view,
-      query: this.session.query,
-      top: this.scroll.scrollTop,
+      search: this.session.search,
+      top: this.scrollTarget ?? this.scroll.scrollTop,
       ladder: this.session.ladder,
       mode: this.session.mode,
     });
@@ -2512,12 +2520,25 @@ export class App {
     if (!previous) return;
     await this.session.select(previous.chain);
     this.session.show(previous.view);
-    this.session.query = previous.query;
+    this.session.search = previous.search;
     this.session.ladder = previous.ladder;
     this.session.mode = previous.mode;
     this.render();
     this.scroll.scrollTo(previous.top);
+    this.scrollAfterLayout(previous.top);
   }
+  /** Scroll to an offset once the scroll box has laid out the cards that it holds now, since it clamps an offset to
+   * the layout it has. */
+  private scrollAfterLayout(top?: number): void {
+    if (top === undefined) return;
+    if (this.scrollTarget === undefined) this.renderer.once("frame", this.laidOut);
+    this.scrollTarget = top;
+  }
+  private laidOut = (): void => {
+    if (this.closed || this.scrollTarget === undefined) return;
+    this.scroll.scrollTo(this.scrollTarget);
+    this.scrollTarget = undefined;
+  };
   chains(): void {
     this.openPalette(
       "Chains",
@@ -2653,41 +2674,19 @@ export class App {
     this.questionDocument = undefined;
     this.composer?.focus();
   }
+  /** The keys that this terminal sends, the session dots, and the commands. */
   help(): void {
+    const kitty = this.renderer.capabilities?.kitty_keyboard === true;
     this.openPalette(
       "Help & keyboard",
-      [
-        ["Enter / Shift+Enter", "Send a message / insert a new line"],
-        ["Ctrl+1 through Ctrl+6", "Conversation / program / activity / facts / transcript / changes"],
-        ["Ctrl+P", "Search all actions"],
-        ["Ctrl+B", "Switch chains"],
-        ["Ctrl+N / Ctrl+M / Shift+Tab / Ctrl+O", "New chain / model / effort / saved sessions"],
-        ["Ctrl+W / Ctrl+\\", "Workspaces and sessions / toggle left sidebar"],
-        ["Alt+E / Alt+D / Alt+Enter", "External editor / rung details / queue a follow-up"],
-        ["Ctrl+V / /image path", "Paste a clipboard image / attach an image file"],
-        ["@ / !", "Find a project file / run a shell command"],
-        [
-          "Session dots",
-          "Blue: working. Yellow: input needed or paused. Green: unread result. Red: error. Open: ready or saved.",
-        ],
-        ["Ctrl+F / PageUp / PageDown", "Filter the current view / scroll"],
-        ["Ctrl+R / Ctrl+Space / Tab", "Python input / complete a name / complete a slash command"],
-        ["Ctrl+G / Ctrl+click a name", "Inspect a value and follow its definition"],
-        ["Click an act / /details", "Expand or collapse details"],
-        ["Right-click an act", "Inspect its value or prompt program"],
-        ["Ctrl+L / Ctrl+A", "Prompt programs / answer an operator question"],
-        ["Ctrl+T / Ctrl+Y", "Themes / copy the selected text"],
-        [
-          "Ctrl+C / Ctrl+Q / Ctrl+D twice",
-          "Clear or cancel / save and quit / save and quit from an empty input",
-        ],
-        ["/ / @ then Up, Down, Tab, Enter", "Suggest a slash command or a project file as it is typed"],
-        ["Ctrl+Alt+Left", "Return from a definition jump"],
-        ["Alt+[ / Alt+]", "Previous / next prompt REPL"],
-        ["Alt+Up / Alt+Down", "Browse submitted input history"],
-        ["Ctrl+PageUp / Ctrl+PageDown", "Previous / next page of file changes"],
-      ]
-        .map(([label, detail]) => ({ label: label ?? "", detail: detail ?? "", run: () => {} }))
+      keys
+        .map((key) => ({ label: chords(key, kitty), detail: key.action, run: () => {} }))
+        .concat({
+          label: "Session dots",
+          detail:
+            "Blue: working. Yellow: input needed or paused. Green: unread result. Red: error. Open: ready or saved.",
+          run: () => {},
+        })
         .concat(
           Object.entries(commands).map(([name, [, argument, detail]]) => ({
             label: `/${name}${argument ? ` ${argument}` : ""}`,
@@ -2710,12 +2709,13 @@ export class App {
       }
       if (key.name === "tab" && !key.shift && chosen) {
         key.preventDefault();
-        chosen.complete();
+        this.complete(chosen);
         return;
       }
       if (["return", "enter"].includes(key.name) && !key.shift && chosen) {
         key.preventDefault();
-        chosen.submit();
+        if (chosen.submit) chosen.submit();
+        else this.complete(chosen);
         return;
       }
       if (key.name === "escape") {
@@ -2750,6 +2750,11 @@ export class App {
     }
     if (!this.overlay && key.meta && ["return", "enter"].includes(key.name)) {
       key.preventDefault();
+      // The queue holds messages to a model. Python input and a program under edit run when Enter sends them.
+      if (this.session.mode === "python" || this.session.editing) {
+        this.session.notice = "Only a message can wait in the queue. Enter runs this Python now.";
+        return;
+      }
       this.session.enqueue(this.composer.plainText);
       this.composer.setText("");
       return;
@@ -2790,33 +2795,37 @@ export class App {
         0,
         Math.min(history.length, this.historyIndex + (key.name === "up" ? -1 : 1)),
       );
-      this.composer.setText(history[this.historyIndex] ?? this.historyDraft);
+      this.composer.replaceText(history[this.historyIndex] ?? this.historyDraft);
       return;
     }
+    // Ctrl+J arrives as a line feed from a terminal with no kitty keyboard protocol.
     if (
       !this.overlay &&
       (this.session.mode === "python" || this.session.editing) &&
-      ((key.shift && ["return", "enter"].includes(key.name)) || (key.ctrl && key.name === "j"))
+      ((key.shift && ["return", "enter"].includes(key.name)) ||
+        (key.ctrl && key.name === "j") ||
+        key.name === "linefeed")
     ) {
       key.preventDefault();
-      const before = this.composer.plainText.slice(0, this.composer.cursorOffset).split("\n").at(-1) ?? "";
+      const before = this.beforeCursor().split("\n").at(-1) ?? "";
       this.composer.insertText(
         `\n${before.match(/^\s*/)?.[0] ?? ""}${before.trimEnd().endsWith(":") ? "  " : ""}`,
       );
       return;
     }
-    if (key.meta && ["[", "]"].includes(key.name) && !this.overlay) {
+    if (key.meta && ["[", "]", "p", "n"].includes(key.name) && !this.overlay) {
       key.preventDefault();
       const prompts = this.session.activity.filter((act) => act.kind === "prompt");
       const current = prompts.findIndex((act) => act.id === this.session.ladder);
-      const next = prompts[(current + (key.name === "]" ? 1 : -1) + prompts.length) % prompts.length];
+      const step = ["]", "n"].includes(key.name) ? 1 : -1;
+      const next = prompts[(current + step + prompts.length) % prompts.length];
       if (next) this.openLadder(next.id);
       return;
     }
     if (key.ctrl && key.name === "c") {
       key.preventDefault();
       if (this.overlay) this.closeOverlay();
-      else if (this.composer.plainText) this.composer.setText("");
+      else if (this.composer.plainText) this.composer.replaceText("");
       else this.action("/cancel");
       return;
     }
@@ -2837,7 +2846,7 @@ export class App {
         this.action("/pause");
       this.closeOverlay();
       this.search.visible = false;
-      this.session.query = "";
+      this.session.search = "";
       this.session.editing = undefined;
       this.render();
       return;
@@ -2863,7 +2872,8 @@ export class App {
       }
       return;
     }
-    if (key.ctrl && /^[1-6]$/.test(key.name)) {
+    // Each chord with Ctrl needs the kitty keyboard protocol, and the same chord with Alt reaches every terminal.
+    if ((key.ctrl || key.meta) && /^[1-6]$/.test(key.name)) {
       key.preventDefault();
       this.session.show(views[Number(key.name) - 1] ?? "conversation");
     } else if (key.name === "f1") {
@@ -2875,7 +2885,7 @@ export class App {
     } else if (key.ctrl && key.name === "b") {
       key.preventDefault();
       this.chains();
-    } else if (key.ctrl && key.name === "m") {
+    } else if ((key.ctrl || key.meta) && key.name === "m") {
       key.preventDefault();
       this.models();
     } else if (key.ctrl && key.name === "t") {
@@ -2921,8 +2931,9 @@ export class App {
   dispose(): void {
     clearInterval(this.tick);
     this.closed = true;
-    this.session.drafts[this.draftKey] = this.composer.plainText;
-    this.session.scrolls[this.lastView] = this.scroll.scrollTop;
+    this.keepDraft();
+    this.session.scrolls[this.lastView] = this.scrollTarget ?? this.scroll.scrollTop;
+    this.renderer.off("frame", this.laidOut);
     this.session.folds = Object.fromEntries(this.folds);
     this.session.save();
     if (this.redraw) clearTimeout(this.redraw);
@@ -2930,14 +2941,7 @@ export class App {
     this.session.off("change", this.schedule);
     this.options.workspaces?.off("change", this.schedule);
     this.session.off("compose", this.compose);
-    this.session.off("inspect", this.inspect);
     this.session.off("resume", this.resume);
-    this.session.off("rewind", this.rewind);
-    this.session.off("models", this.models);
-    this.session.off("efforts", this.effortPicker);
-    this.session.off("details", this.details);
-    this.session.off("queue", this.queuePicker);
-    this.session.off("tree", this.chainTree);
     this.session.off("shared", this.shared);
     this.renderer.keyInput.off("keypress", this.key);
     this.renderer.off("resize", this.render);

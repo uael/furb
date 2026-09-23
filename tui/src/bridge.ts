@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { Act, Fact, ImageAttachment, Life, World } from "@furb/engine";
+import type { Act, Fact, ImageAttachment, Life, LiveAct, World } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
 import type { EngineOptions } from "./models.ts";
 import type { ActRow, FollowUp } from "./session.ts";
@@ -109,6 +109,10 @@ export class HostView extends EventEmitter {
   }
   readChanges(start: number, count: number): Promise<FileChange[]> {
     return this.request("library", "changes", [start, count]) as Promise<FileChange[]>;
+  }
+  /** An act whole, with all that a command printed, and nothing when the life holds no such act. */
+  act(id: string): Promise<LiveAct | undefined> {
+    return this.request("library", "act", [id]) as Promise<LiveAct | undefined>;
   }
   async dispose(): Promise<void> {
     await this.request("world", "dispose", []);

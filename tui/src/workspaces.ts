@@ -3,33 +3,14 @@ import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { RecordLock } from "@furb/engine";
+import { furbDirectory, RecordLock } from "@furb/engine";
 import { openEngine } from "./bridge.ts";
-import { expandHome, furbDirectory } from "./files.ts";
+import { expandHome } from "./files.ts";
 import type { EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { inspectRecords } from "./records.ts";
-import { Session, savedView } from "./session.ts";
+import { Session, type SessionStatus, savedView } from "./session.ts";
 
-export type SessionStatus =
-  | "saved"
-  | "idle"
-  | "working"
-  | "blocked"
-  | "paused"
-  | "done"
-  | "error"
-  | "opening";
-export const statusLabels: Record<SessionStatus, string> = {
-  saved: "Saved",
-  idle: "Ready",
-  working: "Working",
-  blocked: "Input needed",
-  paused: "Paused",
-  done: "Finished, unread",
-  error: "Error",
-  opening: "Opening",
-};
 export interface SessionEntry {
   path: string;
   name: string;
@@ -83,24 +64,6 @@ function readList(path: string): SavedWorkspace[] {
         ? item.records.filter((path: unknown): path is string => typeof path === "string")
         : [],
     }));
-}
-
-/** Status comes from live acts. A saved record is not presented as a running session. */
-export function activityStatus(session: Session): SessionStatus {
-  if (Object.values(session.errors).some(Boolean)) return "error";
-  if (session.queueHeld && session.queued.length) return "blocked";
-  if (session.world.held.size) return "paused";
-  if (session.world.prompts.size) return "blocked";
-  const acts = session.acts.filter((act) => !["chain", "grant"].includes(act.kind));
-  const pending = acts.filter((act) => !act.done);
-  if (pending.some((act) => !act.paused)) return "working";
-  if (pending.length || session.paused) return "paused";
-  const latest = acts.at(-1);
-  if (latest?.run?.status === "failed") return "error";
-  const last = latest?.value;
-  if (last && typeof last === "object" && "is" in last && "args" in last && last.is !== "CancelledError")
-    return "error";
-  return "idle";
 }
 
 export class Workspaces extends EventEmitter {
@@ -289,7 +252,7 @@ export class Workspaces extends EventEmitter {
     const row = entry;
     let completed = session.world.completed;
     const changed = () => {
-      const status = activityStatus(session);
+      const status = session.status();
       const next = session.world.completed;
       if (row !== this.current && next > completed) row.unread = true;
       completed = next;
@@ -345,7 +308,7 @@ export class Workspaces extends EventEmitter {
     if (selection !== this.selection || this.closed) return;
     this.current = entry;
     entry.unread = false;
-    entry.status = activityStatus(entry.session as Session);
+    entry.status = (entry.session as Session).status();
     group.collapsed = false;
     this.save({ directory: group.directory, collapsed: false });
     this.emit("select", entry.session);
@@ -353,7 +316,7 @@ export class Workspaces extends EventEmitter {
   }
   async create(group = this.groupOf(), name?: string): Promise<SessionEntry> {
     if (!group) throw new Error("Add a workspace first.");
-    const directory = await furbDirectory(group.directory, "sessions");
+    const directory = furbDirectory(group.directory, "sessions");
     const path = join(
       directory,
       `${new Date().toISOString().replaceAll(":", "-")}-${randomUUID().slice(0, 8)}.jsonl`,
@@ -412,13 +375,13 @@ export class Workspaces extends EventEmitter {
       await entry.session.dispose();
       entry.session = undefined;
     }
-    // The lock file stays where it is. RecordLock does not check that the file it locked is still the file at the
-    // path, so a move or a removal of it by name could let two processes own one record.
+    // The lock file moves with the record while this lease holds it, and a process that locked it meanwhile opens
+    // the path again.
     const lease = new RecordLock(entry.path);
     const moved: [string, string][] = [];
     try {
-      const directory = await furbDirectory(group.directory, "trash", randomUUID());
-      for (const suffix of ["", ".ui.json", ".world.json", ".changes.jsonl", ".images"]) {
+      const directory = furbDirectory(group.directory, "trash", randomUUID());
+      for (const suffix of ["", ".ui.json", ".world.json", ".changes.jsonl", ".images", ".lock"]) {
         const source = `${entry.path}${suffix}`;
         if (!existsSync(source)) continue;
         const target = join(directory, basename(source));

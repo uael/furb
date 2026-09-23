@@ -102,8 +102,10 @@ test("deleting a session moves its record and state to trash, keeps other sessio
     await otherLife.result(await otherLife.rung("still_alive = 17"));
     expect(await otherLife.held("modules", [second.session.selected, "still_alive"], "at")).toBe(17);
     expect(await stat(first.path).catch(() => null)).toBeNull();
+    expect(await stat(`${first.path}.lock`).catch(() => null)).toBeNull();
     const archived = join(trash, basename(first.path));
     expect((await stat(archived)).isFile()).toBe(true);
+    expect((await stat(`${archived}.lock`)).isFile()).toBe(true);
     const restored = await library.import(archived, group);
     expect(
       await restored.session?.life.held("modules", [restored.session.selected, "kept_value"], "at"),

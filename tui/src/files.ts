@@ -1,25 +1,10 @@
-import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 /** A path as the user typed it, with a leading `~` read as the home directory. */
 export function expandHome(path: string): string {
   return path === "~" ? homedir() : path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
-}
-
-/** The directory `.furb/<parts>` of a project. The TUI keeps transcripts, file contents and shares there, so the
- * `.furb` it makes gets an ignore rule that keeps all of it out of version control. */
-export async function furbDirectory(project: string, ...parts: string[]): Promise<string> {
-  const furb = join(project, ".furb");
-  try {
-    await mkdir(furb);
-    await writeFile(join(furb, ".gitignore"), "*\n");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-  }
-  const directory = join(furb, ...parts);
-  await mkdir(directory, { recursive: true });
-  return directory;
 }
 
 /** Match project files through rg, with a directory walk when it is not installed. A folder that cannot be read

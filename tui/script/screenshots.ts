@@ -210,7 +210,7 @@ try {
   );
   await session.refresh();
   session.show("activity");
-  session.query = command;
+  session.search = command;
   await session.refresh();
   app.render();
   await test.flush();
@@ -353,14 +353,16 @@ try {
   await app.workspacePicker();
   await capture("35-workspace-picker");
   app.closeOverlay();
-  await session.submit("/tree");
+  app.composer.setText("/tree");
+  await app.submit();
   await capture("36-session-tree");
   app.closeOverlay();
   session.show("conversation");
   await session.submit("show live progress");
   session.enqueue("Check keyboard navigation after this answer.");
   await capture("37-queued-follow-up");
-  await session.submit("/queue");
+  app.composer.setText("/queue");
+  await app.submit();
   await capture("38-queue-editor");
   app.closeOverlay();
   await session.attachImage(resolve("docs/screenshots/01-welcome.png"));

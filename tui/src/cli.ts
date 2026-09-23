@@ -3,12 +3,11 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { efforts, type WorldOptions } from "@furb/engine";
+import { efforts, furbDirectory, type WorldOptions } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
 import { App } from "./app.ts";
 import { demoDirectory, removeDemoDirectories } from "./demo.ts";
 import { Extensions } from "./extensions.ts";
-import { furbDirectory } from "./files.ts";
 import { defaultModel, type EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { sessionChoices } from "./sessions.ts";
@@ -33,7 +32,8 @@ if (values.help) {
   console.log(`furb-tui [--demo] [--cwd path] [--model provider:model] [--effort ${efforts.join("|")}]
          [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...]
 
-Enter sends a prompt. Shift+Enter adds a line. Ctrl+P opens actions. F1 shows all keys.
+Enter sends a prompt. Ctrl+J adds a line, and so does Shift+Enter in a terminal with the kitty keyboard
+protocol. Ctrl+P opens actions. F1 shows all keys that the terminal sends.
 The default model is ${defaultModel}, through your Claude CLI subscription.
 Other providers use pi-ai and its environment credentials.`);
   process.exit(0);
@@ -62,7 +62,7 @@ const worldOptions: EngineOptions = {
 const library = new Workspaces(
   preferences,
   worldOptions,
-  values.demo ? join(await furbDirectory(directory), "workspaces.json") : undefined,
+  values.demo ? join(furbDirectory(directory), "workspaces.json") : undefined,
 );
 const group = await library.add(directory);
 await library.refresh();

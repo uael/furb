@@ -204,7 +204,7 @@ test("every view shows an empty result, loading, and an error in its feed", asyn
     for (const view of ["conversation", "program", "activity", "facts", "transcript", "changes"] as const) {
       session.show(view);
       await session.refresh();
-      session.query = "nothing matches this";
+      session.search = "nothing matches this";
       app.render();
       await screen.flush();
       expect(screen.captureCharFrame()).toContain(`No matching ${view}`);

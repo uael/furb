@@ -2,7 +2,6 @@ import { realpath } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import type { Engine } from "./bridge.ts";
 import { commands } from "./commands.ts";
-import { expandHome } from "./files.ts";
 
 export interface ExtensionContext {
   life: Engine;
@@ -26,8 +25,9 @@ export class Extensions {
   readonly paths = new Set<string>();
   private readonly cleanups: (() => void | Promise<void>)[] = [];
   constructor(private readonly context: () => ExtensionContext) {}
+  /** Load the extension at a path, which the caller resolves as it resolves every path the user gives. */
   async load(path: string): Promise<void> {
-    const file = await realpath(expandHome(path));
+    const file = await realpath(path);
     if (this.paths.has(file)) return;
     const module = await import(pathToFileURL(file).href);
     if (typeof module.default !== "function")

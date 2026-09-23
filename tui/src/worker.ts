@@ -85,6 +85,8 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   if (data.target === "library" && data.method === "source") return engineSource();
   if (data.target === "library" && data.method === "changes")
     return world?.changes.read(Number(data.args[0]), Number(data.args[1]));
+  if (data.target === "library" && data.method === "act")
+    return world?.activity.acts.get(String(data.args[0]));
   if (data.target === "library" && data.method === "snapshot") {
     if (!snapshots) throw new Error("The session is not open.");
     return snapshots.take(String(data.args[0]), Number(data.args[1]));

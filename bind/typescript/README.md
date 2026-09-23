@@ -145,7 +145,9 @@ sandbox. It asks the engine's `covers` which live acts a pause or a wake is over
 the control would change. `World.isPaused` and `World.rungState` read it.
 
 `world.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type,
-size, and `furb-image://` reference. Put that reference in the prompt as a Markdown image,
+size, and `furb-image://` reference. A World with no record copies it into `.furb/images` of its directory. The
+`.furb` that it makes holds a `.gitignore` that keeps it out of version control, as `furbDirectory` makes it.
+Put that reference in the prompt as a Markdown image,
 `![design](furb-image://...)`, which `imageReference(image)` writes and `imageReferences(message)` reads. The
 World keeps the exact native text and adds the referenced image as a pi-ai
 image block. The stored bytes are checked against their digest before use. PNG, JPEG, GIF, and WebP are

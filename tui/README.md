@@ -29,9 +29,8 @@ dot reflects its sessions: blue for work, yellow for input needed or paused work
 completion, and red for an error. An open grey dot means ready or saved. Hover a session for its state.
 Selecting a completed session clears its unread marker. `/workspace path` adds a folder; `/new` starts a
 session in the current workspace. `/delete` moves a chosen session and its companions to `.furb/trash`.
-The trash holds a `restore.json` with the original paths, and its record can be opened with `--resume`. The
-`.lock` file of the record stays in `.furb/sessions`. Quit saves and closes all open sessions, and SIGINT, SIGTERM,
-SIGHUP, and SIGQUIT quit the same way.
+The trash holds a `restore.json` with the original paths, and its record can be opened with `--resume`. Quit saves
+and closes all open sessions, and SIGINT, SIGTERM, SIGHUP, and SIGQUIT quit the same way.
 
 The six views show the conversation, accepted Python program, acts, facts, exact model transcript, and file
 diffs. Each chain has its own conversation and module. Python words have offline Tree-sitter colors and
@@ -49,31 +48,42 @@ output previews and expand to named fields. The input panel grows as you type.
 Drag a separator to resize its sidebar. Select text and press Ctrl+Y
 to copy it through OSC 52, where the terminal supports it.
 
+A chord before "or" reaches the TUI only from a terminal with the kitty keyboard protocol. The chord after "or"
+reaches it from every terminal. F1 lists the chords that the terminal in use sends.
+
+<!-- keys:start -->
+
 | Key | Action |
 | --- | --- |
-| Enter / Shift+Enter | Send / new line |
-| Ctrl+1 through Ctrl+6 | Switch view |
-| Ctrl+P | Search commands |
+| Enter | Send a message, or run Python input |
+| Shift+Enter or Ctrl+J | Insert a new line |
+| Ctrl+1 through Ctrl+6 or Alt+1 through Alt+6 | Conversation / program / activity / facts / transcript / changes view |
+| Ctrl+P | Search all actions |
 | Ctrl+B / Ctrl+N | Switch / create a chain |
-| Ctrl+M / Shift+Tab / Ctrl+T | Model / effort / theme |
+| Ctrl+M or Alt+M | Choose a model |
+| Shift+Tab / Ctrl+T | Choose an effort / a theme |
 | Ctrl+O | Saved sessions |
 | Ctrl+W / Ctrl+\\ | Workspaces and sessions / toggle the left sidebar |
 | Alt+D / Alt+E | Fold or expand details / external editor |
-| Alt+Enter | Queue this draft after current work |
+| Alt+Enter | Queue this message after current work |
 | Ctrl+V | Paste a clipboard image |
-| Ctrl+F / PageUp / PageDown | Search / scroll |
+| @ / ! | Find a project file / run a shell command |
+| Up, Down, Tab, Enter after / or @ | Choose a slash command or a project file as it is typed |
+| Ctrl+F / PageUp / PageDown | Filter the current view / scroll |
 | Ctrl+R / Ctrl+Space | Python input / complete a name |
-| Ctrl+L | Prompt programs and editing |
-| Ctrl+A | Answer an operator question |
-| Ctrl+G / Ctrl+Y | Inspect a name / copy selection |
+| Ctrl+L / Ctrl+A | Prompt programs / answer an operator question |
+| Ctrl+G / Ctrl+click a name | Inspect a value and follow its definition |
+| Ctrl+Y | Copy the selected text |
+| Click / right-click an act | Fold or expand it / inspect its value or prompt program |
 | Ctrl+Alt+Left | Return from a definition jump |
-| Alt+[ / Alt+] | Previous / next prompt REPL |
+| Alt+[ / Alt+] or Alt+P / Alt+N | Previous / next prompt REPL |
 | Alt+Up / Alt+Down | Previous / next submitted input |
-| Ctrl+PageUp / Ctrl+PageDown | Previous / next file-change page |
-| Ctrl+C | Clear input, close a dialog, or cancel current work |
-| Tab after `/` | Complete a slash command |
+| Ctrl+PageUp / Ctrl+PageDown | Previous / next page of file changes |
+| Ctrl+C | Clear the input, close a dialog, or cancel current work |
 | Escape | Close a dialog or pause current model work |
-| F1 / Ctrl+Q | Help / save and quit |
+| F1 / Ctrl+Q / Ctrl+D twice | Help / save and quit / save and quit from an empty input |
+
+<!-- keys:end -->
 
 <!-- commands:start -->
 
@@ -149,7 +159,8 @@ folds a branch and Enter opens it. The TUI does not add a separate
 permission or tool protocol to the engine.
 
 `/share` writes a standalone HTML conversation, including its images and exact transcript. `/share`, `/export`,
-`/image`, and `/extension` read a leading `~` as the home directory. The share dialog
+`/image`, and `/extension` read a leading `~` as the home directory, and a relative path from the directory of the
+selected chain. The share dialog
 can open the file, copy its path, or upload the selected conversation to an unlisted GitHub gist through
 `gh`. Upload happens only when chosen. Anyone with its link can read the shared conversation. `/export`
 keeps the structured JSON export. `/context` sets the context ceiling.

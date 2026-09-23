@@ -306,7 +306,7 @@ try {
   await session.submit("/share ~/shared/chat.html");
   await session.submit("/export ~/export.json");
   await session.attachImage("~/pixel.png");
-  await extensions.load("~/extension.ts");
+  await extensions.load(session.path("~/extension.ts"));
   console.log(JSON.stringify({ images: session.images[session.selected]?.length, commands: [...extensions.commands.keys()] }));
 } finally {
   await session.dispose();
