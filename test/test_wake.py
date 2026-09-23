@@ -1,8 +1,8 @@
 """wake, which ends a pause and gives what waited."""
 
-from conftest import STANDS, Sand, gated, life, paragraphs, ran, said, settle
+from conftest import STANDS, Sand, gated, life, paragraphs, plain, ran, relived, said, settle
 from furb import engine
-from furb.engine import WORLD
+from furb.engine import OPERATOR, WORLD
 
 
 async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_heard() -> None:
@@ -57,6 +57,16 @@ async def test_a_wake_on_one_act_lifts_a_pause_of_its_chain_for_that_act_alone()
   engine.wake(one)
   await settle()
   assert one in engine.outcomes and two not in engine.outcomes
+  asked = Sand(stands=STANDS)
+  log, root = life(asked)
+  engine.pause(root)
+  engine.prompt(int, "count", on=root)
+  await settle()
+  (step,) = [a[1] for a in said(log, "rung") if not a[4]]
+  assert said(log, "ask") == []
+  engine.wake(step)
+  await settle()
+  assert [a[1] for a in said(log, "ask")] == [step]
 
 
 async def test_wake_is_given_the_id_of_an_act_or_the_id_of_a_chain() -> None:
@@ -138,3 +148,28 @@ async def test_a_wake_makes_no_ask_twice_and_loses_none() -> None:
   asks = said(log, "ask")
   assert (await act) == 3 and len(asks) == 3
   assert len({a[1] for a in asks}) == 3
+
+
+async def test_a_wake_that_this_life_says_starts_the_pending_acts_it_is_over() -> None:
+  """A wake that this life says, and not one that the record says again, starts the pending acts it is over: the World starts each command, wait and prompt to the operator of them, and the chain asks for its pending rung with the transcript as it grew."""
+  sand = Sand(stands=STANDS, auto=False)
+  log, root = life(sand)
+  command = engine.bash("sleep 9", on=root)
+  waited = engine.wait(100.0, on=root)
+  shown = engine.prompt(str, "why?", to=OPERATOR, on=root)
+  engine.prompt(int, "count", on=root)
+  await settle()
+  engine.pause(root)
+  engine.wake(root)
+  await settle()
+  pending = said(log, "ask")[0][1]
+  later = Sand(stands=STANDS)
+  again, over = await relived(later, plain(sand.record))
+  assert [a[1] for a in said(again, "wake") if a[2] == "record"] == [root]
+  assert said(later.calls, "start") == [] and said(later.calls, "ask") == []
+  await engine.rung("k = 1", on=over)
+  engine.wake(over)
+  await settle()
+  assert [a[1] for a in said(later.calls, "start")] == [command, waited, shown]
+  asks = said(later.calls, "ask")
+  assert [a[1] for a in asks] == [pending] and "k = 1" in asks[0][5][-1][1]

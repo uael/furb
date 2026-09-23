@@ -26,7 +26,7 @@ class Knows(Sand):
           made[qid] = a
         case ("stand", qid, *_):
           self.calls.append(a)
-          yield "done", qid, self.stands or ((), "", "")
+          yield "done", qid, self.stands or [[], "", ""]
         case ("start", about, _):
           self.calls.append(a)
           yield "done", about, f"did {made[about][0]}"

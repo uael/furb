@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import STANDS, Py, Sand, gated, kept, life, of, paragraphs, ran, said, settle, sown, watched
+from conftest import STANDS, Py, Sand, gated, heads, kept, life, of, paragraphs, ran, said, settle, sown, watched
 from furb import engine
 from furb.engine import WORLD, Exit, Refused, Text
 
@@ -85,6 +85,20 @@ async def test_a_rung_with_no_word_tells_nothing_where_it_is_made() -> None:
   assert [(a[2], a[3]) for a in said(log, "tell") if a[1] == step] == [(root, [f"#{step} advance on {act}"])]
   (asked,) = said(log, "ask")
   assert asked[1] == step and asked[5][-1][1].split("\n")[-1] == f"#{step} advance on {act}"
+
+
+async def test_a_rung_with_no_word_and_no_actor_takes_the_default_actor_of_its_chain_when_it_is_made() -> None:
+  """A rung with no word and no actor takes the default actor of its chain when it is made, and writes it into its actor word, so its ask and its ledger read the one actor."""
+  sand = Sand(stands=STANDS, cost=(80000, 0, 0, 0, 0.0))
+  log, root = life(sand)
+  engine.grant(usd=10.0, on=root)
+  bare = engine.rung(on=root)
+  await settle()
+  await engine.rung("actor = 'n/low'", on=root)
+  engine.send("answer", bare, ("assistant", "k = 1", (80000, 0, 0, 0, 0.0), None), by=WORLD)
+  await settle()
+  assert [a[6] for a in said(log, "rung") if a[1] == bare] == ["m/low"] == [a[4] for a in said(log, "ask")]
+  assert [one for one in heads(engine.turns(on=root)) if " ledger " in one] == [f"#{bare} ledger spent=0.0 filled=0.2"]
 
 
 async def test_the_raised_header_tells_the_exception_as_python_shows_it() -> None:

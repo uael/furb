@@ -28,7 +28,7 @@ class Hoard(Sand):
       a = yield
       match a:
         case ("stand", qid, *_):
-          yield "done", qid, self.stands or ((), "", "")
+          yield "done", qid, self.stands or [[], "", ""]
         case ("read", qid, _, _, path):
           yield "done", qid, Text(path, self.files.get(path, ""))
         case ("write", qid, _, _, Text(path=path, content=content)):
@@ -46,7 +46,7 @@ class Firm(Sand):
       match a:
         case ("stand", qid, *_):
           self.calls.append(a)
-          yield "done", qid, self.stands or ((), "", "")
+          yield "done", qid, self.stands or [[], "", ""]
         case ("write", qid, _, _, Text(path=path, content=content)):
           self.calls.append(a)
           self.files[path] = content + "END\n"

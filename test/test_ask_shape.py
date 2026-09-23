@@ -25,7 +25,7 @@ class Busy(Sand):
       a = yield
       match a:
         case ("stand", qid, *_):
-          yield "done", qid, self.stands or ((), "", "")
+          yield "done", qid, self.stands or [[], "", ""]
         case ("ask", rung, _, on, _, _):
           self.calls.append(a)
           if not self.balked:
@@ -134,7 +134,7 @@ async def test_an_ask_hands_the_turns_of_the_chain_whole_folded_again_for_that_a
   await settle()
   asked = said(log, "ask")
   assert asked[0][5][0] == asked[1][5][0] and asked[0][5][0] is not asked[1][5][0]
-  kinds = [e[1][0] for e in sand.record]
+  kinds = [e[0][0] for e in sand.record]
   assert "answer" in kinds and "ask" not in kinds
 
 

@@ -48,7 +48,7 @@ async def test_the_outcome_is_no_slot_of_the_question() -> None:
   await settle()
   assert act not in engine.outcomes and len(said(log, "bash")[0]) == 7
   kept = list(sand.record)
-  assert [len(e[1]) for e in kept if e[1][0] == "bash"] == [7]
+  assert [len(e[0]) for e in kept if e[0][0] == "bash"] == [7]
   later = Sand(stands=STANDS, auto=False)
   _, over = await relived(later, kept)
   assert over == root and act in engine.acts and act not in engine.outcomes

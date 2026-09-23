@@ -73,7 +73,7 @@ async def test_two_acts_that_say_the_same_words_under_one_name_are_one_act() -> 
   await settle()
   got = engine.peek(one)
   assert got == engine.peek(one) and isinstance(got, Exit) and got.code == 0
-  assert [e[1][1] for e in sand.record if e[1][0] == "bash"] == [one]
+  assert [e[0][1] for e in sand.record if e[0][0] == "bash"] == [one]
 
 
 async def test_the_engine_refuses_an_act_said_from_outside_a_run_that_names_no_chain() -> None:

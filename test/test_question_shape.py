@@ -93,6 +93,9 @@ async def test_the_name_of_a_query() -> None:
   assert [name for name in engine.asked if name.startswith("read@")] == ["read@rung1.2"]
   assert engine.outcomes["prompt1"] == 2
   assert [a for a in later.calls if a[0] == "read"] == []
+  assert [a for a in later.calls if a[0] == "ask"] == []
+  engine.wake(root)
+  await settle()
   assert [a[1] for a in later.calls if a[0] == "ask"] == [a[1] for a in sand.calls if a[0] == "ask"][1:]
 
 

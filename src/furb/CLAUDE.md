@@ -6,6 +6,8 @@ Each name has one meaning, which the contract's sentences use as given here.
 
 - engine: the program in engine.py, which is the whole system prompt of a model.
 - operator: the person or program that calls the engine from outside a rung.
+- outside: a host that makes acts under a site of its own, which is neither the operator nor an act; an act of the
+  outside is one that neither the operator nor an act made.
 - model: a language model that answers with python code.
 - provider: the service that runs a model.
 - actor: the operator, or a model at an effort, named model/effort; it answers prompts and makes acts.
@@ -14,7 +16,11 @@ Each name has one meaning, which the contract's sentences use as given here.
 - window: the context size of a model in tokens, as its roster entry says.
 - share: the part of a window that one model response used.
 - standing: what a chain stands on, which the World answers it, or its origin for a chain with a source: the roster,
-  the directory and the default actor.
+  the directory and the default actor; the record holds each standing a chain took, at its place.
+- tip: the point of a later life where the journal has said the record again whole, after which the life goes on
+  past it.
+- stood: the fact that says what a chain stands on from its place in the record on, which the journal says at the
+  tip for a chain whose standing the World changed.
 - default actor: the actor a prompt goes to when the prompt leaves the actor unsaid, bound as `actor` in the chain.
 - World: the ear of the outside that boot takes under the name WORLD, which reaches the disk, the machine, the
   actors and the record; it keeps what the journal says it keeps, and does what it hears it is started to do.
@@ -103,11 +109,12 @@ Each name has one meaning, which the contract's sentences use as given here.
 - ledger: what the grant holds: the dollars of the answers since it was made and the share the last one filled.
 - journal: the ear of the life that hears everything and says a keep for each entry of the record.
 - record: the entries the journal keeps, in the order they were said.
-- entry: one line of the record: the act made last before its fact, and the fact; for a query of a run, its answer
-  beside.
+- entry: one line of the record: the fact, and for a query of a run its answer beside.
 - plain: the form of a value on the wire, which the World may keep an entry as: nothing, a boolean, a number, a
   string, a list of plain, or a table from a string to plain.
 - drift: an act that, made again, does not agree with the record.
+- pending: what the record shows begun and not done when boot returns: a command, a wait or a prompt to the operator
+  that the World started, or a rung that its chain asked for; it waits for a wake that the life says.
 
 ## Laws no test holds
 

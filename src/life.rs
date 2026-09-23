@@ -374,8 +374,8 @@ impl Opening {
 
   /// The life, opened from what a World kept of the life before it.
   ///
-  /// The record is the entries the World kept, each the act made last before its fact, the fact, and for a
-  /// query of a run what it was answered. The stand-in runs first in a module of its own, then the engine, and
+  /// The record is the entries the World kept, each the fact, and for a query of a run what it was
+  /// answered. The stand-in runs first in a module of its own, then the engine, and
   /// `boot` is given the Kernel of the crate and one generator for the World and for each ear.
   pub fn boot(self, record: impl IntoIterator<Item = Object>) -> Result<Life, Fault> {
     let Opening { mut world, ears, mut names, limits } = self;
@@ -680,10 +680,9 @@ impl Life {
     word: &str,
     retells: &str,
     actor: &str,
-    returns: &str,
     on: &str,
   ) -> Result<Act<'_, Object>, Fault> {
-    let args = [word, retells, actor, returns].into_iter().map(Object::string).collect();
+    let args = [word, retells, actor].into_iter().map(Object::string).collect();
     let got = self.verb("rung", args, Life::on(on))?;
     self.act(got)
   }

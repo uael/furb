@@ -4,7 +4,7 @@ from conftest import STANDS, Sand, heads, life, paragraphs, plain, relived, said
 from furb import engine
 from furb.engine import WORLD
 
-LATER = ((("operator", (), 200000), ("o", ("low",), 200000)), "/z", "o/low")
+LATER = [[["operator", [], 200000], ["o", ["low"], 200000]], "/z", "o/low"]
 """What a later World offers: another roster, another directory and another default actor."""
 
 
@@ -30,12 +30,16 @@ async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_
   await settle()
   assert heads(engine.turns(on=root))[1] == f"#{root} stands {STANDS!r}"
   _, over = await relived(Sand(stands=LATER), plain(sand.record))
-  assert over == root and heads(engine.turns(on=over))[1] == f"#{over} stands {LATER!r}"
+  standings = [one for one in heads(engine.turns(on=over)) if " stands " in one]
+  assert over == root and standings == [f"#{over} stands {STANDS!r}", f"#{over} stands {LATER!r}"]
   _, held = engine.ask("transcript", over, over)
   assert isinstance(held, list)
-  assert [a for a in held if a[0] == "tell" and a[3][0].startswith(f"#{over} stands ")] == [
-    ("tell", over, over, [f"#{over} stands {LATER!r}"])
-  ]
+  assert [a for a in held if a[0] == "tell" and a[3][0].startswith(f"#{over} stands ")][-1] == (
+    "tell",
+    over,
+    over,
+    [f"#{over} stands {LATER!r}"],
+  )
   assert engine.cwd(on=over) == "/z" and engine.modules[over]["actor"] == "o/low"
 
 
@@ -46,7 +50,7 @@ async def test_the_world_answers_a_stand_with_the_roster_the_directory_and_the_a
   asked = said(log, "stand")[0]
   answered = next(a for a in said(log, "done") if a[1] == asked[1])
   assert answered[2] == WORLD and answered[3] == STANDS
-  assert answered[3] == (STANDS[0], "/w", "m/low")
+  assert answered[3] == [STANDS[0], "/w", "m/low"]
   assert said(sand.calls, "stand") == [asked]
 
 
@@ -61,8 +65,10 @@ async def test_a_model_asked_on_any_chain_of_a_later_life_finds_the_new_roster()
   later.script[over] = ["close(1)"]
   assert await engine.prompt(int, "count", to="o/low", on=over) == 1
   asked = said(again, "ask")[-1]
-  assert [one for one in paragraphs(asked[5]) if " stands " in one] == [f"#{over} stands {LATER!r}"]
-  assert [one for one in paragraphs(asked[5]) if repr(STANDS[0]) in one] == []
+  assert [one for one in paragraphs(asked[5]) if " stands " in one] == [
+    f"#{over} stands {STANDS!r}",
+    f"#{over} stands {LATER!r}",
+  ]
 
 
 async def test_the_world_answers_it_while_the_chain_waits() -> None:
@@ -75,23 +81,42 @@ async def test_the_world_answers_it_while_the_chain_waits() -> None:
   assert engine.modules[root]["actor"] == "m/low"
 
 
-async def test_a_chain_asks_what_it_stands_on_at_its_open_and_never_again_in_that_life() -> None:
-  """A chain asks what it stands on at its open and never again in that life, and every life asks the World again, so a change of the World reaches every chain of the next life."""
+async def test_a_chain_asks_what_it_stands_on_at_its_open_and_the_journal_keeps_that_stand() -> None:
+  """A chain asks what it stands on at its open, and the journal keeps that stand with its answer beside, so a later life opens the chain on what it stood on and replays it there."""
   sand = Sand(stands=STANDS)
-  _, root = life(sand)
-  assert await engine.rung("k = 1", on=root) is None
+  log, root = life(sand)
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   assert [a[3] for a in said(sand.calls, "stand")] == [root]
+  assert [e for e in sand.record if e[0][0] == "stand"] == [(said(log, "stand")[0], STANDS)]
   later = Sand(stands=LATER)
-  await relived(later, plain(sand.record))
-  assert [a[3] for a in said(later.calls, "stand")] == [root]
-  assert engine.cwd(on=root) == "/z" and engine.modules[root]["actor"] == "o/low"
+  again, _ = await relived(later, plain(sand.record))
+  opened = [a for a in said(again, "done") if a[1] == said(log, "stand")[0][1]]
+  assert [a[2] for a in opened] == ["record"] and [a[3] for a in said(later.calls, "stand")] == [""]
+  assert [a[6] for a in said(again, "rung") if not a[4]] == ["m/low"] and said(again, "ask") == []
+
+
+async def test_at_its_tip_the_journal_asks_the_world_what_it_stands_on() -> None:
+  """At its tip, once the record is said again whole, the journal asks the World what it stands on, and says it as a stood to every chain that stands on something else, so a change of the World reaches every chain after what it replayed."""
+  sand = Sand(stands=STANDS)
+  _, root = life(sand)
+  two = engine.chain("two")
+  side = engine.chain("side", source=root)
+  assert await engine.rung("k = 1", on=root) is None
+  await settle()
+  later = Sand(stands=LATER)
+  again, _ = await relived(later, plain(sand.record))
+  assert [a[1] for a in said(again, "stood")] == [root, two, side]
+  assert [e[0][:2] for e in later.record] == [("stood", root), ("stood", two), ("stood", side)]
+  for one in (root, two, side):
+    assert engine.cwd(on=one) == "/z" and engine.modules[one]["actor"] == "o/low"
   twin = engine.chain("twin", source=root)
   await settle(300)
-  assert [a[3] for a in said(later.calls, "stand")] == [root]
   assert engine.modules[twin]["actor"] == "o/low"
+  same = Sand(stands=LATER)
+  third, _ = await relived(same, [*plain(sand.record), *plain(later.record)])
+  assert {a[2] for a in said(third, "stood")} == {"record"} and same.record == []
 
 
 async def test_each_standing_binds_the_default_actor_of_the_chain_under_the_name_actor() -> None:
@@ -103,8 +128,8 @@ async def test_each_standing_binds_the_default_actor_of_the_chain_under_the_name
   assert engine.modules[root]["actor"] == "m/low" == said(log, "ask")[0][4]
 
 
-async def test_the_chain_tells_the_standing_it_was_answered_under_the_header_stands() -> None:
-  """The chain tells the standing it was answered under the header stands, as python shows it: the roster, the directory and the actor."""
+async def test_the_chain_tells_each_standing_it_takes_under_the_header_stands() -> None:
+  """The chain tells each standing it takes under the header stands, as python shows it: the roster, the directory and the actor."""
   sand = sown()
   log, root = life(sand)
   answered = next(a[3] for a in said(log, "done") if a[1] == said(log, "stand")[0][1])
@@ -113,9 +138,11 @@ async def test_the_chain_tells_the_standing_it_was_answered_under_the_header_sta
     paragraphs(engine.turns(on=root))[1]
     == f"#{root} stands {answered!r}"
     == (
-      "#chain1 stands ((('operator', (), 200000), ('m', ('low', 'high'), 400000), ('n', ('low',), 200000)), '/w', 'm/low')"
+      "#chain1 stands [[['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]], '/w', 'm/low']"
     )
   )
+  await relived(Sand(stands=LATER), plain(sand.record))
+  assert [one for one in paragraphs(engine.turns(on=root)) if " stands " in one][-1] == f"#{root} stands {LATER!r}"
 
 
 async def test_the_chain_holds_no_stand() -> None:

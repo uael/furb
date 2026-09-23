@@ -423,13 +423,13 @@ def opened(
 
   The World of the host stands under the name `world` when the host has one; otherwise the ears of the host hear
   that name too, as they hear every other. The Kernel and the gate are given first, so that the gate answers
-  before any ear hears it. The record is the entries as the World hands them: each the act made last before its fact, the fact as
-  a tuple, and for a query of a run what it was answered.
+  before any ear hears it. The record is the entries as the World hands them: each the fact as a tuple, and for a query
+  of a run what it was answered.
   """
   MADE.clear()
   kept = again(record, engine, ears)
   assert isinstance(kept, list)
-  entries = [(e[0], tuple(e[1]), *e[2:]) for e in kept]
+  entries = [(tuple(e[0]), *e[1:]) for e in kept]
   outside = {
     name: worldly(world, engine, ears) if name == "world" and world is not None else crossing(name, ears, engine)
     for name in names

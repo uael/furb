@@ -205,9 +205,9 @@ def limits(name: str) -> tuple[int, int]:
   return LIMITS.get(name) or LIMITS.get(name[:-DATED] if dated else name) or FLOOR
 
 
-def actors() -> tuple[tuple[str, tuple[str, ...], int], ...]:
+def actors() -> list[list[str | list[str] | int]]:
   """The actors the World offers: the operator, and each model of the family at its efforts, with its window."""
-  return ((OPERATOR, (), WINDOW), *((name, tuple(LEVELS), limits(name)[0]) for name in FAMILY))
+  return [[OPERATOR, [], WINDOW], *([name, list(LEVELS), limits(name)[0]] for name in FAMILY)]
 
 
 def effort_of(level: ThinkingLevel | str | None) -> str | None:

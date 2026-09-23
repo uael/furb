@@ -21,7 +21,7 @@ async def test_what_an_act_tells_is_the_telling_of_its_chain() -> None:
   log, root = life(sand)
   assert await engine.rung("k = 1", on=root) is None
   assert [engine.scope(a[1]) for a in said(log, "tell")] == [root] * len(said(log, "tell"))
-  assert [entry for entry in sand.record if entry[1][0] == "tell"] == []
+  assert [entry for entry in sand.record if entry[0][0] == "tell"] == []
   was = engine.turns(on=root)
   again, over = await relived(Sand(stands=STANDS), plain(sand.record))
   assert over == root and engine.turns(on=over) == was

@@ -57,12 +57,12 @@ async def test_the_world_answers_what_a_chain_stands_on(yard: Path) -> None:
   root = life(live)
   await settle()
   standing = engine.ask("stand", root)[1]
-  assert isinstance(standing, tuple)
+  assert isinstance(standing, list)
   assert f"#{root} stands {standing!r}" in heads(root)
   roster, directory, actor = standing
   assert directory == str(yard)
   assert actor == "opus/low"
-  assert isinstance(roster, tuple)
+  assert isinstance(roster, list)
   assert [name for name, _, _ in roster] == [OPERATOR, "fable", "opus", "sonnet", "haiku"]
   assert live.roster == roster
   assert [one[0] for one in live.calls] == ["stand"]
@@ -448,14 +448,15 @@ async def test_the_record_is_kept_as_json_and_read_back_as_the_entries_it_holds(
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   said = kept(record)
-  assert [fact[0] for _, fact, *_ in said] == ["chain", "prompt", "rung", "answer"]
-  match said[3]:
-    case (_, ("answer", _, _, (_, py, _, _))):
+  assert [fact[0] for fact, *_ in said] == ["chain", "stand", "prompt", "rung", "answer"]
+  match said[4]:
+    case (("answer", _, _, (_, py, _, _)),):
       assert py == "close(1)"
     case _:
-      pytest.fail(str(said[3]))
-  assert [json.loads(line)[1][0] for line in record.read_text(encoding="utf-8").splitlines()] == [
+      pytest.fail(str(said[4]))
+  assert [json.loads(line)[0][0] for line in record.read_text(encoding="utf-8").splitlines()] == [
     "chain",
+    "stand",
     "prompt",
     "rung",
     "answer",
@@ -465,9 +466,9 @@ async def test_the_record_is_kept_as_json_and_read_back_as_the_entries_it_holds(
 def test_a_torn_last_line_is_cut_away_and_a_blank_line_stands_for_no_entry(yard: Path) -> None:
   """A crash tears the last line alone, which is cut away; a line anywhere else that is no entry is a drift."""
   record = yard / "record.jsonl"
-  one = json.dumps(["", ["chain", "chain1", OPERATOR, "", "root", ""]])
+  one = json.dumps([["chain", "chain1", OPERATOR, "", "root", ""]])
   record.write_text(f"{one}\n\n{one[:20]}", encoding="utf-8")
-  assert [fact[0] for _, fact, *_ in kept(record)] == ["chain"]
+  assert [fact[0] for fact, *_ in kept(record)] == ["chain"]
   record.write_text(f"{one[:20]}\n{one}\n", encoding="utf-8")
   with pytest.raises(ValueError, match="line 1 column"):
     kept(record)
@@ -583,7 +584,7 @@ async def test_the_plain_form_of_a_whole_record_is_a_fixed_point_of_json(yard: P
   assert await engine.prompt(int, "run", on=root) == 0
   await settle()
   plain = wire(kept(record))
-  assert {"chain", "prompt", "rung", "bash", "answer", "out", "exited"} <= {fact[0] for _, fact, *_ in kept(record)}
+  assert {"chain", "prompt", "rung", "bash", "answer", "out", "exited"} <= {fact[0] for fact, *_ in kept(record)}
   assert json.loads(json.dumps(plain)) == plain
 
 

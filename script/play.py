@@ -83,7 +83,7 @@ async def settle(n: int = 400) -> None:
 def answered(record: Path) -> list[tuple]:
   """Every answer of a model that the record holds."""
   said = kept(record) if record.is_file() else []
-  return [entry[1] for entry in said if entry[1][0] == "answer" and entry[1][3] is not None]
+  return [entry[0] for entry in said if entry[0][0] == "answer" and entry[0][3] is not None]
 
 
 def spent(record: Path) -> float:
@@ -186,7 +186,7 @@ async def second(yard: Path, record: Path, got: list[object]) -> float:
   say(f"the resumed life made {len(held)} words of its record again and asked no model")
   # A pause the World said when it could not reach a model stands in the record, so every later life of that record
   # opens paused. The World tells the operator why it went quiet, and waking it again is the operator's to do.
-  if [entry for entry in held if entry[1][0] == "pause" and entry[1][1] == root]:
+  if [entry for entry in held if entry[0][0] == "pause" and entry[0][1] == root]:
     say("the record holds a pause of the root, said by the World, so the operator wakes the chain")
     engine.wake(root)
     await settle()

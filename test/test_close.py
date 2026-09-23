@@ -32,7 +32,7 @@ async def test_the_close_of_the_operator_enters_the_record_as_a_fact_of_its_own(
   await settle()
   engine.close(21, act)
   await settle()
-  kept = [fact for _, fact, *_ in sand.record if fact[0] == "close"]
+  kept = [fact for fact, *_ in sand.record if fact[0] == "close"]
   assert [(one[1], one[2], one[3]) for one in kept] == [(act, OPERATOR, 21)]
 
 

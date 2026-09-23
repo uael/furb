@@ -73,6 +73,6 @@ async def test_a_filter_is_no_word_of_a_chain() -> None:
   held: list[tuple] = []
   side = engine.chain("side", source=root, filter=seen(held))
   await settle()
-  kept = [fact for _, fact, *_ in sand.record if fact[0] == "chain"]
+  kept = [fact for fact, *_ in sand.record if fact[0] == "chain"]
   assert [(one[1], one[4], one[5]) for one in kept] == [(root, "root", ""), (side, "side", root)]
   assert [len(one) for one in said(log, "chain")] == [6, 6] and held

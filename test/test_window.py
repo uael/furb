@@ -4,7 +4,7 @@ from conftest import Sand, heads, life, said, settle
 from furb import engine
 from furb.engine import WINDOW
 
-UNSAID = ((("operator", (), 200000), ("q", ("low",), 0)), "/w", "q/low")
+UNSAID = [[["operator", [], 200000], ["q", ["low"], 0]], "/w", "q/low"]
 """A standing whose one model leaves its window unsaid."""
 
 

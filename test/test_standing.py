@@ -30,7 +30,7 @@ async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_
   assert await engine.prompt(int, "count", on=root) == 1
   told = f"#{root} stands {STANDS!r}"
   assert told == (
-    "#chain1 stands ((('operator', (), 200000), ('m', ('low', 'high'), 400000), ('n', ('low',), 200000)), '/w', 'm/low')"
+    "#chain1 stands [[['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]], '/w', 'm/low']"
   )
   assert [paragraphs(a[5])[1] for a in said(log, "ask")] == [told]
   _, held = engine.ask("transcript", root, root)
@@ -49,8 +49,8 @@ async def test_a_standing_holds_no_source() -> None:
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   kept = [
-    (after, (*fact[:4], "echo other", *fact[5:]), *rest) if fact[0] == "bash" else (after, fact, *rest)
-    for after, fact, *rest in plain(sand.record)
+    ((*fact[:4], "echo other", *fact[5:]), *rest) if fact[0] == "bash" else (fact, *rest)
+    for fact, *rest in plain(sand.record)
   ]
   with pytest.raises(Drift, match=r"^bash1 drifts$"):
     life(Sand(stands=STANDS), kept)

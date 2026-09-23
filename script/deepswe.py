@@ -455,7 +455,7 @@ def dollars(numbers: Mapping[str, object]) -> float:
 
 def numbered(record: Path, root: str, began: float, got: object) -> Mapping[str, object]:
   """What the life did and what it cost, read off the record it kept."""
-  held = [entry[1] for entry in kept(record)] if record.is_file() else []
+  held = [entry[0] for entry in kept(record)] if record.is_file() else []
   kinds = [one[0] for one in held]
   usage = [one[3][2] for one in held if one[0] == "answer" and one[3] and one[3][2]]
   return {

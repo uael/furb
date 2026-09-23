@@ -53,7 +53,7 @@ type World = Generator[tuple | None, tuple]
 type Kernel = Generator[tuple | None, tuple]
 """The Kernel, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
 
-STANDS = (((OPERATOR, (), 200000), ("m", ("low", "high"), 400000), ("n", ("low",), 200000)), "/w", "m/low")
+STANDS: list = [[[OPERATOR, [], 200000], ["m", ["low", "high"], 400000], ["n", ["low"], 200000]], "/w", "m/low"]
 """A standing of three actors, a directory and a default actor, which a test takes when it needs a roster."""
 
 WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nclose((await x).code)"
@@ -112,7 +112,7 @@ def plain(record: Sequence[object]) -> list:
   """A record as a later life is given it: through the wire and back, so every tuple is a list and every text a Text."""
   got = unwire(json.loads(json.dumps(wire(list(record)))))
   assert isinstance(got, list)
-  return [(e[0], tuple(e[1]), *e[2:]) for e in got]
+  return [(tuple(e[0]), *e[1:]) for e in got]
 
 
 @dataclass
@@ -132,7 +132,7 @@ class Sand:
   fed: list[str | None] = field(default_factory=list)
   calls: list[tuple] = field(default_factory=list)
   auto: bool = True
-  stands: tuple | None = None
+  stands: list | None = None
   cost: tuple | None = None
   tick: int = 0
 
@@ -174,7 +174,7 @@ class Sand:
             case ("prompt", _, _, _, shape, _, _) if shape not in ("None", "bool", "int", "float", "str"):
               engine.close(Refused(f"the operator answers no {shape}"), about)
         case ("stand", qid, *_):
-          yield "done", qid, self.stands or ((), "", "")
+          yield "done", qid, self.stands or [[], "", ""]
         case ("read", qid, _, on, path) if (full := resolved(engine.cwd(on=on), path)) in self.files:
           yield "done", qid, Text(full, self.files[full])
         case ("write", qid, _, on, Text(path=path, content=content)) if (
@@ -223,7 +223,7 @@ class Dead(Sand):
       match a:
         case ("stand", qid, *_):
           self.calls.append(a)
-          yield "done", qid, self.stands or ((), "", "")
+          yield "done", qid, self.stands or [[], "", ""]
         case (kind, qid, *_) if engine.question(a) and qid in engine.asked:
           self.calls.append(a)
           yield "done", qid, Refused(f"a dead World answers no {kind}")
@@ -241,7 +241,7 @@ class Where(Sand):
       a = yield
       match a:
         case ("stand", qid, *_):
-          yield "done", qid, self.stands or ((), "", "")
+          yield "done", qid, self.stands or [[], "", ""]
         case ("read", qid, _, on, path):
           full = f"{engine.cwd(on=on)}/{path}"
           yield "done", qid, Text(full, self.files.get(full, ""))
@@ -401,6 +401,15 @@ def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   """
   log: list[tuple] = []
   return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears())
+
+
+def outside(label: str = "outside") -> str:
+  """A chain the outside makes under a site of its own, which neither the operator nor an act is."""
+  token = site.set("outside")
+  try:
+    return engine.chain(label)
+  finally:
+    site.reset(token)
 
 
 async def settle(n: int = 80) -> None:

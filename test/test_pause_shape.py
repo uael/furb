@@ -71,7 +71,7 @@ async def test_a_control_is_no_act_it_takes_no_name_of_its_own() -> None:
   await settle()
   assert set(engine.acts) == made
   assert [(one[0], one[1]) for one in log if one[0] in ("pause", "cancel")] == [("pause", act), ("cancel", act)]
-  kept = [fact for _, fact, *_ in sand.record if fact[0] in ("pause", "cancel")]
+  kept = [fact for fact, *_ in sand.record if fact[0] in ("pause", "cancel")]
   assert [(one[0], one[1], one[2]) for one in kept] == [("pause", act, OPERATOR), ("cancel", act, OPERATOR)]
 
 

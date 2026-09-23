@@ -151,10 +151,10 @@ def kept(record: Path) -> list[tuple]:
       if n < len(lines):
         raise
       break
-    if not (isinstance(got, list) and len(got) in (2, 3) and isinstance(got[1], list) and got[1]):
+    if not (isinstance(got, list) and len(got) in (1, 2) and isinstance(got[0], list) and got[0]):
       why = f"line {n} of {record} is no entry of the record"
       raise Drift(why)
-    said.append((got[0], tuple(got[1]), *got[2:]))
+    said.append((tuple(got[0]), *got[1:]))
   return said
 
 
@@ -218,7 +218,7 @@ class Live:
   directory: str
   record: Path | None = None
   actor: str = ACTOR
-  roster: tuple[tuple[str, tuple[str, ...], int], ...] = field(default_factory=actors)
+  roster: list[list[str | list[str] | int]] = field(default_factory=actors)
   calls: list[tuple] = field(default_factory=list)
   model: Model[object] | None = None
   bought: dict[str, Model[object]] = field(default_factory=dict)
@@ -465,7 +465,7 @@ class Live:
             case ("prompt", _, _, _, shape, message, _):
               start(self.show(about, shape, message))
         case ("stand", qid, *_):
-          yield "done", qid, (self.roster, self.directory, self.actor)
+          yield "done", qid, [self.roster, self.directory, self.actor]
         case ("read", qid, _, on, path) if self.serves(path):
           yield "done", qid, self.read(engine.cwd(on=on), path)
         case ("write", qid, _, on, Text(path=path, content=content)) if self.serves(path):

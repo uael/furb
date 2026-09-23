@@ -61,7 +61,7 @@ async def test_a_fact_reaches_the_world_the_kernel_and_the_record_only_through_t
     "chain1: Act[object] = Act('chain1')\nprompt1: Act[str] = Act('prompt1')",
     "close(read('a.txt').content)",
   ]
-  assert [entry[1][4] for entry in sand.record if entry[1][0] == "read"] == ["a.txt"]
+  assert [entry[0][4] for entry in sand.record if entry[0][0] == "read"] == ["a.txt"]
 
 
 async def test_a_rebound_verb_reaches_the_world_only_through_the_bus() -> None:
@@ -90,7 +90,7 @@ async def test_who_says_it_is_whoever_is_speaking() -> None:
 
 
 async def test_a_fact_said_it_says_its_kind_the_act_it_is_about_who_said_it_and_its_words() -> None:
-  """A fact said: it says its kind, the act it is about, who said it and its words, in that order, and nothing else, since the chain it is on is the scope of the act it is about and the act made last before it is the record's to say."""
+  """A fact said: it says its kind, the act it is about, who said it and its words, in that order, and nothing else, since the chain it is on is the scope of the act it is about."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   act = engine.bash("echo hi", on=root)
@@ -99,7 +99,7 @@ async def test_a_fact_said_it_says_its_kind_the_act_it_is_about_who_said_it_and_
   engine.cancel(act)
   over = said(log, "cancel")[0]
   assert over == ("cancel", "bash1", OPERATOR, ["#bash1 cancelled"])
-  assert [entry[0] for entry in sand.record if entry[1][0] == "bash"] == [root]
+  assert [entry for entry in sand.record if entry[0][0] == "bash"] == [(said(log, "bash")[0],)]
 
 
 async def test_the_bus_makes_every_fact_whole_from_what_it_is_given() -> None:
