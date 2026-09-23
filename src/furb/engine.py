@@ -346,20 +346,21 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
       yield "done", id, transcript
       return
     _, standing = ask("stand", here)
-    spent = 0.0
+    spent, whose = 0.0, {}
     for old in transcript:
       match old:
         case ("grant", gid, *_) if gid != id and gid not in outcomes:
           close(None, gid)
+        case ("tell", rid, _, [("opened", [_, ("actor", whom), _], _)]):
+          whose[rid] = whom
     told("opened", id, ("usd", usd), ("share", share))
     while True:
       match (yield):
+        case ("tell", rid, _, [("opened", [_, ("actor", whom), _], _)]):
+          whose[rid] = whom
         case ("answer", about, _, (_, _, (seen, _, _, _, dollars), _)) if scope(about) == here:
           spent += dollars
-          for said in ask("transcript", here, here)[1]:
-            match said:
-              case ("tell", rid, _, [("opened", [_, ("actor", whom), _], _)]) if rid == about:
-                filled = seen / (offered(standing, whom) or WINDOW)
+          filled = seen / (offered(standing, whose[about]) or WINDOW)
           told("ledger", about, ("spent", spent), ("filled", filled))
           if (usd is not None and spent >= usd) or (share is not None and filled >= share):
             pause(here)
@@ -745,7 +746,7 @@ def boot(record=(), **outside):
           alive.pop(name, None)
 
   def live(g, name):
-    if name in alive or (name in outside and name in (OPERATOR, "record", "journal")):
+    if name in alive or (name == "journal" and name in outside):
       raise Refused(f"{name} hears")
     alive[name] = g
     hears(name, g, None)
