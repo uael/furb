@@ -136,6 +136,27 @@ mod tests {
   }
 
   #[test]
+  fn a_builtin_the_sandbox_runs_is_accepted_and_one_it_does_not_run_is_refused() {
+    for word in [
+      "close(hasattr(1, 'a'))",
+      "close(getattr(1, 'a', None))",
+      "setattr(Exit, 'a', 1)",
+      "close(open)",
+    ] {
+      assert_eq!(found(&sheet(word).0), Vec::<(usize, String)>::new(), "{word}");
+    }
+    for word in
+      ["close(vars())", "close(dir())", "close(__import__('os'))", "close(exit)", "close(IOError)"]
+    {
+      let (text, above) = sheet(word);
+      let found = found(&text);
+      assert_eq!(found.len(), 1, "{word}: {found:?}");
+      assert_eq!(found[0].0, above + 1);
+      assert!(found[0].1.contains("unresolved-reference"), "{found:?}");
+    }
+  }
+
+  #[test]
   fn a_word_that_imports_what_the_sandbox_does_not_run_is_refused() {
     let (text, above) = sheet("import subprocess\n  close(subprocess.run)");
     let found = found(&text);

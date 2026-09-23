@@ -3,10 +3,12 @@
 The suite proves the contract on both engines, sentence for sentence. What is proved here is the door itself: an
 ear of this interpreter that says a verb from its thread and is answered with what the verb raised, a show the
 engine made that an ear calls back from its thread, a class a word defined held as a type of this interpreter
-and its instances as objects of it, both ways, a map of the life read where it stands, and the Kernel of this
-interpreter refused, since the engine of monty holds its own.
+and its instances as objects of it, both ways, a map of the life read where it stands, the Kernel of this
+interpreter refused, since the engine of monty holds its own, and a gate that accepts a builtin exactly when the
+sandbox runs it.
 """
 
+import builtins
 from collections.abc import Generator
 
 import pytest
@@ -155,3 +157,23 @@ async def test_boot_refuses_a_kernel_or_a_gate_of_this_interpreter() -> None:
     engine.boot((), world=Sand(stands=STANDS).hears(), kernel=Py().kernel())
   with pytest.raises(Refused, match="gate hears: the engine of monty holds its Kernel and its gate"):
     engine.boot((), world=Sand(stands=STANDS).hears(), gate=Py().gating())
+
+
+async def test_the_gate_accepts_a_builtin_exactly_when_a_rung_runs_it() -> None:
+  """The gate reads a word against the typeshed of the sandbox and a chain that is a module, so it accepts a name of
+  the builtins of python exactly when a rung runs a word that names it. A refused word never runs, so a refused name
+  is run as the Kernel runs a word, in the globals of the chain."""
+  root = engine.boot((), world=Sand(stands=STANDS).hears())
+  refused_yet_ran, accepted_yet_unbound = [], []
+  for name in sorted(vars(builtins)):
+    word = f"got = {name}"
+    if engine.gate(word, on=root):
+      probe = f"ran = True\ntry:\n  eval(compile({word!r}, 'probe', 'exec'), dict(globals()))\nexcept NameError:\n  ran = False\nclose(ran)"
+      if await engine.rung(probe, on=root):
+        refused_yet_ran.append(name)
+    else:
+      try:
+        await engine.rung(word, on=root)
+      except NameError:
+        accepted_yet_unbound.append(name)
+  assert (refused_yet_ran, accepted_yet_unbound) == ([], [])
