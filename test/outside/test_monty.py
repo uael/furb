@@ -141,3 +141,15 @@ async def test_boot_refuses_a_kernel_or_a_gate_of_this_interpreter() -> None:
     engine.boot((), world=Sand(stands=STANDS).hears(), kernel=Py().kernel())
   with pytest.raises(Refused, match="gate hears: the engine of monty holds its Kernel and its gate"):
     engine.boot((), world=Sand(stands=STANDS).hears(), gate=Py().gating())
+
+
+async def test_the_gate_of_the_sandbox_finds_what_the_run_finds_of_a_name_the_program_bound_again() -> None:
+  """A rung that bound a name of the engine again leaves that value to the word after it in the sandbox too, so the
+  word raises when it calls it, and the gate of the sandbox refuses a word that calls it where it can see it."""
+  root = engine.boot((), world=Sand(stands=STANDS).hears())
+  assert await engine.rung("read = 1", on=root) is None
+  with pytest.raises(TypeError, match="not callable"):
+    await engine.rung("f: Any = read\nclose(f('a'))", on=root)
+  assert engine.gate("close(read('a'))", on=root)[0].startswith("line 1: error[call-non-callable]")
+  with pytest.raises(Refused):
+    await engine.rung("close(read('a'))", on=root)

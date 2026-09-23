@@ -4,8 +4,8 @@ the gate of the crate.
 The engine holds the laws of a chain. To judge a word before it runs, and to run it, are machinery, so they stand
 here, in the Kernel and the gate, two ears that boot is given. The gate reads the word on the sheet of
 `furb.sheet`, with the type checker of monty reading it, the one the crate carries and the engine of monty gates
-with too, so a word is judged once and the same: the engine itself, laid as the first rung of the chain, then the
-program of the chain, then the word, all inside one async body, so that the awaits of the word stand.
+with too, so a word is judged once and the same: every name of the engine, then the program of the chain, then the
+word, all inside one async body, so that the awaits of the word stand.
 
 A word answers by a close and never by a return: a body of a module takes no return, so a word that holds one is no
 python and the gate says so.
@@ -15,9 +15,9 @@ from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from asyncio import CancelledError
 from collections.abc import Generator
 from inspect import iscoroutine
-from pathlib import Path
 from types import CoroutineType
 
+import furb
 import furb_monty
 from furb import engine, sheet
 from furb.engine import Act, Refused, modules, outcomes, site, under
@@ -25,13 +25,9 @@ from furb.engine import Act, Refused, modules, outcomes, site, under
 type Kernel = Generator[tuple | None, tuple]
 """The Kernel, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
 
-SOURCE = Path(engine.__file__)
-"""SOURCE is the engine, which names every name that the globals of a chain hold of it."""
-
-
-ENGINE = SOURCE.read_text(encoding="utf-8")
-"""ENGINE is the engine as a text, which the sheet lays as the first rung of every chain, so that a word is read
-in the names the engine binds, with the types the engine gives them."""
+ENGINE = vars(furb.python)
+"""ENGINE is the module of the engine this Kernel runs a word with, whose names the module of every chain holds,
+so that the sheet binds each of them before the word."""
 
 
 def checked(text: str) -> list[tuple[int, str]]:
@@ -114,10 +110,10 @@ class Native:
 
 
 def gate(word: str, program: list[str]) -> list[str]:
-  """What the gate finds against a word: the sheet of the engine, read by the ty command line."""
+  """What the gate finds against a word: the sheet of the engine, read by the gate of the crate."""
   return sheet.gate(ENGINE, program, word, checked)
 
 
 def gating() -> Kernel:
-  """The gate as the ear of a life, which reads every word on the sheet of the engine with the ty command line."""
+  """The gate as the ear of a life, which reads every word on the sheet of the engine with the gate of the crate."""
   return sheet.gating(ENGINE, checked)

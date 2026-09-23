@@ -3,13 +3,14 @@
 import asyncio
 import symtable
 from asyncio import CancelledError
+from pathlib import Path
 
 import pytest
 
+import furb
 from conftest import DOOR, STANDS, Py, Sand, attr, life, ran, said, seen, settle, sown, tags
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Act, Refused, Text, take
-from furb.kernel import ENGINE
 
 
 def made(held: list[tuple]) -> list[str]:
@@ -359,7 +360,7 @@ async def test_every_name_that_the_file_defines_is_in_the_globals_of_a_chain() -
   """Every name that the file defines is in the globals of a chain."""
   sand = sown()
   _, root = life(sand)
-  assert defined(ENGINE) <= set(engine.modules[root])
+  assert defined(Path(furb.python.__file__).read_text(encoding="utf-8")) <= set(engine.modules[root])
 
 
 async def test_a_chain_holds_whole_every_act_made_on_the_chain() -> None:
