@@ -87,7 +87,10 @@ function highlighting(node: Renderable): Promise<void>[] {
 }
 
 async function capture(name: string): Promise<void> {
-  if (name !== "28-loading" && name !== "30-view-error") await session.refresh();
+  // A read that a change starts while the last one ends leaves the view loading, so the capture waits for none.
+  if (name !== "28-loading" && name !== "30-view-error")
+    do await session.refresh();
+    while (session.loading);
   app.render();
   await test.flush();
   // Code is colored by a parser off the main thread: the frame is taken once every code block is highlighted.
