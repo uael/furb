@@ -17,6 +17,8 @@ a new life. Sessions are saved under `.furb/sessions` in the selected directory.
 `.world.json`, `.changes.jsonl`, and `.ui.json` files together. The last file saves the selected chain, view, theme, prompt
 shape, drafts, scroll positions, and pane widths. An unfinished session opens paused and offers a resume
 choice. The native engine replays completed work from the record.
+The picker shows held work as of the last save. Opening a session reads its actual unfinished work from the
+record, so an old metadata file cannot hold work that has already completed.
 
 The six views show the conversation, accepted Python program, acts, facts, exact model transcript, and file
 diffs. Each chain has its own conversation and module. Python words have offline Tree-sitter colors and
@@ -83,7 +85,8 @@ The editor keeps submitted input history, matches brackets, and indents a new Py
 
 The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
 historical checkpoint. `/rewind` offers an act picker and uses the engine's `take` filter to choose which
-acts the new chain reads. Its module and files keep their current state. The TUI does not add a separate
+acts the new chain reads. The choice runs as an operator rung, so the filter is recreated after a reopen.
+Its module and files keep their current state. The TUI does not add a separate
 permission or tool protocol to the engine.
 
 `bun run screenshots` captures the real rendered views through OpenTUI's test renderer. The screenshots use

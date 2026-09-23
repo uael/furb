@@ -112,7 +112,7 @@ test("one failed model ask retries, while two consecutive failures pause with a 
     expect(calls).toBe(2);
     expect(broken.life.outcome(prompt.id).done).toBe(false);
     expect(broken.world?.facts.filter((fact) => fact[0] === "pause")).toHaveLength(1);
-    expect(broken.life.rendered().join("\n")).toContain("answered nothing: unavailable");
+    expect(broken.life.rendered().join("\n")).toContain("answered nothing: Error: unavailable");
   } finally {
     await broken.dispose();
   }
@@ -134,6 +134,36 @@ test("reopening unfinished work does not add another pause to the record", async
     }
     expect(await readFile(record, "utf8")).toBe(original);
   } finally {
+    await rm(cwd, { recursive: true });
+  }
+});
+
+test("the record, not stale saved metadata, decides whether a reopened life has held work", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-stale-held-"));
+  const record = join(cwd, "life.jsonl");
+  const first = new World({ cwd, record, answer: async () => ["assistant", ['close("done")'], null, null] });
+  const prompt = first.open().prompt<string>("str", "finish");
+  await prompt;
+  await first.dispose();
+  const saved = JSON.parse(await readFile(`${record}.world.json`, "utf8"));
+  saved.held = [[prompt.id, "prompt"]];
+  await writeFile(`${record}.world.json`, JSON.stringify(saved));
+  let calls = 0;
+  const second = new World({
+    record,
+    answer: async () => {
+      calls++;
+      return ["assistant", ['close("new answer")'], null, null];
+    },
+  });
+  try {
+    const life = second.open();
+    expect(second.held.size).toBe(0);
+    expect(life.outcome(prompt.id).done).toBe(true);
+    expect(await life.prompt<string>("str", "continue")).toBe("new answer");
+    expect(calls).toBe(1);
+  } finally {
+    await second.dispose();
     await rm(cwd, { recursive: true });
   }
 });

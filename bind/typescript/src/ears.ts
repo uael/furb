@@ -49,9 +49,11 @@ export class Ears {
     this.functions.set(name, callback);
     return { is: "callable", name };
   }
-  callback = ([kind, name, value, kwargs]: unknown[]): unknown => {
+  callback = (request: unknown[]): unknown => {
+    const [kind, name, value] = request;
     try {
       if (kind === "called") {
+        const [, , , kwargs] = request;
         const callback = this.functions.get(String(name));
         if (!callback) throw new Error(`Unknown callable ${name}.`);
         return synchronous(
@@ -60,8 +62,11 @@ export class Ears {
       }
       const ear = this.ears.get(String(name));
       if (!ear) throw new Error(`Unknown ear ${name}.`);
-      if (kind === "hears" && Array.isArray(value) && Array.isArray(kwargs))
-        transcripts.set(value as Fact, kwargs as string[]);
+      if (kind === "hears") {
+        const [, , , rendered] = request;
+        if (Array.isArray(value) && Array.isArray(rendered))
+          transcripts.set(value as Fact, rendered as string[]);
+      }
       const answer = value as [string, unknown];
       const next =
         kind === "answered"
@@ -185,10 +190,13 @@ export class WorldAdapter {
               .at(-1)?.[1]
               .some((tag) => typeof tag !== "string" && String(tag[2]).includes(mute));
             if (repeated) this.life?.pause(String(words[0]));
-            this.life?.close(
-              { is: "Refused", args: [`${mute}: ${error instanceof Error ? error.message : String(error)}`] },
-              id,
-            );
+            const why =
+              error instanceof Error
+                ? `${error.name}: ${error.message}`
+                : error && typeof error === "object" && "is" in error && "args" in error
+                  ? `${error.is}: ${Array.isArray(error.args) ? error.args.map(String).join(", ") : String(error.args)}`
+                  : `Refused: ${String(error)}`;
+            this.life?.close({ is: "Refused", args: [`${mute}: ${why}`] }, id);
           },
         );
       } else if (kind === "start") {

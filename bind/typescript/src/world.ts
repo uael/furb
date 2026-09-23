@@ -91,7 +91,6 @@ export class World extends EventEmitter {
         changes?: FileChange[];
         deadlines?: [string, number][];
         streams?: [string, { chain: string; text: string; thinking: string }][];
-        held?: [string, string][];
       };
       options = {
         ...saved.options,
@@ -101,7 +100,6 @@ export class World extends EventEmitter {
       legacyChanges = saved.changes ?? [];
       for (const [id, deadline] of saved.deadlines ?? []) this.deadlines.set(id, deadline);
       for (const [id, stream] of saved.streams ?? []) this.streams.set(id, stream);
-      for (const [id, kind] of saved.held ?? []) this.held.set(id, kind);
     }
     this.options = options;
     this.directory = resolve(options.cwd ?? process.cwd());
@@ -133,7 +131,6 @@ export class World extends EventEmitter {
         this.release = resolve;
       });
       if (!this.holding) this.release?.();
-      this.save();
     } catch (error) {
       records?.dispose();
       changes?.dispose();
@@ -173,6 +170,7 @@ export class World extends EventEmitter {
           this.release?.();
         }
       }
+      this.save();
       return this.life;
     } catch (error) {
       if (this.adapter) this.adapter.stopped = true;
@@ -495,6 +493,7 @@ export class World extends EventEmitter {
     this.release?.();
     for (const chain of chains) await this.life.wake(chain);
     this.held.clear();
+    this.save();
     this.emit("change");
   }
 

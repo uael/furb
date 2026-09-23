@@ -67,7 +67,7 @@ export class App {
   private readonly promptBox: BoxRenderable;
   private readonly search: InputRenderable;
   private readonly paneKeys = new WeakMap<Renderable, string>();
-  private readonly cards = new Map<string, { node: BoxRenderable; key: string }>();
+  private readonly cards = new Map<string, { node: BoxRenderable; heading: TextRenderable; key: string }>();
   private overlay?: BoxRenderable;
   private paletteInput?: InputRenderable;
   private paletteList?: BoxRenderable;
@@ -507,8 +507,14 @@ export class App {
     index: number,
   ): void {
     key += this.collapsed.has(id) ? ":collapsed" : ":open";
+    const heading = `${this.collapsed.has(id) ? "▸" : "▾"} ${label}`;
     const prior = this.cards.get(id);
-    if (prior?.key === key) return;
+    if (prior?.key === key) {
+      prior.heading.content = heading;
+      prior.heading.fg = color;
+      prior.node.borderColor = color;
+      return;
+    }
     if (prior) {
       prior.node.destroyRecursively();
       this.cards.delete(id);
@@ -522,19 +528,18 @@ export class App {
       backgroundColor: c.panel,
       flexShrink: 0,
     });
-    box.add(
-      this.text(`${this.collapsed.has(id) ? "▸" : "▾"} ${label}`, color, {
-        marginBottom: this.collapsed.has(id) ? 0 : 1,
-        onMouseDown: () => {
-          if (this.collapsed.has(id)) this.collapsed.delete(id);
-          else this.collapsed.add(id);
-          this.renderContent();
-        },
-      }),
-    );
+    const labelNode = this.text(heading, color, {
+      marginBottom: this.collapsed.has(id) ? 0 : 1,
+      onMouseDown: () => {
+        if (this.collapsed.has(id)) this.collapsed.delete(id);
+        else this.collapsed.add(id);
+        this.renderContent();
+      },
+    });
+    box.add(labelNode);
     if (!this.collapsed.has(id)) body(box);
     this.scroll.add(box, index);
-    this.cards.set(id, { key, node: box });
+    this.cards.set(id, { key, node: box, heading: labelNode });
   }
   private code(content: string): CodeRenderable {
     const code = new CodeRenderable(this.renderer, {
@@ -545,10 +550,7 @@ export class App {
       drawUnstyledText: true,
     });
     const nameAt = (x: number, y: number) => {
-      const row = y - code.y;
-      const source = code.getLineSources(row, 1)[0] ?? row;
-      const line = content.split("\n")[source] ?? "";
-      const column = x - code.x + (code.lineInfo.lineStartCols[row] ?? 0);
+      const { line, column } = this.sourcePoint(code, content, x, y);
       return [...line.matchAll(/[\p{L}_][\p{L}\p{N}_]*/gu)].find(
         (match) =>
           column >= Bun.stringWidth(line.slice(0, match.index)) &&
@@ -570,10 +572,19 @@ export class App {
     };
     code.onMouseDown = (event) => {
       const name = nameAt(event.x, event.y);
-      if (name && (event.modifiers.ctrl || event.modifiers.alt || Reflect.get(event.modifiers, "meta")))
-        this.inspect(name);
+      if (name && (event.modifiers.ctrl || event.modifiers.alt)) this.inspect(name);
     };
     return code;
+  }
+  private sourcePoint(node: CodeRenderable | TextRenderable, content: string, x: number, y: number) {
+    const row = y - node.y;
+    const source = node.getLineSources(row, 1)[0] ?? row;
+    const info = node.lineInfo;
+    const first = row - (info.lineWraps[row] ?? 0);
+    return {
+      line: content.split("\n")[source] ?? "",
+      column: x - node.x + (info.lineStartCols[row] ?? 0) - (info.lineStartCols[first] ?? 0),
+    };
   }
   private markdown(content: string): MarkdownRenderable {
     return new MarkdownRenderable(this.renderer, {
@@ -682,7 +693,7 @@ export class App {
         items++;
         add(
           `stream-${id}`,
-          stream.text + stream.thinking + this.progress(id),
+          stream.text + stream.thinking,
           w.paused ? "◌  HELD RESPONSE" : `${this.progress(id)}  WORKING`,
           c.teal,
           (box) => {
@@ -784,7 +795,7 @@ export class App {
         if (!matches(JSON.stringify(act))) continue;
         add(
           act.id,
-          JSON.stringify(act) + (act.done ? "" : this.progress(act.id)),
+          JSON.stringify(act),
           `${act.done ? "✓" : this.progress(act.id)}  ${act.kind.toUpperCase()}  ·  ${short(act.id)}`,
           act.done ? c.accent : c.yellow,
           (box) => {
@@ -1025,15 +1036,19 @@ export class App {
       flexShrink: 0,
     });
     const target = (x: number, y: number) => {
-      const row = y - node.y;
-      const line = text.split("\n")[node.getLineSources(row, 1)[0] ?? row] ?? "";
-      const column = x - node.x + (node.lineInfo.lineStartCols[row] ?? 0);
+      const { line, column } = this.sourcePoint(node, text, x, y);
       const match = [...line.matchAll(/[a-z]+:\/\/[\w./-]+|path="([^"\n]+)"/g)].find(
         (match) =>
           column >= Bun.stringWidth(line.slice(0, match.index)) &&
           column < Bun.stringWidth(line.slice(0, match.index + match[0].length)),
       );
-      return match?.[1] ?? match?.[0];
+      if (match) return { reference: true, value: match[1] ?? match[0] };
+      const name = [...line.matchAll(/[\p{L}_][\p{L}\p{N}_]*/gu)].find(
+        (match) =>
+          column >= Bun.stringWidth(line.slice(0, match.index)) &&
+          column < Bun.stringWidth(line.slice(0, match.index + match[0].length)),
+      );
+      return name ? { reference: false, value: name[0] } : undefined;
     };
     node.onMouseMove = (event) => {
       clearTimeout(this.hoverTimer);
@@ -1042,7 +1057,8 @@ export class App {
       this.hover = undefined;
       if (value)
         this.hoverTimer = setTimeout(() => {
-          void this.referenceHover(value, event.x, event.y);
+          if (value.reference) void this.referenceHover(value.value, event.x, event.y);
+          else void this.showHover(value.value, event.x, event.y);
         }, 220);
     };
     node.onMouseOut = () => {
@@ -1052,7 +1068,8 @@ export class App {
     };
     node.onMouseDown = (event) => {
       const value = target(event.x, event.y);
-      if (value) void this.follow(value).catch(this.workspace.fail);
+      if (value?.reference) void this.follow(value.value).catch(this.workspace.fail);
+      else if (value && (event.modifiers.ctrl || event.modifiers.alt)) this.inspect(value.value);
     };
     return node;
   }
@@ -1351,7 +1368,7 @@ export class App {
   }
   private progress(id: string): string {
     const elapsed = Math.max(0, Math.floor((Date.now() - (this.workspace.started[id] ?? Date.now())) / 1000));
-    return `${["◐", "◓", "◑", "◒"][Math.floor(Date.now() / 250) % 4]} ${elapsed}s`;
+    return `${["◐", "◓", "◑", "◒"][Math.floor(Date.now() / 250) % 4]} ${elapsed}s since start`;
   }
   private resume = (): void => {
     const held = this.workspace.world.held;
@@ -1625,17 +1642,19 @@ export class App {
             act.kind === "prompt" ? act.words[1] : act.words[0] || this.workspace.program[act.id] || "",
           ).split("\n")[0] ?? "",
         run: async () => {
-          const filter = await this.workspace.life.take(
-            acts.slice(index + 1).map((later) => later.id),
-            false,
-          );
-          const next = await this.workspace.life.chain(
-            `${this.workspace.label} through ${short(act.id)}`,
-            this.workspace.selected,
-            filter,
-          );
-          await this.workspace.life.forget(filter.id);
-          await this.workspace.select(next);
+          const source = this.workspace.selected;
+          const omitted = acts.slice(index + 1).map((later) => JSON.stringify(later.id));
+          const filter = `take(${omitted.length ? `${omitted.join(", ")}, ` : ""}inside=False)`;
+          const word = `chain(${JSON.stringify(`${this.workspace.label} through ${short(act.id)}`)}, ${JSON.stringify(source)}, ${filter})`;
+          const rung = await this.workspace.life.rung(word, { on: source });
+          if (this.workspace.world.held.size) this.resume();
+          else if (this.workspace.paused)
+            this.workspace.notice = "Rewind is queued. Resume this chain to finish it.";
+          await this.workspace.life.result(rung);
+          await this.workspace.refresh();
+          const next = this.workspace.chains.find((chain) => chain.by === rung);
+          if (!next) throw new Error("The rewind word created no chain.");
+          await this.workspace.select(next.id);
           this.workspace.notice =
             "The new chain reads the selected transcript prefix. Its module and files keep current state.";
         },

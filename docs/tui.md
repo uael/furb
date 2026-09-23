@@ -144,8 +144,8 @@ Keep using the workspace while a model request is in flight.
 
 ## Rewind transcript
 
-Choose an act by lineage. The engine's filter selects what the new chain reads; its module and files keep
-their current state.
+Choose an act by lineage. An operator rung records the engine's filter, so the selected transcript comes
+back after a reopen. The module and files keep their current state.
 
 ![Rewind transcript](screenshots/24-rewind-transcript.png)
 

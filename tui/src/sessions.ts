@@ -26,7 +26,7 @@ export async function sessionChoices(
       const unfinished = world.held?.length ?? 0;
       return {
         label: metadata.sessionName ?? basename(file, ".jsonl"),
-        detail: `${unfinished ? `Paused · ${unfinished} unfinished acts · ` : ""}${info.mtime.toLocaleString()} · $${(metadata.cost ?? 0).toFixed(4)} · ${(info.size / 1024).toFixed(1)} KiB`,
+        detail: `${unfinished ? `Last saved: Paused · ${unfinished} unfinished acts · ` : ""}${info.mtime.toLocaleString()} · $${(metadata.cost ?? 0).toFixed(4)} · ${(info.size / 1024).toFixed(1)} KiB`,
         run: () => open(path),
       };
     }),

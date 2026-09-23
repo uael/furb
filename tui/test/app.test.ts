@@ -130,12 +130,15 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
   }
 }, 30000);
 
-test("rewind picks an act and filters the new chain's transcript without changing the source", async () => {
+test("rewind is a recorded rung and keeps the selected transcript after reopening", async () => {
   const workspace = await demoWorkspace(true);
   const screen = await createTestRenderer({ width: 140, height: 42 });
   const app = new App(screen.renderer, workspace, { quit() {} });
   const source = workspace.selected;
   const original = await workspace.life.rendered(source);
+  let rewound = "";
+  let transcript: string[] = [];
+  const record = workspace.world.records.path;
   try {
     app.rewind();
     await screen.flush();
@@ -153,8 +156,69 @@ test("rewind picks an act and filters the new chain's transcript without changin
     await selected;
     await workspace.refresh();
     expect(workspace.selected).not.toBe(source);
-    expect(await workspace.life.rendered(source)).toEqual(original);
+    const continued = await workspace.life.rendered(source);
+    expect(continued.join("\n")).toContain(original.join("\n"));
     expect(workspace.turns.length).toBeGreaterThan(0);
+    rewound = workspace.selected;
+    transcript = await workspace.life.rendered(rewound);
+    const maker = workspace.chains.find((chain) => chain.id === rewound)?.by;
+    expect(workspace.acts.find((act) => act.id === maker)?.kind).toBe("rung");
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await workspace.dispose();
+  }
+  const reopened = await openEngine({ record, demo: true });
+  try {
+    expect(await reopened.life.rendered(rewound)).toEqual(transcript);
+  } finally {
+    await reopened.world.dispose();
+  }
+}, 30000);
+
+test("a progress tick keeps an in-flight act's card and body in place", async () => {
+  const workspace = await demoWorkspace();
+  const screen = await createTestRenderer({ width: 120, height: 40 });
+  const app = new App(screen.renderer, workspace, { quit() {} });
+  try {
+    const id = await workspace.life.wait(60);
+    await workspace.refresh();
+    workspace.show("activity");
+    app.render();
+    await screen.flush();
+    const card = app.scroll.getChildren().find((node) => node.id === id);
+    if (!card) throw new Error("No card for the pending wait.");
+    const body = card.getChildren().at(-1);
+    await Bun.sleep(300);
+    app.render();
+    await screen.flush();
+    expect(app.scroll.getChildren().find((node) => node.id === id)).toBe(card);
+    expect(card.getChildren().at(-1)).toBe(body);
+    expect(screen.captureCharFrame()).toContain("since start");
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await workspace.dispose();
+  }
+}, 30000);
+
+test("a name inside a transcript tag opens the same live inspector as Python code", async () => {
+  const workspace = await demoWorkspace();
+  const screen = await createTestRenderer({ width: 120, height: 44, useMouse: true });
+  const app = new App(screen.renderer, workspace, { quit() {} });
+  try {
+    await workspace.life.result(await workspace.life.rung("answer = 17"));
+    await workspace.refresh();
+    workspace.show("transcript");
+    app.render();
+    await screen.flush();
+    const lines = screen.captureCharFrame().split("\n");
+    const row = lines.findIndex((line) => line.includes("answer = 17"));
+    expect(row).toBeGreaterThanOrEqual(0);
+    const column = lines[row]?.indexOf("answer") ?? -1;
+    await screen.mockMouse.click(column + 1, row, 0, { modifiers: { ctrl: true } });
+    await screen.waitForFrame((frame) => frame.includes("ANSWER · INT"), { maxPasses: 200 });
+    expect(screen.captureCharFrame()).toContain("17");
   } finally {
     app.dispose();
     screen.renderer.destroy();
