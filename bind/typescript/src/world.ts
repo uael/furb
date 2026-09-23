@@ -82,7 +82,7 @@ export interface WorldOptions {
   effort?: ModelThinkingLevel;
   models?: Models;
   roster?: string[];
-  /** Replace only the model request, for a deterministic test or another host. */
+  /** Replace only the model request, for a deterministic test or another host; the host still names the models. */
   answer?: (
     actor: string,
     chain: string,
@@ -207,6 +207,9 @@ export class World extends EventEmitter {
       });
       const model = this.model ? this.offers(this.model) : undefined;
       this.effort = model ? clampThinkingLevel(model, options.effort ?? "low") : (options.effort ?? "low");
+      // A World that offers no model puts every prompt to the operator, so nothing would ever reach `answer`.
+      if (options.answer && !this.roster.length)
+        throw new Error("An answer replaces the request of a model, and this World offers no model.");
       this.records = records = new RecordFile(
         options.record ? resolve(options.record) : undefined,
         options.readOnly,

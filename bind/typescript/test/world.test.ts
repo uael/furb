@@ -146,6 +146,8 @@ test("a World holds the models its host gives it: a saved roster gains what the 
     expect(third.actor).toBe("claude-cli:opus/low");
     expect(() => third.route("claude-cli:opus")).toThrow("No model claude-cli:opus");
     expect(() => new World({ cwd, roster: ["claude-cli:opus"] })).toThrow("No model claude-cli:opus");
+    // An answer replaces the request of a model, and a World with no model has none to replace.
+    expect(() => new World({ cwd, answer: async () => said("close(1)") })).toThrow("offers no model");
   } finally {
     await third.dispose();
     await rm(cwd, { recursive: true, force: true });

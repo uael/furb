@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Life, World } from "@furb/engine";
 import { until } from "../../bind/typescript/test/until.ts";
+import { defaultModel, hostModels } from "../src/models.ts";
 import { Snapshots } from "../src/snapshots.ts";
 
 test("idle snapshots add no facts or sandbox calls as the act table grows, and streamed output needs no peek", async () => {
@@ -61,7 +62,14 @@ test("idle snapshots add no facts or sandbox calls as the act table grows, and s
 
 test("fact-derived act state matches native outcomes, controls, and rung results while view queries follow actual changes", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-state-"));
-  const world = new World({ cwd, answer: async () => ["assistant", ['close("answered")'], null, null] });
+  // The scripted answer replaces the request of the model the World offers, so the prompt goes to a model.
+  const host = hostModels();
+  const world = new World({
+    cwd,
+    models: host.models,
+    model: defaultModel,
+    answer: async () => ["assistant", ['close("answered")'], null, null],
+  });
   try {
     const life = world.open();
     const snapshots = new Snapshots(life, world);
@@ -114,6 +122,7 @@ test("fact-derived act state matches native outcomes, controls, and rung results
     ).toBe(true);
   } finally {
     await world.dispose();
+    host.dispose();
     await rm(cwd, { recursive: true, force: true });
   }
 }, 30000);

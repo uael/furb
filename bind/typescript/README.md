@@ -70,7 +70,9 @@ const roster = claude.provider.getModels().map((model) => `${model.provider}:${m
 const world = new World({ models, roster });
 ```
 
-Pass `answer` to replace only model requests, or `operator` to supply operator answers. With no `operator`, questions stand in `world.prompts`; call `world.answer(id, text)`
+Pass `answer` to replace only model requests, or `operator` to supply operator answers. The host still names
+the models that `answer` stands in for, and a World given `answer` and no model is refused, since every prompt
+would go to the operator. With no `operator`, questions stand in `world.prompts`; call `world.answer(id, text)`
 to parse and validate an answer. `world` emits `change` and `facts`; `fault` reports a failure to deliver an
 outside result. `world.facts` holds the facts of the life but the answers to the queries that the host asks
 outside a rung, which no record keeps either, so a listener that asks the life hears no change of its own. A
