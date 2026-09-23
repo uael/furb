@@ -17,18 +17,19 @@ import sys
 import time
 import warnings
 from asyncio.subprocess import Process
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from itertools import pairwise
 from pathlib import Path
 
 import pytest
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models import Model
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from furb import engine
 from furb.engine import OPERATOR, TIMEOUT, Exit, Refused, Text
 from furb.kernel import Native
-from furb.provider.claude import FAMILY, Claude, canon, limits
+from furb.provider.claude import ACTOR, FAMILY, Claude, canon, limits
 from furb.world import CAP, SYSTEM, Command, Live, kept, truth, unwire, wire, worded
 from outside.doubles import broken, heads, life, mute, scripted, settle, speaking, watched
 
@@ -395,6 +396,33 @@ async def test_a_fault_that_stands_pauses_the_chain_so_no_rung_of_it_asks_again(
   assert [head for head in heads(root) if head.endswith(" paused")] == [f"#{root} paused"]
   assert len([head for head in heads(root) if " closed Refused(" in head and "answered nothing" in head]) == 2
   assert act not in engine.outcomes
+
+
+def faltering(words: Sequence[str | None]) -> FunctionModel:
+  """A model that answers each ask with the next word of a script, and answers nothing where the script holds None."""
+  said = list(words)
+
+  async def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    del messages, info
+    word = said.pop(0) if said else "close(None)"
+    if word is None:
+      raise RuntimeError("the model was not there")
+    return ModelResponse(parts=[TextPart(word)])
+
+  return FunctionModel(turn)
+
+
+async def test_the_world_counts_a_row_of_mute_asks_by_what_it_was_answered_and_never_by_a_text(yard: Path) -> None:
+  """A text that says an actor answered nothing is no nothing of that actor, and an answer between two nothings ends
+  the row, so neither nothing of these asks pauses the chain and the prompt gets its answer."""
+  (yard / "notes.txt").write_text(f"Last run: {ACTOR} answered nothing: Error: 529 overloaded\n", encoding="utf-8")
+  live = world(yard, faltering(["t = read('notes.txt')", None, "x = 1", None, "close(3)"]))
+  root = life(live)
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  assert [head for head in heads(root) if head.endswith(" paused")] == []
+  assert len([head for head in heads(root) if " closed Refused(" in head and "answered nothing" in head]) == 2
+  assert engine.outcomes.get(act) == 3
 
 
 def test_the_operator_answers_the_shapes_the_world_puts_to_it() -> None:

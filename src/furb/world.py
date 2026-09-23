@@ -50,7 +50,7 @@ CAP = 524288
 PIPE = 65536
 """PIPE is the bytes the World reads of a stream at a time, which is one Out word of the command."""
 MUTE = "{} answered nothing"
-"""MUTE is how the World says an actor gave no turn, which it reads back to tell a fault of the moment from one that stands."""
+"""MUTE is how the World says an actor gave no turn."""
 
 
 SYSTEM = minify(
@@ -211,6 +211,8 @@ class Live:
   `directory` is where the chains of the life start, `record` the file it keeps the record in and reads it back
   from, `actor` the actor a prompt goes to when it names none, and `roster` the actors it offers. `calls` holds
   every fact it answered or performed, in order, and `model` is the one model it asks, when it is given one.
+  `mute` holds, for each chain, the actor whose last ask on that chain answered nothing, so a second such ask in a
+  row pauses the chain, and an answer between the two ends the row.
   `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
   """
 
@@ -221,6 +223,7 @@ class Live:
   calls: list[tuple] = field(default_factory=list)
   model: Model[object] | None = None
   bought: dict[str, Model[object]] = field(default_factory=dict)
+  mute: dict[str, str] = field(default_factory=dict)
   reader: asyncio.StreamReader | None = None
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -380,32 +383,26 @@ class Live:
     if text := decoder.decode(b"", final=True):
       engine.send("out", about, text, stream, by=WORLD)
 
-  def twice(self, actor: str, turns: Sequence[tuple]) -> bool:
-    """Whether this actor was mute already at the turn this ask was handed, so the fault stands.
-
-    The World tells a fault of the moment from one that stands by its own last refusal: the turns of an ask end
-    with what the chain was told since the answer before it, so a refusal of the same actor there is the second
-    in a row, where one of an older turn was answered after.
-    """
-    return bool(turns) and MUTE.format(actor) in turns[-1][1]
-
   async def asked(self, rung: str, on: str, actor: str, turns: Sequence[tuple]) -> None:
     """One turn of a model for one ask, and the refusal for an ask the World cannot answer, with a pause when the
     fault of it stands.
 
     A fault of the moment is no pause: the rung is closed with the refusal, the prompt asks again, and the model
-    reads what was dropped. A second nothing of the same actor answers the same way twice, so the chain goes quiet
-    until the operator wakes it, and the operator is told here why it went quiet.
+    reads what was dropped. A second nothing of the same actor in a row on the chain is a fault that stands, so the
+    chain goes quiet until the operator wakes it, and the operator is told here why it went quiet. The World counts
+    the row by what it was answered, and never by a text a chain was told.
     """
     try:
       turn = await self.answer(actor, on, turns)
     except Exception as no:
       why = Refused(f"{MUTE.format(actor)}: {type(no).__name__}: {no}")
-      if self.twice(actor, turns):
+      if self.mute.get(on) == actor:
         sys.stderr.write(f"{on} is paused: {why}\n")
         engine.pause(on)
+      self.mute[on] = actor
       engine.close(why, rung)
       return
+    self.mute.pop(on, None)
     engine.send("answer", rung, turn, by=WORLD)
 
   async def show(self, about: str, shape: str, message: str) -> None:
