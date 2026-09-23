@@ -573,7 +573,7 @@ async def test_a_prompt_to_a_model_tells_nothing_where_it_is_made() -> None:
   assert [paragraphs([a[5][-1]])[-2:] for a in said(log, "ask")] == [
     [mine, f"#{one} advance on {first}"],
     [theirs, f"#{two} advance on {second}"],
-    [f"#{one} closed", f"#{three} advance on {first}"],
+    [f"#{three} advance on {first}"],
   ]
   users = [turn for turn in engine.turns(on=root) if turn[0] == "user"]
   assert [[x for x in paragraphs([turn]) if x in (mine, theirs)] for turn in users] == [[mine], [theirs], [], []]
@@ -586,16 +586,11 @@ async def test_a_prompt_to_the_operator_tells_its_message_and_its_binding_where_
   act = engine.prompt(int, "how many?\nsay one", to=OPERATOR, on=root)
   await settle()
   start = log.index(("start", act, act))
-  assert log[start + 1] == (
-    "tell",
-    act,
-    act,
-    [f"#{act} to operator: how many?\n# say one", f"{act}: Act[int] = Act({act!r})"],
-  )
+  assert log[start + 1] == ("tell", act, act, [f"#{act} how many?\n# say one", f"{act}: Act[int] = Act({act!r})"])
   assert [a for a in said(log, "tell") if a[1] == act] == [log[start + 1]] and said(log, "ask") == []
   engine.close(21, act)
   await settle()
   assert paragraphs(engine.turns(on=root))[2:] == [
-    f"#{act} to operator: how many?\n# say one\n{act}: Act[int] = Act({act!r})",
+    f"#{act} how many?\n# say one\n{act}: Act[int] = Act({act!r})",
     f"#{act} closed 21",
   ]

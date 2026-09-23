@@ -19,13 +19,14 @@ def test_span_lo_hi_is_the_show_of_the_lines_lo_through_hi() -> None:
 
 
 async def test_a_span_that_holds_no_line_shows_none_which_hidden_is() -> None:
-  """A span that holds no line shows none, which HIDDEN is, and what a hidden show shows stands in no turns at all, neither its open nor its close."""
+  """A span that holds no line shows none, which HIDDEN is, so what a hidden show shows stands in no turns: an act that takes one tells its header and its binding alone, and a query that takes one tells nothing."""
   assert span(0, 0)(LINES) == HIDDEN(LINES) == []
-  sand = Sand(stands=STANDS)
+  sand = Sand(files={"/w/n.txt": "one\n"}, stands=STANDS)
   log, root = life(sand)
   act = engine.bash("quiet", show=HIDDEN, on=root)
   assert (await act).code == 0
+  assert await engine.rung("read('n.txt', HIDDEN)", on=root) is None
   await settle()
   assert said(log, "bash")[0][1] == act and said(log, "exited") == [("exited", act, WORLD, 0)]
-  assert [a for a in said(log, "tell") if a[1] == act] == []
-  assert heads(engine.turns(on=root)) == ["#chain1 root", f"#chain1 stands {STANDS!r}"]
+  assert [a[3] for a in said(log, "tell") if a[1] == act] == [[f"#{act}", f"{act}: Act[Exit] = Act({act!r})"]]
+  assert [one for one in heads(engine.turns(on=root)) if one.startswith(("#bash", "#read"))] == [f"#{act}"]

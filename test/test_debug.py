@@ -37,7 +37,7 @@ async def test_a_debugged_header_tells_one_interpolation_of_a_debug() -> None:
   _, root = life(sand)
   step = engine.rung("k = 5\ndebug(t'{k} {k * 2}')", on=root)
   await step
-  assert paragraphs(engine.turns(on=root))[-2] == f"#{step} debugged k = 5\n#{step} debugged k * 2 = 10"
+  assert paragraphs(engine.turns(on=root))[-1] == f"#{step} debugged k = 5\n#{step} debugged k * 2 = 10"
 
 
 async def test_a_raised_header_and_a_debugged_header_stand_at_the_place_in_the_run_where_they_happened() -> None:
@@ -75,7 +75,7 @@ async def test_debug_is_given_a_python_template_string() -> None:
   _, root = life(sand)
   step = engine.rung("who = 'me'\ndebug(t'hello {who!r} now {1 + 1}')", on=root)
   await step
-  assert paragraphs(engine.turns(on=root))[-2] == f"#{step} debugged who = 'me'\n#{step} debugged 1 + 1 = 2"
+  assert paragraphs(engine.turns(on=root))[-1] == f"#{step} debugged who = 'me'\n#{step} debugged 1 + 1 = 2"
 
 
 async def test_debug_tells_each_interpolation_of_the_template_with_its_expression_and_its_value() -> None:
@@ -84,7 +84,7 @@ async def test_debug_tells_each_interpolation_of_the_template_with_its_expressio
   _, root = life(sand)
   step = engine.rung("a, b, c = 1, 2, 3\ndebug(t'{a}{b}{c}')", on=root)
   await step
-  assert paragraphs(engine.turns(on=root))[-2] == (
+  assert paragraphs(engine.turns(on=root))[-1] == (
     f"#{step} debugged a = 1\n#{step} debugged b = 2\n#{step} debugged c = 3"
   )
 
@@ -100,9 +100,7 @@ async def test_debug_tells_nothing_but_the_interpolations() -> None:
   assert paragraphs(engine.turns(on=root))[2:] == [
     f"#{one}\nn = 1\ndebug(t'before {{n}} after')",
     f"#{one} debugged n = 1",
-    f"#{one} closed",
     f"#{two}\ndebug(t'nothing at all')",
-    f"#{two} closed",
   ]
 
 
@@ -131,7 +129,6 @@ async def test_it_is_no_act_and_it_enters_no_record() -> None:
     f"#{root} stands {STANDS!r}",
     f"#{act}",
     f"#{act} debugged n = 1",
-    f"#{act} closed",
   ]
 
 
@@ -165,8 +162,7 @@ async def test_a_tell_is_on_the_scope_of_the_act_it_is_of_so_debug_takes_no_chai
   assert [one for one in said(log, "tell") if one[1] == step] == [
     ("tell", step, step, [f"#{step}", "debug(t'{1}')"]),
     ("tell", step, step, [f"#{step} debugged 1 = 1"]),
-    ("tell", step, step, [f"#{step} closed"]),
   ]
   assert engine.scope(step) == two
-  assert paragraphs(engine.turns(on=two))[-2] == f"#{step} debugged 1 = 1"
+  assert paragraphs(engine.turns(on=two))[-1] == f"#{step} debugged 1 = 1"
   assert heads(engine.turns(on=root)) == [f"#{root} root", f"#{root} stands {STANDS!r}"]

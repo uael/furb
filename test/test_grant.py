@@ -163,11 +163,9 @@ async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one
   assert heads(engine.turns(on=root)) == [f"#{root} root", f"#{root} stands {STANDS!r}"]
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
-  assert isinstance(engine.outcomes[ghost], Refused)
-  step = said(log, "rung")[0][1]
+  assert isinstance(engine.outcomes[ghost], Refused) and said(log, "ask") == []
   assert paragraphs(engine.turns(on=root))[2:] == [
     f"#{ghost} hi\n{ghost}: Act[int] = Act({ghost!r})",
-    f"#{step} advance on {ghost}",
     f"#{ghost} closed Refused('ghost no actor')",
   ]
 

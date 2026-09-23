@@ -519,7 +519,7 @@ async def test_an_act_of_the_operator_is_said_again_through_its_verb() -> None:
   assert (await one).code == 0
   engine.chain("two", source=root, filter=take(root))
   await settle()
-  assert [head for head in heads(engine.turns(on=root)) if head.startswith(f"#{one}")] == []
+  assert [head for head in heads(engine.turns(on=root)) if head.startswith(f"#{one}")] == [f"#{one}"]
   later = Sand(stands=STANDS)
   again, over = await relived(later, list(sand.record))
   assert said(again, "bash") == said(log, "bash") and said(again, "chain") == said(log, "chain")

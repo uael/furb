@@ -230,7 +230,7 @@ async def test_a_new_prompt_reads_the_whole_transcript_of_the_chain_the_cancelle
   assert heads(said(log, "ask")[0][5]) == [
     f"#{root} root",
     f"#{root} stands {STANDS!r}",
-    f"#{first} to operator: one",
+    f"#{first} one",
     f"#{first} cancelled",
     f"#{second} two",
     f"#{step} advance on {second}",

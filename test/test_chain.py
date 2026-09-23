@@ -203,11 +203,11 @@ async def test_a_chain_that_the_word_of_a_rung_opens_is_a_scope_of_its_own() -> 
 async def test_the_engine_refuses_a_prompt_to_an_actor_outside_the_roster() -> None:
   """The engine refuses a prompt to an actor outside the roster."""
   sand = sown()
-  _, root = life(sand)
+  log, root = life(sand)
   one = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
   got = engine.peek(one)
-  assert isinstance(got, Refused) and str(got) == "ghost no actor"
+  assert isinstance(got, Refused) and str(got) == "ghost no actor" and said(log, "ask") == []
 
 
 async def test_the_chain_holds_the_control_it_says_itself() -> None:
@@ -302,8 +302,7 @@ async def test_the_turns_of_a_chain_tell_the_standing_and_the_acts_of_the_operat
     opened(root, "root"),
     stood(root),
     f"#{step}\nk = 1",
-    f"#{step} closed",
-    f"#{one} to operator: how many?\n{binding(one, 'int')}",
+    f"#{one} how many?\n{binding(one, 'int')}",
   ]
 
 
@@ -792,7 +791,7 @@ async def test_a_filter_that_skips_a_rung_its_caller_wrote_keeps_it_out_of_the_t
   twin = engine.chain("twin", source=root, filter=take(laid, inside=False))
   await settle()
   assert engine.modules[twin]["k"] == 1
-  assert paragraphs(engine.turns(on=root)) == [opened(root, "root"), stood(root), f"#{laid}\nk = 1", f"#{laid} closed"]
+  assert paragraphs(engine.turns(on=root)) == [opened(root, "root"), stood(root), f"#{laid}\nk = 1"]
   assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), stood(root), opened(twin, f"twin from {root}")]
 
 
@@ -819,10 +818,7 @@ async def test_a_chain_with_a_source_reads_nothing_that_its_origin_did_after_tha
   await settle()
   assert engine.turns(on=twin) == told == [("user", "\n\n".join(paragraphs(told)), None, None)]
   assert paragraphs(told) == [opened(root, "root"), stood(root), opened(twin, f"twin from {root}")]
-  assert "after" not in engine.modules[twin] and paragraphs(engine.turns(on=root))[-2:] == [
-    f"#{after}\nafter = 1",
-    f"#{after} closed",
-  ]
+  assert "after" not in engine.modules[twin] and paragraphs(engine.turns(on=root))[-1:] == [f"#{after}\nafter = 1"]
 
 
 async def test_what_a_rung_of_a_chain_with_a_source_binds_lands_on_that_chain() -> None:
@@ -875,7 +871,6 @@ async def test_it_holds_the_transcript_of_its_origin_first_and_tells_its_own_ope
     opened(root, "root"),
     stood(root),
     f"#{step}\nk = 1",
-    f"#{step} closed",
     opened(twin, f"twin from {root}"),
   ]
 
@@ -911,7 +906,7 @@ async def test_it_holds_no_done_of_a_query_it_does_not_hold() -> None:
 
 
 async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin() -> None:
-  """What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, and the open of the origin, which tells the standing."""
+  """What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, each holds of that transcript, which cuts its turns where an ask of the origin stood, and the open of the origin, which tells the standing."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]
@@ -920,11 +915,15 @@ async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin(
   command, one = said(log, "bash")[0], said(log, "prompt")[0][1]
   twin = engine.chain("twin", source=root, filter=take(command[1]))
   await settle()
-  held = engine.ask("transcript", twin, twin)[1]
-  assert isinstance(held, list)
+  held, theirs = engine.ask("transcript", twin, twin)[1], engine.ask("transcript", root, root)[1]
+  assert isinstance(held, list) and isinstance(theirs, list)
   assert command in held and [a[1] for a in held if a[0] == "prompt"] == [one]
   assert made(held) == [one, command[2], command[1]]
   assert notes(held, root) == [[f"#{root} root", binding(root)], [stood(root)]]
+  assert [a for a in held if a[0] == "holds"] == [a for a in theirs if a[0] == "holds"] != []
+  got = engine.turns(on=twin)
+  assert [role for role, *_ in got] == ["user", "assistant", "user"]
+  assert got[0][1].endswith(f"#{command[2]} advance on {one}")
 
 
 async def test_the_filter_is_given_every_act_the_queries_of_the_operator_among_them() -> None:

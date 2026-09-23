@@ -133,7 +133,7 @@ async def test_the_close_of_the_operator_stands_in_the_transcript_with_the_name_
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
   assert [one[2] for one in held if one[0] == "close"] == [OPERATOR]
-  assert heads(engine.turns(on=root))[2:] == [f"#{act} to operator: how many?", f"#{act} closed 21"]
+  assert heads(engine.turns(on=root))[2:] == [f"#{act} how many?", f"#{act} closed 21"]
 
 
 async def test_a_prompt_completes_with_the_exception_that_the_word_of_the_prompt_gave_to_close() -> None:
@@ -210,22 +210,27 @@ async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_tha
   mine = engine.rung("close(9)", on=root)
   assert await mine == 9
   assert [one[1] for one in said(log, "close")] == [act, mine]
+  sand.script[root] = ["close(5, 'rung4')", "close(6)"]
+  named = engine.prompt(int, "count", on=root)
+  assert await named == 6
+  assert [one[1] for one in said(log, "close")][2:] == ["rung4", named] and engine.outcomes["rung4"] == 5
 
 
 async def test_a_close_said_from_a_word_that_retells_reaches_nothing_and_says_nothing() -> None:
   """A close said from a word that retells reaches nothing and says nothing: it stops the word where it stands, so the rung is done with nothing and answers no prompt."""
-  sand = Sand(stands=STANDS)
+  sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
-  sand.script[root] = ["k = 1\nclose(21)\nj = 2"]
+  sand.script[root] = ["x = bash('slow')\nk = 1\nclose(7, x)\nclose(21)\nj = 2"]
   act = engine.prompt(int, "count", on=root)
   assert await act == 21
   await settle()
+  command = said(log, "bash")[0][1]
   twin = engine.chain("twin", source=root)
   await settle(300)
   copy = next(a[1] for a in said(log, "rung") if a[3] == twin)
   assert engine.modules[twin]["k"] == 1 and "j" not in engine.modules[twin]
   assert engine.outcomes[copy] is None
-  assert [(one[1], one[3]) for one in said(log, "close")] == [(act, 21)]
+  assert [(one[1], one[3]) for one in said(log, "close")] == [(command, 7), (act, 21)]
 
 
 async def test_a_close_of_the_prompt_of_the_running_word_stops_that_word_where_it_stands() -> None:

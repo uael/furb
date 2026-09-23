@@ -111,7 +111,7 @@ async def test_a_write_takes_no_show() -> None:
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   assert await engine.rung("write(Text('b.txt', 'one\\ntwo\\n'))", on=root) is None
-  assert of(engine.turns(on=root), "write") == ["#write b.txt\n# /w/b.txt, 0 known"]
+  assert of(engine.turns(on=root), "write") == []
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
   assert said(held, "write")[0][4:] == (Text("b.txt", "one\ntwo\n"),)
