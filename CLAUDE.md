@@ -49,6 +49,10 @@ control flow in it changes the odds of a good or a bad response, so a flaw in it
 two shapes both pass every gate, the one that serves the meaning of every word is the one, and a shape that is
 green and incoherent is not done.
 
+Read the whole file and list each incoherence: a truth with two homes, a word with two meanings, a part held by the
+wrong owner. Probe each, build its reshape, and measure its size and the suite. Keep what adds coherence, then read
+the whole file again.
+
 ## The suite
 
 The suite drives the engine through its public API alone, end to end, from the module the operator gives.

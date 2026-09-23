@@ -15,7 +15,7 @@ from furb.engine import OPERATOR, WINDOW, Refused
 from furb.kernel import ENGINE, checked, gate
 from outside.doubles import heads, settle, stood, worlds
 
-STANDS = (((OPERATOR, (), WINDOW), ("opus", ("low",), 1000)), "/w", "opus/low")
+STANDS = [[[OPERATOR, [], WINDOW], ["opus", ["low"], 1000]], "/w", "opus/low"]
 
 
 def said(word: str, program: tuple[str, ...] = ()) -> list[str]:

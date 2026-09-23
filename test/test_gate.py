@@ -96,7 +96,7 @@ async def test_the_word_of_a_rung_is_gated_again_in_every_life_that_runs_it() ->
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   assert gated(log) == ["close(1)"] and findings(log) == [[]]
-  assert [fact for _, fact, *_ in sand.record if fact[0] == "gate"] == []
+  assert [fact for fact, *_ in sand.record if fact[0] == "gate"] == []
   again, over = await relived(Sand(stands=STANDS), list(sand.record))
   assert over == root and gated(again) == ["close(1)"] and findings(again) == [[]]
 

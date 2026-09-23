@@ -33,6 +33,8 @@ struct Yard {
   read: Rc<RefCell<Vec<String>>>,
   /// The entries it kept, shared with the test, which is the record of the life.
   kept: Rc<RefCell<Vec<Object>>>,
+  /// Every command it was told to end before its time, shared with the test.
+  slain: Rc<RefCell<Vec<String>>>,
   voice: Option<Voice>,
 }
 
@@ -43,17 +45,23 @@ impl Yard {
       words: Rc::new(RefCell::new(words.iter().map(|one| (*one).to_owned()).collect())),
       read: Rc::default(),
       kept: Rc::default(),
+      slain: Rc::default(),
       voice: None,
     }
   }
 }
 
-/// A command of the yard, which cannot be fed and ends on its own.
-struct Ran;
+/// A command of the yard, which cannot be fed and ends on its own, and which notes that it was told to end.
+struct Ran {
+  about: String,
+  slain: Rc<RefCell<Vec<String>>>,
+}
 
 impl Running for Ran {
   fn feed(&mut self, _text: Option<String>) {}
-  fn slay(&mut self) {}
+  fn slay(&mut self) {
+    self.slain.borrow_mut().push(self.about.clone());
+  }
 }
 
 impl World for Yard {
@@ -115,6 +123,7 @@ impl World for Yard {
 
   fn run(&mut self, command: Command) -> Box<dyn Running> {
     let voice = self.voice.clone().expect("a yard is opened before a command runs");
+    let ran = Ran { about: command.about.clone(), slain: Rc::clone(&self.slain) };
     thread::spawn(move || {
       let got = std::process::Command::new("sh")
         .arg("-c")
@@ -132,7 +141,7 @@ impl World for Yard {
         Err(_) => voice.exited(&command.about, None),
       }
     });
-    Box::new(Ran)
+    Box::new(ran)
   }
 
   fn wait(&mut self, _seconds: f64) -> Later<()> {
@@ -177,6 +186,7 @@ struct Lived {
   at: PathBuf,
   read: Rc<RefCell<Vec<String>>>,
   kept: Rc<RefCell<Vec<Object>>>,
+  slain: Rc<RefCell<Vec<String>>>,
 }
 
 impl Lived {
@@ -187,13 +197,40 @@ impl Lived {
     }
     fs::create_dir_all(&at).expect("a yard of the test");
     let world = Yard::new(at.clone(), words);
-    let (read, kept) = (Rc::clone(&world.read), Rc::clone(&world.kept));
+    let (read, kept, slain) =
+      (Rc::clone(&world.read), Rc::clone(&world.kept), Rc::clone(&world.slain));
     let life = Life::boot(world, record)?;
-    Ok(Lived { life, at, read, kept })
+    Ok(Lived { life, at, read, kept, slain })
   }
 
   fn root(&self) -> String {
     self.life.root().to_owned()
+  }
+
+  /// The life driven until it holds an act of this name.
+  fn made(&mut self, id: &str) {
+    while !self
+      .life
+      .held("acts", vec![Object::string(id)], "in")
+      .unwrap()
+      .as_ref()
+      .as_bool()
+      .unwrap()
+    {
+      block_on(self.life.drive()).unwrap();
+      thread::sleep(Duration::from_millis(5));
+    }
+  }
+
+  /// What an act came to, once the World has said it.
+  fn settled(&mut self, id: &str) -> Object {
+    loop {
+      if let Some(got) = self.life.outcome(id).unwrap() {
+        return got;
+      }
+      block_on(self.life.drive()).unwrap();
+      thread::sleep(Duration::from_millis(5));
+    }
   }
 }
 
@@ -259,6 +296,22 @@ fn a_command_runs_on_this_machine_and_speaks_its_exit_from_its_own_thread() {
   assert_eq!(exit.code, Some(0));
   assert_eq!(exit.stdout.content, "hi\n");
   assert_eq!(exit.stderr.content, "");
+}
+
+#[test]
+fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it() {
+  let words = ["await bash('sleep 0.5')", "c = bash('sleep 0.2; echo late')\nclose(1)"];
+  let mut lived = Lived::new("controls", &words, vec![]).unwrap();
+  let root = lived.root();
+  let cancelled = lived.life.prompt("int", "go", "", &root).unwrap().id().to_owned();
+  lived.made("bash1");
+  lived.life.cancel(&cancelled).unwrap();
+  assert_eq!(*lived.slain.borrow(), ["bash1"]);
+  let got = block_on(lived.life.prompt("int", "go", "", &root).unwrap()).unwrap();
+  assert_eq!(got.as_ref().as_int(), Some(1));
+  let exit = Exit::of(lived.settled("bash2").as_ref()).expect("the command came to its exit");
+  assert_eq!((exit.code, exit.stdout.content.as_str()), (Some(0), "late\n"));
+  assert_eq!(*lived.slain.borrow(), ["bash1"]);
 }
 
 #[test]

@@ -17,18 +17,19 @@ import sys
 import time
 import warnings
 from asyncio.subprocess import Process
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from itertools import pairwise
 from pathlib import Path
 
 import pytest
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models import Model
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from furb import engine
 from furb.engine import OPERATOR, TIMEOUT, Exit, Refused, Text
 from furb.kernel import Native
-from furb.provider.claude import FAMILY, Claude, canon, limits
+from furb.provider.claude import ACTOR, FAMILY, Claude, canon, limits
 from furb.world import CAP, SYSTEM, Command, Live, kept, truth, unwire, wire, worded
 from outside.doubles import broken, heads, life, mute, scripted, settle, speaking, watched
 
@@ -40,7 +41,18 @@ def world(yard: Path, model: Model[object] | None = None, record: Path | None = 
 
 def commanded(proc: Process | None = None) -> Command:
   """One command of the World, merged and unfed, with the process it is given or with none at all."""
-  return Command("bash1", "chain1", "x", False, TIMEOUT, True, proc)
+  return Command("bash1", "x", False, TIMEOUT, True, proc)
+
+
+def runs() -> list[asyncio.Task]:
+  """The run of every command the World holds up, which the loop of a life cancels when it ends."""
+  return [
+    one
+    for one in asyncio.all_tasks()
+    if one is not asyncio.current_task()
+    and inspect.iscoroutine(held := one.get_coro())
+    and held.__qualname__ == "Live.ran"
+  ]
 
 
 async def drained() -> None:
@@ -57,12 +69,12 @@ async def test_the_world_answers_what_a_chain_stands_on(yard: Path) -> None:
   root = life(live)
   await settle()
   standing = engine.ask("stand", root)[1]
-  assert isinstance(standing, tuple)
+  assert isinstance(standing, list)
   assert f"#{root} stands {standing!r}" in heads(root)
   roster, directory, actor = standing
   assert directory == str(yard)
   assert actor == "opus/low"
-  assert isinstance(roster, tuple)
+  assert isinstance(roster, list)
   assert [name for name, _, _ in roster] == [OPERATOR, "fable", "opus", "sonnet", "haiku"]
   assert live.roster == roster
   assert [one[0] for one in live.calls] == ["stand"]
@@ -179,6 +191,25 @@ async def test_a_cancelled_command_dies_instead_of_running_on(yard: Path) -> Non
   assert asyncio.all_tasks() == {asyncio.current_task()}
 
 
+async def test_a_command_ends_at_a_cancel_of_its_prompt_and_runs_on_after_a_close_of_it(yard: Path) -> None:
+  """The World ends a command only at a control that covers puts over it: a cancel is over everything under the
+  prompt it names, so it ends the command that a rung of the prompt made, and a close is over the act it names and
+  the words running under it, so the command runs to its end."""
+  live = world(yard, scripted(["c = bash('sleep 30')\nawait wait(60)", "c = bash('sleep 0.3; echo late')\nclose(1)"]))
+  root = life(live)
+  cancelled = engine.prompt(int, "go", on=root)
+  for _ in range(2000):
+    await asyncio.sleep(0.001)
+    if "bash1" in engine.acts:
+      break
+  engine.cancel(cancelled)
+  with pytest.raises(asyncio.CancelledError):
+    await engine.Act("bash1")
+  assert await engine.prompt(int, "go", on=root) == 1
+  got = await engine.Act[Exit]("bash2")
+  assert (got.code, got.stdout.content) == (0, "late\n")
+
+
 async def test_a_command_still_up_when_its_run_is_cancelled_is_reaped(yard: Path) -> None:
   """The loop of a life that ends cancels the run of a command still up: the World kills the command and reads its
   streams to their end, so no pipe of it outlives the loop and nothing of it warns of itself at the next garbage
@@ -190,16 +221,10 @@ async def test_a_command_still_up_when_its_run_is_cancelled_is_reaped(yard: Path
     await asyncio.sleep(0.001)
     if engine.read(f"{waits}/stdout", on=root).content:
       break
-  runs = [
-    one
-    for one in asyncio.all_tasks()
-    if one is not asyncio.current_task()
-    and inspect.iscoroutine(held := one.get_coro())
-    and held.__qualname__ == "Live.ran"
-  ]
-  assert len(runs) == 1
-  runs[0].cancel()
-  await asyncio.gather(*runs, return_exceptions=True)
+  up = runs()
+  assert len(up) == 1
+  up[0].cancel()
+  await asyncio.gather(*up, return_exceptions=True)
   with warnings.catch_warnings(record=True) as caught:
     warnings.simplefilter("always")
     gc.collect()
@@ -209,6 +234,46 @@ async def test_a_command_still_up_when_its_run_is_cancelled_is_reaped(yard: Path
     await waits
   await drained()
   assert asyncio.all_tasks() == {asyncio.current_task()}
+
+
+async def test_a_later_life_runs_a_command_an_earlier_world_left_not_ended_only_at_a_wake(yard: Path) -> None:
+  """A command that an earlier World started and that never ended, whether it told anything or not, runs in no later
+  life until a wake that life says, and then once; what the command told stands in the door of its command."""
+  record = yard / "record.jsonl"
+  live = world(yard, scripted([]), record)
+  root = life(live)
+  # Each command grows its child before it says its word, so the end of the World kills the whole group of it.
+  await engine.rung("a = bash('sleep 30 & printf once >> count; wait')\nb = bash('sleep 30 & echo up; wait')", on=root)
+  for _ in range(2000):
+    await asyncio.sleep(0.001)
+    if (yard / "count").is_file() and engine.read("bash2/stdout", on=root).content:
+      break
+  up = runs()
+  for one in up:
+    one.cancel()
+  await asyncio.gather(*up, return_exceptions=True)
+  for _ in ("the life after the World ended", "the life after that one"):
+    live = world(yard, scripted([]), record)
+    root = life(live, kept(record))
+    await settle()
+    assert [one for one in live.calls if one[0] == "start"] == []
+    assert "bash1" not in engine.outcomes and "bash2" not in engine.outcomes
+    assert engine.read("bash2/stdout", on=root).content == "up\n"
+    assert (yard / "count").read_text(encoding="utf-8") == "once"
+  engine.wake(root)
+  for _ in range(2000):
+    await asyncio.sleep(0.001)
+    if (yard / "count").read_text(encoding="utf-8") == "onceonce":
+      break
+  assert [one[1] for one in live.calls if one[0] == "start"] == ["bash1", "bash2"]
+  engine.wake(root)
+  await settle()
+  assert [one[1] for one in live.calls if one[0] == "start"] == ["bash1", "bash2"]
+  assert (yard / "count").read_text(encoding="utf-8") == "onceonce"
+  up = runs()
+  for one in up:
+    one.cancel()
+  await asyncio.gather(*up, return_exceptions=True)
 
 
 async def test_a_command_cancelled_before_its_process_stood_dies_as_soon_as_it_stands(yard: Path) -> None:
@@ -378,6 +443,33 @@ async def test_a_fault_that_stands_pauses_the_chain_so_no_rung_of_it_asks_again(
   assert act not in engine.outcomes
 
 
+def faltering(words: Sequence[str | None]) -> FunctionModel:
+  """A model that answers each ask with the next word of a script, and answers nothing where the script holds None."""
+  said = list(words)
+
+  async def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    del messages, info
+    word = said.pop(0) if said else "close(None)"
+    if word is None:
+      raise RuntimeError("the model was not there")
+    return ModelResponse(parts=[TextPart(word)])
+
+  return FunctionModel(turn)
+
+
+async def test_the_world_counts_a_row_of_mute_asks_by_what_it_was_answered_and_never_by_a_text(yard: Path) -> None:
+  """A text that says an actor answered nothing is no nothing of that actor, and an answer between two nothings ends
+  the row, so neither nothing of these asks pauses the chain and the prompt gets its answer."""
+  (yard / "notes.txt").write_text(f"Last run: {ACTOR} answered nothing: Error: 529 overloaded\n", encoding="utf-8")
+  live = world(yard, faltering(["t = read('notes.txt')", None, "x = 1", None, "close(3)"]))
+  root = life(live)
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  assert [head for head in heads(root) if head.endswith(" paused")] == []
+  assert len([head for head in heads(root) if " closed Refused(" in head and "answered nothing" in head]) == 2
+  assert engine.outcomes.get(act) == 3
+
+
 def test_the_operator_answers_the_shapes_the_world_puts_to_it() -> None:
   """A line of the operator becomes a value of the shape the prompt wants, and a line that is neither yes nor no is none."""
   assert truth("YES") is True
@@ -448,14 +540,15 @@ async def test_the_record_is_kept_as_json_and_read_back_as_the_entries_it_holds(
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   said = kept(record)
-  assert [fact[0] for _, fact, *_ in said] == ["chain", "prompt", "rung", "answer"]
-  match said[3]:
-    case (_, ("answer", _, _, (_, py, _, _))):
+  assert [fact[0] for fact, *_ in said] == ["chain", "stand", "prompt", "rung", "answer"]
+  match said[4]:
+    case (("answer", _, _, (_, py, _, _)),):
       assert py == "close(1)"
     case _:
-      pytest.fail(str(said[3]))
-  assert [json.loads(line)[1][0] for line in record.read_text(encoding="utf-8").splitlines()] == [
+      pytest.fail(str(said[4]))
+  assert [json.loads(line)[0][0] for line in record.read_text(encoding="utf-8").splitlines()] == [
     "chain",
+    "stand",
     "prompt",
     "rung",
     "answer",
@@ -465,9 +558,9 @@ async def test_the_record_is_kept_as_json_and_read_back_as_the_entries_it_holds(
 def test_a_torn_last_line_is_cut_away_and_a_blank_line_stands_for_no_entry(yard: Path) -> None:
   """A crash tears the last line alone, which is cut away; a line anywhere else that is no entry is a drift."""
   record = yard / "record.jsonl"
-  one = json.dumps(["", ["chain", "chain1", OPERATOR, "", "root", ""]])
+  one = json.dumps([["chain", "chain1", OPERATOR, "", "root", ""]])
   record.write_text(f"{one}\n\n{one[:20]}", encoding="utf-8")
-  assert [fact[0] for _, fact, *_ in kept(record)] == ["chain"]
+  assert [fact[0] for fact, *_ in kept(record)] == ["chain"]
   record.write_text(f"{one[:20]}\n{one}\n", encoding="utf-8")
   with pytest.raises(ValueError, match="line 1 column"):
     kept(record)
@@ -574,6 +667,16 @@ def test_the_plain_form_of_a_value_leaves_as_json_and_comes_back_whole() -> None
   assert wire(Text("a", "b", Text("a", "c"))) == {"is": "Text", "path": "a", "content": "b"}
 
 
+def test_a_map_that_holds_the_key_is_leaves_as_its_pairs_and_comes_back_as_the_map_it_is() -> None:
+  """A map that holds the key is leaves a life as its pairs, so unwire makes the map again and never makes a value of
+  the name the map holds."""
+  held = {"is": "Refused", "args": ["x"], "text": Text("a", "b")}
+  plain = json.loads(json.dumps(wire(held)))
+  text = {"is": "Text", "path": "a", "content": "b"}
+  assert plain == {"is": "dict", "args": [[["is", "Refused"], ["args", ["x"]], ["text", text]]]}
+  assert unwire(plain) == held
+
+
 async def test_the_plain_form_of_a_whole_record_is_a_fixed_point_of_json(yard: Path) -> None:
   """Every entry a life kept leaves as json through wire and comes back equal, so a record holds nothing that json
   changes: no key that is no string, and no value that is not plain."""
@@ -583,7 +686,7 @@ async def test_the_plain_form_of_a_whole_record_is_a_fixed_point_of_json(yard: P
   assert await engine.prompt(int, "run", on=root) == 0
   await settle()
   plain = wire(kept(record))
-  assert {"chain", "prompt", "rung", "bash", "answer", "out", "exited"} <= {fact[0] for _, fact, *_ in kept(record)}
+  assert {"chain", "prompt", "rung", "bash", "answer", "out", "exited"} <= {fact[0] for fact, *_ in kept(record)}
   assert json.loads(json.dumps(plain)) == plain
 
 

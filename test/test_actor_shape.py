@@ -7,15 +7,15 @@ from furb.engine import Refused
 
 async def test_an_actor_the_world_offers() -> None:
   """An actor the World offers: the name of a model, the efforts it takes, and the window it reads."""
-  one = ("m", ("low", "high"), 400000)
+  one = ["m", ["low", "high"], 400000]
   name, efforts, window = one
-  assert (name, efforts, window) == ("m", ("low", "high"), 400000)
+  assert (name, efforts, window) == ("m", ["low", "high"], 400000)
   assert one in STANDS[0]
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   assert paragraphs(engine.turns(on=root)) == [
     "#chain1 root\nchain1: Act[object] = Act('chain1')",
-    "#chain1 stands ((('operator', (), 200000), ('m', ('low', 'high'), 400000), ('n', ('low',), 200000)), '/w', 'm/low')",
+    "#chain1 stands [[['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]], '/w', 'm/low']",
   ]
 
 
@@ -23,8 +23,8 @@ async def test_the_window_that_a_roster_entry_leaves_unsaid_is_the_window_that_t
   """The window that a roster entry leaves unsaid is the window that the file names."""
   assert engine.WINDOW == 200000
   ledgers = []
-  for roster in ((("plain", (), 0),), (("plain", (), 400000),)):
-    sand = Sand(stands=(roster, "/w", "plain"), cost=(100000, 0, 0, 0, 0.0))
+  for roster in ([["plain", [], 0]], [["plain", [], 400000]]):
+    sand = Sand(stands=[roster, "/w", "plain"], cost=(100000, 0, 0, 0, 0.0))
     _, root = life(sand)
     sand.script[root] = ["close(1)"]
     engine.grant(share=0.9, on=root)

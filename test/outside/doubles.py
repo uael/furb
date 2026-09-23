@@ -66,7 +66,7 @@ def reply(text: str) -> ModelResponse:
   return ModelResponse(parts=[ThinkingPart(content="", signature="sig"), TextPart(content=text)])
 
 
-def worlds(stands: tuple) -> Words:
+def worlds(stands: list) -> Words:
   """A World of the suite: it answers a stand, it does a wait, and it refuses every other question it is put but a
   gate, which is the gate's to answer and none of the World's.
 

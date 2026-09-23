@@ -39,7 +39,7 @@ from pydantic_ai.models import Model
 from python_minifier import minify
 
 from furb import engine
-from furb.engine import WORLD, Drift, Refused, Text, under
+from furb.engine import WORLD, Drift, Refused, Text
 from furb.provider.claude import ACTOR, Claude, Settings, actors
 
 type World = Generator[tuple | None, tuple]
@@ -50,7 +50,7 @@ CAP = 524288
 PIPE = 65536
 """PIPE is the bytes the World reads of a stream at a time, which is one Out word of the command."""
 MUTE = "{} answered nothing"
-"""MUTE is how the World says an actor gave no turn, which it reads back to tell a fault of the moment from one that stands."""
+"""MUTE is how the World says an actor gave no turn."""
 
 
 SYSTEM = minify(
@@ -79,7 +79,8 @@ FENCE = re.compile(r"```(?:python|py)?\n(.*?)```", re.DOTALL)
 def wire(x: object) -> object:
   """The plain form of a value, which is how a record leaves a life: an exception its name and what it was made
   with, a text its path and its content, a shape its name beside its fields, a list and a tuple their entries, a map
-  its entries, and plain data is plain.
+  its entries, or its pairs when it holds the key `is`, so that unwire reads it as the map it is, and plain data is
+  plain.
   """
   match x:
     case BaseException():
@@ -87,7 +88,8 @@ def wire(x: object) -> object:
     case Text():
       return {"is": "Text", "path": x.path, "content": x.content}
     case dict():
-      return {k: wire(v) for k, v in x.items()}
+      plain = {k: wire(v) for k, v in x.items()}
+      return {"is": "dict", "args": [[[k, v] for k, v in plain.items()]]} if "is" in plain else plain
     case list() | tuple():
       return [wire(i) for i in x]
   if is_dataclass(x) and not isinstance(x, type):
@@ -151,10 +153,10 @@ def kept(record: Path) -> list[tuple]:
       if n < len(lines):
         raise
       break
-    if not (isinstance(got, list) and len(got) in (2, 3) and isinstance(got[1], list) and got[1]):
+    if not (isinstance(got, list) and len(got) in (1, 2) and isinstance(got[0], list) and got[0]):
       why = f"line {n} of {record} is no entry of the record"
       raise Drift(why)
-    said.append((got[0], tuple(got[1]), *got[2:]))
+    said.append((tuple(got[0]), *got[1:]))
   return said
 
 
@@ -167,7 +169,6 @@ class Command:
   """
 
   id: str
-  on: str
   command: str
   fed: bool
   timeout: float
@@ -212,16 +213,19 @@ class Live:
   `directory` is where the chains of the life start, `record` the file it keeps the record in and reads it back
   from, `actor` the actor a prompt goes to when it names none, and `roster` the actors it offers. `calls` holds
   every fact it answered or performed, in order, and `model` is the one model it asks, when it is given one.
+  `mute` holds, for each chain, the actor whose last ask on that chain answered nothing, so a second such ask in a
+  row pauses the chain, and an answer between the two ends the row.
   `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
   """
 
   directory: str
   record: Path | None = None
   actor: str = ACTOR
-  roster: tuple[tuple[str, tuple[str, ...], int], ...] = field(default_factory=actors)
+  roster: list[list[str | list[str] | int]] = field(default_factory=actors)
   calls: list[tuple] = field(default_factory=list)
   model: Model[object] | None = None
   bought: dict[str, Model[object]] = field(default_factory=dict)
+  mute: dict[str, str] = field(default_factory=dict)
   reader: asyncio.StreamReader | None = None
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -381,32 +385,26 @@ class Live:
     if text := decoder.decode(b"", final=True):
       engine.send("out", about, text, stream, by=WORLD)
 
-  def twice(self, actor: str, turns: Sequence[tuple]) -> bool:
-    """Whether this actor was mute already at the turn this ask was handed, so the fault stands.
-
-    The World tells a fault of the moment from one that stands by its own last refusal: the turns of an ask end
-    with what the chain was told since the answer before it, so a refusal of the same actor there is the second
-    in a row, where one of an older turn was answered after.
-    """
-    return bool(turns) and MUTE.format(actor) in turns[-1][1]
-
   async def asked(self, rung: str, on: str, actor: str, turns: Sequence[tuple]) -> None:
     """One turn of a model for one ask, and the refusal for an ask the World cannot answer, with a pause when the
     fault of it stands.
 
     A fault of the moment is no pause: the rung is closed with the refusal, the prompt asks again, and the model
-    reads what was dropped. A second nothing of the same actor answers the same way twice, so the chain goes quiet
-    until the operator wakes it, and the operator is told here why it went quiet.
+    reads what was dropped. A second nothing of the same actor in a row on the chain is a fault that stands, so the
+    chain goes quiet until the operator wakes it, and the operator is told here why it went quiet. The World counts
+    the row by what it was answered, and never by a text a chain was told.
     """
     try:
       turn = await self.answer(actor, on, turns)
     except Exception as no:
       why = Refused(f"{MUTE.format(actor)}: {type(no).__name__}: {no}")
-      if self.twice(actor, turns):
+      if self.mute.get(on) == actor:
         sys.stderr.write(f"{on} is paused: {why}\n")
         engine.pause(on)
+      self.mute[on] = actor
       engine.close(why, rung)
       return
+    self.mute.pop(on, None)
     engine.send("answer", rung, turn, by=WORLD)
 
   async def show(self, about: str, shape: str, message: str) -> None:
@@ -458,14 +456,14 @@ class Live:
           match acts[about]:
             case ("bash", _, _, on, command, fed, timeout):
               merged = engine.ask("merged", on, about)[1]
-              running[about] = held = Command(about, on, command, fed, timeout, bool(merged))
+              running[about] = held = Command(about, command, fed, timeout, bool(merged))
               start(self.ran(held, engine.cwd(on=on)))
             case ("wait", _, _, _, seconds):
               loop.call_later(seconds, partial(engine.send, "done", about, None, by=WORLD))
             case ("prompt", _, _, _, shape, message, _):
               start(self.show(about, shape, message))
         case ("stand", qid, *_):
-          yield "done", qid, (self.roster, self.directory, self.actor)
+          yield "done", qid, [self.roster, self.directory, self.actor]
         case ("read", qid, _, on, path) if self.serves(path):
           yield "done", qid, self.read(engine.cwd(on=on), path)
         case ("write", qid, _, on, Text(path=path, content=content)) if self.serves(path):
@@ -474,8 +472,8 @@ class Live:
           start(self.asked(rung, on, actor, turns))
         case ("feed", about, _, text) if about in running:
           running[about].feed(text)
-        case ("cancel" | "close", about, *_):
-          for one in [x for x in running.values() if under(x.id, about) or x.on == about]:
+        case ("cancel" | "close", *_):
+          for one in [x for x in running.values() if engine.covers(a, x.id)]:
             one.over = True
             one.slay()
             yield "exited", one.id, None

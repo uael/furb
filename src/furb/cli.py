@@ -44,7 +44,7 @@ def again(held: Sequence[tuple], root: str, shape: type | None, message: str, to
   named = shape.__name__ if isinstance(shape, type) else repr(shape)
   for entry in held:
     match entry:
-      case (_, ("prompt", id, "operator", on, kind, said, who)) if (on, kind, said, who) == (root, named, message, to):
+      case (("prompt", id, "operator", on, kind, said, who),) if (on, kind, said, who) == (root, named, message, to):
         return id
   return ""
 

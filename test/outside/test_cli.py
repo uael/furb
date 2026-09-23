@@ -67,8 +67,8 @@ async def test_a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it(ya
   await settle()
   assert root == "chain1"
   assert world.directory == str(yard)
-  assert [fact[0] for _, fact, *_ in said] == [fact[0] for _, fact, *_ in kept(record)]
-  assert any(fact[0] == "prompt" for _, fact, *_ in said)
+  assert [fact[0] for fact, *_ in said] == [fact[0] for fact, *_ in kept(record)]
+  assert any(fact[0] == "prompt" for fact, *_ in said)
 
 
 async def test_a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again(yard: Path) -> None:

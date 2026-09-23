@@ -6,7 +6,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import DOOR, STANDS, Py, Sand, heads, life, named, paragraphs, ran, said, seen, settle, sown
+from conftest import DOOR, STANDS, Py, Sand, heads, life, named, paragraphs, ran, relived, said, seen, settle, sown
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Act, Refused, Text, take
 from furb.kernel import ENGINE
@@ -468,7 +468,7 @@ async def test_a_prompt_that_a_step_of_another_chain_made_reads_nothing_of_that_
 
 
 async def test_the_word_of_a_rung_rebinds_the_default_actor_like_any_name() -> None:
-  """The word of a rung rebinds the default actor like any name, and the last binding in record order wins."""
+  """The word of a rung rebinds the default actor like any name, and so does a stood, and the last binding in record order wins."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["actor = 'n/low'\nclose(1)", "close(None)"]
@@ -478,6 +478,10 @@ async def test_the_word_of_a_rung_rebinds_the_default_actor_like_any_name() -> N
   sand.script[root] = ["close(2)", "close(None)"]
   assert await engine.prompt(int, "again", on=root) == 2
   assert [a[4] for a in said(log, "ask")][-1] == "n/low"
+  await relived(Sand(stands=STANDS), list(sand.record))
+  assert engine.modules[root]["actor"] == "n/low"
+  await relived(Sand(stands=[STANDS[0], "/w", "m/high"]), list(sand.record))
+  assert engine.modules[root]["actor"] == "m/high"
 
 
 async def test_the_transcript_of_the_root_begins_with_the_open_of_the_root_and_then_the_standing() -> None:
@@ -986,7 +990,7 @@ async def test_a_source_that_names_no_chain_of_the_life_refuses_the_call() -> No
     f"#{forked} raised Refused('no chain {forked}')"
   ]
   assert [a[4] for a in said(log, "chain")] == ["root"]
-  assert [e[1][4] for e in sand.record if e[1][0] == "chain"] == ["root"]
+  assert [e[0][4] for e in sand.record if e[0][0] == "chain"] == ["root"]
 
 
 async def test_a_chain_with_a_source_asks_its_origin_what_it_stands_on() -> None:
@@ -1003,7 +1007,7 @@ async def test_a_chain_with_a_source_asks_its_origin_what_it_stands_on() -> None
 
 
 async def test_the_chain_answers_a_stand_asked_on_it_with_what_it_stands_on() -> None:
-  """The chain answers a stand asked on it with what it stands on, so a grant reads the roster off the chain it is on."""
+  """The chain answers a stand asked on it with what it stands on, and a stand that names one of its questions with what it stood on when it heard that question, so a grant reads the window of a rung off the chain it is on."""
   sand = Sand(stands=STANDS, cost=(200000, 0, 0, 0, 0.0))
   log, root = life(sand)
   assert engine.ask("stand", root)[1] == STANDS
@@ -1015,6 +1019,10 @@ async def test_the_chain_answers_a_stand_asked_on_it_with_what_it_stands_on() ->
   answered = steps(log, one)[0]
   assert [a for a in heads(engine.turns(on=root)) if " ledger " in a] == [f"#{answered} ledger spent=0.0 filled=0.5"]
   assert [a for a in sand.calls if a[0] == "stand"] == sand.calls[:1]
+  assert engine.ask("stand", root, answered)[1] == STANDS == engine.ask("stand", root, root)[1]
+  later = Sand(stands=[[STANDS[0][0]], "/z", "operator"])
+  await relived(later, list(sand.record))
+  assert engine.ask("stand", root)[1] == later.stands and engine.ask("stand", root, answered)[1] == STANDS
 
 
 async def test_the_chain_answers_a_transcript_asked_of_one_of_its_names() -> None:
@@ -1136,7 +1144,7 @@ async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
 
 
 async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_birth() -> None:
-  """A replay makes the module of the chain again, as it was at its birth, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in."""
+  """A replay makes the module of the chain again, as it was at its birth but on the standing the chain stands on then, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in."""
   sand = sown()
   _, root = life(sand)
   act = engine.prompt(None, "work", to=OPERATOR, on=root)
@@ -1153,10 +1161,15 @@ async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_bir
   assert engine.read(later, on=root) == Text(later, "c = 3\nclose(None)")
   assert engine.modules[root]["c"] == 3 and engine.modules[root]["a"] == 1
   assert "d" not in engine.modules[root]
+  await relived(Sand(stands=[STANDS[0], "/w", "m/high"]), list(sand.record))
+  assert engine.modules[root]["actor"] == "m/high"
+  engine.write(Text(act, "a = 5"), on=root)
+  await settle()
+  assert engine.modules[root]["a"] == 5 and engine.modules[root]["actor"] == "m/high"
 
 
 async def test_before_every_ask_the_chain_tells_the_last_line_of_the_turn() -> None:
-  """Before every ask the chain tells the last line of the turn, which says what the answer is for: #rung5 advance on prompt1 for a rung of a prompt, and #rung5 advance for a rung that no prompt made."""
+  """Before every ask the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(a)", "k = 2"]
@@ -1170,7 +1183,7 @@ async def test_before_every_ask_the_chain_tells_the_last_line_of_the_turn() -> N
   assert [(a[1], a[5][-1][0], a[5][-1][1].split("\n")[-1]) for a in asks] == [
     (first, "user", f"#{first} advance on {one}"),
     (second, "user", f"#{second} advance on {one}"),
-    (bare, "user", f"#{bare} advance"),
+    (bare, "user", f"#{bare} advance on {OPERATOR}"),
   ]
   assert engine.modules[root]["k"] == 2
 
@@ -1201,3 +1214,13 @@ async def test_where_it_asks_the_chain_makes_a_rung_of_the_statements_the_turn_s
   assert words == ["x = bash('echo hi')\nclose(1)", "close(None)"]
   assert [a[4] for a in engine.asked.values() if a[0] == "gate"] == ["k = 1", *words]
   assert [name for name in named(engine.turns(on=root)) if name in binders] == []
+  sand.auto = False
+  sand.script[root] = ["y = bash('sleep')\nawait y"]
+  engine.prompt(None, "work", on=root)
+  await settle()
+  opened = said(log, "bash")[-1][1]
+  fork = engine.chain("fork", source=root)
+  sand.script[fork] = [f"close({opened} is not None)"]
+  asked = engine.prompt(bool, "is it bound", on=fork)
+  await settle()
+  assert engine.peek(asked) is True and engine.modules[fork][opened] == opened

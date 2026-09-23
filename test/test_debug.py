@@ -16,7 +16,8 @@ async def test_what_a_word_tells_of_itself_as_it_runs() -> None:
   await settle()
   step = said(log, "answer")[0][1]
   assert [one for one in paragraphs(engine.turns(on=root)) if " debugged " in one] == [
-    f"#{step} debugged n = 42\n#{step} debugged n + 1 = 43"
+    f"#{step} debugged n = 42",
+    f"#{step} debugged n + 1 = 43",
   ]
 
 
@@ -37,7 +38,7 @@ async def test_a_debugged_header_tells_one_interpolation_of_a_debug() -> None:
   _, root = life(sand)
   step = engine.rung("k = 5\ndebug(t'{k} {k * 2}')", on=root)
   await step
-  assert paragraphs(engine.turns(on=root))[-1] == f"#{step} debugged k = 5\n#{step} debugged k * 2 = 10"
+  assert paragraphs(engine.turns(on=root))[-2:] == [f"#{step} debugged k = 5", f"#{step} debugged k * 2 = 10"]
 
 
 async def test_a_raised_header_and_a_debugged_header_stand_at_the_place_in_the_run_where_they_happened() -> None:
@@ -75,7 +76,7 @@ async def test_debug_is_given_a_python_template_string() -> None:
   _, root = life(sand)
   step = engine.rung("who = 'me'\ndebug(t'hello {who!r} now {1 + 1}')", on=root)
   await step
-  assert paragraphs(engine.turns(on=root))[-1] == f"#{step} debugged who = 'me'\n#{step} debugged 1 + 1 = 2"
+  assert paragraphs(engine.turns(on=root))[-2:] == [f"#{step} debugged who = 'me'", f"#{step} debugged 1 + 1 = 2"]
 
 
 async def test_debug_tells_each_interpolation_of_the_template_with_its_expression_and_its_value() -> None:
@@ -84,9 +85,11 @@ async def test_debug_tells_each_interpolation_of_the_template_with_its_expressio
   _, root = life(sand)
   step = engine.rung("a, b, c = 1, 2, 3\ndebug(t'{a}{b}{c}')", on=root)
   await step
-  assert paragraphs(engine.turns(on=root))[-1] == (
-    f"#{step} debugged a = 1\n#{step} debugged b = 2\n#{step} debugged c = 3"
-  )
+  assert paragraphs(engine.turns(on=root))[-3:] == [
+    f"#{step} debugged a = 1",
+    f"#{step} debugged b = 2",
+    f"#{step} debugged c = 3",
+  ]
 
 
 async def test_debug_tells_nothing_but_the_interpolations() -> None:
@@ -107,11 +110,15 @@ async def test_debug_tells_nothing_but_the_interpolations() -> None:
 async def test_debug_enters_nothing_in_the_record() -> None:
   """debug enters nothing in the record."""
   sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  log, root = life(sand)
   step = engine.rung("n = 1\ndebug(t'{n}')", on=root)
   await step
   await settle()
-  assert [fact[:2] for _, fact, *_ in sand.record] == [("chain", root), ("rung", step)]
+  assert [fact[:2] for fact, *_ in sand.record] == [
+    ("chain", root),
+    ("stand", said(log, "stand")[0][1]),
+    ("rung", step),
+  ]
 
 
 async def test_it_is_no_act_and_it_enters_no_record() -> None:
@@ -123,7 +130,7 @@ async def test_it_is_no_act_and_it_enters_no_record() -> None:
   await act
   await settle()
   assert set(engine.acts) - made == {act}
-  assert [fact for _, fact, *_ in sand.record if fact[0] == "tell"] == []
+  assert [fact for fact, *_ in sand.record if fact[0] == "tell"] == []
   assert heads(engine.turns(on=root)) == [
     f"#{root} root",
     f"#{root} stands {STANDS!r}",

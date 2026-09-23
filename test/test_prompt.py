@@ -201,12 +201,24 @@ async def test_a_rung_need_not_wait_for_a_prompt_of_shape_none() -> None:
 
 
 async def test_the_actor_left_unsaid_is_the_default_actor_of_the_chain() -> None:
-  """The actor left unsaid is the default actor of the chain."""
+  """The actor left unsaid is the default actor of the chain when the prompt is made, which the prompt writes into the actor word of every rung it makes, so every life asks the one actor the record holds."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  sand.script[root] = ["actor = 'n/low'", "close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
-  assert [one[4] for one in said(log, "ask")] == ["m/low"] == [engine.modules[root]["actor"]]
+  assert (
+    [one[4] for one in said(log, "ask")] == ["m/low", "m/low"] == [one[6] for one in said(log, "rung") if not one[4]]
+  )
+  assert engine.modules[root]["actor"] == "n/low"
+  again, _ = await relived(Sand(stands=[STANDS[0], "/w", "n/low"]), plain(sand.record))
+  assert [one[6] for one in said(again, "rung") if not one[4]] == ["m/low", "m/low"] and said(again, "ask") == []
+  alone = Sand(stands=[[[OPERATOR, [], 200000]], "/w", OPERATOR])
+  log, root = life(alone)
+  shown = engine.prompt(str, "what now?", on=root)
+  await settle()
+  assert said(log, "ask") == [] and [a[1] for a in said(log, "start")] == [shown]
+  engine.close("go", shown)
+  assert await shown == "go"
 
 
 async def test_a_prompt_to_a_model_runs_in_steps_until_the_prompt_completes() -> None:
@@ -349,18 +361,25 @@ async def test_a_word_written_to_its_door_is_a_rung_of_it() -> None:
 
 
 async def test_a_prompt_to_the_operator_asks_no_model() -> None:
-  """A prompt to the operator asks no model: the World is shown it, and it waits to be closed; one the record holds is shown no more, since the close it waits for stands there already."""
+  """A prompt to the operator asks no model: the World is shown it, and it waits to be closed; in a later life, one the record shows open is shown again only at a wake, and one the record shows closed is shown no more."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
   assert said(log, "ask") == [] and [one[1] for one in sand.calls if one[0] == "start"] == [act]
+  still = Sand(stands=STANDS)
+  _, over = await relived(still, plain(sand.record))
+  assert over == root and said(still.calls, "start") == []
+  engine.wake(over)
+  await settle()
+  assert [one[1] for one in said(still.calls, "start")] == [act]
   engine.close(21, act)
   await settle()
   after = Sand(stands=STANDS)
-  _, over = await relived(after, plain(sand.record))
-  assert over == root
-  assert [one for one in after.calls if one[0] == "start"] == [] and engine.outcomes[act] == 21
+  _, over = await relived(after, [*plain(sand.record), *plain(still.record)])
+  engine.wake(over)
+  await settle()
+  assert over == root and said(after.calls, "start") == [] and engine.outcomes[act] == 21
 
 
 async def test_its_close_tells_what_closed_it_from_outside() -> None:
@@ -556,41 +575,23 @@ async def test_the_name_of_a_shape_is_the_word_a_chain_says_it_by() -> None:
   assert [one for one in heads(engine.turns(on=root)) if one.split(" ")[1:2] in (["raised"], ["refused"])] == []
 
 
-async def test_a_prompt_to_a_model_tells_nothing_where_it_is_made() -> None:
-  """A prompt to a model tells nothing where it is made: where the chain first asks for one of its rungs, the chain tells its message and its binding, just above the last line of that turn, and never again, so a turn shows at most one message to a model."""
+async def test_a_prompt_tells_its_message_and_its_binding_where_it_is_made() -> None:
+  """A prompt tells its message and its binding where it is made, as every act tells its open, whether a model or the operator answers it."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(2)", "close(3)"]
   first = engine.prompt(int, "count\nto three", on=root)
   second = engine.prompt(int, "count again", on=root)
-  assert (await first, await second) == (3, 2)
-  one, three = [a[1] for a in said(log, "rung") if a[2] == first]
-  (two,) = [a[1] for a in said(log, "rung") if a[2] == second]
-  assert [(a[1], a[2]) for a in said(log, "tell") if a[1] in (first, second)] == [(first, root), (second, root)]
   mine = f"#{first} count\n# to three\n{first}: Act[int] = Act({first!r})"
   theirs = f"#{second} count again\n{second}: Act[int] = Act({second!r})"
-  assert [a[1] for a in said(log, "ask")] == [one, two, three]
-  assert [paragraphs([a[5][-1]])[-2:] for a in said(log, "ask")] == [
-    [mine, f"#{one} advance on {first}"],
-    [theirs, f"#{two} advance on {second}"],
-    [f"#{three} advance on {first}"],
-  ]
+  assert [(a[1], a[2]) for a in said(log, "tell") if a[1] in (first, second)] == [(first, first), (second, second)]
+  told = next(a for a in said(log, "tell") if a[1] == first)
+  assert log.index(said(log, "prompt")[0]) < log.index(told) < log.index(said(log, "prompt")[1])
+  assert (await first, await second) == (3, 2)
   users = [turn for turn in engine.turns(on=root) if turn[0] == "user"]
   assert [[x for x in paragraphs([turn]) if x in (mine, theirs)] for turn in users] == [[mine], [theirs], [], []]
-
-
-async def test_a_prompt_to_the_operator_tells_its_message_and_its_binding_where_it_is_made() -> None:
-  """A prompt to the operator tells its message and its binding where it is made, since the World shows it then and no model answers it."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
   act = engine.prompt(int, "how many?\nsay one", to=OPERATOR, on=root)
   await settle()
   start = log.index(("start", act, act))
   assert log[start + 1] == ("tell", act, act, [f"#{act} how many?\n# say one", f"{act}: Act[int] = Act({act!r})"])
-  assert [a for a in said(log, "tell") if a[1] == act] == [log[start + 1]] and said(log, "ask") == []
-  engine.close(21, act)
-  await settle()
-  assert paragraphs(engine.turns(on=root))[2:] == [
-    f"#{act} how many?\n# say one\n{act}: Act[int] = Act({act!r})",
-    f"#{act} closed 21",
-  ]
+  assert [a for a in said(log, "tell") if a[1] == act] == [log[start + 1]] and len(said(log, "ask")) == 3

@@ -80,7 +80,7 @@ async def test_bash_is_given_a_command_a_fed_flag_a_timeout_and_a_show_for_each_
   engine.bash("echo hi", True, 5.0, HEAD, TAIL, on=root)
   word = said(log, "bash")[0]
   assert word == ("bash", word[1], OPERATOR, root, "echo hi", True, 5.0)
-  assert [e[1] for e in sand.record if e[1][0] == "bash"] == [word]
+  assert [e[0] for e in sand.record if e[0][0] == "bash"] == [word]
 
 
 async def test_bash_gives_the_command_which_is_awaited_for_its_exit_code_and_its_streams() -> None:
@@ -256,8 +256,8 @@ async def test_a_wake_on_a_chain_with_a_source_starts_no_inherited_command_again
   assert [a[1] for a in said(log, "bash")] == [command]
 
 
-async def test_the_world_starts_it_and_starts_it_again_in_no_later_life() -> None:
-  """The World starts it, and starts it again in no later life, since the record holds what it did."""
+async def test_the_world_starts_it_and_a_later_life_starts_it_again_only_when_the_record_shows_it_not_ended() -> None:
+  """The World starts it, and a later life starts it again only when the record shows it started and not ended, and then only at a wake."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   one = engine.bash("echo hi", on=root)
@@ -266,9 +266,24 @@ async def test_the_world_starts_it_and_starts_it_again_in_no_later_life() -> Non
   assert [a[1] for a in sand.calls if a[0] == "start"] == [one]
   later = Sand(stands=STANDS)
   _, over = await relived(later, plain(sand.record))
+  engine.wake(over)
+  await settle()
   assert [a for a in later.calls if a[0] == "start"] == [] and over == root
   got = engine.peek(one)
   assert isinstance(got, Exit) and got.code == 0
+  quiet = Sand(stands=STANDS, auto=False)
+  _, root = life(quiet)
+  two = engine.bash("sleep 9", on=root)
+  await settle()
+  third = Sand(stands=STANDS)
+  _, over = await relived(third, plain(quiet.record))
+  assert said(third.calls, "start") == [] and engine.peek(two) == Exit(
+    None, Text(f"{two}/stdout"), Text(f"{two}/stderr")
+  )
+  engine.wake(over)
+  await settle()
+  got = engine.outcomes[two]
+  assert [a[1] for a in said(third.calls, "start")] == [two] and isinstance(got, Exit) and got.code == 0
 
 
 async def test_its_stdin_is_written_while_it_runs_and_it_is_fed() -> None:

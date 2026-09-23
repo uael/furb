@@ -164,7 +164,7 @@ def test_the_provider_is_keyless_and_hands_out_the_pool_as_its_client() -> None:
   assert Claude("opus").model_name == "opus"
   assert ACTOR == "opus/low"
   assert [name for name, _, _ in actors()] == [OPERATOR, "fable", "opus", "sonnet", "haiku"]
-  assert actors()[2][1] == LEVELS
+  assert actors()[2][1] == list(LEVELS)
   assert actors()[2][2] == MILLION
   assert actors()[4][2] == 200_000
 

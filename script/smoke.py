@@ -34,7 +34,7 @@ CEILING = 1.0
 
 def told(record: Path) -> list[list]:
   """Every answer of a model that the record holds."""
-  return [entry[1] for entry in kept(record) if entry[1][0] == "answer"]
+  return [entry[0] for entry in kept(record) if entry[0][0] == "answer"]
 
 
 def spent(record: Path) -> float:

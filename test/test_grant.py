@@ -234,11 +234,17 @@ async def test_a_grant_is_any_callers_on_any_chain() -> None:
   assert (await mine) is None
 
 
-async def test_a_grant_whose_chain_answers_no_transcript_is_done_with_what_it_was_answered() -> None:
-  """A grant whose chain answers no transcript is done with what it was answered, since it reads its ledger from the transcript."""
+async def test_a_grant_finds_the_grants_of_its_chain_among_the_acts_of_the_life() -> None:
+  """A grant finds the grants of its chain among the acts of the life, so a grant on a chain with a source closes no grant of its origin."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  act = engine.grant(1.0, on="chain9")
+  first = engine.grant(usd=5.0, on=root)
   await settle()
-  assert act in engine.outcomes and (await act) is None
-  assert engine.peek(root, on=root) is None
+  twin = engine.chain("twin", source=root)
+  await settle(300)
+  theirs = engine.grant(usd=9.0, on=twin)
+  await settle()
+  assert first not in engine.outcomes and theirs not in engine.outcomes
+  mine = engine.grant(usd=7.0, on=root)
+  await settle()
+  assert engine.outcomes[first] is None and theirs not in engine.outcomes and mine not in engine.outcomes

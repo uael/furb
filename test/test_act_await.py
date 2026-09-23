@@ -1,12 +1,13 @@
 """Act.__await__, to await an act for what it comes to."""
 
+import asyncio
 from asyncio import CancelledError
 
 import pytest
 
 from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
-from furb.engine import OPERATOR
+from furb.engine import OPERATOR, WORLD, Exit, Text
 
 
 async def test_to_await_an_act_gives_the_value_of_the_act_when_the_act_completes() -> None:
@@ -114,3 +115,9 @@ async def test_a_run_that_awaits_it_hands_it_to_whoever_steps_the_run() -> None:
   assert [(a[3], a[2]) for a in said(log, "wants")] == [(command[1], command[2])]
   mine = engine.bash("echo again", on=root)
   assert (await mine).code == 0 and [a[3] for a in said(log, "wants")] == [command[1]]
+  sand.auto = False
+  slow = engine.bash("slow", on=root)
+  with pytest.raises(TimeoutError):
+    await asyncio.wait_for(slow, 0.01)
+  engine.send("exited", slow, 0, by=WORLD)
+  assert engine.outcomes[slow] == Exit(0, Text(f"{slow}/stdout"), Text(f"{slow}/stderr"))
