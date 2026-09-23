@@ -214,7 +214,7 @@ test("a fenced reply is no python: the gate refuses it and the prompt asks again
     cli.dispose();
     await remove(cwd);
   }
-});
+}, 30000);
 
 test("the default World serves files and streams commands without any TUI", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-world-"));

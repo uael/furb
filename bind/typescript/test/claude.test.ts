@@ -37,7 +37,7 @@ test("a CLI that exits before it reads a request fails that request, and a Node 
   } finally {
     await remove(cwd);
   }
-});
+}, 30000);
 
 test("two lives on one provider keep a conversation each, though their chains share ids", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-two-lives-"));
@@ -65,7 +65,7 @@ test("two lives on one provider keep a conversation each, though their chains sh
     delete process.env.FURB_FAKE_LOG;
     await remove(cwd);
   }
-});
+}, 30000);
 
 test("the pi-ai Claude provider forwards normalized system text, reuses a session, and charges each turn once", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-provider-"));
@@ -137,7 +137,7 @@ test("the pi-ai Claude provider forwards normalized system text, reuses a sessio
     delete process.env.FURB_FAKE_LOG;
     await remove(cwd);
   }
-});
+}, 30000);
 
 test("a turn claude settles block by block keeps each block once, at the place it streamed", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-blocks-"));
@@ -173,4 +173,4 @@ test("a turn claude settles block by block keeps each block once, at the place i
     cli.dispose();
     await remove(cwd);
   }
-});
+}, 30000);

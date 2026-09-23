@@ -12,5 +12,9 @@ export function executable(script: string, directory: string, name: string): str
     stderr: "pipe",
   });
   if (built.exitCode) throw new Error(`${script} does not compile: ${built.stderr.toString()}`);
+  // The first start of a new program can be slow, as the system checks it, and a test that bounds the time
+  // of an answer would read that as a stall. So the program starts here once, with no input and no log.
+  const { FURB_FAKE_LOG: _, ...env } = process.env;
+  Bun.spawnSync([path], { cwd: directory, env, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
   return path;
 }

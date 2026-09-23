@@ -1,4 +1,4 @@
-import { dlopen, FFIType, ptr } from "bun:ffi";
+import { dlopen, FFIType, type Pointer, ptr } from "bun:ffi";
 import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -25,7 +25,7 @@ function withoutBackup(): () => void {
   // 0x28 is the right to query the privileges of a token and to change them.
   if (!advapi.symbols.OpenProcessToken(kernel.symbols.GetCurrentProcess(), 0x28, ptr(handle)))
     throw new Error("The token of this process does not open.");
-  const [token = 0n] = handle;
+  const token = Number(handle[0]) as Pointer;
   const names = ["SeBackupPrivilege", "SeRestorePrivilege"];
   // A TOKEN_PRIVILEGES: the count, then for each privilege its LUID in two words and its state, where 0 is disabled.
   const dropped = new Uint32Array(1 + 3 * names.length);
