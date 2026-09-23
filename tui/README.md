@@ -17,18 +17,19 @@ a new life. Sessions are saved under `.furb/sessions` in the selected directory.
 `.world.json`, `.changes.jsonl`, and `.ui.json` files together. The last file saves the selected chain, view, prompt
 shape, drafts, scroll positions, and sidebar width. An unfinished session opens paused and offers a resume
 choice. The native engine replays completed work from the record.
-The picker shows held work as of the last save. Opening a session reads its actual unfinished work from the
+The picker shows the save time, cost, and record size. Opening a session reads its unfinished work from the
 record, so an old metadata file cannot hold work that has already completed.
 
 The six views show the conversation, accepted Python program, acts, facts, exact model transcript, and file
 diffs. Each chain has its own conversation and module. Python words have offline Tree-sitter colors and
 line numbers. Hover over a name for its current value; Ctrl+click or Ctrl+G opens its fields and definition.
 GitHub Dark is the default. Theme preferences are shared by sessions and saved in `$XDG_CONFIG_HOME/furb/ui.json`
-(or `~/.config/furb/ui.json`). `FURB_CONFIG_DIR` selects another configuration directory. Demo sessions keep
-their preferences with the demo so they do not change the user's theme.
+(or `~/.config/furb/ui.json`). `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot
+generation use isolated preferences; the CLI shares the user's choice across sessions, including demos.
 
-The feed has no card borders or blank rows between events. Acts start as one-line summaries; click a row or
-use `/details` to expand its named fields and output. Drag the right separator to resize the sidebar. Select text and press Ctrl+Y
+Space separates turns, programs, and act results. Code and output start with short previews; click a heading
+or use `/details` to expand the complete content and named fields. The input panel grows as you type.
+Drag the right separator to resize the sidebar. Select text and press Ctrl+Y
 to copy it through OSC 52, where the terminal supports it.
 
 | Key | Action |

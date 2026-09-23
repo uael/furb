@@ -2,12 +2,19 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createModels } from "@earendil-works/pi-ai";
-import { boot, decodeRecord, type Ear, Ears, type Fact, World } from "../src/index.ts";
+import { createModels, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import { actorParts, boot, decodeRecord, type Ear, Ears, type Fact, World } from "../src/index.ts";
 import { claudeProvider, cliModel } from "../src/providers/claude.ts";
 import { RecordFile } from "../src/record.ts";
 
 test("the standing takes each model's efforts from its pi-ai metadata", async () => {
+  expect(getSupportedThinkingLevels(cliModel("sonnet"))).toEqual(["low", "medium", "high", "xhigh", "max"]);
+  expect(actorParts("claude-cli:org/plain")).toEqual({ model: "claude-cli:org/plain", effort: "off" });
+  expect(actorParts("claude-cli:org/plain/high")).toEqual({ model: "claude-cli:org/plain", effort: "high" });
+  expect(actorParts("claude-cli:org/high", ["claude-cli:org/high"])).toEqual({
+    model: "claude-cli:org/high",
+    effort: "off",
+  });
   const cli = claudeProvider();
   const models = createModels();
   models.setProvider({

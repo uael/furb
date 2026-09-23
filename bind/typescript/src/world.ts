@@ -371,7 +371,9 @@ export class World extends EventEmitter {
           signal,
           sessionId: chain,
           reasoning:
-            actorParts(actor).effort === "off" ? undefined : (actorParts(actor).effort as ThinkingLevel),
+            actorParts(actor, this.roster).effort === "off"
+              ? undefined
+              : (actorParts(actor, this.roster).effort as ThinkingLevel),
         },
       );
       for await (const event of stream) {
@@ -464,7 +466,6 @@ export class World extends EventEmitter {
         options: { cwd: this.directory, model: this.model, effort: this.effort, roster: this.roster },
         deadlines: [...this.deadlines],
         streams: [...this.streams],
-        held: [...this.held],
       }),
       { mode: 0o600 },
     );

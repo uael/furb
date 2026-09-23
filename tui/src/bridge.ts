@@ -4,6 +4,7 @@ import type { FileChange } from "@furb/engine/world";
 import type { ActRow } from "./workspace.ts";
 
 export interface Snapshot {
+  paused: boolean;
   roster: [string, string[], number][];
   acts: ActRow[];
   selected: string;

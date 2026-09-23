@@ -6,13 +6,14 @@ capture them again. The generator is `tui/script/screenshots.ts`.
 
 ## Welcome
 
-Start from a compact feed and an input line, with one right sidebar. GitHub Dark is the default.
+Start from a feed with space between turns and a growing input panel, with one right sidebar.
+GitHub Dark is the default.
 
 ![Welcome](screenshots/01-welcome.png)
 
 ## Conversation
 
-Markdown results, structured acts, code, and live usage.
+Markdown results, short code and output previews, expandable act details, and live usage.
 
 ![Conversation](screenshots/02-conversation.png)
 
@@ -173,8 +174,14 @@ The view shows its pending read while the worker runs a Python word. The interfa
 
 ![Loading](screenshots/28-loading.png)
 
-## Error
+## Act failure
 
-A failed read shows its error in the view with a refresh action.
+A failed read shows its error with the act that failed.
 
-![Error](screenshots/29-error.png)
+![Act failure](screenshots/29-error.png)
+
+## View error
+
+A damaged diff journal fails to load. Repair it and refresh the view.
+
+![View error](screenshots/30-view-error.png)

@@ -11,9 +11,9 @@ export const efforts = [
   "xhigh",
   "max",
 ] as const satisfies readonly ModelThinkingLevel[];
-export function actorParts(actor: string): { model: string; effort: string } {
+export function actorParts(actor: string, models: readonly string[] = []): { model: string; effort: string } {
   const at = actor.lastIndexOf("/");
-  return at < 0
+  return at < 0 || models.includes(actor) || !efforts.some((effort) => effort === actor.slice(at + 1))
     ? { model: actor, effort: "off" }
     : { model: actor.slice(0, at), effort: actor.slice(at + 1) };
 }

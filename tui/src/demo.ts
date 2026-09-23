@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { type Turn, World } from "@furb/engine";
 import { openEngine } from "./bridge.ts";
+import type { Preferences } from "./preferences.ts";
 import { Workspace } from "./workspace.ts";
 
 export async function createDemoWorld(record?: string): Promise<World> {
@@ -41,9 +42,9 @@ export async function createDemoWorld(record?: string): Promise<World> {
   return world;
 }
 
-export async function demoWorkspace(seed = false): Promise<Workspace> {
+export async function demoWorkspace(seed = false, preferences?: Preferences): Promise<Workspace> {
   const { life, world } = await openEngine({ demo: true });
-  const workspace = new Workspace(life, world, true);
+  const workspace = new Workspace(life, world, true, preferences);
   await workspace.refresh();
   if (seed) await seedDemo(workspace);
   return workspace;

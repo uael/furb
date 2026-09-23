@@ -8,6 +8,7 @@ import { createCliRenderer } from "@opentui/core";
 import { App } from "./app.ts";
 import { openEngine } from "./bridge.ts";
 import { demoWorkspace } from "./demo.ts";
+import { Preferences } from "./preferences.ts";
 import { sessionChoices } from "./sessions.ts";
 import { palettes } from "./theme.ts";
 import { Workspace } from "./workspace.ts";
@@ -40,6 +41,7 @@ const directory = resolve(values.cwd ?? process.cwd());
 const sessionsDirectory = resolve(directory, ".furb/sessions");
 await mkdir(sessionsDirectory, { recursive: true });
 let workspace: Workspace;
+const preferences = new Preferences();
 const worldOptions: WorldOptions = {
   cwd: values.cwd ? directory : undefined,
   model: values.model,
@@ -51,12 +53,12 @@ async function open(record: string): Promise<Workspace> {
     .then((text) => Boolean(JSON.parse(text).demo))
     .catch(() => false);
   const { life, world } = await openEngine({ ...worldOptions, record, demo });
-  const result = new Workspace(life, world, demo);
+  const result = new Workspace(life, world, demo, preferences);
   await result.refresh();
   return result;
 }
 workspace = values.demo
-  ? await demoWorkspace()
+  ? await demoWorkspace(false, preferences)
   : await open(
       resolve(
         values.resume ??
@@ -96,7 +98,7 @@ const sessions = async () => {
 };
 const newSession = async () => {
   const next = values.demo
-    ? await demoWorkspace()
+    ? await demoWorkspace(false, preferences)
     : await open(resolve(sessionsDirectory, `${new Date().toISOString().replaceAll(":", "-")}.jsonl`));
   app.dispose();
   await workspace.dispose();

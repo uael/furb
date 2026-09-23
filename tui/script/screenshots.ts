@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { Resvg } from "@resvg/resvg-js";
@@ -25,6 +25,7 @@ const color = (value: { toInts(): number[] }) =>
     .join("")}`;
 
 async function capture(name: string): Promise<void> {
+  if (name !== "28-loading" && name !== "30-view-error") await workspace.refresh();
   app.render();
   await test.flush();
   await Bun.sleep(80);
@@ -184,6 +185,8 @@ try {
   );
   await capture("21-sessions");
   app.closeOverlay();
+  await workspace.world.resume();
+  await workspace.refresh();
   app.rewind();
   await capture("24-rewind-transcript");
   app.closeOverlay();
@@ -214,6 +217,14 @@ try {
   await workspace.submit("/read missing-file.txt");
   await Bun.sleep(80);
   await capture("29-error");
+  await workspace.life.write({ path: "preview.txt", content: "A change to inspect.\n" });
+  const journal = `${workspace.world.records.path}.changes.jsonl`;
+  const savedJournal = await readFile(journal);
+  await writeFile(journal, "{ damaged journal }");
+  workspace.show("changes");
+  await workspace.refresh().catch(workspace.fail);
+  await capture("30-view-error");
+  await writeFile(journal, savedJournal);
 } finally {
   app.dispose();
   test.renderer.destroy();

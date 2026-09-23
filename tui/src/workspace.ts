@@ -35,6 +35,7 @@ export class Workspace extends EventEmitter {
   notice = "";
   readonly errors: Record<string, string> = {};
   loading = false;
+  paused = false;
   editing?: string;
   ladder?: string;
   theme: ThemeName;
@@ -44,8 +45,7 @@ export class Workspace extends EventEmitter {
   drafts: Record<string, string> = {};
   scrolls: Record<string, number> = {};
   panes = { inspector: 28 };
-  collapsed: string[] = [];
-  expanded: string[] = [];
+  toggled: string[] = [];
   roster: [string, string[], number][] = [];
   findings: string[] = [];
   rejectedWord = "";
@@ -76,6 +76,8 @@ export class Workspace extends EventEmitter {
     if (path && existsSync(`${path}.ui.json`)) {
       const saved = JSON.parse(readFileSync(`${path}.ui.json`, "utf8")) as Partial<Workspace> & {
         cost?: number;
+        collapsed?: string[];
+        expanded?: string[];
       };
       this.savedCost = saved.cost ?? 0;
       this.selected = saved.selected ?? this.selected;
@@ -93,8 +95,7 @@ export class Workspace extends EventEmitter {
       this.drafts = saved.drafts ?? {};
       this.scrolls = saved.scrolls ?? {};
       this.panes = { inspector: saved.panes?.inspector ?? this.panes.inspector };
-      this.collapsed = saved.collapsed ?? [];
-      this.expanded = saved.expanded ?? [];
+      this.toggled = saved.toggled ?? [...(saved.collapsed ?? []), ...(saved.expanded ?? [])];
     }
     world.on("change", this.changed);
     world.on("facts", this.factsChanged);
@@ -201,15 +202,14 @@ export class Workspace extends EventEmitter {
       [0, 0, 0, 0, 0],
     );
   }
-  get paused(): boolean {
-    return (
-      [...this.world.facts]
-        .reverse()
-        .find((fact) => fact[1] === this.selected && ["pause", "wake"].includes(fact[0]))?.[0] === "pause"
-    );
-  }
   get label(): string {
     return this.labelOf(this.selected);
+  }
+  get actorChoice(): { model: string; effort: string } {
+    return actorParts(
+      this.actor,
+      this.roster.map(([name]) => name),
+    );
   }
   get operatorPrompt() {
     return [...this.world.prompts.values()].find(
@@ -238,22 +238,24 @@ export class Workspace extends EventEmitter {
   }
 
   private track(id: string): void {
-    const chain = this.selected,
-      view = this.view;
     void this.life
       .result(id)
+      .then(
+        () => {
+          this.notice = "Work complete.";
+        },
+        async (error: unknown) => {
+          if (this.closed) return;
+          // A finished act carries its failure in the record and in the feed.
+          if (!(await this.life.outcome(id)).done) throw error;
+          if (error instanceof Error && error.message.startsWith("CancelledError"))
+            this.notice = "Work cancelled.";
+        },
+      )
       .then(() => {
-        if (this.selected === chain && this.view === view) this.error = "";
-        this.notice = "Work complete.";
-        return this.refresh();
+        if (!this.closed) return this.refresh();
       })
-      .catch((error: unknown) => {
-        if (this.closed) return;
-        if (error instanceof Error && error.message.startsWith("CancelledError")) {
-          this.notice = "Work cancelled.";
-          void this.refresh().catch(this.fail);
-        } else this.fail(error);
-      });
+      .catch(this.fail);
   }
 
   async submit(input: string): Promise<void> {
@@ -344,7 +346,7 @@ export class Workspace extends EventEmitter {
         }
         const entry = this.roster.find(([name]) => name === argument && name !== "operator");
         if (!entry) throw new Error("Choose a model in this chain's roster.");
-        const current = actorParts(this.actor).effort;
+        const current = this.actorChoice.effort;
         const effort = entry[1].includes(current) ? current : entry[1][0];
         this.actor = effort ? `${argument}/${effort}` : argument;
         this.track(await this.life.rung(`actor = ${JSON.stringify(this.actor)}`, { on: this.selected }));
@@ -355,7 +357,7 @@ export class Workspace extends EventEmitter {
           this.emit("efforts");
           break;
         }
-        const { model } = actorParts(this.actor);
+        const { model } = this.actorChoice;
         const offered = this.roster.find(([name]) => name === model)?.[1] ?? [];
         if (!offered.includes(argument))
           throw new Error(`This model offers ${offered.join(", ") || "no reasoning efforts"}.`);
@@ -374,9 +376,8 @@ export class Workspace extends EventEmitter {
         if ((await this.life.outcome(id)).done) {
           try {
             await this.life.result(id);
-          } catch (error) {
+          } catch {
             await this.refresh();
-            throw this.findings.length ? new Error(this.findings.join("\n")) : error;
           }
         } else this.track(id);
         break;
@@ -391,6 +392,7 @@ export class Workspace extends EventEmitter {
       case "theme":
         if (!(argument in palettes)) throw new Error(`Choose ${Object.keys(palettes).join(", ")}.`);
         this.theme = argument as ThemeName;
+        this.preferences.save(this.theme);
         break;
       case "bash":
         this.track(await this.life.bash(argument, { on: this.selected }));
@@ -481,8 +483,7 @@ export class Workspace extends EventEmitter {
         drafts: this.drafts,
         scrolls: this.scrolls,
         panes: this.panes,
-        collapsed: this.collapsed,
-        expanded: this.expanded,
+        toggled: this.toggled,
       }),
       { mode: 0o600 },
     );

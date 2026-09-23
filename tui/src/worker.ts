@@ -77,6 +77,10 @@ self.onmessage = async ({ data }) => {
         roster,
         acts,
         selected,
+        paused:
+          world?.facts.findLast(
+            (fact) => fact[1] === selected && ["pause", "wake"].includes(fact[0]),
+          )?.[0] === "pause",
         turns: owner.turns(selected),
         rendered: owner.rendered(selected),
         program: program ?? {},

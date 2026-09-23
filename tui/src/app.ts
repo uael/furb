@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { actorParts, shapes } from "@furb/engine";
+import { shapes } from "@furb/engine";
 import { display, isTag, safeText } from "@furb/engine/world";
 import {
   type BoxOptions,
@@ -48,6 +48,9 @@ interface BlockOptions {
   compact?: boolean;
   heading?: boolean;
   group?: string;
+  separate?: boolean;
+  prompt?: boolean;
+  preview?: (box: BoxRenderable) => void;
   act?: ActRow;
 }
 interface Choice {
@@ -74,9 +77,8 @@ export class App {
   private hoverTimer?: ReturnType<typeof setTimeout>;
   private editorVersion = 0;
   private closed = false;
-  private readonly collapsed = new Set<string>();
-  private readonly expanded = new Set<string>();
-  private readonly inspector: BoxRenderable;
+  private readonly toggled = new Set<string>();
+  private readonly inspector: ScrollBoxRenderable;
   private readonly splitters: BoxRenderable[] = [];
   private readonly tabs: BoxRenderable;
   private readonly head: TextRenderable;
@@ -116,8 +118,7 @@ export class App {
     readonly options: AppOptions,
   ) {
     setTheme(workspace.theme);
-    for (const id of workspace.collapsed) this.collapsed.add(id);
-    for (const id of workspace.expanded) this.expanded.add(id);
+    for (const id of workspace.toggled) this.toggled.add(id);
     this.theme = workspace.theme;
     this.style = syntax();
     this.root = this.box({
@@ -154,7 +155,11 @@ export class App {
       gap: space.stack,
     });
     body.add(center);
-    this.tabs = this.box({ height: space.bar, flexDirection: "row", gap: space.between });
+    this.tabs = this.box({
+      height: space.bar + space.section,
+      flexDirection: "row",
+      gap: space.between,
+    });
     center.add(this.tabs);
     this.search = new InputRenderable(renderer, {
       id: "search",
@@ -177,10 +182,14 @@ export class App {
       scrollX: false,
       stickyScroll: true,
       stickyStart: "bottom",
+      onSizeChange: this.schedule,
       contentOptions: { gap: space.stack, paddingBottom: space.stack },
       verticalScrollbarOptions: { visible: false },
       horizontalScrollbarOptions: { visible: false },
     });
+    // The ScrollBar constructor resets manual visibility; set it after construction.
+    this.scroll.verticalScrollBar.visible = false;
+    this.scroll.horizontalScrollBar.visible = false;
     center.add(this.scroll);
     this.promptBox = this.box({
       id: "operator-prompt",
@@ -190,7 +199,16 @@ export class App {
       onMouseDown: () => this.question(),
     });
     center.add(this.promptBox);
-    this.composeBox = this.box({ id: "composer-box", height: 1, flexShrink: 0, backgroundColor: c.panel });
+    this.composeBox = this.box({
+      id: "composer-box",
+      height: space.bar + space.inset * 2,
+      flexShrink: 0,
+      marginTop: space.section,
+      padding: space.inset,
+      border: ["left"],
+      borderColor: c.accent,
+      backgroundColor: c.panel,
+    });
     center.add(this.composeBox);
     this.composer = new TextareaRenderable(renderer, {
       id: "composer",
@@ -248,6 +266,8 @@ export class App {
       verticalScrollbarOptions: { visible: false },
       horizontalScrollbarOptions: { visible: false },
     });
+    this.inspector.verticalScrollBar.visible = false;
+    this.inspector.horizontalScrollBar.visible = false;
     body.add(this.inspector);
     workspace.on("change", this.schedule);
     workspace.on("compose", this.compose);
@@ -383,7 +403,10 @@ export class App {
       this.clear(this.promptBox);
       if (pending)
         this.promptBox.add(
-          this.text(`Reply (${pending.shape}): ${pending.message}`, c.warning, { height: 1, truncate: true }),
+          this.text(`Reply (${pending.shape}): ${pending.message}`, c.warning, {
+            height: space.bar,
+            truncate: true,
+          }),
         );
     }
     this.composer.placeholder = w.editing
@@ -393,11 +416,10 @@ export class App {
         : w.mode === "python"
           ? "Write Python..."
           : "Ask anything, or type / for a command...";
-    this.composeBox.height = Math.min(
-      6,
-      Math.max(1, this.composer.lineCount, this.composer.lineInfo.lineSources.length),
-    );
-    const { model, effort } = actorParts(w.actor);
+    this.composeBox.height =
+      space.inset * 2 +
+      Math.min(6, Math.max(space.bar, this.composer.lineCount, this.composer.lineInfo.lineSources.length));
+    const { model, effort } = w.actorChoice;
     const state = w.loading
       ? "loading"
       : w.error
@@ -428,20 +450,32 @@ export class App {
     index: number,
     options: BlockOptions = {},
   ): void {
-    const closed = options.compact ? !this.expanded.has(id) : this.collapsed.has(id);
-    key = options.compact && closed ? "closed" : `${key}:${closed}`;
+    const closed = Boolean(options.compact) !== this.toggled.has(id);
+    key =
+      options.compact && closed && !options.preview
+        ? "closed"
+        : `${key}:${closed}:${options.preview && closed ? this.scroll.width : ""}`;
     const heading = `${options.compact ? (closed ? "▸ " : "▾ ") : ""}${label}`;
-    const visible = Boolean(label) && (options.heading !== false || closed);
+    const visible = Boolean(label) && (options.compact || options.heading !== false || closed);
     const prior = this.cards.get(id);
     if (prior?.key === key) {
       prior.heading.content = heading;
       prior.heading.fg = color;
       prior.heading.visible = visible;
+      prior.node.marginTop = options.separate ? space.section : space.stack;
       if (this.scroll.getChildren()[index] !== prior.node) this.scroll.add(prior.node, index);
       return;
     }
     prior?.node.destroyRecursively();
-    const box = this.box({ id, gap: space.stack, flexShrink: 0 });
+    const box = this.box({
+      id,
+      gap: space.stack,
+      flexShrink: 0,
+      marginTop: options.separate ? space.section : space.stack,
+      ...(options.prompt
+        ? { border: ["left"], borderColor: c.accent, paddingX: space.inset, backgroundColor: c.panel }
+        : {}),
+    });
     const labelNode = this.text(heading, color, {
       height: space.bar,
       truncate: true,
@@ -451,14 +485,14 @@ export class App {
           this.actActions(this.workspace.acts.find((act) => act.id === options.act?.id) ?? options.act);
           return;
         }
-        const held = options.compact ? this.expanded : this.collapsed;
-        if (held.has(id)) held.delete(id);
-        else held.add(id);
+        if (this.toggled.has(id)) this.toggled.delete(id);
+        else this.toggled.add(id);
         this.renderContent();
       },
     });
     box.add(labelNode);
     if (!closed) body(box);
+    else options.preview?.(box);
     this.scroll.add(box, index);
     this.cards.set(id, { key, node: box, heading: labelNode, compact: options.compact ?? false });
   }
@@ -540,9 +574,25 @@ export class App {
       existing.delete(id);
       const heading = !options.group || group !== options.group;
       group = options.group ?? "";
-      this.card(id, key, label, color, body, order++, { ...options, heading: options.heading ?? heading });
+      this.card(id, key, label, color, body, order, {
+        ...options,
+        heading: options.heading ?? heading,
+        separate: order > 0 && (options.separate ?? heading),
+      });
+      order++;
     };
     const matches = (text: string) => !w.query || text.toLowerCase().includes(w.query.toLowerCase());
+    if (w.preferences.notice)
+      add("preferences-notice", w.preferences.notice, "", c.warning, (box) =>
+        box.add(
+          this.text(w.preferences.notice, c.warning, {
+            onMouseDown: () => {
+              w.preferences.notice = "";
+              this.renderContent();
+            },
+          }),
+        ),
+      );
     if (w.error && !(w.view === "program" && w.findings.length))
       add("view-error", w.error, "", c.danger, (box) => {
         box.add(this.text(w.error, c.danger));
@@ -555,8 +605,6 @@ export class App {
           }),
         );
       });
-    if (w.loading)
-      add("view-loading", w.view, "", c.muted, (box) => box.add(this.text(`Loading ${w.view}...`, c.muted)));
     let items = 0;
     if (w.view === "conversation") {
       const seen = new Set<string>();
@@ -566,14 +614,10 @@ export class App {
           if (typeof content === "string") {
             if (!matches(content)) continue;
             items++;
-            add(
-              id,
-              content,
-              `Python · ${this.preview(content, 11)}`,
-              c.muted,
-              (box) => box.add(this.numbered(content)),
-              { compact: true },
-            );
+            add(id, content, "Python", c.muted, (box) => box.add(this.numbered(content)), {
+              compact: true,
+              preview: (box) => this.excerpt(box, content, true),
+            });
             continue;
           }
           if (!isTag(content)) continue;
@@ -581,6 +625,7 @@ export class App {
           const fields = Object.fromEntries(attrs);
           const actId = String(fields.id ?? fields.over ?? "");
           const act = w.acts.find((act) => act.id === actId);
+          if (act && ["raised", "refused"].includes(name) && this.failure(act)) continue;
           if (
             name === "ledger" ||
             (act &&
@@ -598,7 +643,7 @@ export class App {
               act.by === "operator" ? "You" : "Observation",
               c.muted,
               (box) => box.add(this.markdown(String(fields.message ?? ""))),
-              { group: act.by === "operator" ? "user" : "observation", act },
+              { group: act.by === "operator" ? "user" : "observation", prompt: act.by === "operator", act },
             );
           } else if (act?.kind === "prompt" && name === "closed") {
             items++;
@@ -620,7 +665,7 @@ export class App {
               this.actSummary(act),
               this.actColor(act),
               (box) => this.actDetails(box, act),
-              { compact: true, act },
+              { compact: true, group: "tools", preview: this.actPreview(act), act },
             );
           } else {
             items++;
@@ -644,7 +689,7 @@ export class App {
                   );
                 if (body !== null && body !== "") this.renderBody(box, body);
               },
-              { compact: true, act },
+              { compact: true, group: "tools", act },
             );
           }
         }
@@ -710,7 +755,7 @@ export class App {
             this.actSummary(act),
             this.actColor(act),
             (box) => this.actDetails(box, act),
-            { compact: true, act },
+            { compact: true, preview: this.actPreview(act), act },
           );
         }
     } else if (w.view === "transcript") {
@@ -779,10 +824,12 @@ export class App {
             box.add(this.text(`by ${fact[2]}`, c.muted));
             box.add(this.text(JSON.stringify(fact.slice(3), null, 2)));
           },
-          { compact: true },
+          { compact: true, group: "facts" },
         );
       }
     }
+    if (!items && w.loading && !w.error)
+      add("view-loading", w.view, "", c.muted, (box) => box.add(this.text(`Loading ${w.view}...`, c.muted)));
     if (!items && !w.loading && !w.error) {
       const empty = {
         conversation: "No conversation yet.",
@@ -802,8 +849,9 @@ export class App {
   }
 
   private preview(text: string, reserve = 2): string {
-    const line = text.replace(/\s+/g, " ");
-    const width = Math.max(8, this.scroll.width - reserve);
+    return this.clip(text.replace(/\s+/g, " "), Math.max(8, this.scroll.width - reserve));
+  }
+  private clip(line: string, width: number): string {
     if (Bun.stringWidth(line) <= width) return line;
     let result = "";
     for (const character of line) {
@@ -811,6 +859,40 @@ export class App {
       result += character;
     }
     return `${result}…`;
+  }
+  private excerpt(box: BoxRenderable, content: string, python = false, tail = false, color = c.text): void {
+    const lines = content.trimEnd().split("\n");
+    const limit = python ? 2 : 3;
+    const selected = tail ? lines.slice(-limit) : lines.slice(0, limit);
+    if (lines.length > limit) {
+      if (tail) selected[0] = `… ${selected[0]}`;
+      else selected[selected.length - 1] += " …";
+    }
+    const visible = selected
+      .map((line) => this.clip(line, Math.max(8, this.scroll.width - space.between)))
+      .join("\n");
+    const preview = this.box({ paddingLeft: space.between });
+    preview.add(python ? this.code(visible) : this.text(visible, color));
+    box.add(preview);
+  }
+  private actPreview(act: ActRow): BlockOptions["preview"] {
+    if (this.failure(act)) {
+      const fault = act.value as { is: string; args: unknown[] };
+      return (box) =>
+        this.excerpt(box, `${fault.is}: ${fault.args.map(display).join(", ")}`, false, false, c.danger);
+    }
+    if (act.kind === "rung") {
+      const word = String(this.workspace.program[act.id] || act.words[0] || "");
+      if (word) return (box) => this.excerpt(box, word, true);
+    }
+    if (act.kind === "bash" && act.value && typeof act.value === "object") {
+      const exit = act.value as { stdout?: { content: string }; stderr?: { content: string } };
+      const output = [exit.stdout?.content, exit.stderr?.content].filter(Boolean).join("\n");
+      if (output) return (box) => this.excerpt(box, output, false, true);
+    }
+    if (act.kind === "prompt" && act.done && act.value !== null)
+      return (box) => this.excerpt(box, display(act.value));
+    return undefined;
   }
   private failure(act: ActRow): boolean {
     return Boolean(
@@ -862,10 +944,15 @@ export class App {
               .join(" · ")
           : act.kind === "wait"
             ? `${act.words[0]}s`
-            : String(this.workspace.program[act.id] || act.words[0] || "awaiting model");
-    const prefix = `${act.kind} · `,
+            : act.kind === "rung"
+              ? this.workspace.program[act.id] || act.words[0]
+                ? short(act.id)
+                : "awaiting model"
+              : String(act.words[0] || "");
+    const observation = act.kind === "prompt" && act.by !== "operator";
+    const prefix = `${observation ? "observation" : act.kind} · `,
       suffix = ` · ${state}`;
-    return `${prefix}${this.preview(words, Bun.stringWidth(prefix + suffix) + 2)}${suffix}`;
+    return `${prefix}${this.preview(observation ? words.replace(/ done$/, "") : words, Bun.stringWidth(prefix + suffix) + 2)}${suffix}`;
   }
   private actDetails(box: BoxRenderable, act: ActRow): void {
     const fields: Record<string, string[]> = {
@@ -1088,7 +1175,7 @@ export class App {
     for (const chain of w.chains)
       this.inspector.add(
         this.text(w.labelOf(chain.id), chain.id === w.selected ? c.accent : c.muted, {
-          height: 1,
+          height: space.bar,
           truncate: true,
           attributes: chain.id === w.selected ? 1 : 0,
           bg: chain.id === w.selected ? c.selected : c.panel,
@@ -1103,7 +1190,7 @@ export class App {
     const path = Bun.stringWidth(directory) > width ? `…${directory.slice(1 - width)}` : directory;
     this.inspector.add(
       this.text(path, c.muted, {
-        height: 1,
+        height: space.bar,
         truncate: true,
         onMouseDown: () => this.showValue("Directory", directory),
       }),
@@ -1215,13 +1302,13 @@ export class App {
         .filter(([name]) => name !== "operator")
         .map(([name, , window]) => ({
           label: name,
-          detail: `${count(window)} context${name === actorParts(this.workspace.actor).model ? " · selected" : ""}`,
+          detail: `${count(window)} context${name === this.workspace.actorChoice.model ? " · selected" : ""}`,
           run: () => this.action(`/model ${name}`),
         })),
     );
   };
   effortPicker = (): void => {
-    const { model, effort } = actorParts(this.workspace.actor);
+    const { model, effort } = this.workspace.actorChoice;
     const offered = this.workspace.roster.find(([name]) => name === model)?.[1] ?? [];
     this.openPalette(
       `Effort · ${model}`,
@@ -1240,10 +1327,10 @@ export class App {
         .filter(([, card]) => card.compact)
         .map(([id, card]) => ({
           label: card.heading.plainText.replace(/^[▸▾] /, ""),
-          detail: this.expanded.has(id) ? "Collapse" : "Expand",
+          detail: this.toggled.has(id) ? "Collapse" : "Expand",
           run: () => {
-            if (this.expanded.has(id)) this.expanded.delete(id);
-            else this.expanded.add(id);
+            if (this.toggled.has(id)) this.toggled.delete(id);
+            else this.toggled.add(id);
             this.renderContent();
             this.scroll.scrollChildIntoView(id);
           },
@@ -1640,6 +1727,16 @@ export class App {
     this.workspace.notice = `${id}: run a rung below, or /edit ${id} to change its program.`;
   }
   rewind = (): void => {
+    if (this.workspace.paused) {
+      this.openPalette("Resume this chain before rewinding", [
+        {
+          label: "Resume chain",
+          detail: "Then choose the last act the new chain will read.",
+          run: () => (this.workspace.world.held.size ? this.resume() : this.action("/wake")),
+        },
+      ]);
+      return;
+    }
     const acts = this.workspace.activity.filter((act) => !["chain", "grant"].includes(act.kind));
     this.openPalette(
       "Rewind transcript · module and files stay current",
@@ -1650,14 +1747,15 @@ export class App {
             act.kind === "prompt" ? act.words[1] : act.words[0] || this.workspace.program[act.id] || "",
           ).split("\n")[0] ?? "",
         run: async () => {
+          if (this.workspace.paused) {
+            this.rewind();
+            return;
+          }
           const source = this.workspace.selected;
           const omitted = acts.slice(index + 1).map((later) => JSON.stringify(later.id));
           const filter = `take(${omitted.length ? `${omitted.join(", ")}, ` : ""}inside=False)`;
           const word = `chain(${JSON.stringify(`${this.workspace.label} through ${short(act.id)}`)}, ${JSON.stringify(source)}, ${filter})`;
           const rung = await this.workspace.life.rung(word, { on: source });
-          if (this.workspace.world.held.size) this.resume();
-          else if (this.workspace.paused)
-            this.workspace.notice = "Rewind is queued. Resume this chain to finish it.";
           await this.workspace.life.result(rung);
           await this.workspace.refresh();
           const next = this.workspace.chains.find((chain) => chain.by === rung);
@@ -1770,12 +1868,13 @@ export class App {
       });
       row.add(
         this.text(`${selected ? "▸" : " "} ${choice.label}`, selected ? c.accent : c.text, {
-          height: 1,
+          height: space.bar,
           truncate: true,
           attributes: selected ? 1 : 0,
         }),
       );
-      if (choice.detail) row.add(this.text(`  ${choice.detail}`, c.muted, { height: 1, truncate: true }));
+      if (choice.detail)
+        row.add(this.text(`  ${choice.detail}`, c.muted, { height: space.bar, truncate: true }));
       this.paletteList.add(row);
     }
     if (!this.filtered.length) this.paletteList.add(this.text("No matching actions.", c.muted));
@@ -1986,8 +2085,7 @@ export class App {
     this.closed = true;
     this.workspace.drafts[this.draftKey] = this.composer.plainText;
     this.workspace.scrolls[this.lastView] = this.scroll.scrollTop;
-    this.workspace.collapsed = [...this.collapsed];
-    this.workspace.expanded = [...this.expanded];
+    this.workspace.toggled = [...this.toggled];
     this.workspace.save();
     if (this.redraw) clearTimeout(this.redraw);
     if (this.hoverTimer) clearTimeout(this.hoverTimer);

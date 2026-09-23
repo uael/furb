@@ -5,6 +5,7 @@ import { defaultTheme, palettes, type ThemeName } from "./theme.ts";
 
 export class Preferences {
   theme: ThemeName = defaultTheme;
+  notice = "";
   constructor(
     readonly path = join(
       process.env.FURB_CONFIG_DIR ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "furb"),
@@ -12,10 +13,11 @@ export class Preferences {
     ),
   ) {
     try {
-      const saved = JSON.parse(readFileSync(path, "utf8")) as { theme?: string };
-      if (saved.theme && saved.theme in palettes) this.theme = saved.theme as ThemeName;
+      const saved = JSON.parse(readFileSync(path, "utf8")) as { theme?: string } | null;
+      if (saved?.theme && Object.hasOwn(palettes, saved.theme)) this.theme = saved.theme as ThemeName;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+        this.notice = `Could not read preferences at ${path}. Using GitHub Dark. Click to dismiss.`;
     }
   }
   save(theme: ThemeName): void {

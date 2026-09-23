@@ -73,7 +73,7 @@ export function cliModel(id: string): Model<Api> {
     reasoning: true,
     thinkingLevelMap: {
       off: null,
-      minimal: "low",
+      minimal: null,
       low: "low",
       medium: "medium",
       high: "high",
