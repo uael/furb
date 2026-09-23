@@ -196,8 +196,15 @@ test("the left tree groups sessions, switches by mouse, collapses and toggles wi
     expect(app.scroll.x).toBe(1);
     expect(app.composer.plainText).toBe("keep this draft");
     screen.mockInput.pressKey("w", { ctrl: true });
-    await Bun.sleep(50);
-    await screen.flush();
+    // The picker refreshes the workspaces before it opens, so the frame is read until it shows, for two seconds.
+    for (
+      let tries = 0;
+      tries < 100 && !screen.captureCharFrame().includes("Workspaces & sessions");
+      tries++
+    ) {
+      await Bun.sleep(20);
+      await screen.flush();
+    }
     expect(screen.captureCharFrame()).toContain("Workspaces & sessions");
     app.closeOverlay();
     library.toggle();
