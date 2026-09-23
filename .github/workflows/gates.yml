@@ -34,7 +34,13 @@ jobs:
           enable-cache: true
           cache-python: true
       # The rust of rust-toolchain.toml, and the cache of what cargo built of the dependencies the last time.
+      # The key of the cache holds the files that tell cargo what to build, because the action does not read them.
+      # Only main saves the cache, and a pull request reads the cache of main.
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          cache-key: >-
+            ${{ hashFiles('.github/workflows/gates.yml', '.pre-commit-config.yaml', 'bind/python/pyproject.toml') }}
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: uv python install
       - run: uv sync --locked
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -60,6 +66,10 @@ jobs:
           enable-cache: true
           cache-python: true
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          cache-key: >-
+            ${{ hashFiles('.github/workflows/gates.yml', '.pre-commit-config.yaml', 'bind/python/pyproject.toml') }}
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: uv python install
       - run: uv sync --locked
       - run: uv run ty check --error-on-warning
@@ -84,6 +94,10 @@ jobs:
           enable-cache: true
           cache-python: true
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          cache-key: >-
+            ${{ hashFiles('.github/workflows/gates.yml', '.pre-commit-config.yaml', 'bind/python/pyproject.toml') }}
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: uv python install
       - run: uv sync --locked
       - run: uv run pytest -q
