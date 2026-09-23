@@ -1,12 +1,15 @@
+import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
-import type { Fact, Turn, Usage } from "@furb/engine";
+import { mkdir, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
+import type { Fact, ImageAttachment, Turn, Usage } from "@furb/engine";
 import { actorParts, shapes } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
 import type { Engine, HostView } from "./bridge.ts";
+import { fileReferences } from "./files.ts";
 import { Preferences } from "./preferences.ts";
+import { shareHtml, shareMarkdown } from "./share.ts";
 import { palettes, type ThemeName } from "./theme.ts";
 
 export type View = "conversation" | "program" | "activity" | "facts" | "transcript" | "changes";
@@ -17,10 +20,19 @@ export interface ActRow {
   on: string;
   words: unknown[];
   done: boolean;
+  paused?: boolean;
+  run?: { status: "running" | "failed" | "done"; reason: string };
   value: unknown;
 }
+export interface FollowUp {
+  id: string;
+  chain: string;
+  text: string;
+  shape: string;
+  actor: string;
+}
 
-export class Workspace extends EventEmitter {
+export class Session extends EventEmitter {
   selected: string;
   view: View = "conversation";
   actor: string;
@@ -32,25 +44,32 @@ export class Workspace extends EventEmitter {
   changePage = 0;
   program: Record<string, string> = {};
   query = "";
-  notice = "";
+  private message = "";
+  private noticeTimer?: ReturnType<typeof setTimeout>;
   readonly errors: Record<string, string> = {};
   loading = false;
   paused = false;
   editing?: string;
   ladder?: string;
-  theme: ThemeName;
   readonly preferences: Preferences;
   mode: "prompt" | "python" = "prompt";
   shape = "str";
   drafts: Record<string, string> = {};
   scrolls: Record<string, number> = {};
   panes = { inspector: 28 };
-  toggled: string[] = [];
+  folds: Record<string, boolean> = {};
   roster: [string, string[], number][] = [];
   findings: string[] = [];
   rejectedWord = "";
   rejectedAct = "";
   repls: Record<string, string[]> = {};
+  queued: FollowUp[] = [];
+  dispatched: string[] = [];
+  images: Record<string, ImageAttachment[]> = {};
+  queueHeld = false;
+  queueError = "";
+  redo: { from: string; to: string }[] = [];
+  private draining = false;
   private savedCost = 0;
   histories: Record<string, string[]> = {};
   started: Record<string, number> = {};
@@ -72,12 +91,12 @@ export class Workspace extends EventEmitter {
     const path = world.records.path;
     this.preferences =
       preferences ?? new Preferences(demo && path ? join(dirname(path), "ui-preferences.json") : undefined);
-    this.theme = this.preferences.theme;
     if (path && existsSync(`${path}.ui.json`)) {
-      const saved = JSON.parse(readFileSync(`${path}.ui.json`, "utf8")) as Partial<Workspace> & {
+      const saved = JSON.parse(readFileSync(`${path}.ui.json`, "utf8")) as Partial<Session> & {
         cost?: number;
         collapsed?: string[];
         expanded?: string[];
+        toggled?: string[];
       };
       this.savedCost = saved.cost ?? 0;
       this.selected = saved.selected ?? this.selected;
@@ -91,11 +110,22 @@ export class Workspace extends EventEmitter {
       this.histories = saved.histories ?? {};
       this.started = saved.started ?? {};
       this.repls = saved.repls ?? {};
+      this.queued = saved.queued ?? [];
+      this.images = saved.images ?? {};
+      this.queueHeld = this.queued.length > 0;
+      this.queueError = saved.queueError ?? "";
+      this.redo = saved.redo ?? [];
       this.ladder = saved.ladder;
       this.drafts = saved.drafts ?? {};
       this.scrolls = saved.scrolls ?? {};
       this.panes = { inspector: saved.panes?.inspector ?? this.panes.inspector };
-      this.toggled = saved.toggled ?? [...(saved.collapsed ?? []), ...(saved.expanded ?? [])];
+      this.folds =
+        saved.folds ??
+        Object.fromEntries([
+          ...(saved.collapsed ?? []).map((id) => [id, true]),
+          ...(saved.expanded ?? []).map((id) => [id, false]),
+          ...(saved.toggled ?? []).map((id) => [id, saved.view === "program"]),
+        ]);
     }
     world.on("change", this.changed);
     world.on("facts", this.factsChanged);
@@ -105,6 +135,27 @@ export class Workspace extends EventEmitter {
   private changed = () => {
     this.emit("change");
   };
+  get theme(): ThemeName {
+    return this.preferences.theme;
+  }
+  get notice(): string {
+    return this.message;
+  }
+  set notice(value: string) {
+    clearTimeout(this.noticeTimer);
+    this.message = value;
+    this.emit("change");
+    if (value) {
+      this.noticeTimer = setTimeout(() => {
+        this.message = "";
+        this.emit("change");
+      }, 4000);
+      this.noticeTimer.unref();
+    }
+  }
+  set theme(value: ThemeName) {
+    this.preferences.save(value);
+  }
   private factsChanged = (facts: Fact[]) => {
     if (
       facts.some(
@@ -156,6 +207,16 @@ export class Workspace extends EventEmitter {
           continue;
         }
         Object.assign(this, snapshot);
+        const dispatched = new Set(this.dispatched);
+        const queued = this.queued.filter((entry) => !dispatched.has(entry.id));
+        if (queued.length !== this.queued.length) {
+          this.queued = queued;
+          if (!queued.length) {
+            this.queueHeld = false;
+            this.queueError = "";
+          }
+          this.save();
+        }
         if (this.view === "changes") this.changes = await this.world.readChanges(this.changePage * 20, 20);
         const rows = this.acts;
         for (const act of rows) if (!act.done) this.started[act.id] ??= Date.now();
@@ -186,6 +247,7 @@ export class Workspace extends EventEmitter {
       this.refreshTask = undefined;
       this.loading = false;
       if (!this.closed) this.emit("change");
+      if (!this.closed) void this.drainQueue().catch(this.fail);
     });
     return this.refreshTask;
   }
@@ -216,6 +278,27 @@ export class Workspace extends EventEmitter {
       (prompt) => this.acts.find((act) => act.id === prompt.id)?.on === this.selected,
     );
   }
+  isUserPrompt(act: ActRow): boolean {
+    return act.kind === "prompt" && act.by === "operator";
+  }
+  async attachImage(path: string): Promise<void> {
+    if (!this.world.route(this.actor).input.includes("image"))
+      throw new Error("Choose a model that accepts images before attaching one.");
+    const image = await this.world.attachImage(resolve(this.directory || this.world.directory, path));
+    const images = this.images[this.selected] ?? [];
+    this.images[this.selected] = images;
+    if (!images.some((current) => current.uri === image.uri)) images.push(image);
+    this.save();
+    this.notice = `${image.name} attached.`;
+  }
+  private withImages(text: string): string {
+    return [
+      text,
+      ...(this.images[this.selected] ?? []).map(
+        (image) => `![${image.name.replace(/[[\]\r\n]/g, "_")}](${image.uri})`,
+      ),
+    ].join("\n");
+  }
   labelOf(id: string): string {
     return id === this.life.root
       ? "Main"
@@ -241,11 +324,10 @@ export class Workspace extends EventEmitter {
     void this.life
       .result(id)
       .then(
-        () => {
-          this.notice = "Work complete.";
-        },
+        () => {},
         async (error: unknown) => {
           if (this.closed) return;
+          this.notice = "";
           // A finished act carries its failure in the record and in the feed.
           if (!(await this.life.outcome(id)).done) throw error;
           if (error instanceof Error && error.message.startsWith("CancelledError"))
@@ -257,11 +339,109 @@ export class Workspace extends EventEmitter {
       })
       .catch(this.fail);
   }
+  enqueue(text: string): void {
+    if (!text.trim()) return;
+    this.queued.push({
+      id: randomUUID(),
+      chain: this.selected,
+      text: this.withImages(text),
+      shape: this.shape,
+      actor: this.actor,
+    });
+    delete this.images[this.selected];
+    this.save();
+    this.notice = "Follow-up queued.";
+    void this.drainQueue().catch(this.fail);
+  }
+  async drainQueue(): Promise<void> {
+    if (this.closed || this.draining || this.queueHeld || this.world.held.size || !this.queued.length) return;
+    this.draining = true;
+    try {
+      for (const entry of [...this.queued]) {
+        if (
+          this.acts.find((act) => act.id === entry.chain)?.paused ||
+          this.acts.some(
+            (act) => act.on === entry.chain && !act.done && ["prompt", "rung"].includes(act.kind),
+          )
+        )
+          continue;
+        await this.attachFiles(entry.text, entry.chain);
+        this.track(await this.world.sendQueued(entry));
+        this.queued = this.queued.filter((item) => item.id !== entry.id);
+        this.save();
+        await this.refresh();
+      }
+    } catch (error) {
+      if (!this.closed) {
+        this.queueHeld = true;
+        this.queueError = error instanceof Error ? error.message : String(error);
+        this.notice = `Queue stopped: ${this.queueError}`;
+        this.save();
+      }
+    } finally {
+      this.draining = false;
+      this.emit("change");
+    }
+  }
+  removeQueued(id: string): void {
+    if (!this.queued.some((entry) => entry.id === id))
+      throw new Error("This follow-up has already been sent.");
+    this.queued = this.queued.filter((entry) => entry.id !== id);
+    if (!this.queued.length) {
+      this.queueHeld = false;
+      this.queueError = "";
+    }
+    this.save();
+    this.notice = "Follow-up removed.";
+  }
+  private async attachFiles(text: string, chain = this.selected): Promise<void> {
+    for (const path of fileReferences(text))
+      await this.life.result(await this.life.rung(`read(${JSON.stringify(path)})`, { on: chain }));
+  }
+  async undo(): Promise<void> {
+    if (this.paused || this.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)))
+      throw new Error("Let the current prompt finish, or cancel and wake it before undo.");
+    const index = this.activity.findLastIndex((act) => this.isUserPrompt(act));
+    const prompt = this.activity[index];
+    if (!prompt) throw new Error("There is no user message to undo.");
+    const source = this.selected;
+    const omitted = this.activity
+      .slice(index)
+      .map((act) => JSON.stringify(act.id))
+      .join(", ");
+    const rung = await this.life.rung(
+      `chain(${JSON.stringify(`${this.label} undo`)}, ${JSON.stringify(source)}, take(${omitted}, inside=False))`,
+      { on: source },
+    );
+    await this.life.result(rung);
+    await this.refresh();
+    const branch = this.chains.find((chain) => chain.by === rung);
+    if (!branch) throw new Error("Undo did not create its chain.");
+    this.redo.push({ from: source, to: branch.id });
+    await this.select(branch.id);
+    let message = String(prompt.words[1] ?? "");
+    for (const match of message.matchAll(
+      /!\[([^\]]*)\]\((furb-image:\/\/[a-f0-9]{64}\.(?:png|jpg|gif|webp))\)/g,
+    )) {
+      const uri = match[2] ?? "";
+      const image = await this.world.attachImage(
+        join(this.world.imageDirectory, uri.slice("furb-image://".length)),
+      );
+      image.name = match[1] || image.name;
+      this.images[this.selected] ??= [];
+      this.images[this.selected]?.push(image);
+      message = message.replace(match[0], "");
+    }
+    this.emit("compose", message.trimEnd());
+    this.notice = "Message removed from this branch. Module and files keep their current state.";
+    this.save();
+  }
 
   async submit(input: string): Promise<void> {
     const text = input.trim();
     if (!text) return;
     this.error = "";
+    this.notice = "";
     if (this.editing) {
       await this.life.result(
         await this.life.rung(`write(Text(${JSON.stringify(this.editing)}, ${JSON.stringify(input)}))`, {
@@ -271,15 +451,22 @@ export class Workspace extends EventEmitter {
       this.notice = "Program updated and replayed.";
       this.editing = undefined;
     } else if (text.startsWith("/")) await this.command(text);
+    else if (text.startsWith("!")) await this.command(`/bash ${text.slice(1).trimStart()}`);
     else {
       const pending = this.operatorPrompt;
       if (pending) await this.world.answer(pending.id, input);
       else {
+        await this.attachFiles(input);
+        this.redo = [];
         const held = this.world.held.size > 0;
-        const id = await this.life.prompt(this.shape, input, { on: this.selected, to: this.actor });
+        const id = await this.life.prompt(this.shape, this.withImages(input), {
+          on: this.selected,
+          to: this.actor,
+        });
+        delete this.images[this.selected];
+        this.save();
         if (held) this.emit("resume");
         this.track(id);
-        this.notice = "The model is working.";
       }
     }
     await this.refresh();
@@ -322,6 +509,32 @@ export class Workspace extends EventEmitter {
       case "rewind":
         this.emit("rewind");
         break;
+      case "undo":
+        await this.undo();
+        break;
+      case "redo": {
+        const point = this.redo.at(-1);
+        if (!point || point.to !== this.selected) throw new Error("There is no message to redo here.");
+        this.redo.pop();
+        await this.select(point.from);
+        this.emit("compose", "");
+        this.save();
+        break;
+      }
+      case "queue":
+        if (argument) this.enqueue(argument);
+        else this.emit("queue");
+        break;
+      case "tree":
+        this.emit("tree");
+        break;
+      case "autocollapse":
+        this.preferences.autoCollapseRungs = !this.preferences.autoCollapseRungs;
+        this.preferences.save();
+        this.notice = this.preferences.autoCollapseRungs
+          ? "Completed rungs collapse automatically."
+          : "Rungs keep their open state.";
+        break;
       case "grant": {
         const amount = Number(argument);
         if (!argument || !Number.isFinite(amount) || amount < 0)
@@ -332,10 +545,10 @@ export class Workspace extends EventEmitter {
         this.notice = `Budget set to $${amount.toFixed(2)}. Use /wake if paused.`;
         break;
       }
-      case "share": {
+      case "context": {
         const amount = Number(argument);
         if (!argument || !Number.isFinite(amount) || amount < 0 || amount > 1)
-          throw new Error("Use /share with a number from 0 to 1.");
+          throw new Error("Use /context with a number from 0 to 1.");
         await this.life.grant({ share: amount, on: this.selected });
         break;
       }
@@ -390,7 +603,8 @@ export class Workspace extends EventEmitter {
         this.emit("inspect", argument);
         break;
       case "theme":
-        if (!(argument in palettes)) throw new Error(`Choose ${Object.keys(palettes).join(", ")}.`);
+        if (!Object.hasOwn(palettes, argument))
+          throw new Error(`Choose ${Object.keys(palettes).join(", ")}.`);
         this.theme = argument as ThemeName;
         this.preferences.save(this.theme);
         break;
@@ -437,6 +651,16 @@ export class Workspace extends EventEmitter {
         this.notice = `Exported to ${argument}.`;
         break;
       }
+      case "share": {
+        const path = argument
+          ? resolve(argument)
+          : join(this.world.directory, ".furb/shares", `${Date.now()}.html`);
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, shareHtml(this), { flag: "wx", mode: 0o600 });
+        this.notice = `Conversation saved to ${path}`;
+        this.emit("shared", path, shareMarkdown(this));
+        break;
+      }
       default:
         throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
     }
@@ -480,16 +704,21 @@ export class Workspace extends EventEmitter {
         started: this.started,
         ladder: this.ladder,
         repls: this.repls,
+        queued: this.queued,
+        queueError: this.queueError,
+        images: this.images,
+        redo: this.redo,
         drafts: this.drafts,
         scrolls: this.scrolls,
         panes: this.panes,
-        toggled: this.toggled,
+        folds: this.folds,
       }),
       { mode: 0o600 },
     );
     renameSync(`${path}.tmp`, path);
   }
   async dispose(): Promise<void> {
+    clearTimeout(this.noticeTimer);
     this.save();
     this.closed = true;
     this.world.off("change", this.changed);

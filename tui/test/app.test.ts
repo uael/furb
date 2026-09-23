@@ -4,19 +4,19 @@ import { dirname, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
-import { demoWorkspace, seedDemo } from "../src/demo.ts";
+import { demoSession, seedDemo } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
+import { Session } from "../src/session.ts";
 import { sessionChoices } from "../src/sessions.ts";
-import { Workspace } from "../src/workspace.ts";
 
 test("the real native life drives conversation, program, activity, search, and responsive views", async () => {
-  const workspace = await demoWorkspace();
+  const session = await demoSession();
   const test = await createTestRenderer({ width: 145, height: 45, useMouse: true });
-  const app = new App(test.renderer, workspace, { quit() {} });
+  const app = new App(test.renderer, session, { quit() {} });
   try {
     await test.flush();
     expect(test.captureCharFrame()).toContain("Explore a codebase");
-    expect(workspace.theme).toBe("github");
+    expect(session.theme).toBe("github");
     expect(app.scroll.x).toBe(1);
     expect(app.scroll.height).toBeGreaterThanOrEqual(36);
     expect(app.scroll.height).toBeLessThanOrEqual(38);
@@ -27,7 +27,7 @@ test("the real native life drives conversation, program, activity, search, and r
     app.composer.setText("");
     expect(test.captureCharFrame()).not.toContain("No budget set");
     expect(test.captureCharFrame()).not.toContain("Session saved");
-    await seedDemo(workspace);
+    await seedDemo(session);
     app.render();
     await test.flush();
     expect(test.captureCharFrame()).toContain("Result");
@@ -50,11 +50,11 @@ test("the real native life drives conversation, program, activity, search, and r
     if (expanded) await test.mockMouse.click(expanded.x, expanded.y);
     await test.flush();
     expect(test.captureCharFrame()).not.toContain("command:");
-    workspace.show("program");
+    session.show("program");
     app.render();
     await test.flush();
     expect(test.captureCharFrame()).toContain('notes = read("README.md")');
-    workspace.show("activity");
+    session.show("activity");
     app.render();
     await test.flush();
     expect(app.scroll.getChildren().some((child) => child.id.startsWith("bash://"))).toBe(true);
@@ -76,14 +76,14 @@ test("the real native life drives conversation, program, activity, search, and r
   } finally {
     app.dispose();
     test.renderer.destroy();
-    await workspace.dispose();
+    await session.dispose();
   }
 }, 30000);
 
 test("model and effort change independently and a theme preference applies to a new session", async () => {
-  const first = await demoWorkspace();
-  let second: Workspace | undefined;
-  let recovered: Workspace | undefined;
+  const first = await demoSession();
+  let second: Session | undefined;
+  let recovered: Session | undefined;
   try {
     await first.submit("/effort high");
     expect(first.actor).toBe("claude-cli:sonnet/high");
@@ -92,7 +92,7 @@ test("model and effort change independently and a theme preference applies to a 
     await first.submit("/effort low");
     expect(first.actor).toBe("claude-cli:opus/low");
     await first.submit("/theme paper");
-    second = await demoWorkspace(false, new Preferences(first.preferences.path));
+    second = await demoSession(false, new Preferences(first.preferences.path));
     expect(second.theme).toBe("paper");
     expect(second.world.records.path).not.toBe(first.world.records.path);
     expect(first.preferences.path).toBe(join(dirname(first.world.records.path ?? ""), "ui-preferences.json"));
@@ -102,7 +102,7 @@ test("model and effort change independently and a theme preference applies to a 
     first.actor = "claude-cli:org/high";
     expect(first.actorChoice).toEqual({ model: "claude-cli:org/high", effort: "off" });
     await writeFile(first.preferences.path, "{");
-    recovered = await demoWorkspace(false, new Preferences(first.preferences.path));
+    recovered = await demoSession(false, new Preferences(first.preferences.path));
     expect(recovered.theme).toBe("github");
     expect(recovered.preferences.notice).toContain("Could not read preferences");
     expect(await readFile(first.preferences.path, "utf8")).toBe("{");
@@ -114,47 +114,47 @@ test("model and effort change independently and a theme preference applies to a 
 }, 30000);
 
 test("refreshes keep content in place, act failures stay in the record, and hidden scrollbars still scroll", async () => {
-  const workspace = await demoWorkspace(true);
+  const session = await demoSession(true);
   const screen = await createTestRenderer({ width: 120, height: 40 });
-  const app = new App(screen.renderer, workspace, { quit() {} });
-  const snapshot = workspace.world.snapshot.bind(workspace.world);
+  const app = new App(screen.renderer, session, { quit() {} });
+  const snapshot = session.world.snapshot.bind(session.world);
   let release = () => {};
   try {
     await Bun.sleep(300);
-    await workspace.refresh();
+    await session.refresh();
     app.render();
     await screen.flush();
     const before = app.scroll.getChildren().map((node) => [node.id, node.y]);
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    workspace.world.snapshot = async (chain) => {
+    session.world.snapshot = async (chain) => {
       await gate;
       return snapshot(chain);
     };
-    const reading = workspace.refresh();
+    const reading = session.refresh();
     app.render();
     await screen.flush();
     expect(screen.captureCharFrame()).not.toContain("Loading conversation...");
     expect(app.scroll.getChildren().map((node) => [node.id, node.y])).toEqual(before);
     release();
     await reading;
-    workspace.world.snapshot = snapshot;
+    session.world.snapshot = snapshot;
 
-    await workspace.submit("/read missing-review-file.txt");
-    await workspace.refresh();
+    await session.submit("/read missing-review-file.txt");
+    await session.refresh();
     app.render();
     await screen.flush();
-    expect(workspace.error).toBe("");
+    expect(session.error).toBe("");
     expect(screen.captureCharFrame()).not.toContain("Refresh view");
     expect(
-      workspace.activity.some(
+      session.activity.some(
         (act) => act.done && act.kind === "rung" && JSON.stringify(act.value).includes("Refused"),
       ),
     ).toBe(true);
 
-    workspace.show("transcript");
-    await workspace.refresh();
+    session.show("transcript");
+    await session.refresh();
     app.render();
     await screen.flush();
     expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.height);
@@ -163,10 +163,10 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
     await screen.flush();
     expect(app.scroll.scrollTop).toBeGreaterThan(0);
 
-    workspace.world.snapshot = async () => {
+    session.world.snapshot = async () => {
       throw new Error("Snapshot unavailable");
     };
-    await workspace.refresh().catch(workspace.fail);
+    await session.refresh().catch(session.fail);
     app.render();
     await screen.flush();
     app.scroll.scrollTo(0);
@@ -175,76 +175,76 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
     expect(screen.captureCharFrame()).toContain("Refresh view");
   } finally {
     release();
-    workspace.world.snapshot = snapshot;
+    session.world.snapshot = snapshot;
     app.dispose();
     screen.renderer.destroy();
-    await workspace.dispose();
+    await session.dispose();
   }
 }, 30000);
 
 test("every view shows an empty result, loading, and an error in its feed", async () => {
-  const workspace = await demoWorkspace();
+  const session = await demoSession();
   const screen = await createTestRenderer({ width: 120, height: 42 });
-  const app = new App(screen.renderer, workspace, { quit() {} });
+  const app = new App(screen.renderer, session, { quit() {} });
   try {
     for (const view of ["conversation", "program", "activity", "facts", "transcript", "changes"] as const) {
-      workspace.show(view);
-      await workspace.refresh();
-      workspace.query = "nothing matches this";
+      session.show(view);
+      await session.refresh();
+      session.query = "nothing matches this";
       app.render();
       await screen.flush();
       expect(screen.captureCharFrame()).toContain(`No matching ${view}`);
-      const snapshot = workspace.world.snapshot.bind(workspace.world);
+      const snapshot = session.world.snapshot.bind(session.world);
       let release = () => {};
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
-      workspace.world.snapshot = async (chain) => {
+      session.world.snapshot = async (chain) => {
         await gate;
         return snapshot(chain);
       };
-      const loading = workspace.refresh();
+      const loading = session.refresh();
       app.render();
       await screen.flush();
       expect(screen.captureCharFrame()).toContain(`Loading ${view}`);
       release();
       await loading;
-      workspace.world.snapshot = snapshot;
-      workspace.fail(new Error(`Could not load ${view}`));
+      session.world.snapshot = snapshot;
+      session.fail(new Error(`Could not load ${view}`));
       app.render();
       await screen.flush();
       expect(screen.captureCharFrame()).toContain(`Could not load ${view}`);
       expect(screen.captureCharFrame()).toContain("Refresh view");
-      workspace.error = "";
+      session.error = "";
     }
   } finally {
     app.dispose();
     screen.renderer.destroy();
-    await workspace.dispose();
+    await session.dispose();
   }
 }, 30000);
 
 test("operator answers and program edits act through the binding", async () => {
-  const workspace = await demoWorkspace();
+  const session = await demoSession();
   const test = await createTestRenderer({ width: 120, height: 40, exitOnCtrlC: false });
-  const app = new App(test.renderer, workspace, { quit() {} });
+  const app = new App(test.renderer, session, { quit() {} });
   try {
-    const id = await workspace.life.prompt("bool", "Continue with the change?", { to: "operator" });
+    const id = await session.life.prompt("bool", "Continue with the change?", { to: "operator" });
     await Bun.sleep(60);
-    await workspace.refresh();
+    await session.refresh();
     app.render();
     await test.flush();
     expect(test.captureCharFrame()).toContain("Continue with the change?");
-    await workspace.submit("yes");
-    expect(await workspace.life.result(id)).toBe(true);
-    await seedDemo(workspace);
-    await workspace.command("/edit");
+    await session.submit("yes");
+    expect(await session.life.result(id)).toBe(true);
+    await seedDemo(session);
+    await session.command("/edit");
     expect(app.composer.plainText).toContain("close(");
-    await workspace.submit('close("Edited answer")');
-    expect(workspace.editing).toBeUndefined();
-    await workspace.command("/run this is invalid python !!!");
-    expect(workspace.error).toBe("");
-    expect(workspace.findings.join("\n")).toContain("line 1");
+    await session.submit('close("Edited answer")');
+    expect(session.editing).toBeUndefined();
+    await session.command("/run this is invalid python !!!");
+    expect(session.error).toBe("");
+    expect(session.findings.join("\n")).toContain("line 1");
     app.render();
     await test.flush();
     expect(test.captureCharFrame()).toContain("this is invalid python");
@@ -255,12 +255,12 @@ test("operator answers and program edits act through the binding", async () => {
   } finally {
     app.dispose();
     test.renderer.destroy();
-    await workspace.dispose();
+    await session.dispose();
   }
 }, 30000);
 
 test("resume preserves chains, programs, theme, and input drafts while unfinished work stays paused", async () => {
-  const first = await demoWorkspace(true);
+  const first = await demoSession(true);
   const screen = await createTestRenderer({ width: 120, height: 40 });
   const app = new App(screen.renderer, first, { quit() {} });
   const fork = first.chains.find((chain) => chain.id !== first.life.root);
@@ -285,10 +285,10 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
     async () => {},
   );
   expect(choices[1]?.detail).toContain("KiB");
-  expect(choices[1]?.detail).not.toContain("Paused");
+  expect(choices[1]?.detail).toContain("Paused");
   expect(choices).toHaveLength(2);
   const opened = await openEngine({ record, demo: true });
-  const second = new Workspace(opened.life, opened.world, true);
+  const second = new Session(opened.life, opened.world, true);
   await second.refresh();
   const next = await createTestRenderer({ width: 120, height: 40 });
   const view = new App(next.renderer, second, { quit() {} });
@@ -309,52 +309,52 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
 }, 30000);
 
 test("rewind is a recorded rung and keeps the selected transcript after reopening", async () => {
-  const workspace = await demoWorkspace(true);
+  const session = await demoSession(true);
   const screen = await createTestRenderer({ width: 140, height: 42 });
-  const app = new App(screen.renderer, workspace, { quit() {} });
-  const source = workspace.selected;
-  await workspace.submit("/pause");
-  const heldActs = workspace.activity.map((act) => act.id);
+  const app = new App(screen.renderer, session, { quit() {} });
+  const source = session.selected;
+  await session.submit("/pause");
+  const heldActs = session.activity.map((act) => act.id);
   app.rewind();
   app.rewind();
   await screen.flush();
   expect(screen.captureCharFrame()).toContain("Resume this chain before rewinding");
-  await workspace.refresh();
-  expect(workspace.activity.map((act) => act.id)).toEqual(heldActs);
+  await session.refresh();
+  expect(session.activity.map((act) => act.id)).toEqual(heldActs);
   app.closeOverlay();
-  await workspace.submit("/wake");
-  const original = await workspace.life.rendered(source);
+  await session.submit("/wake");
+  const original = await session.life.rendered(source);
   let rewound = "";
   let transcript: string[] = [];
-  const record = workspace.world.records.path;
+  const record = session.world.records.path;
   try {
     app.rewind();
     await screen.flush();
     expect(screen.captureCharFrame()).toContain("Rewind transcript");
     const selected = new Promise<void>((resolve, reject) => {
       const changed = () => {
-        if (workspace.selected === source && !workspace.error) return;
-        workspace.off("change", changed);
-        if (workspace.error) reject(new Error(workspace.error));
+        if (session.selected === source && !session.error) return;
+        session.off("change", changed);
+        if (session.error) reject(new Error(session.error));
         else resolve();
       };
-      workspace.on("change", changed);
+      session.on("change", changed);
     });
     screen.mockInput.pressEnter();
     await selected;
-    await workspace.refresh();
-    expect(workspace.selected).not.toBe(source);
-    const continued = await workspace.life.rendered(source);
+    await session.refresh();
+    expect(session.selected).not.toBe(source);
+    const continued = await session.life.rendered(source);
     expect(continued.join("\n")).toContain(original.join("\n"));
-    expect(workspace.turns.length).toBeGreaterThan(0);
-    rewound = workspace.selected;
-    transcript = await workspace.life.rendered(rewound);
-    const maker = workspace.chains.find((chain) => chain.id === rewound)?.by;
-    expect(workspace.acts.find((act) => act.id === maker)?.kind).toBe("rung");
+    expect(session.turns.length).toBeGreaterThan(0);
+    rewound = session.selected;
+    transcript = await session.life.rendered(rewound);
+    const maker = session.chains.find((chain) => chain.id === rewound)?.by;
+    expect(session.acts.find((act) => act.id === maker)?.kind).toBe("rung");
   } finally {
     app.dispose();
     screen.renderer.destroy();
-    await workspace.dispose();
+    await session.dispose();
   }
   const reopened = await openEngine({ record, demo: true });
   try {
@@ -365,13 +365,13 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
 }, 30000);
 
 test("a progress tick keeps an in-flight act's card and body in place", async () => {
-  const workspace = await demoWorkspace();
+  const session = await demoSession();
   const screen = await createTestRenderer({ width: 120, height: 40 });
-  const app = new App(screen.renderer, workspace, { quit() {} });
+  const app = new App(screen.renderer, session, { quit() {} });
   try {
-    const id = await workspace.life.wait(60);
-    await workspace.refresh();
-    workspace.show("activity");
+    const id = await session.life.wait(60);
+    await session.refresh();
+    session.show("activity");
     app.render();
     await screen.flush();
     const card = app.scroll.getChildren().find((node) => node.id === id);
@@ -386,18 +386,18 @@ test("a progress tick keeps an in-flight act's card and body in place", async ()
   } finally {
     app.dispose();
     screen.renderer.destroy();
-    await workspace.dispose();
+    await session.dispose();
   }
 }, 30000);
 
 test("a name inside a transcript tag opens the same live inspector as Python code", async () => {
-  const workspace = await demoWorkspace();
+  const session = await demoSession();
   const screen = await createTestRenderer({ width: 120, height: 44, useMouse: true });
-  const app = new App(screen.renderer, workspace, { quit() {} });
+  const app = new App(screen.renderer, session, { quit() {} });
   try {
-    await workspace.life.result(await workspace.life.rung("answer = 17"));
-    await workspace.refresh();
-    workspace.show("transcript");
+    await session.life.result(await session.life.rung("answer = 17"));
+    await session.refresh();
+    session.show("transcript");
     app.render();
     await screen.flush();
     const lines = screen.captureCharFrame().split("\n");
@@ -410,16 +410,16 @@ test("a name inside a transcript tag opens the same live inspector as Python cod
   } finally {
     app.dispose();
     screen.renderer.destroy();
-    await workspace.dispose();
+    await session.dispose();
   }
 }, 30000);
 
 test("a delayed snapshot cannot restore the chain selected before a switch", async () => {
-  const workspace = await demoWorkspace();
+  const session = await demoSession();
   try {
-    const child = await workspace.life.chain("next");
-    await workspace.refresh();
-    const original = workspace.world.snapshot.bind(workspace.world);
+    const child = await session.life.chain("next");
+    await session.refresh();
+    const original = session.world.snapshot.bind(session.world);
     let release = () => {};
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -429,7 +429,7 @@ test("a delayed snapshot cannot restore the chain selected before a switch", asy
       entered = resolve;
     });
     let first = true;
-    workspace.world.snapshot = async (chain) => {
+    session.world.snapshot = async (chain) => {
       if (first) {
         first = false;
         const before = await original(chain);
@@ -439,20 +439,20 @@ test("a delayed snapshot cannot restore the chain selected before a switch", asy
       }
       return original(chain);
     };
-    const reading = workspace.refresh();
+    const reading = session.refresh();
     await started;
-    const switching = workspace.select(child);
+    const switching = session.select(child);
     release();
     await Promise.all([reading, switching]);
-    expect(workspace.selected).toBe(child);
-    expect(workspace.label).toBe("next");
+    expect(session.selected).toBe(child);
+    expect(session.label).toBe("next");
   } finally {
-    await workspace.dispose();
+    await session.dispose();
   }
 }, 30000);
 
 test("editing a prompt program is a durable operator rung", async () => {
-  const first = await demoWorkspace(true);
+  const first = await demoSession(true);
   const prompt = first.activity.find((act) => act.kind === "prompt" && act.by === "operator");
   if (!prompt) throw new Error("No prompt in the fixture.");
   await first.command(`/edit ${prompt.id}`);
@@ -461,7 +461,7 @@ test("editing a prompt program is a durable operator rung", async () => {
   const record = first.world.records.path;
   await first.dispose();
   const opened = await openEngine({ record, demo: true });
-  const second = new Workspace(opened.life, opened.world, true);
+  const second = new Session(opened.life, opened.world, true);
   try {
     await second.refresh();
     expect((await second.life.inspect("saved_edit")).value).toBe(42);

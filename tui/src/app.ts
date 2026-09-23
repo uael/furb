@@ -1,5 +1,5 @@
-import { basename } from "node:path";
-import { shapes } from "@furb/engine";
+import { basename, join } from "node:path";
+import { imageContent, shapes } from "@furb/engine";
 import { display, isTag, safeText } from "@furb/engine/world";
 import {
   type BoxOptions,
@@ -22,8 +22,14 @@ import {
   TextRenderable,
 } from "@opentui/core";
 import { createTwoFilesPatch } from "diff";
+import { clipboardImage } from "./clipboard.ts";
 import { commands } from "./commands.ts";
+import { externalEditor } from "./editor.ts";
+import type { Extensions } from "./extensions.ts";
+import { projectFiles } from "./files.ts";
 import { loadParsers } from "./parsers.ts";
+import type { ActRow, Session, View } from "./session.ts";
+import { publishShare } from "./share.ts";
 import {
   theme as c,
   defaultTheme,
@@ -33,7 +39,7 @@ import {
   syntax,
   type ThemeName,
 } from "./theme.ts";
-import type { ActRow, View, Workspace } from "./workspace.ts";
+import { type SessionStatus, statusLabels, type Workspace, type Workspaces } from "./workspaces.ts";
 
 const views: View[] = ["conversation", "program", "activity", "facts", "transcript", "changes"];
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
@@ -46,6 +52,7 @@ const count = (value: number) =>
       : String(value);
 interface BlockOptions {
   compact?: boolean;
+  collapsible?: boolean;
   heading?: boolean;
   group?: string;
   separate?: boolean;
@@ -57,12 +64,15 @@ interface Choice {
   label: string;
   detail: string;
   run(): void | Promise<void>;
+  toggle?: () => void;
 }
 
 export interface AppOptions {
   quit(): void | Promise<void>;
   sessions?: () => Promise<Choice[]>;
   newSession?: () => Promise<void>;
+  workspaces?: Workspaces;
+  extensions?: Extensions;
 }
 
 export class App {
@@ -77,19 +87,31 @@ export class App {
   private hoverTimer?: ReturnType<typeof setTimeout>;
   private editorVersion = 0;
   private closed = false;
-  private readonly toggled = new Set<string>();
+  private readonly folds = new Map<string, boolean>();
   private readonly inspector: ScrollBoxRenderable;
+  private readonly sidebar: ScrollBoxRenderable;
+  private readonly sidebarSplitter: BoxRenderable;
   private readonly splitters: BoxRenderable[] = [];
   private readonly tabs: BoxRenderable;
   private readonly head: TextRenderable;
   private readonly status: TextRenderable;
   private readonly composeBox: BoxRenderable;
   private readonly promptBox: BoxRenderable;
+  private readonly queueBox: BoxRenderable;
+  private readonly imageBox: BoxRenderable;
   private readonly search: InputRenderable;
   private readonly paneKeys = new WeakMap<Renderable, string>();
   private readonly cards = new Map<
     string,
-    { node: BoxRenderable; heading: TextRenderable; key: string; compact: boolean }
+    {
+      node: BoxRenderable;
+      heading: TextRenderable;
+      key: string;
+      compact: boolean;
+      collapsible: boolean;
+      state: string;
+      closed: boolean;
+    }
   >();
   private overlay?: BoxRenderable;
   private paletteInput?: InputRenderable;
@@ -114,12 +136,12 @@ export class App {
 
   constructor(
     readonly renderer: CliRenderer,
-    readonly workspace: Workspace,
+    readonly session: Session,
     readonly options: AppOptions,
   ) {
-    setTheme(workspace.theme);
-    for (const id of workspace.toggled) this.toggled.add(id);
-    this.theme = workspace.theme;
+    setTheme(session.theme);
+    for (const [id, closed] of Object.entries(session.folds)) this.folds.set(id, closed);
+    this.theme = session.theme;
     this.style = syntax();
     this.root = this.box({
       id: "furb",
@@ -140,12 +162,35 @@ export class App {
     header.add(this.text("furb", c.text, { attributes: 1 }));
     this.head = this.text("", c.muted, { flexGrow: 1 });
     header.add(this.head);
+    if (options.workspaces)
+      header.add(this.text("Ctrl+W spaces", c.muted, { onMouseDown: () => this.workspacePicker() }));
     const commands = this.text("Ctrl+P", c.muted, { onMouseDown: () => this.palette() });
     header.add(commands);
     this.root.add(header);
 
     const body = this.box({ flexGrow: 1, flexShrink: 1, flexDirection: "row", minHeight: 0 });
     this.root.add(body);
+    this.sidebar = new ScrollBoxRenderable(renderer, {
+      id: "workspaces",
+      width: session.preferences.sidebarWidth,
+      flexShrink: 0,
+      backgroundColor: c.panel,
+      scrollX: false,
+      contentOptions: { paddingX: space.inset, gap: space.stack },
+    });
+    this.sidebar.verticalScrollBar.visible = false;
+    this.sidebar.horizontalScrollBar.visible = false;
+    body.add(this.sidebar);
+    this.sidebarSplitter = this.box({
+      width: space.inset,
+      backgroundColor: c.border,
+      onMouseDrag: (event) => {
+        session.preferences.sidebarWidth = Math.max(22, Math.min(42, event.x));
+        session.preferences.save();
+        this.render();
+      },
+    });
+    body.add(this.sidebarSplitter);
     const center = this.box({
       flexGrow: 1,
       flexShrink: 1,
@@ -156,7 +201,8 @@ export class App {
     });
     body.add(center);
     this.tabs = this.box({
-      height: space.bar + space.section,
+      height: space.bar,
+      marginBottom: space.section,
       flexDirection: "row",
       gap: space.between,
     });
@@ -170,7 +216,7 @@ export class App {
       placeholderColor: c.muted,
     });
     this.search.on(InputRenderableEvents.INPUT, (value: string) => {
-      workspace.query = value;
+      session.query = value;
       this.renderContent();
     });
     center.add(this.search);
@@ -199,11 +245,24 @@ export class App {
       onMouseDown: () => this.question(),
     });
     center.add(this.promptBox);
+    this.queueBox = this.box({
+      id: "queued-follow-ups",
+      height: space.bar,
+      visible: false,
+      onMouseDown: () => this.queuePicker(),
+    });
+    center.add(this.queueBox);
+    this.imageBox = this.box({
+      id: "attached-images",
+      height: space.bar,
+      flexDirection: "row",
+      gap: space.between,
+      visible: false,
+    });
+    center.add(this.imageBox);
     this.composeBox = this.box({
       id: "composer-box",
-      height: space.bar + space.inset * 2,
       flexShrink: 0,
-      marginTop: space.section,
       padding: space.inset,
       border: ["left"],
       borderColor: c.accent,
@@ -229,6 +288,8 @@ export class App {
       onContentChange: () => {
         this.schedule();
         void this.highlightEditor();
+        if (!this.overlay && session.mode === "prompt" && /(?:^|\s)@$/.test(this.composer?.plainText ?? ""))
+          void this.filesPicker();
       },
       onCursorChange: () => {
         void this.highlightEditor();
@@ -244,8 +305,8 @@ export class App {
       width: 1,
       backgroundColor: c.border,
       onMouseDrag: (event) => {
-        workspace.panes.inspector = Math.max(24, Math.min(44, renderer.width - event.x));
-        this.inspector.width = workspace.panes.inspector;
+        session.panes.inspector = Math.max(24, Math.min(44, renderer.width - event.x));
+        this.inspector.width = session.panes.inspector;
       },
       onMouseOver() {
         this.backgroundColor = c.accent;
@@ -257,7 +318,7 @@ export class App {
     body.add(rightSplitter);
     this.splitters.push(rightSplitter);
     this.inspector = new ScrollBoxRenderable(renderer, {
-      width: workspace.panes.inspector,
+      width: session.panes.inspector,
       flexShrink: 0,
       scrollX: false,
       scrollY: true,
@@ -269,20 +330,24 @@ export class App {
     this.inspector.verticalScrollBar.visible = false;
     this.inspector.horizontalScrollBar.visible = false;
     body.add(this.inspector);
-    workspace.on("change", this.schedule);
-    workspace.on("compose", this.compose);
-    workspace.on("inspect", this.inspect);
-    workspace.on("resume", this.resume);
-    workspace.on("rewind", this.rewind);
-    workspace.on("models", this.models);
-    workspace.on("efforts", this.effortPicker);
-    workspace.on("details", this.details);
+    session.on("change", this.schedule);
+    options.workspaces?.on("change", this.schedule);
+    session.on("compose", this.compose);
+    session.on("inspect", this.inspect);
+    session.on("resume", this.resume);
+    session.on("rewind", this.rewind);
+    session.on("models", this.models);
+    session.on("efforts", this.effortPicker);
+    session.on("details", this.details);
+    session.on("queue", this.queuePicker);
+    session.on("tree", this.chainTree);
+    session.on("shared", this.shared);
     renderer.keyInput.on("keypress", this.key);
     renderer.on("resize", this.render);
     this.tick = setInterval(() => {
       if (
-        !this.workspace.paused &&
-        this.workspace.activity.some(
+        !this.session.paused &&
+        this.session.activity.some(
           (act) => !act.done && ["prompt", "bash", "wait", "rung"].includes(act.kind),
         )
       )
@@ -298,8 +363,8 @@ export class App {
           void this.highlightEditor();
         }
       })
-      .catch(workspace.fail);
-    if (workspace.world.held.size) this.resume();
+      .catch(session.fail);
+    if (session.world.held.size) this.resume();
   }
 
   private box(options: BoxOptions = {}): BoxRenderable {
@@ -328,8 +393,8 @@ export class App {
     for (const child of [...node.getChildren()]) child.destroyRecursively();
   }
   private compose = (text: string) => {
-    if (this.draftKey) this.workspace.drafts[this.draftKey] = this.composer.plainText;
-    this.draftKey = `${this.workspace.selected}:${this.workspace.editing ?? this.workspace.ladder ?? this.workspace.mode}`;
+    if (this.draftKey) this.session.drafts[this.draftKey] = this.composer.plainText;
+    this.draftKey = `${this.session.selected}:${this.session.editing ?? this.session.ladder ?? this.session.mode}`;
     this.composer.setText(text);
     this.composer.focus();
   };
@@ -346,23 +411,22 @@ export class App {
     this.submitting = true;
     const content = this.composer.plainText;
     try {
-      if (content.trim() === "/new" && this.options.newSession) {
-        await this.options.newSession();
+      if (await this.globalCommand(content.trim())) {
         return;
       }
-      await this.workspace.submit(
-        this.workspace.mode === "python" && !this.workspace.editing && !content.startsWith("/")
+      await this.session.submit(
+        this.session.mode === "python" && !this.session.editing && !content.startsWith("/")
           ? `/run ${content}`
           : content,
       );
-      const history = this.workspace.histories[this.draftKey] ?? [];
-      this.workspace.histories[this.draftKey] = history;
+      const history = this.session.histories[this.draftKey] ?? [];
+      this.session.histories[this.draftKey] = history;
       if (content && history.at(-1) !== content) history.push(content);
       if (history.length > 200) history.shift();
       this.historyIndex = -1;
-      if (!content.startsWith("/edit")) this.composer.setText("");
+      if (!content.startsWith("/edit") && content.trim() !== "/undo") this.composer.setText("");
     } catch (error) {
-      this.workspace.fail(error);
+      this.report(error);
     } finally {
       this.submitting = false;
       this.render();
@@ -371,7 +435,7 @@ export class App {
 
   render = (): void => {
     if (this.closed) return;
-    const w = this.workspace;
+    const w = this.session;
     if (w.theme !== this.theme) this.applyTheme(w.theme);
     const draftKey = `${w.selected}:${w.editing ?? w.ladder ?? w.mode}`;
     if (this.draftKey !== draftKey) {
@@ -379,16 +443,22 @@ export class App {
       this.draftKey = draftKey;
       this.composer.setText(w.drafts[draftKey] ?? "");
     }
-    this.inspector.visible = this.renderer.width >= 100;
+    this.sidebar.visible = Boolean(
+      this.options.workspaces && w.preferences.sidebar && this.renderer.width >= 110,
+    );
+    this.sidebar.width = w.preferences.sidebarWidth;
+    this.sidebarSplitter.visible = this.sidebar.visible;
+    const available =
+      this.renderer.width - (this.sidebar.visible ? w.preferences.sidebarWidth + space.inset : 0);
+    this.inspector.visible = available >= 100;
     if (this.splitters[0]) this.splitters[0].visible = this.inspector.visible;
-    this.head.content = `${w.sessionName} / ${w.label}`;
-    if (this.paneChanged(this.tabs, [w.view, this.theme, this.renderer.width])) {
+    const group = this.options.workspaces?.groupOf();
+    this.head.content = `${group ? `${group.name} / ` : ""}${w.sessionName} / ${w.label}`;
+    if (this.paneChanged(this.tabs, [w.view, this.theme, available])) {
       this.clear(this.tabs);
       for (const [index, view] of views.entries()) {
         const label =
-          this.renderer.width < 110
-            ? ["Chat", "Code", "Acts", "Facts", "Transcript", "Diffs"][index]
-            : title(view);
+          available < 140 ? ["Chat", "Code", "Acts", "Facts", "Transcript", "Diffs"][index] : title(view);
         this.tabs.add(
           this.text(`${index + 1} ${label}`, w.view === view ? c.accent : c.muted, {
             onMouseDown: () => w.show(view),
@@ -399,6 +469,46 @@ export class App {
     }
     const pending = w.operatorPrompt;
     this.promptBox.visible = !!pending;
+    const images = w.images[w.selected] ?? [];
+    this.imageBox.visible = images.length > 0;
+    if (this.paneChanged(this.imageBox, [images, this.theme])) {
+      this.clear(this.imageBox);
+      this.imageBox.add(
+        this.text(
+          `Images · ${images.length} · ${images
+            .map((image) => image.name)
+            .join(", ")
+            .replace(/\s+/g, " ")}`,
+          c.muted,
+          {
+            height: space.bar,
+            truncate: true,
+            flexShrink: 1,
+            onMouseDown: () => {
+              this.openPalette(
+                "Image attachments",
+                images.map((image) => ({
+                  label: image.name,
+                  detail: `${image.mimeType} · ${(image.size / 1024).toFixed(1)} KiB`,
+                  run: () => this.imageActions(image.uri),
+                })),
+              );
+            },
+          },
+        ),
+      );
+    }
+    this.queueBox.visible = w.queued.length > 0;
+    if (this.paneChanged(this.queueBox, [w.queued, w.queueHeld, this.theme])) {
+      this.clear(this.queueBox);
+      this.queueBox.add(
+        this.text(
+          `${w.queueHeld ? "Queue held" : "Queued"} · ${w.queued.length} · ${w.queued[0]?.text.split("\n")[0] ?? ""}`,
+          w.queueHeld ? c.warning : c.muted,
+          { height: space.bar, truncate: true },
+        ),
+      );
+    }
     if (this.paneChanged(this.promptBox, [pending, this.theme])) {
       this.clear(this.promptBox);
       if (pending)
@@ -431,9 +541,10 @@ export class App {
             : w.activity.some((act) => !act.done && ["prompt", "rung", "bash", "wait"].includes(act.kind))
               ? "working"
               : "ready";
-    this.status.content = `${state} · model ${model} · effort ${effort}${pending ? "" : ` · ${w.mode === "python" || w.editing ? "Python" : `returns ${w.shape}`}`}${w.world.records.path ? ` · ${basename(w.world.records.path)}` : ""}`;
+    this.status.content = `${w.error ? state : w.notice || state} · model ${model} · effort ${effort}${pending ? "" : ` · ${w.mode === "python" || w.editing ? "Python" : `returns ${w.shape}`}`}${w.world.records.path ? ` · ${basename(w.world.records.path)}` : ""}`;
     this.renderContent();
     this.renderInspector();
+    this.renderWorkspaces();
     const diagnostics = JSON.stringify([w.rejectedWord, w.findings]);
     if (diagnostics !== this.diagnosticsKey) {
       this.diagnosticsKey = diagnostics;
@@ -450,18 +561,25 @@ export class App {
     index: number,
     options: BlockOptions = {},
   ): void {
-    const closed = Boolean(options.compact) !== this.toggled.has(id);
+    const rung = options.act?.kind === "rung" ? options.act : undefined;
+    const state = rung?.id ?? id;
+    const closed =
+      this.folds.get(state) ??
+      (rung
+        ? this.session.preferences.autoCollapseRungs && rung.run?.status === "done"
+        : Boolean(options.compact));
     key =
       options.compact && closed && !options.preview
         ? "closed"
         : `${key}:${closed}:${options.preview && closed ? this.scroll.width : ""}`;
-    const heading = `${options.compact ? (closed ? "▸ " : "▾ ") : ""}${label}`;
+    const heading = `${rung || options.compact || options.collapsible ? (closed ? "▸ " : "▾ ") : ""}${label}`;
     const visible = Boolean(label) && (options.compact || options.heading !== false || closed);
     const prior = this.cards.get(id);
     if (prior?.key === key) {
       prior.heading.content = heading;
       prior.heading.fg = color;
       prior.heading.visible = visible;
+      prior.closed = closed;
       prior.node.marginTop = options.separate ? space.section : space.stack;
       if (this.scroll.getChildren()[index] !== prior.node) this.scroll.add(prior.node, index);
       return;
@@ -482,19 +600,26 @@ export class App {
       visible,
       onMouseDown: (event) => {
         if (event.button === 2 && options.act) {
-          this.actActions(this.workspace.acts.find((act) => act.id === options.act?.id) ?? options.act);
+          this.actActions(this.session.acts.find((act) => act.id === options.act?.id) ?? options.act);
           return;
         }
-        if (this.toggled.has(id)) this.toggled.delete(id);
-        else this.toggled.add(id);
+        this.folds.set(state, !closed);
         this.renderContent();
       },
     });
     box.add(labelNode);
     if (!closed) body(box);
-    else options.preview?.(box);
+    else if (!rung) options.preview?.(box);
     this.scroll.add(box, index);
-    this.cards.set(id, { key, node: box, heading: labelNode, compact: options.compact ?? false });
+    this.cards.set(id, {
+      key,
+      node: box,
+      heading: labelNode,
+      compact: options.compact ?? false,
+      collapsible: Boolean(rung || options.collapsible),
+      state,
+      closed,
+    });
   }
   private code(content: string): CodeRenderable {
     const code = new CodeRenderable(this.renderer, {
@@ -550,7 +675,7 @@ export class App {
   }
 
   renderContent(): void {
-    const w = this.workspace;
+    const w = this.session;
     const view = `${w.selected}:${w.view}:${w.ladder ?? ""}`;
     if (this.lastView !== view) {
       if (this.lastView) w.scrolls[this.lastView] = this.scroll.scrollTop;
@@ -608,16 +733,29 @@ export class App {
     let items = 0;
     if (w.view === "conversation") {
       const seen = new Set<string>();
+      let rung: ActRow | undefined;
       for (const [index, turn] of w.turns.entries())
         for (const [part, content] of turn[1].entries()) {
           const id = `turn-${index}-${part}`;
           if (typeof content === "string") {
             if (!matches(content)) continue;
             items++;
-            add(id, content, "Python", c.muted, (box) => box.add(this.numbered(content)), {
-              compact: true,
-              preview: (box) => this.excerpt(box, content, true),
-            });
+            const wordAct = rung;
+            if (wordAct) seen.add(wordAct.id);
+            add(
+              id,
+              `${content}\n${wordAct?.run?.reason ?? ""}`,
+              rung ? this.actSummary(rung) : "Python",
+              rung ? this.actColor(rung) : c.muted,
+              (box) => {
+                box.add(this.numbered(content));
+                if (wordAct?.run?.reason) box.add(this.text(wordAct.run.reason, c.danger));
+              },
+              {
+                collapsible: true,
+                act: rung,
+              },
+            );
             continue;
           }
           if (!isTag(content)) continue;
@@ -625,12 +763,15 @@ export class App {
           const fields = Object.fromEntries(attrs);
           const actId = String(fields.id ?? fields.over ?? "");
           const act = w.acts.find((act) => act.id === actId);
-          if (act && ["raised", "refused"].includes(name) && this.failure(act)) continue;
+          if (act?.kind === "rung" && name === "opened") rung = act;
+          if (act && ["raised", "refused"].includes(name) && this.failure(act) && seen.has(act.id)) continue;
           if (
             name === "ledger" ||
             (act &&
               (["chain", "grant"].includes(act.kind) ||
-                (act.kind === "rung" && (act.by !== "operator" || !act.words[0]))) &&
+                (act.kind === "rung" &&
+                  (act.by !== "operator" || !act.words[0]) &&
+                  (name === "opened" || !this.failure(act) || seen.has(act.id)))) &&
               ["opened", "closed"].includes(name))
           )
             continue;
@@ -640,20 +781,27 @@ export class App {
             add(
               id,
               JSON.stringify(content),
-              act.by === "operator" ? "You" : "Observation",
+              w.isUserPrompt(act) ? "You" : "Observation",
               c.muted,
               (box) => box.add(this.markdown(String(fields.message ?? ""))),
-              { group: act.by === "operator" ? "user" : "observation", prompt: act.by === "operator", act },
+              { group: w.isUserPrompt(act) ? "user" : "observation", prompt: w.isUserPrompt(act), act },
             );
           } else if (act?.kind === "prompt" && name === "closed") {
             items++;
+            const parallel =
+              turn[1].filter(
+                (part) =>
+                  isTag(part) &&
+                  part[0] === "closed" &&
+                  part[1].some(([key, value]) => key === "over" && String(value).startsWith("prompt://")),
+              ).length > 1;
             add(
               id,
               JSON.stringify(content),
-              "Result",
+              parallel ? `Result · ${this.preview(String(act.words[1]).split("\n")[0] ?? "", 9)}` : "Result",
               c.muted,
               (box) => box.add(this.markdown(display(act.value ?? body))),
-              { group: "assistant", act },
+              { group: parallel ? `assistant:${act.id}` : "assistant", act },
             );
           } else if (act && ["opened", "closed"].includes(name)) {
             if (seen.has(act.id)) continue;
@@ -689,22 +837,34 @@ export class App {
                   );
                 if (body !== null && body !== "") this.renderBody(box, body);
               },
-              { compact: true, group: "tools", act },
+              {
+                compact: true,
+                group: "tools",
+                act,
+                ...(name === "refused"
+                  ? {
+                      preview: (box: BoxRenderable) =>
+                        this.excerpt(box, display(body), false, false, c.danger),
+                    }
+                  : {}),
+              },
             );
           }
         }
       for (const [id, stream] of w.world.streams) {
         if (stream.chain !== w.selected) continue;
+        const act = w.acts.find((act) => act.id === id);
         items++;
         add(
           `stream-${id}`,
           stream.text + stream.thinking,
-          w.paused ? "Response held" : this.progress(id),
+          act ? this.actSummary(act) : this.progress(id),
           c.muted,
           (box) => {
             if (stream.thinking) box.add(this.text(stream.thinking, c.muted));
             if (stream.text) box.add(this.code(stream.text));
           },
+          { act, collapsible: true },
         );
       }
       if (!items && !w.query && !w.loading && !w.error) {
@@ -743,7 +903,15 @@ export class App {
       for (const [id, word] of words)
         if (matches(word)) {
           items++;
-          add(id, word, `rung ${short(id)}`, c.muted, (box) => box.add(this.numbered(word)));
+          const act = w.acts.find((act) => act.id === id);
+          add(
+            id,
+            word,
+            act ? this.actSummary(act) : `rung · ${short(id)} · done`,
+            act ? this.actColor(act) : c.muted,
+            (box) => box.add(this.numbered(word)),
+            { collapsible: true, act },
+          );
         }
     } else if (w.view === "activity") {
       for (const act of w.activity)
@@ -876,14 +1044,14 @@ export class App {
     box.add(preview);
   }
   private actPreview(act: ActRow): BlockOptions["preview"] {
+    if (act.run)
+      return act.run.reason
+        ? (box) => this.excerpt(box, act.run?.reason ?? "", false, false, c.danger)
+        : undefined;
     if (this.failure(act)) {
       const fault = act.value as { is: string; args: unknown[] };
       return (box) =>
         this.excerpt(box, `${fault.is}: ${fault.args.map(display).join(", ")}`, false, false, c.danger);
-    }
-    if (act.kind === "rung") {
-      const word = String(this.workspace.program[act.id] || act.words[0] || "");
-      if (word) return (box) => this.excerpt(box, word, true);
     }
     if (act.kind === "bash" && act.value && typeof act.value === "object") {
       const exit = act.value as { stdout?: { content: string }; stderr?: { content: string } };
@@ -895,6 +1063,7 @@ export class App {
     return undefined;
   }
   private failure(act: ActRow): boolean {
+    if (act.run) return act.run.status === "failed";
     return Boolean(
       act.value &&
         typeof act.value === "object" &&
@@ -905,33 +1074,33 @@ export class App {
   }
   private actColor(act: ActRow): RGBA {
     if (this.failure(act)) return c.danger;
-    return this.workspace.world.prompts.has(act.id) ? c.warning : c.muted;
+    return this.session.world.prompts.has(act.id) ? c.warning : c.muted;
   }
   private actSummary(act: ActRow): string {
-    const held = this.workspace.world.held.has(act.id);
+    const held = this.session.world.held.has(act.id);
     const fault = this.failure(act);
     const cancelled =
       act.value && typeof act.value === "object" && "is" in act.value && act.value.is === "CancelledError";
-    const parent = this.workspace.acts.find((candidate) => candidate.id === act.by);
-    const answered = act.kind === "rung" && parent?.kind === "prompt" && parent.done && !this.failure(parent);
     const state =
-      act.kind === "grant"
-        ? act.done
-          ? "ended ceiling"
-          : "active ceiling"
-        : act.done
-          ? fault
-            ? "failed"
-            : cancelled && !answered
-              ? "cancelled"
-              : "done"
-          : held
-            ? "held"
-            : this.workspace.world.prompts.has(act.id)
-              ? "needs input"
-              : this.workspace.paused && act.kind !== "bash"
-                ? "paused"
-                : `running ${this.progress(act.id)}`;
+      act.kind === "rung"
+        ? (act.run?.status ?? "running")
+        : act.kind === "grant"
+          ? act.done
+            ? "ended ceiling"
+            : "active ceiling"
+          : act.done
+            ? fault
+              ? "failed"
+              : cancelled
+                ? "cancelled"
+                : "done"
+            : held
+              ? "held"
+              : this.session.world.prompts.has(act.id)
+                ? "needs input"
+                : this.session.paused && act.kind !== "bash"
+                  ? "paused"
+                  : `running ${this.progress(act.id)}`;
     const words =
       act.kind === "prompt"
         ? String(act.words[1])
@@ -945,16 +1114,20 @@ export class App {
           : act.kind === "wait"
             ? `${act.words[0]}s`
             : act.kind === "rung"
-              ? this.workspace.program[act.id] || act.words[0]
-                ? short(act.id)
-                : "awaiting model"
+              ? short(act.id)
               : String(act.words[0] || "");
-    const observation = act.kind === "prompt" && act.by !== "operator";
+    const observation = act.kind === "prompt" && !this.session.isUserPrompt(act);
     const prefix = `${observation ? "observation" : act.kind} · `,
-      suffix = ` · ${state}`;
+      suffix = ` · ${state}${act.kind === "rung" && state === "running" ? ` ${this.progress(act.id)}` : ""}`;
     return `${prefix}${this.preview(observation ? words.replace(/ done$/, "") : words, Bun.stringWidth(prefix + suffix) + 2)}${suffix}`;
   }
   private actDetails(box: BoxRenderable, act: ActRow): void {
+    if (act.kind === "rung") {
+      const word = String(this.session.program[act.id] || act.words[0] || "");
+      if (word) box.add(this.numbered(word));
+      if (act.run?.reason) box.add(this.text(act.run.reason, c.danger));
+      return;
+    }
     const fields: Record<string, string[]> = {
       prompt: ["shape", "message", "actor"],
       rung: ["word", "retells", "actor", "returns"],
@@ -969,8 +1142,8 @@ export class App {
         this.text(`${fields[act.kind]?.[index] ?? `argument ${index + 1}`}: ${display(value)}`, c.muted),
       );
     }
-    if (act.kind === "rung" && (this.workspace.program[act.id] || act.words[0]))
-      box.add(this.numbered(String(this.workspace.program[act.id] || act.words[0])));
+    if (act.kind === "rung" && (this.session.program[act.id] || act.words[0]))
+      box.add(this.numbered(String(this.session.program[act.id] || act.words[0])));
     if (act.kind === "bash" && act.value && typeof act.value === "object") {
       const exit = act.value as { stdout?: { content: string }; stderr?: { content: string }; code?: number };
       if (exit.stdout?.content) {
@@ -1026,7 +1199,7 @@ export class App {
   private reference(label: string, value: string): TextRenderable {
     const node = this.text(label, c.link, { attributes: 8 });
     node.onMouseDown = () => {
-      void this.follow(value).catch(this.workspace.fail);
+      void this.follow(value).catch(this.report);
     };
     node.onMouseOver = (event) => {
       void this.referenceHover(value, event.x, event.y);
@@ -1041,7 +1214,8 @@ export class App {
   private async follow(value: string): Promise<void> {
     this.hover?.destroyRecursively();
     this.hover = undefined;
-    if (value.startsWith("chain://")) await this.workspace.select(value);
+    if (value.startsWith("furb-image://")) this.imageActions(value);
+    else if (value.startsWith("chain://")) await this.session.select(value);
     else if (value.startsWith("prompt://")) this.openLadder(value);
     else if (value.startsWith("rung://")) this.go("program", value);
     else if (value.includes("://") && !value.includes("/stdin")) this.go("activity", value);
@@ -1049,27 +1223,29 @@ export class App {
       this.showValue(
         value,
         (
-          (await this.workspace.life.read(
-            value,
-            { is: "name", name: "HIDDEN" },
-            this.workspace.selected,
-          )) as { content: string }
+          (await this.session.life.read(value, { is: "name", name: "HIDDEN" }, this.session.selected)) as {
+            content: string;
+          }
         ).content,
       );
   }
 
   private async referenceHover(value: string, x: number, y: number): Promise<void> {
     try {
-      const act = this.workspace.acts.find((act) => act.id === value);
-      const detail = act
-        ? `${act.kind} · ${act.done ? display(act.value) : "pending"}`
-        : (
-            (await this.workspace.life.read(
-              value,
-              { is: "name", name: "HIDDEN" },
-              this.workspace.selected,
-            )) as { content: string }
-          ).content;
+      const act = this.session.acts.find((act) => act.id === value);
+      const detail = value.startsWith("furb-image://")
+        ? "Image attachment. Click to open its actions."
+        : act
+          ? `${act.kind} · ${act.done ? display(act.value) : "pending"}`
+          : (
+              (await this.session.life.read(
+                value,
+                { is: "name", name: "HIDDEN" },
+                this.session.selected,
+              )) as {
+                content: string;
+              }
+            ).content;
       if (this.closed || this.overlay) return;
       this.hover?.destroyRecursively();
       this.hover = this.box({
@@ -1084,7 +1260,7 @@ export class App {
         backgroundColor: c.raised,
         zIndex: 30,
         onMouseDown: () => {
-          void this.follow(value).catch(this.workspace.fail);
+          void this.follow(value).catch(this.report);
         },
       });
       this.hover.add(this.text(value, c.link));
@@ -1120,7 +1296,7 @@ export class App {
     });
     const target = (x: number, y: number) => {
       const { line, column } = this.sourcePoint(node, text, x, y);
-      const match = [...line.matchAll(/[a-z]+:\/\/[\w./-]+|path="([^"\n]+)"/g)].find(
+      const match = [...line.matchAll(/[a-z][a-z-]*:\/\/[\w./-]+|path="([^"\n]+)"/g)].find(
         (match) =>
           column >= Bun.stringWidth(line.slice(0, match.index)) &&
           column < Bun.stringWidth(line.slice(0, match.index + match[0].length)),
@@ -1151,14 +1327,14 @@ export class App {
     };
     node.onMouseDown = (event) => {
       const value = target(event.x, event.y);
-      if (value?.reference) void this.follow(value.value).catch(this.workspace.fail);
+      if (value?.reference) void this.follow(value.value).catch(this.report);
       else if (value && (event.modifiers.ctrl || event.modifiers.alt)) this.inspect(value.value);
     };
     return node;
   }
 
   private renderInspector(): void {
-    const w = this.workspace;
+    const w = this.session;
     if (
       !this.paneChanged(this.inspector, [
         this.theme,
@@ -1225,17 +1401,430 @@ export class App {
     this.composer.setText(text);
     this.composer.focus();
   }
+  private statusColor(status: SessionStatus): RGBA {
+    return status === "blocked" || status === "paused"
+      ? c.warning
+      : status === "error"
+        ? c.danger
+        : status === "done"
+          ? c.success
+          : status === "working" || status === "opening"
+            ? c.accent
+            : c.muted;
+  }
+  private statusDot(status: SessionStatus): string {
+    return status === "saved" || status === "idle" ? "○" : status === "paused" ? "◌" : "●";
+  }
+  private renderWorkspaces(): void {
+    const library = this.options.workspaces;
+    if (!library || !this.sidebar.visible) return;
+    if (
+      !this.paneChanged(this.sidebar, [
+        this.theme,
+        library.current?.path,
+        this.session.preferences.sidebarWidth,
+        library.notice,
+        library.groups.map((group) => [
+          group.name,
+          group.collapsed,
+          group.sessions.map((entry) => [entry.path, entry.name, entry.status, entry.error]),
+        ]),
+      ])
+    )
+      return;
+    this.clear(this.sidebar);
+    this.hover?.destroyRecursively();
+    this.hover = undefined;
+    const heading = this.box({ flexDirection: "row", height: space.bar, marginBottom: space.section });
+    heading.add(this.text("Workspaces", c.text, { attributes: 1, flexGrow: 1 }));
+    heading.add(this.text("‹", c.muted, { onMouseDown: () => library.toggle() }));
+    this.sidebar.add(heading);
+    if (library.notice) this.sidebar.add(this.text(library.notice, c.warning));
+    for (const group of library.groups) {
+      const status = library.groupStatus(group);
+      const row = this.box({
+        flexDirection: "row",
+        height: space.bar,
+        onMouseDown: () => library.toggle(group),
+        marginTop: group === library.groups[0] ? space.stack : space.section,
+      });
+      row.add(this.text(group.collapsed ? "▸ " : "▾ ", c.muted));
+      row.add(this.text(`${this.statusDot(status)} `, this.statusColor(status)));
+      row.add(
+        this.text(group.name, c.text, {
+          truncate: true,
+          flexGrow: 1,
+          flexShrink: 1,
+          attributes: group === library.groupOf() ? 1 : 0,
+        }),
+      );
+      this.sidebar.add(row);
+      const path = this.box({ paddingLeft: space.between, height: space.bar });
+      const width = this.session.preferences.sidebarWidth - space.inset * 2 - space.between;
+      path.add(
+        this.text(
+          Bun.stringWidth(group.directory) > width
+            ? `…${[...group.directory].slice(1 - width).join("")}`
+            : group.directory,
+          c.muted,
+          { height: space.bar, truncate: true },
+        ),
+      );
+      this.sidebar.add(path);
+      if (group.collapsed) continue;
+      for (const entry of group.sessions) {
+        const selected = library.current === entry;
+        const row = this.box({
+          flexDirection: "row",
+          height: space.bar,
+          paddingLeft: space.between,
+          backgroundColor: selected ? c.selected : c.panel,
+          onMouseDown: () => {
+            void library.select(entry).catch(this.report);
+          },
+          onMouseOver: (event) => {
+            this.hover?.destroyRecursively();
+            const hint = `${statusLabels[entry.status]} · ${entry.name}${entry.error ? ` · ${entry.error}` : ""}`;
+            this.hover = this.box({
+              position: "absolute",
+              left: Math.min(event.x, this.renderer.width - 40),
+              top: Math.min(event.y + 1, this.renderer.height - 2),
+              width: Math.min(this.renderer.width - 2, Math.max(25, Bun.stringWidth(hint) + space.inset * 2)),
+              paddingX: space.inset,
+              backgroundColor: c.raised,
+              zIndex: 30,
+            });
+            this.hover.add(this.text(hint, this.statusColor(entry.status)));
+            this.root.add(this.hover);
+          },
+          onMouseOut: () => {
+            this.hover?.destroyRecursively();
+            this.hover = undefined;
+          },
+        });
+        row.add(this.text(`${this.statusDot(entry.status)} `, this.statusColor(entry.status)));
+        row.add(
+          this.text(entry.name, selected ? c.text : c.muted, {
+            truncate: true,
+            flexGrow: 1,
+            flexShrink: 1,
+            attributes: selected ? 1 : 0,
+          }),
+        );
+        this.sidebar.add(row);
+      }
+      this.sidebar.add(
+        this.text("  + New session", c.muted, {
+          height: space.bar,
+          onMouseDown: () => {
+            void library.create(group).catch(this.report);
+          },
+        }),
+      );
+    }
+    this.sidebar.add(
+      this.text("+ Workspace", c.muted, {
+        marginTop: space.section,
+        onMouseDown: () => this.insert("/workspace "),
+      }),
+    );
+  }
+  workspacePicker = (): void => {
+    const library = this.options.workspaces;
+    if (!library) return;
+    void library
+      .refresh()
+      .then(() =>
+        this.openPalette("Workspaces & sessions", [
+          { label: "Add workspace", detail: "Open a project folder", run: () => this.insert("/workspace ") },
+          {
+            label: library.preferences.sidebar ? "Hide left sidebar" : "Show left sidebar",
+            detail: "Ctrl+\\",
+            run: () => library.toggle(),
+          },
+          ...library.groups.flatMap((group) => [
+            { label: group.name, detail: group.directory, run: () => this.sessionsPicker(group) },
+            ...group.sessions.map((entry) => ({
+              label: `  ${entry.name}`,
+              detail: `${statusLabels[entry.status]} · ${group.name}`,
+              run: () => library.select(entry),
+            })),
+          ]),
+        ]),
+      )
+      .catch(this.report);
+  };
+  private sessionsPicker(group: Workspace): void {
+    const library = this.options.workspaces;
+    if (!library) return;
+    this.openPalette(group.name, [
+      {
+        label: "+ New session",
+        detail: group.directory,
+        run: async () => {
+          await library.create(group);
+        },
+      },
+      ...group.sessions.map((entry) => ({
+        label: entry.name,
+        detail: statusLabels[entry.status],
+        run: () => library.select(entry),
+      })),
+    ]);
+  }
+  private async globalCommand(text: string): Promise<boolean> {
+    const consume = () => {
+      if (this.composer.plainText.trim() === text) this.composer.setText("");
+    };
+    const extensions = this.options.extensions;
+    if (text.startsWith("/extension ") && extensions) {
+      consume();
+      await extensions.load(text.slice(11).trim());
+      this.session.notice = "Extension loaded.";
+      return true;
+    }
+    const [name, ...words] = text.startsWith("/") ? text.slice(1).split(" ") : [];
+    if (name && extensions?.commands.has(name)) {
+      consume();
+      await extensions.run(name, words.join(" "));
+      return true;
+    }
+    if (text === "/editor") {
+      consume();
+      await this.editDraft();
+      return true;
+    }
+    if (text === "/files") {
+      consume();
+      await this.filesPicker();
+      return true;
+    }
+    if (text === "/new" && this.options.newSession) {
+      consume();
+      await this.options.newSession();
+      return true;
+    }
+    if (text === "/image" || text.startsWith("/image ")) {
+      consume();
+      const path = text.slice(6).trim();
+      if (path) await this.session.attachImage(path);
+      else await clipboardImage((path) => this.session.attachImage(path));
+      return true;
+    }
+    const library = this.options.workspaces;
+    if (!library) return false;
+    if (text === "/delete") {
+      consume();
+      this.openPalette(
+        "Delete a session",
+        library.groups.flatMap((group) =>
+          group.sessions.map((entry) => ({
+            label: entry.name,
+            detail: group.name,
+            run: () =>
+              this.openPalette(`Delete ${entry.name}?`, [
+                { label: "Keep session", detail: "Return without changes", run() {} },
+                {
+                  label: "Move to trash",
+                  detail: "Stop this session and move its record and files to the workspace trash",
+                  run: async () => {
+                    await library.delete(entry);
+                  },
+                },
+              ]),
+          })),
+        ),
+      );
+      return true;
+    }
+    if (text === "/sidebar") {
+      consume();
+      library.toggle();
+      return true;
+    }
+    if (text === "/workspace") {
+      consume();
+      this.workspacePicker();
+      return true;
+    }
+    if (text.startsWith("/workspace ")) {
+      consume();
+      const group = await library.add(text.slice(11).trim());
+      const entry = group.sessions[0];
+      if (entry) await library.select(entry);
+      else await library.create(group);
+      return true;
+    }
+    return false;
+  }
+  private imageActions(uri: string): void {
+    const content = imageContent(this.session.world.imageDirectory, uri);
+    const file = join(this.session.world.imageDirectory, uri.slice("furb-image://".length));
+    const pending = this.session.images[this.session.selected]?.find((image) => image.uri === uri);
+    this.openPalette(pending?.name ?? "Image attachment", [
+      {
+        label: "Open image",
+        detail: `${content.mimeType} · ${(Buffer.byteLength(content.data, "base64") / 1024).toFixed(1)} KiB`,
+        run: async () => {
+          const child = Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", file], {
+            stdout: "ignore",
+            stderr: "pipe",
+          });
+          if (await child.exited) throw new Error(await new Response(child.stderr).text());
+        },
+      },
+      ...(pending
+        ? [
+            {
+              label: "Remove from this draft",
+              detail: "Keep the saved image file",
+              run: () => {
+                this.session.images[this.session.selected] = (
+                  this.session.images[this.session.selected] ?? []
+                ).filter((image) => image.uri !== uri);
+                this.session.save();
+                this.render();
+              },
+            },
+          ]
+        : []),
+    ]);
+  }
+  private async editDraft(): Promise<void> {
+    const value = await externalEditor(
+      this.renderer,
+      this.composer.plainText,
+      this.session.mode === "python" || Boolean(this.session.editing),
+      this.session.directory || this.session.world.directory,
+    );
+    if (!this.closed) {
+      this.composer.setText(value);
+      this.composer.focus();
+      this.render();
+    }
+  }
+  private filesPicker = async (): Promise<void> => {
+    const files = await projectFiles(this.session.directory || this.session.world.directory);
+    if (this.closed) return;
+    this.openPalette(
+      "Attach a project file",
+      files.map((path) => ({
+        label: path,
+        detail: "Read into this chain with the next message",
+        run: () => {
+          const before = this.composer.plainText.slice(0, this.composer.cursorOffset);
+          const token = before.match(/(?:^|\s)(@[^\s]*)$/)?.[1];
+          if (token) for (const _ of token) this.composer.deleteCharBackward();
+          this.composer.insertText(`@${/\s/.test(path) ? JSON.stringify(path) : path} `);
+        },
+      })),
+    );
+  };
+  private queuePicker = (): void => {
+    const session = this.session;
+    this.openPalette("Queued follow-ups", [
+      ...(session.queueHeld
+        ? [
+            {
+              label: "Resume queue",
+              detail: session.queueError || "Send when this chain's current work is complete",
+              run: async () => {
+                session.queueHeld = false;
+                session.queueError = "";
+                await session.drainQueue();
+              },
+            },
+          ]
+        : []),
+      ...session.queued.map((entry) => ({
+        label: entry.text.split("\n")[0] ?? "Follow-up",
+        detail: `${session.labelOf(entry.chain)} · ${entry.actor}`,
+        run: () =>
+          this.openPalette("Queued message", [
+            {
+              label: "Edit in composer",
+              detail: "Remove from the queue and edit before sending again",
+              run: async () => {
+                session.removeQueued(entry.id);
+                await session.select(entry.chain);
+                this.insert(entry.text);
+              },
+            },
+            {
+              label: "Remove",
+              detail: "Remove this queued message",
+              run: () => {
+                session.removeQueued(entry.id);
+              },
+            },
+          ]),
+      })),
+    ]);
+  };
+  private shared = (path: string, markdown: string): void => {
+    this.openPalette("Conversation ready to share", [
+      {
+        label: "Open HTML",
+        detail: path,
+        run: async () => {
+          const child = Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", path], {
+            stdout: "ignore",
+            stderr: "pipe",
+          });
+          if (await child.exited) throw new Error(await new Response(child.stderr).text());
+        },
+      },
+      {
+        label: "Copy path",
+        detail: path,
+        run: () => {
+          this.renderer.copyToClipboardOSC52(path);
+          this.session.notice = "Export path copied.";
+        },
+      },
+      {
+        label: "Upload an unlisted GitHub gist",
+        detail: "Anyone with the link can read this conversation and its images. Requires gh login.",
+        run: async () => {
+          const url = await publishShare(path, markdown, this.session.sessionName);
+          this.session.notice = `Shared: ${url}`;
+          if (!this.closed)
+            this.openPalette("Share link", [
+              {
+                label: "Copy link",
+                detail: url,
+                run: () => {
+                  this.renderer.copyToClipboardOSC52(url);
+                  this.session.notice = "Share link copied.";
+                },
+              },
+            ]);
+        },
+      },
+    ]);
+  };
   private action(command: string): void {
     this.closeOverlay();
-    void this.workspace.submit(command).catch(this.workspace.fail);
+    void this.globalCommand(command)
+      .then((handled) => {
+        if (!handled) return this.session.submit(command);
+      })
+      .catch(this.report);
   }
+  private report = (error: unknown): void => {
+    const message = error instanceof Error ? error.message : String(error);
+    if (this.closed) {
+      const session = this.options.workspaces?.current?.session;
+      if (session) session.notice = message;
+    } else this.showValue("Could not complete action", message);
+  };
   private actActions(act: ActRow): void {
     this.openPalette(`Act · ${act.kind}`, [
       {
         label: "Inspect activity",
         detail: act.id,
         run: () => {
-          this.workspace.show("activity");
+          this.session.show("activity");
         },
       },
       ...(act.kind === "prompt"
@@ -1253,8 +1842,10 @@ export class App {
     const choices: Choice[] = views.map((view) => ({
       label: `${title(view)} view`,
       detail: `Inspect ${view}`,
-      run: () => this.workspace.show(view),
+      run: () => this.session.show(view),
     }));
+    for (const [name, command] of this.options.extensions?.commands ?? [])
+      choices.push({ label: command.label, detail: command.description, run: () => this.action(`/${name}`) });
     if (this.options.newSession)
       choices.unshift({ label: "New session", detail: "Start a fresh life", run: this.options.newSession });
     choices.push(
@@ -1298,18 +1889,18 @@ export class App {
   models = (): void => {
     this.openPalette(
       "Model",
-      this.workspace.roster
+      this.session.roster
         .filter(([name]) => name !== "operator")
         .map(([name, , window]) => ({
           label: name,
-          detail: `${count(window)} context${name === this.workspace.actorChoice.model ? " · selected" : ""}`,
+          detail: `${count(window)} context${name === this.session.actorChoice.model ? " · selected" : ""}`,
           run: () => this.action(`/model ${name}`),
         })),
     );
   };
   effortPicker = (): void => {
-    const { model, effort } = this.workspace.actorChoice;
-    const offered = this.workspace.roster.find(([name]) => name === model)?.[1] ?? [];
+    const { model, effort } = this.session.actorChoice;
+    const offered = this.session.roster.find(([name]) => name === model)?.[1] ?? [];
     this.openPalette(
       `Effort · ${model}`,
       offered.map((name) => ({
@@ -1324,13 +1915,12 @@ export class App {
     this.openPalette(
       "Details",
       [...this.cards]
-        .filter(([, card]) => card.compact)
+        .filter(([, card]) => card.compact || card.collapsible)
         .map(([id, card]) => ({
           label: card.heading.plainText.replace(/^[▸▾] /, ""),
-          detail: this.toggled.has(id) ? "Collapse" : "Expand",
+          detail: card.closed ? "Expand" : "Collapse",
           run: () => {
-            if (this.toggled.has(id)) this.toggled.delete(id);
-            else this.toggled.add(id);
+            this.folds.set(card.state, !card.closed);
             this.renderContent();
             this.scroll.scrollChildIntoView(id);
           },
@@ -1344,9 +1934,9 @@ export class App {
         label: name === "github" ? "GitHub Dark" : title(name),
         detail: name === "paper" ? "Light" : "Dark",
         run: () => {
-          this.workspace.theme = name as ThemeName;
+          this.session.theme = name as ThemeName;
           this.render();
-          this.workspace.save();
+          this.session.save();
         },
       })),
     );
@@ -1358,14 +1948,14 @@ export class App {
         label: name,
         detail: "The engine validates the result against this Python type",
         run: () => {
-          this.workspace.shape = name;
+          this.session.shape = name;
           this.render();
         },
       })),
     );
   }
   toggleMode(): void {
-    this.workspace.mode = this.workspace.mode === "python" ? "prompt" : "python";
+    this.session.mode = this.session.mode === "python" ? "prompt" : "python";
     this.render();
     void this.highlightEditor();
   }
@@ -1408,14 +1998,14 @@ export class App {
   private async highlightEditor(): Promise<void> {
     if (this.closed) return;
     const content = this.composer.plainText;
-    this.workspace.drafts[this.draftKey] = content;
+    this.session.drafts[this.draftKey] = content;
     const version = ++this.editorVersion;
     for (let line = 0; line < this.composer.lineCount; line++) this.composer.clearLineHighlights(line);
-    if (this.workspace.mode !== "python" && !this.workspace.editing && !content.startsWith("/run ")) return;
+    if (this.session.mode !== "python" && !this.session.editing && !content.startsWith("/run ")) return;
     const result = await getTreeSitterClient()
       .highlightOnce(content, "python")
       .catch((error) => {
-        if (!this.closed) this.workspace.fail(error);
+        if (!this.closed) this.session.fail(error);
         return undefined;
       });
     if (version !== this.editorVersion || this.closed) return;
@@ -1424,10 +2014,10 @@ export class App {
         this.style.resolveStyleId(group) ?? this.style.resolveStyleId(group.split(".")[0] ?? "default");
       if (styleId !== null) this.composer.addHighlightByCharRange({ start, end, styleId });
     }
-    if (content === this.workspace.rejectedWord || content === `/run ${this.workspace.rejectedWord}`) {
+    if (content === this.session.rejectedWord || content === `/run ${this.session.rejectedWord}`) {
       const styleId = this.style.resolveStyleId("diagnostic");
       const lines = content.split("\n");
-      for (const finding of this.workspace.findings) {
+      for (const finding of this.session.findings) {
         const line = Number(finding.match(/line (\d+)/)?.[1] ?? 0) - 1;
         if (styleId !== null && line >= 0) {
           const start = lines.slice(0, line).reduce((size, line) => size + line.length + 1, 0);
@@ -1462,18 +2052,18 @@ export class App {
     }
   }
   private progress(id: string): string {
-    const elapsed = Math.max(0, Math.floor((Date.now() - (this.workspace.started[id] ?? Date.now())) / 1000));
+    const elapsed = Math.max(0, Math.floor((Date.now() - (this.session.started[id] ?? Date.now())) / 1000));
     return `${["◐", "◓", "◑", "◒"][Math.floor(Date.now() / 250) % 4]} ${elapsed}s since start`;
   }
   private resume = (): void => {
-    const held = this.workspace.world.held;
+    const held = this.session.world.held;
     this.openPalette("Saved work is paused", [
       {
         label: "Resume saved work",
         detail: `${held.size} unfinished acts. Interrupted commands keep their output and report an interruption.`,
         run: async () => {
-          await this.workspace.world.resume();
-          await this.workspace.refresh();
+          await this.session.world.resume();
+          await this.session.refresh();
         },
       },
       {
@@ -1484,19 +2074,19 @@ export class App {
     ]);
   };
   question(): void {
-    const question = this.workspace.operatorPrompt;
+    const question = this.session.operatorPrompt;
     if (!question) return;
     if (question.shape === "bool") {
       this.openPalette("Operator question · bool", [
         {
           label: "Yes",
           detail: "Answer true",
-          run: () => this.workspace.world.answer(question.id, "yes").then(() => {}),
+          run: () => this.session.world.answer(question.id, "yes").then(() => {}),
         },
         {
           label: "No",
           detail: "Answer false",
-          run: () => this.workspace.world.answer(question.id, "no").then(() => {}),
+          run: () => this.session.world.answer(question.id, "no").then(() => {}),
         },
       ]);
       this.showQuestionText(question.message);
@@ -1511,7 +2101,7 @@ export class App {
     input.removeAllListeners(InputRenderableEvents.INPUT);
     input.removeAllListeners(InputRenderableEvents.ENTER);
     input.on(InputRenderableEvents.ENTER, () => {
-      void this.workspace.world
+      void this.session.world
         .answer(question.id, input.value)
         .then(() => this.closeOverlay())
         .catch((failure) => {
@@ -1534,7 +2124,7 @@ export class App {
   }
   private async showHover(name: string, x: number, y: number): Promise<void> {
     try {
-      const inspected = await this.workspace.life.inspect(name, this.workspace.selected);
+      const inspected = await this.session.life.inspect(name, this.session.selected);
       if (this.closed || this.overlay) return;
       this.hover?.destroyRecursively();
       const width = Math.min(58, this.renderer.width - 4);
@@ -1564,18 +2154,18 @@ export class App {
   private inspect = (name: string): void => {
     this.hover?.destroyRecursively();
     this.hover = undefined;
-    void this.workspace.life
-      .inspect(name, this.workspace.selected)
+    void this.session.life
+      .inspect(name, this.session.selected)
       .then((value) => {
         this.showValue(`${name} · ${value.kind}`, value.value ?? value.representation, name);
       })
-      .catch(this.workspace.fail);
+      .catch(this.report);
   };
   private showValue(label: string, value: unknown, name?: string, back?: () => void): void {
     const choices: Choice[] = [];
     if (back) choices.push({ label: "← Back", detail: "Return to the parent value", run: back });
     if (name && /^[\p{L}_][\p{L}\p{N}_]*$/u.test(name)) {
-      const definition = [...Object.entries(this.workspace.program)]
+      const definition = [...Object.entries(this.session.program)]
         .reverse()
         .find(([, source]) =>
           source
@@ -1595,12 +2185,12 @@ export class App {
           label: "Engine definition",
           detail: `Find ${name} in the engine source`,
           run: async () => {
-            const lines = (await this.workspace.world.source()).split("\n");
+            const lines = (await this.session.world.source()).split("\n");
             const at = lines.findIndex((line) =>
               new RegExp(`^(?:(?:async )?def |class )?${name}\\b`).test(line),
             );
             if (at < 0) {
-              this.workspace.notice = "This name has no definition in the engine source.";
+              this.session.notice = "This name has no definition in the engine source.";
               return;
             }
             const next = lines.slice(at + 1).findIndex((line) => /^(?:def |class |[A-Z_]+\s*=)/.test(line));
@@ -1647,7 +2237,7 @@ export class App {
         detail: "Copy this value",
         run: () => {
           this.renderer.copyToClipboardOSC52(display(value));
-          this.workspace.notice = "Value copied.";
+          this.session.notice = "Value copied.";
         },
       });
     if (typeof value === "string" && value.includes("://"))
@@ -1655,11 +2245,11 @@ export class App {
         label: "Follow this act or door",
         detail: value,
         run: () => {
-          if (value.startsWith("chain://")) return this.workspace.select(value);
-          void this.workspace.life
-            .read(value, undefined, this.workspace.selected)
+          if (value.startsWith("chain://")) return this.session.select(value);
+          void this.session.life
+            .read(value, undefined, this.session.selected)
             .then((text) => this.showValue(value, text))
-            .catch(this.workspace.fail);
+            .catch(this.report);
         },
       });
     this.openPalette(label, choices);
@@ -1675,7 +2265,7 @@ export class App {
     }
   }
   async names(): Promise<void> {
-    const names = (await this.workspace.life.held("modules", [this.workspace.selected], "keys")) as string[];
+    const names = (await this.session.life.held("modules", [this.session.selected], "keys")) as string[];
     this.openPalette(
       "Inspect a name",
       names
@@ -1688,7 +2278,7 @@ export class App {
     );
   }
   private async completeNames(): Promise<void> {
-    const names = (await this.workspace.life.held("modules", [this.workspace.selected], "keys")) as string[];
+    const names = (await this.session.life.held("modules", [this.session.selected], "keys")) as string[];
     const before = this.composer.plainText.slice(0, this.composer.cursorOffset);
     const prefix = before.match(/[\p{L}_][\p{L}\p{N}_]*$/u)?.[0] ?? "";
     this.openPalette(
@@ -1709,7 +2299,7 @@ export class App {
   ladders(): void {
     this.openPalette(
       "Prompt programs",
-      this.workspace.activity
+      this.session.activity
         .filter((act) => act.kind === "prompt")
         .map((act) => ({
           label: `${act.done ? "✓" : "◌"} ${short(act.id)}`,
@@ -1720,48 +2310,48 @@ export class App {
   }
   private openLadder(id: string): void {
     this.go("program");
-    this.workspace.ladder = id;
-    this.workspace.editing = undefined;
-    this.workspace.mode = "python";
+    this.session.ladder = id;
+    this.session.editing = undefined;
+    this.session.mode = "python";
     this.render();
-    this.workspace.notice = `${id}: run a rung below, or /edit ${id} to change its program.`;
+    this.session.notice = `${id}: run a rung below, or /edit ${id} to change its program.`;
   }
   rewind = (): void => {
-    if (this.workspace.paused) {
+    if (this.session.paused) {
       this.openPalette("Resume this chain before rewinding", [
         {
           label: "Resume chain",
           detail: "Then choose the last act the new chain will read.",
-          run: () => (this.workspace.world.held.size ? this.resume() : this.action("/wake")),
+          run: () => (this.session.world.held.size ? this.resume() : this.action("/wake")),
         },
       ]);
       return;
     }
-    const acts = this.workspace.activity.filter((act) => !["chain", "grant"].includes(act.kind));
+    const acts = this.session.activity.filter((act) => !["chain", "grant"].includes(act.kind));
     this.openPalette(
       "Rewind transcript · module and files stay current",
       acts.map((act, index) => ({
         label: `${"  ".repeat(Math.max(0, short(act.id).split(".").length - 2))}${act.kind} · ${short(act.id)}`,
         detail:
           String(
-            act.kind === "prompt" ? act.words[1] : act.words[0] || this.workspace.program[act.id] || "",
+            act.kind === "prompt" ? act.words[1] : act.words[0] || this.session.program[act.id] || "",
           ).split("\n")[0] ?? "",
         run: async () => {
-          if (this.workspace.paused) {
+          if (this.session.paused) {
             this.rewind();
             return;
           }
-          const source = this.workspace.selected;
+          const source = this.session.selected;
           const omitted = acts.slice(index + 1).map((later) => JSON.stringify(later.id));
           const filter = `take(${omitted.length ? `${omitted.join(", ")}, ` : ""}inside=False)`;
-          const word = `chain(${JSON.stringify(`${this.workspace.label} through ${short(act.id)}`)}, ${JSON.stringify(source)}, ${filter})`;
-          const rung = await this.workspace.life.rung(word, { on: source });
-          await this.workspace.life.result(rung);
-          await this.workspace.refresh();
-          const next = this.workspace.chains.find((chain) => chain.by === rung);
+          const word = `chain(${JSON.stringify(`${this.session.label} through ${short(act.id)}`)}, ${JSON.stringify(source)}, ${filter})`;
+          const rung = await this.session.life.rung(word, { on: source });
+          await this.session.life.result(rung);
+          await this.session.refresh();
+          const next = this.session.chains.find((chain) => chain.by === rung);
           if (!next) throw new Error("The rewind word created no chain.");
-          await this.workspace.select(next.id);
-          this.workspace.notice =
+          await this.session.select(next.id);
+          this.session.notice =
             "The new chain reads the selected transcript prefix. Its module and files keep current state.";
         },
       })),
@@ -1769,45 +2359,76 @@ export class App {
   };
   private go(view: View, id?: string): void {
     this.navigation.push({
-      chain: this.workspace.selected,
-      view: this.workspace.view,
-      query: this.workspace.query,
+      chain: this.session.selected,
+      view: this.session.view,
+      query: this.session.query,
       top: this.scroll.scrollTop,
-      ladder: this.workspace.ladder,
-      mode: this.workspace.mode,
+      ladder: this.session.ladder,
+      mode: this.session.mode,
     });
     if (
       id &&
-      this.workspace.ladder &&
-      !short(id).startsWith(`${short(this.workspace.ladder)}.`) &&
-      !this.workspace.repls[this.workspace.ladder]?.includes(id)
+      this.session.ladder &&
+      !short(id).startsWith(`${short(this.session.ladder)}.`) &&
+      !this.session.repls[this.session.ladder]?.includes(id)
     )
-      this.workspace.ladder = undefined;
-    this.workspace.show(view);
+      this.session.ladder = undefined;
+    this.session.show(view);
     this.render();
     if (id) this.scroll.scrollChildIntoView(id);
   }
   private async back(): Promise<void> {
     const previous = this.navigation.pop();
     if (!previous) return;
-    await this.workspace.select(previous.chain);
-    this.workspace.show(previous.view);
-    this.workspace.query = previous.query;
-    this.workspace.ladder = previous.ladder;
-    this.workspace.mode = previous.mode;
+    await this.session.select(previous.chain);
+    this.session.show(previous.view);
+    this.session.query = previous.query;
+    this.session.ladder = previous.ladder;
+    this.session.mode = previous.mode;
     this.render();
     this.scroll.scrollTo(previous.top);
   }
   chains(): void {
     this.openPalette(
       "Chains",
-      this.workspace.chains.map((chain) => ({
-        label: this.workspace.labelOf(chain.id),
+      this.session.chains.map((chain) => ({
+        label: this.session.labelOf(chain.id),
         detail: chain.id,
-        run: () => this.workspace.select(chain.id),
+        run: () => this.session.select(chain.id),
       })),
     );
   }
+  private chainTree = (focus?: string): void => {
+    const choices: (Choice & { id: string })[] = [];
+    const chains = this.session.chains;
+    const visit = (chain: ActRow, depth: number) => {
+      const children = chains.filter((child) => child.words[1] === chain.id);
+      const key = `chain:${chain.id}`;
+      const closed = this.folds.get(key) ?? false;
+      choices.push({
+        id: chain.id,
+        label: `${"  ".repeat(depth)}${children.length ? (closed ? "▸" : "▾") : " "} ${this.session.labelOf(chain.id)}`,
+        detail: `${chain.id}${chain.id === this.session.selected ? " · current" : ""}`,
+        run: () => this.session.select(chain.id),
+        ...(children.length
+          ? {
+              toggle: () => {
+                this.folds.set(key, !closed);
+                this.chainTree(chain.id);
+              },
+            }
+          : {}),
+      });
+      if (!closed) for (const child of children) visit(child, depth + 1);
+    };
+    for (const chain of chains.filter((chain) => !chains.some((parent) => parent.id === chain.words[1])))
+      visit(chain, 0);
+    this.openPalette(
+      "Session tree · Left/Right folds, Enter opens",
+      choices,
+      choices.findIndex((choice) => choice.id === (focus ?? this.session.selected)),
+    );
+  };
   openPalette(label: string, choices: Choice[], selected = 0): void {
     this.closeOverlay();
     this.composer.blur();
@@ -1861,7 +2482,11 @@ export class App {
       const selected = index + start === this.selection;
       const row = this.box({
         backgroundColor: selected ? c.selected : c.raised,
-        onMouseDown: () => {
+        onMouseDown: (event) => {
+          if (event.button === 2 && choice.toggle) {
+            choice.toggle();
+            return;
+          }
           this.selection = index + start;
           this.choose();
         },
@@ -1883,7 +2508,9 @@ export class App {
     const choice = this.filtered[this.selection];
     if (!choice) return;
     this.closeOverlay();
-    Promise.resolve(choice.run()).catch(this.workspace.fail);
+    void Promise.resolve()
+      .then(() => choice.run())
+      .catch(this.report);
   }
   closeOverlay(): void {
     this.overlay?.destroyRecursively();
@@ -1902,6 +2529,14 @@ export class App {
         ["Ctrl+P", "Search all actions"],
         ["Ctrl+B", "Switch chains"],
         ["Ctrl+N / Ctrl+M / Shift+Tab / Ctrl+O", "New chain / model / effort / saved sessions"],
+        ["Ctrl+W / Ctrl+\\", "Workspaces and sessions / toggle left sidebar"],
+        ["Alt+E / Alt+D / Alt+Enter", "External editor / rung details / queue a follow-up"],
+        ["Ctrl+V / /image path", "Paste a clipboard image / attach an image file"],
+        ["@ / !", "Find a project file / run a shell command"],
+        [
+          "Session dots",
+          "Blue: working. Yellow: input needed or paused. Green: unread result. Red: error. Open: ready or saved.",
+        ],
         ["Ctrl+F / PageUp / PageDown", "Filter the current view / scroll"],
         ["Ctrl+R / Ctrl+Space / Tab", "Python input / complete a name / complete a slash command"],
         ["Ctrl+G / Ctrl+click a name", "Inspect a value and follow its definition"],
@@ -1926,24 +2561,55 @@ export class App {
     );
   }
   private key = (key: KeyEvent): void => {
+    if (!this.overlay && key.ctrl && key.name === "v") {
+      key.preventDefault();
+      void clipboardImage((path) => this.session.attachImage(path)).catch(this.report);
+      return;
+    }
+    if (!this.overlay && key.meta && key.name === "e") {
+      key.preventDefault();
+      void this.editDraft().catch(this.report);
+      return;
+    }
+    if (!this.overlay && key.meta && key.name === "d") {
+      key.preventDefault();
+      this.details();
+      return;
+    }
+    if (!this.overlay && key.meta && ["return", "enter"].includes(key.name)) {
+      key.preventDefault();
+      this.session.enqueue(this.composer.plainText);
+      this.composer.setText("");
+      return;
+    }
+    if (key.ctrl && key.name === "w" && !this.overlay) {
+      key.preventDefault();
+      this.workspacePicker();
+      return;
+    }
+    if (key.ctrl && key.name === "\\" && !this.overlay) {
+      key.preventDefault();
+      this.options.workspaces?.toggle();
+      return;
+    }
     if (!this.overlay && key.name === "tab" && key.shift) {
       key.preventDefault();
       this.effortPicker();
       return;
     }
-    if (key.ctrl && ["pageup", "pagedown"].includes(key.name) && this.workspace.view === "changes") {
+    if (key.ctrl && ["pageup", "pagedown"].includes(key.name) && this.session.view === "changes") {
       key.preventDefault();
       this.changePage(key.name === "pageup" ? -1 : 1);
       return;
     }
     if (key.meta && key.ctrl && key.name === "left" && !this.overlay) {
       key.preventDefault();
-      void this.back().catch(this.workspace.fail);
+      void this.back().catch(this.report);
       return;
     }
     if (!this.overlay && key.meta && ["up", "down"].includes(key.name)) {
       key.preventDefault();
-      const history = this.workspace.histories[this.draftKey] ?? [];
+      const history = this.session.histories[this.draftKey] ?? [];
       if (this.historyIndex < 0) {
         this.historyDraft = this.composer.plainText;
         this.historyIndex = history.length;
@@ -1957,7 +2623,7 @@ export class App {
     }
     if (
       !this.overlay &&
-      (this.workspace.mode === "python" || this.workspace.editing) &&
+      (this.session.mode === "python" || this.session.editing) &&
       ((key.shift && ["return", "enter"].includes(key.name)) || (key.ctrl && key.name === "j"))
     ) {
       key.preventDefault();
@@ -1969,8 +2635,8 @@ export class App {
     }
     if (key.meta && ["[", "]"].includes(key.name) && !this.overlay) {
       key.preventDefault();
-      const prompts = this.workspace.activity.filter((act) => act.kind === "prompt");
-      const current = prompts.findIndex((act) => act.id === this.workspace.ladder);
+      const prompts = this.session.activity.filter((act) => act.kind === "prompt");
+      const current = prompts.findIndex((act) => act.id === this.session.ladder);
       const next = prompts[(current + (key.name === "]" ? 1 : -1) + prompts.length) % prompts.length];
       if (next) this.openLadder(next.id);
       return;
@@ -1992,19 +2658,24 @@ export class App {
       if (
         !this.overlay &&
         !this.search.visible &&
-        !this.workspace.editing &&
-        !this.workspace.paused &&
-        this.workspace.activity.some((act) => act.kind === "prompt" && !act.done)
+        !this.session.editing &&
+        !this.session.paused &&
+        this.session.activity.some((act) => act.kind === "prompt" && !act.done)
       )
         this.action("/pause");
       this.closeOverlay();
       this.search.visible = false;
-      this.workspace.query = "";
-      this.workspace.editing = undefined;
+      this.session.query = "";
+      this.session.editing = undefined;
       this.render();
       return;
     }
     if (this.overlay) {
+      if (["left", "right"].includes(key.name) && this.filtered[this.selection]?.toggle) {
+        key.preventDefault();
+        this.filtered[this.selection]?.toggle?.();
+        return;
+      }
       if (this.questionDocument && ["pageup", "pagedown"].includes(key.name)) {
         key.preventDefault();
         this.questionDocument.scrollBy(key.name === "pageup" ? -8 : 8);
@@ -2022,7 +2693,7 @@ export class App {
     }
     if (key.ctrl && /^[1-6]$/.test(key.name)) {
       key.preventDefault();
-      this.workspace.show(views[Number(key.name) - 1] ?? "conversation");
+      this.session.show(views[Number(key.name) - 1] ?? "conversation");
     } else if (key.name === "f1") {
       key.preventDefault();
       this.help();
@@ -2038,12 +2709,12 @@ export class App {
     } else if (key.ctrl && key.name === "t") {
       key.preventDefault();
       this.themes();
-    } else if (key.ctrl && key.name === "a" && this.workspace.operatorPrompt) {
+    } else if (key.ctrl && key.name === "a" && this.session.operatorPrompt) {
       key.preventDefault();
       this.question();
     } else if (key.ctrl && key.name === "g") {
       key.preventDefault();
-      void this.names().catch(this.workspace.fail);
+      void this.names().catch(this.report);
     } else if (key.ctrl && key.name === "l") {
       key.preventDefault();
       this.ladders();
@@ -2056,11 +2727,13 @@ export class App {
       if (selection) this.renderer.copyToClipboardOSC52(selection);
     } else if (key.ctrl && key.name === "space") {
       key.preventDefault();
-      void this.completeNames().catch(this.workspace.fail);
-    } else if (key.name === "tab" && /^\/\w*$/.test(this.composer.plainText)) {
+      void this.completeNames().catch(this.report);
+    } else if (key.name === "tab" && /^\/[\w-]*$/.test(this.composer.plainText)) {
       key.preventDefault();
       const prefix = this.composer.plainText.slice(1);
-      const command = Object.keys(commands).find((name) => name.startsWith(prefix));
+      const command = [...Object.keys(commands), ...(this.options.extensions?.commands.keys() ?? [])].find(
+        (name) => name.startsWith(prefix),
+      );
       if (command) this.composer.setText(`/${command} `);
     } else if (key.ctrl && key.name === "n") {
       key.preventDefault();
@@ -2070,7 +2743,7 @@ export class App {
       void this.options
         .sessions?.()
         .then((choices) => this.openPalette("Sessions", choices))
-        .catch(this.workspace.fail);
+        .catch(this.report);
     } else if (key.ctrl && key.name === "f") {
       key.preventDefault();
       this.search.visible = true;
@@ -2083,30 +2756,34 @@ export class App {
   dispose(): void {
     clearInterval(this.tick);
     this.closed = true;
-    this.workspace.drafts[this.draftKey] = this.composer.plainText;
-    this.workspace.scrolls[this.lastView] = this.scroll.scrollTop;
-    this.workspace.toggled = [...this.toggled];
-    this.workspace.save();
+    this.session.drafts[this.draftKey] = this.composer.plainText;
+    this.session.scrolls[this.lastView] = this.scroll.scrollTop;
+    this.session.folds = Object.fromEntries(this.folds);
+    this.session.save();
     if (this.redraw) clearTimeout(this.redraw);
     if (this.hoverTimer) clearTimeout(this.hoverTimer);
-    this.workspace.off("change", this.schedule);
-    this.workspace.off("compose", this.compose);
-    this.workspace.off("inspect", this.inspect);
-    this.workspace.off("resume", this.resume);
-    this.workspace.off("rewind", this.rewind);
-    this.workspace.off("models", this.models);
-    this.workspace.off("efforts", this.effortPicker);
-    this.workspace.off("details", this.details);
+    this.session.off("change", this.schedule);
+    this.options.workspaces?.off("change", this.schedule);
+    this.session.off("compose", this.compose);
+    this.session.off("inspect", this.inspect);
+    this.session.off("resume", this.resume);
+    this.session.off("rewind", this.rewind);
+    this.session.off("models", this.models);
+    this.session.off("efforts", this.effortPicker);
+    this.session.off("details", this.details);
+    this.session.off("queue", this.queuePicker);
+    this.session.off("tree", this.chainTree);
+    this.session.off("shared", this.shared);
     this.renderer.keyInput.off("keypress", this.key);
     this.renderer.off("resize", this.render);
     this.root.destroyRecursively();
     this.style.destroy();
   }
   private changePage(step: number): void {
-    this.workspace.changePage = Math.max(
+    this.session.changePage = Math.max(
       0,
-      Math.min(Math.ceil(this.workspace.world.changes.length / 20) - 1, this.workspace.changePage + step),
+      Math.min(Math.ceil(this.session.world.changes.length / 20) - 1, this.session.changePage + step),
     );
-    void this.workspace.refresh().catch(this.workspace.fail);
+    void this.session.refresh().catch(this.session.fail);
   }
 }

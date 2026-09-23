@@ -4,6 +4,16 @@ These captures come from the real OpenTUI renderer and native engine. The demo W
 answers, temporary files, and real local commands. Run `bun run screenshots` from the repository root to
 capture them again. The generator is `tui/script/screenshots.ts`.
 
+## Workspaces and sessions
+
+One collapsible tree groups sessions under project folders. Status dots come from live work and saved
+records. Open sessions keep running while another is selected. The group dot shows the state that needs
+attention first.
+
+![Workspace tree](screenshots/31-workspace-tree.png)
+
+The other view captures below keep the left sidebar hidden. The workspace controls remain in the header.
+
 ## Welcome
 
 Start from a feed with space between turns and a growing input panel, with one right sidebar.
@@ -185,3 +195,97 @@ A failed read shows its error with the act that failed.
 A damaged diff journal fails to load. Repair it and refresh the view.
 
 ![View error](screenshots/30-view-error.png)
+
+## Collapsed rung
+
+A folded rung shows its name and status. Its state is shared across views and saved with the session.
+
+![Collapsed rung](screenshots/32-collapsed-rung.png)
+
+## Collapsed workspace
+
+A workspace keeps its status visible while its session rows are folded.
+
+![Collapsed workspace](screenshots/33-collapsed-workspace.png)
+
+## Hidden workspace sidebar
+
+The feed takes the left sidebar's columns when it is hidden.
+
+![Hidden workspace sidebar](screenshots/34-hidden-workspace-sidebar.png)
+
+## Workspace picker
+
+Find a project or session from the keyboard, with the same live status as the tree.
+
+![Workspace picker](screenshots/35-workspace-picker.png)
+
+## Session tree
+
+Follow each chain's source parent. Left and Right fold branches; Enter opens a chain.
+
+![Session tree](screenshots/36-session-tree.png)
+
+## Queued follow-up
+
+A message waits until the chain's current prompt and rungs finish.
+
+![Queued follow-up](screenshots/37-queued-follow-up.png)
+
+## Queue controls
+
+Edit or remove a message before it is sent. Saved queues wait for a resume choice.
+
+![Queue controls](screenshots/38-queue-editor.png)
+
+## Image attachment
+
+An image is copied beside the record. Its reference enters the prompt, and the World sends the image bytes
+through pi-ai. Click the attachment row to preview or remove a draft image.
+
+![Image attachment](screenshots/39-image-attachment.png)
+
+## Share conversation
+
+Export a standalone HTML file with images and the exact transcript. The dialog can open it, copy its path,
+or upload it and a Markdown copy to an unlisted GitHub gist when the user chooses that action.
+
+![Share conversation](screenshots/40-share-conversation.png)
+
+## Delete session
+
+Choose a session, then move its record and companion files to the workspace trash. Other sessions keep running.
+
+![Delete session](screenshots/41-delete-session.png)
+
+## External editor
+
+The configured editor writes the draft file and returns it to the TUI. This capture uses a local editor
+fixture that writes Python through the same external-editor path.
+
+![External editor](screenshots/42-external-editor.png)
+
+## File picker
+
+Type `@` to search project files and insert a reference. The selected file is read with the next message.
+
+![File picker](screenshots/43-file-picker.png)
+
+## Extension command
+
+A loaded TypeScript extension adds a command to the same palette and completion list.
+
+![Extension command](screenshots/44-extension-command.png)
+
+## Undo message
+
+Undo opens a durable filtered branch and restores the message draft, including image attachments. The
+module and files keep their current state.
+
+![Undo message](screenshots/45-undo-message.png)
+
+## Redo message
+
+Redo returns to the origin of that undo.
+
+![Redo message](screenshots/46-redo-message.png)

@@ -2,6 +2,8 @@ import type { Life } from "@furb/engine";
 import { Act, engineSource, World, type WorldOptions } from "@furb/engine";
 import type { Snapshot, WorldState } from "./bridge.ts";
 import { createDemoWorld } from "./demo.ts";
+import { queueDispatches, queueHash } from "./queue.ts";
+import type { FollowUp } from "./session.ts";
 
 declare const self: Worker & { close(): void };
 let world: World | undefined;
@@ -14,6 +16,7 @@ const state = () => {
   if (!owner) return;
   const snapshot: WorldState = {
     directory: owner.directory,
+    imageDirectory: owner.imageDirectory,
     model: owner.model,
     effort: owner.effort,
     roster: owner.roster,
@@ -34,8 +37,11 @@ self.onmessage = async ({ data }) => {
     let value: unknown;
     if (data.method === "open") {
       const options = data.args[0] as WorldOptions & { demo?: boolean };
-      world = options.demo ? await createDemoWorld(options.record) : new World(options);
+      world = options.demo ? await createDemoWorld(options.record, options.cwd) : new World(options);
       life = world.open();
+      const tail = world.records.entries.at(-1)?.[1];
+      if (tail?.[0] === "queue_begin" && tail[2] === "operator")
+        life.send("queue_aborted", tail[1], [tail[3]]);
       world.on("fault", (error) =>
         self.postMessage({ fault: error instanceof Error ? error.message : String(error) }),
       );
@@ -46,6 +52,20 @@ self.onmessage = async ({ data }) => {
         }, 20);
       });
       value = life.root;
+    } else if (data.target === "library" && data.method === "queue") {
+      if (!life || !world) throw new Error("The session is not open.");
+      const entry = data.args[0] as FollowUp;
+      const prior = queueDispatches(world.records.entries).get(entry.id);
+      if (prior) value = prior;
+      else {
+        life.send("queue_begin", entry.chain, [
+          entry.id,
+          queueHash(entry.chain, entry.shape, entry.text, entry.actor),
+        ]);
+        const act = life.prompt(entry.shape, entry.text, { on: entry.chain, to: entry.actor });
+        life.send("queue_sent", entry.chain, [entry.id, act.id]);
+        value = act.id;
+      }
     } else if (data.target === "library" && data.method === "source") {
       value = engineSource();
     } else if (data.target === "library" && data.method === "changes") {
@@ -63,6 +83,8 @@ self.onmessage = async ({ data }) => {
           on: fact[0] === "chain" ? id : fact[3],
           words: fact.slice(4),
           done: outcome.done,
+          paused: world?.isPaused(id) ?? false,
+          run: fact[0] === "rung" ? world?.rungState(id) : undefined,
           value: !outcome.done && fact[0] === "bash" ? owner.peek(id) : outcome.value,
         };
       });
@@ -74,13 +96,11 @@ self.onmessage = async ({ data }) => {
         {},
       );
       value = {
+        dispatched: world ? [...queueDispatches(world.records.entries).keys()] : [],
         roster,
         acts,
         selected,
-        paused:
-          world?.facts.findLast(
-            (fact) => fact[1] === selected && ["pause", "wake"].includes(fact[0]),
-          )?.[0] === "pause",
+        paused: world?.isPaused(selected) ?? false,
         turns: owner.turns(selected),
         rendered: owner.rendered(selected),
         program: program ?? {},

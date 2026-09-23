@@ -1,9 +1,18 @@
 import { EventEmitter } from "node:events";
-import { type Act, actorParts, type Fact, type Life, type World, type WorldOptions } from "@furb/engine";
+import {
+  type Act,
+  actorParts,
+  type Fact,
+  type ImageAttachment,
+  type Life,
+  type World,
+  type WorldOptions,
+} from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
-import type { ActRow } from "./workspace.ts";
+import type { ActRow, FollowUp } from "./session.ts";
 
 export interface Snapshot {
+  dispatched: string[];
   paused: boolean;
   roster: [string, string[], number][];
   acts: ActRow[];
@@ -24,6 +33,7 @@ export type Engine = {
 };
 export interface WorldState {
   directory: string;
+  imageDirectory: string;
   model: string;
   effort: World["effort"];
   roster: string[];
@@ -38,6 +48,7 @@ export interface WorldState {
 
 export class HostView extends EventEmitter {
   directory = "";
+  imageDirectory = "";
   model = "";
   effort: World["effort"] = "low";
   roster: string[] = [];
@@ -53,6 +64,7 @@ export class HostView extends EventEmitter {
   }
   update(state: WorldState): void {
     this.directory = state.directory;
+    this.imageDirectory = state.imageDirectory;
     this.model = state.model;
     this.effort = state.effort;
     this.roster = state.roster;
@@ -78,6 +90,12 @@ export class HostView extends EventEmitter {
   }
   answer(id: string, value: string): Promise<unknown> {
     return this.request("world", "answer", [id, value]);
+  }
+  attachImage(path: string): Promise<ImageAttachment> {
+    return this.request("world", "attachImage", [path]) as Promise<ImageAttachment>;
+  }
+  sendQueued(entry: FollowUp): Promise<string> {
+    return this.request("library", "queue", [entry]) as Promise<string>;
   }
   resume(): Promise<unknown> {
     return this.request("world", "resume", []);

@@ -1,17 +1,18 @@
 #!/usr/bin/env bun
 import { existsSync } from "node:fs";
-import { mkdir, readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { efforts, type WorldOptions } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
 import { App } from "./app.ts";
-import { openEngine } from "./bridge.ts";
-import { demoWorkspace } from "./demo.ts";
+import { seedDemoFiles } from "./demo.ts";
+import { Extensions } from "./extensions.ts";
 import { Preferences } from "./preferences.ts";
 import { sessionChoices } from "./sessions.ts";
 import { palettes } from "./theme.ts";
-import { Workspace } from "./workspace.ts";
+import { Workspaces } from "./workspaces.ts";
 
 const { values } = parseArgs({
   args: process.argv.slice(2).filter((value, index) => index !== 0 || value !== "--"),
@@ -24,6 +25,7 @@ const { values } = parseArgs({
     record: { type: "string" },
     resume: { type: "string" },
     roster: { type: "string", multiple: true },
+    extension: { type: "string", multiple: true },
   },
 });
 if (values.help) {
@@ -37,38 +39,59 @@ Other providers use pi-ai and its environment credentials.`);
 }
 if (values.effort && !efforts.some((effort) => effort === values.effort)) throw new Error("Invalid effort.");
 if (values.resume && !existsSync(resolve(values.resume))) throw new Error(`No session at ${values.resume}.`);
-const directory = resolve(values.cwd ?? process.cwd());
-const sessionsDirectory = resolve(directory, ".furb/sessions");
-await mkdir(sessionsDirectory, { recursive: true });
-let workspace: Workspace;
 const preferences = new Preferences();
-const worldOptions: WorldOptions = {
-  cwd: values.cwd ? directory : undefined,
+const record = values.resume ?? values.record;
+const savedDirectory =
+  record && !values.cwd
+    ? await readFile(`${resolve(record)}.world.json`, "utf8")
+        .then((text) => JSON.parse(text)?.options?.cwd as string | undefined)
+        .catch(() => undefined)
+    : undefined;
+const directory =
+  values.demo && !values.cwd && !record
+    ? join(await mkdtemp(join(tmpdir(), "furb-demo-")), "fieldnotes")
+    : resolve(values.cwd ?? savedDirectory ?? process.cwd());
+if (values.demo) await mkdir(directory, { recursive: true });
+if (values.demo && !values.cwd && !record) await seedDemoFiles(directory);
+const worldOptions: WorldOptions & { demo?: boolean } = {
   model: values.model,
   effort: values.effort as WorldOptions["effort"],
   roster: values.roster,
+  demo: values.demo,
 };
-async function open(record: string): Promise<Workspace> {
-  const demo = await readFile(`${record}.ui.json`, "utf8")
-    .then((text) => Boolean(JSON.parse(text).demo))
-    .catch(() => false);
-  const { life, world } = await openEngine({ ...worldOptions, record, demo });
-  const result = new Workspace(life, world, demo, preferences);
-  await result.refresh();
-  return result;
+const library = new Workspaces(
+  preferences,
+  worldOptions,
+  values.demo ? join(directory, ".furb/workspaces.json") : undefined,
+);
+const group = await library.add(directory);
+await library.refresh();
+if (record) await library.import(record, group);
+else await library.create(group);
+const initial = library.current?.session;
+if (!initial) throw new Error("The session did not open.");
+const extensions = new Extensions(() => {
+  const session = library.current?.session;
+  if (!session) throw new Error("No session is selected.");
+  return {
+    life: session.life,
+    chain: session.selected,
+    directory: session.directory || session.world.directory,
+    notify: (message) => {
+      session.notice = message;
+    },
+    submit: (message) => session.submit(message),
+  };
+});
+try {
+  for (const path of values.extension ?? []) await extensions.load(resolve(path));
+} catch (error) {
+  await library.dispose();
+  throw error;
 }
-workspace = values.demo
-  ? await demoWorkspace(false, preferences)
-  : await open(
-      resolve(
-        values.resume ??
-          values.record ??
-          `${sessionsDirectory}/${new Date().toISOString().replaceAll(":", "-")}.jsonl`,
-      ),
-    );
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
-  backgroundColor: palettes[workspace.theme].background,
+  backgroundColor: palettes[initial.theme].background,
   targetFps: 30,
   useMouse: true,
 });
@@ -79,33 +102,37 @@ const quit = async () => {
   closing = true;
   app.dispose();
   renderer.destroy();
-  await workspace.dispose();
-};
-const sessions = async () => {
-  const location = workspace.world.records.path ? dirname(workspace.world.records.path) : sessionsDirectory;
-  return sessionChoices(
-    location,
-    async (path) => {
-      if (path === workspace.world.records.path) return;
-      const next = await open(path);
-      app.dispose();
-      await workspace.dispose();
-      workspace = next;
-      app = new App(renderer, workspace, { quit, sessions, newSession });
-    },
-    newSession,
-  );
+  try {
+    await extensions.dispose();
+  } finally {
+    await library.dispose();
+  }
 };
 const newSession = async () => {
-  const next = values.demo
-    ? await demoWorkspace(false, preferences)
-    : await open(resolve(sessionsDirectory, `${new Date().toISOString().replaceAll(":", "-")}.jsonl`));
-  app.dispose();
-  await workspace.dispose();
-  workspace = next;
-  app = new App(renderer, workspace, { quit, sessions, newSession });
+  await library.create();
 };
-app = new App(renderer, workspace, { quit, sessions, newSession });
-process.once("SIGTERM", () => {
-  void quit();
+const sessions = async () => {
+  await library.refresh();
+  const group = library.groupOf();
+  const entries = new Map((group?.sessions ?? []).map((entry) => [entry.path, entry]));
+  return sessionChoices(
+    dirname(library.current?.path ?? directory),
+    async (path) => {
+      const entry = entries.get(path);
+      if (entry) await library.select(entry);
+    },
+    newSession,
+    entries,
+  );
+};
+const options = { quit, sessions, newSession, workspaces: library, extensions };
+app = new App(renderer, initial, options);
+library.on("select", (session) => {
+  if (app.session === session) return;
+  app.dispose();
+  app = new App(renderer, session, options);
 });
+for (const signal of ["SIGTERM", "SIGHUP"] as const)
+  process.once(signal, () => {
+    void quit();
+  });

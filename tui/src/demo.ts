@@ -1,22 +1,26 @@
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { type Turn, World } from "@furb/engine";
 import { openEngine } from "./bridge.ts";
 import type { Preferences } from "./preferences.ts";
-import { Workspace } from "./workspace.ts";
+import { Session } from "./session.ts";
 
-export async function createDemoWorld(record?: string): Promise<World> {
-  const directory = record
-    ? dirname(record)
-    : join(await mkdtemp(join(tmpdir(), "furb-demo-")), "fieldnotes");
-  if (!record) {
-    await mkdir(directory);
-    await writeFile(
-      join(directory, "README.md"),
-      "# Fieldnotes\n\nA small place to keep ideas.\n\n- Capture a thought\n- Find it when it matters\n- Keep everything local\n",
-    );
-  }
+export async function seedDemoFiles(directory: string): Promise<void> {
+  if (existsSync(join(directory, "README.md"))) return;
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    join(directory, "README.md"),
+    "# Fieldnotes\n\nA small place to keep ideas.\n\n- Capture a thought\n- Find it when it matters\n- Keep everything local\n",
+    { flag: "wx" },
+  );
+}
+
+export async function createDemoWorld(record?: string, cwd?: string): Promise<World> {
+  const directory =
+    cwd ?? (record ? dirname(record) : join(await mkdtemp(join(tmpdir(), "furb-demo-")), "fieldnotes"));
+  if (!record && !cwd) await seedDemoFiles(directory);
   const world = new World({
     cwd: directory,
     record: record ?? join(directory, "demo.jsonl"),
@@ -42,16 +46,16 @@ export async function createDemoWorld(record?: string): Promise<World> {
   return world;
 }
 
-export async function demoWorkspace(seed = false, preferences?: Preferences): Promise<Workspace> {
+export async function demoSession(seed = false, preferences?: Preferences): Promise<Session> {
   const { life, world } = await openEngine({ demo: true });
-  const workspace = new Workspace(life, world, true, preferences);
-  await workspace.refresh();
-  if (seed) await seedDemo(workspace);
-  return workspace;
+  const session = new Session(life, world, true, preferences);
+  await session.refresh();
+  if (seed) await seedDemo(session);
+  return session;
 }
 
-export async function seedDemo(workspace: Workspace): Promise<void> {
-  const { life } = workspace;
+export async function seedDemo(session: Session): Promise<void> {
+  const { life } = session;
   await life.grant({ usd: 2, on: life.root });
   const prompt = await life.prompt(
     "str",
@@ -62,5 +66,5 @@ export async function seedDemo(workspace: Workspace): Promise<void> {
   const fork = await life.chain("Search shortcut", life.root);
   await life.result(await life.rung('shortcut = "Ctrl+K"\nquery = "small ideas"', { on: fork }));
   await life.chain("Review notes");
-  await workspace.refresh();
+  await session.refresh();
 }
