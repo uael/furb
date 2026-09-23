@@ -37,7 +37,8 @@ export interface WorldState {
   prompts: { id: string; shape: string; message: string }[];
   streams: [string, { chain: string; text: string; thinking: string }][];
   held: [string, string][];
-  changes: string[];
+  /** How many file changes the World holds. */
+  changes: number;
   models: ReturnType<World["route"]>[];
 }
 
@@ -54,7 +55,8 @@ export class HostView extends EventEmitter {
   prompts = new Map<string, { id: string; shape: string; message: string }>();
   streams = new Map<string, { chain: string; text: string; thinking: string }>();
   held = new Map<string, string>();
-  changes: string[] = [];
+  /** The file changes of the World, of which a view reads the count alone. */
+  changes = { length: 0 };
   private models: ReturnType<World["route"]>[] = [];
   constructor(private request: (target: string, method: string, args: unknown[]) => Promise<unknown>) {
     super();
@@ -73,7 +75,7 @@ export class HostView extends EventEmitter {
     this.prompts = new Map(state.prompts.map((prompt) => [prompt.id, prompt]));
     this.streams = new Map(state.streams);
     this.held = new Map(state.held);
-    for (const path of state.changes) this.changes.push(path);
+    this.changes = { length: state.changes };
     this.models = state.models;
     if (incoming.length) this.emit("facts", incoming);
     this.emit("change");

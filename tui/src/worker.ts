@@ -14,7 +14,6 @@ let snapshots: Snapshots | undefined;
 let host: ReturnType<typeof hostModels> | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let sentFacts = 0;
-let sentChanges = 0;
 const state = () => {
   const owner = world;
   if (!owner) return;
@@ -31,11 +30,10 @@ const state = () => {
     prompts: [...owner.prompts.values()].map(({ id, shape, message }) => ({ id, shape, message })),
     streams: [...owner.streams],
     held: [...owner.held],
-    changes: owner.changes.paths.slice(sentChanges),
-    models: owner.roster.map((name) => owner.route(name)),
+    changes: owner.changes.length,
+    models: owner.roster.flatMap((name) => owner.offers(name) ?? []),
   };
   sentFacts = owner.facts.length;
-  sentChanges = owner.changes.length;
   self.postMessage({ state: snapshot });
 };
 self.onmessage = async ({ data }) => {

@@ -1,9 +1,68 @@
 import { expect, test } from "bun:test";
-import { chmod, mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, type Message } from "@earendil-works/pi-ai";
+import { World } from "../src/index.ts";
 import { claudeProvider } from "../src/providers/claude.ts";
+
+test("a CLI that exits before it reads a request fails that request, and a Node host lives on", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-gone-cli-"));
+  const bin = join(cwd, "claude");
+  await writeFile(bin, "#!/bin/sh\nexit 3\n");
+  await chmod(bin, 0o755);
+  // Node ends its process at an error event that nothing hears, so the host is Node, on the built package.
+  const host = `
+    import { createModels } from ${JSON.stringify(import.meta.resolve("@earendil-works/pi-ai"))};
+    import { claudeProvider } from ${JSON.stringify(new URL("../dist/providers/claude.js", import.meta.url).href)};
+    const cli = claudeProvider({ bin: ${JSON.stringify(bin)}, stallMs: 1000 });
+    const models = createModels();
+    models.setProvider(cli.provider);
+    // A request over the buffer of the pipe is still being written when the CLI is gone.
+    const reply = await models.completeSimple(
+      models.getModel("claude-cli", "sonnet"),
+      { messages: [{ role: "user", content: "x".repeat(4 * 1024 * 1024), timestamp: 0 }] },
+      { sessionId: "gone" },
+    );
+    cli.dispose();
+    process.stdout.write(reply.stopReason);
+  `;
+  try {
+    const node = Bun.spawnSync(["node", "--input-type=module", "-e", host]);
+    expect([node.exitCode, node.stdout.toString()]).toEqual([0, "error"]);
+  } finally {
+    await rm(cwd, { recursive: true });
+  }
+});
+
+test("two lives on one provider keep a conversation each, though their chains share ids", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-two-lives-"));
+  const bin = new URL("fake-claude.ts", import.meta.url).pathname;
+  await chmod(bin, 0o755);
+  const log = join(cwd, "cli.jsonl");
+  process.env.FURB_FAKE_LOG = log;
+  const cli = claudeProvider({ bin, stallMs: 1000 });
+  const models = createModels();
+  models.setProvider(cli.provider);
+  const one = new World({ cwd, models, model: "claude-cli:sonnet" });
+  const two = new World({ cwd, models, model: "claude-cli:sonnet" });
+  try {
+    const [first, second] = [one.open(), two.open()];
+    expect(first.root).toBe(second.root);
+    expect(
+      await Promise.all([first.prompt<string>("str", "task"), second.prompt<string>("str", "task")]),
+    ).toEqual(["reply 1", "reply 1"]);
+    expect((await readFile(log, "utf8")).split("\n").filter((line) => line.includes('"pid"'))).toHaveLength(
+      2,
+    );
+  } finally {
+    await one.dispose();
+    await two.dispose();
+    cli.dispose();
+    delete process.env.FURB_FAKE_LOG;
+    await rm(cwd, { recursive: true });
+  }
+});
 
 test("the pi-ai Claude provider forwards normalized system text, reuses a session, and charges each turn once", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-provider-"));

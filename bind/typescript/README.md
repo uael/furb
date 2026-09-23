@@ -21,14 +21,19 @@ uses `/bin/sh`, so it supports macOS and Linux. Build the native binary for the 
 ```ts
 import { boot } from "@furb/engine";
 
-const session = boot({ cwd: process.cwd(), record: ".furb/work.jsonl" });
+const session = boot({
+  cwd: process.cwd(),
+  record: ".furb/work.jsonl",
+  // With no model, the World offers the operator alone, and this callback answers what is put to it.
+  operator: async ({ message }) => `You asked: ${message}`,
+});
 try {
   const { life } = session;
   console.log(life.cwd()); // A synchronous query.
-  const work = life.prompt<string>("str", "Read the README and explain this project.");
+  const work = life.prompt<string>("str", "What is this project?");
   console.log(work.id);
   const answer = await work;
-  console.log(answer);
+  console.log(answer); // You asked: What is this project?
 } finally {
   await session.dispose();
 }
@@ -38,15 +43,18 @@ The default `World` provides files, streamed shell commands, stdin, timeouts, ti
 requests, and operator questions. It knows no provider of its own: it asks the pi-ai collection it is given in
 `models`, the built-in providers when it is given none, and it preserves provider response blocks in the
 record. The host names what the World offers in `roster`, as `provider:model`, and the default actor in `model`,
-which is the first of the roster when unsaid; a World given neither offers the operator alone. A name without
-its provider routes to the one model of that id. A reopened record keeps its roster and model, and a model the
-host offers since then joins the roster. Configure an API provider through its pi-ai credentials.
+which is the first of the roster when unsaid; a World given neither offers the operator alone, and a prompt
+that names no actor goes to the operator. A name without its provider routes to the one model of that id. A
+reopened record keeps its roster and model, and a model the host offers since then joins the roster. A saved
+model that the host no longer offers stays in the roster, since the record was made on it, and an ask of it
+fails. Configure an API provider through its pi-ai credentials.
 
 The Claude CLI provider, `claudeProvider` from `@furb/engine/claude`, is a pi-ai provider that a host adds to
 its collection at run time. It follows the pooled session design in [dirt](https://github.com/uael/dirt/tree/main/packages/cli/src/providers).
-It reads current pi-ai system messages, keeps warm conversations by chain, sends only new messages, preserves
-text and thinking blocks, and reports the cost of each turn. It runs pure completions with CLI tools and MCP
-disabled. It finds the standalone CLI or the CLI installed by Claude Desktop. Set `FURB_CLAUDE_BIN` to select
+It reads current pi-ai system messages, keeps a warm conversation for each session id, sends only new messages,
+preserves text and thinking blocks, and reports the cost of each turn. The World gives each chain of each life a
+session id of its own, since the ids of chains repeat in every life. It runs pure completions with CLI tools and
+MCP disabled. It finds the standalone CLI or the CLI installed by Claude Desktop. Set `FURB_CLAUDE_BIN` to select
 a binary; `DIRT_CLI_BIN` is also accepted. Its pool belongs to the host that made the provider, and its
 `dispose` stops it. No CLI process starts until a model is asked.
 
@@ -64,8 +72,10 @@ const world = new World({ models, roster });
 
 Pass `answer` to replace only model requests, or `operator` to supply operator answers. With no `operator`, questions stand in `world.prompts`; call `world.answer(id, text)`
 to parse and validate an answer. `world` emits `change` and `facts`; `fault` reports a failure to deliver an
-outside result. A failed outside act carries its refusal in the record. A `Keep` writes and syncs
-one complete record entry before it returns. The `answer` callback also receives the exact rendered turns
+outside result. `world.facts` holds the facts of the life but the answers to the queries that the host asks
+outside a rung, which no record keeps either, so a listener that asks the life hears no change of its own. A
+failed outside act carries its refusal in the record. A `Keep` writes and syncs one complete record entry
+before it returns. The `answer` callback also receives the exact rendered turns
 as its fifth argument. `life.rendered(chain)` gives that text from the native values, so Python floats,
 tuples, and instances retain their representations before they cross to JavaScript. `life.rendering(chain)`
 gives the turns and that text from one question.
@@ -89,7 +99,8 @@ Pass `world` to `boot` to replace the whole World. It receives these operations:
 Stand, Read, Write, Clock, Chance, Keep, Run, Feed, and Slay answer synchronously. They must not call back
 into the same life. For a World that needs nested engine queries, use `Ears`: its generators yield a saying
 `[kind, id, ...words]`, a call `{verb, args, kwargs}`, or nothing. A yielded call is answered before the ear
-continues, as in the Python binding. `Ears.callable` carries a JavaScript show or filter into the engine.
+continues, as in the Python binding. `Ears.callable` carries a JavaScript show or filter into the engine,
+from the `Ears` the life boots on: `world.ears` for the supplied World, and `session.ears` from `boot`.
 `Life.call` reaches every public engine verb beyond the named methods.
 
 Values use the Python record form. Text and Exit carry `is` plus their fields. Faults carry `is` and `args`.
@@ -104,8 +115,9 @@ JavaScript holds it rounded: send a BigInt, or the `int` form above. A BigInt pa
 as its digits in a string. `inspect(name, chain)` also gives the Python type and representation of a value.
 
 Records preserve integral floats as `{"is":"float","args":["1"]}`. The native record reader checks integer
-precision before JavaScript can round a number. Queries are not journal entries. To keep a program edit
-across a later open, perform its `write` in a `rung`.
+precision before JavaScript can round a number. A query of a rung enters the record with its answer, and a
+query that the host asks outside a rung enters none. To keep a program edit across a later open, perform its
+`write` in a `rung`.
 
 A record whose replay drifts gives a life all the same, and `life.raised` holds the drift; that life keeps
 nothing more. `World.open` refuses such a record with the drift.
@@ -113,11 +125,13 @@ nothing more. `World.open` refuses such a record with the drift.
 Only one process owns a record. Its `RecordLock` holds a lock on `<record>.lock`, which the system releases
 when the process ends, so a lease of a process that ended never blocks an open. The lock file stays beside the
 record. A torn final line is removed before an append; a damaged complete line fails.
-Closing a durable World pauses its chains. A later open holds unfinished work before any model or command
-runs, and `world.resume()` explicitly releases it. Interrupted commands keep their recorded output and end
-with a refusal on resume; they are never run twice without a new act. Wait deadlines and partial streams
-live in the record's `.world.json` companion. File snapshots append to `.changes.jsonl`; `world.changes.read`
-loads a page of them. Keep both companions with the JSONL record.
+A later open holds unfinished work, in `world.held`, before any model, command, wait or operator question
+starts, and `world.resume()` explicitly releases it. The World pauses no chain to hold work, so every pause
+that the record holds stands after resume: one of the operator, of a grant, or of two failed asks in a row.
+A command that an earlier World started keeps its recorded output and ends with a refusal on resume; it is
+never run twice without a new act. Wait deadlines, partial streams, and the commands and operator questions
+that were started live in the record's `.world.json` companion. File snapshots append to `.changes.jsonl`;
+`world.changes.read` loads a page of them. Keep both companions with the JSONL record.
 
 `inspectRecord(path, models)` reads pending work through the same native replay without taking a record lock,
 writing files, or starting a model or command. The TUI runs this inspection in its own worker. `World.activity` holds

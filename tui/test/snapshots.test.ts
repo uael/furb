@@ -81,7 +81,8 @@ test("fact-derived act state matches native outcomes, controls, and rung results
     let view = snapshots.take(life.root);
     expect(Object.values(view.program)).toContain("answer = 17");
     expect(view.rendered.join("\n")).toContain("answer = 17");
-    life.cd("another-directory");
+    // A cd the operator asks is of the moment, and the World keeps no answer of it, so the cd is a rung, as /cd is.
+    await life.rung('cd("another-directory")');
     await Promise.resolve();
     expect(snapshots.take(life.root).directory).toBe("another-directory");
     const failed = life.rung("x = 1 / 0");

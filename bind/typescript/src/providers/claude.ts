@@ -320,6 +320,10 @@ class Session {
     child.on("error", (error) => {
       if (child === this.child) this.stop(error);
     });
+    // A CLI that exits before it reads its input breaks the pipe, and an error that nothing hears ends the host.
+    child.stdin.on("error", (error) => {
+      if (child === this.child) this.stop(error);
+    });
     child.on("close", (code) => {
       if (child === this.child) this.stop(new Error(`Claude exited (${code}): ${this.stderr.trim()}`));
     });

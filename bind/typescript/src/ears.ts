@@ -91,13 +91,38 @@ export class Ears {
 export class WorldAdapter {
   life?: Life;
   stopped = false;
+  /** The ears the life boots on, whose callable carries a show or a filter of the host into the life. */
+  readonly ears: Ears;
   private readonly running = new Set<string>();
+  /** The actor whose last ask on each chain answered nothing, so a second such ask in a row pauses the chain. */
+  private readonly mute = new Map<string, string>();
   constructor(
     readonly handle: WorldHandler,
     readonly onFacts?: (facts: Fact[]) => void,
     readonly onFault?: (error: unknown) => void,
     readonly onFact?: (fact: Fact) => void,
-  ) {}
+  ) {
+    const owner = this;
+    let queued = false;
+    const facts: Fact[] = [];
+    const observer = (function* (): Ear {
+      for (;;) {
+        const fact = (yield null) as Fact;
+        if (fact) {
+          facts.push(fact);
+          onFact?.(fact);
+        }
+        if (!queued) {
+          queued = true;
+          queueMicrotask(() => {
+            queued = false;
+            if (!owner.stopped && facts.length) onFacts?.(facts.splice(0));
+          });
+        }
+      }
+    })();
+    this.ears = new Ears({ world: this.world(), typescript: observer });
+  }
 
   private get closed(): boolean {
     return this.stopped || this.life?.disposed === true;
@@ -170,6 +195,7 @@ export class WorldAdapter {
         yield ["done", id, value];
       } else if (kind === "keep") synchronous(this.handle({ kind: "Keep", args: [words[0]] }));
       else if (kind === "ask") {
+        const [chain, actor] = [String(words[0]), String(words[1])];
         this.later(
           { kind: "Ask", args: [id, ...words, transcripts.get(fact)] },
           (value) => {
@@ -180,47 +206,26 @@ export class WorldAdapter {
               );
               value = reply;
             }
+            this.mute.delete(chain);
             if (!this.life?.outcome(id).done) this.life?.send("answer", id, [value], "world");
           },
           (error) => {
-            const actor = String(words[1]);
-            const mute = `${actor} answered nothing`;
-            const turns = words[2] as import("./types.js").Turn[];
-            const repeated = turns
-              .at(-1)?.[1]
-              .some((tag) => typeof tag !== "string" && String(tag[2]).includes(mute));
-            if (repeated) this.life?.pause(String(words[0]));
+            if (this.mute.get(chain) === actor) this.life?.pause(chain);
+            this.mute.set(chain, actor);
             const why =
               error instanceof Error
                 ? `${error.name}: ${error.message}`
                 : error && typeof error === "object" && "is" in error && "args" in error
                   ? `${error.is}: ${Array.isArray(error.args) ? error.args.map(String).join(", ") : String(error.args)}`
                   : `Refused: ${String(error)}`;
-            this.life?.close({ is: "Refused", args: [`${mute}: ${why}`] }, id);
+            this.life?.close({ is: "Refused", args: [`${actor} answered nothing: ${why}`] }, id);
           },
         );
       } else if (kind === "start") {
         const act = (yield { verb: "get", args: [id] }) as Fact;
         if (!act) continue;
-        if (act[0] === "wait")
-          this.later(
-            { kind: "Wait", args: [act[4], id] },
-            () => {
-              if (!this.life?.outcome(id).done) this.life?.send("done", id, [null], "world");
-            },
-            (error) => this.life?.close(fault(error), id),
-          );
-        else if (act[0] === "prompt")
-          this.later(
-            { kind: "Prompt", args: [id, act[4], act[5]] },
-            (value) => {
-              if (!this.life?.outcome(id).done) this.life?.close(value, id);
-            },
-            (error) => {
-              if (!this.life?.outcome(id).done) this.life?.close(fault(error), id);
-            },
-          );
-        else if (act[0] === "bash") {
+        if (act[0] !== "bash") this.start(act);
+        else {
           const here = yield { verb: "cwd", kwargs: { on: act[3] } };
           const [, merged] = (yield { verb: "ask", args: ["merged", act[3], id] }) as [unknown, boolean];
           this.running.add(id);
@@ -248,27 +253,31 @@ export class WorldAdapter {
       }
     }
   }
+  /** The outside work of a wait or of a prompt to the operator: the one start of it, for an act born in this life
+   * and for one that the record held, which the World starts again when it resumes. */
+  start(act: Fact): void {
+    const id = act[1];
+    if (act[0] === "wait")
+      this.later(
+        { kind: "Wait", args: [act[4], id] },
+        () => {
+          if (!this.life?.outcome(id).done) this.life?.send("done", id, [null], "world");
+        },
+        (error) => this.life?.close(fault(error), id),
+      );
+    else if (act[0] === "prompt")
+      this.later(
+        { kind: "Prompt", args: [id, act[4], act[5]] },
+        (value) => {
+          if (!this.life?.outcome(id).done) this.life?.close(value, id);
+        },
+        (error) => {
+          if (!this.life?.outcome(id).done) this.life?.close(fault(error), id);
+        },
+      );
+  }
   boot(record: Entry[] = []): Life {
-    const owner = this;
-    let queued = false;
-    const facts: Fact[] = [];
-    const observer = (function* (): Ear {
-      for (;;) {
-        const fact = (yield null) as Fact;
-        if (fact) {
-          facts.push(fact);
-          owner.onFact?.(fact);
-        }
-        if (!queued) {
-          queued = true;
-          queueMicrotask(() => {
-            queued = false;
-            if (!owner.stopped && facts.length) owner.onFacts?.(facts.splice(0));
-          });
-        }
-      }
-    })();
-    this.life = new Ears({ world: this.world(), typescript: observer }).boot(record);
+    this.life = this.ears.boot(record);
     return this.life;
   }
 }

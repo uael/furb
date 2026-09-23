@@ -131,7 +131,7 @@ export class Snapshots {
     return {
       selected,
       acts: [...this.world.activity.acts.values()],
-      paused: this.world.isPaused(selected),
+      paused: this.world.isPaused(selected) || this.world.held.size > 0,
       dispatched: this.dispatched,
       roster: view.roster,
       program: view.program,

@@ -21,7 +21,6 @@ export interface FileChange {
 
 /** Append file snapshots once. Keep only their positions in memory and read a page on demand. */
 export class FileChanges {
-  readonly paths: string[] = [];
   private readonly positions: { start: number; size: number }[] = [];
   private readonly temporary?: string;
   private readonly fd?: number;
@@ -38,8 +37,8 @@ export class FileChanges {
           truncateSync(path, this.end);
           break;
         }
-        const value = JSON.parse(data.subarray(this.end, newline).toString("utf8")) as FileChange;
-        this.paths.push(value.path);
+        // A complete line that is no change fails here, before the World opens on it.
+        JSON.parse(data.subarray(this.end, newline).toString("utf8"));
         this.positions.push({ start: this.end, size: newline - this.end });
         this.end = newline + 1;
       }
@@ -47,14 +46,13 @@ export class FileChanges {
     this.fd = openSync(path, "a+", 0o600);
   }
   get length(): number {
-    return this.paths.length;
+    return this.positions.length;
   }
   append(change: FileChange): void {
     if (this.fd === undefined) return;
     const data = Buffer.from(`${JSON.stringify(change)}\n`);
     writeSync(this.fd, data);
     fsyncSync(this.fd);
-    this.paths.push(change.path);
     this.positions.push({ start: this.end, size: data.length - 1 });
     this.end += data.length;
   }
