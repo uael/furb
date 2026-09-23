@@ -17,7 +17,7 @@ import {
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { decodeRecord, type Life } from "../index.cjs";
 import { Activity, type RunState } from "./activity.js";
-import { type FileChange, FileChanges } from "./changes.js";
+import { FileChanges } from "./changes.js";
 import { type Ears, WorldAdapter, type WorldHandler, type WorldRequest } from "./ears.js";
 import { attachImage, type ImageAttachment, ImageCache, turnImages } from "./images.js";
 import { RecordFile } from "./record.js";
@@ -25,6 +25,7 @@ import {
   actorParts,
   type Entry,
   type Fact,
+  modelNamed,
   type OperatorPrompt,
   shapes,
   type Turn,
@@ -104,7 +105,6 @@ type Actor = [name: string, efforts: string[], window: number];
 interface Saved {
   options: WorldOptions;
   actors?: Actor[];
-  changes?: FileChange[];
   deadlines?: [string, number][];
   streams?: [string, { chain: string; text: string; thinking: string }][];
   spawned?: string[];
@@ -215,7 +215,6 @@ export class World extends EventEmitter {
         options.readOnly,
       );
       this.changes = changes = new FileChanges(this.records.path, options.readOnly);
-      if (!this.changes.length) for (const change of saved?.changes ?? []) this.changes.append(change);
       // A later life holds its outside work until the host resumes it, and an inspection holds it for good.
       this.holding = Boolean(options.readOnly) || this.records.entries.length > 0;
       this.resumeGate = new Promise((resolve) => {
@@ -242,16 +241,7 @@ export class World extends EventEmitter {
 
   /** The model an actor names, with or without its effort, and nothing when the World holds no such model. */
   offers(actor: string): Model<Api> | undefined {
-    for (const name of [actor, actorParts(actor).model]) {
-      const separator = name.indexOf(":");
-      // A name without its provider is the one model of that id among every provider the World holds.
-      const found =
-        separator < 0
-          ? this.models.getModels().filter((model) => model.id === name)
-          : [this.models.getModel(name.slice(0, separator), name.slice(separator + 1))];
-      if (found.length === 1 && found[0]) return found[0];
-    }
-    return undefined;
+    return modelNamed(this.models.getModels(), actor);
   }
   route(actor: string): Model<Api> {
     const model = this.offers(actor);

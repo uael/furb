@@ -17,6 +17,18 @@ export function actorParts(actor: string, models: readonly string[] = []): { mod
     ? { model: actor, effort: "off" }
     : { model: actor.slice(0, at), effort: actor.slice(at + 1) };
 }
+/** The one model among models that an actor names, with or without its effort: its provider and id as
+ * `provider:id`, or its id alone. */
+export function modelNamed<M extends { provider: string; id: string }>(
+  models: readonly M[],
+  actor: string,
+): M | undefined {
+  for (const name of [actor, actorParts(actor).model]) {
+    const found = models.filter((model) => `${model.provider}:${model.id}` === name || model.id === name);
+    if (found.length === 1) return found[0];
+  }
+  return undefined;
+}
 export const shapes = ["str", "None", "bool", "int", "float", "list", "dict"] as const;
 
 export type Turn = Awaited<ReturnType<Life["turns"]>>[number];

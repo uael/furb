@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { ImageCache } from "../src/images.ts";
-import { imageContent, World } from "../src/index.ts";
+import { imageContent, imagePath, imageReference, imageReferences, World } from "../src/index.ts";
 import { claudeProvider } from "../src/providers/claude.ts";
 
 test("image attachments reach pi-ai and the Claude CLI as image blocks and remain available after replay", async () => {
@@ -61,3 +61,15 @@ test("image attachments reach pi-ai and the Claude CLI as image blocks and remai
     await rm(directory, { recursive: true, force: true });
   }
 }, 30000);
+
+test("an image attachment is written and read back by one grammar, and a bare uri is no attachment", () => {
+  const digest = "a".repeat(64);
+  const image = { name: "plan [v2]\nfinal", uri: `furb-image://${digest}.png` };
+  const reference = imageReference(image);
+  expect(reference).toBe(`![plan _v2__final](furb-image://${digest}.png)`);
+  expect(imageReferences(`See ${reference} beside furb-image://${"b".repeat(64)}.png.`)).toEqual([
+    { text: reference, name: "plan _v2__final", uri: image.uri },
+  ]);
+  expect(imagePath("/images", image.uri)).toEqual({ path: `/images/${digest}.png`, digest });
+  expect(() => imagePath("/images", "furb-image://short.png")).toThrow("Invalid image attachment.");
+});

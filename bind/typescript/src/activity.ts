@@ -36,6 +36,12 @@ export class Activity {
   readonly unknown = new Map<string, string>();
   /** How many times the table was derived again, which a reader of it compares to know that. */
   generation = 0;
+  /** How many changes of a row the table has made, and the count at the last change of each row, so that a reader
+   * takes only the rows that changed since it last read. */
+  private changes = 0;
+  private changed = new Map<string, number>();
+  /** The count of changes when the table was last derived again: a reader behind it takes the whole table. */
+  private derived = 0;
   private controls = new Map<string, { paused: boolean; order: number }>();
   private children = new Map<string, Set<string>>();
   private ran = new Map<string, unknown>();
@@ -58,7 +64,20 @@ export class Activity {
     this.merged = new Map();
     this.order = 0;
     this.generation++;
+    this.changed = new Map();
+    this.derived = this.changes;
     for (const fact of facts) this.hear(fact);
+  }
+
+  /** The rows that changed after a count of changes, all of them when the table was derived again since, and the
+   * count now. */
+  since(count: number): { count: number; whole: boolean; acts: LiveAct[] } {
+    const whole = count < this.derived;
+    const acts = [...this.acts.values()].filter((act) => whole || (this.changed.get(act.id) ?? 0) > count);
+    return { count: this.changes, whole, acts };
+  }
+  private mark(act: LiveAct): void {
+    this.changed.set(act.id, ++this.changes);
   }
 
   hear(fact: Fact): void {
@@ -92,6 +111,7 @@ export class Activity {
           stderr: { is: "Text", path: `${id}/stderr`, content: "" },
         };
       this.acts.set(id, act);
+      this.mark(act);
       if (!this.children.has(by)) this.children.set(by, new Set());
       this.children.get(by)?.add(id);
       return;
@@ -102,7 +122,11 @@ export class Activity {
     if (kind === "pause" || kind === "wake") {
       const paused = kind === "pause";
       this.controls.set(id, { paused, order: ++this.order });
-      for (const row of this.acts.values()) if (row.on === id || under(row.id, id)) row.paused = paused;
+      for (const row of this.acts.values())
+        if (row.on === id || under(row.id, id)) {
+          row.paused = paused;
+          this.mark(row);
+        }
     } else if (kind === "done") {
       if (id.startsWith("merged://") && this.acts.get(by)?.kind === "bash")
         this.merged.set(by, Boolean(fact[3]));
@@ -110,6 +134,7 @@ export class Activity {
         if (!act.done && ["prompt", "rung", "bash", "wait"].includes(act.kind)) this.completed++;
         act.done = true;
         act.value = fact[3];
+        this.mark(act);
         this.updateRun(act);
         for (const child of this.children.get(id) ?? []) {
           const row = this.acts.get(child);
@@ -129,10 +154,12 @@ export class Activity {
       const value = act.value as { stdout: { content: string }; stderr: { content: string } };
       const stream = fact[4] === "stderr" && this.merged.get(id) === false ? value.stderr : value.stdout;
       stream.content += String(fact[3]);
+      this.mark(act);
     }
   }
   private updateRun(act: LiveAct): void {
     if (act.kind !== "rung") return;
+    this.mark(act);
     const refused = this.refused.get(act.id);
     if (refused !== undefined) {
       act.run = { status: "failed", reason: refused };

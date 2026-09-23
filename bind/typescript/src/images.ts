@@ -38,10 +38,23 @@ export function attachImage(directory: string, path: string): ImageAttachment {
   }
   return { name: basename(path), uri: `furb-image://${file}`, mimeType, size: bytes.length };
 }
-function imagePath(directory: string, uri: string): { path: string; digest: string } {
-  const match = uri.match(/^furb-image:\/\/([a-f0-9]{64})\.(png|jpg|gif|webp)$/);
-  if (!match) throw new Error("Invalid image attachment.");
-  return { path: join(directory, `${match[1]}.${match[2]}`), digest: match[1] ?? "" };
+/** The uri of an image attachment: the digest of its bytes and the extension of its type. */
+const uriForm = String.raw`furb-image://(?<digest>[a-f0-9]{64})\.(?<extension>png|jpg|gif|webp)`;
+/** The file that holds an image attachment in a directory of images, and the digest its bytes must have. */
+export function imagePath(directory: string, reference: string): { path: string; digest: string } {
+  const { digest, extension } = reference.match(new RegExp(`^${uriForm}$`))?.groups ?? {};
+  if (!digest || !extension) throw new Error("Invalid image attachment.");
+  return { path: join(directory, `${digest}.${extension}`), digest };
+}
+/** An image attachment as a message holds it: `![name](uri)`. */
+export function imageReference(image: { name: string; uri: string }): string {
+  return `![${image.name.replace(/[[\]\r\n]/g, "_")}](${image.uri})`;
+}
+/** The image attachments that a message holds, each with its text in the message, its name, and its uri. */
+export function imageReferences(message: string): { text: string; name: string; uri: string }[] {
+  return [...message.matchAll(new RegExp(String.raw`!\[(?<name>[^\]]*)\]\((?<uri>${uriForm})\)`, "g"))].map(
+    (match) => ({ text: match[0], name: match.groups?.name ?? "", uri: match.groups?.uri ?? "" }),
+  );
 }
 export function imageContent(directory: string, uri: string): ImageContent {
   const { path, digest } = imagePath(directory, uri);
@@ -75,8 +88,7 @@ export function turnImages(directory: string, parts: Turn[1], cache?: ImageCache
     if (!isTag(part) || part[0] !== "opened") continue;
     const message = part[1].find(([key]) => key === "message")?.[1];
     if (typeof message !== "string") continue;
-    for (const match of message.matchAll(/furb-image:\/\/[a-f0-9]{64}\.(?:png|jpg|gif|webp)/g))
-      uris.add(match[0]);
+    for (const reference of imageReferences(message)) uris.add(reference.uri);
   }
   return [...uris].map((uri) => (cache ? cache.get(directory, uri) : imageContent(directory, uri)));
 }

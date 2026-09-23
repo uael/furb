@@ -44,7 +44,8 @@ requests, and operator questions. It knows no provider of its own: it asks the p
 `models`, the built-in providers when it is given none, and it preserves provider response blocks in the
 record. The host names what the World offers in `roster`, as `provider:model`, and the default actor in `model`,
 which is the first of the roster when unsaid; a World given neither offers the operator alone, and a prompt
-that names no actor goes to the operator. A name without its provider routes to the one model of that id. A
+that names no actor goes to the operator. A name without its provider routes to the one model of that id, by
+the rule that `modelNamed(models, name)` gives a host. A
 reopened record keeps its roster and model, and a model the host offers since then joins the roster. A saved
 model that the host no longer offers stays in the roster, since the record was made on it, and an ask of it
 fails. Configure an API provider through its pi-ai credentials.
@@ -112,7 +113,8 @@ type makes it from under `args`, and comes back in whole: an int past the safe r
 `{"is":"int","args":["1180591620717411303424"]}`, a float that is not finite as `{"is":"float","args":["inf"]}`,
 and a map with a key that is no string as `{"is":"dict","args":[[[1,"a"]]]}`. Any other value, and a value
 nested beyond 64 levels, crosses as its Python representation. Into the engine, a whole JavaScript number is
-an int and a number with a fraction is a float. A whole number past the safe range is refused, since
+an int and a number with a fraction is a float, so a whole float goes in its form, `{"is":"float","args":["2"]}`.
+A whole number past the safe range is refused, since
 JavaScript holds it rounded: send a BigInt, or the `int` form above. A BigInt past 64 bits reaches the engine
 as its digits in a string. `inspect(name, chain)` also gives the Python type and representation of a value.
 
@@ -141,7 +143,8 @@ the state of every act, derived once from the facts as the life hears them, so a
 sandbox. `World.isPaused` and `World.rungState` read it.
 
 `world.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type,
-size, and `furb-image://` reference. Put that reference in the prompt, for example
-`![design](furb-image://...)`. The World keeps the exact native text and adds the referenced image as a pi-ai
+size, and `furb-image://` reference. Put that reference in the prompt as a Markdown image,
+`![design](furb-image://...)`, which `imageReference(image)` writes and `imageReferences(message)` reads. The
+World keeps the exact native text and adds the referenced image as a pi-ai
 image block. The stored bytes are checked against their digest before use. PNG, JPEG, GIF, and WebP are
 supported, with a 20 MiB limit per image. Keep `.images` with the record when moving a session.
