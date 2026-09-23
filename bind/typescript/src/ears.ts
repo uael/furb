@@ -129,7 +129,6 @@ export class WorldAdapter {
           } catch (failure) {
             this.onFault?.(failure);
           }
-          this.onFault?.(error);
         });
     });
   }

@@ -49,7 +49,8 @@ World and stops when that World closes. No CLI process starts until a model is a
 
 Pass `answer` to replace only model requests, `operator` to supply operator answers, or `models` to use your
 own pi-ai collection. With no `operator`, questions stand in `world.prompts`; call `world.answer(id, text)`
-to parse and validate an answer. `world` emits `change`, `facts`, and `fault` events. A `Keep` writes and syncs
+to parse and validate an answer. `world` emits `change` and `facts`; `fault` reports a failure to deliver an
+outside result. A failed outside act carries its refusal in the record. A `Keep` writes and syncs
 one complete record entry before it returns. The `answer` callback also receives the exact rendered turns
 as its fifth argument. `life.rendered(chain)` gives that text from the native values, so Python floats,
 tuples, and instances retain their representations before they cross to JavaScript.
@@ -63,7 +64,7 @@ Pass `world` to `boot` to replace the whole World. It receives these operations:
 | Write | directory, path, content | `{path, content}` |
 | Clock, Chance | none | number |
 | Keep | entry | nothing |
-| Ask | rung, chain, actor, turns | Promise of a turn |
+| Ask | rung, chain, actor, turns, rendered text | Promise of a turn |
 | Run | `{id, here, command, fed, timeout, merged}` | nothing; send out/exited later |
 | Feed | command id, text or null | nothing |
 | Slay | command id | nothing |
@@ -91,3 +92,13 @@ runs, and `world.resume()` explicitly releases it. Interrupted commands keep the
 with a refusal on resume; they are never run twice without a new act. Wait deadlines and partial streams
 live in the record's `.world.json` companion. File snapshots append to `.changes.jsonl`; `world.changes.read`
 loads a page of them. Keep both companions with the JSONL record.
+
+`inspectRecord(path)` reads pending work through the same native replay without taking a record lock,
+writing files, or starting a model or command. The TUI runs this inspection in its own worker. `World.isPaused`
+and `World.rungState` expose the shared pause and rung-state derivations used by the interface.
+
+`world.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type,
+size, and `furb-image://` reference. Put that reference in the prompt, for example
+`![design](furb-image://...)`. The World keeps the exact native text and adds the referenced image as a pi-ai
+image block. The stored bytes are checked against their digest before use. PNG, JPEG, GIF, and WebP are
+supported, with a 20 MiB limit per image. Keep `.images` with the record when moving a session.

@@ -1,7 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   type Api,
@@ -18,13 +18,25 @@ import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { Life } from "../index.cjs";
 import { type FileChange, FileChanges } from "./changes.js";
 import { WorldAdapter, type WorldHandler, type WorldRequest } from "./ears.js";
+import { attachImage, type ImageAttachment, turnImages } from "./images.js";
 import { type ClaudeOptions, claudeProvider, zeroUsage } from "./providers/claude.js";
 import { RecordFile } from "./record.js";
-import { actorParts, type Entry, type Fact, type OperatorPrompt, shapes, type Turn } from "./types.js";
+import {
+  actorParts,
+  display,
+  type Entry,
+  type Fact,
+  isTag,
+  type OperatorPrompt,
+  shapes,
+  type Turn,
+} from "./types.js";
 
 export { display, isTag, safeText } from "./types.js";
 
 export interface WorldOptions {
+  /** Replay a record for inspection without owning it or starting outside work. */
+  readOnly?: boolean;
   cwd?: string;
   record?: string;
   model?: string;
@@ -133,8 +145,11 @@ export class World extends EventEmitter {
       ];
       for (const name of this.roster) this.route(name);
       this.effort = clampThinkingLevel(this.route(this.model), options.effort ?? "low");
-      this.records = records = new RecordFile(options.record ? resolve(options.record) : undefined);
-      this.changes = changes = new FileChanges(this.records.path);
+      this.records = records = new RecordFile(
+        options.record ? resolve(options.record) : undefined,
+        options.readOnly,
+      );
+      this.changes = changes = new FileChanges(this.records.path, options.readOnly);
       if (!this.changes.length) for (const change of legacyChanges) this.changes.append(change);
       this.holding = this.records.entries.length > 0;
       this.resumeGate = new Promise((resolve) => {
@@ -158,6 +173,13 @@ export class World extends EventEmitter {
       if (model) return model;
     }
     throw new Error(`No model ${actor}. Use provider:model, for example claude-cli:sonnet.`);
+  }
+  get imageDirectory(): string {
+    return this.records.path ? `${this.records.path}.images` : join(this.directory, ".furb/images");
+  }
+  attachImage(path: string): ImageAttachment {
+    if (this.options.readOnly) throw new Error("Record inspection cannot attach an image.");
+    return attachImage(this.imageDirectory, resolve(this.directory, path));
   }
 
   open(): Life {
@@ -196,6 +218,11 @@ export class World extends EventEmitter {
   }
 
   handle = ({ kind, args }: WorldRequest): unknown => {
+    if (this.options.readOnly && !["Stand", "Keep"].includes(kind)) {
+      if (["Read", "Write", "Clock", "Chance"].includes(kind))
+        throw new Error("Record inspection cannot perform a new World query.");
+      return new Promise(() => {});
+    }
     switch (kind) {
       case "Stand":
         return [
@@ -331,7 +358,7 @@ export class World extends EventEmitter {
     try {
       if (this.options.answer) return await this.options.answer(actor, chain, turns, signal, texts);
       const model = this.route(actor);
-      const messages: Message[] = turns.map(([role, , usage, blocks], index) => {
+      const messages: Message[] = turns.map(([role, parts, usage, blocks], index) => {
         if (
           role === "assistant" &&
           blocks &&
@@ -340,7 +367,18 @@ export class World extends EventEmitter {
           blocks.role === "assistant"
         )
           return blocks as AssistantMessage;
-        if (role === "user") return { role, content: texts[index] ?? "", timestamp: 0 };
+        if (role === "user") {
+          const images = turnImages(this.imageDirectory, parts);
+          if (images.length && !model.input.includes("image"))
+            throw new Error(`${model.name} does not accept images.`);
+          return {
+            role,
+            content: images.length
+              ? [{ type: "text", text: texts[index] ?? "" }, ...images]
+              : (texts[index] ?? ""),
+            timestamp: 0,
+          };
+        }
         return {
           role,
           content: [{ type: "text", text: texts[index] ?? "" }],
@@ -458,7 +496,7 @@ export class World extends EventEmitter {
 
   private save(): void {
     const record = this.records?.path;
-    if (!record) return;
+    if (!record || this.options.readOnly) return;
     const path = `${record}.world.json`;
     writeFileSync(
       `${path}.tmp`,
@@ -474,6 +512,7 @@ export class World extends EventEmitter {
 
   /** Confirm the resume. Commands whose process ended at exit are closed as interrupted, never rerun. */
   async resume(): Promise<void> {
+    if (this.options.readOnly) throw new Error("Record inspection cannot resume work.");
     if (!this.life || !this.holding) return;
     const chains = new Set<string>();
     for (const [id, kind] of this.held) {
@@ -604,11 +643,56 @@ export class World extends EventEmitter {
     this.removeAllListeners();
   }
 
+  isPaused(id: string): boolean {
+    const scope = this.life?.call<string>("scope", [id], {});
+    const last = this.records.entries.findLast(
+      ([, fact]) =>
+        ["pause", "wake"].includes(fact[0]) &&
+        (fact[1] === id || fact[1] === scope || this.life?.call<boolean>("under", [id, fact[1]], {})),
+    )?.[1];
+    return last?.[0] === "pause";
+  }
+  rungState(id: string): { status: "running" | "failed" | "done"; reason: string } {
+    const exception = (value: unknown): value is { is: string; args: unknown[] } =>
+      Boolean(value && typeof value === "object" && "is" in value && "args" in value);
+    const refused = this.facts
+      .filter((fact) => fact[0] === "tell" && fact[1] === id)
+      .flatMap((fact) => (Array.isArray(fact[3]) ? fact[3] : []))
+      .findLast((tag) => isTag(tag) && tag[0] === "refused");
+    if (refused && isTag(refused))
+      return { status: "failed", reason: typeof refused[2] === "string" ? refused[2] : display(refused[2]) };
+    const ran = this.facts.findLast((fact) => fact[0] === "ran" && fact[1] === id);
+    const outcome = this.life?.outcome(id);
+    const value = ran ? ran[3] : outcome?.value;
+    if (exception(value)) {
+      if (value.is === "CancelledError" && this.life) {
+        const act = this.life.get(id);
+        const parent = String(act[2]).startsWith("prompt://") ? this.life.outcome(String(act[2])) : undefined;
+        if (
+          act[5] ||
+          (outcome?.done && !exception(outcome.value)) ||
+          (parent?.done && !exception(parent.value))
+        )
+          return { status: "done", reason: "" };
+      }
+      return { status: "failed", reason: `${value.is}: ${value.args.map(display).join(", ")}` };
+    }
+    return { status: ran ? "done" : "running", reason: "" };
+  }
   private pause(chain: string): void {
-    const last = this.records.entries
-      .map((entry) => entry[1])
-      .findLast((fact) => ["pause", "wake"].includes(fact[0]) && fact[1] === chain);
-    if (last?.[0] !== "pause") this.life?.pause(chain);
+    if (!this.isPaused(chain)) this.life?.pause(chain);
+  }
+}
+
+/** Read pending work through the real replay path, without taking a lock or writing the record. */
+export async function inspectRecord(record: string): Promise<{ held: [string, string][] }> {
+  const world = new World({ record, readOnly: true });
+  try {
+    world.open();
+    await Promise.resolve();
+    return { held: [...world.held] };
+  } finally {
+    await world.dispose();
   }
 }
 

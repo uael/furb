@@ -3,9 +3,45 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
-import { actorParts, boot, decodeRecord, type Ear, Ears, type Fact, World } from "../src/index.ts";
+import {
+  actorParts,
+  boot,
+  decodeRecord,
+  type Ear,
+  Ears,
+  type Fact,
+  inspectRecord,
+  World,
+} from "../src/index.ts";
 import { claudeProvider, cliModel } from "../src/providers/claude.ts";
 import { RecordFile } from "../src/record.ts";
+
+test("record inspection derives pending work without taking its lock, writing files, or starting commands", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-inspect-"));
+  const record = join(cwd, "session.jsonl");
+  const world = new World({ cwd, record });
+  try {
+    const life = world.open();
+    await life.rung('write(Text("value.txt", "once"))');
+    const waiting = life.wait(60).id;
+    const prompt = life.prompt("str", "Question", { to: "operator" }).id;
+    const before = await readFile(record, "utf8");
+    const metadata = await readFile(`${record}.world.json`, "utf8");
+    const lock = await readFile(`${record}.lock`, "utf8");
+    const first = await inspectRecord(record);
+    expect(first.held.map(([id]) => id)).toEqual([waiting, prompt]);
+    expect(await readFile(record, "utf8")).toBe(before);
+    expect(await readFile(`${record}.world.json`, "utf8")).toBe(metadata);
+    expect(await readFile(`${record}.lock`, "utf8")).toBe(lock);
+    expect(await readFile(join(cwd, "value.txt"), "utf8")).toBe("once");
+    life.cancel(waiting);
+    life.close("answered", prompt);
+    expect((await inspectRecord(record)).held).toEqual([]);
+  } finally {
+    await world.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
 
 test("the standing takes each model's efforts from its pi-ai metadata", async () => {
   expect(getSupportedThinkingLevels(cliModel("sonnet"))).toEqual(["low", "medium", "high", "xhigh", "max"]);

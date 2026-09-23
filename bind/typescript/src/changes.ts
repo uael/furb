@@ -24,9 +24,10 @@ export class FileChanges {
   readonly paths: string[] = [];
   private readonly positions: { start: number; size: number }[] = [];
   private readonly temporary?: string;
-  private readonly fd: number;
+  private readonly fd?: number;
   private end = 0;
-  constructor(record?: string) {
+  constructor(record?: string, readOnly = false) {
+    if (readOnly) return;
     if (!record) this.temporary = mkdtempSync(join(tmpdir(), "furb-changes-"));
     const path = record ? `${record}.changes.jsonl` : join(this.temporary ?? "", "changes.jsonl");
     if (existsSync(path)) {
@@ -49,6 +50,7 @@ export class FileChanges {
     return this.paths.length;
   }
   append(change: FileChange): void {
+    if (this.fd === undefined) return;
     const data = Buffer.from(`${JSON.stringify(change)}\n`);
     writeSync(this.fd, data);
     fsyncSync(this.fd);
@@ -57,14 +59,16 @@ export class FileChanges {
     this.end += data.length;
   }
   read(start = 0, count = 20): FileChange[] {
+    const fd = this.fd;
+    if (fd === undefined) return [];
     return this.positions.slice(start, start + count).map(({ start, size }) => {
       const data = Buffer.alloc(size);
-      readSync(this.fd, data, 0, size, start);
+      readSync(fd, data, 0, size, start);
       return JSON.parse(data.toString("utf8")) as FileChange;
     });
   }
   dispose(): void {
-    closeSync(this.fd);
+    if (this.fd !== undefined) closeSync(this.fd);
     if (this.temporary) rmSync(this.temporary, { recursive: true });
   }
 }
