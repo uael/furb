@@ -318,7 +318,7 @@ try {
     expect(code).toBe(0);
     expect(JSON.parse(output)).toEqual({ images: 1, commands: ["home-probe"] });
     expect(await readFile(join(home, "shared/chat.html"), "utf8")).toContain("<!doctype html>");
-    expect(JSON.parse(await readFile(join(home, "export.json"), "utf8")).chain).toBe("chain://operator.1");
+    expect(JSON.parse(await readFile(join(home, "export.json"), "utf8")).chain).toBe("chain1");
     expect(existsSync(join(home, "~"))).toBe(false);
   } finally {
     await rm(home, { recursive: true, force: true });

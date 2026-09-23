@@ -3,7 +3,7 @@
 export function inspectRecords(
   paths: string[],
   signal: AbortSignal,
-): Promise<Record<string, { held: number; error?: string }>> {
+): Promise<Record<string, { pending: number; error?: string }>> {
   if (!paths.length) return Promise.resolve({});
   if (signal.aborted) return Promise.reject(signal.reason);
   return new Promise((resolve, reject) => {

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { ImageContent } from "@earendil-works/pi-ai";
-import { isTag, type Turn } from "./types.js";
+import { opens, paragraphs, questionKind } from "./types.js";
 
 export interface ImageAttachment {
   name: string;
@@ -82,13 +82,12 @@ export class ImageCache {
     this.entries.clear();
   }
 }
-export function turnImages(directory: string, parts: Turn[1], cache?: ImageCache): ImageContent[] {
+/** The images that the prompts told in the python of a user turn attach, each once: a prompt tells its message
+ * in its paragraph, and an image reference of anything else attaches nothing. */
+export function turnImages(directory: string, python: string, cache?: ImageCache): ImageContent[] {
   const uris = new Set<string>();
-  for (const part of parts) {
-    if (!isTag(part) || part[0] !== "opened") continue;
-    const message = part[1].find(([key]) => key === "message")?.[1];
-    if (typeof message !== "string") continue;
-    for (const reference of imageReferences(message)) uris.add(reference.uri);
-  }
+  for (const paragraph of paragraphs(python))
+    if (questionKind(paragraph.name) === "prompt" && opens(paragraph))
+      for (const reference of imageReferences(paragraph.text)) uris.add(reference.uri);
   return [...uris].map((uri) => (cache ? cache.get(directory, uri) : imageContent(directory, uri)));
 }

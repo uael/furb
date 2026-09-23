@@ -19,6 +19,18 @@ export {
 } from "./images.js";
 export { furbDirectory } from "./project.js";
 export { shell } from "./shell.js";
-export type { Entry, Fact, OperatorPrompt, Tag, Turn, Usage } from "./types.js";
-export { actorParts, efforts, modelNamed, shapes } from "./types.js";
+export type { Entry, Fact, OperatorPrompt, Paragraph, Turn, Usage } from "./types.js";
+export {
+  actorParts,
+  efforts,
+  isQuestion,
+  marked,
+  modelNamed,
+  opens,
+  paragraphs,
+  questionKind,
+  shapes,
+  uncommented,
+  unmarked,
+} from "./types.js";
 export { boot, inspectRecord, type Session, World, type WorldOptions } from "./world.js";

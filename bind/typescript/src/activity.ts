@@ -1,5 +1,5 @@
 import type { Call } from "./ears.js";
-import { display, type Fact, isTag } from "./types.js";
+import { display, type Fact, isQuestion, uncommented } from "./types.js";
 
 export interface RunState {
   status: "running" | "failed" | "done";
@@ -89,7 +89,7 @@ export class Activity {
 
   *hear(fact: Fact): Hearing {
     const [kind, id, by] = fact;
-    const question = id.startsWith(`${kind}://`);
+    const question = isQuestion(kind, id);
     const known = this.kinds.get(kind);
     if (question && known === undefined && !this.unknown.has(kind)) this.unknown.set(kind, id);
     if (question && known) {
@@ -130,7 +130,7 @@ export class Activity {
           this.mark(row);
         }
     } else if (kind === "done") {
-      if (id.startsWith("merged://") && this.acts.get(by)?.kind === "bash")
+      if (isQuestion("merged", id) && this.acts.get(by)?.kind === "bash")
         this.merged.set(by, Boolean(fact[3]));
       if (act) {
         if (!act.done && ["prompt", "rung", "bash", "wait"].includes(act.kind)) this.completed++;
@@ -147,11 +147,12 @@ export class Activity {
       this.ran.set(id, fact[3]);
       if (act) this.updateRun(act);
     } else if (kind === "tell" && act?.kind === "rung" && Array.isArray(fact[3])) {
-      for (const tag of fact[3])
-        if (isTag(tag) && tag[0] === "refused") {
-          this.refused.set(id, typeof tag[2] === "string" ? tag[2] : display(tag[2]));
-          this.updateRun(act);
-        }
+      // The chain tells the findings that refused a word under the header refused, one comment for each.
+      const [header, ...findings] = fact[3];
+      if (header === `#${id} refused`) {
+        this.refused.set(id, uncommented(findings.map(String).join("\n").split("\n")));
+        this.updateRun(act);
+      }
     } else if (kind === "out" && act?.kind === "bash" && !act.done) {
       const value = act.value as { stdout: { content: string }; stderr: { content: string } };
       const stream = fact[4] === "stderr" && this.merged.get(id) === false ? value.stderr : value.stdout;

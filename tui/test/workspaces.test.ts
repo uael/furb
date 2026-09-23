@@ -75,9 +75,9 @@ test("workspaces keep sessions alive, report background completion and input, an
     if (!restored) throw new Error("The saved session is missing.");
     await library.select(restored);
     expect(restored.status).toBe("paused");
-    expect(restored.session?.world.held.has(waiting)).toBe(true);
+    expect(restored.session?.world.pending.has(waiting)).toBe(true);
     const metadata = JSON.parse(await readFile(`${record}.world.json`, "utf8"));
-    expect(metadata.held).toBeUndefined();
+    expect(metadata.pending).toBeUndefined();
   } finally {
     await library.dispose();
     await rm(directory, { recursive: true, force: true });

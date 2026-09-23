@@ -25,7 +25,6 @@ export interface Call {
   kwargs?: Record<string, unknown>;
 }
 export type Ear = Generator<Saying | Call | null | undefined, void, unknown>;
-const transcripts = new WeakMap<Fact, string[]>();
 const fault = (error: unknown) =>
   error && typeof error === "object" && "is" in error && "args" in error
     ? error
@@ -62,11 +61,6 @@ export class Ears {
       }
       const ear = this.ears.get(String(name));
       if (!ear) throw new Error(`Unknown ear ${name}.`);
-      if (kind === "hears") {
-        const [, , , rendered] = request;
-        if (Array.isArray(value) && Array.isArray(rendered))
-          transcripts.set(value as Fact, rendered as string[]);
-      }
       const answer = value as [string, unknown];
       const next =
         kind === "answered"
@@ -199,7 +193,7 @@ export class WorldAdapter {
       else if (kind === "ask") {
         const [chain, actor] = [String(words[0]), String(words[1])];
         this.later(
-          { kind: "Ask", args: [id, ...words, transcripts.get(fact)] },
+          { kind: "Ask", args: [id, ...words] },
           (value) => {
             if (Array.isArray(value) && Array.isArray(value[2]) && typeof value[2][4] === "number") {
               const reply = [...value];
@@ -226,7 +220,7 @@ export class WorldAdapter {
       } else if (kind === "start") {
         const act = (yield { verb: "get", args: [id] }) as Fact;
         if (!act) continue;
-        if (act[0] !== "bash") this.start(act);
+        if (act[0] !== "bash") this.started(act);
         else {
           const here = yield { verb: "cwd", kwargs: { on: act[3] } };
           const [, merged] = (yield { verb: "ask", args: ["merged", act[3], id] }) as [unknown, boolean];
@@ -255,9 +249,9 @@ export class WorldAdapter {
       }
     }
   }
-  /** The outside work of a wait or of a prompt to the operator: the one start of it, for an act born in this life
-   * and for one that the record held, which the World starts again when it resumes. */
-  start(act: Fact): void {
+  /** The outside work of a wait or of a prompt to the operator, which the start of the act says: at its birth, or at
+   * the first wake over it that this life says, for one the record shows begun and not done. */
+  private started(act: Fact): void {
     const id = act[1];
     if (act[0] === "wait")
       this.later(

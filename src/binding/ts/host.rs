@@ -1,9 +1,6 @@
 //! JavaScript ears cross like Python ears: a saying, a call to the bus, or nothing.
-use super::{
-  render,
-  wire::{inward, outward, record},
-};
-use crate::{Ears, Fact, Fault, Life, Object, ObjectRef, Reply, life::WORLD};
+use super::wire::{inward, outward, record};
+use crate::{Ears, Fact, Fault, Life, Object, ObjectRef, Reply};
 use napi::{
   Env, JsDeferred,
   bindgen_prelude::{FunctionRef, Object as JsObject},
@@ -53,16 +50,12 @@ impl Host {
   }
 }
 impl Ears for Host {
-  /// Every ear hears every fact. The World answers an ask, so it alone is given the turns of one as the model
-  /// reads them, rendered while their values are python's.
+  /// Every ear hears every fact.
   fn hears(&mut self, name: &str, fact: Option<&Fact>) -> Reply {
     let value = fact.map(|fact| {
       if fact.kind() == "keep" { record(fact.0.as_ref()) } else { outward(fact.0.as_ref()) }
     });
-    let rendered = fact
-      .filter(|fact| name == WORLD && fact.kind() == "ask")
-      .and_then(|fact| fact.0.as_ref().items()?.get(5).map(|turns| render::turns(*turns)));
-    self.reply(json!(["hears", name, value, rendered]))
+    self.reply(json!(["hears", name, value]))
   }
   fn answered(&mut self, name: &str, value: ObjectRef<'_>) -> Reply {
     self.reply(json!(["answered", name, outward(value)]))

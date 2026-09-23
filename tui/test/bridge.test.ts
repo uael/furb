@@ -19,7 +19,7 @@ test("the view of the host takes more facts than one call takes as arguments", (
     facts: new Array<Fact>(count).fill(["done", "x", "world", null]),
     prompts: [],
     streams: [],
-    held: [],
+    pending: [],
     changes: 0,
   });
   expect(view.facts).toHaveLength(count);
@@ -38,7 +38,7 @@ test("the view of the host counts the file changes of the World", () => {
     facts: [],
     prompts: [],
     streams: [],
-    held: [],
+    pending: [],
     changes: 3,
   });
   expect(view.changes).toBe(3);

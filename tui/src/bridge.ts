@@ -16,7 +16,6 @@ export interface Snapshot {
   count: number;
   selected: string;
   turns: ReturnType<Life["turns"]>;
-  rendered: string[];
   program: Record<string, string>;
   actor: string;
   directory: string;
@@ -41,7 +40,7 @@ export interface WorldState {
   facts: Fact[];
   prompts: { id: string; shape: string; message: string }[];
   streams: [string, { chain: string; text: string; thinking: string }][];
-  held: [string, string][];
+  pending: [string, string][];
   /** How many file changes the World holds. */
   changes: number;
 }
@@ -58,7 +57,7 @@ export class HostView extends EventEmitter {
   facts: Fact[] = [];
   prompts = new Map<string, { id: string; shape: string; message: string }>();
   streams = new Map<string, { chain: string; text: string; thinking: string }>();
-  held = new Map<string, string>();
+  pending = new Map<string, string>();
   /** How many file changes the World holds. */
   changes = 0;
   constructor(private request: (target: string, method: string, args: unknown[]) => Promise<unknown>) {
@@ -77,7 +76,7 @@ export class HostView extends EventEmitter {
     for (const fact of incoming) this.facts.push(fact);
     this.prompts = new Map(state.prompts.map((prompt) => [prompt.id, prompt]));
     this.streams = new Map(state.streams);
-    this.held = new Map(state.held);
+    this.pending = new Map(state.pending);
     this.changes = state.changes;
     if (incoming.length) this.emit("facts", incoming);
     this.emit("change");

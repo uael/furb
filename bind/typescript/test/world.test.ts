@@ -28,7 +28,7 @@ offered.setProvider(offer.provider);
 const modeled = { models: offered, model: "claude-cli:sonnet" };
 afterAll(() => offer.dispose());
 /** A turn of a model whose word is the one given. */
-const said = (word: string): Turn => ["assistant", [word], null, null];
+const said = (word: string): Turn => ["assistant", word, null, null];
 
 test("record inspection derives pending work without taking its lock, writing files, or starting commands", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-inspect-"));
@@ -50,14 +50,14 @@ test("record inspection derives pending work without taking its lock, writing fi
     const lock = await locked();
     // The World holds the lease while the inspection runs, so an inspection that took it would be refused.
     const first = await inspectRecord(record);
-    expect(first.held.map(([id]) => id)).toEqual([waiting, prompt]);
+    expect(first.pending.map(([id]) => id)).toEqual([waiting, prompt]);
     expect(await readFile(record, "utf8")).toBe(before);
     expect(await readFile(`${record}.world.json`, "utf8")).toBe(metadata);
     expect(await locked()).toEqual(lock);
     expect(await readFile(join(cwd, "value.txt"), "utf8")).toBe("once");
     life.cancel(waiting);
     life.close("answered", prompt);
-    expect((await inspectRecord(record)).held).toEqual([]);
+    expect((await inspectRecord(record)).pending).toEqual([]);
   } finally {
     await world.dispose();
     await rm(cwd, { recursive: true, force: true });
@@ -181,7 +181,7 @@ test("a World holds the models its host gives it: a saved roster gains what the 
   }
   // Without the provider that offered them, the saved models stay, since the record was lived on them; only an ask
   // of one fails.
-  expect((await inspectRecord(record)).held).toEqual([]);
+  expect((await inspectRecord(record)).pending).toEqual([]);
   const third = new World({ record });
   try {
     expect(third.model).toBe("claude-cli:opus");
@@ -206,9 +206,12 @@ test("a fenced reply is no python: the gate refuses it and the prompt asks again
   try {
     const life = world.open();
     expect(await life.prompt<string>("str", "FENCE")).toBe("reply 2");
-    const transcript = life.rendered().join("\n");
+    const transcript = life
+      .turns()
+      .map(([, python]) => python)
+      .join("\n");
     expect(transcript).toContain("```python");
-    expect(transcript).toContain("<refused");
+    expect(transcript).toMatch(/^#rung\d+ refused$/m);
   } finally {
     await world.dispose();
     cli.dispose();
@@ -244,7 +247,7 @@ test("the default World serves files and streams commands without any TUI", asyn
   }
 });
 
-test("unfinished model work and waits reopen held until the host confirms resume", async () => {
+test("unfinished model work and waits reopen pending until the host resumes them", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-resume-"));
   const record = join(cwd, "life.jsonl");
   let calls = 0;
@@ -257,14 +260,16 @@ test("unfinished model work and waits reopen held until the host confirms resume
     record,
     answer: async () => {
       calls++;
-      return ["assistant", ['close("resumed")'], null, null];
+      return ["assistant", 'close("resumed")', null, null];
     },
   });
   const resumed = second.open();
   try {
-    // A reopened World holds every ask until the host resumes it, so no model is asked however long it stands.
+    // The engine starts no pending work until a wake that this life says, so no model is asked however long it
+    // stands.
+    await tick();
     expect(calls).toBe(0);
-    expect(second.held.has(prompt)).toBe(true);
+    expect(second.pending.has(prompt)).toBe(true);
     expect(resumed.outcome(prompt).done).toBe(false);
     await second.resume();
     expect(await resumed.result<string>(prompt)).toBe("resumed");
@@ -280,11 +285,11 @@ test("record ownership, a torn last line, and a damaged complete line are distin
   const cwd = await mkdtemp(join(tmpdir(), "furb-record-"));
   const path = join(cwd, "record.jsonl");
   try {
-    await writeFile(path, '["x",["done","x","world",null]]\n["partial"');
+    await writeFile(path, '[["done","x","world",null]]\n["partial"');
     const record = new RecordFile(path);
     expect(record.entries).toHaveLength(1);
     expect(() => new RecordFile(path)).toThrow("Another process");
-    record.keep(["y", ["done", "y", "world", 1]]);
+    record.keep([["done", "y", "world", 1]]);
     record.dispose();
     expect((await readFile(path, "utf8")).split("\n").filter(Boolean)).toHaveLength(2);
     await writeFile(path, "broken\n");
@@ -300,7 +305,7 @@ test("one failed model ask retries, while two consecutive failures pause with a 
     ...modeled,
     answer: async () => {
       if (++calls === 1) throw new Error("temporary outage");
-      return ["assistant", ['close("recovered")'], null, null];
+      return ["assistant", 'close("recovered")', null, null];
     },
   });
   try {
@@ -326,7 +331,12 @@ test("one failed model ask retries, while two consecutive failures pause with a 
     expect(calls).toBe(2);
     expect(broken.life.outcome(prompt.id).done).toBe(false);
     expect(broken.world?.facts.filter((fact) => fact[0] === "pause")).toHaveLength(1);
-    expect(broken.life.rendered().join("\n")).toContain("answered nothing: Error: unavailable");
+    expect(
+      broken.life
+        .turns()
+        .map(([, python]) => python)
+        .join("\n"),
+    ).toContain("answered nothing: Error: unavailable");
   } finally {
     await broken.dispose();
   }
@@ -351,32 +361,32 @@ test("reopening unfinished work does not add another pause to the record", async
   }
 });
 
-test("the record, not stale saved metadata, decides whether a reopened life has held work", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-stale-held-"));
+test("the record, not stale saved metadata, decides whether a reopened life has pending work", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-stale-pending-"));
   const record = join(cwd, "life.jsonl");
   const first = new World({
     cwd,
     record,
     ...modeled,
-    answer: async () => ["assistant", ['close("done")'], null, null],
+    answer: async () => ["assistant", 'close("done")', null, null],
   });
   const prompt = first.open().prompt<string>("str", "finish");
   await prompt;
   await first.dispose();
   const saved = JSON.parse(await readFile(`${record}.world.json`, "utf8"));
-  saved.held = [[prompt.id, "prompt"]];
+  saved.pending = [[prompt.id, "prompt"]];
   await writeFile(`${record}.world.json`, JSON.stringify(saved));
   let calls = 0;
   const second = new World({
     record,
     answer: async () => {
       calls++;
-      return ["assistant", ['close("new answer")'], null, null];
+      return ["assistant", 'close("new answer")', null, null];
     },
   });
   try {
     const life = second.open();
-    expect(second.held.size).toBe(0);
+    expect(second.pending.size).toBe(0);
     expect(life.outcome(prompt.id).done).toBe(true);
     expect(await life.prompt<string>("str", "continue")).toBe("new answer");
     expect(calls).toBe(1);
@@ -386,49 +396,49 @@ test("the record, not stale saved metadata, decides whether a reopened life has 
   }
 });
 
-test("native transcript rendering retains Python values and chain accepts its parent", async () => {
-  const rendered: string[] = [];
-  const session = boot({
-    ...modeled,
-    answer: async (_actor, _chain, _turns, _signal, texts) => {
-      rendered.push(...texts);
-      return ["assistant", ['close("ok")'], null, null];
-    },
-  });
+test("the World hands the provider the python of a user turn as the engine wrote it, and chain accepts its parent", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-python-turn-"));
+  const log = join(cwd, "cli.jsonl");
+  process.env.FURB_FAKE_LOG = log;
+  const cli = claudeProvider({ bin: executable(join(import.meta.dir, "fake-claude.ts"), cwd, "claude") });
+  const models = createModels();
+  models.setProvider(cli.provider);
+  const session = boot({ cwd, models, model: "claude-cli:sonnet" });
   try {
-    const child = session.life.chain("child", null, null, session.life.root);
-    expect(session.life.get(child.id)[3]).toBe(session.life.root);
-    await session.life.rung(
-      `tell("values", ("f", 1.0), ("t", (1, 2)), body=[['a', 'b']])\nresult = await bash("printf hi")\ntell("exit", body=result)`,
-      { on: child.id },
-    );
-    const text = session.life.rendered(child.id).join("\n");
-    expect(text).toContain('f="1.0"');
-    expect(text).toContain('t="(1, 2)"');
-    expect(text).toContain("['a', 'b']");
-    expect(text).toContain("Exit(code=0, stdout=Text(");
-    await session.life.prompt<string>("str", "finish", { on: child.id });
-    expect(rendered.join("\n")).toContain('f="1.0"');
-    expect(rendered.join("\n")).toContain("Exit(code=0, stdout=Text(");
+    const { life } = session;
+    const child = life.chain("child", null, null, life.root);
+    expect(life.get(child.id)[3]).toBe(life.root);
+    expect(await life.prompt<string>("str", 'say "hi" <b> && \\n')).toBe("reply 1");
+    const [turn] = life.turns();
+    expect(turn?.[1]).toContain('#prompt1 say "hi" <b> && \\n');
+    const requests = (await readFile(log, "utf8"))
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((line) => line.type === "user");
+    expect(requests.map((line) => line.message.content)).toEqual([[{ type: "text", text: turn?.[1] }]]);
   } finally {
     await session.dispose();
+    cli.dispose();
+    delete process.env.FURB_FAKE_LOG;
+    await remove(cwd);
   }
-});
+}, 30000);
 
-test("input sent before a held command starts reaches its process after resume", async () => {
+test("input sent to a pending command before it starts reaches its process after resume", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-fed-"));
   const record = join(cwd, "life.jsonl");
   const first = new World({ cwd, record });
-  first.open().wait(60);
+  const command = first.open().bash("cat", { fed: true }).id;
   await first.dispose();
   const second = new World({ record });
   try {
     const life = second.open();
-    const command = life.bash("cat", { fed: true });
-    life.write({ path: `${command.id}/stdin`, content: "before start\n" });
-    life.write({ path: `${command.id}/stdin`, content: "" });
+    expect(second.pending.has(command)).toBe(true);
+    life.write({ path: `${command}/stdin`, content: "before start\n" });
+    life.write({ path: `${command}/stdin`, content: "" });
     await second.resume();
-    const result = await command;
+    const result = await life.result<{ stdout: { content: string } }>(command);
     expect(result.stdout.content).toBe("before start\n");
   } finally {
     await second.dispose();
@@ -487,7 +497,7 @@ test("integral floats keep their Python type in operator replies and records", a
   try {
     const next = second.open();
     expect(await next.result<number>(id)).toBe(1);
-    expect(second.held.size).toBe(0);
+    expect(second.pending.size).toBe(0);
   } finally {
     await second.dispose();
     await rm(cwd, { recursive: true });
@@ -517,23 +527,33 @@ test("host ears yield nested bus calls and host shows remain callable", () => {
   }
 });
 
-test("an interrupted command is reported on resume without repeating its side effect", async () => {
+test("a command an earlier World started and did not end runs again once, at the resume", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-command-resume-"));
   const record = join(cwd, "life.jsonl");
   const first = new World({ cwd, record });
   const life = first.open();
-  const command = life.bash("printf 'once\\n' >> count; printf ready; sleep 5").id;
+  const command = life.bash("printf x >> count; [ -e done ] || { printf ready; exec sleep 30; }").id;
   const output = () =>
     (first.activity.acts.get(command)?.value as { stdout?: { content: string } }).stdout?.content;
   await until(first, () => output() === "ready");
   await first.dispose();
+  await writeFile(join(cwd, "done"), "");
   const second = new World({ record });
   try {
     const resumed = second.open();
-    expect(second.held.has(command)).toBe(true);
+    await tick();
+    expect(second.pending.has(command)).toBe(true);
+    expect(await readFile(join(cwd, "count"), "utf8")).toBe("x");
     await second.resume();
-    await expect(resumed.result(command)).rejects.toThrow("command process ended");
-    expect(await readFile(join(cwd, "count"), "utf8")).toBe("once\n");
+    // What the command told before the death of its process stands in its door.
+    expect(await resumed.result<{ code: number; stdout: { content: string } }>(command)).toMatchObject({
+      code: 0,
+      stdout: { content: "ready" },
+    });
+    expect(await readFile(join(cwd, "count"), "utf8")).toBe("xx");
+    resumed.wake(resumed.root);
+    await tick();
+    expect(await readFile(join(cwd, "count"), "utf8")).toBe("xx");
   } finally {
     await second.dispose();
     await remove(cwd);
@@ -571,33 +591,39 @@ const kinds = async (record: string) =>
   (await readFile(record, "utf8"))
     .split("\n")
     .filter(Boolean)
-    .map((line) => JSON.parse(line)[1][0] as string);
+    .map((line) => JSON.parse(line)[0][0] as string);
 /** One turn of the loop of the host, so that every fact said before it has reached the World. */
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-test("a command a rung started and that printed nothing is never run again by a later life", async () => {
+test("a command a rung started runs in no later life before a wake, and once at the wake", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-silent-"));
   const record = join(cwd, "life.jsonl");
   const first = new World({ cwd, record });
   const life = first.open();
   life.rung('await bash("printf once >> count; exec sleep 30")');
-  // A second command waits for the first to write, so the first stands silent in a record that holds nothing of it.
+  // A second command waits for the first to write, so the first stands silent in a record that holds its start.
   await life.bash("while [ ! -s count ]; do sleep 0.01; done");
   await first.dispose();
   const second = new World({ record });
   try {
     const resumed = second.open();
-    expect(second.held.has("bash://operator.2.1")).toBe(true);
-    await second.resume();
-    await expect(resumed.result("bash://operator.2.1")).rejects.toThrow("command process ended");
+    await tick();
+    expect(second.pending.has("bash1")).toBe(true);
     expect(await readFile(join(cwd, "count"), "utf8")).toBe("once");
+    await second.resume();
+    for (let tries = 0; (await readFile(join(cwd, "count"), "utf8")) === "once" && tries < 250; tries++)
+      await Bun.sleep(20);
+    expect(await readFile(join(cwd, "count"), "utf8")).toBe("onceonce");
+    resumed.wake(resumed.root);
+    await Bun.sleep(100);
+    expect(await readFile(join(cwd, "count"), "utf8")).toBe("onceonce");
   } finally {
     await second.dispose();
     await remove(cwd);
   }
 });
 
-test("resume lets go of the hold of the World alone, so a pause of the operator stands", async () => {
+test("resume wakes no work that a pause of the operator holds, so that pause stands", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-own-pause-"));
   const record = join(cwd, "life.jsonl");
   const first = new World({ cwd, record, ...modeled, answer: () => new Promise(() => {}) });
@@ -608,6 +634,7 @@ test("resume lets go of the hold of the World alone, so a pause of the operator 
   const second = new World({ record, answer: async () => said('close("x")') });
   try {
     const again = second.open();
+    expect(second.pending.size).toBe(0);
     await second.resume();
     expect(second.isPaused(again.root)).toBe(true);
     expect(await kinds(record)).not.toContain("wake");
@@ -617,7 +644,7 @@ test("resume lets go of the hold of the World alone, so a pause of the operator 
   }
 });
 
-test("a reopened World pauses no chain, so new work asks once the held work is gone", async () => {
+test("a reopened World pauses no chain, so new work asks once the pending work is gone", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-drained-"));
   const record = join(cwd, "life.jsonl");
   const first = new World({ cwd, record, ...modeled, answer: () => new Promise(() => {}) });
@@ -626,10 +653,10 @@ test("a reopened World pauses no chain, so new work asks once the held work is g
   const second = new World({ record, answer: async () => said('close("x")') });
   try {
     const again = second.open();
-    expect(second.held.has(prompt)).toBe(true);
+    expect(second.pending.has(prompt)).toBe(true);
     again.cancel(prompt);
     await tick();
-    expect(second.held.size).toBe(0);
+    expect(second.pending.size).toBe(0);
     await second.resume();
     expect(await again.prompt<string>("str", "next")).toBe("x");
     expect(second.isPaused(again.root)).toBe(false);
@@ -644,7 +671,7 @@ test("a question a rung put to the operator is asked once in a later life", asyn
   const record = join(cwd, "life.jsonl");
   const first = new World({ cwd, record });
   first.open().rung('x = await prompt(str, "Q?", to="operator")\nclose(x)');
-  const question = "prompt://operator.2.1";
+  const question = "prompt1";
   await until(first, () => first.prompts.has(question));
   await first.dispose();
   const asked: string[] = [];
@@ -711,30 +738,30 @@ test("an act that never ends by design holds nothing, and a close of the World l
   const second = new World({ record });
   try {
     expect(await readFile(record, "utf8")).toBe(before);
-    expect((await inspectRecord(record)).held).toEqual([]);
+    expect((await inspectRecord(record)).pending).toEqual([]);
     second.open();
-    expect(second.held.size).toBe(0);
+    expect(second.pending.size).toBe(0);
   } finally {
     await second.dispose();
     await rm(cwd, { recursive: true });
   }
 });
 
-test("record inspection reports held work when its replay starts or feeds a command", async () => {
+test("record inspection reports pending work when its replay starts or feeds a command", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-inspect-commands-"));
   const record = join(cwd, "life.jsonl");
   const first = new World({ cwd, record });
   const life = first.open();
   life.rung('await bash("exec sleep 30")');
   life.rung('c = bash("head -c 6; exec sleep 30", fed=True)\nwrite(Text(c + "/stdin", "hello\\n"))\nawait c');
-  await until(first, () => printed(first, "bash://operator.3.1") === "hello\n");
+  await until(first, () => printed(first, "bash2") === "hello\n");
   await first.dispose();
   try {
-    expect((await inspectRecord(record)).held.map(([id]) => id)).toEqual([
-      "rung://operator.2",
-      "bash://operator.2.1",
-      "rung://operator.3",
-      "bash://operator.3.1",
+    expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
+      "rung1",
+      "bash1",
+      "rung2",
+      "bash2",
     ]);
   } finally {
     await remove(cwd);
@@ -755,19 +782,40 @@ test("a later life stands on the models its record was lived on, though the host
   const answered = life.prompt<number>("int", "five");
   expect(await answered).toBe(5);
   life.prompt("int", "later");
-  await until(first, () => first.activity.acts.has("wait://operator.3.1.1"));
+  await until(first, () => first.activity.acts.has("wait1"));
   await first.dispose();
-  const held = ["prompt://operator.3", "rung://operator.3.1", "wait://operator.3.1.1"];
+  const pending = ["prompt2", "rung3", "wait1"];
   const second = new World({ record });
   try {
-    expect((await inspectRecord(record)).held.map(([id]) => id)).toEqual(held);
+    expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual(pending);
     const again = second.open();
     expect(second.roster).toEqual(["claude-cli:sonnet"]);
     expect(again.outcome(answered.id)).toEqual({ done: true, value: 5 });
-    expect([...second.held.keys()]).toEqual(held);
+    expect([...second.pending.keys()]).toEqual(pending);
   } finally {
     await second.dispose();
     await rm(cwd, { recursive: true });
+  }
+});
+
+test("the World ends a command only at a control that covers it, so a close of the prompt lets its command run", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-covers-"));
+  const words = ["c = bash('sleep 30')\nawait wait(60)", "c = bash('sleep 0.3; echo late')\nclose(1)"];
+  const session = boot({ cwd, ...modeled, answer: async () => said(words.shift() ?? "close(0)") });
+  const { life } = session;
+  try {
+    const world = session.world;
+    if (!world) throw new Error("The session has no World.");
+    const cancelled = life.prompt<number>("int", "go");
+    await until(world, () => world.activity.acts.has("bash1"));
+    life.cancel(cancelled.id);
+    await expect(life.result("bash1")).rejects.toThrow("CancelledError");
+    expect(await life.prompt<number>("int", "go")).toBe(1);
+    const late = await life.result<{ code: number; stdout: { content: string } }>("bash2");
+    expect([late.code, late.stdout.content]).toEqual([0, "late\n"]);
+  } finally {
+    await session.dispose();
+    await remove(cwd);
   }
 });
 
@@ -824,7 +872,7 @@ test("a host that asks the life at each change hears no change of its own asking
     life.cwd();
     await tick();
     expect(calls).toBe(0);
-    expect(world.facts.filter(([kind, id]) => kind === "done" && id.startsWith("cwd://"))).toEqual([]);
+    expect(world.facts.filter(([kind, id]) => kind === "done" && id.startsWith("cwd@"))).toEqual([]);
   } finally {
     await world.dispose();
     await rm(cwd, { recursive: true });
@@ -885,7 +933,7 @@ test("a whole number from the operator answers a float prompt as a float", async
   }
 });
 
-test("an operator answer of a list keeps its numbers exact and its maps plain", async () => {
+test("an operator answer of a list keeps its numbers exact, and a map in it that holds the key is stays a map", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-list-answer-"));
   const world = new World({ cwd });
   const life = world.open();
@@ -893,11 +941,35 @@ test("an operator answer of a list keeps its numbers exact and its maps plain", 
     const question = life.prompt("list", "Numbers?", { to: "operator" });
     await until(world, () => world.prompts.has(question.id));
     expect(() => world.answer(question.id, "[9007199254740993]")).toThrow("safe integer");
-    expect(() => world.answer(question.id, '[{"is": "str"}]')).toThrow("key is");
-    world.answer(question.id, "[2.0, 3]");
-    await question;
+    world.answer(question.id, '[2.0, 3, {"is": "str", "args": [1.0]}]');
+    expect(await question).toEqual([
+      2,
+      3,
+      {
+        is: "dict",
+        args: [
+          [
+            ["is", "str"],
+            ["args", [1]],
+          ],
+        ],
+      },
+    ]);
     await life.rung(`x = peek(${JSON.stringify(question.id)})`);
-    expect(life.inspect("x").representation).toBe("[2.0, 3]");
+    expect(life.inspect("x").representation).toBe("[2.0, 3, {'is': 'str', 'args': [1.0]}]");
+    expect(life.inspect("x").value).toEqual([
+      2,
+      3,
+      {
+        is: "dict",
+        args: [
+          [
+            ["is", "str"],
+            ["args", [1]],
+          ],
+        ],
+      },
+    ]);
   } finally {
     await world.dispose();
     await rm(cwd, { recursive: true });
@@ -963,7 +1035,7 @@ test("a World with no model puts to the operator every prompt that names no acto
       "You asked: What is this project?",
     );
     session.life.rung('b = bash("true")');
-    expect(await acknowledgment).toBe("bash://operator.3.1 done");
+    expect(await acknowledgment).toBe("bash1 done");
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });

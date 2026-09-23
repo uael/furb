@@ -9,6 +9,7 @@ import {
   WorldAdapter,
   type WorldRequest,
 } from "../src/index.ts";
+import { display } from "../src/world.ts";
 
 const lives: Life[] = [];
 afterEach(async () => {
@@ -48,7 +49,7 @@ async function open(record: unknown[] = [], answer = 'close("hello")') {
         return { path: args[1], content: args[2] };
       case "Ask":
         asks++;
-        return Promise.resolve(["assistant", [answer], [20, 8, 0, 0, 0.001], null]);
+        return Promise.resolve(["assistant", answer, [20, 8, 0, 0, 0.001], null]);
       case "Wait":
         return Number(args[0]) === 0 ? null : new Promise((resolve) => waits.push(() => resolve(null)));
       case "Prompt":
@@ -67,7 +68,7 @@ async function open(record: unknown[] = [], answer = 'close("hello")') {
 
 test("native queries are synchronous and acts await the real engine and async World", async () => {
   const { life, asks } = await open();
-  expect(life.root).toBe("chain://operator.1");
+  expect(life.root).toBe("chain1");
   expect(life.clock()).toBe(123.5);
   expect(life.chance()).toBe(0.25);
   expect(await life.wait(0)).toBeNull();
@@ -164,30 +165,34 @@ test("map order and live Python values cross without losing their meaning", asyn
 test("every ear hears a fact whose values have no plain form, and each value crosses as what it is", async () => {
   const { life, facts, files } = await open();
   await life.rung(
-    "class P:\n  pass\nd = {1: 'a'}\nn = 2**70\nf = float('-inf')\nb = b'x'\np = P()\ndebug(t'{d}{n}{f}{b}{p}')",
+    "class P:\n  pass\nd = {1: 'a'}\nn = 2**70\nf = float('-inf')\nb = b'x'\np = P()\nm = {'is': 'name', 'name': 'bash'}\nsend('note', acting(), d, n, f, b, p, m)\ndebug(t'{d}')",
   );
   await Promise.resolve();
-  const debugged = facts
-    .filter((fact) => (fact as Fact)[0] === "tell")
-    .flatMap((fact) => (fact as [string, string, string, [string, [string, unknown][], unknown][]])[3])
-    .filter((tag) => tag[0] === "debugged")
-    .map((tag) => tag[1][1]);
-  expect(debugged.slice(0, 4)).toEqual([
-    ["d", { is: "dict", args: [[[1, "a"]]] }],
-    ["n", { is: "int", args: ["1180591620717411303424"] }],
-    ["f", { is: "float", args: ["-inf"] }],
-    ["b", "b'x'"],
+  const [note] = facts.filter((fact) => (fact as Fact)[0] === "note") as Fact[];
+  expect(note?.slice(3, 7)).toEqual([
+    { is: "dict", args: [[[1, "a"]]] },
+    { is: "int", args: ["1180591620717411303424"] },
+    { is: "float", args: ["-inf"] },
+    "b'x'",
   ]);
-  expect(debugged[4]?.[1]).toMatchObject({
-    is: "instance",
-    class: { is: "class", name: "P" },
-    value: { is: "P" },
+  expect(note?.[7]).toMatchObject({ is: "instance", class: { is: "class", name: "P" }, value: { is: "P" } });
+  // A map of the word that holds the key is crosses as its pairs, and so is read as no mark.
+  expect(note?.[8]).toEqual({
+    is: "dict",
+    args: [
+      [
+        ["is", "name"],
+        ["name", "bash"],
+      ],
+    ],
   });
-  expect(life.rendered().join("\n")).toContain(`d="{1: 'a'}"`);
-  // A tag whose name is no string renders as python says the name, and a model is asked on it.
-  await life.rung('send("tell", acting(), [(1, [], None)])');
-  expect(await life.result<string>(life.prompt("str", "Say hello").id)).toBe("hello");
-  expect(life.rendered().join("\n")).toContain("<1/>");
+  expect(display(note?.[8])).toBe(JSON.stringify({ is: "name", name: "bash" }, null, 2));
+  expect(
+    life
+      .turns()
+      .map(([, python]) => python)
+      .join("\n"),
+  ).toContain("debugged d = {1: 'a'}");
   // The World hears on: it serves a read, a write and a wait after that fact.
   expect(life.read<{ content: string }>("a").content).toBe("one\ntwo\n");
   await life.rung('write(Text("c", "after"))');
@@ -202,7 +207,7 @@ test("a record keeps a value with no plain form, so a later life makes the same 
   // The operator speaks of the act, so the record keeps the act with its words.
   first.life.close(5, note);
   expect(JSON.stringify(first.entries)).toContain(
-    '"chain://operator.1",{"is":"dict","args":[[[1,"a"]]]},{"is":"int","args":["1180591620717411303424"]},{"is":"float","args":["inf"]}]',
+    '"chain1",{"is":"dict","args":[[[1,"a"]]]},{"is":"int","args":["1180591620717411303424"]},{"is":"float","args":["inf"]}]',
   );
   const second = await open(first.entries.map((entry) => decodeRecord(JSON.stringify(entry))));
   expect(second.life.raised).toBeNull();
@@ -238,11 +243,11 @@ test("a life whose replay drifts is kept, with what boot raised", async () => {
   const second = await open(first.entries, word);
   expect(second.life.raised).toMatchObject({ is: "Drift" });
   expect(String(second.life.raised?.args[0])).toContain("drifts");
-  expect(second.life.root).toBe("chain://operator.1");
+  expect(second.life.root).toBe("chain1");
   expect(second.life.cwd(second.life.chain("two").id)).toBe("/tmp");
 });
 
-test("the World alone is given the turns of an ask as the model reads them", () => {
+test("every ear is given the turns of an ask as the python the chain folded", () => {
   const given: [unknown, unknown][] = [];
   const ear = (world: boolean) =>
     (function* (): Ear {
@@ -255,30 +260,18 @@ test("the World alone is given the turns of an ask as the model reads them", () 
   const ears = new Ears({ world: ear(true), other: ear(false) });
   const callback = ears.callback;
   ears.callback = (request) => {
-    if (request[0] === "hears" && (request[2] as Fact | null)?.[0] === "ask")
-      given.push([request[1], request[3]]);
+    const fact = request[2] as Fact | null;
+    if (request[0] === "hears" && fact?.[0] === "ask") given.push([request[1], fact[5]]);
     return callback(request);
   };
   const life = ears.boot();
   try {
     life.prompt("str", "hi");
     expect(given.map(([name]) => name)).toEqual(["world", "other"]);
-    expect(given[0]?.[1]).toEqual(life.rendered());
-    expect(given[1]?.[1]).toBeNull();
+    expect(given[0]?.[1]).toEqual(life.turns());
+    expect(given[1]?.[1]).toEqual(life.turns());
+    expect(life.turns()[0]?.[1]).toContain("#prompt1 hi");
   } finally {
     life.dispose();
   }
-});
-
-test("rendering takes the turns of a chain with one question and renders those turns", async () => {
-  const { life, facts } = await open();
-  await life.result(life.prompt("str", "Say hello").id);
-  await Promise.resolve();
-  const before = facts.length;
-  const rendering = life.rendering();
-  await Promise.resolve();
-  const questions = facts.slice(before).filter((fact) => String((fact as Fact)[1]).startsWith("turns://"));
-  expect(questions).toHaveLength(1);
-  expect(rendering.turns).toEqual(life.turns());
-  expect(rendering.rendered).toEqual(life.rendered());
 });

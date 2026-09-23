@@ -63,7 +63,7 @@ export function createDemoWorld(options: WorldOptions): World {
         turns.filter((turn) => turn[0] === "assistant").length === 0
           ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
           : 'close("The next step is ready. Keep the change small, run its checks, and inspect the result here.")';
-      return ["assistant", [code], [3240, 184, 2800, 0, 0.0024], null];
+      return ["assistant", code, [3240, 184, 2800, 0, 0.0024], null];
     },
   });
   return world;

@@ -16,6 +16,7 @@ import {
 import type { FileChange } from "@furb/engine/world";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView } from "./bridge.ts";
+import { refusal } from "./conversation.ts";
 import { expandHome, fileReferences, projectFiles } from "./files.ts";
 import { dollars } from "./format.ts";
 import { Preferences } from "./preferences.ts";
@@ -123,7 +124,6 @@ export class Session extends EventEmitter {
   sessionName: string;
   acts: ActRow[] = [];
   turns: Turn[] = [];
-  rendered: string[] = [];
   changes: ShownChange[] = [];
   changePage = 0;
   program: Record<string, string> = {};
@@ -243,7 +243,7 @@ export class Session extends EventEmitter {
             "wake",
             "tell",
           ].includes(kind) ||
-          (kind === "done" && /^(prompt|rung|bash|wait|grant):/.test(id)),
+          (kind === "done" && /^(prompt|rung|bash|wait|grant)\d+$/.test(id)),
       )
     )
       void this.refresh().catch(this.fail);
@@ -310,22 +310,7 @@ export class Session extends EventEmitter {
         const lastWord = rows
           .filter((act) => act.on === this.selected && act.kind === "rung" && act.by === "operator")
           .at(-1);
-        const refused = this.turns
-          .flatMap((turn) => turn[1])
-          .find(
-            (tag) =>
-              typeof tag !== "string" &&
-              tag[0] === "refused" &&
-              tag[1].some(([key, value]) => key === "id" && value === lastWord?.id),
-          );
-        this.findings =
-          refused && typeof refused !== "string"
-            ? typeof refused[2] === "string"
-              ? refused[2].split("\n")
-              : Array.isArray(refused[2])
-                ? refused[2].map(String)
-                : []
-            : [];
+        this.findings = lastWord ? refusal(this.turns, lastWord.id) : [];
         this.rejectedWord = this.findings.length ? String(lastWord?.words[0] ?? "") : "";
         this.rejectedAct = this.findings.length ? (lastWord?.id ?? "") : "";
         this.emit("change");
@@ -369,7 +354,7 @@ export class Session extends EventEmitter {
     );
     if (chain ? this.error : Object.values(this.errors).some(Boolean)) return "error";
     if (this.queueHeld && this.queued.length) return "blocked";
-    if (this.world.held.size) return "paused";
+    if (this.world.pending.size) return "paused";
     if (chain ? this.operatorPrompt : this.world.prompts.size) return "blocked";
     if (acts.some(working)) return "working";
     if (this.paused || acts.some((act) => act.paused && !act.done)) return "paused";
@@ -404,6 +389,26 @@ export class Session extends EventEmitter {
   }
   isUserPrompt(act: ActRow): boolean {
     return act.kind === "prompt" && act.by === "operator";
+  }
+  /** The act that a name or a door names: the act whose name is the first part of the path. */
+  actOf(path: string): ActRow | undefined {
+    const [name] = path.split("/");
+    return this.acts.find((act) => act.id === name);
+  }
+  /** Whether an act is a rung of a ladder: the prompt of that ladder made it. */
+  madeBy(id: string, ladder: string): boolean {
+    return this.acts.find((act) => act.id === id)?.by === ladder;
+  }
+  /** How many acts made an act, one under the other, up to the operator or the outside. */
+  depth(act: ActRow): number {
+    let depth = 0;
+    for (
+      let maker = this.acts.find((one) => one.id === act.by);
+      maker;
+      maker = this.acts.find((one) => one.id === maker?.by)
+    )
+      depth++;
+    return depth;
   }
   async attachImage(path: string): Promise<void> {
     if (!(await this.world.route(this.actor)).input.includes("image"))
@@ -473,7 +478,8 @@ export class Session extends EventEmitter {
     void this.drainQueue().catch(this.fail);
   }
   async drainQueue(): Promise<void> {
-    if (this.closed || this.draining || this.queueHeld || this.world.held.size || !this.queued.length) return;
+    if (this.closed || this.draining || this.queueHeld || this.world.pending.size || !this.queued.length)
+      return;
     this.draining = true;
     // The queue is read again before each send, since the operator may remove or take back a follow-up meanwhile.
     const queued = (entry: FollowUp) => this.queued.some((item) => item.id === entry.id);
@@ -605,14 +611,14 @@ export class Session extends EventEmitter {
       else {
         await this.attachFiles(input);
         this.redo = [];
-        const held = this.world.held.size > 0;
+        const pending = this.world.pending.size > 0;
         const id = await this.life.prompt(this.shape, this.withImages(input), {
           on: this.selected,
           to: this.actor,
         });
         delete this.images[this.selected];
         this.save();
-        if (held) this.emit("resume");
+        if (pending) this.emit("resume");
         this.track(id);
       }
     }
@@ -633,7 +639,7 @@ export class Session extends EventEmitter {
         this.notice = "Paused. In-flight work can finish.";
         break;
       case "wake":
-        if (this.world.held.size) {
+        if (this.world.pending.size) {
           this.emit("resume");
           break;
         }

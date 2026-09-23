@@ -118,7 +118,7 @@ test("the views say each quantity one way, read a page of changes once, and set 
     expect(frame).toContain("30% context");
     expect(frame).not.toContain("30.000000000000004");
     expect(frame).toContain("$1.50");
-    const card = app.scroll.getChildren().find((node) => node.id.startsWith("grant://"));
+    const card = app.scroll.getChildren().find((node) => /^grant\d+$/.test(node.id));
     const heading = card?.getChildren()[0] as TextRenderable | undefined;
     if (!heading) throw new Error("No card for the grant.");
     const content = heading.content;

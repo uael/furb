@@ -83,10 +83,10 @@ to parse and validate an answer. `world` emits `change` and `facts`; `fault` rep
 outside result. `world.facts` holds the facts of the life but the answers to the queries that the host asks
 outside a rung, which no record keeps either, so a listener that asks the life hears no change of its own. A
 failed outside act carries its refusal in the record. A `Keep` writes and syncs one complete record entry
-before it returns. The `answer` callback also receives the exact rendered turns
-as its fifth argument. `life.rendered(chain)` gives that text from the native values, so Python floats,
-tuples, and instances retain their representations before they cross to JavaScript. `life.rendering(chain)`
-gives the turns and that text from one question.
+before it returns. The engine phrases every turn as python, so the World renders nothing. A turn is its role,
+its python, its usage and the blocks of its provider, as `life.turns(chain)` gives it. The World hands a
+provider the python of each user turn as it is, and no user turn that holds nothing, and the `answer` callback
+receives the same turns.
 
 Pass `world` to `boot` to replace the whole World. It receives these operations:
 
@@ -97,7 +97,7 @@ Pass `world` to `boot` to replace the whole World. It receives these operations:
 | Write | directory, path, content | `{path, content}` |
 | Clock, Chance | none | number |
 | Keep | entry | nothing |
-| Ask | rung, chain, actor, turns, rendered text | Promise of a turn |
+| Ask | rung, chain, actor, turns | Promise of a turn |
 | Run | `{id, here, command, fed, timeout, merged}` | nothing; send out/exited later |
 | Feed | command id, text or null | nothing |
 | Slay | command id | nothing |
@@ -117,7 +117,9 @@ so an ear hears every fact. A value that JSON holds only in part crosses as its 
 type makes it from under `args`, and comes back in whole: an int past the safe range as
 `{"is":"int","args":["1180591620717411303424"]}`, a float that is not finite as `{"is":"float","args":["inf"]}`,
 and a map with a key that is no string as `{"is":"dict","args":[[[1,"a"]]]}`. Any other value, and a value
-nested beyond 64 levels, crosses as its Python representation. Into the engine, a whole JavaScript number is
+nested beyond 64 levels, crosses as its Python representation. A map that holds the key `is` crosses as its
+pairs under the same mark, `{"is":"dict","args":[[["is","x"]]]}`, both ways, so no map of a word reads as a
+mark; a host marks its own such map the same way, as `world.answer` does for an answer of the operator. Into the engine, a whole JavaScript number is
 an int and a number with a fraction is a float, so a whole float goes in its form, `{"is":"float","args":["2"]}`.
 A whole number past the safe range is refused, since
 JavaScript holds it rounded: send a BigInt, or the `int` form above. A BigInt past 64 bits reaches the engine
@@ -136,13 +138,14 @@ when the process ends, so a lease of a process that ended never blocks an open. 
 with the record, and a process that locked the moved file opens the path again. On Windows the lock also refuses
 a read of the file by any other handle; the file holds no text, and nothing reads it. A torn final line is removed
 before an append; a damaged complete line fails.
-A later open holds unfinished work, in `world.held`, before any model, command, wait or operator question
-starts, and `world.resume()` explicitly releases it. The World pauses no chain to hold work, so every pause
-that the record holds stands after resume: one of the operator, of a grant, or of two failed asks in a row.
-A command that an earlier World started keeps its recorded output and ends with a refusal on resume; it is
-never run twice without a new act. Wait deadlines, partial streams, and the commands and operator questions
-that were started live in the record's `.world.json` companion. File snapshots append to `.changes.jsonl`;
-`world.changes.read` loads a page of them. Keep both companions with the JSONL record.
+The record keeps a command, a wait and a prompt to the operator from its start, and a rung from its ask. What
+it shows begun and not done is pending in a later life: the engine starts none of it, and asks for no rung of
+it, until a wake that this life says. `world.pending` holds that work, and `world.resume()` says a wake of each
+chain that holds some. Work that a pause of the operator holds is not in `world.pending`, and it waits for the
+wake of the operator. A command that an earlier World started and did not end runs again at that wake, once,
+and what it told before stands in its door. Wait deadlines and partial streams live in the record's
+`.world.json` companion. File snapshots append to `.changes.jsonl`; `world.changes.read` loads a page of them.
+Keep both companions with the JSONL record.
 
 `inspectRecord(path, models)` reads pending work through the same native replay without taking a record lock,
 writing files, or starting a model or command. The TUI runs this inspection in its own worker. `World.activity` holds
@@ -155,6 +158,6 @@ size, and `furb-image://` reference. A World with no record copies it into `.fur
 `.furb` that it makes holds a `.gitignore` that keeps it out of version control, as `furbDirectory` makes it.
 Put that reference in the prompt as a Markdown image,
 `![design](furb-image://...)`, which `imageReference(image)` writes and `imageReferences(message)` reads. The
-World keeps the exact native text and adds the referenced image as a pi-ai
-image block. The stored bytes are checked against their digest before use. PNG, JPEG, GIF, and WebP are
+World hands the python of the turn as it is, and adds each image that the message of a prompt of that turn
+references as a pi-ai image block. The stored bytes are checked against their digest before use. PNG, JPEG, GIF, and WebP are
 supported, with a 20 MiB limit per image. Keep `.images` with the record when moving a session.

@@ -11,7 +11,7 @@ test("a record of more entries than one call takes as arguments opens whole", as
   const path = join(cwd, "record.jsonl");
   try {
     const count = 700_000;
-    await writeFile(path, '["x",["done","x","world",null]]\n'.repeat(count));
+    await writeFile(path, '[["done","x","world",null]]\n'.repeat(count));
     const record = new RecordFile(path);
     try {
       expect(record.entries).toHaveLength(count);

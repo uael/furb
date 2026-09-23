@@ -32,9 +32,9 @@ export function modelNamed<M extends { provider: string; id: string }>(
 export const shapes = ["str", "None", "bool", "int", "float", "list", "dict"] as const;
 
 export type Turn = Awaited<ReturnType<Life["turns"]>>[number];
-export type Tag = Exclude<Turn[1][number], string>;
 export type Fact = Awaited<ReturnType<Life["send"]>>;
-export type Entry = [string, Fact, unknown?];
+/** One entry of the record: the fact, and for a query of a run what it was answered beside. */
+export type Entry = [Fact, unknown?];
 export type Usage = NonNullable<Turn[2]>;
 export interface TextValue {
   is?: "Text";
@@ -49,14 +49,72 @@ export interface OperatorPrompt {
   reject(error: Error): void;
 }
 
-export function isTag(value: unknown): value is Tag {
-  return (
-    Array.isArray(value) && value.length === 3 && typeof value[0] === "string" && Array.isArray(value[1])
+/** What one fact that tells stands as in a user turn: its header, `#` and the name of the act or the kind of the
+ * query it is of, then its words; and the lines after the header. */
+export interface Paragraph {
+  name: string;
+  words: string;
+  lines: string[];
+  text: string;
+}
+/** The paragraphs of the python of a user turn, in order. A blank line that a header follows is where one paragraph
+ * ends, since a word its caller wrote may hold a blank line of its own. */
+export function paragraphs(python: string): Paragraph[] {
+  if (!python) return [];
+  return python.split(/\n\n(?=#\S)/).map((text) => {
+    const [header = "", ...lines] = text.split("\n");
+    const space = header.indexOf(" ");
+    return {
+      name: header.slice(1, space < 0 ? undefined : space),
+      words: space < 0 ? "" : header.slice(space + 1),
+      lines,
+      text,
+    };
+  });
+}
+/** Whether a paragraph is the open of the act it is of: an act tells its binding as the last line of its open,
+ * and no other paragraph ends with it. */
+export function opens(paragraph: Paragraph): boolean {
+  return paragraph.lines.at(-1)?.startsWith(`${paragraph.name}: Act[`) ?? false;
+}
+/** The lines of a paragraph as their text: a comment without its mark, and python as it stands. */
+export function uncommented(lines: readonly string[]): string {
+  return lines.map((line) => (line === "#" ? "" : line.startsWith("# ") ? line.slice(2) : line)).join("\n");
+}
+/** Whether a name is the name of a question of that kind: the kind and a number for an act, and the kind, @ and
+ * its maker for a query. */
+export function isQuestion(kind: string, id: string): boolean {
+  return id.startsWith(kind) && /^(?:\d+|@.+)$/.test(id.slice(kind.length));
+}
+/** The kind of a question, from its name: an act is its kind and a number, and a query its kind, @ and its maker. */
+export function questionKind(id: string): string | undefined {
+  return id.match(/^(\w+?)(?:\d+|@.+)$/)?.[1];
+}
+/** A map as JavaScript holds it again: a map the life marked as its pairs, since it holds the key `is`, whose keys
+ * are all strings becomes that map, and its entries are read the same way. */
+export function unmarked(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(unmarked);
+  if (!value || typeof value !== "object") return value;
+  const held = value as Record<string, unknown>;
+  const pairs = held.is === "dict" && Array.isArray(held.args) ? held.args[0] : undefined;
+  if (Array.isArray(pairs) && pairs.every((pair) => Array.isArray(pair) && typeof pair[0] === "string"))
+    return Object.fromEntries(pairs.map(([key, one]) => [key, unmarked(one)]));
+  return Object.fromEntries(Object.entries(held).map(([key, one]) => [key, unmarked(one)]));
+}
+/** A plain value of the host as the life takes it: each map that holds the key `is` crosses as its pairs, under the
+ * mark dict, so no map of the host reads as a mark. `decoded` is the same value as the native reader gave it, whose
+ * numbers it keeps. */
+export function marked(plain: unknown, decoded: unknown = plain): unknown {
+  if (Array.isArray(plain)) return plain.map((one, index) => marked(one, (decoded as unknown[])[index]));
+  if (!plain || typeof plain !== "object") return decoded;
+  const pairs = Object.entries(plain).map(
+    ([key, one]) => [key, marked(one, (decoded as Record<string, unknown>)[key])] as const,
   );
+  return "is" in plain ? { is: "dict", args: [pairs] } : Object.fromEntries(pairs);
 }
 export function display(value: unknown): string {
   if (typeof value === "string") return value;
-  return JSON.stringify(value, null, 2) ?? "None";
+  return JSON.stringify(unmarked(value), null, 2) ?? "None";
 }
 export function safeText(value: string): string {
   // Text from files and processes must not become terminal control sequences.

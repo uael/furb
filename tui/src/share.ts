@@ -2,8 +2,9 @@ import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { imageContent, imageReferences } from "@furb/engine";
-import { display, isTag } from "@furb/engine/world";
+import { display } from "@furb/engine/world";
 import { Marked } from "marked";
+import { conversation } from "./conversation.ts";
 import type { Session } from "./session.ts";
 import { palettes } from "./theme.ts";
 
@@ -32,77 +33,62 @@ const prose = (text: string) => markdown.parse(text, { async: false });
 export function shareHtml(session: Session): string {
   const theme = palettes[session.theme];
   const sections: string[] = [];
-  for (const [role, parts] of session.turns)
-    for (const part of parts) {
-      if (typeof part === "string") {
-        sections.push(
-          `<section><h2>${role === "assistant" ? "Python" : "Message"}</h2><pre><code>${escaped(part)}</code></pre></section>`,
-        );
-        continue;
-      }
-      if (!isTag(part)) continue;
-      const [kind, attrs, body] = part;
-      const fields = Object.fromEntries(attrs);
-      const act = session.acts.find((act) => act.id === (fields.id ?? fields.over));
-      if (kind === "opened" && act?.kind === "prompt") {
-        const message = String(fields.message ?? "");
-        const references = imageReferences(message);
-        const images = references
-          .map((reference) => {
-            const image = imageContent(session.world.imageDirectory, reference.uri);
-            return `<img alt="Attached image" src="data:${image.mimeType};base64,${image.data}">`;
-          })
-          .join("");
-        const text = references.reduce((rest, reference) => rest.replace(reference.text, ""), message);
-        sections.push(
-          `<section class="prompt"><h2>${session.isUserPrompt(act) ? "You" : "Observation"}</h2>${prose(text)}${images}</section>`,
-        );
-      } else if (kind === "closed" && act?.kind === "prompt")
-        sections.push(`<section><h2>Result</h2>${prose(display(act.value ?? body))}</section>`);
-      else if (!["opened", "closed", "ledger"].includes(kind))
-        sections.push(
-          `<details><summary>${escaped(kind)} ${escaped(String(fields.path ?? fields.id ?? ""))}</summary><pre>${escaped(display(body))}</pre></details>`,
-        );
-    }
+  for (const item of conversation(session.turns, session.acts)) {
+    if (item.type === "python")
+      sections.push(`<section><h2>Python</h2><pre><code>${escaped(item.code)}</code></pre></section>`);
+    else if (item.type === "prompt") {
+      const message = String(item.act.words[1] ?? "");
+      const references = imageReferences(message);
+      const images = references
+        .map((reference) => {
+          const image = imageContent(session.world.imageDirectory, reference.uri);
+          return `<img alt="Attached image" src="data:${image.mimeType};base64,${image.data}">`;
+        })
+        .join("");
+      const text = references.reduce((rest, reference) => rest.replace(reference.text, ""), message);
+      sections.push(
+        `<section class="prompt"><h2>${session.isUserPrompt(item.act) ? "You" : "Observation"}</h2>${prose(text)}${images}</section>`,
+      );
+    } else if (item.type === "result")
+      sections.push(`<section><h2>Result</h2>${prose(display(item.act.value))}</section>`);
+    else if (item.type === "note")
+      sections.push(
+        `<details><summary>${escaped(item.label)} ${escaped(item.act?.id ?? item.detail)}</summary><pre>${escaped([item.detail, item.body].filter(Boolean).join("\n"))}</pre></details>`,
+      );
+  }
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><title>${escaped(session.sessionName)} · furb</title><style>
 body{color:${theme.text};background:${theme.background};font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:48px auto;padding:0 24px}h1{font-size:28px}h2{font-size:14px;color:${theme.muted};font-weight:500}section{margin:32px 0}.prompt{background:${theme.panel};border-left:3px solid ${theme.accent};padding:12px 20px}p,pre{white-space:pre-wrap;overflow-wrap:anywhere}pre{font:14px/1.6 ui-monospace,monospace;background:${theme.panel};padding:16px}summary{cursor:pointer;color:${theme.muted}}details{margin:16px 0}footer{color:${theme.muted};font-size:13px;margin:48px 0}img{max-width:100%;height:auto}
-</style><main><h1>${escaped(session.sessionName)}</h1><p>${escaped(session.label)}</p>${sections.join("\n")}<details><summary>Exact model transcript</summary>${session.rendered.map((text) => `<pre>${escaped(text)}</pre>`).join("\n")}</details></main><footer>Exported from furb. This file contains the selected chain's conversation and transcript.</footer></html>`;
+</style><main><h1>${escaped(session.sessionName)}</h1><p>${escaped(session.label)}</p>${sections.join("\n")}<details><summary>Exact model transcript</summary>${session.turns.map(([, python]) => `<pre>${escaped(python)}</pre>`).join("\n")}</details></main><footer>Exported from furb. This file contains the selected chain's conversation and transcript.</footer></html>`;
 }
 
 export function shareMarkdown(session: Session): string {
   const lines = [`# ${session.sessionName}`, "", `Chain: ${session.label}`, ""];
-  for (const [role, parts] of session.turns)
-    for (const part of parts) {
-      if (typeof part === "string") {
-        const fence = "`".repeat(
-          Math.max(3, ...[...part.matchAll(/`+/g)].map((match) => match[0].length + 1)),
-        );
-        lines.push(`## ${role === "assistant" ? "Python" : "Message"}`, `${fence}python`, part, fence, "");
-      } else if (isTag(part)) {
-        const fields = Object.fromEntries(part[1]);
-        const act = session.acts.find((act) => act.id === (fields.id ?? fields.over));
-        if (part[0] === "opened" && act?.kind === "prompt")
-          lines.push(
-            `## ${session.isUserPrompt(act) ? "You" : "Observation"}`,
-            "",
-            imageReferences(String(fields.message ?? "")).reduce(
-              (text, reference) =>
-                text.replace(reference.text, `[Image: ${reference.name}, included in conversation.html]`),
-              String(fields.message ?? ""),
-            ),
-            "",
-          );
-        if (part[0] === "closed" && act?.kind === "prompt")
-          lines.push("## Result", "", display(act.value ?? part[2]), "");
-        else if (!["opened", "closed", "ledger"].includes(part[0])) {
-          const body = display(part[2]);
-          const fence = "`".repeat(
-            Math.max(3, ...[...body.matchAll(/`+/g)].map((match) => match[0].length + 1)),
-          );
-          lines.push(`### ${part[0]}`, `${fence}text`, body, fence, "");
-        }
-      }
-    }
+  const fenced = (text: string, language: string) => {
+    const fence = "`".repeat(Math.max(3, ...[...text.matchAll(/`+/g)].map((match) => match[0].length + 1)));
+    return [`${fence}${language}`, text, fence];
+  };
+  for (const item of conversation(session.turns, session.acts)) {
+    if (item.type === "python") lines.push("## Python", ...fenced(item.code, "python"), "");
+    else if (item.type === "prompt") {
+      const message = String(item.act.words[1] ?? "");
+      lines.push(
+        `## ${session.isUserPrompt(item.act) ? "You" : "Observation"}`,
+        "",
+        imageReferences(message).reduce(
+          (text, reference) =>
+            text.replace(reference.text, `[Image: ${reference.name}, included in conversation.html]`),
+          message,
+        ),
+        "",
+      );
+    } else if (item.type === "result") lines.push("## Result", "", display(item.act.value), "");
+    else if (item.type === "note")
+      lines.push(
+        `### ${item.label}`,
+        ...fenced([item.detail, item.body].filter(Boolean).join("\n"), "text"),
+        "",
+      );
+  }
   return lines.join("\n");
 }
 

@@ -3,7 +3,6 @@
 pub mod console;
 mod host;
 mod lease;
-mod render;
 mod wire;
 
 use napi::{
@@ -65,17 +64,7 @@ pub struct Outcome {
 pub struct RungOptions {
   pub retells: Option<String>,
   pub actor: Option<String>,
-  pub returns: Option<String>,
   pub on: Option<String>,
-}
-
-#[napi(object)]
-pub struct Rendering {
-  #[napi(
-    ts_type = "Array<['user' | 'assistant', Array<string | [string, Array<[string, unknown]>, unknown]>, [number, number, number, number, number] | null, unknown]>"
-  )]
-  pub turns: Value,
-  pub rendered: Vec<String>,
 }
 
 #[napi(object)]
@@ -275,8 +264,7 @@ impl JsLife {
     self
       .held
       .call(move |life| {
-        let options =
-          options.unwrap_or(RungOptions { retells: None, actor: None, returns: None, on: None });
+        let options = options.unwrap_or(RungOptions { retells: None, actor: None, on: None });
         let named = on(life, options.on);
         invoke(
           life,
@@ -285,7 +273,6 @@ impl JsLife {
             json!(word),
             json!(options.retells.unwrap_or_default()),
             json!(options.actor.unwrap_or_default()),
-            json!(options.returns.unwrap_or_default()),
           ],
           named,
         )
@@ -294,20 +281,22 @@ impl JsLife {
       .map(|id| JsAct { id, held: self.held.clone() })
   }
 
-  /// Read one name from the chain without calling it, with its Python type and representation.
+  /// Read one name from the chain without calling it, with its Python type and representation. The value crosses
+  /// as every value of the life does, through the stand-in, so a map that holds the key `is` crosses as its pairs.
   #[napi]
   pub fn inspect(&self, name: String, chain: Option<String>) -> napi::Result<Inspection> {
     self.held.call(move |life| {
-      let chain = chain.unwrap_or_else(|| life.root().into());
-      let value = life.word(
+      let chain = crate::Object::string(chain.unwrap_or_else(|| life.root().into()));
+      let key = crate::Object::string(&name);
+      let raw = life.word(
         "modules[__chain][__name]",
-        vec![("__chain", crate::Object::string(chain)), ("__name", crate::Object::string(&name))],
+        vec![("__chain", chain.clone()), ("__name", key.clone())],
       )?;
-      let value = value.as_ref();
+      let value = life.held("modules", vec![chain, key], "at")?;
       Ok(Inspection {
-        kind: value.type_name().into(),
-        representation: value.py_repr(),
-        value: Some(outward(value)).filter(|value| !value.is_null()),
+        kind: raw.as_ref().type_name().into(),
+        representation: raw.as_ref().py_repr(),
+        value: Some(outward(value.as_ref())).filter(|value| !value.is_null()),
         name,
       })
     })
@@ -437,32 +426,14 @@ impl JsLife {
     self.held.call(move |life| Ok(outward(life.get(&id)?.0.as_ref())))
   }
 
+  /// The turns of a chain, each the python a model reads, which the engine wrote.
   #[napi(
-    ts_return_type = "Array<['user' | 'assistant', Array<string | [string, Array<[string, unknown]>, unknown]>, [number, number, number, number, number] | null, unknown]>"
+    ts_return_type = "Array<['user' | 'assistant', string, [number, number, number, number, number] | null, unknown]>"
   )]
   pub fn turns(&self, chain: Option<String>) -> napi::Result<Value> {
     self.held.call(move |life| {
       let named = on(life, chain);
       invoke(life, "turns", vec![], named)
-    })
-  }
-
-  /// Exact model text, rendered before Python values cross to JavaScript.
-  #[napi]
-  pub fn rendered(&self, chain: Option<String>) -> napi::Result<Vec<String>> {
-    self.held.call(move |life| {
-      let chain = chain.unwrap_or_else(|| life.root().to_owned());
-      Ok(render::turns(life.turns(&chain)?.as_ref()))
-    })
-  }
-
-  /// The turns of a chain from one question, and each turn as the text a model reads.
-  #[napi]
-  pub fn rendering(&self, chain: Option<String>) -> napi::Result<Rendering> {
-    self.held.call(move |life| {
-      let chain = chain.unwrap_or_else(|| life.root().to_owned());
-      let turns = life.turns(&chain)?;
-      Ok(Rendering { rendered: render::turns(turns.as_ref()), turns: outward(turns.as_ref()) })
     })
   }
 

@@ -30,10 +30,10 @@ export function readRecord(path: string, repair = false): Entry[] {
       }
       if (
         !Array.isArray(value) ||
-        ![2, 3].includes(value.length) ||
-        typeof value[0] !== "string" ||
-        !Array.isArray(value[1]) ||
-        value[1].length < 3
+        ![1, 2].includes(value.length) ||
+        !Array.isArray(value[0]) ||
+        value[0].length < 3 ||
+        typeof value[0][0] !== "string"
       ) {
         throw new Error(`Invalid record entry at byte ${start} in ${path}.`);
       }

@@ -29,7 +29,7 @@ const state = () => {
     facts: owner.facts.slice(sentFacts),
     prompts: [...owner.prompts.values()].map(({ id, shape, message }) => ({ id, shape, message })),
     streams: [...owner.streams],
-    held: [...owner.held],
+    pending: [...owner.pending],
     changes: owner.changes.length,
   };
   sentFacts = owner.facts.length;
@@ -44,7 +44,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     world = demo ? createDemoWorld(given) : new World(given);
     life = world.open();
     snapshots = new Snapshots(life, world);
-    const tail = world.records.entries.at(-1)?.[1];
+    const tail = world.records.entries.at(-1)?.[0];
     const event = tail && queueEvent(tail);
     if (tail && event?.step === "begin") life.send("queue", tail[1], ["aborted", event.key]);
     world.on("fault", (error) =>

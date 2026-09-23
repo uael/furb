@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 import { imageContent, imagePath, shapes } from "@furb/engine";
-import { display, isTag, safeText } from "@furb/engine/world";
+import { display, safeText } from "@furb/engine/world";
 import {
   type BoxOptions,
   BoxRenderable,
@@ -23,6 +23,7 @@ import {
 } from "@opentui/core";
 import { clipboardImage } from "./clipboard.ts";
 import { commands } from "./commands.ts";
+import { conversation, filled } from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import type { Extensions } from "./extensions.ts";
 import { clip, count, dollars, graphemes, kibibytes, share } from "./format.ts";
@@ -53,7 +54,6 @@ import type { Workspaces } from "./workspaces.ts";
 const exitNotice = "Press Ctrl+D again to exit.";
 const views: View[] = ["conversation", "program", "activity", "facts", "transcript", "changes"];
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-const short = (id: string) => id.replace(/^[^:]+:\/\//, "");
 interface BlockOptions {
   compact?: boolean;
   collapsible?: boolean;
@@ -389,7 +389,7 @@ export class App {
         void this.highlightEditor();
       })
       .catch(session.fail);
-    if (session.world.held.size) this.resume();
+    if (session.world.pending.size) this.resume();
   }
 
   private box(options: BoxOptions = {}): BoxRenderable {
@@ -769,126 +769,92 @@ export class App {
       });
     let items = 0;
     if (w.view === "conversation") {
-      const seen = new Set<string>();
-      let rung: ActRow | undefined;
-      for (const [index, turn] of w.turns.entries())
-        for (const [part, content] of turn[1].entries()) {
-          const id = `turn-${index}-${part}`;
-          if (typeof content === "string") {
-            if (!matches(content)) continue;
-            items++;
-            const wordAct = rung;
-            if (wordAct) seen.add(wordAct.id);
-            add(
-              id,
-              `${content}\n${wordAct?.run?.reason ?? ""}`,
-              rung ? this.actSummary(rung) : "Python",
-              rung ? this.actColor(rung) : c.muted,
-              (box) => {
-                box.add(this.numbered(content));
-                if (wordAct?.run?.reason) box.add(this.text(wordAct.run.reason, c.danger));
-              },
-              {
-                collapsible: true,
-                act: rung,
-                title: moving(rung),
-              },
-            );
-            continue;
-          }
-          if (!isTag(content)) continue;
-          const [name, attrs, body] = content;
-          const fields = Object.fromEntries(attrs);
-          const actId = String(fields.id ?? fields.over ?? "");
-          const act = w.acts.find((act) => act.id === actId);
-          if (act?.kind === "rung" && name === "opened") rung = act;
-          if (act && ["raised", "refused"].includes(name) && failed(act) && seen.has(act.id)) continue;
-          if (
-            name === "ledger" ||
-            (act &&
-              (["chain", "grant"].includes(act.kind) ||
-                (act.kind === "rung" &&
-                  (act.by !== "operator" || !act.words[0]) &&
-                  (name === "opened" || !failed(act) || seen.has(act.id)))) &&
-              ["opened", "closed"].includes(name))
-          )
-            continue;
-          if (!matches(JSON.stringify(content))) continue;
-          if (act?.kind === "prompt" && name === "opened") {
-            items++;
-            add(
-              id,
-              JSON.stringify(content),
-              w.isUserPrompt(act) ? "You" : "Observation",
-              c.muted,
-              (box) => box.add(this.markdown(String(fields.message ?? ""))),
-              { group: w.isUserPrompt(act) ? "user" : "observation", prompt: w.isUserPrompt(act), act },
-            );
-          } else if (act?.kind === "prompt" && name === "closed") {
-            items++;
-            const parallel =
-              turn[1].filter(
-                (part) =>
-                  isTag(part) &&
-                  part[0] === "closed" &&
-                  part[1].some(([key, value]) => key === "over" && String(value).startsWith("prompt://")),
-              ).length > 1;
-            add(
-              id,
-              JSON.stringify(content),
-              parallel ? `Result · ${this.preview(String(act.words[1]).split("\n")[0] ?? "", 9)}` : "Result",
-              c.muted,
-              (box) => box.add(this.markdown(display(act.value ?? body))),
-              { group: parallel ? `assistant:${act.id}` : "assistant", act },
-            );
-          } else if (act && ["opened", "closed"].includes(name)) {
-            if (seen.has(act.id)) continue;
-            seen.add(act.id);
-            items++;
-            add(
-              act.id,
-              JSON.stringify(act),
-              this.actSummary(act),
-              this.actColor(act),
-              (box) => this.actDetails(box, act),
-              { compact: true, group: "tools", preview: this.actPreview(act), act, title: moving(act) },
-            );
-          } else {
-            items++;
-            const detail = attrs
-              .filter(([key]) => !["id", "over"].includes(key))
-              .map(([key, value]) => `${key}: ${display(value)}`)
-              .join(" · ");
-            const summary = `${name}${detail ? ` · ${this.preview(detail, Bun.stringWidth(name) + 5)}` : actId ? ` · ${short(actId)}` : ""}`;
-            add(
-              id,
-              JSON.stringify(content),
-              summary,
-              ["raised", "refused"].includes(name) ? c.danger : c.muted,
-              (box) => {
-                if (actId) box.add(this.reference(actId, actId));
-                for (const [key, value] of attrs.filter(([key]) => !["id", "over"].includes(key)))
-                  box.add(
-                    typeof value === "string" && (key === "path" || value.includes("://"))
-                      ? this.reference(`${key}: ${value}`, value)
-                      : this.text(`${key}: ${display(value)}`, c.muted),
-                  );
-                if (body !== null && body !== "") this.renderBody(box, body);
-              },
-              {
-                compact: true,
-                group: "tools",
-                act,
-                ...(name === "refused"
-                  ? {
-                      preview: (box: BoxRenderable) =>
-                        this.excerpt(box, display(body), false, false, c.danger),
-                    }
-                  : {}),
-              },
-            );
-          }
+      for (const item of conversation(w.turns, w.acts)) {
+        if (item.type === "python") {
+          const { code, rung } = item;
+          if (!matches(code)) continue;
+          items++;
+          add(
+            item.key,
+            `${code}\n${rung?.run?.reason ?? ""}`,
+            rung ? this.actSummary(rung) : "Python",
+            rung ? this.actColor(rung) : c.muted,
+            (box) => {
+              box.add(this.numbered(code));
+              if (rung?.run?.reason) box.add(this.text(rung.run.reason, c.danger));
+            },
+            { collapsible: true, act: rung, title: moving(rung) },
+          );
+        } else if (item.type === "prompt") {
+          const { act } = item;
+          const message = String(act.words[1] ?? "");
+          if (!matches(message)) continue;
+          items++;
+          add(
+            item.key,
+            message,
+            w.isUserPrompt(act) ? "You" : "Observation",
+            c.muted,
+            (box) => box.add(this.markdown(message)),
+            { group: w.isUserPrompt(act) ? "user" : "observation", prompt: w.isUserPrompt(act), act },
+          );
+        } else if (item.type === "result") {
+          const { act } = item;
+          const value = display(act.value);
+          if (!matches(value)) continue;
+          items++;
+          add(
+            item.key,
+            value,
+            item.parallel
+              ? `Result · ${this.preview(String(act.words[1]).split("\n")[0] ?? "", 9)}`
+              : "Result",
+            c.muted,
+            (box) => box.add(this.markdown(value)),
+            { group: item.parallel ? `assistant:${act.id}` : "assistant", act },
+          );
+        } else if (item.type === "act") {
+          const { act } = item;
+          if (!matches(JSON.stringify(act))) continue;
+          items++;
+          add(
+            act.id,
+            JSON.stringify(act),
+            this.actSummary(act),
+            this.actColor(act),
+            (box) => this.actDetails(box, act),
+            { compact: true, group: "tools", preview: this.actPreview(act), act, title: moving(act) },
+          );
+        } else {
+          const { label, detail, body, act } = item;
+          const text = [act?.id, label, detail, body].filter(Boolean).join("\n");
+          if (!matches(text)) continue;
+          items++;
+          const danger = ["raised", "refused"].includes(label);
+          add(
+            item.key,
+            text,
+            `${label}${detail ? ` · ${this.preview(detail, Bun.stringWidth(label) + 5)}` : act ? ` · ${act.id}` : ""}`,
+            danger ? c.danger : c.muted,
+            (box) => {
+              if (act) box.add(this.reference(act.id, act.id));
+              // A read and a write name the path they were of, which the reference opens.
+              if (!act && detail && ["read", "write"].includes(label))
+                box.add(this.reference(detail, detail));
+              else if (detail) box.add(this.text(detail, c.muted));
+              if (body) box.add(this.text(body));
+            },
+            {
+              compact: true,
+              group: "tools",
+              act,
+              ...(label === "refused"
+                ? { preview: (box: BoxRenderable) => this.excerpt(box, body, false, false, c.danger) }
+                : {}),
+            },
+          );
         }
+      }
       for (const [id, stream] of w.world.streams) {
         if (stream.chain !== w.selected) continue;
         const act = w.acts.find((act) => act.id === id);
@@ -923,7 +889,7 @@ export class App {
         add(
           "prompt-repl",
           JSON.stringify(ladder),
-          `Prompt ${short(ladder.id)} · ${ladder.done ? "closed" : "pending"}`,
+          `Prompt ${ladder.id} · ${ladder.done ? "closed" : "pending"}`,
           c.muted,
           (box) => box.add(this.markdown(String(ladder.words[1] ?? ""))),
         );
@@ -936,7 +902,7 @@ export class App {
         });
       }
       const words = Object.entries(w.program).filter(
-        ([id]) => !w.ladder || short(id).startsWith(`${short(w.ladder)}.`) || w.repls[w.ladder]?.includes(id),
+        ([id]) => !w.ladder || w.madeBy(id, w.ladder) || w.repls[w.ladder]?.includes(id),
       );
       for (const [id, word] of words)
         if (matches(word)) {
@@ -945,7 +911,7 @@ export class App {
           add(
             id,
             word,
-            act ? this.actSummary(act) : `rung · ${short(id)} · done`,
+            act ? this.actSummary(act) : `rung · ${id} · done`,
             act ? this.actColor(act) : c.muted,
             (box) => box.add(this.numbered(word)),
             { collapsible: true, act, title: moving(act) },
@@ -966,7 +932,7 @@ export class App {
         }
     } else if (w.view === "transcript") {
       w.turns.forEach((turn, index) => {
-        const text = w.rendered[index] ?? "";
+        const text = turn[1];
         if (!matches(text)) return;
         items++;
         add(
@@ -1098,7 +1064,7 @@ export class App {
     return this.session.world.prompts.has(act.id) ? c.warning : c.muted;
   }
   private actSummary(act: ActRow): string {
-    const held = this.session.world.held.has(act.id);
+    const pending = this.session.world.pending.has(act.id);
     const fault = failed(act);
     const cancelled =
       act.value && typeof act.value === "object" && "is" in act.value && act.value.is === "CancelledError";
@@ -1115,8 +1081,8 @@ export class App {
               : cancelled
                 ? "cancelled"
                 : "done"
-            : held
-              ? "held"
+            : pending
+              ? "pending"
               : this.session.world.prompts.has(act.id)
                 ? "needs input"
                 : act.paused && act.kind !== "bash"
@@ -1135,7 +1101,7 @@ export class App {
           : act.kind === "wait"
             ? `${act.words[0]}s`
             : act.kind === "rung"
-              ? short(act.id)
+              ? act.id
               : String(act.words[0] || "");
     const observation = act.kind === "prompt" && !this.session.isUserPrompt(act);
     const prefix = `${observation ? "observation" : act.kind} · `,
@@ -1192,27 +1158,6 @@ export class App {
     } else if (act.done && act.value !== null) box.add(this.text(display(act.value), this.actColor(act)));
   }
 
-  private renderBody(box: BoxRenderable, body: unknown): void {
-    if (!Array.isArray(body)) {
-      box.add(this.text(display(body)));
-      return;
-    }
-    for (const one of body) {
-      if (isTag(one)) {
-        box.add(this.text(title(one[0]), c.muted, { marginTop: space.section }));
-        for (const [key, value] of one[1])
-          box.add(
-            typeof value === "string" && (key === "path" || value.includes("://"))
-              ? this.reference(`${key}: ${value}`, value)
-              : this.text(`${key}: ${display(value)}`, c.muted),
-          );
-        this.renderBody(box, one[2]);
-      } else if (Array.isArray(one) && typeof one[0] === "number" && typeof one[1] === "string") {
-        box.add(this.text(`${String(one[0]).padStart(4)}  ${one[1]}`));
-      } else box.add(this.text(display(one)));
-    }
-  }
-
   private numbered(word: string, findings: string[] = []): LineNumberRenderable {
     const lines = new LineNumberRenderable(this.renderer, {
       target: this.code(word),
@@ -1248,11 +1193,12 @@ export class App {
   private async follow(value: string): Promise<void> {
     this.hover?.destroyRecursively();
     this.hover = undefined;
+    const act = this.session.actOf(value);
     if (value.startsWith("furb-image://")) this.imageActions(value);
-    else if (value.startsWith("chain://")) await this.session.select(value);
-    else if (value.startsWith("prompt://")) this.openLadder(value);
-    else if (value.startsWith("rung://")) this.go("program", value);
-    else if (value.includes("://") && !value.includes("/stdin")) this.go("activity", value);
+    else if (act?.kind === "chain") await this.session.select(act.id);
+    else if (act?.kind === "prompt" && act.id === value) this.openLadder(value);
+    else if (act?.kind === "rung" && act.id === value) this.go("program", value);
+    else if (act && !value.endsWith("/stdin")) this.go("activity", act.id);
     else
       this.showValue(
         value,
@@ -1305,20 +1251,22 @@ export class App {
     }
   }
 
+  /** The python of a user turn: a header is `#` and the name of an act or the kind of a query, a comment is `#` and
+   * a space, and a header that names an act and an image attachment are references. */
   private transcriptText(source: string): TextRenderable {
     const text = safeText(source);
     const chunks: TextChunk[] = [];
     let at = 0;
-    for (const match of text.matchAll(/<\/?[\w-]+|\/?>|[\w-]+(?==)|"[^"\n]*"/g)) {
+    for (const match of text.matchAll(/^#(?! |$)\S+|^#(?: .*)?$|furb-image:\/\/[\w.]+/gm)) {
       if (match.index > at) chunks.push({ __isChunk: true, text: text.slice(at, match.index), fg: c.text });
       chunks.push({
         __isChunk: true,
         text: match[0],
-        fg: match[0].startsWith("<")
-          ? c.syntaxKeyword
-          : match[0].startsWith('"')
-            ? c.syntaxString
-            : c.syntaxType,
+        fg: match[0].startsWith("furb-image://")
+          ? c.syntaxString
+          : /^#(?! |$)/.test(match[0])
+            ? c.syntaxKeyword
+            : c.syntaxComment,
       });
       at = match.index + match[0].length;
     }
@@ -1330,8 +1278,9 @@ export class App {
     });
     const target = (x: number, y: number) => {
       const { line, column } = this.sourcePoint(node, text, x, y);
-      const match = [...line.matchAll(/[a-z][a-z-]*:\/\/[\w./-]+|path="([^"\n]+)"/g)].find(
+      const match = [...line.matchAll(/^#([\w@.]+)|furb-image:\/\/[\w.]+/g)].find(
         (match) =>
+          (match[1] === undefined || this.session.actOf(match[1])) &&
           column >= Bun.stringWidth(line.slice(0, match.index)) &&
           column < Bun.stringWidth(line.slice(0, match.index + match[0].length)),
       );
@@ -1405,17 +1354,13 @@ export class App {
     );
     const usage = w.usage;
     if (usage.some((amount) => amount > 0)) {
-      const ledger = w.turns
-        .flatMap((turn) => turn[1])
-        .findLast((part) => isTag(part) && part[0] === "ledger");
-      const filled =
-        ledger && isTag(ledger) ? Number(ledger[1].find(([name]) => name === "filled")?.[1]) : undefined;
+      const window = filled(w.turns);
       this.inspector.add(
         this.text(w.demo ? "Simulated usage" : "Usage", c.text, { attributes: 1, marginTop: space.section }),
       );
       this.inspector.add(
         this.text(
-          `${dollars(usage[4])}${filled !== undefined && Number.isFinite(filled) ? ` · ${share(filled)}` : ""}`,
+          `${dollars(usage[4])}${window !== undefined && Number.isFinite(window) ? ` · ${share(window)}` : ""}`,
         ),
       );
       this.inspector.add(this.text(`${count(usage[0])} in · ${count(usage[1])} out`, c.muted));
@@ -2192,11 +2137,11 @@ export class App {
     return `${["◐", "◓", "◑", "◒"][Math.floor(Date.now() / 250) % 4]} ${elapsed}s since start`;
   }
   private resume = (): void => {
-    const held = this.session.world.held;
+    const pending = this.session.world.pending;
     this.openPalette("Saved work is paused", [
       {
         label: "Resume saved work",
-        detail: `${held.size} unfinished acts. Interrupted commands keep their output and report an interruption.`,
+        detail: `${pending.size} unfinished ${pending.size === 1 ? "act starts" : "acts start"} again.`,
         run: async () => {
           await this.session.world.resume();
           await this.session.refresh();
@@ -2377,12 +2322,13 @@ export class App {
           this.session.notice = "Value copied.";
         },
       });
-    if (typeof value === "string" && value.includes("://"))
+    const act = typeof value === "string" ? this.session.actOf(value) : undefined;
+    if (typeof value === "string" && act)
       choices.push({
         label: "Follow this act or door",
         detail: value,
         run: () => {
-          if (value.startsWith("chain://")) return this.session.select(value);
+          if (act.kind === "chain") return this.session.select(act.id);
           void this.session.life
             .read(value, undefined, this.session.selected)
             .then((text) => this.showValue(value, text))
@@ -2437,7 +2383,7 @@ export class App {
       this.session.activity
         .filter((act) => act.kind === "prompt")
         .map((act) => ({
-          label: `${act.done ? "✓" : "◌"} ${short(act.id)}`,
+          label: `${act.done ? "✓" : "◌"} ${act.id}`,
           detail: String(act.words[1]),
           run: () => this.openLadder(act.id),
         })),
@@ -2457,16 +2403,19 @@ export class App {
         {
           label: "Resume chain",
           detail: "Then choose the last act the new chain will read.",
-          run: () => (this.session.world.held.size ? this.resume() : this.action("/wake")),
+          run: () => (this.session.world.pending.size ? this.resume() : this.action("/wake")),
         },
       ]);
       return;
     }
     const acts = this.session.activity.filter((act) => !["chain", "grant"].includes(act.kind));
+    // A rung the chain wrote binds the names of the acts its turn showed, and no turn shows it, so it is no point to
+    // rewind to; the new chain omits it with the acts after the point all the same.
+    const points = acts.filter((act) => act.kind !== "rung" || this.session.actOf(act.by)?.kind !== "chain");
     this.openPalette(
       "Rewind transcript · module and files stay current",
-      acts.map((act, index) => ({
-        label: `${"  ".repeat(Math.max(0, short(act.id).split(".").length - 2))}${act.kind} · ${short(act.id)}`,
+      points.map((act) => ({
+        label: `${"  ".repeat(this.session.depth(act))}${act.kind} · ${act.id}`,
         detail:
           String(
             act.kind === "prompt" ? act.words[1] : act.words[0] || this.session.program[act.id] || "",
@@ -2477,8 +2426,8 @@ export class App {
             return;
           }
           await this.session.branch(
-            `${this.session.label} through ${short(act.id)}`,
-            acts.slice(index + 1).map((later) => later.id),
+            `${this.session.label} through ${act.id}`,
+            acts.slice(acts.indexOf(act) + 1).map((later) => later.id),
           );
           this.session.notice =
             "The new chain reads the selected transcript prefix. Its module and files keep current state.";
@@ -2498,7 +2447,7 @@ export class App {
     if (
       id &&
       this.session.ladder &&
-      !short(id).startsWith(`${short(this.session.ladder)}.`) &&
+      !this.session.madeBy(id, this.session.ladder) &&
       !this.session.repls[this.session.ladder]?.includes(id)
     )
       this.session.ladder = undefined;

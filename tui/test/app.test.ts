@@ -11,6 +11,7 @@ import { Session } from "../src/session.ts";
 import { sessionChoices } from "../src/sessions.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "./idle.ts";
+import { transcriptOf } from "./transcript.ts";
 
 afterAll(removeDemoDirectories);
 
@@ -41,7 +42,7 @@ test("the real native life drives conversation, program, activity, search, and r
       conversation.indexOf("A clear starting point"),
     );
     expect(conversation).toContain("✓ local storage");
-    const command = app.scroll.getChildren().find((node) => node.id.startsWith("bash://"));
+    const command = app.scroll.getChildren().find((node) => /^bash\d+$/.test(node.id));
     const heading = command?.getChildren()[0];
     if (!heading) throw new Error("No command heading.");
     await test.mockMouse.click(heading.x, heading.y);
@@ -62,7 +63,7 @@ test("the real native life drives conversation, program, activity, search, and r
     session.show("activity");
     app.render();
     await test.flush();
-    expect(app.scroll.getChildren().some((child) => child.id.startsWith("bash://"))).toBe(true);
+    expect(app.scroll.getChildren().some((child) => /^bash\d+$/.test(child.id))).toBe(true);
     expect(test.captureCharFrame()).not.toContain("failed");
     app.palette();
     await test.flush();
@@ -321,7 +322,7 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
     expect(second.theme).toBe("paper");
     expect(second.mode).toBe("python");
     expect(view.composer.plainText).toBe('draft = "keep this"');
-    expect(second.world.held.has(pending)).toBe(true);
+    expect(second.world.pending.has(pending)).toBe(true);
     expect((await second.life.outcome(pending)).done).toBe(false);
   } finally {
     view.dispose();
@@ -336,19 +337,20 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
   const app = new App(screen.renderer, session, { quit() {} });
   const source = session.selected;
   await session.submit("/pause");
-  const heldActs = session.activity.map((act) => act.id);
+  const pausedActs = session.activity.map((act) => act.id);
   app.rewind();
   app.rewind();
   await screen.flush();
   expect(screen.captureCharFrame()).toContain("Resume this chain before rewinding");
   await session.refresh();
-  expect(session.activity.map((act) => act.id)).toEqual(heldActs);
+  expect(session.activity.map((act) => act.id)).toEqual(pausedActs);
   app.closeOverlay();
   await session.submit("/wake");
-  // A tag told while an ask is in flight goes to the turn after its answer, so the origin is read once it settles.
+  // A paragraph told while an ask is in flight goes to the turn after its answer, so the origin is read once it
+  // settles.
   while (session.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)))
     await new Promise((resolve) => session.once("change", resolve));
-  const original = await session.life.rendered(source);
+  const original = await transcriptOf(session.life, source);
   let rewound = "";
   let transcript: string[] = [];
   const record = session.world.records.path;
@@ -369,11 +371,11 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
     await selected;
     await session.refresh();
     expect(session.selected).not.toBe(source);
-    const continued = await session.life.rendered(source);
+    const continued = await transcriptOf(session.life, source);
     expect(continued.join("\n")).toContain(original.join("\n"));
     expect(session.turns.length).toBeGreaterThan(0);
     rewound = session.selected;
-    transcript = await session.life.rendered(rewound);
+    transcript = await transcriptOf(session.life, rewound);
     const maker = session.chains.find((chain) => chain.id === rewound)?.by;
     expect(session.acts.find((act) => act.id === maker)?.kind).toBe("rung");
   } finally {
@@ -383,7 +385,7 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
   }
   const reopened = await openEngine({ record, demo: true });
   try {
-    expect(await reopened.life.rendered(rewound)).toEqual(transcript);
+    expect(await transcriptOf(reopened.life, rewound)).toEqual(transcript);
   } finally {
     await reopened.world.dispose();
   }

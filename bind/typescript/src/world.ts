@@ -27,6 +27,7 @@ import {
   actorParts,
   type Entry,
   type Fact,
+  marked,
   modelNamed,
   type OperatorPrompt,
   shapes,
@@ -34,7 +35,7 @@ import {
   zeroUsage,
 } from "./types.js";
 
-export { display, isTag, safeText } from "./types.js";
+export { display, opens, paragraphs, safeText, uncommented } from "./types.js";
 
 let prompt: string | undefined;
 /** The system prompt of every model: the engine minified in layout alone, which `bun run build` writes beside the
@@ -44,11 +45,8 @@ function system(): string {
   return prompt;
 }
 
-/** The kinds of act whose outside work the World holds until the host resumes it: an ask for a prompt or a rung, a
- * command, and a wait. */
-const HELD = ["prompt", "rung", "bash", "wait"];
-const INTERRUPTED =
-  "The command process ended when the previous World closed. Its recorded output is available; rerun it as a new act if needed.";
+/** The kinds of act whose work the record may show begun and not done, which waits for a wake. */
+const PENDING = ["prompt", "rung", "bash", "wait"];
 /** The longest delay that one timer holds, in milliseconds. */
 const LONGEST = 2 ** 31 - 1;
 
@@ -70,12 +68,6 @@ function shaped(shape: string, value: unknown): unknown {
   return shape === "float" && typeof value === "number" ? { is: "float", args: [String(value)] } : value;
 }
 
-/** Whether plain data holds a map with the key `is`, which the wire reads as a value of the engine. */
-function tagged(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(tagged);
-  return Boolean(value && typeof value === "object" && ("is" in value || Object.values(value).some(tagged)));
-}
-
 export interface WorldOptions {
   /** Replay a record for inspection without owning it or starting outside work. */
   readOnly?: boolean;
@@ -86,13 +78,7 @@ export interface WorldOptions {
   models?: Models;
   roster?: string[];
   /** Replace only the model request, for a deterministic test or another host; the host still names the models. */
-  answer?: (
-    actor: string,
-    chain: string,
-    turns: Turn[],
-    signal: AbortSignal,
-    rendered: readonly string[],
-  ) => Promise<Turn>;
+  answer?: (actor: string, chain: string, turns: Turn[], signal: AbortSignal) => Promise<Turn>;
   operator?: (
     prompt: { id: string; shape: string; message: string },
     signal: AbortSignal,
@@ -109,8 +95,6 @@ interface Saved {
   actors?: Actor[];
   deadlines?: [string, number][];
   streams?: [string, { chain: string; text: string; thinking: string }][];
-  spawned?: string[];
-  prompted?: string[];
 }
 interface Command {
   id: string;
@@ -141,8 +125,10 @@ export class World extends EventEmitter {
   private readonly images = new ImageCache();
   readonly streams = new Map<string, { chain: string; text: string; thinking: string }>();
   readonly changes: FileChanges;
-  /** The acts whose outside work the World holds until the host calls resume, by their kind. */
-  readonly held = new Map<string, string>();
+  /** The acts that the record showed begun and not done when the life opened, and that no pause holds, by their
+   * kind: the engine starts none of them until a wake that this life says, which resume says. One that a pause of
+   * the operator holds waits for the wake of the operator. */
+  readonly pending = new Map<string, string>();
   /** The ears of the life, whose callable carries a show or a filter of the host into it. */
   readonly ears: Ears;
   private life?: Life;
@@ -157,17 +143,8 @@ export class World extends EventEmitter {
   private readonly conversations = randomUUID();
   private delivery: Promise<unknown> = Promise.resolve();
   private stopped = false;
-  private holding: boolean;
-  private release?: () => void;
-  private readonly resumeGate: Promise<void>;
-  private readonly deferred = new Map<string, Command>();
   private readonly feeds = new Map<string, (string | null)[]>();
   private readonly deadlines = new Map<string, number>();
-  /** The commands this World or an earlier one spawned and that are not done, kept on the disk so that no life runs
-   * one of them again. */
-  private readonly spawned = new Set<string>();
-  /** The prompts that this World or an earlier one put to the operator and that are not done. */
-  private readonly prompted = new Set<string>();
   /** How many of the facts the World has given its host. */
   private emitted = 0;
 
@@ -184,8 +161,6 @@ export class World extends EventEmitter {
       };
       for (const [id, deadline] of saved.deadlines ?? []) this.deadlines.set(id, deadline);
       for (const [id, stream] of saved.streams ?? []) this.streams.set(id, stream);
-      for (const id of saved.spawned ?? []) this.spawned.add(id);
-      for (const id of saved.prompted ?? []) this.prompted.add(id);
     }
     this.options = options;
     this.directory = resolve(options.cwd ?? process.cwd());
@@ -217,12 +192,6 @@ export class World extends EventEmitter {
         options.readOnly,
       );
       this.changes = changes = new FileChanges(this.records.path, options.readOnly);
-      // A later life holds its outside work until the host resumes it, and an inspection holds it for good.
-      this.holding = Boolean(options.readOnly) || this.records.entries.length > 0;
-      this.resumeGate = new Promise((resolve) => {
-        this.release = resolve;
-      });
-      if (!this.holding) this.release?.();
     } catch (error) {
       records?.dispose();
       changes?.dispose();
@@ -272,10 +241,10 @@ export class World extends EventEmitter {
       const raised = this.life.raised;
       if (raised) throw new Error(`${raised.is}: ${raised.args.map(String).join(" ")}`);
       this.learnKinds();
-      if (this.holding)
-        for (const act of this.activity.acts.values())
-          if (HELD.includes(act.kind) && !act.done) this.held.set(act.id, act.kind);
-      this.endHoldWhenEmpty();
+      // The journal said the whole record again before boot returned, so every act that is not done now is one the
+      // record showed begun and not done.
+      for (const act of this.activity.acts.values())
+        if (PENDING.includes(act.kind) && !act.done && !act.paused) this.pending.set(act.id, act.kind);
       this.save();
       return this.life;
     } catch (error) {
@@ -290,8 +259,12 @@ export class World extends EventEmitter {
   }
 
   handle = ({ kind, args }: WorldRequest): unknown => {
-    if (this.options.readOnly && ["Read", "Write", "Clock", "Chance"].includes(kind))
-      throw new Error("Record inspection cannot perform a new World query.");
+    // An inspection says no wake, so the engine starts nothing, and a World that inspects does nothing new.
+    if (
+      this.options.readOnly &&
+      ["Read", "Write", "Clock", "Chance", "Ask", "Run", "Wait", "Prompt"].includes(kind)
+    )
+      throw new Error("Record inspection cannot do new work of the World.");
     switch (kind) {
       case "Stand":
         return [[...this.actors, ["operator", [], 200000]], this.directory, this.actor];
@@ -328,48 +301,33 @@ export class World extends EventEmitter {
         return { path, content: readFileSync(path, "utf8") };
       }
       case "Ask":
-        return this.ask(
-          String(args[0]),
-          String(args[1]),
-          String(args[2]),
-          args[3] as Turn[],
-          args[4] as string[],
-        );
+        return this.ask(String(args[0]), String(args[1]), String(args[2]), args[3] as Turn[]);
       case "Wait": {
         const [seconds, id] = [args[0], String(args[1])];
         if (typeof seconds !== "number") throw new Error(`A wait needs a number of seconds, not ${seconds}.`);
+        // A wait that an earlier World started ends when it would have ended then.
         const deadline = this.deadlines.get(id) ?? Date.now() + seconds * 1000;
         this.deadlines.set(id, deadline);
         this.save();
-        return this.resumeGate.then(
-          () =>
-            new Promise((resolve, reject) => {
-              const signal = this.controller.signal;
-              const abort = () => {
-                cancel();
-                reject(signal.reason);
-              };
-              const cancel = at(deadline, () => {
-                signal.removeEventListener("abort", abort);
-                this.deadlines.delete(id);
-                this.save();
-                resolve(null);
-              });
-              if (signal.aborted) abort();
-              else signal.addEventListener("abort", abort, { once: true });
-            }),
-        );
+        return new Promise((resolve, reject) => {
+          const signal = this.controller.signal;
+          const abort = () => {
+            cancel();
+            reject(signal.reason);
+          };
+          const cancel = at(deadline, () => {
+            signal.removeEventListener("abort", abort);
+            this.deadlines.delete(id);
+            this.save();
+            resolve(null);
+          });
+          if (signal.aborted) abort();
+          else signal.addEventListener("abort", abort, { once: true });
+        });
       }
-      case "Run": {
-        const command = args[0] as Command;
-        // A command an earlier World spawned has no process now, and resume ends it as interrupted. Its done is not
-        // in the record, so it is held work, and a World that holds nothing refuses it at once.
-        if (this.spawned.has(command.id)) {
-          if (!this.holding) throw new Error(INTERRUPTED);
-        } else if (this.holding) this.deferred.set(command.id, command);
-        else this.run(command);
+      case "Run":
+        this.run(args[0] as Command);
         return null;
-      }
       case "Feed": {
         const id = String(args[0]);
         const child = this.commands.get(id)?.child;
@@ -381,7 +339,6 @@ export class World extends EventEmitter {
       }
       case "Slay":
         this.commands.get(String(args[0]))?.stop();
-        this.deferred.delete(String(args[0]));
         this.feeds.delete(String(args[0]));
         return null;
       case "Prompt":
@@ -404,24 +361,11 @@ export class World extends EventEmitter {
       );
   }
 
-  /** Whether a fact answers a query the operator asked outside a run. Such a query is of the moment: the record
-   * keeps none of it and the World keeps none either, so a host that asks the life at each change hears no change of
-   * its own asking. */
+  /** Whether a fact answers a query the operator asked outside a run, which is named kind@operator.N. Such a query
+   * is of the moment: the record keeps none of it and the World keeps none either, so a host that asks the life at
+   * each change hears no change of its own asking. */
   private momentary([kind, id]: Fact): boolean {
-    const [scheme = "", lineage = ""] = id.split("://");
-    return (
-      kind === "done" &&
-      /^operator\.\d+$/.test(lineage) &&
-      !this.activity.acts.has(id) &&
-      !this.activity.unknown.has(scheme)
-    );
-  }
-
-  /** The World lets its outside work go once it holds nothing, but an inspection holds for good. */
-  private endHoldWhenEmpty(): void {
-    if (!this.holding || this.held.size || this.options.readOnly) return;
-    this.holding = false;
-    this.release?.();
+    return kind === "done" && /^\w+@operator\.\d+$/.test(id);
   }
 
   private hear = (): void => {
@@ -431,11 +375,9 @@ export class World extends EventEmitter {
     this.emitted = this.facts.length;
     if (!facts.length) return;
     for (const [kind, id] of facts) {
-      if (this.holding && HELD.includes(kind) && !this.activity.acts.get(id)?.done) this.held.set(id, kind);
       if (kind === "done") {
-        this.held.delete(id);
+        this.pending.delete(id);
         this.streams.delete(id);
-        this.deferred.delete(id);
         this.feeds.delete(id);
         this.asks.get(id)?.abort();
         this.asks.delete(id);
@@ -444,16 +386,13 @@ export class World extends EventEmitter {
           this.prompts.delete(id);
           prompt.reject(new Error("The prompt ended."));
         }
-        if (this.spawned.delete(id) || this.prompted.delete(id)) this.save();
       }
     }
-    this.endHoldWhenEmpty();
     this.emit("facts", facts);
     this.emit("change");
   };
 
-  private async ask(id: string, chain: string, actor: string, turns: Turn[], texts: string[]): Promise<Turn> {
-    await this.resumeGate;
+  private async ask(id: string, chain: string, actor: string, turns: Turn[]): Promise<Turn> {
     if (this.stopped) throw new Error("The World was disposed.");
     if (this.life?.outcome(id).done) throw new Error("The act is no longer pending.");
     const controller = new AbortController();
@@ -462,9 +401,12 @@ export class World extends EventEmitter {
     this.streams.set(id, { chain, text: "", thinking: "" });
     this.emit("change");
     try {
-      if (this.options.answer) return await this.options.answer(actor, chain, turns, signal, texts);
+      if (this.options.answer) return await this.options.answer(actor, chain, turns, signal);
       const model = this.route(actor);
-      const messages: Message[] = turns.map(([role, parts, usage, blocks], index) => {
+      // The engine phrases every turn as python, so the World renders nothing: a user turn goes as the python the
+      // engine wrote, and one that holds nothing goes not at all, and an assistant turn as the blocks its provider
+      // gave.
+      const messages: Message[] = turns.flatMap(([role, python, usage, blocks]): Message[] => {
         if (
           role === "assistant" &&
           blocks &&
@@ -472,38 +414,41 @@ export class World extends EventEmitter {
           "role" in blocks &&
           blocks.role === "assistant"
         )
-          return blocks as AssistantMessage;
+          return [blocks as AssistantMessage];
         if (role === "user") {
-          const images = turnImages(this.imageDirectory, parts, this.images);
+          if (!python) return [];
+          const images = turnImages(this.imageDirectory, python, this.images);
           if (images.length && !model.input.includes("image"))
             throw new Error(`${model.name} does not accept images.`);
-          return {
-            role,
-            content: images.length
-              ? [{ type: "text", text: texts[index] ?? "" }, ...images]
-              : (texts[index] ?? ""),
-            timestamp: 0,
-          };
+          return [
+            {
+              role,
+              content: images.length ? [{ type: "text", text: python }, ...images] : python,
+              timestamp: 0,
+            },
+          ];
         }
-        return {
-          role,
-          content: [{ type: "text", text: texts[index] ?? "" }],
-          api: model.api,
-          provider: model.provider,
-          model: model.id,
-          usage: usage
-            ? {
-                ...zeroUsage(),
-                input: usage[0] - usage[2] - usage[3],
-                output: usage[1],
-                cacheRead: usage[2],
-                cacheWrite: usage[3],
-                cost: { ...zeroUsage().cost, total: usage[4] },
-              }
-            : zeroUsage(),
-          stopReason: "stop",
-          timestamp: 0,
-        };
+        return [
+          {
+            role,
+            content: [{ type: "text", text: python }],
+            api: model.api,
+            provider: model.provider,
+            model: model.id,
+            usage: usage
+              ? {
+                  ...zeroUsage(),
+                  input: usage[0] - usage[2] - usage[3],
+                  output: usage[1],
+                  cacheRead: usage[2],
+                  cacheWrite: usage[3],
+                  cost: { ...zeroUsage().cost, total: usage[4] },
+                }
+              : zeroUsage(),
+            stopReason: "stop",
+            timestamp: 0,
+          },
+        ];
       });
       const stream = this.models.streamSimple(
         model,
@@ -535,7 +480,7 @@ export class World extends EventEmitter {
       return [
         "assistant",
         // A model speaks python alone: a fence or prose around the code stays in the word, for the gate to refuse.
-        [text],
+        text,
         [
           usage.input + usage.cacheRead + usage.cacheWrite,
           usage.output,
@@ -553,9 +498,6 @@ export class World extends EventEmitter {
   }
 
   private async prompt(id: string, shape: string, message: string): Promise<unknown> {
-    this.prompted.add(id);
-    this.save();
-    await this.resumeGate;
     if (this.stopped) throw new Error("The World was disposed.");
     if (this.life?.outcome(id).done) throw new Error("The prompt is no longer pending.");
     if (this.options.operator)
@@ -598,9 +540,9 @@ export class World extends EventEmitter {
           : !plain || typeof plain !== "object" || Array.isArray(plain)
       )
         throw new Error(`Enter a JSON ${prompt.shape}.`);
-      if (tagged(plain)) throw new Error("A map in an answer cannot hold the key is.");
-      // The native reader keeps what JSON.parse loses: it refuses an unsafe integer, and 2.0 stays a float.
-      value = decodeRecord(input);
+      // The native reader keeps what JSON.parse loses: it refuses an unsafe integer, and 2.0 stays a float. A map
+      // that holds the key is crosses as its pairs.
+      value = marked(plain, decodeRecord(input));
     }
     this.prompts.delete(id);
     prompt.resolve(value);
@@ -616,43 +558,20 @@ export class World extends EventEmitter {
       actors: this.actors,
       deadlines: [...this.deadlines],
       streams: [...this.streams],
-      spawned: [...this.spawned],
-      prompted: [...this.prompted],
     };
     writeFileSync(`${path}.tmp`, JSON.stringify(saved), { mode: 0o600 });
     renameSync(`${path}.tmp`, path);
   }
 
-  /** Let the held work go. A command an earlier World spawned ends with a refusal, and is never run again. */
+  /** Start the pending work: a wake of each chain that holds some, which the engine answers by starting each
+   * command, wait and prompt to the operator of it again, and by asking for each pending rung. */
   async resume(): Promise<void> {
     if (this.options.readOnly) throw new Error("Record inspection cannot resume work.");
     const life = this.life;
-    if (!life || !this.holding) return;
-    this.holding = false;
-    this.release?.();
-    for (const [id, kind] of this.held) {
-      if (life.outcome(id).done) continue;
-      if (kind === "bash" && !this.deferred.has(id)) life.close({ is: "Refused", args: [INTERRUPTED] }, id);
-      else if (kind === "wait" || this.prompted.has(id)) {
-        // The engine starts a wait or a prompt to the operator only when the record holds nothing of it, so the
-        // one that the record holds the World starts again here, and every other one has its start already.
-        const [, kept] = life.call<[unknown, unknown[]]>("ask", ["holds", "", id], {});
-        if (kept.length) this.adapter.start(life.get(id));
-      }
-    }
-    for (const command of this.deferred.values()) {
-      try {
-        this.run(command);
-      } catch (error) {
-        life.close(
-          { is: "Refused", args: [error instanceof Error ? error.message : String(error)] },
-          command.id,
-        );
-      }
-    }
-    this.deferred.clear();
-    this.held.clear();
-    this.save();
+    if (!life) return;
+    const chains = new Set([...this.pending.keys()].map((id) => this.activity.acts.get(id)?.on));
+    this.pending.clear();
+    for (const chain of chains) if (chain) life.wake(chain);
     this.emit("change");
   }
 
@@ -667,9 +586,6 @@ export class World extends EventEmitter {
   }
 
   private run(command: Command): void {
-    this.spawned.add(command.id);
-    // The note stands on the disk before the process does, so no later life runs the command again.
-    this.save();
     const child = spawn(shell, ["-c", command.merged ? `exec 2>&1\n${command.command}` : command.command], {
       cwd: resolve(this.directory, command.here),
       stdio: "pipe",
@@ -733,7 +649,6 @@ export class World extends EventEmitter {
     } finally {
       this.adapter.stopped = true;
       this.life?.dispose();
-      this.release?.();
       this.controller.abort();
       for (const request of this.prompts.values()) request.reject(new Error("The World was disposed."));
       this.prompts.clear();
@@ -759,12 +674,15 @@ export class World extends EventEmitter {
 }
 
 /** Read pending work through the real replay path, without taking a lock or writing the record. */
-export async function inspectRecord(record: string, models?: Models): Promise<{ held: [string, string][] }> {
+export async function inspectRecord(
+  record: string,
+  models?: Models,
+): Promise<{ pending: [string, string][] }> {
   const world = new World({ record, models, readOnly: true });
   try {
     world.open();
     await Promise.resolve();
-    return { held: [...world.held] };
+    return { pending: [...world.pending] };
   } finally {
     await world.dispose();
   }

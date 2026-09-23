@@ -16,6 +16,7 @@ import { fileReferences, projectFiles } from "../src/files.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
 import { idle } from "./idle.ts";
+import { transcriptOf } from "./transcript.ts";
 
 afterAll(removeDemoDirectories);
 
@@ -32,7 +33,7 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
     let card = app.scroll.getChildren().find((card) => card.id === rung);
     let heading = card?.getChildren()[0];
     if (!heading) throw new Error("No rung header.");
-    expect(screen.captureCharFrame()).toContain(`rung · ${rung.split("://")[1]} · running`);
+    expect(screen.captureCharFrame()).toContain(`rung · ${rung} · running`);
     expect(card?.getChildren().length).toBeGreaterThan(1);
     await screen.mockMouse.click(heading.x + 1, heading.y);
     app.render();
@@ -50,7 +51,7 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
     await session.refresh();
     app.render();
     await screen.flush();
-    expect(screen.captureCharFrame()).toContain(`rung · ${rung.split("://")[1]} · done`);
+    expect(screen.captureCharFrame()).toContain(`rung · ${rung} · done`);
     expect(
       app.scroll
         .getChildren()
@@ -136,12 +137,12 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     const source = session.selected;
     await session.undo();
     expect(session.selected).not.toBe(source);
-    expect((await session.life.rendered(session.selected)).join("\n")).not.toContain(
+    expect((await transcriptOf(session.life, session.selected)).join("\n")).not.toContain(
       "Explain @README.md after this answer.",
     );
     await session.submit("/redo");
     expect(session.selected).toBe(source);
-    expect((await session.life.rendered(source)).join("\n")).toContain(
+    expect((await transcriptOf(session.life, source)).join("\n")).toContain(
       "Explain @README.md after this answer.",
     );
     await session.submit("/pause");
@@ -376,15 +377,15 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     await session.dispose();
     const lines = (await readFile(record, "utf8")).trimEnd().split("\n");
     const begin = lines.findIndex(
-      (line) => JSON.parse(line)[1][0] === "queue" && JSON.parse(line)[1][3] === "begin",
+      (line) => JSON.parse(line)[0][0] === "queue" && JSON.parse(line)[0][3] === "begin",
     );
-    expect(JSON.parse(lines[begin + 1] ?? "null")[1][0]).toBe("prompt");
+    expect(JSON.parse(lines[begin + 1] ?? "null")[0][0]).toBe("prompt");
     const state = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
     state.queued = [entry];
     await writeFile(`${record}.ui.json`, JSON.stringify(state));
     await writeFile(
       record,
-      `${lines.filter((line) => !(JSON.parse(line)[1][0] === "queue" && JSON.parse(line)[1][3] === "sent")).join("\n")}\n`,
+      `${lines.filter((line) => !(JSON.parse(line)[0][0] === "queue" && JSON.parse(line)[0][3] === "sent")).join("\n")}\n`,
     );
     let opened = await openEngine({ record, demo: true });
     session = new Session(opened.life, opened.world, true);

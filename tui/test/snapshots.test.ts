@@ -68,7 +68,7 @@ test("fact-derived act state matches native outcomes, controls, and rung results
     cwd,
     models: host.models,
     model: defaultModel,
-    answer: async () => ["assistant", ['close("answered")'], null, null],
+    answer: async () => ["assistant", 'close("answered")', null, null],
   });
   try {
     const life = world.open();
@@ -88,7 +88,7 @@ test("fact-derived act state matches native outcomes, controls, and rung results
     await Promise.resolve();
     let view = snapshots.take(life.root);
     expect(Object.values(view.program)).toContain("answer = 17");
-    expect(view.rendered.join("\n")).toContain("answer = 17");
+    expect(view.turns.map(([, python]) => python).join("\n")).toContain("answer = 17");
     // A cd the operator asks is of the moment, and the World keeps no answer of it, so the cd is a rung, as /cd is.
     await life.rung('cd("another-directory")');
     await Promise.resolve();
@@ -117,7 +117,7 @@ test("fact-derived act state matches native outcomes, controls, and rung results
     expect(view.acts.find((act) => act.id === refused.id)?.run?.reason).toContain("line 1");
     expect(
       view.acts
-        .filter((act) => act.kind === "rung" && act.by.startsWith("prompt://"))
+        .filter((act) => act.kind === "rung" && /^prompt\d+$/.test(act.by))
         .every((act) => act.run?.status === "done"),
     ).toBe(true);
   } finally {
@@ -137,7 +137,7 @@ test("an act of a kind an extension defines joins the act table, and what it tel
     await life.rung(
       [
         "def noted(name):",
-        '  yield ("tell", name, [("note", [("id", name)], "hello")])',
+        '  yield ("tell", name, [f"#{name} said", "# hello"])',
         '  yield ("done", name, "noted")',
         'note = act("note", "", noted)',
       ].join("\n"),
@@ -146,15 +146,15 @@ test("an act of a kind an extension defines joins the act table, and what it tel
     const view = snapshots.take(life.root);
     const note = view.acts.find((act) => act.kind === "note");
     expect(note).toMatchObject({ on: life.root, done: true, value: "noted" });
-    expect(view.rendered.join("\n")).toContain("hello");
-    expect(view.rendered).toEqual(life.rendered(life.root));
+    expect(view.turns.map(([, python]) => python).join("\n")).toContain("# hello");
+    expect(view.turns).toEqual(life.turns(life.root));
   } finally {
     await world.dispose();
     await rm(cwd, { recursive: true, force: true });
   }
 }, 30000);
 
-test("a take after a change of the chain asks its turns and their text by one question", async () => {
+test("a take after a change of the chain asks its turns by one question", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-rendering-"));
   const world = new World({ cwd });
   try {
@@ -176,8 +176,8 @@ test("a take after a change of the chain asks its turns and their text by one qu
     await life.result(life.rung("changed = 1").id);
     calls.length = 0;
     const snapshot = snapshots.take(life.root);
-    expect(calls.filter((name) => ["turns", "rendered", "rendering"].includes(name))).toEqual(["rendering"]);
-    expect(snapshot.rendered.join("\n")).toContain("changed = 1");
+    expect(calls.filter((name) => name === "turns")).toEqual(["turns"]);
+    expect(snapshot.turns.map(([, python]) => python).join("\n")).toContain("changed = 1");
     expect(snapshot.turns).toEqual(life.turns(life.root));
   } finally {
     await world.dispose();

@@ -36,7 +36,10 @@ export declare class Life {
   forget(id: number): void
   prompt<T = unknown>(shape: string, message: string, options?: PromptOptions | undefined | null): Act & PromiseLike<T>
   rung(word: string, options?: RungOptions | undefined | null): Act & PromiseLike<unknown>
-  /** Read one name from the chain without calling it, with its Python type and representation. */
+  /**
+   * Read one name from the chain without calling it, with its Python type and representation. The value crosses
+   * as every value of the life does, through the stand-in, so a map that holds the key `is` crosses as its pairs.
+   */
   inspect(name: string, chain?: string | undefined | null): Inspection
   chain(label: string, source?: string | null, filter?: unknown, on?: string | null): Act & PromiseLike<never>
   grant(options: GrantOptions): Act & PromiseLike<null>
@@ -46,11 +49,8 @@ export declare class Life {
   write<T = TextValue>(text: TextValue, chain?: string | undefined | null): T
   peek<T = unknown>(id: string, chain?: string | undefined | null): T | null
   get(id: string): [string, string, string, string, ...unknown[]]
-  turns(chain?: string | undefined | null): Array<['user' | 'assistant', Array<string | [string, Array<[string, unknown]>, unknown]>, [number, number, number, number, number] | null, unknown]>
-  /** Exact model text, rendered before Python values cross to JavaScript. */
-  rendered(chain?: string | undefined | null): Array<string>
-  /** The turns of a chain from one question, and each turn as the text a model reads. */
-  rendering(chain?: string | undefined | null): Rendering
+  /** The turns of a chain, each the python a model reads, which the engine wrote. */
+  turns(chain?: string | undefined | null): Array<['user' | 'assistant', string, [number, number, number, number, number] | null, unknown]>
   scope(id: string): string
   cwd(chain?: string | undefined | null): string
   cd(path: string, chain?: string | undefined | null): string
@@ -135,15 +135,9 @@ export interface PromptOptions {
   on?: string
 }
 
-export interface Rendering {
-  turns: Array<['user' | 'assistant', Array<string | [string, Array<[string, unknown]>, unknown]>, [number, number, number, number, number] | null, unknown]>
-  rendered: Array<string>
-}
-
 export interface RungOptions {
   retells?: string
   actor?: string
-  returns?: string
   on?: string
 }
 

@@ -16,11 +16,11 @@ export function queueEvent(fact: Fact): { step: string; key: string; value: unkn
 export function queueDispatches(entries: readonly Entry[]): Map<string, string> {
   const sent = new Map<string, string>();
   for (const [index, entry] of entries.entries()) {
-    const fact = entry[1];
+    const [fact] = entry;
     const event = queueEvent(fact);
     if (event?.step === "sent" && typeof event.value === "string") sent.set(event.key, event.value);
     if (event?.step === "begin") {
-      const next = entries[index + 1]?.[1];
+      const next = entries[index + 1]?.[0];
       if (
         next?.[0] === "prompt" &&
         next[2] === "operator" &&

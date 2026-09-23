@@ -215,7 +215,7 @@ export class Workspaces extends EventEmitter {
             const state = states[entry.path];
             if (!state || entry.session || this.opening.has(entry.path)) continue;
             entry.error = state.error;
-            entry.status = state.error ? "error" : state.held ? "paused" : "saved";
+            entry.status = state.error ? "error" : state.pending ? "paused" : "saved";
           }
         this.emit("change");
       },
