@@ -670,8 +670,8 @@ The roster, the directory and the actor that a model reads are in the transcript
 A standing holds no source: the engine is one file the model imports, and a record made by another engine is a drift.
 """
 type Entry = tuple[str, Fact] | tuple[str, Question, object]
-"""One entry of the record: the act made last before its fact, and the fact; for a query of a run, the query and what it was answered beside, since a query is answered at once and its answer travels with it.
-An entry says which act was made last before it, and that is what puts the entry back in its place in a later life.
+"""One entry of the record: the act of the outside made last before its fact, and the fact; for a query of a run, the query and what it was answered beside, since a query is answered at once and its answer travels with it.
+An entry says which act of the outside was made last before it, and that, with the order of the record, is what puts the entry back in its place in a later life.
 The World keeps each entry as the journal says it, plain or not.
 The record is a sequence of entries about acts.
 """
@@ -941,7 +941,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   The record that boot is given enters nothing in the record, since the record is what boot is given.
   An act takes its name when the act opens, and the name says what made the act.
   The engine derives the transcripts, the turns, the globals and the working directories from the record.
-  A fact the journal says again keeps who said it first, and a fact the record answers by is the record's own.
+  A fact the journal says again is the record's own, as is a fact the record answers by.
   What the module holds is not in the record.
   The root is the first act of the record.
   A later life on a kept record makes the root again and enters no second root.
@@ -963,14 +963,17 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   The journal: it hears everything, and keeps what the World said and what the operator said that is no query, of the acts and of the queries of a run it holds and of nothing else, since it keeps nothing that a later life works out again by asking, each entry of it after the words of the act it is about.
   A query the operator asks is of the moment and enters no record, neither the query nor what it was answered, since nobody asks it again; a change the operator wants a later life to hold it makes a rung of, which is kept.
   What it keeps it says, so that the World holds the record and the journal alone says what belongs in it; a World that is durable keeps what it is told, one that is not keeps nothing, and either way what the World holds is what the life after it is given.
-  Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them: a query nobody asks again it steps over and holds back nothing with; an act of the operator it says at once, as the operator, once the chain it is on has been made again, which is how the acts of the operator start the life; any other fact it says when the act it is about has been made again and the act that was made last before it is there too, so that its controls land where they landed, but for a question, which its own word says again, and a done, which is the World's and which the record answers by.
-  The act made last before an entry is the last act the journal heard when it kept the entry, which is the act made last when the fact was said, since the journal hears every fact in the order it was said.
-  One said under a name it had keeps it, and whoever names acts under the lineage of that name counts on from it, so that no later act takes a name that is taken.
+  Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard: a query nobody asks again it steps over; an act of the operator it says as the operator, once the chain it is on has been made again; a question of any other maker it says not, since the word of that maker says it again; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed.
+  An entry waits for the act of the outside made last before it, and the entries after it wait with it, since the outside makes its acts again when it likes.
+  An entry whose act this life has not made again when every fact said before it has been heard, which for an act of the operator is the chain it is on, the journal steps over, since this life will not make that act at that place, and the entries after it go on.
+  The act made last before an entry is the last act of the outside that the journal heard when it kept the entry, which is an act that neither the operator nor an act made, since the life makes every other act again from the entries before it.
+  An act of the operator said again keeps the name the record holds, and the operator counts on from the highest number the record holds of it, so that no question of this life takes a name that is taken.
   A boot is a life; a second boot is a second life, and the first is gone.
   The names operator, record and journal are the life's own ears, and boot refuses a generator of the outside under one of them.
   A life settles an await of its acts from outside a run in the loop it is opened in, so boot outside a running loop raises before it makes anything.
   An act of the operator is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, and a show or a filter it was given is not said again, since the record holds none.
-  The record answers a question said again from what it holds of it, a query from the answer beside it and an act from the done that names it.
+  A later life says an act of the operator again only through a verb in the globals of its chain, and an act whose kind no verb binds is a drift.
+  The record answers a query said again from the answer beside it, and the journal says the done of an act said again at the place where the record holds it.
   """
 
 actor: str

@@ -54,9 +54,11 @@ async def test_one_that_raises_while_it_hears_is_broken_the_same_way() -> None:
   engine.drive(breaks(), "broken")
   with pytest.raises(ValueError, match="boom"):
     engine.bash("echo hi", on=root)
+  after: list[tuple] = []
+  engine.drive(keeping(after), "broken")
   engine.bash("echo again", on=root)
   assert len(said(log, "bash")) == 2
-  assert said(heard, "bash") == said(log, "bash")
+  assert said(heard, "bash") == said(log, "bash") and said(after, "bash") == said(log, "bash")[1:]
   assert [e[1] for e in sand.record if e[1][0] == "bash"] == said(log, "bash")
 
 

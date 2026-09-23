@@ -6,7 +6,7 @@ from furb.engine import Text
 
 
 async def test_one_entry_of_the_record_the_act_made_last_before_its_fact_and_the_fact() -> None:
-  """One entry of the record: the act made last before its fact, and the fact; for a query of a run, the query and what it was answered beside, since a query is answered at once and its answer travels with it."""
+  """One entry of the record: the act of the outside made last before its fact, and the fact; for a query of a run, the query and what it was answered beside, since a query is answered at once and its answer travels with it."""
   sand = sown()
   log, _ = await lived(sand)
   reads = [e for e in sand.record if e[1][0] == "read"]
@@ -16,14 +16,14 @@ async def test_one_entry_of_the_record_the_act_made_last_before_its_fact_and_the
   assert all(e[0] == "" or e[0] in made for e in sand.record)
 
 
-async def test_an_entry_says_which_act_was_made_last_before_it() -> None:
-  """An entry says which act was made last before it, and that is what puts the entry back in its place in a later life."""
+async def test_an_entry_says_which_act_of_the_outside_was_made_last_before_it() -> None:
+  """An entry says which act of the outside was made last before it, and that, with the order of the record, is what puts the entry back in its place in a later life."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
-  assert [e[0] for e in sand.record][:2] == ["", root]
+  assert [e[0] for e in sand.record][:2] == ["", ""]
   again, over = await relived(Dead(stands=STANDS), plain(sand.record))
   assert over == root
   assert [one[1] for one in said(again, "prompt")] == [said(log, "prompt")[0][1]]

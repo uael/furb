@@ -92,8 +92,8 @@ Each name has one meaning, which the contract's sentences use as given here.
 - ledger: what the grant holds: the dollars of the answers since it was made and the share the last one filled.
 - journal: the ear of the life that hears everything and says a keep for each entry of the record.
 - record: the entries the journal keeps, in the order they were said.
-- entry: one line of the record: the act made last before its fact, and the fact; for a query of a run, its answer
-  beside.
+- entry: one line of the record: the act of the outside made last before its fact, and the fact; for a query of a
+  run, its answer beside.
 - plain: the form of a value on the wire, which the World may keep an entry as: nothing, a boolean, a number, a
   string, a list of plain, or a table from a string to plain.
 - drift: an act that, made again, does not agree with the record.
