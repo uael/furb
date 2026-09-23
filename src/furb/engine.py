@@ -194,18 +194,19 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
     if isinstance(shape, type)
     else re.sub(r"[\w.:/]*\.", "", repr(shape))
   )
+  who = to or modules.get(on or scope(site.get()), {}).get("actor")
 
   def ear(id):
     asking = None
     told("opened", id, ("shape", named), ("message", message), ("to", to))
     while True:
-      if to != OPERATOR and not asking:
+      if who != OPERATOR and not asking:
         asking = rung(actor=to, returns=named)
       match (yield):
         case ("done", about, *_) if about == asking:
           asking = None
 
-  return act("prompt", on, pausing(ending(started(ear, to))), named, message, to)
+  return act("prompt", on, pausing(ending(started(ear, who))), named, message, to)
 
 
 def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act:

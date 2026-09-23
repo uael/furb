@@ -193,6 +193,13 @@ async def test_the_actor_left_unsaid_is_the_default_actor_of_the_chain() -> None
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
   assert [one[4] for one in said(log, "ask")] == ["m/low"] == [engine.modules[root]["actor"]]
+  alone = Sand(stands=(((OPERATOR, (), 200000),), "/w", OPERATOR))
+  log, root = life(alone)
+  shown = engine.prompt(str, "what now?", on=root)
+  await settle()
+  assert said(log, "ask") == [] and [a[1] for a in said(log, "start")] == [shown]
+  engine.close("go", shown)
+  assert await shown == "go"
 
 
 async def test_a_prompt_to_a_model_runs_in_steps_until_the_prompt_completes() -> None:
