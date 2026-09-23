@@ -292,22 +292,6 @@ impl Life {
     to_python(py, &self.made, got.as_ref())
   }
 
-  /// One word of the operator, run in the names of the engine with these values bound, and what it gave.
-  fn word<'py>(
-    &mut self,
-    py: Python<'py>,
-    word: &str,
-    inputs: Bound<'py, PyDict>,
-  ) -> PyResult<Bound<'py, PyAny>> {
-    let mut bound = Vec::new();
-    for (key, value) in inputs.iter() {
-      bound.push((key.extract::<String>()?, of_python(&self.made, &self.ears, &value)?));
-    }
-    let bound = bound.iter().map(|(key, value)| (key.as_str(), value.clone())).collect();
-    let got = self.held.word(word, bound).map_err(|fault| raised(py, &self.made, &fault))?;
-    to_python(py, &self.made, got.as_ref())
-  }
-
   /// One callable the engine made, called back by its handle with these words, and what it gave.
   fn made<'py>(
     &mut self,

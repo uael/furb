@@ -279,11 +279,6 @@ def findings(log: Sequence[tuple]) -> list[list[str]]:
   return [a[3] for a in said(log, "done") if a[1].startswith("gate@")]
 
 
-def refusals(log: Sequence[tuple]) -> list[str]:
-  """The findings that refused a word, each as the lines the refused paragraph tells as comments."""
-  return ["\n".join(found) for found in findings(log) if found]
-
-
 class Py:
   """A Kernel that is python, outside the engine like the World.
 
