@@ -69,6 +69,9 @@ export interface FollowUp {
   actor: string;
 }
 
+/** Where a view stands: the end of a view that follows its end while it stands there, and an offset otherwise. */
+export type Scroll = number | "end";
+
 /** The fields of a session that `<record>.ui.json` keeps, so that a later open shows the session as it was left. */
 const kept = [
   "sessionName",
@@ -137,7 +140,8 @@ export class Session extends EventEmitter {
   mode: "prompt" | "python" = "prompt";
   shape = "str";
   drafts: Record<string, string> = {};
-  scrolls: Record<string, number> = {};
+  /** Where each view was left, by its key. */
+  scrolls: Record<string, Scroll> = {};
   panes = { inspector: 28 };
   folds: Record<string, boolean> = {};
   roster: [string, string[], number][] = [];

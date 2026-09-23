@@ -223,3 +223,81 @@ test("a card that the view goes to, or that Details expands, is in view once the
     await session.dispose();
   }
 });
+
+test("the palette lists as many choices as its rows hold, with the selected one among them, inside its border", async () => {
+  const session = await demoSession();
+  const screen = await createTestRenderer({ width: 120, height: 30 });
+  const app = new App(screen.renderer, session, { quit() {} });
+  const frame = async () => {
+    app.render();
+    await screen.flush();
+    return screen.captureCharFrame().split("\n");
+  };
+  try {
+    app.palette();
+    let lines = await frame();
+    const bottom = lines.findIndex((line) => line.includes("╰"));
+    expect(lines[bottom]?.trim()).toMatch(/^╰─+╯$/);
+    const count = lines.filter((line) => line.includes("│   ") || line.includes("│ ▸ ")).length;
+    for (let i = 0; i < count + 4; i++) screen.mockInput.pressArrow("down");
+    lines = await frame();
+    expect(lines.find((line) => line.includes("╰"))?.trim()).toMatch(/^╰─+╯$/);
+    expect(lines.some((line) => line.includes("│ ▸ "))).toBe(true);
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await session.dispose();
+  }
+});
+
+test("a text that truncates keeps one line and shows where it was cut", async () => {
+  const session = await demoSession();
+  const screen = await createTestRenderer({ width: 120, height: 30 });
+  const app = new App(screen.renderer, session, { quit() {} });
+  try {
+    session.notice = `A notice longer than its line ${"and longer ".repeat(20)}to its end`;
+    app.render();
+    await screen.flush();
+    const lines = screen.captureCharFrame().split("\n");
+    const status = lines.findLast((line) => line.includes("A notice longer"));
+    expect(status).toContain("...");
+    expect(status).toContain("demo.jsonl");
+    expect(lines.filter((line) => line.includes("and longer")).length).toBe(1);
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await session.dispose();
+  }
+});
+
+test("the conversation left at its end opens at its end, and one left above its end opens where it was", async () => {
+  const session = await demoSession(true);
+  const screen = await createTestRenderer({ width: 120, height: 30 });
+  const app = new App(screen.renderer, session, { quit() {} });
+  const show = async (view: View) => {
+    session.show(view);
+    await session.refresh();
+    app.render();
+    await screen.flush();
+    await screen.flush();
+  };
+  const end = () => Math.max(0, app.scroll.scrollHeight - app.scroll.viewport.height);
+  try {
+    await show("conversation");
+    expect(app.scroll.scrollTop).toBe(end());
+    await show("facts");
+    for (let i = 0; i < 12; i++) await session.command(`/run grown${i} = ${i}`);
+    await until(session, () => Object.values(session.program).includes("grown11 = 11"));
+    await show("conversation");
+    expect(end()).toBeGreaterThan(0);
+    expect(app.scroll.scrollTop).toBe(end());
+    app.scroll.scrollTo(3);
+    await show("facts");
+    await show("conversation");
+    expect(app.scroll.scrollTop).toBe(3);
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await session.dispose();
+  }
+});
