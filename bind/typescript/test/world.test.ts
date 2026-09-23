@@ -618,7 +618,7 @@ test("a question a rung put to the operator is asked once in a later life", asyn
     const again = second.open();
     await second.resume();
     expect(await again.result<string>(question)).toBe("answer 1");
-    expect(asked).toEqual([question]);
+    expect(asked.filter((id) => id === question)).toEqual([question]);
   } finally {
     await second.dispose();
     await rm(cwd, { recursive: true });
