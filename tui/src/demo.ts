@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { type Turn, World } from "@furb/engine";
+import { type Turn, World, type WorldOptions } from "@furb/engine";
 import { openEngine } from "./bridge.ts";
 import type { Preferences } from "./preferences.ts";
 import { Session } from "./session.ts";
@@ -17,16 +17,22 @@ export async function seedDemoFiles(directory: string): Promise<void> {
   );
 }
 
-export async function createDemoWorld(record?: string, cwd?: string): Promise<World> {
+export async function createDemoWorld(options: WorldOptions): Promise<World> {
+  const { record, cwd } = options;
   const directory =
     cwd ?? (record ? dirname(record) : join(await mkdtemp(join(tmpdir(), "furb-demo-")), "fieldnotes"));
   if (!record && !cwd) await seedDemoFiles(directory);
   const world = new World({
+    ...options,
     cwd: directory,
     record: record ?? join(directory, "demo.jsonl"),
     answer: async (_actor, _chain, turns, signal): Promise<Turn> => {
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, JSON.stringify(turns).includes("show live progress") ? 1800 : 180);
+        // Only the turn that asks for live progress is slow, and not every later turn of its chain.
+        const timer = setTimeout(
+          resolve,
+          JSON.stringify(turns.at(-1)).includes("show live progress") ? 1800 : 180,
+        );
         signal.addEventListener(
           "abort",
           () => {

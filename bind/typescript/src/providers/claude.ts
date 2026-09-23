@@ -18,8 +18,8 @@ import {
   type Provider,
   type SimpleStreamOptions,
   type TranscriptContext,
-  type Usage,
 } from "@earendil-works/pi-ai";
+import { zeroUsage } from "../types.js";
 
 export const CLAUDE = "claude-cli";
 
@@ -54,14 +54,6 @@ export function claudeBinary(): string {
     }) ?? "claude"
   );
 }
-export const zeroUsage = (): Usage => ({
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  totalTokens: 0,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-});
 
 export function cliModel(id: string): Model<Api> {
   return {
@@ -169,6 +161,7 @@ class Session {
   private cost = 0;
   private resumed = false;
   private streamingBase: number | null = null;
+  private streamingSettled = 0;
   private again = false;
   private heartbeat?: () => void;
   constructor(
@@ -215,6 +208,7 @@ class Session {
       timestamp: Date.now(),
     };
     this.streamingBase = null;
+    this.streamingSettled = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let watchdog: ReturnType<typeof setTimeout> | undefined;
     let completed = false;
@@ -334,7 +328,10 @@ class Session {
     if (["stream_event", "assistant", "result"].includes(event.type ?? "")) this.heartbeat?.();
     if (event.type === "stream_event" && event.event) {
       const update = event.event;
-      if (update.type === "message_start") this.streamingBase = flight.message.content.length;
+      if (update.type === "message_start") {
+        this.streamingBase = flight.message.content.length;
+        this.streamingSettled = 0;
+      }
       const contentIndex = (this.streamingBase ?? 0) + (update.index ?? 0);
       if (update.type === "content_block_start") {
         const block = update.content_block;
@@ -377,20 +374,20 @@ class Session {
       }
     } else if (event.type === "assistant") {
       if (this.streamingBase !== null) {
-        const blocks: AssistantMessage["content"] = (event.message?.content ?? []).flatMap(
-          (block): AssistantMessage["content"] =>
-            block.type === "text"
-              ? [{ type: "text", text: block.text ?? "" }]
-              : block.type === "thinking"
-                ? [{ type: "thinking", thinking: block.thinking ?? "", thinkingSignature: block.signature }]
-                : [],
-        );
-        flight.message.content.splice(
-          this.streamingBase,
-          flight.message.content.length - this.streamingBase,
-          ...blocks,
-        );
-        this.streamingBase = null;
+        // claude says each block of a streamed message again once it is whole, in an assistant event of its own and in
+        // the order it streamed them: the whole block settles over the one streamed at its place, signature and all,
+        // and is never appended a second time.
+        for (const block of event.message?.content ?? []) {
+          const contentIndex = this.streamingBase + this.streamingSettled++;
+          if (block.type === "text")
+            flight.message.content[contentIndex] = { type: "text", text: block.text ?? "" };
+          else if (block.type === "thinking")
+            flight.message.content[contentIndex] = {
+              type: "thinking",
+              thinking: block.thinking ?? "",
+              thinkingSignature: block.signature,
+            };
+        }
         return;
       }
       for (const block of event.message?.content ?? []) {
@@ -452,6 +449,8 @@ class Session {
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: Math.max(0, paid - this.cost) },
       };
       this.cost = paid;
+      // A streamed block of a kind this provider does not read holds its place in the stream and nothing in the reply.
+      flight.message.content = flight.message.content.filter(Boolean);
       if (!flight.message.content.length && event.result)
         flight.message.content.push({ type: "text", text: event.result });
       flight.resolve();

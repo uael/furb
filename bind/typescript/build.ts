@@ -20,7 +20,8 @@ const command = [
   "index.cjs",
   "--dts",
   "index.d.cts",
-  ...(process.argv.includes("--release") ? ["--release"] : []),
+  // The engine runs in the interpreter, which a debug build runs many times slower: release unless asked.
+  ...(process.argv.includes("--debug") ? [] : ["--release"]),
 ];
 const child = Bun.spawn(command, { cwd: root, stdout: "inherit", stderr: "inherit" });
 if (await child.exited) process.exit(1);

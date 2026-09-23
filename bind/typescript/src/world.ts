@@ -20,9 +20,16 @@ import { Activity, type RunState } from "./activity.js";
 import { type FileChange, FileChanges } from "./changes.js";
 import { WorldAdapter, type WorldHandler, type WorldRequest } from "./ears.js";
 import { attachImage, type ImageAttachment, ImageCache, turnImages } from "./images.js";
-import { type ClaudeOptions, claudeProvider, zeroUsage } from "./providers/claude.js";
 import { RecordFile } from "./record.js";
-import { actorParts, type Entry, type Fact, type OperatorPrompt, shapes, type Turn } from "./types.js";
+import {
+  actorParts,
+  type Entry,
+  type Fact,
+  type OperatorPrompt,
+  shapes,
+  type Turn,
+  zeroUsage,
+} from "./types.js";
 
 export { display, isTag, safeText } from "./types.js";
 
@@ -35,7 +42,6 @@ export interface WorldOptions {
   effort?: ModelThinkingLevel;
   models?: Models;
   roster?: string[];
-  claude?: ClaudeOptions;
   /** Replace only the model request, for a deterministic test or another host. */
   answer?: (
     actor: string,
@@ -85,7 +91,6 @@ export class World extends EventEmitter {
   private readonly controller = new AbortController();
   private readonly asks = new Map<string, AbortController>();
   private readonly commands = new Map<string, Running>();
-  private readonly cli?: ReturnType<typeof claudeProvider>;
   private readonly options: WorldOptions;
   private delivery: Promise<unknown> = Promise.resolve();
   private stopped = false;
@@ -101,6 +106,8 @@ export class World extends EventEmitter {
   constructor(options: WorldOptions = {}) {
     super();
     let legacyChanges: FileChange[] = [];
+    const asked = options.roster;
+    let kept: string[] = [];
     if (options.record && existsSync(`${resolve(options.record)}.world.json`)) {
       const saved = JSON.parse(readFileSync(`${resolve(options.record)}.world.json`, "utf8")) as {
         options: WorldOptions;
@@ -112,33 +119,26 @@ export class World extends EventEmitter {
         ...saved.options,
         ...Object.fromEntries(Object.entries(options).filter(([, value]) => value !== undefined)),
       };
-      options.roster = [...new Set([...(saved.options.roster ?? []), ...(options.roster ?? [])])];
+      kept = saved.options.roster ?? [];
+      options.roster = asked;
       legacyChanges = saved.changes ?? [];
       for (const [id, deadline] of saved.deadlines ?? []) this.deadlines.set(id, deadline);
       for (const [id, stream] of saved.streams ?? []) this.streams.set(id, stream);
     }
     this.options = options;
     this.directory = resolve(options.cwd ?? process.cwd());
-    this.model = options.model ?? "claude-cli:sonnet";
+    // The host names the models: a World given none offers the operator alone, and a model is "" then.
+    this.model = options.model ?? options.roster?.[0] ?? kept[0] ?? "";
     let records: RecordFile | undefined;
     let changes: FileChanges | undefined;
     try {
-      if (options.models) this.models = options.models;
-      else {
-        this.cli = claudeProvider(options.claude);
-        const models = builtinModels();
-        models.setProvider(this.cli.provider);
-        this.models = models;
-      }
-      this.roster = [
-        ...new Set([
-          this.model,
-          ...(options.roster ??
-            (options.models ? [] : ["claude-cli:sonnet", "claude-cli:opus", "claude-cli:haiku"])),
-        ]),
-      ];
+      this.models = options.models ?? builtinModels();
+      // A saved roster keeps what a session offered, and a model the host offers since then joins it.
+      this.roster = [...new Set([this.model, ...kept, ...(options.roster ?? [])])].filter(Boolean);
       for (const name of this.roster) this.route(name);
-      this.effort = clampThinkingLevel(this.route(this.model), options.effort ?? "low");
+      this.effort = this.model
+        ? clampThinkingLevel(this.route(this.model), options.effort ?? "low")
+        : (options.effort ?? "low");
       this.records = records = new RecordFile(
         options.record ? resolve(options.record) : undefined,
         options.readOnly,
@@ -153,7 +153,6 @@ export class World extends EventEmitter {
     } catch (error) {
       records?.dispose();
       changes?.dispose();
-      this.cli?.dispose();
       throw error;
     }
   }
@@ -161,12 +160,14 @@ export class World extends EventEmitter {
   route(actor: string): Model<Api> {
     for (const name of [actor, actorParts(actor).model]) {
       const separator = name.indexOf(":");
-      const provider = separator < 0 ? "claude-cli" : name.slice(0, separator);
-      const id = separator < 0 ? name : name.slice(separator + 1);
-      const model = this.models.getModel(provider, id);
-      if (model) return model;
+      // A name without its provider is the one model of that id among every provider the World holds.
+      const found =
+        separator < 0
+          ? this.models.getModels().filter((model) => model.id === name)
+          : [this.models.getModel(name.slice(0, separator), name.slice(separator + 1))];
+      if (found.length === 1 && found[0]) return found[0];
     }
-    throw new Error(`No model ${actor}. Use provider:model, for example claude-cli:sonnet.`);
+    throw new Error(`No model ${actor}. Name one as provider:model.`);
   }
   get imageDirectory(): string {
     return this.records.path ? `${this.records.path}.images` : join(this.directory, ".furb/images");
@@ -212,7 +213,6 @@ export class World extends EventEmitter {
       this.life?.dispose();
       this.records.dispose();
       this.changes.dispose();
-      this.cli?.dispose();
       this.controller.abort();
       this.stopped = true;
       throw error;
@@ -237,7 +237,7 @@ export class World extends EventEmitter {
             ["operator", [], 200000],
           ],
           this.directory,
-          `${this.model}/${this.effort}`,
+          this.model ? `${this.model}/${this.effort}` : "operator",
         ];
       case "Clock":
         return Date.now() / 1000;
@@ -640,7 +640,6 @@ export class World extends EventEmitter {
       command.stop();
     }
     this.commands.clear();
-    this.cli?.dispose();
     this.changes.dispose();
     this.records.dispose();
     this.images.clear();
@@ -659,8 +658,8 @@ export class World extends EventEmitter {
 }
 
 /** Read pending work through the real replay path, without taking a lock or writing the record. */
-export async function inspectRecord(record: string): Promise<{ held: [string, string][] }> {
-  const world = new World({ record, readOnly: true });
+export async function inspectRecord(record: string, models?: Models): Promise<{ held: [string, string][] }> {
+  const world = new World({ record, models, readOnly: true });
   try {
     world.open();
     await Promise.resolve();

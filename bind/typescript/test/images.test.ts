@@ -2,8 +2,10 @@ import { expect, test } from "bun:test";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { ImageCache } from "../src/images.ts";
 import { imageContent, World } from "../src/index.ts";
+import { claudeProvider } from "../src/providers/claude.ts";
 
 test("image attachments reach pi-ai and the Claude CLI as image blocks and remain available after replay", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-images-"));
@@ -16,7 +18,11 @@ test("image attachments reach pi-ai and the Claude CLI as image blocks and remai
   const log = join(directory, "cli.jsonl");
   const previous = process.env.FURB_FAKE_LOG;
   process.env.FURB_FAKE_LOG = log;
-  let world = new World({ cwd: directory, record, claude: { bin } });
+  // The Claude CLI is a provider the host adds to the models of pi-ai, as a host of the World does.
+  const cli = claudeProvider({ bin });
+  const models = builtinModels();
+  models.setProvider(cli.provider);
+  let world = new World({ cwd: directory, record, models, roster: ["claude-cli:sonnet"] });
   try {
     const image = world.attachImage(path);
     const life = world.open();
@@ -43,12 +49,13 @@ test("image attachments reach pi-ai and the Claude CLI as image blocks and remai
     await writeFile(asset, original);
     await world.dispose();
     const before = await readFile(log, "utf8");
-    world = new World({ record, claude: { bin } });
+    world = new World({ record, models });
     world.open();
     expect(imageContent(world.imageDirectory, image.uri).data).toBe(data);
     expect(await readFile(log, "utf8")).toBe(before);
   } finally {
     await world.dispose();
+    cli.dispose();
     if (previous === undefined) delete process.env.FURB_FAKE_LOG;
     else process.env.FURB_FAKE_LOG = previous;
     await rm(directory, { recursive: true, force: true });

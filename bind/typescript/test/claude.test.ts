@@ -76,3 +76,35 @@ test("the pi-ai Claude provider forwards normalized system text, reuses a sessio
     await rm(cwd, { recursive: true });
   }
 });
+
+test("a turn claude settles block by block keeps each block once, at the place it streamed", async () => {
+  const path = new URL("fake-claude.ts", import.meta.url).pathname;
+  await chmod(path, 0o755);
+  const cli = claudeProvider({ bin: path, stallMs: 1000 });
+  const models = createModels();
+  models.setProvider(cli.provider);
+  const model = models.getModel("claude-cli", "sonnet");
+  if (!model) throw new Error("Missing test model");
+  try {
+    const one = await models.completeSimple(
+      model,
+      { systemPrompt: "ENGINE ONLY", messages: [{ role: "user", content: "THINK", timestamp: 0 }] },
+      { sessionId: "think" },
+    );
+    expect(one.content).toEqual([
+      { type: "thinking", thinking: "hmm", thinkingSignature: "sig" },
+      { type: "text", text: 'close("reply 1")' },
+    ]);
+    const two = await models.completeSimple(
+      model,
+      { systemPrompt: "ENGINE ONLY", messages: [{ role: "user", content: "REDACT THINK", timestamp: 0 }] },
+      { sessionId: "redact" },
+    );
+    expect(two.content).toEqual([
+      { type: "thinking", thinking: "hmm", thinkingSignature: "sig" },
+      { type: "text", text: 'close("reply 1")' },
+    ]);
+  } finally {
+    cli.dispose();
+  }
+});

@@ -92,6 +92,40 @@ test("the standing takes each model's efforts from its pi-ai metadata", async ()
   }
 });
 
+test("a World holds the models its host gives it: a saved roster gains what the host offers since, and an id alone routes", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-roster-"));
+  const record = join(cwd, "session.jsonl");
+  const cli = claudeProvider();
+  const models = createModels();
+  models.setProvider(cli.provider);
+  const alone = new World({ cwd });
+  try {
+    expect(alone.roster).toEqual([]);
+    const life = alone.open();
+    const [, [, , actor]] = life.call<[unknown, [unknown, string, string]]>("ask", ["stand", life.root], {});
+    expect(actor).toBe("operator");
+  } finally {
+    await alone.dispose();
+  }
+  const first = new World({ cwd, record, models, model: "claude-cli:opus", roster: ["claude-cli:sonnet"] });
+  try {
+    first.open();
+  } finally {
+    await first.dispose();
+  }
+  const second = new World({ record, models, roster: ["claude-cli:fable"] });
+  try {
+    expect(second.model).toBe("claude-cli:opus");
+    expect(second.roster).toEqual(["claude-cli:opus", "claude-cli:sonnet", "claude-cli:fable"]);
+    expect(second.route("haiku").id).toBe("haiku");
+    expect(() => second.route("nothing")).toThrow("Name one as provider:model");
+  } finally {
+    await second.dispose();
+    cli.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("the default World serves files and streams commands without any TUI", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-world-"));
   const session = boot({ cwd });

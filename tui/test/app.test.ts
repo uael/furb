@@ -81,7 +81,7 @@ test("the real native life drives conversation, program, activity, search, and r
   }
 }, 30000);
 
-test("model and effort change independently and a theme preference applies to a new session", async () => {
+test("model and effort change independently, a model is named by its id alone, and a theme preference applies to a new session", async () => {
   const first = await demoSession();
   let second: Session | undefined;
   let recovered: Session | undefined;
@@ -90,6 +90,12 @@ test("model and effort change independently and a theme preference applies to a 
     expect(first.actor).toBe("claude-cli:sonnet/high");
     await first.submit("/model claude-cli:opus");
     expect(first.actor).toBe("claude-cli:opus/high");
+    expect(first.roster.map(([name]) => name)).toContain("claude-cli:fable");
+    await first.submit("/model fable");
+    expect(first.actor).toBe("claude-cli:fable/high");
+    await first.submit("/model opus");
+    expect(first.actor).toBe("claude-cli:opus/high");
+    await expect(first.submit("/model nothing")).rejects.toThrow("Choose one of");
     await first.submit("/effort low");
     expect(first.actor).toBe("claude-cli:opus/low");
     await first.submit("/theme paper");
@@ -330,6 +336,9 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
   expect(session.activity.map((act) => act.id)).toEqual(heldActs);
   app.closeOverlay();
   await session.submit("/wake");
+  // A tag told while an ask is in flight goes to the turn after its answer, so the origin is read once it settles.
+  while (session.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)))
+    await new Promise((resolve) => session.once("change", resolve));
   const original = await session.life.rendered(source);
   let rewound = "";
   let transcript: string[] = [];
@@ -474,5 +483,63 @@ test("editing a prompt program is a durable operator rung", async () => {
     expect((await second.life.inspect("saved_edit")).value).toBe(42);
   } finally {
     await second.dispose();
+  }
+}, 30000);
+
+test("slash commands and project files are suggested above the input as they are typed, and Ctrl+D twice exits", async () => {
+  const session = await demoSession();
+  const screen = await createTestRenderer({ width: 120, height: 40 });
+  let quits = 0;
+  const app = new App(screen.renderer, session, {
+    quit() {
+      quits++;
+    },
+  });
+  const frame = async () => {
+    app.render();
+    await screen.flush();
+    return screen.captureCharFrame();
+  };
+  try {
+    await screen.flush();
+    app.composer.focus();
+    app.composer.setText("draft");
+    screen.mockInput.pressKey("d", { ctrl: true });
+    screen.mockInput.pressKey("d", { ctrl: true });
+    expect(quits).toBe(0);
+    app.composer.setText("");
+    screen.mockInput.pressKey("d", { ctrl: true });
+    expect(quits).toBe(0);
+    expect(await frame()).toContain("Press Ctrl+D again to exit.");
+    screen.mockInput.pressKey("d", { ctrl: true });
+    expect(quits).toBe(1);
+
+    await screen.mockInput.typeText("/mod");
+    expect(app.composer.plainText).toBe("/mod");
+    const commands = await frame();
+    expect(commands).toContain("/model [model]");
+    expect(commands).not.toContain("/exit");
+    expect(commands).not.toContain("Commands");
+    screen.mockInput.pressTab();
+    expect(app.composer.plainText).toBe("/model ");
+    expect(await frame()).not.toContain("/model [model]");
+
+    app.composer.setText("");
+    await screen.mockInput.typeText("Read @READ");
+    expect(await frame()).toContain("@README.md");
+    screen.mockInput.pressEscape();
+    await Bun.sleep(80);
+    expect(await frame()).not.toContain("@README.md");
+    await screen.mockInput.typeText("M");
+    expect(await frame()).toContain("@README.md");
+    screen.mockInput.pressEnter();
+    expect(app.composer.plainText).toBe("Read @README.md ");
+    expect(session.acts.some((act) => act.kind === "prompt" && String(act.words[1]).startsWith("Read"))).toBe(
+      false,
+    );
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await session.dispose();
   }
 }, 30000);

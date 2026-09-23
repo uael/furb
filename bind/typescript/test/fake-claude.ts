@@ -18,18 +18,36 @@ for await (const line of createInterface({ input: process.stdin })) {
   if (text.includes("WAIT")) continue;
   calls++;
   const word = `close(${JSON.stringify(`reply ${calls}`)})`;
-  for (const event of [
-    { type: "message_start" },
-    { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
-    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: word.slice(0, 6) } },
-    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: word.slice(6) } },
-    { type: "content_block_stop", index: 0 },
-    { type: "message_stop" },
-  ])
-    process.stdout.write(`${JSON.stringify({ type: "stream_event", event })}\n`);
-  process.stdout.write(
-    `${JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: word }] } })}\n`,
-  );
+  const think = text.includes("THINK");
+  const say = (event: object) => process.stdout.write(`${JSON.stringify({ type: "stream_event", event })}\n`);
+  const settle = (block: object) =>
+    process.stdout.write(`${JSON.stringify({ type: "assistant", message: { content: [block] } })}\n`);
+  const streamed = (index: number, block: object, deltas: object[]) => {
+    say({ type: "content_block_start", index, content_block: block });
+    for (const delta of deltas) say({ type: "content_block_delta", index, delta });
+    say({ type: "content_block_stop", index });
+  };
+  say({ type: "message_start" });
+  // claude says each block again, as an assistant event of its own, as soon as it is whole: before the next streams.
+  let index = 0;
+  if (text.includes("REDACT")) {
+    const hidden = { type: "redacted_thinking", data: "opaque" };
+    streamed(index++, hidden, []);
+    settle(hidden);
+  }
+  if (think) {
+    streamed(index++, { type: "thinking", thinking: "" }, [
+      { type: "thinking_delta", thinking: "hmm" },
+      { type: "signature_delta", signature: "sig" },
+    ]);
+    settle({ type: "thinking", thinking: "hmm", signature: "sig" });
+  }
+  streamed(index, { type: "text", text: "" }, [
+    { type: "text_delta", text: word.slice(0, 6) },
+    { type: "text_delta", text: word.slice(6) },
+  ]);
+  say({ type: "message_stop" });
+  settle({ type: "text", text: word });
   process.stdout.write(
     `${JSON.stringify({
       type: "result",

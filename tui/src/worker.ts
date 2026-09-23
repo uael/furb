@@ -1,7 +1,8 @@
 import type { Life } from "@furb/engine";
-import { Act, engineSource, World, type WorldOptions } from "@furb/engine";
+import { Act, engineSource, World } from "@furb/engine";
 import type { WorldState } from "./bridge.ts";
 import { createDemoWorld } from "./demo.ts";
+import { type EngineOptions, hostModels } from "./models.ts";
 import { queueDispatches, queueEvent, queueHash } from "./queue.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
@@ -10,6 +11,7 @@ declare const self: Worker & { close(): void };
 let world: World | undefined;
 let life: Life | undefined;
 let snapshots: Snapshots | undefined;
+let host: ReturnType<typeof hostModels> | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let sentFacts = 0;
 let sentChanges = 0;
@@ -40,8 +42,10 @@ self.onmessage = async ({ data }) => {
   try {
     let value: unknown;
     if (data.method === "open") {
-      const options = data.args[0] as WorldOptions & { demo?: boolean };
-      world = options.demo ? await createDemoWorld(options.record, options.cwd) : new World(options);
+      const { demo, claude, ...options } = data.args[0] as EngineOptions;
+      host = hostModels(claude);
+      const given = { ...options, models: host.models, roster: options.roster ?? host.roster };
+      world = demo ? await createDemoWorld(given) : new World(given);
       life = world.open();
       snapshots = new Snapshots(life, world);
       const tail = world.records.entries.at(-1)?.[1];
@@ -94,6 +98,8 @@ self.onmessage = async ({ data }) => {
       world = undefined;
       life = undefined;
       snapshots = undefined;
+      host?.dispose();
+      host = undefined;
       setTimeout(() => {
         self.postMessage({ id: data.id, value, disposed });
         self.close();

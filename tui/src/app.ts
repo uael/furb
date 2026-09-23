@@ -41,6 +41,7 @@ import {
 } from "./theme.ts";
 import { type SessionStatus, statusLabels, type Workspaces } from "./workspaces.ts";
 
+const exitNotice = "Press Ctrl+D again to exit.";
 const views: View[] = ["conversation", "program", "activity", "facts", "transcript", "changes"];
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const short = (id: string) => id.replace(/^[^:]+:\/\//, "");
@@ -65,6 +66,13 @@ interface Choice {
   detail: string;
   run(): void | Promise<void>;
   toggle?: () => void;
+}
+/** One suggestion for the token before the cursor: what Tab puts in its place, and what Enter does with it. */
+interface Suggestion {
+  label: string;
+  detail: string;
+  complete(): void;
+  submit(): void;
 }
 
 export interface AppOptions {
@@ -99,6 +107,13 @@ export class App {
   private readonly promptBox: BoxRenderable;
   private readonly queueBox: BoxRenderable;
   private readonly imageBox: BoxRenderable;
+  /** The suggestions for a `/command` or an `@path` typed in the input, drawn above it while the input keeps focus. */
+  private readonly suggestionBox: BoxRenderable;
+  private suggestions: Suggestion[] = [];
+  private suggestionIndex = 0;
+  /** The token whose suggestions Escape hid, which a change of the token shows again. */
+  private dismissed = "";
+  private files?: { directory: string; paths?: string[]; error?: string };
   private readonly search: InputRenderable;
   private readonly paneKeys = new WeakMap<Renderable, string>();
   private readonly cards = new Map<
@@ -258,6 +273,8 @@ export class App {
       visible: false,
     });
     center.add(this.imageBox);
+    this.suggestionBox = this.box({ id: "suggestions", flexShrink: 0, visible: false });
+    center.add(this.suggestionBox);
     this.composeBox = this.box({
       id: "composer-box",
       flexShrink: 0,
@@ -286,11 +303,11 @@ export class App {
       onContentChange: () => {
         this.schedule();
         void this.highlightEditor();
-        if (!this.overlay && session.mode === "prompt" && /(?:^|\s)@$/.test(this.composer?.plainText ?? ""))
-          void this.filesPicker();
+        this.suggest();
       },
       onCursorChange: () => {
         void this.highlightEditor();
+        this.suggest();
       },
       onSubmit: () => {
         void this.submit();
@@ -355,11 +372,18 @@ export class App {
     this.composer.focus();
     void loadParsers()
       .then(() => {
-        if (!this.closed) {
-          this.lastView = "";
-          this.render();
-          void this.highlightEditor();
-        }
+        if (this.closed) return;
+        // Code drawn before the parsers came is highlighted again where it stands, and no card is made again.
+        const highlight = (node: Renderable) => {
+          if (node instanceof CodeRenderable && node.filetype) {
+            const filetype = node.filetype;
+            node.filetype = undefined;
+            node.filetype = filetype;
+          }
+          for (const child of node.getChildren()) highlight(child);
+        };
+        highlight(this.root);
+        void this.highlightEditor();
       })
       .catch(session.fail);
     if (session.world.held.size) this.resume();
@@ -543,6 +567,7 @@ export class App {
     this.renderContent();
     this.renderInspector();
     this.renderWorkspaces();
+    this.renderSuggestions();
     const diagnostics = JSON.stringify([w.rejectedWord, w.findings]);
     if (diagnostics !== this.diagnosticsKey) {
       this.diagnosticsKey = diagnostics;
@@ -1559,6 +1584,11 @@ export class App {
       await extensions.run(name, words.join(" "));
       return true;
     }
+    if (text === "/exit") {
+      consume();
+      await this.options.quit();
+      return true;
+    }
     if (text === "/editor") {
       consume();
       await this.editDraft();
@@ -1821,16 +1851,7 @@ export class App {
     choices.push(
       ...Object.entries(commands)
         .filter(([name]) => name !== "new")
-        .map(([name, [label, argument, detail]]) => ({
-          label,
-          detail,
-          run: () =>
-            name === "rewind"
-              ? this.rewind()
-              : argument && !argument.startsWith("[")
-                ? this.insert(`/${name} `)
-                : this.action(`/${name}`),
-        })),
+        .map(([name, [label, argument, detail]]) => ({ label, detail, run: this.command(name, argument) })),
     );
     choices.push({
       label: "Inspect a name",
@@ -1855,6 +1876,138 @@ export class App {
     choices.push({ label: "Switch chain", detail: "Go to any conversation", run: () => this.chains() });
     choices.push({ label: "Help", detail: "Keyboard and slash commands", run: () => this.help() });
     this.openPalette("Commands", choices);
+  }
+  /** How a command runs when it is picked from a list: one that needs its argument waits for it in the input. */
+  private command(name: string, argument: string): () => void {
+    return () =>
+      name === "rewind"
+        ? this.rewind()
+        : argument && !argument.startsWith("[")
+          ? this.insert(`/${name} `)
+          : this.action(`/${name}`);
+  }
+  /** The token the cursor ends: a `/command` that opens the input, or an `@path` that starts a word of a prompt. */
+  private token(): { kind: "/" | "@"; text: string } | undefined {
+    const before = this.composer.plainText.slice(0, this.composer.cursorOffset);
+    const slash = before.match(/^\/([\w-]*)$/);
+    if (slash) return { kind: "/", text: slash[1] ?? "" };
+    const at = before.match(/(?:^|\s)@([^\s"']*)$/);
+    if (at && this.session.mode === "prompt" && !this.session.editing)
+      return { kind: "@", text: at[1] ?? "" };
+    return undefined;
+  }
+  /** The token before the cursor, replaced with what a suggestion completes it to. */
+  private replaceToken(text: string, replacement: string): void {
+    for (const _ of text) this.composer.deleteCharBackward();
+    this.composer.insertText(replacement);
+  }
+  private suggest = (): void => {
+    const token = this.token();
+    const key = token ? `${token.kind}${token.text}` : "";
+    if (key !== this.dismissed) this.dismissed = "";
+    if (!token || this.overlay || this.dismissed) {
+      this.suggestions = [];
+      this.renderSuggestions();
+      return;
+    }
+    if (token.kind === "/") {
+      const names = [
+        ...Object.entries(commands).map(([name, [, argument, detail]]) => ({ name, argument, detail })),
+        ...[...(this.options.extensions?.commands ?? [])].map(([name, command]) => ({
+          name,
+          argument: "",
+          detail: command.description,
+        })),
+      ];
+      this.suggestions = names
+        .filter(({ name }) => name.startsWith(token.text))
+        .map(({ name, argument, detail }) => ({
+          label: `/${name}${argument ? ` ${argument}` : ""}`,
+          detail,
+          complete: () => this.replaceToken(`/${token.text}`, `/${name} `),
+          submit: () => {
+            this.composer.setText("");
+            this.command(name, argument)();
+          },
+        }));
+    } else {
+      const directory = this.session.directory || this.session.world.directory;
+      if (this.files?.directory !== directory) {
+        const files: NonNullable<typeof this.files> = { directory };
+        this.files = files;
+        void projectFiles(directory)
+          .then((paths) => {
+            files.paths = paths;
+          })
+          .catch((error: unknown) => {
+            files.error = error instanceof Error ? error.message : String(error);
+          })
+          .finally(() => {
+            if (this.files === files && !this.closed) this.suggest();
+          });
+      }
+      const wanted = token.text.toLowerCase();
+      this.suggestions = (this.files.paths ?? [])
+        .filter((path) => path.toLowerCase().includes(wanted))
+        .slice(0, 50)
+        .map((path) => {
+          const complete = () =>
+            this.replaceToken(`@${token.text}`, `@${/\s/.test(path) ? JSON.stringify(path) : path} `);
+          return { label: `@${path}`, detail: "", complete, submit: complete };
+        });
+    }
+    this.suggestionIndex = Math.min(this.suggestionIndex, Math.max(0, this.suggestions.length - 1));
+    this.renderSuggestions();
+  };
+  private renderSuggestions(): void {
+    const token = this.overlay || this.dismissed ? undefined : this.token();
+    const shown = token ? this.suggestions : [];
+    const state = !token
+      ? ""
+      : token.kind === "@" && this.files?.error
+        ? this.files.error
+        : token.kind === "@" && !this.files?.paths
+          ? "Finding project files..."
+          : shown.length
+            ? ""
+            : token.kind === "/"
+              ? "No command starts with that name."
+              : "No project file matches.";
+    if (
+      !this.paneChanged(this.suggestionBox, [
+        this.theme,
+        state,
+        this.suggestionIndex,
+        shown.map((one) => one.label),
+      ])
+    )
+      return;
+    this.clear(this.suggestionBox);
+    this.suggestionBox.visible = Boolean(state || shown.length);
+    if (state)
+      this.suggestionBox.add(this.text(state, this.files?.error ? c.danger : c.muted, { height: space.bar }));
+    const rows = 8;
+    const first = Math.max(0, Math.min(this.suggestionIndex - rows + 1, shown.length - rows));
+    for (const [offset, one] of shown.slice(first, first + rows).entries()) {
+      const index = first + offset;
+      const selected = index === this.suggestionIndex;
+      const row = this.box({
+        flexDirection: "row",
+        height: space.bar,
+        gap: space.between,
+        paddingX: space.inset,
+        backgroundColor: selected ? c.selected : c.panel,
+        onMouseDown: () => {
+          this.suggestionIndex = index;
+          one.complete();
+        },
+      });
+      row.add(
+        this.text(one.label, selected ? c.accent : c.text, { flexShrink: 0, attributes: selected ? 1 : 0 }),
+      );
+      if (one.detail) row.add(this.text(one.detail, c.muted, { truncate: true, flexShrink: 1 }));
+      this.suggestionBox.add(row);
+    }
   }
   models = (): void => {
     this.openPalette(
@@ -2399,7 +2552,7 @@ export class App {
       choices.findIndex((choice) => choice.id === (focus ?? this.session.selected)),
     );
   };
-  openPalette(label: string, choices: Choice[], selected = 0): void {
+  openPalette(label: string, choices: Choice[], selected = 0, query = ""): void {
     this.closeOverlay();
     this.composer.blur();
     const width = Math.min(76, this.renderer.width - 4);
@@ -2430,12 +2583,15 @@ export class App {
     this.overlay.add(this.paletteInput);
     this.paletteList = this.box({ gap: space.stack });
     this.overlay.add(this.paletteList);
-    this.filtered = choices;
-    this.selection = Math.max(0, selected);
-    this.paletteInput.on(InputRenderableEvents.INPUT, (value: string) => {
-      this.filtered = choices.filter((choice) =>
+    const filter = (value: string) =>
+      choices.filter((choice) =>
         `${choice.label} ${choice.detail}`.toLowerCase().includes(value.toLowerCase()),
       );
+    this.filtered = filter(query);
+    this.selection = Math.max(0, selected);
+    this.paletteInput.value = query;
+    this.paletteInput.on(InputRenderableEvents.INPUT, (value: string) => {
+      this.filtered = filter(value);
       this.selection = 0;
       this.renderChoices();
     });
@@ -2514,7 +2670,11 @@ export class App {
         ["Right-click an act", "Inspect its value or prompt program"],
         ["Ctrl+L / Ctrl+A", "Prompt programs / answer an operator question"],
         ["Ctrl+T / Ctrl+Y", "Themes / copy the selected text"],
-        ["Ctrl+C / Ctrl+Q", "Clear or cancel / save and quit"],
+        [
+          "Ctrl+C / Ctrl+Q / Ctrl+D twice",
+          "Clear or cancel / save and quit / save and quit from an empty input",
+        ],
+        ["/ / @ then Up, Down, Tab, Enter", "Suggest a slash command or a project file as it is typed"],
         ["Ctrl+Alt+Left", "Return from a definition jump"],
         ["Alt+[ / Alt+]", "Previous / next prompt REPL"],
         ["Alt+Up / Alt+Down", "Browse submitted input history"],
@@ -2531,6 +2691,41 @@ export class App {
     );
   }
   private key = (key: KeyEvent): void => {
+    if (!this.overlay && this.suggestionBox.visible && !key.ctrl && !key.meta) {
+      const chosen = this.suggestions[this.suggestionIndex];
+      if (key.name === "up" || key.name === "down") {
+        key.preventDefault();
+        const count = this.suggestions.length;
+        if (count)
+          this.suggestionIndex = (this.suggestionIndex + (key.name === "up" ? count - 1 : 1)) % count;
+        this.renderSuggestions();
+        return;
+      }
+      if (key.name === "tab" && !key.shift && chosen) {
+        key.preventDefault();
+        chosen.complete();
+        return;
+      }
+      if (["return", "enter"].includes(key.name) && !key.shift && chosen) {
+        key.preventDefault();
+        chosen.submit();
+        return;
+      }
+      if (key.name === "escape") {
+        key.preventDefault();
+        const token = this.token();
+        this.dismissed = token ? `${token.kind}${token.text}` : "";
+        this.suggest();
+        return;
+      }
+    }
+    // As in Claude Code: Ctrl+D on an empty input asks once, and exits when it is pressed again while it asks.
+    if (!this.overlay && key.ctrl && key.name === "d" && !this.composer.plainText) {
+      key.preventDefault();
+      if (this.session.notice === exitNotice) void this.options.quit();
+      else this.session.notice = exitNotice;
+      return;
+    }
     if (!this.overlay && key.ctrl && key.name === "v") {
       key.preventDefault();
       void clipboardImage((path) => this.session.attachImage(path)).catch(this.report);
@@ -2698,13 +2893,6 @@ export class App {
     } else if (key.ctrl && key.name === "space") {
       key.preventDefault();
       void this.completeNames().catch(this.report);
-    } else if (key.name === "tab" && /^\/[\w-]*$/.test(this.composer.plainText)) {
-      key.preventDefault();
-      const prefix = this.composer.plainText.slice(1);
-      const command = [...Object.keys(commands), ...(this.options.extensions?.commands.keys() ?? [])].find(
-        (name) => name.startsWith(prefix),
-      );
-      if (command) this.composer.setText(`/${command} `);
     } else if (key.ctrl && key.name === "n") {
       key.preventDefault();
       this.insert("/chain ");

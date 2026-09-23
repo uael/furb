@@ -1,6 +1,7 @@
 /** Names, labels, arguments, and help for every slash command. */
 export const commands = {
   new: ["New session", "", "Start a fresh life"],
+  exit: ["Exit", "", "Save every session and quit"],
   workspace: ["Open workspace", "[path]", "Choose a workspace or add a project folder"],
   sidebar: ["Toggle left sidebar", "", "Show or hide the workspace and session tree"],
   delete: ["Delete session", "", "Move a session and its files to the workspace trash"],

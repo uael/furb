@@ -4,8 +4,9 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { mkdir, readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { RecordLock, type WorldOptions } from "@furb/engine";
+import { RecordLock } from "@furb/engine";
 import { openEngine } from "./bridge.ts";
+import type { EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { inspectRecords } from "./records.ts";
 import { Session } from "./session.ts";
@@ -78,7 +79,7 @@ export class Workspaces extends EventEmitter {
   readonly path: string;
   constructor(
     readonly preferences = new Preferences(),
-    readonly options: WorldOptions & { demo?: boolean } = {},
+    readonly options: EngineOptions = {},
     path = join(dirname(preferences.path), "workspaces.json"),
   ) {
     super();

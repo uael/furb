@@ -9,6 +9,7 @@ import { createCliRenderer } from "@opentui/core";
 import { App } from "./app.ts";
 import { seedDemoFiles } from "./demo.ts";
 import { Extensions } from "./extensions.ts";
+import type { EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { sessionChoices } from "./sessions.ts";
 import { palettes } from "./theme.ts";
@@ -53,7 +54,7 @@ const directory =
     : resolve(values.cwd ?? savedDirectory ?? process.cwd());
 if (values.demo) await mkdir(directory, { recursive: true });
 if (values.demo && !values.cwd && !record) await seedDemoFiles(directory);
-const worldOptions: WorldOptions & { demo?: boolean } = {
+const worldOptions: EngineOptions = {
   model: values.model,
   effort: values.effort as WorldOptions["effort"],
   roster: values.roster,

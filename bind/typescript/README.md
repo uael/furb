@@ -35,20 +35,34 @@ try {
 ```
 
 The default `World` provides files, streamed shell commands, stdin, timeouts, time, chance, records, model
-requests, and operator questions. It uses pi-ai's model collection and preserves provider response blocks in
-the record. Its default actor is `claude-cli:sonnet/low`. Other models use `provider:model/effort` in the
-roster, for example `anthropic:claude-sonnet-4-6/low`. Configure an API provider through its pi-ai credentials.
-Add models at boot with `roster`; the engine owns the standing of each chain.
+requests, and operator questions. It knows no provider of its own: it asks the pi-ai collection it is given in
+`models`, the built-in providers when it is given none, and it preserves provider response blocks in the
+record. The host names what the World offers in `roster`, as `provider:model`, and the default actor in `model`,
+which is the first of the roster when unsaid; a World given neither offers the operator alone. A name without
+its provider routes to the one model of that id. A reopened record keeps its roster and model, and a model the
+host offers since then joins the roster. Configure an API provider through its pi-ai credentials.
 
-The Claude CLI provider follows the pooled session design in [dirt](https://github.com/uael/dirt/tree/main/packages/cli/src/providers).
+The Claude CLI provider, `claudeProvider` from `@furb/engine/claude`, is a pi-ai provider that a host adds to
+its collection at run time. It follows the pooled session design in [dirt](https://github.com/uael/dirt/tree/main/packages/cli/src/providers).
 It reads current pi-ai system messages, keeps warm conversations by chain, sends only new messages, preserves
 text and thinking blocks, and reports the cost of each turn. It runs pure completions with CLI tools and MCP
 disabled. It finds the standalone CLI or the CLI installed by Claude Desktop. Set `FURB_CLAUDE_BIN` to select
-a binary; `DIRT_CLI_BIN` is also accepted. Its pool is owned by one
-World and stops when that World closes. No CLI process starts until a model is asked.
+a binary; `DIRT_CLI_BIN` is also accepted. Its pool belongs to the host that made the provider, and its
+`dispose` stops it. No CLI process starts until a model is asked.
 
-Pass `answer` to replace only model requests, `operator` to supply operator answers, or `models` to use your
-own pi-ai collection. With no `operator`, questions stand in `world.prompts`; call `world.answer(id, text)`
+```ts
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+import { World } from "@furb/engine";
+import { claudeProvider } from "@furb/engine/claude";
+
+const claude = claudeProvider();
+const models = builtinModels();
+models.setProvider(claude.provider);
+const roster = claude.provider.getModels().map((model) => `${model.provider}:${model.id}`);
+const world = new World({ models, roster });
+```
+
+Pass `answer` to replace only model requests, or `operator` to supply operator answers. With no `operator`, questions stand in `world.prompts`; call `world.answer(id, text)`
 to parse and validate an answer. `world` emits `change` and `facts`; `fault` reports a failure to deliver an
 outside result. A failed outside act carries its refusal in the record. A `Keep` writes and syncs
 one complete record entry before it returns. The `answer` callback also receives the exact rendered turns
@@ -93,7 +107,7 @@ with a refusal on resume; they are never run twice without a new act. Wait deadl
 live in the record's `.world.json` companion. File snapshots append to `.changes.jsonl`; `world.changes.read`
 loads a page of them. Keep both companions with the JSONL record.
 
-`inspectRecord(path)` reads pending work through the same native replay without taking a record lock,
+`inspectRecord(path, models)` reads pending work through the same native replay without taking a record lock,
 writing files, or starting a model or command. The TUI runs this inspection in its own worker. `World.activity` holds
 the state of every act, derived once from the facts as the life hears them, so a host reads it without asking the
 sandbox. `World.isPaused` and `World.rungState` read it.

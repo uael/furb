@@ -548,11 +548,15 @@ export class Session extends EventEmitter {
           this.emit("models");
           break;
         }
-        const entry = this.roster.find(([name]) => name === argument && name !== "operator");
-        if (!entry) throw new Error("Choose a model in this chain's roster.");
+        // A model is named in full, provider:model, or by its model alone when one entry of the roster has it.
+        const models = this.roster.filter(([name]) => name !== "operator");
+        const named = models.filter(([name]) => name === argument || name.split(":").at(-1) === argument);
+        const [entry] = named;
+        if (!entry || named.length > 1)
+          throw new Error(`Choose one of ${models.map(([name]) => name).join(", ")}.`);
         const current = this.actorChoice.effort;
         const effort = entry[1].includes(current) ? current : entry[1][0];
-        this.actor = effort ? `${argument}/${effort}` : argument;
+        this.actor = effort ? `${entry[0]}/${effort}` : entry[0];
         this.track(await this.life.rung(`actor = ${JSON.stringify(this.actor)}`, { on: this.selected }));
         break;
       }
@@ -612,7 +616,16 @@ export class Session extends EventEmitter {
         this.track(await this.life.rung(`cd(${JSON.stringify(argument)})`, { on: this.selected }));
         break;
       case "edit": {
-        const id = argument || [...this.activity].reverse().find((act) => act.kind === "prompt")?.id;
+        // The latest prompt with a program: one of its rungs holds a word the gate let run on this chain.
+        const id =
+          argument ||
+          [...this.activity]
+            .reverse()
+            .find(
+              (act) =>
+                act.kind === "prompt" &&
+                this.activity.some((rung) => rung.by === act.id && Object.hasOwn(this.program, rung.id)),
+            )?.id;
         if (!id) throw new Error("There is no prompt program to edit.");
         const got = (await this.life.read(id, undefined, this.selected)) as { content: string };
         this.editing = id;

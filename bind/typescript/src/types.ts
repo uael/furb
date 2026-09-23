@@ -1,5 +1,5 @@
 import { stripVTControlCharacters } from "node:util";
-import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
+import type { ModelThinkingLevel, Usage as ModelUsage } from "@earendil-works/pi-ai";
 import type { Life } from "../index.cjs";
 
 export const efforts = [
@@ -51,3 +51,12 @@ export function safeText(value: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: Remove terminal control bytes from displayed text.
   return stripVTControlCharacters(value).replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
 }
+/** The usage of a turn that cost nothing, as pi-ai counts one. */
+export const zeroUsage = (): ModelUsage => ({
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+});

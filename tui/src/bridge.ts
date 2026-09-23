@@ -1,14 +1,7 @@
 import { EventEmitter } from "node:events";
-import {
-  type Act,
-  actorParts,
-  type Fact,
-  type ImageAttachment,
-  type Life,
-  type World,
-  type WorldOptions,
-} from "@furb/engine";
+import { type Act, actorParts, type Fact, type ImageAttachment, type Life, type World } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
+import type { EngineOptions } from "./models.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 
 export interface Snapshot {
@@ -120,9 +113,7 @@ export class HostView extends EventEmitter {
   }
 }
 
-export async function openEngine(
-  options: WorldOptions & { demo?: boolean },
-): Promise<{ life: Engine; world: HostView }> {
+export async function openEngine(options: EngineOptions): Promise<{ life: Engine; world: HostView }> {
   const worker = new Worker(new URL("worker.ts", import.meta.url).href, { type: "module" });
   const waiting = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
   let sequence = 0;

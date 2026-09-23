@@ -77,6 +77,7 @@ to copy it through OSC 52, where the terminal supports it.
 | Command | Action |
 | --- | --- |
 | `/new` | Start a fresh life |
+| `/exit` | Save every session and quit |
 | `/workspace [path]` | Choose a workspace or add a project folder |
 | `/sidebar` | Show or hide the workspace and session tree |
 | `/delete` | Move a session and its files to the workspace trash |

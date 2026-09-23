@@ -26,6 +26,7 @@
         "furb-tui": "src/cli.ts",
       },
       "dependencies": {
+        "@earendil-works/pi-ai": "0.87.0",
         "@furb/engine": "workspace:*",
         "@opentui/core": "0.5.11",
         "diff": "^9.0.0",
