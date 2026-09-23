@@ -213,6 +213,9 @@ export class World extends EventEmitter {
         },
       );
       this.life = this.adapter.boot(this.records.entries);
+      // A life that drifted keeps nothing more, so this World refuses to open on it.
+      const raised = this.life.raised;
+      if (raised) throw new Error(`${raised.is}: ${raised.args.map(String).join(" ")}`);
       this.learnKinds();
       if (this.holding) {
         const chains = new Set<string>();

@@ -1,5 +1,14 @@
 import { afterEach, expect, test } from "bun:test";
-import { type Entry, type Life, WorldAdapter, type WorldRequest } from "../src/index.ts";
+import {
+  decodeRecord,
+  type Ear,
+  Ears,
+  type Entry,
+  type Fact,
+  type Life,
+  WorldAdapter,
+  type WorldRequest,
+} from "../src/index.ts";
 
 const lives: Life[] = [];
 afterEach(async () => {
@@ -150,4 +159,126 @@ test("map order and live Python values cross without losing their meaning", asyn
   const ordered = life.inspect("ordered");
   expect(Object.keys(ordered.value as object)).toEqual(["z", "a"]);
   expect(life.inspect("value").kind).toBe("float");
+});
+
+test("every ear hears a fact whose values have no plain form, and each value crosses as what it is", async () => {
+  const { life, facts, files } = await open();
+  await life.rung(
+    "class P:\n  pass\nd = {1: 'a'}\nn = 2**70\nf = float('-inf')\nb = b'x'\np = P()\ndebug(t'{d}{n}{f}{b}{p}')",
+  );
+  await Promise.resolve();
+  const debugged = facts
+    .filter((fact) => (fact as Fact)[0] === "tell")
+    .flatMap((fact) => (fact as [string, string, string, [string, [string, unknown][], unknown][]])[3])
+    .filter((tag) => tag[0] === "debugged")
+    .map((tag) => tag[1][1]);
+  expect(debugged.slice(0, 4)).toEqual([
+    ["d", { is: "dict", args: [[[1, "a"]]] }],
+    ["n", { is: "int", args: ["1180591620717411303424"] }],
+    ["f", { is: "float", args: ["-inf"] }],
+    ["b", "b'x'"],
+  ]);
+  expect(debugged[4]?.[1]).toMatchObject({
+    is: "instance",
+    class: { is: "class", name: "P" },
+    value: { is: "P" },
+  });
+  expect(life.rendered().join("\n")).toContain(`d="{1: 'a'}"`);
+  // A tag whose name is no string renders as python says the name, and a model is asked on it.
+  await life.rung('send("tell", acting(), [(1, [], None)])');
+  expect(await life.result<string>(life.prompt("str", "Say hello").id)).toBe("hello");
+  expect(life.rendered().join("\n")).toContain("<1/>");
+  // The World hears on: it serves a read, a write and a wait after that fact.
+  expect(life.read<{ content: string }>("a").content).toBe("one\ntwo\n");
+  await life.rung('write(Text("c", "after"))');
+  expect(files.get("c")).toBe("after");
+  expect(await life.wait(0)).toBeNull();
+});
+
+test("a record keeps a value with no plain form, so a later life makes the same act again", async () => {
+  const first = await open();
+  await first.life.rung("note = act('note', '', idle, {1: 'a'}, 2**70, float('inf'))");
+  const note = first.life.inspect("note").value as string;
+  // The operator speaks of the act, so the record keeps the act with its words.
+  first.life.close(5, note);
+  expect(JSON.stringify(first.entries)).toContain(
+    '"chain://operator.1",{"is":"dict","args":[[[1,"a"]]]},{"is":"int","args":["1180591620717411303424"]},{"is":"float","args":["inf"]}]',
+  );
+  const second = await open(first.entries.map((entry) => decodeRecord(JSON.stringify(entry))));
+  expect(second.life.raised).toBeNull();
+  expect(second.life.get(note)).toEqual(first.life.get(note));
+});
+
+test("a whole JavaScript number is an int, and a BigInt is one exactly", async () => {
+  const { life } = await open();
+  for (const [value, back] of [
+    [5_000_000_000, 5_000_000_000],
+    [-5_000_000_000, -5_000_000_000],
+    [2n ** 60n, { is: "int", args: ["1152921504606846976"] }],
+    [2n ** 63n, { is: "int", args: ["9223372036854775808"] }],
+  ] as const) {
+    const id = life.prompt("int", "?", { to: "operator" }).id;
+    life.close(value, id);
+    expect(life.outcome(id)).toEqual({ done: true, value: back });
+  }
+  const id = life.prompt("float", "?", { to: "operator" }).id;
+  life.close(2.5, id);
+  expect(life.outcome(id)).toEqual({ done: true, value: 2.5 });
+  expect(() => life.close(2 ** 60, life.prompt("int", "?", { to: "operator" }).id)).toThrow("safe integer");
+});
+
+test("a life whose replay drifts is kept, with what boot raised", async () => {
+  const word = "import random\nawait wait(random.random() + 1)\nclose(1)";
+  const first = await open([], word);
+  const prompt = first.life.prompt("int", "roll").id;
+  const settled = first.life.result<number>(prompt);
+  await Bun.sleep(20);
+  first.release();
+  expect(await settled).toBe(1);
+  const second = await open(first.entries, word);
+  expect(second.life.raised).toMatchObject({ is: "Drift" });
+  expect(String(second.life.raised?.args[0])).toContain("drifts");
+  expect(second.life.root).toBe("chain://operator.1");
+  expect(second.life.cwd(second.life.chain("two").id)).toBe("/tmp");
+});
+
+test("the World alone is given the turns of an ask as the model reads them", () => {
+  const given: [unknown, unknown][] = [];
+  const ear = (world: boolean) =>
+    (function* (): Ear {
+      for (;;) {
+        const fact = (yield null) as Fact;
+        if (world && fact?.[0] === "stand")
+          yield ["done", fact[1], [[["model", ["low"], 200000]], "/tmp", "model/low"]];
+      }
+    })();
+  const ears = new Ears({ world: ear(true), other: ear(false) });
+  const callback = ears.callback;
+  ears.callback = (request) => {
+    if (request[0] === "hears" && (request[2] as Fact | null)?.[0] === "ask")
+      given.push([request[1], request[3]]);
+    return callback(request);
+  };
+  const life = ears.boot();
+  try {
+    life.prompt("str", "hi");
+    expect(given.map(([name]) => name)).toEqual(["world", "other"]);
+    expect(given[0]?.[1]).toEqual(life.rendered());
+    expect(given[1]?.[1]).toBeNull();
+  } finally {
+    life.dispose();
+  }
+});
+
+test("rendering takes the turns of a chain with one question and renders those turns", async () => {
+  const { life, facts } = await open();
+  await life.result(life.prompt("str", "Say hello").id);
+  await Promise.resolve();
+  const before = facts.length;
+  const rendering = life.rendering();
+  await Promise.resolve();
+  const questions = facts.slice(before).filter((fact) => String((fact as Fact)[1]).startsWith("turns://"));
+  expect(questions).toHaveLength(1);
+  expect(rendering.turns).toEqual(life.turns());
+  expect(rendering.rendered).toEqual(life.rendered());
 });

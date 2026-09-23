@@ -22,6 +22,8 @@ export declare class Life {
   /** Open on JavaScript ears, using the same call and reply protocol as the Python binding. */
   static boot(callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null): Life
   get root(): string
+  /** What boot raised, and nothing when it raised nothing. After a drift the life goes on, with nothing kept. */
+  get raised(): { is: string; args: unknown[] } | null
   get disposed(): boolean
   site(value?: string | undefined | null): string
   /** Call any public engine verb, including verbs used by extensions. */
@@ -34,7 +36,7 @@ export declare class Life {
   forget(id: number): void
   prompt<T = unknown>(shape: string, message: string, options?: PromptOptions | undefined | null): Act & PromiseLike<T>
   rung(word: string, options?: RungOptions | undefined | null): Act & PromiseLike<unknown>
-  /** Read one name from the chain without calling it. Unrepresentable values still expose their Python repr. */
+  /** Read one name from the chain without calling it, with its Python type and representation. */
   inspect(name: string, chain?: string | undefined | null): Inspection
   chain(label: string, source?: string | null, filter?: unknown, on?: string | null): Act & PromiseLike<never>
   grant(options: GrantOptions): Act & PromiseLike<null>
@@ -47,6 +49,8 @@ export declare class Life {
   turns(chain?: string | undefined | null): Array<['user' | 'assistant', Array<string | [string, Array<[string, unknown]>, unknown]>, [number, number, number, number, number] | null, unknown]>
   /** Exact model text, rendered before Python values cross to JavaScript. */
   rendered(chain?: string | undefined | null): Array<string>
+  /** The turns of a chain from one question, and each turn as the text a model reads. */
+  rendering(chain?: string | undefined | null): Rendering
   scope(id: string): string
   cwd(chain?: string | undefined | null): string
   cd(path: string, chain?: string | undefined | null): string
@@ -121,6 +125,11 @@ export interface Outcome {
 export interface PromptOptions {
   to?: string
   on?: string
+}
+
+export interface Rendering {
+  turns: Array<['user' | 'assistant', Array<string | [string, Array<[string, unknown]>, unknown]>, [number, number, number, number, number] | null, unknown]>
+  rendered: Array<string>
 }
 
 export interface RungOptions {

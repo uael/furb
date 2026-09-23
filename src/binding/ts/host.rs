@@ -1,6 +1,9 @@
 //! JavaScript ears cross like Python ears: a saying, a call to the bus, or nothing.
-use super::wire::{inward, outward};
-use crate::{Ears, Fact, Fault, Life, Object, ObjectRef, Reply};
+use super::{
+  render,
+  wire::{inward, outward, record},
+};
+use crate::{Ears, Fact, Fault, Life, Object, ObjectRef, Reply, life::WORLD};
 use napi::{
   Env, JsDeferred,
   bindgen_prelude::{FunctionRef, Object as JsObject},
@@ -50,38 +53,19 @@ impl Host {
   }
 }
 impl Ears for Host {
+  /// Every ear hears every fact. The World answers an ask, so it alone is given the turns of one as the model
+  /// reads them, rendered while their values are python's.
   fn hears(&mut self, name: &str, fact: Option<&Fact>) -> Reply {
-    match fact
-      .map(|fact| {
-        if fact.kind() == "keep" {
-          super::wire::record(fact.0.as_ref())
-        } else {
-          outward(fact.0.as_ref())
-        }
-      })
-      .transpose()
-    {
-      Ok(value) => {
-        let rendered = fact
-          .filter(|fact| fact.kind() == "ask")
-          .map(|fact| {
-            let values = fact.0.as_ref().items().ok_or_else(|| Fault::refused("invalid ask"))?;
-            super::render::turns(*values.get(5).ok_or_else(|| Fault::refused("invalid ask"))?)
-          })
-          .transpose();
-        match rendered {
-          Ok(rendered) => self.reply(json!(["hears", name, value, rendered])),
-          Err(fault) => Reply::Raised(fault),
-        }
-      }
-      Err(fault) => Reply::Raised(fault),
-    }
+    let value = fact.map(|fact| {
+      if fact.kind() == "keep" { record(fact.0.as_ref()) } else { outward(fact.0.as_ref()) }
+    });
+    let rendered = fact
+      .filter(|fact| name == WORLD && fact.kind() == "ask")
+      .and_then(|fact| fact.0.as_ref().items()?.get(5).map(|turns| render::turns(*turns)));
+    self.reply(json!(["hears", name, value, rendered]))
   }
   fn answered(&mut self, name: &str, value: ObjectRef<'_>) -> Reply {
-    match outward(value) {
-      Ok(value) => self.reply(json!(["answered", name, value])),
-      Err(fault) => Reply::Raised(fault),
-    }
+    self.reply(json!(["answered", name, outward(value)]))
   }
   fn called(
     &mut self,
@@ -89,11 +73,11 @@ impl Ears for Host {
     args: Vec<Object>,
     kwargs: Vec<(String, Object)>,
   ) -> Result<Object, Fault> {
-    let args = args.iter().map(|value| outward(value.as_ref())).collect::<Result<Vec<_>, _>>()?;
+    let args = args.iter().map(|value| outward(value.as_ref())).collect::<Vec<_>>();
     let kwargs = kwargs
       .iter()
-      .map(|(key, value)| Ok((key.clone(), outward(value.as_ref())?)))
-      .collect::<Result<serde_json::Map<_, _>, Fault>>()?;
+      .map(|(key, value)| (key.clone(), outward(value.as_ref())))
+      .collect::<serde_json::Map<_, _>>();
     inward(&self.call(json!(["called", name, args, kwargs]))?)
   }
 }
@@ -128,9 +112,12 @@ impl Held {
     let result = self.call(|life| {
       life.watch(id, move |value| {
         if let Some(deferred) = settled.borrow_mut().take() {
-          match Fault::of(value.as_ref()).map_or_else(|| outward(value.as_ref()), Err) {
-            Ok(value) => deferred.resolve(Box::new(move |_| Ok(value))),
-            Err(fault) => deferred.reject(napi::Error::from_reason(fault.to_string())),
+          match Fault::of(value.as_ref()) {
+            Some(fault) => deferred.reject(napi::Error::from_reason(fault.to_string())),
+            None => {
+              let value = outward(value.as_ref());
+              deferred.resolve(Box::new(move |_| Ok(value)));
+            }
           }
         }
       })
@@ -187,7 +174,7 @@ pub fn invoke(
   let args = args(&json!(values))?;
   let held = kwargs(&named)?;
   let kwargs = held.iter().map(|(key, value)| (key.as_str(), value.clone())).collect();
-  outward(life.verb(name, args, kwargs)?.as_ref())
+  Ok(outward(life.verb(name, args, kwargs)?.as_ref()))
 }
 pub fn on(life: &Life, given: Option<String>) -> Value {
   json!({"on": given.unwrap_or_else(|| life.root().into())})

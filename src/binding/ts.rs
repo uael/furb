@@ -69,6 +69,15 @@ pub struct RungOptions {
 }
 
 #[napi(object)]
+pub struct Rendering {
+  #[napi(
+    ts_type = "Array<['user' | 'assistant', Array<string | [string, Array<[string, unknown]>, unknown]>, [number, number, number, number, number] | null, unknown]>"
+  )]
+  pub turns: Value,
+  pub rendered: Vec<String>,
+}
+
+#[napi(object)]
 pub struct Inspection {
   pub name: String,
   pub kind: String,
@@ -81,6 +90,7 @@ pub struct Inspection {
 pub struct JsLife {
   held: Rc<Held>,
   root: String,
+  raised: Option<Value>,
 }
 
 /// A named act. Keep its id for controls, or await the act for its outcome.
@@ -147,16 +157,20 @@ impl JsLife {
     let life = crate::Life::open_on(Host { env, callback: callback.create_ref()? }, names)
       .boot(record)
       .map_err(error)?;
-    if let Some(fault) = life.raised() {
-      return Err(error(fault.clone()));
-    }
     let root = life.root().to_owned();
-    Ok(Self { held: Held::new(life), root })
+    let raised = life.raised().map(|fault| outward(fault.object().as_ref()));
+    Ok(Self { held: Held::new(life), root, raised })
   }
 
   #[napi(getter)]
   pub fn root(&self) -> String {
     self.root.clone()
+  }
+
+  /// What boot raised, and nothing when it raised nothing. After a drift the life goes on, with nothing kept.
+  #[napi(getter, ts_return_type = "{ is: string; args: unknown[] } | null")]
+  pub fn raised(&self) -> Option<Value> {
+    self.raised.clone()
   }
 
   #[napi(getter)]
@@ -187,11 +201,13 @@ impl JsLife {
 
   #[napi]
   pub fn outcome(&self, id: String) -> napi::Result<Outcome> {
-    let value = self.held.call(move |life| {
+    self.held.call(move |life| {
       let got = life.outcome(&id)?;
-      Ok(json!({"done": got.is_some(), "value": got.map(|value| outward(value.as_ref())).transpose()?}))
-    })?;
-    Ok(Outcome { done: value["done"] == true, value: value["value"].clone() })
+      Ok(Outcome {
+        done: got.is_some(),
+        value: got.map_or(Value::Null, |value| outward(value.as_ref())),
+      })
+    })
   }
 
   #[napi(
@@ -202,7 +218,7 @@ impl JsLife {
   pub fn held(&self, name: String, keys: Vec<Value>, ask: String) -> napi::Result<Value> {
     self.held.call(move |life| {
       let keys = keys.iter().map(inward).collect::<Result<Vec<_>, _>>()?;
-      outward(life.held(&name, keys, &ask)?.as_ref())
+      Ok(outward(life.held(&name, keys, &ask)?.as_ref()))
     })
   }
 
@@ -221,19 +237,13 @@ impl JsLife {
         .map(|(key, value)| Ok((key.clone(), inward(value)?)))
         .collect::<Result<Vec<_>, Fault>>()?;
       let kwargs = held.iter().map(|(key, value)| (key.as_str(), value.clone())).collect();
-      outward(life.made(id, args, kwargs)?.as_ref())
+      Ok(outward(life.made(id, args, kwargs)?.as_ref()))
     })
   }
 
   #[napi]
   pub fn forget(&self, id: i64) -> napi::Result<()> {
-    self
-      .held
-      .call(move |life| {
-        life.forget(id)?;
-        Ok(Value::Null)
-      })
-      .map(|_| ())
+    self.held.call(move |life| life.forget(id))
   }
 
   #[napi(ts_generic_types = "T = unknown", ts_return_type = "Act & PromiseLike<T>")]
@@ -283,20 +293,22 @@ impl JsLife {
       .map(|id| JsAct { id, held: self.held.clone() })
   }
 
-  /// Read one name from the chain without calling it. Unrepresentable values still expose their Python repr.
+  /// Read one name from the chain without calling it, with its Python type and representation.
   #[napi]
   pub fn inspect(&self, name: String, chain: Option<String>) -> napi::Result<Inspection> {
-    let field = name.clone();
-    let value = self.held.call(move |life| {
+    self.held.call(move |life| {
       let chain = chain.unwrap_or_else(|| life.root().into());
-      let value = life.word("modules[__chain][__name]", vec![("__chain", crate::Object::string(chain)), ("__name", crate::Object::string(field))])?;
-      Ok(json!({"kind": value.as_ref().type_name(), "representation": value.py_repr(), "value": outward(value.as_ref()).ok()}))
-    })?;
-    Ok(Inspection {
-      name,
-      kind: value["kind"].as_str().unwrap_or_default().into(),
-      representation: value["representation"].as_str().unwrap_or_default().into(),
-      value: value.get("value").filter(|value| !value.is_null()).cloned(),
+      let value = life.word(
+        "modules[__chain][__name]",
+        vec![("__chain", crate::Object::string(chain)), ("__name", crate::Object::string(&name))],
+      )?;
+      let value = value.as_ref();
+      Ok(Inspection {
+        kind: value.type_name().into(),
+        representation: value.py_repr(),
+        value: Some(outward(value)).filter(|value| !value.is_null()),
+        name,
+      })
     })
   }
 
@@ -421,7 +433,7 @@ impl JsLife {
 
   #[napi(ts_return_type = "[string, string, string, string, ...unknown[]]")]
   pub fn get(&self, id: String) -> napi::Result<Value> {
-    self.held.call(move |life| outward(life.get(&id)?.0.as_ref()))
+    self.held.call(move |life| Ok(outward(life.get(&id)?.0.as_ref())))
   }
 
   #[napi(
@@ -439,7 +451,17 @@ impl JsLife {
   pub fn rendered(&self, chain: Option<String>) -> napi::Result<Vec<String>> {
     self.held.call(move |life| {
       let chain = chain.unwrap_or_else(|| life.root().to_owned());
-      render::turns(life.turns(&chain)?.as_ref())
+      Ok(render::turns(life.turns(&chain)?.as_ref()))
+    })
+  }
+
+  /// The turns of a chain from one question, and each turn as the text a model reads.
+  #[napi]
+  pub fn rendering(&self, chain: Option<String>) -> napi::Result<Rendering> {
+    self.held.call(move |life| {
+      let chain = chain.unwrap_or_else(|| life.root().to_owned());
+      let turns = life.turns(&chain)?;
+      Ok(Rendering { rendered: render::turns(turns.as_ref()), turns: outward(turns.as_ref()) })
     })
   }
 
@@ -503,43 +525,19 @@ impl JsLife {
 
   #[napi]
   pub fn pause(&self, id: String) -> napi::Result<()> {
-    self
-      .held
-      .call(move |life| {
-        life.pause(&id)?;
-        Ok(Value::Null)
-      })
-      .map(|_| ())
+    self.held.call(move |life| life.pause(&id))
   }
   #[napi]
   pub fn wake(&self, id: String) -> napi::Result<()> {
-    self
-      .held
-      .call(move |life| {
-        life.wake(&id)?;
-        Ok(Value::Null)
-      })
-      .map(|_| ())
+    self.held.call(move |life| life.wake(&id))
   }
   #[napi]
   pub fn cancel(&self, id: String) -> napi::Result<()> {
-    self
-      .held
-      .call(move |life| {
-        life.cancel(&id)?;
-        Ok(Value::Null)
-      })
-      .map(|_| ())
+    self.held.call(move |life| life.cancel(&id))
   }
   #[napi(ts_args_type = "value: unknown, id: string")]
   pub fn close(&self, value: Value, id: String) -> napi::Result<()> {
-    self
-      .held
-      .call(move |life| {
-        life.close(inward(&value)?, &id)?;
-        Ok(Value::Null)
-      })
-      .map(|_| ())
+    self.held.call(move |life| life.close(inward(&value)?, &id))
   }
 
   #[napi(ts_return_type = "[string, string, string, ...unknown[]]")]

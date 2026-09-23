@@ -67,7 +67,8 @@ to parse and validate an answer. `world` emits `change` and `facts`; `fault` rep
 outside result. A failed outside act carries its refusal in the record. A `Keep` writes and syncs
 one complete record entry before it returns. The `answer` callback also receives the exact rendered turns
 as its fifth argument. `life.rendered(chain)` gives that text from the native values, so Python floats,
-tuples, and instances retain their representations before they cross to JavaScript.
+tuples, and instances retain their representations before they cross to JavaScript. `life.rendering(chain)`
+gives the turns and that text from one question.
 
 Pass `world` to `boot` to replace the whole World. It receives these operations:
 
@@ -92,13 +93,22 @@ continues, as in the Python binding. `Ears.callable` carries a JavaScript show o
 `Life.call` reaches every public engine verb beyond the named methods.
 
 Values use the Python record form. Text and Exit carry `is` plus their fields. Faults carry `is` and `args`.
-Lists and tuples cross as arrays; maps keep their order and require string keys. Unsupported values, unsafe
-integers, and nesting beyond 64 levels are refused. `inspect(name, chain)` also gives the Python type and
-representation of a value that cannot cross as plain data.
+Lists and tuples cross as arrays, and maps keep their order. Every value of the engine crosses to JavaScript,
+so an ear hears every fact. A value that JSON holds only in part crosses as its type under `is` and what that
+type makes it from under `args`, and comes back in whole: an int past the safe range as
+`{"is":"int","args":["1180591620717411303424"]}`, a float that is not finite as `{"is":"float","args":["inf"]}`,
+and a map with a key that is no string as `{"is":"dict","args":[[[1,"a"]]]}`. Any other value, and a value
+nested beyond 64 levels, crosses as its Python representation. Into the engine, a whole JavaScript number is
+an int and a number with a fraction is a float. A whole number past the safe range is refused, since
+JavaScript holds it rounded: send a BigInt, or the `int` form above. A BigInt past 64 bits reaches the engine
+as its digits in a string. `inspect(name, chain)` also gives the Python type and representation of a value.
 
 Records preserve integral floats as `{"is":"float","args":["1"]}`. The native record reader checks integer
 precision before JavaScript can round a number. Queries are not journal entries. To keep a program edit
 across a later open, perform its `write` in a `rung`.
+
+A record whose replay drifts gives a life all the same, and `life.raised` holds the drift; that life keeps
+nothing more. `World.open` refuses such a record with the drift.
 
 Only one process owns a record. Its `RecordLock` holds a lock on `<record>.lock`, which the system releases
 when the process ends, so a lease of a process that ended never blocks an open. The lock file stays beside the
