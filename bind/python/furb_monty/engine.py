@@ -33,8 +33,8 @@ python = furb.python
 NAMES = vars(python)
 """NAMES are the names of the engine of this interpreter."""
 PURE = frozenset({
-  "span", "grep", "differs", "take", "HEAD", "TAIL", "HIDDEN",
-  "lineage", "under", "question", "showing", "shown", "turns_of", "offered", "ended", "idle",
+  "span", "grep", "differs", "HEAD", "TAIL", "HIDDEN",
+  "question", "headed", "commented", "bound", "showing", "shown", "turns_of", "unquoted", "offered", "ended", "idle",
 })  # fmt: skip
 """PURE are the callables of the engine that read no life, so the engine of this interpreter answers them."""
 HELD = ("modules", "acts", "asked", "outcomes")
@@ -219,11 +219,13 @@ def calling(n: int, args: tuple[object, ...], kwargs: dict[str, object]) -> obje
 
 
 def made(n: int) -> Callable[..., object]:
-  """One callable the engine made, as this interpreter calls it: by its handle."""
+  """One callable the engine made, as this interpreter calls it: by its handle, which it carries as `__monty__`, so
+  that it goes back in as the callable it is and never as a callable of this interpreter."""
 
   def back(*args: object, **kwargs: object) -> object:
     return calling(n, args, kwargs)
 
+  vars(back)["__monty__"] = n
   # When this interpreter drops the last reference, the handle is forgotten at the next verb of the operator.
   weakref.finalize(back, FORGOTTEN.append, n)
   return back

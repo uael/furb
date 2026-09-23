@@ -52,10 +52,15 @@ async def test_a_paused_prompt_stops_at_its_next_boundary_with_its_loop_where_it
   act = engine.prompt(int, "count", on=root)
   engine.pause(act)
   await settle()
-  assert len(said(log, "ask")) == 1 and said(log, "run") == [] and act not in engine.outcomes
+  (first,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert [a[1] for a in said(log, "ask")] == [first] and [a[1] for a in said(log, "answer")] == [first]
+  assert [a for a in said(log, "ready") if a[1] == first] == [] and act not in engine.outcomes
   engine.wake(act)
   await settle()
-  assert (await act) == 2 and len(said(log, "ask")) == 2 and len(said(log, "run")) == 2
+  assert (await act) == 2
+  steps = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert [a[1] for a in said(log, "ask")] == steps == [first, steps[1]]
+  assert [(a[1], a[4]) for a in said(log, "run") if a[1] in steps] == [(first, "a = 1"), (steps[1], "close(a + 1)")]
 
 
 async def test_the_engine_holds_the_response_of_an_ask_that_returns_on_a_paused_chain() -> None:
@@ -66,10 +71,12 @@ async def test_the_engine_holds_the_response_of_an_ask_that_returns_on_a_paused_
   act = engine.prompt(int, "count", on=root)
   engine.pause(root)
   await settle()
-  assert len(said(log, "answer")) == 1 and said(log, "run") == [] and act not in engine.outcomes
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert [a[1] for a in said(log, "answer")] == [step] and act not in engine.outcomes
+  assert [a for a in said(log, "ready") if a[1] == step] == [] and [a for a in said(log, "run") if a[1] == step] == []
   engine.wake(root)
   await settle()
-  assert (await act) == 7 and len(said(log, "run")) == 1
+  assert (await act) == 7 and [a[4] for a in said(log, "run") if a[1] == step] == ["close(7)"]
 
 
 async def test_a_rung_carries_on_only_while_its_own_chain_is_not_paused() -> None:

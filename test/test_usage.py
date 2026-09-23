@@ -1,6 +1,6 @@
 """Usage, what one answer of a model cost."""
 
-from conftest import STANDS, Sand, attr, life, settle, tags
+from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
 
 COST = (80000, 30, 200, 10, 1.5)
@@ -28,12 +28,16 @@ async def test_a_usage_holds_the_token_counts_and_the_dollars_of_one_model_respo
 async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_the_window_of_the_actor() -> None:
   """The share of the window it filled is the words it read against the window of the actor, so no word of it says the share."""
   sand = Sand(stands=STANDS, cost=COST)
-  _, root = life(sand)
+  log, root = life(sand)
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
   sand.script[root] = ["a = 1", "close(2)"]
   assert await engine.prompt(int, "count", on=root) == 2
-  assert [attr(tag, "filled") for tag in tags(engine.turns(on=root), "ledger")] == [0.2, 0.2]
+  one, two = [a[1] for a in said(log, "answer")]
+  assert [line for line in heads(engine.turns(on=root)) if " ledger " in line] == [
+    f"#{one} ledger spent=1.5 filled=0.2",
+    f"#{two} ledger spent=3.0 filled=0.2",
+  ]
   assert engine.offered(STANDS, "m/low") == 400000 and COST[0] / 400000 == 0.2
   assert len(COST) == 5
   engine.cancel(ceiling)

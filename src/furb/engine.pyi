@@ -53,8 +53,9 @@ type Question = tuple[str, str, str, str, *tuple[object, ...]]
 A question is a fact whose about is its own name and whose first word is the chain it is on.
 An act or a query takes a name.
 A question is named by its kind, so a fact is a question when the act it is about is named under its kind, which is what question says.
-The name of a question: its kind, the lineage of the one that made it, which is the lineage of that act when the maker is one and of its name otherwise, and how many that one has made, which the life counts for each maker.
-A question is named by its kind, so a rung is rung://, a prompt prompt://, a read read://, and the generator that settles an await of an act from outside a run is named waits:// under that act, which is the name of no question.
+The name of an act is its kind and how many acts of that kind the life has made with it, so the root is chain1, the first command is bash1 and the first prompt is prompt1, and python binds each name as it is.
+The name of a query is its kind, @, the one that made it, a dot, and how many questions that one has made with it, as read@rung1.2, so a query takes no number from the acts, and a query of the operator that a later life does not ask again moves no name.
+The generator that settles an await of an act from outside a run is named after that act and the task that awaits it, which is the name of no question.
 """
 type Saying = tuple[str, str, *tuple[object, ...]]
 """What an ear says: the kind of the fact, the act it is about, and the words, and nothing of who says it, which the bus fills in from whoever is speaking."""
@@ -64,7 +65,7 @@ The World hears every fact: it answers a stand, a clock, a chance, a read and a 
 The World performs any fact that an extension defines and that the World knows.
 The facts that the World says of its own are for the acts that complete later.
 The World speaks by yielding a saying, or by calling send under its own name when it speaks from its loop.
-The chain has the gate read and the Kernel begin every rung, by the facts gate and run.
+The chain has the gate read every rung but the ones it wrote itself, and the Kernel begin every rung, by the facts gate and run.
 The Kernel runs the word of a run in the module of the chain the run names, says wants for the act a run waits for, takes a sent of what that act came to, and says ran with what the word gave.
 The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung.
 """
@@ -158,7 +159,7 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   read is given a path and a show.
   read gives a Text.
   A text without a show is told as HEAD, which is the span of its first 2000 lines.
-  A read of prompt://lineage gives the program of that ladder, the words of its rungs in order.
+  A read of the name of a prompt gives the program of that ladder, the words of its rungs in order.
   Whether a name is one of the prompts a chain has heard on itself, which is what its doors serve and no other path, a path of no name being none of them.
   A prompt is the door of the program of its ladder, so a read of its name gives the word of every rung of it in order, the words the gate refused among them, which are none at all for a prompt that ran no word.
   A read of a door that a rung of that ladder says leaves the word of that rung out, since a rung is no part of the program it reads.
@@ -192,7 +193,7 @@ def peek(at: str, on: str = "") -> object:
 def turns(on: str = "") -> list[Turn]:
   """The turns of a chain, folded from what it has heard.
   A turns asked from a run tells how many turns there are, and never the turns.
-  The turns of what a chain has heard: every fact that carries tags stands as its tags, and nothing else stands at all.
+  The turns of what a chain has heard: every fact that carries notes stands as a paragraph of them, and nothing else stands at all.
   The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines it has not seen, which the one that tells it says the show of.
   The chain answers for its turns, folded from what it has heard.
   """
@@ -212,12 +213,12 @@ def chance(on: str = "") -> float:
 
 def gate(word: str, on: str = "") -> list[str]:
   """Whether the word of a rung may run: the gate reads it after the program of its chain, and it finds nothing when the word may run.
-  The word of a rung runs only if the gate accepts the word.
+  The word of a rung runs only if the gate accepts the word, or if the chain wrote it.
   The gate checks the word of a rung against the rungs before it in record order.
   A response that is not python is a finding like any other.
   The gate gives no finding when the gate accepts the rung.
   The word of a rung is gated again in every life that runs it, since the gate is of the moment and its findings are kept by nobody.
-  gate tells the findings as its body.
+  gate tells the findings, one comment for each.
   """
 
 def cd(path: str, on: str = "") -> str:
@@ -247,7 +248,7 @@ def get(about: str) -> Question:
 
 def pause(id: str) -> None:
   """A pause: while it stands, nothing it is over hears, and what is said meanwhile waits for the wake.
-  A control tells a tag of its own name, so a model reads what was done to its work.
+  A control tells a header of its own name, so a model reads what was done to its work.
   pause is given the id of a pending act or the id of a chain.
   A pause stops no ask in flight: the ask returns.
   A paused chain goes quiet as its in-flight work returns.
@@ -302,8 +303,8 @@ def close(value: object, id: str = "") -> None:
 def debug(template: Template) -> None:
   """What a word tells of itself as it runs: each interpolation of a template, with its expression and its value.
   The engine tells what a step debugged.
-  The debugged tag tells one interpolation of a debug, its expression and its value.
-  A raised tag and a debugged tag stand at the place in the run where they happened.
+  A debugged header tells one interpolation of a debug, its expression and its value.
+  A raised header and a debugged header stand at the place in the run where they happened.
   The transcript holds between the entries what the run of each word raised and debugged.
   debug is given a python template string.
   debug tells each interpolation of the template, with its expression and its value.
@@ -326,9 +327,9 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
   A rung is an act: the run of one word in the globals of its chain, which the chain has the Kernel run.
   The engine tells what a step raised.
   A step that raised nothing and debugged nothing tells nothing.
-  The opened tag of a rung with a word carries that word as its body.
-  The opened tag of a rung with no word tells the actor that is asked and the close its word must say to answer the prompt.
-  The raised tag tells the type and the message of the exception as attributes.
+  The open of a rung with a word is its header and then that word, as its caller wrote it.
+  A rung with no word tells nothing where it is made, since the chain tells it as the last line of the turn it asks for it with.
+  The raised header tells the exception as python shows it, which says its type and its message.
   A rung that retells another rung names its acts under that one, so it makes the same acts and shares them.
   A cancel of a rung is the Kernel's to do, since the Kernel is the one running the word.
   The word of a model is python code and nothing else.
@@ -340,7 +341,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
   The word of a rung runs to its next await and continues when the close it awaits comes.
   The word of a rung answers its prompt with close, which carries the value the prompt is done with.
   The turns of the chain of another prompt tell the rung of a word its caller wrote.
-  A word its caller wrote is a user turn, the opened tag of its rung.
+  A word its caller wrote stands in a user turn as python, under the header of its rung.
   rung is given a word and runs it on a chain in the globals of that chain.
   The gate reads the word its caller wrote like any word.
   A rung with a word completes with what that word raises, and with nothing when the word runs to its end.
@@ -355,7 +356,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
   A replay makes a rung of its own retelling each rung of the donor it keeps.
   What a rung that retells asks is named under the one it retells, so the life answers it with what it answered then and the World is asked nothing twice.
   A rung that awaits an act nobody settles waits until the operator cancels it, and holds nothing else of the chain.
-  The lineage a rung names its acts under is the lineage of its own name, and of the name of the one it retells for a rung that retells.
+  A rung that retells says each question it makes as the rung it retells, so the question it makes at a place is the one that rung made there.
   A rung that retells names the rung the record holds and never another rung that retells it, so a second replay makes the same acts and asks the World nothing twice.
   A rung that retells is done with nothing when its word answers, runs to its end or is cancelled, whatever the Kernel makes of the word, and with what that word raised.
   """
@@ -381,7 +382,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A rung need not wait for a prompt of shape None.
   The actor left unsaid is the default actor of the chain.
   A prompt to a model runs in steps until the prompt completes.
-  The opened tag of a prompt tells the shape as python shows the expression.
+  The binding of a prompt gives the shape as python shows the expression, as prompt1: Act[int] = Act('prompt1').
   A rung whose word closes nothing ends its step, and the engine asks the model again.
   The completion of a prompt cancels nothing under the prompt but the words it ran.
   The operator prompts on any chain, by the id of the chain.
@@ -404,6 +405,8 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The response of an acknowledgment is no orphan.
   When an act a rung of the chain made is done, no ask has shown it, no prompt it heard on itself is open and no word of the chain is running, the chain prompts nothing, so that the model sees it.
   A pause stands over the close that answers a prompt too, so what a word gave waits for the wake.
+  A prompt to a model tells nothing where it is made: where the chain first asks for one of its rungs, the chain tells its message and its binding, just above the last line of that turn, and never again, so a turn shows at most one message to a model.
+  A prompt to the operator tells its message and its binding where it is made, since the World shows it then and no model answers it.
   """
 
 @overload
@@ -415,7 +418,7 @@ def prompt(shape: object, message: str = "", to: str = "", on: str = "") -> Act:
 def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act[Never]:
   """chain says what a chain does: how it is opened, what it tells, and what it answers for.
   boot gives the root, and chain gives the chain, which never settles.
-  The opened tag of a chain with a source carries its label.
+  The header of a chain with a source carries its label and its source.
   The entry that opens a chain with a source carries its label, after the prefix.
   chain gives the new chain, which never completes.
   boot gives the root as an act of Never, and the root never completes.
@@ -429,7 +432,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The engine binds the exception of a raise in the globals of the chain, under the name raised.
   The engine binds the exception again at each raise.
   A chain: its module, which is the engine itself, named for the chain, since everything the file defines is the model's to call and nothing of it is bound to one chain, and what the operator would add to it, it makes a rung of, which binds it, stands in the program and is said again in a later life, a fact said from a run being on the chain of that run, and a word that wants a chain of its own giving the name of its own as the source.
-  A chain is chain://lineage.n whether boot or chain opened it, and the root is chain://operator.1.
+  A chain is chainN whether boot or chain opened it, and the root is chain1.
   A chain is an act of Never, so the chain never completes.
   The turns of a chain tell the standing and the acts of the operator.
   The transcript of a chain is the facts on it, in the order it heard them.
@@ -440,7 +443,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A chain with a source made after the rung whose word defined a door has the door too.
   The globals of a chain are those of a module named by the id of the chain.
   Every name that the file defines is in the globals of a chain.
-  A chain holds whole every act made on the chain.
+  A chain holds whole every act made on the chain, but a rung it makes itself, which it runs and holds nothing of.
   A chain holds every fact on it, and an act on another chain is that chain's.
   A prompt that a step of another chain made reads nothing of that chain.
   The word of a rung rebinds the default actor like any name, and the last binding in record order wins.
@@ -483,16 +486,18 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A chain with a source asks its origin what it stands on, and the origin answers with its standing as it stands.
   The chain answers a stand asked on it with what it stands on, so a grant reads the roster off the chain it is on.
   The chain answers a transcript asked of one of its names with its transcript up to that act, and whole for the chain itself.
-  The chain answers a program asked on it with the word of every rung it holds that the gate let run, each under the name of that rung, in order.
+  The chain answers a program asked on it with the word of every rung it holds that runs, as python, each under the name of that rung, in order.
   The chain retells the rungs of its origin through the program the origin answers, and it owns the rungs it retells, though it holds nothing of them.
   A replay makes the rungs of a chain again from its donor: it keeps each rung of the ladder while the words it is given repeat it, it makes one rung of what is left, and every rung of the chain after the first word that differs is gone.
   A replay makes the module of the chain again, as it was at its birth, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in.
   The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.
   A write of a door gives the words of that ladder alone, so a rung of the chain that is no rung of that ladder and stands before the first word that differs stands as it did.
+  Before every ask the chain tells the last line of the turn, which says what the answer is for: #rung5 advance on prompt1 for a rung of a prompt, and #rung5 advance for a rung that no prompt made.
+  Where it asks, the chain makes a rung of the statements the turn shows of every act but a rung, which bind the name of each act the turn opened; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its statements already.
   """
 
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
-  """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells that ledger at each answer of a model, so no turn an ask has sent grows a tag after it.
+  """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells that ledger at each answer of a model, so no turn an ask has sent grows a line after it.
   grant on a chain puts a ceiling on it: dollars, a share of the window, or both.
   The engine enters a pause on the chain when a response carries the ledger to its ceiling.
   The word of the response that crossed the ceiling runs.
@@ -531,10 +536,10 @@ def bash(
   Without a stderr show, the stderr of the command flows into its stdout.
   The stderr door of a merged command stays empty.
   A command without a timeout has the timeout TIMEOUT that the file names.
-  bash://lineage/stdout and bash://lineage/stderr are readable while the command runs and after it.
-  bash://lineage/stdin is writable while a fed command runs.
-  A write of nothing to bash://lineage/stdin closes the stdin.
-  A read of bash://lineage/stdout gives the lines of the command while the command runs.
+  The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it.
+  The door bash1/stdin is writable while a fed command runs.
+  A write of nothing to bash1/stdin closes the stdin.
+  A read of bash1/stdout gives the lines of the command while the command runs.
   A wake on a chain with a source starts no inherited command again, since only the owner starts an act.
   The World starts it, and starts it again in no later life, since the record holds what it did.
   Its stdin is written while it runs and it is fed, which it says to the World as a feed and answers with the text that landed, and a write of nothing closes it; a write of it takes no word once the command ended, and none at all when the command was not opened fed.
@@ -544,7 +549,7 @@ def bash(
   A pause stops no command: it runs on, and its close waits for the wake.
   Its close tells what its stdout shows, and what its stderr shows when that stream has a show of its own that is no hidden one, so a merged command tells no stderr.
   The stdout of a command without a show is told as TAIL, which is the span of its last 250 lines.
-  The engine refuses a write to bash://lineage/stdin once the command ended or was cancelled.
+  The engine refuses a write to bash1/stdin once the command ended or was cancelled.
   The World asks a command whether its stderr flows into its stdout, as it asks a chain where its paths resolve, and the command answers from what its verb was given.
   The World hears the bash itself, with the command, the fed flag and the timeout, and no working directory and no show.
   """
@@ -625,18 +630,21 @@ class Drift(Exception):
   A drift breaks the journal, which keeps nothing more, and the life runs on with nothing kept.
   """
 
-type Tag = tuple[str, list[tuple[str, object]], object]
-"""One thing a turn says: its name, what it holds of its own, and what it is of, which is a text and its show when a text is what it shows.
-A tag is a name, attributes as pairs of a name and a value that the World makes plain, and a body.
-Each tag of a user turn that is of an act names the act by its id among its attributes, under the name id for what an act tells and over for a control, and a tag of a query stands at the place in the run where the query was asked.
-The tags of the file are opened, closed, shown, raised, debugged, refused, paused, woke, cancelled, ledger, and one for each query the model may say: read, write, peek, turns, clock, chance, gate, cd and cwd.
+type Note = str | Showing
+"""One thing a tell says: python as it stands, or a text and its show, which the fold shows as comments by the lines the model has not seen.
+A paragraph is what one fact that tells stands as in a turn: its notes, one after the other, and a blank line between two paragraphs.
+The first line of a paragraph is its header: # and, with no space, the id of the act it is of, or the kind of the query it is of, then its words, as #bash1 exited 0 or #read a.txt.
+Every other comment of a paragraph begins with # and a space, so no line of a message or of a text reads as a header.
+The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a query stands at the place in the run where the query was asked.
+The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, stands, advance, paused, woke, cancelled, and one for each query the model may say: read, write, peek, turns, clock, chance, gate, cd and cwd.
+A statement that a paragraph shows binds the name of an act in the chain, and a comment binds nothing.
 """
 type Showing = tuple[Text, Show]
-"""A text a tag shows, and the show of it, which is what a tell of a text carries and what the fold of the turns makes a tag of.
-The body of a closed tag holds one shown for each text told.
-A list body shows each showing in it, and anything else in it stands as it is.
-The shown tag holds as its body the lines that a show picked, with their numbers.
-The engine applies a show before it makes a tag, so the body holds the picked lines alone.
+"""A text a note shows, and the show of it, which is what a tell of a text carries and what the fold of the turns makes comments of.
+The paragraph of an exited command holds one showing for each text told.
+A tell shows each showing it holds, and each other note stands as it is.
+A showing stands as a comment of the path of its text and of how many of the lines the show picked the chain knows, then a comment for each other line it picked, with its number.
+The engine applies a show before it writes a line, so the paragraph holds the picked lines alone.
 A show applies to a text or to a stream.
 A line told once on a chain is known there, by its path, its number and its content.
 read tells a line again after the content of the line changed.
@@ -648,15 +656,15 @@ type Usage = tuple[int, int, int, int, float]
 A usage holds the token counts and the dollars of one model response.
 The share of the window it filled is the words it read against the window of the actor, so no word of it says the share.
 """
-type Turn = tuple[Literal["user", "assistant"], list[Tag | str], Usage | None, object]
-"""One turn of what a model reads: who said it, what it holds, what the answer to it cost, and the blocks of the provider, which are its own, are read by nothing of the engine, and go back to it with the turn.
+type Turn = tuple[Literal["user", "assistant"], str, Usage | None, object]
+"""One turn of what a model reads: who said it, the python it holds, what the answer to it cost, and the blocks of the provider, which are its own, are read by nothing of the engine, and go back to it with the turn.
 The role of a turn is assistant for a response, and user for everything else.
 The blocks of an assistant turn are the response as the provider returned it.
-A turn is a role, a content, a usage and blocks.
+A turn is a role, python, a usage and blocks.
 An assistant turn carries the usage of the response.
 An assistant turn keeps the role assistant for every model that reads the turns.
 The engine sends the response to the provider again whole.
-The text of a turn is everything it holds that is text, which is the whole of what a model says when what it says is python.
+The python of an assistant turn is the word the model wrote, quotes and all, and the python of a user turn is the paragraphs told since the ask before it, and nothing else.
 """
 type Actor = tuple[str, tuple[str, ...], int]
 """An actor the World offers: the name of a model, the efforts it takes, and the window it reads.
@@ -684,30 +692,30 @@ A done that an act said itself is the result of the act.
 A done that names a question is the answer to the question.
 A kind that ends when it is told to: it starts its ear, and then a done that names it is what it came to; a cancel over it ends it with a CancelledError, and a close of it with the value that close carries.
 """
-type Tell = tuple[Literal["tell"], str, str, list[Tag]]
-"""A tell carries tags about the act it is about, and the turns are folded from them.
+type Tell = tuple[Literal["tell"], str, str, list[Note]]
+"""A tell carries notes about the act it is about, and the turns are folded from them.
 What an act tells is the telling of its chain, so the record keeps none of it, and a later life tells it again.
-A fact that carries tags is what the turns are folded from: a tell, and a control, which carries the tag it tells.
+A fact that carries notes is what the turns are folded from: a tell, and a control, which carries the header it tells.
 """
-type Pause = tuple[Literal["pause"], str, str, list[Tag]]
+type Pause = tuple[Literal["pause"], str, str, list[Note]]
 """While a pause stands, nothing that the pause is over hears, and what is said meanwhile waits for the wake.
 A control is a fact over an act: over that act, over everything that act made, and over everything on a chain when the control names a chain.
 A control reaches what it is over, and whatever else the words of the control name.
 A control is no act: it takes no name of its own, and the record holds it as a fact about the acts it is over.
 What a control reaches: the act it names, everything that act made, and every act of the chain it names.
 It reaches by the chain as well as by the name, since an act on a chain is not under it unless the chain made it.
-A control carries the tag it tells, so a model reads what was done to its work whoever did it, and nothing else builds that tag: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it.
+A control carries the header it tells, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it.
 A pause is over the act it names and everything under it.
 """
-type Wake = tuple[Literal["wake"], str, str, list[Tag]]
+type Wake = tuple[Literal["wake"], str, str, list[Note]]
 """A wake ends the pause over the same act, and what waited is heard.
 A wake is over the act it names and everything under it.
 """
-type Cancel = tuple[Literal["cancel"], str, str, list[Tag]]
+type Cancel = tuple[Literal["cancel"], str, str, list[Note]]
 """A cancel ends everything it is over: each of them is done with CancelledError, and none of them says anything of its own again.
 A cancel reaches to any depth, and on whatever chain.
 """
-type Close = tuple[Literal["close"], str, str, object, list[Tag]]
+type Close = tuple[Literal["close"], str, str, object, list[Note]]
 """A close is a cancel that carries what the act it names is done with, and it is a kind of its own, since a tuple has no slot that may be empty.
 A close is over the act it names and the words running under it, where a cancel is over everything under it.
 """
@@ -738,7 +746,7 @@ No prompt that a pause is over asks a model.
 A paused chain makes no new ask after a held response.
 No model is asked for a rung the record answered, since a later life asks again for nothing it was answered once.
 It asks for no rung a pause stands over, whether the pause is over that rung or over the chain, so a paused chain asks no model until the wake.
-The chain asks one model at a time, which it reads from its transcript, the rung that has waited the longest among those it heard on itself that nothing has been said of, handing it the turns as they stand, for the World to render as it likes, so that many chains ask many models at once.
+The chain asks one model at a time, which it reads from its transcript, the rung that has waited the longest among those it heard on itself that nothing has been said of, handing it the turns as they stand, for the World to hand its provider as it likes, so that many chains ask many models at once.
 """
 type Answer = tuple[Literal["answer"], str, str, Turn]
 """The result of an ask is the turn of the model, which stands as the turn it is.
@@ -747,12 +755,13 @@ The World answers with the turn, which carries its usage and the blocks of the p
 """
 type Ready = tuple[Literal["ready"], str, str, str]
 """A ready says the word a rung holds.
-The word of a rung enters the program of the chain when the gate accepts it, and runs in the globals of the chain.
+The word of a rung enters the program of the chain when the gate accepts it or when the chain wrote it, and runs in the globals of the chain.
 The word of a rung that extends the engine is part of the program, so the extension returns in a later life.
 The old words stay in the program and in the turns after a rung rebinds a name.
 """
 type Run = tuple[Literal["run"], str, str, str, str, str]
 """A run tells the Kernel to run the word of a rung, and says the chain whose module it runs in.
+The word a run carries is python, which unquoted made of the word of the rung.
 A run names the rung that the word retells, so a Kernel may answer a retold run from what it kept of that one instead of running the word again.
 Every rung of a chain runs in the globals of the chain, the word of a model and a word its caller wrote alike.
 What a rung binds stays bound for every later rung of the chain.
@@ -799,7 +808,7 @@ A model asked on any chain of a later life finds the new roster in the transcrip
 The World answers it while the chain waits, since what a chain stands on is asked and never done.
 A chain asks what it stands on at its open and never again in that life, and every life asks the World again, so a change of the World reaches every chain of the next life.
 Each standing binds the default actor of the chain, under the name actor.
-The chain tells the standing it was answered under the name opened, with the roster, the directory and the actor.
+The chain tells the standing it was answered under the header stands, as python shows it: the roster, the directory and the actor.
 The chain holds no stand, since the standing it tells is what its transcript holds of it.
 """
 type Holds = tuple[Literal["holds"], str, str, str, str]
@@ -809,8 +818,8 @@ The chain holds its holds in the transcript, where the ask stands in a life that
 type Gate = tuple[Literal["gate"], str, str, str, str, dict[str, str]]
 """A gate is the question of whether a word may run, which the ear named gate answers with its findings, apart from the Kernel, so a word may ask it while the Kernel runs that word.
 A gate says the program of the chain before that rung, whose words the Kernel reads the word after, so the Kernel keeps no ladder of its own and a word of a program made again is read after the rungs that stand.
-The refused tag holds as its body the findings that refused the word of a rung.
-The chain has the word of a rung gated before it runs, and a refused word runs never.
+The refused paragraph holds the findings that refused the word of a rung, one comment for each.
+The chain has the word of a rung gated before it runs, but a word it wrote itself, and a refused word runs never.
 A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a copy of a refused word is refused again and tells its findings not again.
 A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run.
 The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the prompt of it asks again as it does for a word that gave no value.
@@ -822,8 +831,8 @@ type Cwd = tuple[Literal["cwd"], str, str, str]
 type Transcript = tuple[Literal["transcript"], str, str, str, str]
 """A transcript is the question of the transcript of a chain up to an act, which the chain answers, and which a chain with a source and a grant ask."""
 type Program = tuple[Literal["program"], str, str, str]
-"""A program is the question of the words of the rungs of a chain that the gate let run, each with the name of its rung, which the chain answers.
-A chain with a source asks the program of its origin, and gate asks the program of the chain before it asks the Kernel."""
+"""A program is the question of the words of the rungs of a chain that run, as python, each with the name of its rung, which the chain answers.
+A chain with a source asks the program of its origin, and gate asks the program of the chain before it asks the gate whether the word may run."""
 type Merged = tuple[Literal["merged"], str, str, str, str]
 """A merged is the question of whether the stderr of a command flows into its stdout, which the command answers from what its verb was given, and which the World asks before it starts the command."""
 type Wait = tuple[Literal["wait"], str, str, str, float]
@@ -833,19 +842,16 @@ type Rung = tuple[Literal["rung"], str, str, str, str, str, str, str]
 type Prompt = tuple[Literal["prompt"], str, str, str, str, str, str]
 """A prompt carries the name of the shape, the message and the actor of a prompt."""
 type Chain = tuple[Literal["chain"], str, str, str, str, str]
-"""A chain carries the label and the source of a chain, and every chain is chain://lineage.n whether boot or chain opened it."""
+"""A chain carries the label and the source of a chain, and every chain is chainN whether boot or chain opened it."""
 type Grant = tuple[Literal["grant"], str, str, str, float | None, float | None]
 """A grant carries the ceiling in dollars and the ceiling in share of the window."""
 type Bash = tuple[Literal["bash"], str, str, str, str, bool, float]
 """A bash carries the command, the fed flag and the timeout, and no show and no working directory."""
 
-def lineage(name: str) -> str:
-  """The lineage of an act, the makers of it one under the other, which its name holds after its kind."""
-
 def under(name: str, of: str) -> bool:
-  """Whether one act is another or was made by it, which their lineages say, since an act is named under the one that made it.
-  An act is under every ancestor of the act, and the name of the act says which acts those are.
-  An act is under its chain only when the chain made it: the rung of a prompt the operator made is under that prompt, and on the chain, so a name says who made an act and never where it stands.
+  """Whether one act is another or was made by it, which the life says, since every question says who made it.
+  An act is under every ancestor of the act, which the maker of each says in turn, up to the operator or an ear of the outside.
+  An act is under its chain only when the chain made it: the rung of a prompt the operator made is under that prompt, and on the chain, so the maker of an act says who made it and never where it stands.
   Nothing is under a name of nothing.
   """
 
@@ -858,38 +864,57 @@ def question(a: Fact) -> bool:
 def scope(name: str) -> str:
   """The scope of a question, from its name: the chain it is on, and itself for a chain, and nothing for a name of no question of the life."""
 
-def tell(name: str, *attrs: tuple[str, object], body: object = None) -> None:
-  """What a query tells of itself: a tag of its own name, with its words and what it was answered, said on the run that asked it, and nothing at all outside a run.
+def tell(name: str, text: object = "", *notes: Note) -> None:
+  """What a query tells of itself: a paragraph headed with its kind, its words and what it was answered, said on the run that asked it, and nothing at all outside a run.
   A query is put to the living generators in turn, the acts first and the outside last, and it stops at the first answer, so the World is asked for nothing that the engine knows.
   """
 
-def told(name: str, id: str, *attrs: tuple[str, object], body: object = None) -> Tell:
-  """The opened tag tells the id and what the act says of itself, and no actor and no arguments as such.
-  A closed tag tells the act with what it came to, as python shows it.
-  told says a tell about an act with one tag that names the act by its id, and gives the tell back, so a chain holds what it told where it told it.
+def told(id: str, text: object = "", *notes: Note) -> Tell:
+  """The open of an act tells the id and what the act says of itself, and no actor and no arguments as such.
+  A closed header tells the act with what it came to, as python shows it.
+  told says a tell about an act with one paragraph headed with the id of the act, and gives the tell back, so a chain holds what it told where it told it.
   """
 
 def control(kind: str, name: str, id: str, *words: object) -> Fact:
-  """A control said over the act it names, with a tag of its name that says which act it is over, which is how pause, wake, cancel and close say theirs.
+  """A control said over the act it names, with a header of its name headed with that act, which is how pause, wake, cancel and close say theirs.
   The call gives the control as the life made it whole, so a close that named no act reads which act it is over.
   """
 
-def showing(got: object, show: Show) -> list[Showing] | str:
-  """What a tag shows of what a door answered: the text by the lines the model has not seen, and anything that is no text as python shows it."""
+def headed(name: str, text: object = "") -> str:
+  """The header of a paragraph: # and the name with no space between, then the text, whose later lines are comments."""
 
-def shown(pair: Showing, seen: dict[str, dict[int, str]]) -> Tag:
+def commented(text: object) -> str:
+  """The text as comments: # and a space before each line of it, and # alone for an empty line, so no line of it runs."""
+
+def bound(id: str, of: str = "object") -> str:
+  """The statement that binds the name of an act to the act, with the type of what the act comes to, as bash1: Act[Exit] = Act('bash1'), so the gate knows what an await of it gives."""
+
+def showing(got: object, show: Show) -> list[Note]:
+  """What a paragraph shows of what a door answered: the text by the lines the model has not seen, and anything that is no text as a comment of how python shows it."""
+
+def shown(pair: Note, seen: dict[str, dict[int, str]]) -> str:
   """The lines of the text the model has not seen, and how many of the rest it knows."""
 
 def turns_of(heard: list[Fact]) -> list[Turn]:
-  """A user turn packs one tag for each thing told since the last ask, in order.
+  """A user turn packs one paragraph for each thing told since the last ask, in order.
   The turns of a chain only grow.
   A turn once phrased is phrased the same on every later ask.
-  The turns are folded whole at each ask, and a user turn holds every tag told before its ask and since the ask before it, so a tag told while an ask is in flight goes to the turn after the answer.
+  The turns are folded whole at each ask, and a user turn holds every paragraph told before its ask and since the ask before it, so a paragraph told while an ask is in flight goes to the turn after the answer.
   An ask appends the response as an assistant turn.
   The next ask tells everything that the step told.
   The turns hold every answer of the model as the turn it is.
   The turns of a chain show every act the model made, with its result, and turns is how they are read.
   The turns end with a user turn, empty when nothing was told since the last answer.
+  """
+
+def unquoted(word: str) -> str:
+  """What a word is as python: each quote in it bound as a string.
+  A quote is a string a word writes between two marks, <Sn> at the start of a line and </Sn> at the end of a line, n being any number, so nothing in it needs an escape.
+  The open mark is looked for line by line from the top, and its close mark from the last line up, so a quote may hold the marks of another.
+  The value of a quote is the text between its marks, less a line break just after the open mark.
+  A quote becomes Sn bound to its value as python writes it, on the line of the open mark, and each other line of the quote becomes an empty line, so every line after it keeps its number.
+  An open mark that has no close mark stays as it is, and the gate reads it as the python it is not.
+  The engine unquotes a word before the gate reads it and before the Kernel runs it, and the door of a ladder and the turns keep the quotes as the word wrote them.
   """
 
 def offered(standing: Standing, to: str) -> int | None:
@@ -931,8 +956,8 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names, and the act made last are its own, and four names reach them: send, which says a fact, ask, which puts a query, act, which makes an act, and drive, which brings a generator to life.
   A verb from a rung takes the chain of the rung when the call leaves on unsaid.
   The kind of an act is the verb that made the act.
-  The lineage of an act is the lineage of the act that made it, and then which of the acts of that one it is.
-  The lineage of an act that the operator made begins at the operator.
+  An act says who made it, and the one that made it says its own maker in turn, which is how the life knows every ancestor of an act.
+  An act that the operator made has the operator for its maker.
   A name is never reused in the record.
   A later life gives the same names, since the same acts make them again.
   The root has no parent.
@@ -965,7 +990,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   What it keeps it says, so that the World holds the record and the journal alone says what belongs in it; a World that is durable keeps what it is told, one that is not keeps nothing, and either way what the World holds is what the life after it is given.
   Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them: a query nobody asks again it steps over and holds back nothing with; an act of the operator it says at once, as the operator, once the chain it is on has been made again, which is how the acts of the operator start the life; any other fact it says when the act it is about has been made again and the act that was made last before it is there too, so that its controls land where they landed, but for a question, which its own word says again, and a done, which is the World's and which the record answers by.
   The act made last before an entry is the last act the journal heard when it kept the entry, which is the act made last when the fact was said, since the journal hears every fact in the order it was said.
-  One said under a name it had keeps it, and whoever names acts under the lineage of that name counts on from it, so that no later act takes a name that is taken.
+  One said again takes the name it had, since a later life makes its acts again in the order of the record, and the life counts each kind on from there, so that no later act takes a name that is taken.
   A boot is a life; a second boot is a second life, and the first is gone.
   The names operator, record and journal are the life's own ears, and boot refuses a generator of the outside under one of them.
   A life settles an await of its acts from outside a run in the loop it is opened in, so boot outside a running loop raises before it makes anything.

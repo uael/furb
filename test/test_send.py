@@ -1,6 +1,22 @@
 """send, the bus: the one way a fact is said to the living."""
 
-from conftest import DOOR, STANDS, Dead, Sand, gated, keeping, life, lived, pair, plain, relived, said, settle, sown
+from conftest import (
+  DOOR,
+  STANDS,
+  Dead,
+  Sand,
+  findings,
+  keeping,
+  life,
+  lived,
+  pair,
+  plain,
+  ran,
+  relived,
+  said,
+  settle,
+  sown,
+)
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Exit, Text
 
@@ -11,8 +27,8 @@ async def test_the_one_way_to_speak_of_an_act() -> None:
   """The one way to speak of an act: a fact about it is said to the living, whole as the bus made it, and given back."""
   sand = sown()
   log, root = life(sand)
-  made = engine.send("tell", root, [("noted", [], None)])
-  assert made == ("tell", root, OPERATOR, [("noted", [], None)])
+  made = engine.send("tell", root, ["#chain1 noted"])
+  assert made == ("tell", "chain1", OPERATOR, ["#chain1 noted"])
   assert said(log, "tell")[-1] == made
 
 
@@ -30,7 +46,7 @@ async def test_every_verb_of_the_file_speaks_through_the_three_entries_of_the_bu
   assert [a[4] for a in said(log, "read")] == ["a.txt"]
   assert [a[4] for a in said(log, "bash")] == ["echo hi"]
   assert said(log, "close")[-1][1] == root
-  assert [a[1] for a in said(log, "note")] == ["note://operator.2.1.1"]
+  assert [a[1] for a in said(log, "note")] == ["note1"]
 
 
 async def test_a_fact_reaches_the_world_the_kernel_and_the_record_only_through_the_bus() -> None:
@@ -40,7 +56,11 @@ async def test_a_fact_reaches_the_world_the_kernel_and_the_record_only_through_t
   sand.script[root] = ["close(read('a.txt').content)"]
   assert await engine.prompt(str, "read it", on=root) == "one\ntwo\n"
   assert [a[0] for a in sand.calls] == ["stand", "ask", "read"]
-  assert gated(log) == ["close(read('a.txt').content)"]
+  assert findings(log) == [[]]
+  assert ran(log) == [
+    "chain1: Act[object] = Act('chain1')\nprompt1: Act[str] = Act('prompt1')",
+    "close(read('a.txt').content)",
+  ]
   assert [entry[1][4] for entry in sand.record if entry[1][0] == "read"] == ["a.txt"]
 
 
@@ -62,7 +82,7 @@ async def test_who_says_it_is_whoever_is_speaking() -> None:
   assert await engine.prompt(int, "start one", on=root) == 1
   await settle()
   step, command = said(log, "rung")[0], said(log, "bash")[0]
-  assert (command[2], step[2]) == (step[1], "prompt://operator.2")
+  assert (command[2], step[1], step[2]) == ("rung1", "rung1", "prompt1")
   engine.send("out", command[1], "hi\n", "stdout", by=WORLD)
   assert said(log, "out")[-1][2] == WORLD
   engine.read("a.txt", on=root)
@@ -78,7 +98,7 @@ async def test_a_fact_said_it_says_its_kind_the_act_it_is_about_who_said_it_and_
   assert engine.scope(act) == root
   engine.cancel(act)
   over = said(log, "cancel")[0]
-  assert over == ("cancel", act, OPERATOR, [("cancelled", [("over", act)], None)])
+  assert over == ("cancel", "bash1", OPERATOR, ["#bash1 cancelled"])
   assert [entry[0] for entry in sand.record if entry[1][0] == "bash"] == [root]
 
 
@@ -86,10 +106,10 @@ async def test_the_bus_makes_every_fact_whole_from_what_it_is_given() -> None:
   """The bus makes every fact whole from what it is given, so nobody holds a fact that is not whole."""
   sand = sown()
   log, root = life(sand)
-  made = engine.send("tell", root, [("noted", [], None)])
-  assert (made[0], made[1], made[2]) == ("tell", root, OPERATOR)
+  made = engine.send("tell", root, ["#chain1 noted"])
+  assert (made[0], made[1], made[2]) == ("tell", "chain1", OPERATOR)
   asking, got = engine.ask("read", root, "a.txt")
-  assert asking == ("read", "read://operator.2", OPERATOR, root, "a.txt")
+  assert asking == ("read", "read@operator.2", OPERATOR, "chain1", "a.txt")
   assert got == Text("/w/a.txt", "one\ntwo\n")
   act = engine.bash("echo hi", on=root)
   assert said(log, "bash")[0] == ("bash", act, OPERATOR, root, "echo hi", False, 600.0)

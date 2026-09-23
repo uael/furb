@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import MANY, STANDS, Sand, Where, attr, life, plain, relived, said, settle, shown, tags
+from conftest import MANY, STANDS, Sand, Where, life, paragraphs, plain, relived, said, settle
 from furb import engine
 from furb.engine import HEAD, HIDDEN, OPERATOR, TAIL, WORLD, Act, Exit, Refused, Text, grep, span
 
@@ -39,11 +39,9 @@ async def test_bash_is_given_one_show_for_each_stream_that_bash_tells() -> None:
   engine.send("out", one, "a\nb\n", "stderr", by=WORLD)
   engine.send("exited", one, 0, by=WORLD)
   await one
-  closed = tags(engine.turns(on=root), "closed")[0]
-  assert [(attr(x, "path"), x[2]) for x in shown(closed)] == [
-    (door(one, "stdout"), "2 two"),
-    (door(one, "stderr"), "2 b"),
-  ]
+  assert paragraphs(engine.turns(on=root))[-1] == (
+    f"#{one} exited 0\n# {one}/stdout, 0 known\n# 2 two\n# {one}/stderr, 0 known\n# 2 b"
+  )
 
 
 async def test_a_feed_whose_text_is_none_closes_the_stdin_of_the_command() -> None:
@@ -90,7 +88,7 @@ async def test_bash_gives_the_command_which_is_awaited_for_its_exit_code_and_its
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   one = engine.bash("echo hi", on=root)
-  assert isinstance(one, Act) and one.startswith("bash://")
+  assert isinstance(one, Act) and one == "bash1"
   got = await one
   assert isinstance(got, Exit) and (got.code, got.stdout.content) == (0, "ran echo hi\n")
 
@@ -188,52 +186,56 @@ async def test_a_command_without_a_timeout_has_the_timeout_timeout_that_the_file
 
 
 async def test_the_stdout_and_the_stderr_doors_are_readable_while_the_command_runs_and_after_it() -> None:
-  """bash://lineage/stdout and bash://lineage/stderr are readable while the command runs and after it."""
+  """The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it."""
   sand = Sand(stands=STANDS, auto=False)
   _, root = life(sand)
   one = engine.bash("run", show_err=TAIL, on=root)
+  assert one == "bash1"
   engine.send("out", one, "one\n", "stdout", by=WORLD)
   engine.send("out", one, "bad\n", "stderr", by=WORLD)
   await settle()
-  assert engine.read(door(one, "stdout"), on=root).content == "one\n"
-  assert engine.read(door(one, "stderr"), on=root).content == "bad\n"
+  assert engine.read("bash1/stdout", on=root) == Text("bash1/stdout", "one\n")
+  assert engine.read("bash1/stderr", on=root) == Text("bash1/stderr", "bad\n")
   engine.send("exited", one, 0, by=WORLD)
   await one
-  assert engine.read(door(one, "stdout"), on=root).content == "one\n"
-  assert engine.read(door(one, "stderr"), on=root).content == "bad\n"
+  assert engine.read("bash1/stdout", on=root) == Text("bash1/stdout", "one\n")
+  assert engine.read("bash1/stderr", on=root) == Text("bash1/stderr", "bad\n")
 
 
 async def test_the_stdin_door_is_writable_while_a_fed_command_runs() -> None:
-  """bash://lineage/stdin is writable while a fed command runs."""
+  """The door bash1/stdin is writable while a fed command runs."""
   sand = Sand(stands=STANDS, auto=False)
   _, root = life(sand)
   one = engine.bash("run", fed=True, on=root)
+  assert one == "bash1"
   await settle()
-  assert engine.write(Text(door(one, "stdin"), "go"), on=root) == Text(door(one, "stdin"), "go")
-  assert engine.write(Text(door(one, "stdin"), "more"), on=root) == Text(door(one, "stdin"), "more")
+  assert engine.write(Text("bash1/stdin", "go"), on=root) == Text("bash1/stdin", "go")
+  assert engine.write(Text("bash1/stdin", "more"), on=root) == Text("bash1/stdin", "more")
   assert sand.fed == ["go", "more"]
 
 
 async def test_a_write_of_nothing_to_the_stdin_door_closes_the_stdin() -> None:
-  """A write of nothing to bash://lineage/stdin closes the stdin."""
+  """A write of nothing to bash1/stdin closes the stdin."""
   sand = Sand(stands=STANDS, auto=False)
   _, root = life(sand)
   one = engine.bash("run", fed=True, on=root)
-  assert engine.write(Text(door(one, "stdin"), "go"), on=root) == Text(door(one, "stdin"), "go")
-  engine.write(Text(door(one, "stdin")), on=root)
+  assert one == "bash1"
+  assert engine.write(Text("bash1/stdin", "go"), on=root) == Text("bash1/stdin", "go")
+  assert engine.write(Text("bash1/stdin"), on=root) == Text("bash1/stdin")
   assert sand.fed == ["go", None]
   with pytest.raises(Refused, match="closed"):
-    engine.write(Text(door(one, "stdin"), "late"), on=root)
+    engine.write(Text("bash1/stdin", "late"), on=root)
 
 
 async def test_a_read_of_the_stdout_door_gives_the_lines_of_the_command_while_the_command_runs() -> None:
-  """A read of bash://lineage/stdout gives the lines of the command while the command runs."""
+  """A read of bash1/stdout gives the lines of the command while the command runs."""
   sand = Sand(stands=STANDS, auto=False)
   _, root = life(sand)
   one = engine.bash("run", on=root)
+  assert one == "bash1"
   engine.send("out", one, "one\ntwo\n", "stdout", by=WORLD)
   await settle()
-  assert engine.read(door(one, "stdout"), on=root).lines == ["one", "two"]
+  assert engine.read("bash1/stdout", on=root).lines == ["one", "two"]
   got = engine.peek(one)
   assert isinstance(got, Exit) and got.code is None
 
@@ -301,7 +303,7 @@ async def test_without_a_show_of_its_own_the_stderr_of_it_flows_into_its_stdout(
   quiet = engine.bash("quiet", show=HIDDEN, on=root)
   engine.send("exited", quiet, 0, by=WORLD)
   await quiet
-  assert [tag for tag in tags(engine.turns(on=root)) if ("id", quiet) in tag[1]] == []
+  assert paragraphs(engine.turns(on=root))[2:] == [f"#{one} run\n{one}: Act[Exit] = Act({one!r})"]
 
 
 async def test_it_answers_a_read_of_a_stream_and_a_peek_while_it_runs() -> None:
@@ -366,19 +368,19 @@ async def test_the_stdout_of_a_command_without_a_show_is_told_as_tail() -> None:
   engine.send("out", one, MANY, "stdout", by=WORLD)
   engine.send("exited", one, 0, by=WORLD)
   await one
-  body = shown(tags(engine.turns(on=root), "closed")[0])[0][2]
-  assert isinstance(body, str)
-  assert body.splitlines()[:1] + body.splitlines()[-1:] == ["51 line 51", "300 line 300"]
+  told = "".join(f"\n# {i} line {i}" for i in range(51, 301))
+  assert paragraphs(engine.turns(on=root))[-1] == f"#{one} exited 0\n# {one}/stdout, 0 known{told}"
 
 
 async def test_the_engine_refuses_a_write_to_the_stdin_door_after_the_command_ended() -> None:
-  """The engine refuses a write to bash://lineage/stdin once the command ended or was cancelled."""
+  """The engine refuses a write to bash1/stdin once the command ended or was cancelled."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   one = engine.bash("echo hi", fed=True, on=root)
+  assert one == "bash1"
   await one
   with pytest.raises(Refused, match="ended"):
-    engine.write(Text(door(one, "stdin"), "late"), on=root)
+    engine.write(Text("bash1/stdin", "late"), on=root)
   sand.auto = False
   gone = engine.bash("sleep", fed=True, on=root)
   engine.cancel(gone)
@@ -399,10 +401,11 @@ async def test_its_close_tells_what_its_stdout_shows() -> None:
     engine.send("out", one, "bad\n", "stderr", by=WORLD)
     engine.send("exited", one, 0, by=WORLD)
   await settle()
-  shut = {attr(tag, "id"): [attr(x, "path") for x in shown(tag)] for tag in tags(engine.turns(on=root), "closed")}
-  assert shut[merged] == [door(merged, "stdout")]
-  assert shut[apart] == [door(apart, "stdout"), door(apart, "stderr")]
-  assert shut[quiet] == [door(quiet, "stdout")]
+  assert paragraphs(engine.turns(on=root))[-3:] == [
+    f"#{merged} exited 0\n# {merged}/stdout, 0 known\n# 1 bad",
+    f"#{apart} exited 0\n# {apart}/stdout, 0 known\n# {apart}/stderr, 0 known\n# 1 bad",
+    f"#{quiet} exited 0\n# {quiet}/stdout, 0 known",
+  ]
 
 
 async def test_the_world_asks_a_command_whether_its_stderr_flows_into_its_stdout() -> None:
@@ -413,7 +416,7 @@ async def test_the_world_asks_a_command_whether_its_stderr_flows_into_its_stdout
   apart = engine.bash("two", show_err=TAIL, on=root)
   await settle()
   asked = [a for a in engine.asked.values() if a[0] == "merged"]
-  assert [a[2:] for a in asked] == [(WORLD, root, merged), (WORLD, root, apart)]
+  assert asked == [("merged", "merged@world.1", WORLD, root, merged), ("merged", "merged@world.2", WORLD, root, apart)]
   assert [engine.outcomes[a[1]] for a in asked] == [True, False]
 
 

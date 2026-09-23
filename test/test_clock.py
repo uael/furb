@@ -1,6 +1,6 @@
 """clock, one reading of the wall clock of the World."""
 
-from conftest import STANDS, Sand, attr, life, settle, tags
+from conftest import STANDS, Sand, life, settle
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -31,4 +31,4 @@ async def test_clock_tells_the_reading_it_was_answered() -> None:
   assert await engine.prompt(int, "read the clock", on=root) == 1
   await settle()
   assert engine.modules[root]["at"] == 1001.0
-  assert [attr(tag, "at") for tag in tags(engine.turns(on=root), "clock")] == [1001.0]
+  assert engine.turns(on=root)[-1][1] == "#clock 1001.0\n\n#prompt1 closed 1"

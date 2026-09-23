@@ -4,7 +4,7 @@ from collections.abc import Generator
 
 import pytest
 
-from conftest import STANDS, Sand, attr, life, said, settle, tags
+from conftest import STANDS, Sand, life, paragraphs, said, settle
 from furb import engine
 from furb.engine import HIDDEN, OPERATOR, TIMEOUT, Act, Exit, Refused, take
 
@@ -17,8 +17,8 @@ def noting(heard: list[object], how: str = ""):  # noqa: ANN201
   def lives(id: str) -> Generator[tuple | None, tuple]:
     heard.append(id)
     if how:
-      yield "tell", id, [("noted", [("id", id), ("how", "yield")], how)]
-      engine.send("tell", id, [("noted", [("id", id), ("how", "bus")], how)])
+      yield "tell", id, [f"#{id} {how} by yield"]
+      engine.send("tell", id, [f"#{id} {how} by the bus"])
     while True:
       if (a := (yield)) is not None:
         heard.append(a)
@@ -32,7 +32,7 @@ async def test_the_way_to_make_a_question_that_lives() -> None:
   log, root = life(sand)
   heard: list[object] = []
   one = engine.act("note", root, noting(heard), "one")
-  assert isinstance(one, Act) and one == "note://operator.2"
+  assert isinstance(one, Act) and one == "note1"
   assert said(log, "note") == [("note", one, OPERATOR, root, "one")]
   assert engine.acts[one] == ("note", one, OPERATOR, root, "one")
   assert heard[0] == one
@@ -45,7 +45,7 @@ async def test_an_act_said_it_is_begun_and_what_the_call_gives_is_its_name() -> 
   one = engine.bash("echo hi", on=root)
   got = engine.peek(one)
   assert isinstance(one, Act) and isinstance(got, Exit) and got.code is None
-  assert tags(engine.turns(on=root), "opened")[-1][1] == [("id", one), ("command", "echo hi")]
+  assert paragraphs(engine.turns(on=root))[-1] == "#bash1 echo hi\nbash1: Act[Exit] = Act('bash1')"
   assert (await one).code == 0
 
 
@@ -55,9 +55,9 @@ async def test_an_act_said_twice_under_one_name_is_one_act() -> None:
   log, root = life(sand)
   first = engine.rung("close(bash('echo hi'))", on=root)
   again = engine.rung("close(bash('echo hi'))", retells=first, on=root)
-  assert (await first) == "bash://operator.2.1" and (await again) is None
+  assert (await first) == "bash1" and (await again) is None
   assert len(said(log, "bash")) == 1
-  assert [a[1] for a in sand.calls if a[0] == "start"] == ["bash://operator.2.1"]
+  assert [a[1] for a in sand.calls if a[0] == "start"] == ["bash1"]
 
 
 async def test_two_acts_that_say_the_same_words_under_one_name_are_one_act() -> None:
@@ -84,7 +84,7 @@ async def test_the_engine_refuses_an_act_said_from_outside_a_run_that_names_no_c
   with pytest.raises(Refused, match="no chain"):
     engine.act("note", "", noting(heard))
   assert said(log, "note") == [] and heard == []
-  assert engine.chain("two").startswith("chain://")
+  assert engine.chain("two") == "chain2"
 
 
 async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
@@ -109,10 +109,11 @@ async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fa
   two = engine.bash("echo hi", on=root)
   await settle()
   assert heard[0] == one and ("bash", two, OPERATOR, root, "echo hi", False, TIMEOUT) in heard[1:]
-  told = tags(engine.turns(on=root), "noted")
-  assert [(attr(tag, "id"), attr(tag, "how"), tag[2]) for tag in told] == [
-    (one, "yield", "spoke"),
-    (one, "bus", "spoke"),
+  assert paragraphs(engine.turns(on=root))[2:] == [
+    "#note1 spoke by yield",
+    "#note1 spoke by the bus",
+    "#bash1 echo hi\nbash1: Act[Exit] = Act('bash1')",
+    "#bash1 exited 0\n# bash1/stdout, 0 known\n# 1 ran echo hi",
   ]
 
 

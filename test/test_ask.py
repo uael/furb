@@ -14,7 +14,7 @@ async def test_the_way_to_put_a_question_that_lives_not() -> None:
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   here, where = engine.ask("cwd", root)
-  assert here == ("cwd", "cwd://operator.2", OPERATOR, root) and where == "/w"
+  assert here == ("cwd", "cwd@operator.2", OPERATOR, "chain1") and where == "/w"
   assert engine.asked[here[1]] == here
   when, at = engine.ask("clock", root)
   assert at == 1001.0
@@ -69,7 +69,7 @@ async def test_a_question_that_nobody_answers_is_answered_with_nothing() -> None
   """A question that nobody answers is answered with nothing."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  merged, got = engine.ask("merged", root, "bash://none.1")
+  merged, got = engine.ask("merged", root, "bash9")
   assert got is None and merged[1] not in engine.outcomes
   assert engine.read("missing.txt", on=root) is None
 
@@ -80,7 +80,7 @@ async def test_a_query_the_operator_asks_from_outside_a_run_that_names_no_chain(
   log, root = life(sand)
   two = engine.chain("two")
   when, at = engine.ask("clock", "")
-  assert when == ("clock", when[1], OPERATOR, "") and at == 1001.0
+  assert when == ("clock", "clock@operator.3", OPERATOR, "") and at == 1001.0
   assert when in log
   assert [a[2] for a in said(log, "done") if a[1] == when[1]] == [WORLD]
   held, theirs = engine.ask("transcript", root, root)[1], engine.ask("transcript", two, two)[1]

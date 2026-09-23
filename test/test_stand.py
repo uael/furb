@@ -1,6 +1,6 @@
 """Stand, what a chain stands on."""
 
-from conftest import STANDS, Sand, attr, life, plain, relived, said, settle, sown, tags
+from conftest import STANDS, Sand, heads, life, paragraphs, plain, relived, said, settle, sown
 from furb import engine
 from furb.engine import WORLD
 
@@ -28,11 +28,14 @@ async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_
   _, root = life(sand)
   assert await engine.rung("k = 1", on=root) is None
   await settle()
-  was = tags(engine.turns(on=root), "opened")[1]
-  assert was == ("opened", [("id", root), ("roster", STANDS[0]), ("directory", "/w"), ("actor", "m/low")], None)
+  assert heads(engine.turns(on=root))[1] == f"#{root} stands {STANDS!r}"
   _, over = await relived(Sand(stands=LATER), plain(sand.record))
-  now = tags(engine.turns(on=over), "opened")[1]
-  assert now == ("opened", [("id", over), ("roster", LATER[0]), ("directory", "/z"), ("actor", "o/low")], None)
+  assert over == root and heads(engine.turns(on=over))[1] == f"#{over} stands {LATER!r}"
+  _, held = engine.ask("transcript", over, over)
+  assert isinstance(held, list)
+  assert [a for a in held if a[0] == "tell" and a[3][0].startswith(f"#{over} stands ")] == [
+    ("tell", over, over, [f"#{over} stands {LATER!r}"])
+  ]
   assert engine.cwd(on=over) == "/z" and engine.modules[over]["actor"] == "o/low"
 
 
@@ -58,9 +61,8 @@ async def test_a_model_asked_on_any_chain_of_a_later_life_finds_the_new_roster()
   later.script[over] = ["close(1)"]
   assert await engine.prompt(int, "count", to="o/low", on=over) == 1
   asked = said(again, "ask")[-1]
-  assert [attr(tag, "roster") for tag in tags(asked[5], "opened") if ("id", over) in tag[1] and len(tag[1]) == 4] == [
-    LATER[0]
-  ]
+  assert [one for one in paragraphs(asked[5]) if " stands " in one] == [f"#{over} stands {LATER!r}"]
+  assert [one for one in paragraphs(asked[5]) if repr(STANDS[0]) in one] == []
 
 
 async def test_the_world_answers_it_while_the_chain_waits() -> None:
@@ -68,7 +70,7 @@ async def test_the_world_answers_it_while_the_chain_waits() -> None:
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   asked = said(log, "stand")[0]
-  assert asked[1] == "stand://operator.1.1"
+  assert asked[1] == f"stand@{root}.1" == "stand@chain1.1"
   assert asked[1] in engine.asked and asked[1] not in engine.acts
   assert engine.modules[root]["actor"] == "m/low"
 
@@ -101,20 +103,28 @@ async def test_each_standing_binds_the_default_actor_of_the_chain_under_the_name
   assert engine.modules[root]["actor"] == "m/low" == said(log, "ask")[0][4]
 
 
-async def test_the_chain_tells_the_standing_it_was_answered_under_the_name_opened() -> None:
-  """The chain tells the standing it was answered under the name opened, with the roster, the directory and the actor."""
+async def test_the_chain_tells_the_standing_it_was_answered_under_the_header_stands() -> None:
+  """The chain tells the standing it was answered under the header stands, as python shows it: the roster, the directory and the actor."""
   sand = sown()
-  _, root = life(sand)
-  told = tags(engine.turns(on=root), "opened")
-  assert dict(told[1][1]) == {"id": root, "roster": STANDS[0], "directory": "/w", "actor": "m/low"}
+  log, root = life(sand)
+  answered = next(a[3] for a in said(log, "done") if a[1] == said(log, "stand")[0][1])
+  assert answered == STANDS
+  assert (
+    paragraphs(engine.turns(on=root))[1]
+    == f"#{root} stands {answered!r}"
+    == (
+      "#chain1 stands ((('operator', (), 200000), ('m', ('low', 'high'), 400000), ('n', ('low',), 200000)), '/w', 'm/low')"
+    )
+  )
 
 
 async def test_the_chain_holds_no_stand() -> None:
   """The chain holds no stand, since the standing it tells is what its transcript holds of it."""
   sand = sown()
-  _, root = life(sand)
+  log, root = life(sand)
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
-  assert said(held, "stand") == []
-  assert [a for a in held if a[1].startswith("stand://")] == []
-  assert dict(tags(engine.turns(on=root), "opened")[1][1])["roster"] == STANDS[0]
+  stood = said(log, "stand")[0][1]
+  assert stood == f"stand@{root}.1"
+  assert [a for a in held if a[0] == "stand" or a[1] == stood] == []
+  assert held[1] == ("tell", root, root, [f"#{root} stands {STANDS!r}"])

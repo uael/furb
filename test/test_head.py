@@ -1,6 +1,6 @@
 """HEAD, the span a read without a show is told as."""
 
-from conftest import STANDS, Sand, life, settle, shown, tags
+from conftest import STANDS, Sand, life, settle
 from furb import engine
 
 LONG = "".join(f"line {i}\n" for i in range(1, 2003))
@@ -15,7 +15,5 @@ async def test_head_is_the_span_of_the_first_2000_lines_which_a_read_without_a_s
   sand.script[root] = ["read('long.txt')\nclose(1)"]
   assert await engine.prompt(int, "read it", on=root) == 1
   await settle()
-  body = shown(tags(engine.turns(on=root), "read")[0])[0][2]
-  assert isinstance(body, str)
-  lines = body.splitlines()
-  assert len(lines) == 2000 and lines[0] == "1 line 1" and lines[-1] == "2000 line 2000"
+  told = "\n".join(["#read long.txt", "# /w/long.txt, 0 known", *[f"# {i} line {i}" for i in range(1, 2001)]])
+  assert engine.turns(on=root)[-1][1] == f"{told}\n\n#prompt1 closed 1"

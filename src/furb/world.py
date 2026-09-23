@@ -110,37 +110,6 @@ def unwire(x: object) -> object:
   return x
 
 
-def shown(tag: tuple) -> str:
-  """One tag as the model reads it: its name, its short attributes beside the name, and everything else inside it.
-
-  A value that holds a line break or a quotation mark stands in the body and not beside the name, and nothing is
-  ever escaped, so a text crosses to the model byte for byte.
-  """
-  name, held, body = tag
-  attrs, parts = "", []
-  for key, value in held:
-    said = value if isinstance(value, str) else repr(value)
-    if "\n" in said or '"' in said:
-      parts.append(f"<{key}>\n{said}\n</{key}>")
-    else:
-      attrs += f' {key}="{said}"'
-  if isinstance(body, str):
-    parts.append(body)
-  elif isinstance(body, list):
-    # A tag says its attributes as a list, which nothing else a body holds does, a showing among it.
-    parts.extend(shown(one) if isinstance(one, tuple) and isinstance(one[1], list) else repr(one) for one in body)
-  elif body is not None:
-    # A body is any value a tag was told with, so one of a kind this World does not know stands as python shows it.
-    parts.append(repr(body))
-  inner = "\n".join(one for one in parts if one)
-  return f"<{name}{attrs}/>" if not inner else f"<{name}{attrs}>\n{inner}\n</{name}>"
-
-
-def rendered(content: Sequence[tuple | str]) -> str:
-  """What one turn holds, as one text: a tag as its block, and a text as itself."""
-  return "\n".join(shown(one) if isinstance(one, tuple) else one for one in content)
-
-
 def worded(got: ModelResponse) -> str:
   """The word of the rung, which is what the model wrote: the one block of code it holds, or the whole of it."""
   text = "".join(one.content for one in got.parts if isinstance(one, TextPart)).strip()
@@ -267,19 +236,18 @@ class Live:
   async def answer(self, actor: str, on: str, turns: Sequence[tuple]) -> tuple:
     """One turn of a model for one ask: the turns of the chain as messages, and what comes back as the turn it is.
 
-    The system prompt stands first, then each turn of the chain: a user turn as the text of its tags, an assistant
-    turn as the parts the provider gave, so that the provider reads its own answer whole and its cache holds the
-    conversation from one end. A user turn that holds nothing goes not at all.
+    The system prompt stands first, then each turn of the chain: a user turn as the python the engine wrote, an
+    assistant turn as the parts the provider gave, so that the provider reads its own answer whole and its cache
+    holds the conversation from one end. A user turn that holds nothing goes not at all.
     """
     who, effort = actor.partition("/")[::2]
     messages: list[ModelMessage] = [ModelRequest(parts=[SystemPromptPart(content=SYSTEM)])]
-    for role, content, _, blocks in turns:
+    for role, py, _, blocks in turns:
       if role == "assistant":
         held = blocks if isinstance(blocks, list) else []
-        text = "\n".join(x for x in content if isinstance(x, str))
-        messages.append(ModelResponse(parts=PARTS.validate_python(held) if held else [TextPart(text)]))
-      elif said := rendered(content):
-        messages.append(ModelRequest(parts=[UserPromptPart(content=said)]))
+        messages.append(ModelResponse(parts=PARTS.validate_python(held) if held else [TextPart(py)]))
+      elif py:
+        messages.append(ModelRequest(parts=[UserPromptPart(content=py)]))
     settings = Settings(claude_session_id=on, claude_effort=effort)
     got = await model_request(self.buys(who), messages, model_settings=settings)
     spent = got.usage
@@ -290,7 +258,7 @@ class Live:
       spent.cache_write_tokens,
       float(spent.cost or 0),
     )
-    return ("assistant", [worded(got)], usage, PARTS.dump_python(list(got.parts), mode="json"))
+    return ("assistant", worded(got), usage, PARTS.dump_python(list(got.parts), mode="json"))
 
   def at(self, here: str, path: str = "") -> Path:
     """One path of the disk: the directory of the life, where the chain stands, and then the path.
@@ -316,13 +284,17 @@ class Live:
 
   def serves(self, path: str) -> bool:
     """Whether the World answers for a path: a path of the disk, and a door of an act of the life, which it refuses
-    once nothing lives behind it. A door of no act of the life is another ear's to answer, so the World says nothing
-    of it, whatever the order the ears were given in."""
-    return "://" not in path or path.rsplit("/", 1)[0] in engine.acts
+    once nothing lives behind it. A path of a scheme is another ear's to answer, so the World says nothing of it,
+    whatever the order the ears were given in."""
+    return "://" not in path
+
+  def door(self, path: str) -> bool:
+    """Whether a path is a door: its first part names an act of the life, so `./` before it reaches the file."""
+    return path.split("/", 1)[0] in engine.acts
 
   def read(self, here: str, path: str) -> Text | Refused:
     """The text at a path: the file on the disk, and a refusal for the door of nothing that lives."""
-    if "://" in path:
+    if self.door(path):
       return Refused(f"{path} is the door of nothing that lives")
     at = self.at(here, path)
     if not at.is_file():
@@ -337,7 +309,7 @@ class Live:
 
   def write(self, here: str, path: str, content: str) -> Text | Refused:
     """The content onto the file at a path, and the text of that file as it stands on the disk after the write."""
-    if "://" in path:
+    if self.door(path):
       return Refused(f"{path} is the door of nothing that takes a word")
     at = self.at(here, path)
     at.parent.mkdir(parents=True, exist_ok=True)
@@ -416,8 +388,7 @@ class Live:
     with what the chain was told since the answer before it, so a refusal of the same actor there is the second
     in a row, where one of an older turn was answered after.
     """
-    last = turns[-1] if turns else None
-    return last is not None and any(isinstance(one, tuple) and MUTE.format(actor) in str(one[2]) for one in last[1])
+    return bool(turns) and MUTE.format(actor) in turns[-1][1]
 
   async def asked(self, rung: str, on: str, actor: str, turns: Sequence[tuple]) -> None:
     """One turn of a model for one ask, and the refusal for an ask the World cannot answer, with a pause when the

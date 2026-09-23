@@ -28,7 +28,12 @@ async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_
   assert all(isinstance(one, tuple) and isinstance(one[0], str) for one in log)
   assert {OPERATOR, WORLD, "gate", root, "journal"} <= {one[2] for one in log}
   assert {"chain", "stand", "prompt", "rung", "ask", "answer", "ready", "run", "ran", "keep"} <= {one[0] for one in log}
-  assert all(one[1].startswith(one[0] + "://") for one in log if engine.question(one))
+  assert [(name, one[0]) for name, one in engine.acts.items()] == [
+    ("chain1", "chain"),
+    ("prompt1", "prompt"),
+    ("rung1", "rung"),
+    ("rung2", "rung"),
+  ]
 
 
 async def test_a_fact_says_who_said_it() -> None:
@@ -37,11 +42,11 @@ async def test_a_fact_says_who_said_it() -> None:
   log, root = life(sand)
   sand.script[root] = ["close(read('a.txt').content)"]
   assert await engine.prompt(str, "read it", on=root) == "one\n"
-  step = said(log, "rung")[0][1]
-  assert said(log, "read")[0][2] == step
+  assert said(log, "rung")[0][1:3] == ("rung1", "prompt1")
+  assert said(log, "read")[0][2] == "rung1"
   assert said(log, "answer")[0][2] == WORLD
-  assert [one[2] for one in said(log, "done") if one[1].startswith("gate://")] == ["gate"]
-  assert said(log, "ran")[0][2] == step
+  assert [one[2] for one in said(log, "done") if one[1].startswith("gate@")] == ["gate"]
+  assert [(one[1], one[2]) for one in said(log, "ran")] == [("rung2", "rung2"), ("rung1", "rung1")]
   engine.read("a.txt", on=root)
   assert said(log, "read")[-1][2] == OPERATOR
 
@@ -69,7 +74,7 @@ async def test_a_control_is_about_the_act_it_is_over() -> None:
   assert [one[1] for one in said(log, "cancel")] == [act]
   assert {one[0] for one in log if one[1] == act} == {"bash", "start", "out", "exited", "tell", "done", "cancel"}
   told = [one for one in said(log, "tell") if one[1] == act]
-  assert [tag[0] for one in told for tag in one[3]] == ["opened", "closed"]
+  assert [one[3][0] for one in told] == ["#bash1 echo hi", "#bash1 exited 0"]
 
 
 async def test_a_verb_takes_a_chain_and_the_act_it_makes_is_on_that_chain() -> None:

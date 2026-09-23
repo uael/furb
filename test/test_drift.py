@@ -15,7 +15,7 @@ async def test_what_a_life_fails_with_when_an_act_of_it_is_not_the_one_the_recor
   assert await engine.prompt(int, "roll", on=root) == 0
   await settle()
   later = Sand(stands=STANDS)
-  with pytest.raises(Drift, match="bash://"):
+  with pytest.raises(Drift, match=r"^bash1 drifts$"):
     life(later, list(sand.record))
   assert later.record == []
 
@@ -49,4 +49,4 @@ async def test_a_drift_breaks_the_journal_which_keeps_nothing_more() -> None:
   assert later.record == []
   two = engine.chain("two")
   await settle()
-  assert two.startswith("chain://") and later.record == []
+  assert two == "chain2" and later.record == []

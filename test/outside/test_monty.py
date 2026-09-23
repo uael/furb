@@ -52,7 +52,7 @@ async def test_a_show_the_engine_made_is_called_back_from_the_thread_of_an_ear()
   def looking() -> Generator[tuple | None, tuple | None]:
     while True:
       if (a := (yield)) is not None and a[0] == "tell":
-        picked.extend(show(text.lines) for tag in a[3] if tag[0] == "read" for text, show in tag[2])
+        picked.extend(show(text.lines) for note in a[3] if isinstance(note, tuple) for text, show in [note])
 
   root = engine.boot((), world=sand.hears(), looking=looking())
   sand.script[root] = ["read('n.txt', span(2, 2))\nclose(1)"]
@@ -129,9 +129,9 @@ async def test_a_map_of_the_life_refuses_a_key_it_does_not_hold() -> None:
   """A map of the life, read where it stands, raises KeyError for a key it does not hold, and says which map it is."""
   engine.boot((), world=Sand(stands=STANDS).hears())
   with pytest.raises(KeyError):
-    engine.modules["chain://none"]
+    engine.modules["chain9"]
   with pytest.raises(KeyError):
-    engine.acts["none://x"]
+    engine.acts["none9"]
   assert repr(engine.acts) == "acts of the life"
 
 

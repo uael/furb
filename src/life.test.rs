@@ -106,7 +106,7 @@ impl World for Yard {
     Box::pin(async move {
       Object::tuple([
         Object::string("assistant"),
-        Object::list([Object::string(word)]),
+        Object::string(word),
         Object::none(),
         Object::list([]),
       ])
@@ -200,7 +200,7 @@ impl Lived {
 #[test]
 fn a_life_of_the_real_engine_opens_on_its_root_and_answers_what_the_root_stands_on() {
   let mut lived = Lived::new("opens", &[], vec![]).unwrap();
-  assert_eq!(lived.root(), "chain://operator.1");
+  assert_eq!(lived.root(), "chain1");
   assert!(lived.life.raised().is_none(), "{:?}", lived.life.raised());
   let cwd = lived.life.cwd(&lived.root()).unwrap();
   assert_eq!(cwd.as_ref().as_str(), Some(lived.at.display().to_string().as_str()));
@@ -303,7 +303,7 @@ fn a_callable_of_the_host_is_called_back_by_the_sandbox_with_what_the_word_gave_
 #[test]
 fn what_the_engine_raised_reaches_the_host_as_the_fault_it_is() {
   let mut lived = Lived::new("faults", &[], vec![]).unwrap();
-  let no = lived.life.get("bash://operator.9").unwrap_err();
+  let no = lived.life.get("bash9").unwrap_err();
   assert_eq!(no.name, "KeyError");
   let no = lived.life.word("nowhere", vec![]).unwrap_err();
   assert_eq!(no.name, "NameError");

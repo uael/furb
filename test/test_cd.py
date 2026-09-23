@@ -1,6 +1,6 @@
 """cd, the verb that moves the working directory of a chain."""
 
-from conftest import STANDS, Sand, attr, life, settle, tags
+from conftest import STANDS, Sand, life, paragraphs, settle
 from furb import engine
 
 
@@ -52,6 +52,6 @@ async def test_cd_tells_the_path_it_was_given() -> None:
   sand.script[root] = ["cd('/x')\nclose(1)"]
   assert await engine.prompt(int, "move", on=root) == 1
   await settle()
-  told = tags(engine.turns(on=root), "cd")
-  assert [(attr(one, "path"), one[2]) for one in told] == [("/x", None)]
-  assert engine.cd("/y", on=root) == "/y" and tags(engine.turns(on=root), "cd") == told
+  assert engine.turns(on=root)[-1][1] == "#cd /x\n\n#prompt1 closed 1"
+  was = paragraphs(engine.turns(on=root))
+  assert engine.cd("/y", on=root) == "/y" and paragraphs(engine.turns(on=root)) == was

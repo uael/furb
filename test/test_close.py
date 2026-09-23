@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import STANDS, Sand, attr, life, said, settle, tags
+from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Exit, Refused, Text
 
@@ -24,7 +24,7 @@ async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
   assert engine.peek(command, on=root) == Exit(None, Text(f"{command}/stdout"), Text(f"{command}/stderr"))
 
 
-async def test_the_close_of_the_operator_enters_the_record_as_a_word_of_its_own() -> None:
+async def test_the_close_of_the_operator_enters_the_record_as_a_fact_of_its_own() -> None:
   """The close of the operator enters the record as a fact of its own."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
@@ -99,7 +99,7 @@ async def test_a_rung_closes_a_pending_prompt_of_any_actor() -> None:
   assert ((await waiting), (await act)) == (21, 1)
 
 
-async def test_close_is_given_the_id_of_a_pending_act_and_its_result() -> None:
+async def test_close_is_given_the_result_of_a_pending_act_and_the_id_of_that_act() -> None:
   """close is given the result of a pending act, and the id of that act when it is not the prompt of the running word."""
   sand = Sand(stands=STANDS, auto=False)
   _, root = life(sand)
@@ -133,7 +133,7 @@ async def test_the_close_of_the_operator_stands_in_the_transcript_with_the_name_
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
   assert [one[2] for one in held if one[0] == "close"] == [OPERATOR]
-  assert [attr(tag, "over") for tag in tags(engine.turns(on=root), "closed")] == [act]
+  assert heads(engine.turns(on=root))[2:] == [f"#{act} to operator: how many?", f"#{act} closed 21"]
 
 
 async def test_a_prompt_completes_with_the_exception_that_the_word_of_the_prompt_gave_to_close() -> None:
@@ -148,7 +148,7 @@ async def test_a_prompt_completes_with_the_exception_that_the_word_of_the_prompt
   assert (await act) == 1 and isinstance(engine.outcomes[waiting], ValueError)
 
 
-async def test_close_is_given_the_name_of_the_act_it_closes_and_the_value() -> None:
+async def test_close_is_given_the_value_first() -> None:
   """close is given the value first, since a word that answers its own prompt names no act at all."""
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
@@ -156,7 +156,7 @@ async def test_close_is_given_the_name_of_the_act_it_closes_and_the_value() -> N
   engine.close(21, act)
   word = said(log, "close")[0]
   assert (word[0], word[1], word[2], word[3]) == ("close", act, OPERATOR, 21)
-  assert word[4] == [("closed", [("over", act)], "21")]
+  assert word[4] == [f"#{act} closed 21"]
 
 
 async def test_a_value_closes_an_act_with_that_value_and_a_prompt_with_a_value_that_has_its_shape() -> None:
@@ -182,8 +182,9 @@ async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   assert len(said(log, "ask")) == 2
-  raised = tags(engine.turns(on=root), "raised")
-  assert [(attr(tag, "type"), attr(tag, "message")) for tag in raised] == [("Refused", "'nope' not int")]
+  step = said(log, "answer")[0][1]
+  raised = [line for line in heads(engine.turns(on=root)) if " raised " in line]
+  assert raised == [f"#{step} raised Refused(\"'nope' not int\")"]
 
 
 async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
@@ -197,7 +198,7 @@ async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
   assert (await act).code == 0
 
 
-async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_that_asked_for_it() -> None:
+async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_that_made_the_rung_of_the_word() -> None:
   """A close said from a word that names no act is over the prompt that made the rung of the word, and over the rung itself for a word its caller wrote, which answers no prompt."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)

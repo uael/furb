@@ -12,7 +12,9 @@ use pyo3::{
   Bound, Py, PyAny, PyResult, Python,
   exceptions::{PyBaseException, PyTypeError},
   prelude::*,
-  types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyModule, PyString, PyTuple, PyType},
+  types::{
+    PyBool, PyDict, PyFloat, PyFunction, PyInt, PyList, PyModule, PyString, PyTuple, PyType,
+  },
 };
 
 use crate::{
@@ -547,10 +549,10 @@ fn of_python(made: &Made, ears: &Py<PyAny>, value: &Bound<'_, PyAny>) -> PyResul
   if let Ok(held) = value.cast::<PyString>() {
     return Ok(Object::string(held.to_str()?));
   }
-  // A class a word defined goes back in by its handle, and an instance of one by the handle of its class and its
-  // fields; any other type goes in as its name, which is how a shape is said.
+  // A class a word defined and a callable the engine made go back in by their handle, and an instance of such a
+  // class by the handle of its class and its fields; any other type goes in as its name, which is how a shape is said.
   if let Ok(n) = value.getattr("__monty__").and_then(|n| n.extract::<i64>())
-    && value.is_instance_of::<PyType>()
+    && (value.is_instance_of::<PyType>() || value.is_instance_of::<PyFunction>())
   {
     return Ok(marked("made", [("id", Object::int(n))]));
   }

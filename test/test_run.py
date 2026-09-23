@@ -14,10 +14,34 @@ async def test_a_run_tells_the_kernel_to_run_the_word_of_a_rung() -> None:
   laid = engine.rung("k = 1", on=root)
   await laid
   sand.script[root] = ["close(k + 1)"]
-  assert await engine.prompt(int, "count", on=root) == 2
-  _, asking, *_ = said(log, "rung")[-1]
-  assert said(log, "run") == [("run", laid, root, root, "k = 1", ""), ("run", asking, root, root, "close(k + 1)", "")]
-  assert ran(log) == ["k = 1", "close(k + 1)"]
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 2
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  (binding,) = [a[1] for a in said(log, "rung") if a[2] == root]
+  wrote = f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"
+  assert said(log, "run") == [
+    ("run", laid, root, root, "k = 1", ""),
+    ("run", binding, root, root, wrote, ""),
+    ("run", step, root, root, "close(k + 1)", ""),
+  ]
+  assert ran(log) == ["k = 1", wrote, "close(k + 1)"]
+
+
+async def test_the_word_a_run_carries_is_python_which_unquoted_made_of_the_word_of_the_rung() -> None:
+  """The word a run carries is python, which unquoted made of the word of the rung."""
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
+  laid = engine.rung("<S1>\nhi\n</S1>\nk = S1", on=root)
+  await laid
+  sand.script[root] = ["<S2>it's</S2>\nclose(k + S2)"]
+  act = engine.prompt(str, "greet", on=root)
+  assert await act == "hi\nit's"
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  words = {a[1]: a[3] for a in said(log, "ready")}
+  runs = [(a[1], a[4]) for a in said(log, "run") if a[1] in (laid, step)]
+  assert runs == [(laid, "S1 = 'hi\\n'\n\n\nk = S1"), (step, 'S2 = "it\'s"\nclose(k + S2)')]
+  assert [word for _, word in runs] == [engine.unquoted(words[laid]), engine.unquoted(words[step])]
+  assert [compile(word, "<run>", "exec").co_names for _, word in runs] == [("S1", "k"), ("S2", "close", "k")]
 
 
 async def test_a_run_names_the_rung_that_the_word_retells() -> None:
@@ -145,12 +169,26 @@ async def test_the_chain_runs_one_word_at_a_time() -> None:
 
 async def test_a_word_that_waits_for_an_act_gives_the_chain_to_the_next_word() -> None:
   """A word that waits for an act gives the chain to the next word, which runs while it waits, and the waiting word runs on at the done of what it awaits."""
-  sand = sown()
+  sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
-  sand.script["chain://operator.2.1"] = ["close(21)", "close(None)", "close(None)"]
-  sand.script[root] = ["close(None)", "close(None)"]
-  got = engine.rung("f = chain('x', source=__name__)\nn = await prompt(int, 'add', on=f)\nclose(n)", on=root)
-  assert await got == 21
+  waiting = engine.rung("x = bash('slow')\nout = await x\nk = out.code", on=root)
+  after = engine.rung("k = 2", on=root)
   await settle()
-  fork = said(log, "chain")[1]
-  assert (fork[1], fork[5]) == ("chain://operator.2.1", root)
+  assert engine.outcomes[after] is None and waiting not in engine.outcomes and engine.modules[root]["k"] == 2
+  engine.send("exited", "bash1", 0, by=WORLD)
+  await settle()
+  assert engine.outcomes[waiting] is None and engine.modules[root]["k"] == 0
+  moves = [
+    (a[0], a[1])
+    for a in log
+    if (a[1] in (waiting, after) and a[0] in ("run", "wants", "sent", "ran")) or a[:2] == ("done", "bash1")
+  ]
+  assert moves == [
+    ("run", waiting),
+    ("wants", waiting),
+    ("run", after),
+    ("ran", after),
+    ("done", "bash1"),
+    ("sent", waiting),
+    ("ran", waiting),
+  ]

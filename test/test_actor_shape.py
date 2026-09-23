@@ -1,6 +1,6 @@
 """Actor, an actor the World offers."""
 
-from conftest import STANDS, Sand, attr, life, said, settle, tags
+from conftest import STANDS, Sand, heads, life, paragraphs, said, settle
 from furb import engine
 from furb.engine import Refused
 
@@ -13,14 +13,16 @@ async def test_an_actor_the_world_offers() -> None:
   assert one in STANDS[0]
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  told = tags(engine.turns(on=root), "opened")
-  assert attr(told[1], "roster") == STANDS[0]
+  assert paragraphs(engine.turns(on=root)) == [
+    "#chain1 root\nchain1: Act[object] = Act('chain1')",
+    "#chain1 stands ((('operator', (), 200000), ('m', ('low', 'high'), 400000), ('n', ('low',), 200000)), '/w', 'm/low')",
+  ]
 
 
 async def test_the_window_that_a_roster_entry_leaves_unsaid_is_the_window_that_the_file_names() -> None:
   """The window that a roster entry leaves unsaid is the window that the file names."""
   assert engine.WINDOW == 200000
-  filled = []
+  ledgers = []
   for roster in ((("plain", (), 0),), (("plain", (), 400000),)):
     sand = Sand(stands=(roster, "/w", "plain"), cost=(100000, 0, 0, 0, 0.0))
     _, root = life(sand)
@@ -28,8 +30,11 @@ async def test_the_window_that_a_roster_entry_leaves_unsaid_is_the_window_that_t
     engine.grant(share=0.9, on=root)
     assert await engine.prompt(int, "count", on=root) == 1
     await settle()
-    filled += [attr(one, "filled") for one in tags(engine.turns(on=root), "ledger")]
-  assert filled == [100000 / engine.WINDOW, 100000 / 400000]
+    ledgers += [one for one in heads(engine.turns(on=root)) if one.startswith("#rung1 ledger ")]
+  assert ledgers == [
+    f"#rung1 ledger spent=0.0 filled={100000 / engine.WINDOW}",
+    f"#rung1 ledger spent=0.0 filled={100000 / 400000}",
+  ]
 
 
 async def test_what_a_prompt_names_is_one_of_these_names_and_one_effort_of_that_range() -> None:

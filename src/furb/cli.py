@@ -15,7 +15,7 @@ from furb import engine
 from furb.engine import Act
 from furb.kernel import Native, gating
 from furb.provider.claude import ACTOR, cool
-from furb.world import Live, kept, rendered
+from furb.world import Live, kept
 
 SHAPES: dict[str, type | None] = {"none": None, "str": str, "int": int, "float": float, "bool": bool, "list": list}
 """SHAPES is every shape a prompt of the command line takes, by the name it is given on the line."""
@@ -62,11 +62,11 @@ async def prompted(record: Path | None, cwd: Path, shape: type | None, message: 
 
 
 async def turned(record: Path, cwd: Path) -> None:
-  """The turns of the root of a life made again from its record, each as the text a model reads of it."""
+  """The turns of the root of a life made again from its record, each as the python a model reads of it."""
   root = lived(record, cwd, ACTOR)[1]
   try:
-    for role, content, _, _ in engine.turns(on=root):
-      say(f"[{role}] {rendered(content)}")
+    for role, py, _, _ in engine.turns(on=root):
+      say(f"[{role}] {py}")
   finally:
     await cool()
 

@@ -13,7 +13,7 @@ import furb_monty
 from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
 from furb.kernel import ENGINE, checked, gate
-from outside.doubles import settle, stood, tags, worlds
+from outside.doubles import heads, settle, stood, worlds
 
 STANDS = (((OPERATOR, (), WINDOW), ("opus", ("low",), 1000)), "/w", "opus/low")
 
@@ -31,7 +31,7 @@ def test_the_sheet_lays_the_engine_as_the_first_rung() -> None:
   assert laid.startswith("async def __body():\n  import re\n")
   assert "".join(line[2:] + "\n" if line.strip() else "\n" for line in laid.split("\n")[1:]).startswith(ENGINE)
   assert (
-    '  actor = ""\n  raised: BaseException | None = None\n  try:\n    lineage("")\n    k = 1\n  except BaseException:\n'
+    '  actor = ""\n  raised: BaseException | None = None\n  try:\n    acting()\n    k = 1\n  except BaseException:\n'
     "    pass\n  close(k)\n"
   ) in laid
   assert above == laid.count("\n") - 1
@@ -63,7 +63,7 @@ def test_a_word_is_read_against_the_names_it_will_have() -> None:
   """The gate reads a word in the names a chain holds, and a name of nobody is a finding."""
   assert said("close(1)") == []
   assert said("close(nowhere())")[0].startswith("line 1: error[unresolved-reference]")
-  assert said("close('a', 'rung://elsewhere')") == []
+  assert said("close('a', 'rung9')") == []
   assert said("k = 1") == []
 
 
@@ -155,7 +155,7 @@ async def test_what_a_word_raises_is_what_the_run_came_to() -> None:
   with pytest.raises(ValueError, match="boom"):
     await engine.rung("kept = 1\nraise ValueError('boom')", on=root)
   assert engine.modules[root]["kept"] == 1
-  assert [one[1][1:] for one in tags(root, "raised")] == [[("type", "ValueError"), ("message", "boom")]]
+  assert [head for head in heads(root) if " raised " in head] == ["#rung1 raised ValueError('boom')"]
 
 
 async def test_a_word_the_interpreter_cannot_compile_is_what_the_run_came_to() -> None:
@@ -184,7 +184,7 @@ async def test_the_kernel_speaks_from_the_run_it_steps() -> None:
   root = stood(worlds(STANDS), gated=False)
   waits = engine.rung('x = 3\ndebug(t"{x}")', on=root)
   await waits
-  assert [one[1] for one in tags(root, "debugged")] == [[("id", waits), ("x", 3)]]
+  assert [head for head in heads(root) if " debugged " in head] == [f"#{waits} debugged x = 3"]
 
 
 async def test_a_word_that_awaits_and_then_ends_gives_nothing() -> None:

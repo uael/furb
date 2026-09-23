@@ -1,6 +1,6 @@
 """HIDDEN, the span of no line."""
 
-from conftest import STANDS, Sand, life, said, settle, tags
+from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
 
 
@@ -13,6 +13,6 @@ async def test_hidden_is_the_span_of_no_line_which_an_act_takes_to_tell_nothing_
   assert await engine.prompt(int, "quietly", on=root) == 1
   await settle()
   command = said(log, "bash")[0][1]
-  told = tags(engine.turns(on=root))
-  assert [tag for tag in told if tag[0] == "read"] == []
-  assert [tag for tag in told if ("id", command) in tag[1]] == []
+  assert [a for a in said(log, "tell") if a[1] == command or a[3][0].startswith("#read")] == []
+  assert [one for one in heads(engine.turns(on=root)) if one.startswith((f"#{command}", "#read"))] == []
+  assert [a[4] for a in engine.asked.values() if a[0] == "read"] == ["a.txt"]

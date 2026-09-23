@@ -441,7 +441,7 @@ def opened(
     # journal and keeps nothing more, so the root stands when the record held it.
     acts = engine["acts"]
     assert isinstance(acts, dict)
-    return ("chain://operator.1" if "chain://operator.1" in acts else "", no)
+    return ("chain1" if "chain1" in acts else "", no)
   return (str(root), None)
 
 

@@ -1,6 +1,6 @@
 """pause, which holds what the acts it is over hear until the wake."""
 
-from conftest import STANDS, Sand, attr, life, said, settle, tags
+from conftest import STANDS, Sand, heads, life, paragraphs, ran, said, settle
 from furb import engine
 from furb.engine import WORLD
 
@@ -22,13 +22,18 @@ async def test_a_pause_while_it_stands_nothing_it_is_over_hears() -> None:
   assert (await act) == 0
 
 
-async def test_a_control_tells_a_tag_of_its_own_name() -> None:
-  """A control tells a tag of its own name, so a model reads what was done to its work."""
+async def test_a_control_tells_a_header_of_its_own_name() -> None:
+  """A control tells a header of its own name, so a model reads what was done to its work."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   act = engine.bash("echo hi", on=root)
   engine.pause(act)
-  assert tags(engine.turns(on=root), "paused") == [("paused", [("over", act)], None)]
+  assert heads(engine.turns(on=root)) == [
+    f"#{root} root",
+    f"#{root} stands {STANDS!r}",
+    f"#{act} echo hi",
+    f"#{act} paused",
+  ]
 
 
 async def test_pause_is_given_the_id_of_a_pending_act_or_the_id_of_a_chain() -> None:
@@ -77,7 +82,8 @@ async def test_a_paused_chain_goes_quiet_as_its_in_flight_work_returns() -> None
   quiet = len(log)
   await settle()
   assert len(log) == quiet and len(said(log, "ask")) == 1
-  assert said(log, "run") == [] and act not in engine.outcomes
+  assert ran(log) == [f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"]
+  assert act not in engine.outcomes
 
 
 async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
@@ -87,7 +93,7 @@ async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
   act = engine.bash("slow", on=root)
   await settle()
   assert [one[1] for one in sand.calls if one[0] == "start"] == [act]
-  assert [tag[1] for tag in tags(engine.turns(on=root), "opened")][-1] == [("id", act), ("command", "slow")]
+  assert paragraphs(engine.turns(on=root))[-1] == f"#{act} slow\n{act}: Act[Exit] = Act({act!r})"
   engine.pause(root)
   engine.send("out", act, "one\n", "stdout", by=WORLD)
   engine.send("out", act, "two\n", "stdout", by=WORLD)
@@ -139,5 +145,5 @@ async def test_a_control_is_on_the_scope_of_what_it_is_over() -> None:
   await settle()
   held = said(log, "pause")[0]
   assert (held[0], held[1], held[2]) == ("pause", act, engine.OPERATOR) and engine.scope(act) == two
-  assert [attr(tag, "over") for tag in tags(engine.turns(on=two), "paused")] == [act]
-  assert tags(engine.turns(on=root), "paused") == []
+  assert heads(engine.turns(on=two))[-2:] == [f"#{act} slow", f"#{act} paused"]
+  assert heads(engine.turns(on=root)) == [f"#{root} root", f"#{root} stands {STANDS!r}"]

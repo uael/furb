@@ -72,7 +72,7 @@ mod tests {
       }
     }
     above.push_str(
-      "  actor = \"\"\n  raised: BaseException | None = None\n  try:\n    lineage(\"\")\n  except BaseException:\n    pass\n",
+      "  actor = \"\"\n  raised: BaseException | None = None\n  try:\n    acting()\n  except BaseException:\n    pass\n",
     );
     let lines = above.lines().count();
     (format!("{above}  {word}\n"), lines)
