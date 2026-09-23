@@ -9,7 +9,7 @@ import { createCliRenderer } from "@opentui/core";
 import { App } from "./app.ts";
 import { seedDemoFiles } from "./demo.ts";
 import { Extensions } from "./extensions.ts";
-import type { EngineOptions } from "./models.ts";
+import { defaultModel, type EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { sessionChoices } from "./sessions.ts";
 import { palettes } from "./theme.ts";
@@ -34,7 +34,7 @@ if (values.help) {
          [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...]
 
 Enter sends a prompt. Shift+Enter adds a line. Ctrl+P opens actions. F1 shows all keys.
-The default model is claude-cli:sonnet, through your Claude CLI subscription.
+The default model is ${defaultModel}, through your Claude CLI subscription.
 Other providers use pi-ai and its environment credentials.`);
   process.exit(0);
 }

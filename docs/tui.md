@@ -266,11 +266,19 @@ fixture that writes Python through the same external-editor path.
 
 ![External editor](screenshots/42-external-editor.png)
 
-## File picker
+## File suggestions
 
-Type `@` to search project files and insert a reference. The selected file is read with the next message.
+Type `@` at the start of a word to list project files above the input, which keeps the text as you type. Up and
+Down choose, Tab or Enter inserts the reference, and Escape hides the list. The file is read with the next message.
 
-![File picker](screenshots/43-file-picker.png)
+![File suggestions](screenshots/43-file-picker.png)
+
+## Command suggestions
+
+Type `/` at the start of the input to list the commands whose name starts with what follows. Tab completes the
+name, and Enter runs a command that needs no argument.
+
+![Command suggestions](screenshots/47-slash-suggestions.png)
 
 ## Extension command
 

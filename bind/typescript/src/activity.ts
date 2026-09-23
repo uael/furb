@@ -21,21 +21,52 @@ const lineage = (id: string) => id.split("://").at(-1) ?? "";
 const under = (id: string, parent: string) =>
   Boolean(parent) && `${lineage(id)}.`.startsWith(`${lineage(parent)}.`);
 
-/** The observable state of acts, updated once as facts enter the life. No sandbox query is needed. */
+/** The observable state of acts, updated once as facts enter the life. No sandbox query is needed but one per
+ * kind of question the file does not make: a kind is made by one verb, an act or a query, and the last ear hears
+ * every act but only a query nobody answered, so a fact alone cannot say which its kind is. */
 export class Activity {
   readonly acts = new Map<string, LiveAct>();
   completed = 0;
   cost = 0;
-  private readonly controls = new Map<string, { paused: boolean; order: number }>();
-  private readonly children = new Map<string, Set<string>>();
-  private readonly ran = new Map<string, unknown>();
-  private readonly refused = new Map<string, string>();
-  private readonly merged = new Map<string, boolean>();
+  /** Each kind of question and whether its verb makes acts: the file's own acts, then the kinds the life said. */
+  private readonly kinds = new Map(
+    ["chain", "prompt", "rung", "bash", "wait", "grant"].map((kind) => [kind, true]),
+  );
+  /** A question of each kind not known yet, which the owner of the life asks it about outside any ear. */
+  readonly unknown = new Map<string, string>();
+  /** How many times the table was derived again, which a reader of it compares to know that. */
+  generation = 0;
+  private controls = new Map<string, { paused: boolean; order: number }>();
+  private children = new Map<string, Set<string>>();
+  private ran = new Map<string, unknown>();
+  private refused = new Map<string, string>();
+  private merged = new Map<string, boolean>();
   private order = 0;
+
+  /** What the life said of a kind: an act kind derives the table again from the facts, which now hold its acts. */
+  learn(kind: string, act: boolean, facts: readonly Fact[]): void {
+    this.kinds.set(kind, act);
+    this.unknown.delete(kind);
+    if (!act) return;
+    this.acts.clear();
+    this.completed = 0;
+    this.cost = 0;
+    this.controls = new Map();
+    this.children = new Map();
+    this.ran = new Map();
+    this.refused = new Map();
+    this.merged = new Map();
+    this.order = 0;
+    this.generation++;
+    for (const fact of facts) this.hear(fact);
+  }
 
   hear(fact: Fact): void {
     const [kind, id, by] = fact;
-    if (["chain", "prompt", "rung", "bash", "wait", "grant"].includes(kind) && id.startsWith(`${kind}://`)) {
+    const question = id.startsWith(`${kind}://`);
+    const known = this.kinds.get(kind);
+    if (question && known === undefined && !this.unknown.has(kind)) this.unknown.set(kind, id);
+    if (question && known) {
       const act: LiveAct = {
         id,
         kind,

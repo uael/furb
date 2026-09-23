@@ -116,3 +116,30 @@ test("fact-derived act state matches native outcomes, controls, and rung results
     await rm(cwd, { recursive: true, force: true });
   }
 }, 30000);
+
+test("an act of a kind an extension defines joins the act table, and what it tells reaches the view", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-extension-"));
+  const world = new World({ cwd });
+  try {
+    const life = world.open();
+    const snapshots = new Snapshots(life, world);
+    snapshots.take(life.root);
+    await life.rung(
+      [
+        "def noted(name):",
+        '  yield ("tell", name, [("note", [("id", name)], "hello")])',
+        '  yield ("done", name, "noted")',
+        'note = act("note", "", noted)',
+      ].join("\n"),
+    );
+    await until(world, () => [...world.activity.acts.values()].some((act) => act.kind === "note"));
+    const view = snapshots.take(life.root);
+    const note = view.acts.find((act) => act.kind === "note");
+    expect(note).toMatchObject({ on: life.root, done: true, value: "noted" });
+    expect(view.rendered.join("\n")).toContain("hello");
+    expect(view.rendered).toEqual(life.rendered(life.root));
+  } finally {
+    await world.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
+}, 30000);

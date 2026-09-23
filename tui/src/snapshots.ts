@@ -19,6 +19,7 @@ interface ChainView {
 export class Snapshots {
   private readonly chains = new Map<string, ChainView>();
   private heard = 0;
+  private generation = 0;
   private entries = -1;
   private dispatched: string[] = [];
   constructor(
@@ -73,6 +74,12 @@ export class Snapshots {
     }
   }
   take(requested: string): Snapshot {
+    // An act table derived again knows acts whose facts the views were read without, so every view reads again.
+    if (this.generation !== this.world.activity.generation) {
+      this.generation = this.world.activity.generation;
+      for (const view of this.chains.values())
+        Object.assign(view, { textDirty: true, programDirty: true, directoryDirty: true, actorDirty: true });
+    }
     for (const fact of this.world.facts.slice(this.heard)) this.changed(fact);
     this.heard = this.world.facts.length;
     const selected = this.world.activity.acts.get(requested)?.kind === "chain" ? requested : this.life.root;

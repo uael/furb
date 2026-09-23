@@ -83,11 +83,14 @@ test("pause holds a model response until wake and cancel rejects a native await"
   const { life, asks } = await open();
   await life.pause(life.root);
   const id = life.prompt("str", "Say hello").id;
-  // A paused chain asks no model, so nothing answers the prompt until the wake.
-  expect(asks()).toBe(0);
+  // A chain the pause is not over is asked and answered meanwhile, and the paused prompt alone is not asked.
+  const free = life.chain("free").id;
+  expect(await life.result<string>(life.prompt("str", "Say hello", { on: free }).id)).toBe("hello");
+  expect(asks()).toBe(1);
   expect((await life.outcome(id)).done).toBe(false);
   await life.wake(life.root);
   expect(await life.result<string>(id)).toBe("hello");
+  expect(asks()).toBe(2);
   const later = life.wait(60).id;
   const result = life.result(later).then(
     () => "resolved",

@@ -96,11 +96,15 @@ test("a turn claude settles block by block keeps each block once, at the place i
       { type: "thinking", thinking: "hmm", thinkingSignature: "sig" },
       { type: "text", text: 'close("reply 1")' },
     ]);
-    const two = await models.completeSimple(
+    const stream = models.streamSimple(
       model,
       { systemPrompt: "ENGINE ONLY", messages: [{ role: "user", content: "REDACT THINK", timestamp: 0 }] },
       { sessionId: "redact" },
     );
+    // A block of a kind the provider does not read takes no place, so no partial reply has a hole.
+    for await (const event of stream)
+      if ("partial" in event) expect(event.partial.content.every((block) => block !== undefined)).toBe(true);
+    const two = await stream.result();
     expect(two.content).toEqual([
       { type: "thinking", thinking: "hmm", thinkingSignature: "sig" },
       { type: "text", text: 'close("reply 1")' },

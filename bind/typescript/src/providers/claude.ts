@@ -160,8 +160,11 @@ class Session {
   private stderr = "";
   private cost = 0;
   private resumed = false;
-  private streamingBase: number | null = null;
-  private streamingSettled = 0;
+  /** The place in the reply of each block the current message streams, by its index in the stream: a block of a
+   * kind this provider does not read has none. Nothing streamed means the CLI sends each message whole. */
+  private streamed?: Map<number, number>;
+  /** How many blocks of the current message claude has settled, which is the stream index of the next one. */
+  private settled = 0;
   private again = false;
   private heartbeat?: () => void;
   constructor(
@@ -207,8 +210,8 @@ class Session {
       stopReason: "stop",
       timestamp: Date.now(),
     };
-    this.streamingBase = null;
-    this.streamingSettled = 0;
+    this.streamed = undefined;
+    this.settled = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let watchdog: ReturnType<typeof setTimeout> | undefined;
     let completed = false;
@@ -329,20 +332,25 @@ class Session {
     if (event.type === "stream_event" && event.event) {
       const update = event.event;
       if (update.type === "message_start") {
-        this.streamingBase = flight.message.content.length;
-        this.streamingSettled = 0;
+        this.streamed = new Map();
+        this.settled = 0;
       }
-      const contentIndex = (this.streamingBase ?? 0) + (update.index ?? 0);
+      this.streamed ??= new Map();
+      const streamed = this.streamed;
       if (update.type === "content_block_start") {
         const block = update.content_block;
+        const at = flight.message.content.length;
         if (block?.type === "text") {
-          flight.message.content[contentIndex] = { type: "text", text: block.text ?? "" };
-          flight.stream.push({ type: "text_start", contentIndex, partial: flight.message });
+          streamed.set(update.index ?? 0, at);
+          flight.message.content.push({ type: "text", text: block.text ?? "" });
+          flight.stream.push({ type: "text_start", contentIndex: at, partial: flight.message });
         } else if (block?.type === "thinking") {
-          flight.message.content[contentIndex] = { type: "thinking", thinking: block.thinking ?? "" };
-          flight.stream.push({ type: "thinking_start", contentIndex, partial: flight.message });
+          streamed.set(update.index ?? 0, at);
+          flight.message.content.push({ type: "thinking", thinking: block.thinking ?? "" });
+          flight.stream.push({ type: "thinking_start", contentIndex: at, partial: flight.message });
         }
       }
+      const contentIndex = streamed.get(update.index ?? 0) ?? -1;
       const block = flight.message.content[contentIndex];
       if (update.type === "content_block_delta") {
         if (block?.type === "text" && update.delta?.type === "text_delta") {
@@ -373,12 +381,13 @@ class Session {
           });
       }
     } else if (event.type === "assistant") {
-      if (this.streamingBase !== null) {
+      if (this.streamed) {
         // claude says each block of a streamed message again once it is whole, in an assistant event of its own and in
         // the order it streamed them: the whole block settles over the one streamed at its place, signature and all,
         // and is never appended a second time.
         for (const block of event.message?.content ?? []) {
-          const contentIndex = this.streamingBase + this.streamingSettled++;
+          const contentIndex = this.streamed.get(this.settled++);
+          if (contentIndex === undefined) continue;
           if (block.type === "text")
             flight.message.content[contentIndex] = { type: "text", text: block.text ?? "" };
           else if (block.type === "thinking")
@@ -449,8 +458,6 @@ class Session {
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: Math.max(0, paid - this.cost) },
       };
       this.cost = paid;
-      // A streamed block of a kind this provider does not read holds its place in the stream and nothing in the reply.
-      flight.message.content = flight.message.content.filter(Boolean);
       if (!flight.message.content.length && event.result)
         flight.message.content.push({ type: "text", text: event.result });
       flight.resolve();

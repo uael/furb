@@ -75,7 +75,8 @@ interface Running {
 /** Files, processes, pi-ai models, and durable records. The engine and its order remain native. */
 export class World extends EventEmitter {
   readonly directory: string;
-  readonly model: string;
+  /** The model a prompt goes to when it names none, and none when the World offers the operator alone. */
+  readonly model?: string;
   readonly effort: ModelThinkingLevel;
   readonly records: RecordFile;
   readonly models: Models;
@@ -106,7 +107,7 @@ export class World extends EventEmitter {
   constructor(options: WorldOptions = {}) {
     super();
     let legacyChanges: FileChange[] = [];
-    const asked = options.roster;
+    const named = { model: options.model, roster: options.roster ?? [] };
     let kept: string[] = [];
     if (options.record && existsSync(`${resolve(options.record)}.world.json`)) {
       const saved = JSON.parse(readFileSync(`${resolve(options.record)}.world.json`, "utf8")) as {
@@ -119,23 +120,25 @@ export class World extends EventEmitter {
         ...saved.options,
         ...Object.fromEntries(Object.entries(options).filter(([, value]) => value !== undefined)),
       };
-      kept = saved.options.roster ?? [];
-      options.roster = asked;
+      kept = [saved.options.model ?? "", ...(saved.options.roster ?? [])].filter(Boolean);
       legacyChanges = saved.changes ?? [];
       for (const [id, deadline] of saved.deadlines ?? []) this.deadlines.set(id, deadline);
       for (const [id, stream] of saved.streams ?? []) this.streams.set(id, stream);
     }
     this.options = options;
     this.directory = resolve(options.cwd ?? process.cwd());
-    // The host names the models: a World given none offers the operator alone, and a model is "" then.
-    this.model = options.model ?? options.roster?.[0] ?? kept[0] ?? "";
     let records: RecordFile | undefined;
     let changes: FileChanges | undefined;
     try {
       this.models = options.models ?? builtinModels();
-      // A saved roster keeps what a session offered, and a model the host offers since then joins it.
-      this.roster = [...new Set([this.model, ...kept, ...(options.roster ?? [])])].filter(Boolean);
-      for (const name of this.roster) this.route(name);
+      // What the host names must route. What only a saved record names stays while it routes, and a model gone
+      // since is a change of the World, which the standing of every chain tells in the next life.
+      for (const name of named.model ? [named.model, ...named.roster] : named.roster) this.route(name);
+      const still = kept.filter((name) => this.offers(name));
+      this.model = named.model ?? still[0] ?? named.roster[0];
+      this.roster = [...new Set([this.model, ...still, ...named.roster])].filter(
+        (name) => name !== undefined,
+      );
       this.effort = this.model
         ? clampThinkingLevel(this.route(this.model), options.effort ?? "low")
         : (options.effort ?? "low");
@@ -157,7 +160,8 @@ export class World extends EventEmitter {
     }
   }
 
-  route(actor: string): Model<Api> {
+  /** The model an actor names, with or without its effort, and nothing when the World holds no such model. */
+  offers(actor: string): Model<Api> | undefined {
     for (const name of [actor, actorParts(actor).model]) {
       const separator = name.indexOf(":");
       // A name without its provider is the one model of that id among every provider the World holds.
@@ -167,7 +171,16 @@ export class World extends EventEmitter {
           : [this.models.getModel(name.slice(0, separator), name.slice(separator + 1))];
       if (found.length === 1 && found[0]) return found[0];
     }
-    throw new Error(`No model ${actor}. Name one as provider:model.`);
+    return undefined;
+  }
+  route(actor: string): Model<Api> {
+    const model = this.offers(actor);
+    if (!model) throw new Error(`No model ${actor}. Name one as provider:model.`);
+    return model;
+  }
+  /** The actor a prompt goes to when it names none, which the standing of every chain says. */
+  get actor(): string {
+    return this.model ? `${this.model}/${this.effort}` : "operator";
   }
   get imageDirectory(): string {
     return this.records.path ? `${this.records.path}.images` : join(this.directory, ".furb/images");
@@ -192,6 +205,7 @@ export class World extends EventEmitter {
         },
       );
       this.life = this.adapter.boot(this.records.entries);
+      this.learnKinds();
       if (this.holding) {
         const chains = new Set<string>();
         for (const act of this.activity.acts.values()) {
@@ -237,7 +251,7 @@ export class World extends EventEmitter {
             ["operator", [], 200000],
           ],
           this.directory,
-          this.model ? `${this.model}/${this.effort}` : "operator",
+          this.actor,
         ];
       case "Clock":
         return Date.now() / 1000;
@@ -320,8 +334,15 @@ export class World extends EventEmitter {
     return resolve(this.directory, here, path);
   }
 
+  /** Each kind of question the act table does not know, asked of the life once, outside any ear. */
+  private learnKinds(): void {
+    for (const [kind, id] of this.activity.unknown)
+      this.activity.learn(kind, this.life?.held("acts", [id], "in") === true, this.facts);
+  }
+
   private hear = (facts: Fact[]): void => {
     if (this.stopped) return;
+    this.learnKinds();
     for (const [kind, id] of facts) {
       if (
         this.holding &&

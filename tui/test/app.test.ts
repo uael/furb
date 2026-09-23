@@ -531,8 +531,16 @@ test("slash commands and project files are suggested above the input as they are
     expect(await frame()).not.toContain("/model [model]");
 
     app.composer.setText("");
+    await screen.mockInput.typeText("/");
+    screen.mockInput.pressArrow("down");
+    screen.mockInput.pressArrow("down");
+    await screen.mockInput.typeText("e");
+    screen.mockInput.pressTab();
+    expect(app.composer.plainText).toBe("/exit ");
+
+    app.composer.setText("");
     await screen.mockInput.typeText("Read @READ");
-    await app.files?.read;
+    await session.projectFiles();
     expect(await frame()).toContain("@README.md");
     screen.mockInput.pressEscape();
     expect(await frame()).not.toContain("@README.md");

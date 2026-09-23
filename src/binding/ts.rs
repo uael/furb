@@ -313,8 +313,9 @@ impl JsLife {
     self
       .held
       .call(move |life| {
-        let mut named = on(life, chain);
-        named["filter"] = json!(filter);
+        // A chain the operator opens stands on no chain unless it names one, as the contract's default says: on
+        // the root it would be an act of the root, which every control over the root reaches.
+        let named = json!({ "on": chain.unwrap_or_default(), "filter": filter });
         invoke(life, "chain", vec![json!(label), json!(source.unwrap_or_default())], named)
       })
       .and_then(string)

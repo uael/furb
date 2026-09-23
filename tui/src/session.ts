@@ -7,7 +7,7 @@ import type { Fact, ImageAttachment, LiveAct, Turn, Usage } from "@furb/engine";
 import { actorParts, shapes } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
 import type { Engine, HostView } from "./bridge.ts";
-import { fileReferences } from "./files.ts";
+import { fileReferences, projectFiles } from "./files.ts";
 import { Preferences } from "./preferences.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { palettes, type ThemeName } from "./theme.ts";
@@ -77,7 +77,7 @@ export class Session extends EventEmitter {
   ) {
     super();
     this.selected = life.root;
-    this.actor = `${world.model}/${world.effort}`;
+    this.actor = world.actor;
     this.sessionName = basename(world.directory);
     const path = world.records.path;
     this.preferences =
@@ -243,6 +243,15 @@ export class Session extends EventEmitter {
     return this.refreshTask;
   }
 
+  private fileList?: { directory: string; read: Promise<string[]> };
+  /** The files of the project the session works in: read again when asked fresh or when the directory moved, and
+   * otherwise the read already made, so every reader of one read sees the same list. */
+  projectFiles(fresh = false): Promise<string[]> {
+    const directory = this.directory || this.world.directory;
+    if (fresh || this.fileList?.directory !== directory)
+      this.fileList = { directory, read: projectFiles(directory) };
+    return this.fileList.read;
+  }
   get chains(): ActRow[] {
     return this.acts.filter((act) => act.kind === "chain");
   }

@@ -23,7 +23,7 @@ const state = () => {
     cost: owner.activity.cost,
     directory: owner.directory,
     imageDirectory: owner.imageDirectory,
-    model: owner.model,
+    actor: owner.actor,
     effort: owner.effort,
     roster: owner.roster,
     path: owner.records.path,

@@ -1,8 +1,10 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { CodeRenderable, type Renderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { Resvg } from "@resvg/resvg-js";
+import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoSession, seedDemo, seedDemoFiles } from "../src/demo.ts";
@@ -13,6 +15,7 @@ import { Session } from "../src/session.ts";
 import { sessionChoices } from "../src/sessions.ts";
 import { palettes } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
+import { idle } from "../test/idle.ts";
 
 const output = resolve("docs/screenshots");
 await mkdir(output, { recursive: true });
@@ -76,11 +79,19 @@ const color = (value: { toInts(): number[] }) =>
     .map((part) => part.toString(16).padStart(2, "0"))
     .join("")}`;
 
+function highlighting(node: Renderable): Promise<void>[] {
+  return [
+    ...(node instanceof CodeRenderable ? [node.highlightingDone] : []),
+    ...node.getChildren().flatMap(highlighting),
+  ];
+}
+
 async function capture(name: string): Promise<void> {
   if (name !== "28-loading" && name !== "30-view-error") await session.refresh();
   app.render();
   await test.flush();
-  await Bun.sleep(80);
+  // Code is colored by a parser off the main thread: the frame is taken once every code block is highlighted.
+  await Promise.all(highlighting(test.renderer.root));
   await test.flush();
   const frame = test.captureSpans();
   const cell = 9,
@@ -120,7 +131,7 @@ try {
   await capture("01-welcome");
   await seedDemo(session);
   await session.command("/name Explore project");
-  await Bun.sleep(300);
+  await idle(session);
   await session.refresh();
   await capture("02-conversation");
   session.show("program");
@@ -138,13 +149,14 @@ try {
   test.mockInput.pressEscape();
   session.show("transcript");
   await capture("06-transcript");
+  const written = session.world.changes.length;
   await session.life.result(
     await session.life.rung(
       'write(read("README.md").append("\\n## Keyboard\\nPress Ctrl+K to find a note.\\n"))',
       { on: session.selected },
     ),
   );
-  await Bun.sleep(60);
+  await until(session.world, () => session.world.changes.length > written);
   session.show("changes");
   await capture("07-changes");
   app.palette();
@@ -156,11 +168,11 @@ try {
   app.effortPicker();
   await capture("26-effort");
   app.closeOverlay();
-  await session.life.prompt("bool", "Apply the search shortcut to the main chain?", {
+  const question = await session.life.prompt("bool", "Apply the search shortcut to the main chain?", {
     on: session.selected,
     to: "operator",
   });
-  await Bun.sleep(60);
+  await until(session.world, () => session.world.prompts.has(question));
   await session.refresh();
   session.show("conversation");
   await capture("10-operator-question");
@@ -172,8 +184,7 @@ try {
   app.composer.setText('notes = read("README.md")\nprint(notes.content)');
   session.show("program");
   await capture("11-python-input");
-  session.emit("inspect", "notes");
-  await Bun.sleep(40);
+  await app.inspect("notes");
   await capture("12-value-inspector");
   app.closeOverlay();
   session.theme = "paper";
@@ -194,7 +205,9 @@ try {
     "printf 'Building the search index...\\n'; sleep 1; printf '3 notes indexed.\\n'",
     { on: session.selected },
   );
-  await Bun.sleep(60);
+  await until(session.world, () =>
+    session.world.facts.some((fact) => fact[0] === "out" && fact[1] === command),
+  );
   await session.refresh();
   session.show("activity");
   session.query = command;
@@ -210,7 +223,9 @@ try {
   await capture("22-live-command");
   await session.life.result(command);
   const progress = await session.life.prompt("str", "show live progress", { on: session.selected });
-  await Bun.sleep(60);
+  await until(session.world, () =>
+    session.world.facts.some((fact) => fact[0] === "rung" && fact[2] === progress),
+  );
   await session.refresh();
   session.show("conversation");
   await capture("23-model-progress");
@@ -261,7 +276,7 @@ try {
   await session.life.result(await running);
   await reading;
   await session.submit("/read missing-file.txt");
-  await Bun.sleep(80);
+  await until(session, () => session.acts.some((act) => act.run?.status === "failed"));
   await capture("29-error");
   await session.life.write({ path: "preview.txt", content: "A change to inspect.\n" });
   const journal = `${session.world.records.path}.changes.jsonl`;
@@ -312,14 +327,14 @@ try {
   session = main.session;
   app = new App(test.renderer, session, options());
   followSelection();
-  await Bun.sleep(100);
-  if (
-    checks.status !== "working" ||
-    review.status !== "blocked" ||
-    changelog.status !== "done" ||
-    research.status !== "paused"
-  )
-    throw new Error("The workspace status fixtures have not settled.");
+  await until(
+    library,
+    () =>
+      checks.status === "working" &&
+      review.status === "blocked" &&
+      changelog.status === "done" &&
+      research.status === "paused",
+  );
   await capture("31-workspace-tree");
   session.show("program");
   await session.refresh();
@@ -335,8 +350,7 @@ try {
   await capture("34-hidden-workspace-sidebar");
   library.toggle();
   library.toggle(second);
-  app.workspacePicker();
-  await Bun.sleep(100);
+  await app.workspacePicker();
   await capture("35-workspace-picker");
   app.closeOverlay();
   await session.submit("/tree");
@@ -352,8 +366,7 @@ try {
   await session.attachImage(resolve("docs/screenshots/01-welcome.png"));
   app.composer.setText("Review the layout in this image.");
   await capture("39-image-attachment");
-  test.mockInput.pressEnter();
-  await Bun.sleep(100);
+  await app.submit();
   await session.refresh();
   const imagePrompt = session.acts.findLast(
     (act) => act.kind === "prompt" && String(act.words[1]).startsWith("Review the layout"),
@@ -365,8 +378,7 @@ try {
   await capture("40-share-conversation");
   app.closeOverlay();
   app.composer.setText("/delete");
-  test.mockInput.pressEnter();
-  await Bun.sleep(80);
+  await app.submit();
   await test.mockInput.typeText("Archive");
   test.mockInput.pressEnter();
   await capture("41-delete-session");
@@ -383,9 +395,7 @@ try {
     process.env.EDITOR = `/bin/sh '${editor}'`;
     delete process.env.VISUAL;
     app.toggleMode();
-    test.mockInput.pressKey("e", { meta: true });
-    for (let attempt = 0; attempt < 100 && !app.composer.plainText.includes("edited_in_editor"); attempt++)
-      await Bun.sleep(20);
+    await app.editDraft();
     if (!app.composer.plainText.includes("edited_in_editor"))
       throw new Error("The external editor did not return its draft.");
     await capture("42-external-editor");
@@ -395,14 +405,19 @@ try {
     if (priorVisual === undefined) delete process.env.VISUAL;
     else process.env.VISUAL = priorVisual;
   }
-  app.toggleMode();
-  app.composer.setText("@");
-  await Bun.sleep(100);
+  if (session.mode === "python") app.toggleMode();
+  app.composer.setText("");
+  app.composer.focus();
+  await test.mockInput.typeText("@");
+  await session.projectFiles();
   await capture("43-file-picker");
+  app.composer.setText("");
+  await test.mockInput.typeText("/e");
+  await capture("47-slash-suggestions");
+  app.composer.setText("");
   app.closeOverlay();
   app.composer.setText(`/extension ${resolve("tui/examples/project-summary.ts")}`);
-  test.mockInput.pressEnter();
-  await Bun.sleep(100);
+  await app.submit();
   app.palette();
   await test.mockInput.typeText("Summarize this project");
   await capture("44-extension-command");

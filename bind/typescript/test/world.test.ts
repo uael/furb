@@ -105,6 +105,7 @@ test("a World holds the models its host gives it: a saved roster gains what the 
     const life = alone.open();
     const [, [, , actor]] = life.call<[unknown, [unknown, string, string]]>("ask", ["stand", life.root], {});
     expect(actor).toBe("operator");
+    expect(alone.actor).toBe("operator");
   } finally {
     await alone.dispose();
   }
@@ -123,6 +124,17 @@ test("a World holds the models its host gives it: a saved roster gains what the 
   } finally {
     await second.dispose();
     cli.dispose();
+  }
+  // Without the provider that offered them, the saved models are gone: a change of the World, and no refusal.
+  expect((await inspectRecord(record)).held).toEqual([]);
+  const third = new World({ record });
+  try {
+    expect(third.model).toBeUndefined();
+    expect(third.roster).toEqual([]);
+    expect(third.actor).toBe("operator");
+    expect(() => new World({ cwd, roster: ["claude-cli:opus"] })).toThrow("No model claude-cli:opus");
+  } finally {
+    await third.dispose();
     await rm(cwd, { recursive: true, force: true });
   }
 });

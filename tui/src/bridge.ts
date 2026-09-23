@@ -29,7 +29,7 @@ export interface WorldState {
   cost: number;
   directory: string;
   imageDirectory: string;
-  model: string;
+  actor: string;
   effort: World["effort"];
   roster: string[];
   path?: string;
@@ -46,7 +46,7 @@ export class HostView extends EventEmitter {
   cost = 0;
   directory = "";
   imageDirectory = "";
-  model = "";
+  actor = "";
   effort: World["effort"] = "low";
   roster: string[] = [];
   records: { path?: string } = {};
@@ -64,7 +64,7 @@ export class HostView extends EventEmitter {
     this.cost = state.cost;
     this.directory = state.directory;
     this.imageDirectory = state.imageDirectory;
-    this.model = state.model;
+    this.actor = state.actor;
     this.effort = state.effort;
     this.roster = state.roster;
     this.records.path = state.path;

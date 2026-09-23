@@ -26,7 +26,6 @@ import { clipboardImage } from "./clipboard.ts";
 import { commands } from "./commands.ts";
 import { externalEditor } from "./editor.ts";
 import type { Extensions } from "./extensions.ts";
-import { projectFiles } from "./files.ts";
 import { loadParsers } from "./parsers.ts";
 import type { ActRow, Session, View } from "./session.ts";
 import { publishShare } from "./share.ts";
@@ -113,8 +112,8 @@ export class App {
   private suggestionIndex = 0;
   /** The token whose suggestions Escape hid, which a change of the token shows again. */
   private dismissed = "";
-  /** The project files an `@` suggests, read again each time an `@` starts a word, and awaited by a caller. */
-  files?: { directory: string; read: Promise<void>; paths?: string[]; error?: string };
+  /** The read of the project files an `@` suggests from, which each `@` that starts a word asks afresh. */
+  private files?: { read: Promise<string[]>; paths?: string[]; error?: string };
   private lastToken = "";
   private readonly search: InputRenderable;
   private readonly paneKeys = new WeakMap<Renderable, string>();
@@ -430,7 +429,7 @@ export class App {
         this.render();
       }, 35);
   };
-  private async submit(): Promise<void> {
+  async submit(): Promise<void> {
     if (this.submitting) return;
     this.submitting = true;
     const content = this.composer.plainText;
@@ -1693,7 +1692,7 @@ export class App {
         : []),
     ]);
   }
-  private async editDraft(): Promise<void> {
+  async editDraft(): Promise<void> {
     const value = await externalEditor(
       this.renderer,
       this.composer.plainText,
@@ -1707,7 +1706,7 @@ export class App {
     }
   }
   private filesPicker = async (): Promise<void> => {
-    const files = await projectFiles(this.session.directory || this.session.world.directory);
+    const files = await this.session.projectFiles(true);
     if (this.closed) return;
     this.openPalette(
       "Attach a project file",
@@ -1908,6 +1907,8 @@ export class App {
     const token = this.token();
     const key = token ? `${token.kind}${token.text}` : "";
     const started = key === "@" && this.lastToken !== "@";
+    // A new filter chooses anew from its first suggestion, and a move of the cursor keeps the choice.
+    if (key !== this.lastToken) this.suggestionIndex = 0;
     this.lastToken = key;
     if (key !== this.dismissed) this.dismissed = "";
     if (!token || this.overlay || this.dismissed) {
@@ -1936,10 +1937,11 @@ export class App {
           },
         }));
     } else {
-      const directory = this.session.directory || this.session.world.directory;
-      if (started || this.files?.directory !== directory) {
-        const files: NonNullable<typeof this.files> = { directory, read: Promise.resolve() };
-        files.read = projectFiles(directory).then(
+      const read = this.session.projectFiles(started);
+      if (this.files?.read !== read) {
+        const files: NonNullable<typeof this.files> = { read };
+        this.files = files;
+        read.then(
           (paths) => {
             files.paths = paths;
             if (this.files === files && !this.closed) this.suggest();
@@ -1949,7 +1951,6 @@ export class App {
             if (this.files === files && !this.closed) this.suggest();
           },
         );
-        this.files = files;
       }
       const wanted = token.text.toLowerCase();
       this.suggestions = (this.files.paths ?? [])
@@ -2279,10 +2280,11 @@ export class App {
       this.hover = undefined;
     }
   }
-  private inspect = (name: string): void => {
+  /** The value a name holds in the module of the chain, shown once the life has read it. */
+  inspect = (name: string): Promise<void> => {
     this.hover?.destroyRecursively();
     this.hover = undefined;
-    void this.session.life
+    return this.session.life
       .inspect(name, this.session.selected)
       .then((value) => {
         this.showValue(`${name} · ${value.kind}`, value.value ?? value.representation, name);
