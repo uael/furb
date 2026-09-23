@@ -37,3 +37,12 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   assert engine.offered(STANDS, "m/low") == 400000 and COST[0] / 400000 == 0.2
   assert len(COST) == 5
   engine.cancel(ceiling)
+  rebound = Sand(stands=STANDS, cost=COST)
+  _, root = life(rebound)
+  rebound.script[root] = ["close(2)"]
+  asked = engine.prompt(int, "count", on=root)
+  engine.rung("actor = 'n/low'", on=root)
+  later = engine.grant(usd=10.0, on=root)
+  assert await asked == 2
+  assert [attr(tag, "filled") for tag in tags(engine.turns(on=root), "ledger")] == [0.2]
+  engine.cancel(later)

@@ -214,7 +214,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 
   def ear(id):
     transcript, rungs, refused, retold, paused, mine = [], {}, {}, set(), set(), {id}
-    waiting, asking, running, to_run, unseen = [], None, "", [], ""
+    waiting, asking, running, to_run, unseen = {}, None, "", [], ""
 
     def stands(name):
       return any(under(name, x) or x == id for x in paused)
@@ -270,7 +270,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       picked = (filter or (lambda x: x))([x for x in theirs if question(x)])
       transcript += [it for it in theirs if it[1] == source or any(under(one[1], it[1]) for one in picked)]
       rungs.update(ask("program", source)[1])
-    start = len(transcript)
     transcript.append(told("opened", id, ("label", label), ("source", source)))
     _, standing = ask("stand", source or id)
     if not source:
@@ -292,9 +291,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         asking = None
       match a:
         case ("rung", rid, _, _, "", _, who, returns):
-          unseen = ""
-          waiting.append(rid)
-          transcript.append(told("opened", rid, ("actor", who or modules[id]["actor"]), ("says", f"close({returns})")))
+          unseen, waiting[rid] = "", who or modules[id]["actor"]
+          transcript.append(told("opened", rid, ("actor", waiting[rid]), ("says", f"close({returns})")))
         case ("ready", rid, _, word):
           retells = acts[rid][5]
           found = refused.get(retells, []) if retells else ask("gate", id, word, program())[1]
@@ -309,8 +307,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("prompt", pid, _, _, _, _, to) if to and offered(standing, to) is None:
           close(Refused(f"{to} no actor"), pid)
         case ("done", about, _, value):
-          if about in waiting:
-            waiting.remove(about)
+          waiting.pop(about, None)
           if isinstance(value, Exception) and about in program():
             modules[id]["raised"] = value
           if about == running:
@@ -323,15 +320,15 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           paused.add(about)
         case ("wake", about, *_):
           paused.discard(about)
-      if not asking and (mute := [x for x in waiting if not stands(x)]):
-        waiting.remove(asking := mute[0])
+      if not asking and (asking := next((x for x in waiting if not stands(x)), None)):
+        whom = waiting.pop(asking)
         q, held = ask("holds", id, asking)
         transcript.append(q)
         if not held:
-          yield "ask", asking, id, acts[asking][6] or modules[id]["actor"], turns_of(transcript)
+          yield "ask", asking, id, whom, turns_of(transcript)
       if to_run and not running:
         yield "run", (running := to_run.pop(0)), id, rungs[running], acts[running][5]
-      if unseen and not running and all(x[1] in outcomes for x in transcript[start:] if x[0] == "prompt"):
+      if unseen and not running and all(x[1] in outcomes for x in transcript if x[0] == "prompt" and x[3] == id):
         prompt(None, f"{unseen} done", on=id)
         unseen = ""
 
@@ -349,7 +346,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
       yield "done", id, transcript
       return
     _, standing = ask("stand", here)
-    spent, filled = 0.0, 0.0
+    spent = 0.0
     for old in transcript:
       match old:
         case ("grant", gid, *_) if gid != id and gid not in outcomes:
@@ -358,10 +355,11 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
     while True:
       match (yield):
         case ("answer", about, _, (_, _, (seen, _, _, _, dollars), _)) if scope(about) == here:
-          spent, filled = (
-            spent + dollars,
-            seen / (offered(standing, acts[about][6] or modules[here]["actor"]) or WINDOW),
-          )
+          spent += dollars
+          for said in ask("transcript", here, here)[1]:
+            match said:
+              case ("tell", rid, _, [("opened", [_, ("actor", whom), _], _)]) if rid == about:
+                filled = seen / (offered(standing, whom) or WINDOW)
           told("ledger", about, ("spent", spent), ("filled", filled))
           if (usd is not None and spent >= usd) or (share is not None and filled >= share):
             pause(here)
@@ -398,7 +396,7 @@ def bash(
         case ("peek", qid, _, _, at) if at == id:
           yield "done", qid, Exit(None, *streams.values())
         case ("out", about, _, text, stream) if about == id:
-          into = err if stream == "stderr" and show_err is not None else out
+          into = f"{id}/{stream}" if show_err else out
           streams[into] = streams[into].grow(text)
         case ("exited", about, _, code) if about == id:
           gone = "ended"
@@ -648,7 +646,7 @@ def boot(record=(), **outside):
 
   def journal():
     facts = {one[1]: one for _, one, *_ in kept if question(one)}
-    said, cursor, after, held = set(), 0, "", set(facts)
+    cursor, after, held = 0, "", set(facts)
 
     def keep(entry):
       kept.append(entry)
@@ -657,13 +655,11 @@ def boot(record=(), **outside):
     while True:
       while cursor < past and heard == len(log):
         match kept[cursor]:
-          case (_, q, _):
-            said.add(q[1])
-          case (_, (kind, _, "operator", on, *words) as then) if question(then) and (not on or on in said):
+          case (_, (kind, qid, "operator", on, *words) as then) if question(then) and (not on or scope(on)):
             with site.set(OPERATOR):
-              made[OPERATOR] = int(then[1].rpartition(".")[2]) - 1
+              made[OPERATOR] = int(qid.rpartition(".")[2]) - 1
               modules.get(on, globals())[kind](*words, on=on)
-          case (before, (_, about, *_)) if not (about in said and before in said):
+          case (before, (_, about, *_)) if not (scope(about) and scope(before)):
             break
           case (_, (kind, about, by, *words) as then) if not question(then):
             held.add(id(send(kind, about, *words, by="record" if kind == "done" else by)))
@@ -675,7 +671,6 @@ def boot(record=(), **outside):
           if ours and qid in facts and words[1:] != [*facts[qid][4:]]:
             raise Drift(f"{qid} drifts")
           if ours or by.startswith("rung://"):
-            said.add(qid)
             facts.setdefault(qid, a)
             if by == OPERATOR and ours and qid not in held:
               held.add(qid)
@@ -720,7 +715,6 @@ def boot(record=(), **outside):
     if acts.setdefault(id, a) is a:
       log.append(a)
       live(ear(id), id)
-      dispatch()
     return Act(id)
 
   def ears():
