@@ -33,6 +33,14 @@ import {
 
 export { display, isTag, safeText } from "./types.js";
 
+let prompt: string | undefined;
+/** The system prompt of every model: the engine minified in layout alone, which `bun run build` writes beside the
+ * package, read once. */
+function system(): string {
+  prompt ??= JSON.parse(readFileSync(new URL("../system.json", import.meta.url), "utf8")) as string;
+  return prompt;
+}
+
 export interface WorldOptions {
   /** Replay a record for inspection without owning it or starting outside work. */
   readOnly?: boolean;
@@ -425,12 +433,9 @@ export class World extends EventEmitter {
           timestamp: 0,
         };
       });
-      const systemPrompt = JSON.parse(
-        readFileSync(new URL("../system.json", import.meta.url), "utf8"),
-      ) as string;
       const stream = this.models.streamSimple(
         model,
-        { systemPrompt, messages },
+        { systemPrompt: system(), messages },
         {
           signal,
           sessionId: chain,
