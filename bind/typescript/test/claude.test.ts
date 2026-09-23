@@ -1,16 +1,20 @@
 import { expect, test } from "bun:test";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, type Message } from "@earendil-works/pi-ai";
 import { World } from "../src/index.ts";
 import { claudeProvider } from "../src/providers/claude.ts";
+import { executable } from "./executable.ts";
+import { remove } from "./processes.ts";
+
+/** The fake Claude CLI, compiled into a directory. */
+const fake = (directory: string) => executable(join(import.meta.dir, "fake-claude.ts"), directory, "claude");
 
 test("a CLI that exits before it reads a request fails that request, and a Node host lives on", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-gone-cli-"));
-  const bin = join(cwd, "claude");
-  await writeFile(bin, "#!/bin/sh\nexit 3\n");
-  await chmod(bin, 0o755);
+  await writeFile(join(cwd, "gone.ts"), "process.exit(3);\n");
+  const bin = executable(join(cwd, "gone.ts"), cwd, "claude");
   // Node ends its process at an error event that nothing hears, so the host is Node, on the built package.
   const host = `
     import { createModels } from ${JSON.stringify(import.meta.resolve("@earendil-works/pi-ai"))};
@@ -31,14 +35,13 @@ test("a CLI that exits before it reads a request fails that request, and a Node 
     const node = Bun.spawnSync(["node", "--input-type=module", "-e", host]);
     expect([node.exitCode, node.stdout.toString()]).toEqual([0, "error"]);
   } finally {
-    await rm(cwd, { recursive: true });
+    await remove(cwd);
   }
 });
 
 test("two lives on one provider keep a conversation each, though their chains share ids", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-two-lives-"));
-  const bin = new URL("fake-claude.ts", import.meta.url).pathname;
-  await chmod(bin, 0o755);
+  const bin = fake(cwd);
   const log = join(cwd, "cli.jsonl");
   process.env.FURB_FAKE_LOG = log;
   const cli = claudeProvider({ bin, stallMs: 1000 });
@@ -60,14 +63,13 @@ test("two lives on one provider keep a conversation each, though their chains sh
     await two.dispose();
     cli.dispose();
     delete process.env.FURB_FAKE_LOG;
-    await rm(cwd, { recursive: true });
+    await remove(cwd);
   }
 });
 
 test("the pi-ai Claude provider forwards normalized system text, reuses a session, and charges each turn once", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-provider-"));
-  const path = new URL("fake-claude.ts", import.meta.url).pathname;
-  await chmod(path, 0o755);
+  const path = fake(cwd);
   const log = join(cwd, "cli.jsonl");
   process.env.FURB_FAKE_LOG = log;
   const cli = claudeProvider({ bin: path, stallMs: 1000 });
@@ -133,14 +135,13 @@ test("the pi-ai Claude provider forwards normalized system text, reuses a sessio
   } finally {
     cli.dispose();
     delete process.env.FURB_FAKE_LOG;
-    await rm(cwd, { recursive: true });
+    await remove(cwd);
   }
 });
 
 test("a turn claude settles block by block keeps each block once, at the place it streamed", async () => {
-  const path = new URL("fake-claude.ts", import.meta.url).pathname;
-  await chmod(path, 0o755);
-  const cli = claudeProvider({ bin: path, stallMs: 1000 });
+  const cwd = await mkdtemp(join(tmpdir(), "furb-blocks-"));
+  const cli = claudeProvider({ bin: fake(cwd), stallMs: 1000 });
   const models = createModels();
   models.setProvider(cli.provider);
   const model = models.getModel("claude-cli", "sonnet");
@@ -170,5 +171,6 @@ test("a turn claude settles block by block keeps each block once, at the place i
     ]);
   } finally {
     cli.dispose();
+    await remove(cwd);
   }
 });

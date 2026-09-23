@@ -1,4 +1,4 @@
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { type ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
@@ -22,6 +22,7 @@ import { type Ears, WorldAdapter, type WorldHandler, type WorldRequest } from ".
 import { attachImage, type ImageAttachment, ImageCache, turnImages } from "./images.js";
 import { furbDirectory } from "./project.js";
 import { RecordFile } from "./record.js";
+import { shell } from "./shell.js";
 import {
   actorParts,
   type Entry,
@@ -669,20 +670,24 @@ export class World extends EventEmitter {
     this.spawned.add(command.id);
     // The note stands on the disk before the process does, so no later life runs the command again.
     this.save();
-    const child = spawn(
-      "/bin/sh",
-      ["-c", command.merged ? `exec 2>&1\n${command.command}` : command.command],
-      {
-        cwd: resolve(this.directory, command.here),
-        stdio: "pipe",
-        detached: process.platform !== "win32",
-      },
-    );
+    const child = spawn(shell, ["-c", command.merged ? `exec 2>&1\n${command.command}` : command.command], {
+      cwd: resolve(this.directory, command.here),
+      stdio: "pipe",
+      detached: process.platform !== "win32",
+      windowsHide: true,
+    });
     let late = false;
+    // A command ends with every process it started: on Unix its process group, which it leads, and on Windows,
+    // which has no process group that a program can signal, its tree of processes.
     const stop = () => {
+      if (!child.pid) return;
       try {
-        if (process.platform !== "win32" && child.pid) process.kill(-child.pid, "SIGKILL");
-        else child.kill("SIGKILL");
+        if (process.platform === "win32")
+          spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+            stdio: "ignore",
+            windowsHide: true,
+          });
+        else process.kill(-child.pid, "SIGKILL");
       } catch {}
     };
     // A command with no timeout runs until it ends.

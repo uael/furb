@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { shell } from "@furb/engine";
 import type { CliRenderer } from "@opentui/core";
 
 export async function externalEditor(
@@ -15,7 +16,7 @@ export async function externalEditor(
   renderer.suspend();
   try {
     const editor = process.env.VISUAL || process.env.EDITOR || "vi";
-    const child = Bun.spawn(["/bin/sh", "-c", `exec ${editor} "$1"`, "furb-editor", path], {
+    const child = Bun.spawn([shell, "-c", `exec ${editor} "$1"`, "furb-editor", path], {
       cwd,
       stdin: "inherit",
       stdout: "inherit",

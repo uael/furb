@@ -15,8 +15,11 @@ bun test bind/typescript/test
 
 `napi-rs` generates `index.cjs` and `index.d.cts` from `src/binding/ts.rs`. The optional `typescript` feature
 builds the binding in the existing crate. There is no Rust worker or second crate. TypeScript compiles the supplied
-TypeScript World to JavaScript. The package runs on Bun and Node.js 22 or later. The supplied shell World
-uses `/bin/sh`, so it supports macOS and Linux. Build the native binary for the host before using the package.
+TypeScript World to JavaScript. The package runs on Bun and Node.js 22 or later, on macOS, Linux and Windows.
+The supplied World runs a command with `/bin/sh`, and on Windows with the `sh` on `PATH`, such as the one of Git
+for Windows. It ends a command with the processes that the command started: on Unix by the process group of the
+command, and on Windows by its tree of processes, through `taskkill`. Build the native binary for the host before
+using the package.
 
 ```ts
 import { boot } from "@furb/engine";
@@ -55,9 +58,9 @@ its collection at run time. It follows the pooled session design in [dirt](https
 It reads current pi-ai system messages, keeps a warm conversation for each session id, sends only new messages,
 preserves text and thinking blocks, and reports the cost of each turn. The World gives each chain of each life a
 session id of its own, since the ids of chains repeat in every life. It runs pure completions with CLI tools and
-MCP disabled. It finds the standalone CLI or the CLI installed by Claude Desktop. Set `FURB_CLAUDE_BIN` to select
-a binary; `DIRT_CLI_BIN` is also accepted. Its pool belongs to the host that made the provider, and its
-`dispose` stops it. No CLI process starts until a model is asked.
+MCP disabled. It finds the standalone CLI (`claude.exe` on Windows) or the CLI installed by Claude Desktop. Set
+`FURB_CLAUDE_BIN` to select a binary; `DIRT_CLI_BIN` is also accepted. Its pool belongs to the host that made the
+provider, and its `dispose` stops it. No CLI process starts until a model is asked.
 
 ```ts
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";

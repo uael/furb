@@ -30,14 +30,16 @@ completion, and red for an error. An open grey dot means ready or saved. Hover a
 Selecting a completed session clears its unread marker. `/workspace path` adds a folder; `/new` starts a
 session in the current workspace. `/delete` moves a chosen session and its companions to `.furb/trash`.
 The trash holds a `restore.json` with the original paths, and its record can be opened with `--resume`. Quit saves
-and closes all open sessions, and SIGINT, SIGTERM, SIGHUP, and SIGQUIT quit the same way.
+and closes all open sessions, and SIGINT, SIGTERM, SIGHUP, and SIGQUIT quit the same way. On Windows, a console
+that closes and Ctrl+Break quit the same way.
 
 The six views show the conversation, accepted Python program, acts, facts, exact model transcript, and file
 diffs. Each chain has its own conversation and module. Python words have offline Tree-sitter colors and
 line numbers. Hover over a name for its current value; Ctrl+click or Ctrl+G opens its fields and definition.
 GitHub Dark is the default. Theme preferences are shared by sessions and saved in `$XDG_CONFIG_HOME/furb/ui.json`
-(or `~/.config/furb/ui.json`). `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot
-generation use isolated preferences; the CLI shares the user's choice across sessions, including demos.
+(or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows). `FURB_CONFIG_DIR` selects another
+configuration directory. Tests and screenshot generation use isolated preferences; the CLI shares the user's choice
+across sessions, including demos.
 The left sidebar's visibility and width are preferences too. `Ctrl+\` or `/sidebar` toggles it. On narrow
 terminals it is hidden, and `/workspace` keeps all sessions available from the keyboard.
 
@@ -139,11 +141,12 @@ replay. Python input uses the same gate as a model's word and marks a refused li
 The editor keeps submitted input history, matches brackets, and indents a new Python line.
 `@` opens project file search. A reference that names a file, such as `@README.md` or `@"file name.txt"`, is read
 before the message is sent; any other @word, such as `@dataclass`, stays text. A leading `!` runs a shell
-command. Alt+E or `/editor` edits the current draft with `VISUAL`, then `EDITOR`, then `vi`; configure the
-editor to wait until the file is saved and closed.
+command. Alt+E or `/editor` edits the current draft with `VISUAL`, then `EDITOR`, then `vi`, through the shell
+that runs commands; configure the editor to wait until the file is saved and closed.
 `/image path` attaches a PNG, JPEG, GIF, or WebP file. Ctrl+V or bare `/image` pastes an image through macOS
-AppKit, Wayland `wl-paste`, or X11 `xclip`. Attachments have a limit of 20 MiB each and are copied beside the
-record. The built-in World sends them as pi-ai image blocks, with their references kept in the prompt.
+AppKit, Windows PowerShell, Wayland `wl-paste`, or X11 `xclip`. Attachments have a limit of 20 MiB each and are
+copied beside the record. The built-in World sends them as pi-ai image blocks, with their references kept in the
+prompt.
 Click the attachment row to open or remove an image from the draft.
 `/model` and `/effort` open separate pickers. `/model name` takes `provider:model` or the model's id alone, by
 the rule of the World. Each model offers the efforts in its pi-ai metadata, saved in

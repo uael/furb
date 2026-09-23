@@ -12,7 +12,13 @@ export class Preferences {
   private saved = "";
   constructor(
     readonly path = join(
-      process.env.FURB_CONFIG_DIR ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "furb"),
+      process.env.FURB_CONFIG_DIR ??
+        join(
+          process.env.XDG_CONFIG_HOME ??
+            (process.platform === "win32" ? process.env.APPDATA : undefined) ??
+            join(homedir(), ".config"),
+          "furb",
+        ),
       "ui.json",
     ),
   ) {

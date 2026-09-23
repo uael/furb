@@ -1,8 +1,10 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, extname, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
+import { executable } from "../../bind/typescript/test/executable.ts";
+import { remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
@@ -190,19 +192,24 @@ test("clipboard import and share publication use bounded files and the explicitl
   await mkdir(bin);
   const oldPath = process.env.PATH;
   const data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
-  const clipboard = `#!/usr/bin/env bun\nconst data = ${JSON.stringify(data)}; process.stdout.write(process.argv[1].endsWith("osascript") ? data : Buffer.from(data, "base64"));\n`;
-  for (const name of ["osascript", "wl-paste", "xclip"])
-    await writeFile(join(bin, name), clipboard, { mode: 0o700 });
+  // One reader of the clipboard under the name of each system's reader: AppKit and PowerShell print base64.
+  await writeFile(
+    join(directory, "clipboard.ts"),
+    `import { basename } from "node:path"; const data = ${JSON.stringify(data)}; process.stdout.write(/^(osascript|powershell)(\\.exe)?$/.test(basename(process.execPath)) ? data : Buffer.from(data, "base64"));\n`,
+  );
+  const reader = executable(join(directory, "clipboard.ts"), directory, "reader");
+  for (const name of ["osascript", "powershell", "wl-paste", "xclip"])
+    await link(reader, join(bin, `${name}${extname(reader)}`));
   const log = join(directory, "uploaded.json");
   await writeFile(
-    join(bin, "gh"),
-    `#!/usr/bin/env bun\nimport { readFileSync, writeFileSync } from "node:fs"; const args = process.argv.slice(2); writeFileSync(${JSON.stringify(log)}, JSON.stringify({ args, markdown: readFileSync(args.at(-2), "utf8"), html: readFileSync(args.at(-1), "utf8") })); console.log("https://gist.github.com/furb/test-link");\n`,
-    { mode: 0o700 },
+    join(directory, "gh.ts"),
+    `import { readFileSync, writeFileSync } from "node:fs"; const args = process.argv.slice(2); writeFileSync(${JSON.stringify(log)}, JSON.stringify({ args, markdown: readFileSync(args.at(-2), "utf8"), html: readFileSync(args.at(-1), "utf8") })); console.log("https://gist.github.com/furb/test-link");\n`,
   );
+  const gh = executable(join(directory, "gh.ts"), bin, "gh");
 
   try {
-    process.env.PATH = `${bin}:${oldPath ?? ""}`;
-    expect(Bun.which("gh", { PATH: process.env.PATH })).toBe(join(bin, "gh"));
+    process.env.PATH = `${bin}${delimiter}${oldPath ?? ""}`;
+    expect(Bun.which("gh", { PATH: process.env.PATH })).toBe(gh);
     let temporary = "";
     const bytes = await clipboardImage(async (path) => {
       temporary = path;
@@ -223,7 +230,7 @@ test("clipboard import and share publication use bounded files and the explicitl
   } finally {
     if (oldPath === undefined) delete process.env.PATH;
     else process.env.PATH = oldPath;
-    await rm(directory, { recursive: true, force: true });
+    await remove(directory);
   }
 }, 30000);
 
@@ -232,7 +239,13 @@ test("model request failures remain act failures while the session pauses after 
   const opened = await openEngine({
     cwd: directory,
     record: join(directory, "session.jsonl"),
-    claude: { bin: new URL("../../bind/typescript/test/fake-claude.ts", import.meta.url).pathname },
+    claude: {
+      bin: executable(
+        join(import.meta.dir, "../../bind/typescript/test/fake-claude.ts"),
+        directory,
+        "claude",
+      ),
+    },
   });
   const session = new Session(opened.life, opened.world, true);
   const screen = await createTestRenderer({ width: 140, height: 42 });
@@ -251,7 +264,7 @@ test("model request failures remain act failures while the session pauses after 
     app.dispose();
     screen.renderer.destroy();
     await session.dispose();
-    await rm(directory, { recursive: true, force: true });
+    await remove(directory);
   }
 }, 30000);
 

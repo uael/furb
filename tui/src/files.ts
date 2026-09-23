@@ -1,18 +1,33 @@
 import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 
 /** A path as the user typed it, with a leading `~` read as the home directory. */
 export function expandHome(path: string): string {
-  return path === "~" ? homedir() : path.startsWith("~/") ? join(homedir(), path.slice(2)) : path;
+  return path === "~" || path.startsWith("~/") || path.startsWith(`~${sep}`)
+    ? join(homedir(), path.slice(1))
+    : path;
 }
 
 /** Match project files through rg, with a directory walk when it is not installed. A folder that cannot be read
- * holds no file to offer. */
+ * holds no file to offer. A file is named by its path from the directory with `/` between its parts, which every
+ * system reads, so a reference to it is the same text on every system. */
 export async function projectFiles(directory: string): Promise<string[]> {
   try {
     const child = Bun.spawn(
-      ["rg", "--files", "--hidden", "-g", "!.git", "-g", "!.furb", "-g", "!node_modules"],
+      [
+        "rg",
+        "--files",
+        "--hidden",
+        "--path-separator",
+        "/",
+        "-g",
+        "!.git",
+        "-g",
+        "!.furb",
+        "-g",
+        "!node_modules",
+      ],
       { cwd: directory, stdout: "pipe", stderr: "pipe" },
     );
     const text = await new Response(child.stdout).text();
@@ -33,7 +48,7 @@ export async function projectFiles(directory: string): Promise<string[]> {
       );
       for (const entry of entries) {
         if ([".git", ".furb", "node_modules"].includes(entry.name)) continue;
-        const path = join(relative, entry.name);
+        const path = relative ? `${relative}/${entry.name}` : entry.name;
         if (entry.isDirectory()) await walk(path);
         else if (entry.isFile()) result.push(path);
       }

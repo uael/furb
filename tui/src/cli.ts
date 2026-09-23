@@ -134,5 +134,6 @@ library.on("select", (session) => {
   app.dispose();
   app = new App(renderer, session, options);
 });
-for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)
+// On Windows, a console that closes gives SIGHUP, and Ctrl+Break gives SIGBREAK.
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT", "SIGBREAK"] as const)
   process.once(signal, () => void quit().finally(() => process.exit()));

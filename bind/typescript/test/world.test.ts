@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
@@ -16,6 +16,8 @@ import {
 } from "../src/index.ts";
 import { claudeProvider, cliModel } from "../src/providers/claude.ts";
 import { RecordFile } from "../src/record.ts";
+import { executable } from "./executable.ts";
+import { alive, printPid, remove } from "./processes.ts";
 import { until } from "./until.ts";
 
 // A World with no model puts every prompt to the operator, so a test that asks a model names one, and its `answer`
@@ -190,9 +192,7 @@ test("a World holds the models its host gives it: a saved roster gains what the 
 
 test("a fenced reply is no python: the gate refuses it and the prompt asks again", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-fence-"));
-  const bin = new URL("fake-claude.ts", import.meta.url).pathname;
-  await chmod(bin, 0o755);
-  const cli = claudeProvider({ bin });
+  const cli = claudeProvider({ bin: executable(join(import.meta.dir, "fake-claude.ts"), cwd, "claude") });
   const models = createModels();
   models.setProvider(cli.provider);
   const world = new World({ cwd, models, roster: ["claude-cli:sonnet"] });
@@ -205,7 +205,7 @@ test("a fenced reply is no python: the gate refuses it and the prompt asks again
   } finally {
     await world.dispose();
     cli.dispose();
-    await rm(cwd, { recursive: true, force: true });
+    await remove(cwd);
   }
 });
 
@@ -529,7 +529,7 @@ test("an interrupted command is reported on resume without repeating its side ef
     expect(await readFile(join(cwd, "count"), "utf8")).toBe("once\n");
   } finally {
     await second.dispose();
-    await rm(cwd, { recursive: true });
+    await remove(cwd);
   }
 });
 
@@ -586,7 +586,7 @@ test("a command a rung started and that printed nothing is never run again by a 
     expect(await readFile(join(cwd, "count"), "utf8")).toBe("once");
   } finally {
     await second.dispose();
-    await rm(cwd, { recursive: true });
+    await remove(cwd);
   }
 });
 
@@ -730,7 +730,7 @@ test("record inspection reports held work when its replay starts or feeds a comm
       "bash://operator.3.1",
     ]);
   } finally {
-    await rm(cwd, { recursive: true });
+    await remove(cwd);
   }
 });
 
@@ -784,23 +784,22 @@ test("a timeout or a wait past the longest timer runs its full time, and a comma
 
 test("a close of the World whose save fails still ends its life and its commands", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-failed-save-"));
-  const directory = join(cwd, "sessions");
-  await mkdir(directory);
-  const world = new World({ cwd, record: join(directory, "life.jsonl") });
+  const record = join(cwd, "life.jsonl");
+  const world = new World({ cwd, record });
   const life = world.open();
-  const command = life.bash("printf $$; exec sleep 30").id;
+  const command = life.bash(`${printPid}; exec sleep 30`).id;
   await until(world, () => printed(world, command) !== "");
-  const pid = printed(world, command);
-  await chmod(directory, 0o500);
+  const pid = Number(printed(world, command));
+  // A directory where the save writes its file makes the save fail on every system.
+  await mkdir(`${record}.world.json.tmp`);
   try {
-    await expect(world.dispose()).rejects.toThrow("EACCES");
+    await expect(world.dispose()).rejects.toThrow("life.jsonl.world.json.tmp");
     expect(life.disposed).toBe(true);
-    const state = Bun.spawnSync(["ps", "-o", "stat=", "-p", pid]).stdout.toString().trim();
-    // A process the World killed is gone, or dead and not yet reaped.
-    expect(state === "" || state.startsWith("Z")).toBe(true);
+    // A process the World killed ends a moment after, once the loop of this process hears of it.
+    for (let tries = 0; alive(pid) && tries < 100; tries++) await Bun.sleep(20);
+    expect(alive(pid)).toBe(false);
   } finally {
-    await chmod(directory, 0o700);
-    await rm(cwd, { recursive: true });
+    await remove(cwd);
   }
 });
 

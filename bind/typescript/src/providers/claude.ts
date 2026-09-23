@@ -26,11 +26,12 @@ export const CLAUDE = "claude-cli";
 export function claudeBinary(): string {
   if (process.env.FURB_CLAUDE_BIN) return process.env.FURB_CLAUDE_BIN;
   if (process.env.DIRT_CLI_BIN) return process.env.DIRT_CLI_BIN;
+  const name = process.platform === "win32" ? "claude.exe" : "claude";
   const candidates = (process.env.PATH ?? "")
     .split(delimiter)
     .filter(Boolean)
-    .map((path) => join(path, "claude"));
-  candidates.push(join(homedir(), ".local/bin/claude"));
+    .map((path) => join(path, name));
+  candidates.push(join(homedir(), ".local/bin", name));
   if (process.platform === "darwin") {
     const desktop = join(homedir(), "Library/Application Support/Claude/claude-code");
     try {

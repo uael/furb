@@ -59,7 +59,7 @@ test("one holder at a time owns a record, and a holder that ends ends only its o
 test("a holder may move the lock file, and two processes never own the record at once", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-lease-"));
   const path = join(cwd, "record.jsonl");
-  const racer = new URL("lease-racer.ts", import.meta.url).pathname;
+  const racer = join(import.meta.dir, "lease-racer.ts");
   try {
     const until = String(Date.now() + 1500);
     const racers = ["", "", "", "", "", "", "move", "move"].map((role) =>

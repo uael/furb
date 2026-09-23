@@ -1,11 +1,13 @@
 import { expect, test } from "bun:test";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { ImageCache } from "../src/images.ts";
 import { imageContent, imagePath, imageReference, imageReferences, World } from "../src/index.ts";
 import { claudeProvider } from "../src/providers/claude.ts";
+import { executable } from "./executable.ts";
+import { remove } from "./processes.ts";
 
 /** A PNG of one pixel, in base64. */
 const pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
@@ -16,8 +18,7 @@ test("image attachments reach pi-ai and the Claude CLI as image blocks and remai
   const path = join(directory, "pixel.png");
   const data = pixel;
   await writeFile(path, Buffer.from(data, "base64"));
-  const bin = new URL("fake-claude.ts", import.meta.url).pathname;
-  await chmod(bin, 0o755);
+  const bin = executable(join(import.meta.dir, "fake-claude.ts"), directory, "claude");
   const log = join(directory, "cli.jsonl");
   const previous = process.env.FURB_FAKE_LOG;
   process.env.FURB_FAKE_LOG = log;
@@ -61,7 +62,7 @@ test("image attachments reach pi-ai and the Claude CLI as image blocks and remai
     cli.dispose();
     if (previous === undefined) delete process.env.FURB_FAKE_LOG;
     else process.env.FURB_FAKE_LOG = previous;
-    await rm(directory, { recursive: true, force: true });
+    await remove(directory);
   }
 }, 30000);
 
@@ -73,7 +74,7 @@ test("an image attachment is written and read back by one grammar, and a bare ur
   expect(imageReferences(`See ${reference} beside furb-image://${"b".repeat(64)}.png.`)).toEqual([
     { text: reference, name: "plan _v2__final", uri: image.uri },
   ]);
-  expect(imagePath("/images", image.uri)).toEqual({ path: `/images/${digest}.png`, digest });
+  expect(imagePath("/images", image.uri)).toEqual({ path: join("/images", `${digest}.png`), digest });
   expect(() => imagePath("/images", "furb-image://short.png")).toThrow("Invalid image attachment.");
 });
 

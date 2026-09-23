@@ -1,9 +1,10 @@
 import { afterAll, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { RecordLock } from "@furb/engine";
+import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type Engine, openEngine } from "../src/bridge.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
@@ -11,16 +12,6 @@ import { Session } from "../src/session.ts";
 import { idle } from "./idle.ts";
 
 afterAll(removeDemoDirectories);
-
-/** Whether a process of this number still runs. */
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 test("an @word that names no file is text of the message, and a word that names a file is read first", async () => {
   const session = await demoSession();
@@ -69,30 +60,27 @@ test("a view that cannot be read opens the record with the default view and name
 
 test("a session that cannot save its view still ends its World, its commands and its lease", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-dispose-"));
-  const sessions = join(directory, "sessions");
-  await mkdir(sessions);
-  const record = join(sessions, "life.jsonl");
+  const record = join(directory, "life.jsonl");
   const opened = await openEngine({ cwd: directory, record, demo: true });
   const session = new Session(opened.life, opened.world, true);
   try {
-    const command = await session.life.bash("echo $$; sleep 30");
+    const command = await session.life.bash(`${printPid}; sleep 30`);
     const pid = () =>
       Number(
         (session.acts.find((act) => act.id === command)?.value as { stdout?: { content: string } })?.stdout
           ?.content,
       );
     await until(session, () => pid() > 0);
-    await chmod(sessions, 0o500);
+    // A directory where the save writes its file makes the save fail on every system.
+    await mkdir(`${record}.ui.json.tmp`);
     const failed = await session.dispose().catch((error: unknown) => error);
-    await chmod(sessions, 0o700);
-    expect(String(failed)).toContain("EACCES");
+    expect(String(failed)).toContain("life.jsonl.ui.json.tmp");
     expect(session.life.disposed).toBe(true);
     for (let tries = 0; alive(pid()) && tries < 100; tries++) await Bun.sleep(20);
     expect(alive(pid())).toBe(false);
     new RecordLock(record).dispose();
   } finally {
-    await chmod(sessions, 0o700);
-    await rm(directory, { recursive: true, force: true });
+    await remove(directory);
   }
 }, 30000);
 
@@ -314,9 +302,10 @@ try {
 }
 `,
     );
+    // Windows reads the home directory from USERPROFILE, and every other system from HOME.
     const child = Bun.spawn([process.execPath, script], {
       cwd: home,
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, USERPROFILE: home },
       stdout: "pipe",
       stderr: "pipe",
     });
