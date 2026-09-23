@@ -30,7 +30,7 @@ export const commands = {
   read: ["Read file", "path", "Show a file to this chain"],
   cd: ["Change directory", "path", "Change this chain's working directory"],
   edit: ["Edit program", "[prompt id]", "Change a prompt's program and replay it"],
-  feed: ["Feed command", "id text", "Send input to a command; empty text closes input"],
+  feed: ["Feed command", "id text", "Send a line of input to a command; no text closes its input"],
   close: ["Answer an act", "id JSON", "Close an act with a JSON value"],
   export: ["Export transcript", "path", "Write the transcript and program to a new JSON file"],
   model: ["Choose model", "[model]", "Use a model from this chain's roster"],

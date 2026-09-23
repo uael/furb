@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Fact } from "@furb/engine";
 import { HostView } from "../src/bridge.ts";
 
@@ -18,7 +21,49 @@ test("the view of the host takes more facts than one call takes as arguments", (
     streams: [],
     held: [],
     changes: 0,
-    models: [],
   });
   expect(view.facts).toHaveLength(count);
 });
+
+test("the view of the host counts the file changes of the World", () => {
+  const view = new HostView(async () => null);
+  view.update({
+    completed: 0,
+    cost: 0,
+    directory: "/tmp",
+    imageDirectory: "/tmp/images",
+    actor: "operator",
+    effort: "low",
+    roster: [],
+    facts: [],
+    prompts: [],
+    streams: [],
+    held: [],
+    changes: 3,
+  });
+  expect(view.changes).toBe(3);
+});
+
+test("a session whose life does not open ends its worker, so the process that asked it can exit", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-open-fail-"));
+  const record = join(directory, "damaged.jsonl");
+  const script = join(directory, "open.ts");
+  try {
+    await writeFile(record, "not json\n");
+    await writeFile(
+      script,
+      `import { openEngine } from ${JSON.stringify(join(import.meta.dir, "../src/bridge.ts"))};
+await openEngine({ cwd: ${JSON.stringify(directory)}, record: ${JSON.stringify(record)}, demo: true }).catch((error) =>
+  console.log(error.message),
+);
+`,
+    );
+    const child = Bun.spawn([process.execPath, script], { stdout: "pipe", stderr: "pipe" });
+    const ended = await Promise.race([child.exited, Bun.sleep(15000).then(() => "still running")]);
+    child.kill();
+    expect(ended).toBe(0);
+    expect(await new Response(child.stdout).text()).toContain("Invalid record entry");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30000);

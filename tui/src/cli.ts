@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { efforts, type WorldOptions } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
 import { App } from "./app.ts";
-import { seedDemoFiles } from "./demo.ts";
+import { demoDirectory, removeDemoDirectories } from "./demo.ts";
 import { Extensions } from "./extensions.ts";
+import { furbDirectory } from "./files.ts";
 import { defaultModel, type EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { sessionChoices } from "./sessions.ts";
@@ -50,10 +50,9 @@ const savedDirectory =
     : undefined;
 const directory =
   values.demo && !values.cwd && !record
-    ? join(await mkdtemp(join(tmpdir(), "furb-demo-")), "fieldnotes")
+    ? await demoDirectory()
     : resolve(values.cwd ?? savedDirectory ?? process.cwd());
 if (values.demo) await mkdir(directory, { recursive: true });
-if (values.demo && !values.cwd && !record) await seedDemoFiles(directory);
 const worldOptions: EngineOptions = {
   model: values.model,
   effort: values.effort as WorldOptions["effort"],
@@ -63,7 +62,7 @@ const worldOptions: EngineOptions = {
 const library = new Workspaces(
   preferences,
   worldOptions,
-  values.demo ? join(directory, ".furb/workspaces.json") : undefined,
+  values.demo ? join(await furbDirectory(directory), "workspaces.json") : undefined,
 );
 const group = await library.add(directory);
 await library.refresh();
@@ -77,7 +76,7 @@ const extensions = new Extensions(() => {
   return {
     life: session.life,
     chain: session.selected,
-    directory: session.directory || session.world.directory,
+    directory: session.workingDirectory,
     notify: (message) => {
       session.notice = message;
     },
@@ -92,22 +91,33 @@ try {
 }
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
+  // The TUI ends on a signal by its own quit, since the view saves its draft before the renderer goes.
+  exitSignals: [],
   backgroundColor: palettes[initial.theme].background,
   targetFps: 30,
   useMouse: true,
 });
 let app: App;
 let closing = false;
+/** Each step runs whatever the steps before it came to, so that the sessions close even when the terminal is gone. */
 const quit = async () => {
   if (closing) return;
   closing = true;
-  app.dispose();
-  renderer.destroy();
-  try {
-    await extensions.dispose();
-  } finally {
-    await library.dispose();
-  }
+  const failures: unknown[] = [];
+  for (const step of [
+    () => app.dispose(),
+    () => renderer.destroy(),
+    () => extensions.dispose(),
+    () => library.dispose(),
+    () => removeDemoDirectories(),
+  ])
+    try {
+      await step();
+    } catch (error) {
+      failures.push(error);
+    }
+  for (const error of failures) console.error(error);
+  if (failures.length) process.exitCode = 1;
 };
 const newSession = async () => {
   await library.create();
@@ -124,7 +134,5 @@ library.on("select", (session) => {
   app.dispose();
   app = new App(renderer, session, options);
 });
-for (const signal of ["SIGTERM", "SIGHUP"] as const)
-  process.once(signal, () => {
-    void quit();
-  });
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)
+  process.once(signal, () => void quit().finally(() => process.exit()));

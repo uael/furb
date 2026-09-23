@@ -1,8 +1,8 @@
-import { EventEmitter } from "node:events";
 import { realpath } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import type { Engine } from "./bridge.ts";
 import { commands } from "./commands.ts";
+import { expandHome } from "./files.ts";
 
 export interface ExtensionContext {
   life: Engine;
@@ -21,15 +21,13 @@ export interface ExtensionAPI {
 }
 
 /** Extensions run only when named by the user, through --extension or /extension. */
-export class Extensions extends EventEmitter {
+export class Extensions {
   readonly commands = new Map<string, ExtensionCommand>();
   readonly paths = new Set<string>();
   private readonly cleanups: (() => void | Promise<void>)[] = [];
-  constructor(private readonly context: () => ExtensionContext) {
-    super();
-  }
+  constructor(private readonly context: () => ExtensionContext) {}
   async load(path: string): Promise<void> {
-    const file = await realpath(path);
+    const file = await realpath(expandHome(path));
     if (this.paths.has(file)) return;
     const module = await import(pathToFileURL(file).href);
     if (typeof module.default !== "function")
@@ -56,7 +54,6 @@ export class Extensions extends EventEmitter {
     for (const [name, command] of pending) this.commands.set(name, command);
     if (typeof cleanup === "function") this.cleanups.push(cleanup);
     this.paths.add(file);
-    this.emit("change");
   }
   async run(name: string, argument: string): Promise<boolean> {
     const command = this.commands.get(name);
@@ -67,6 +64,5 @@ export class Extensions extends EventEmitter {
   async dispose(): Promise<void> {
     for (const cleanup of this.cleanups.reverse()) await cleanup();
     this.commands.clear();
-    this.removeAllListeners();
   }
 }

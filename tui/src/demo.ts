@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { type Turn, World, type WorldOptions } from "@furb/engine";
@@ -17,11 +17,28 @@ export async function seedDemoFiles(directory: string): Promise<void> {
   );
 }
 
-export async function createDemoWorld(options: WorldOptions): Promise<World> {
+/** The temporary directories that the demos of this process made. */
+const temporary = new Set<string>();
+
+/** A new demo project with its files, in a temporary directory that stays until removeDemoDirectories. */
+export async function demoDirectory(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "furb-demo-"));
+  temporary.add(root);
+  const directory = join(root, "fieldnotes");
+  await seedDemoFiles(directory);
+  return directory;
+}
+
+/** Remove every temporary directory that a demo of this process made, once no demo of it runs. */
+export async function removeDemoDirectories(): Promise<void> {
+  for (const root of temporary) await rm(root, { recursive: true, force: true });
+  temporary.clear();
+}
+
+export function createDemoWorld(options: WorldOptions): World {
   const { record, cwd } = options;
-  const directory =
-    cwd ?? (record ? dirname(record) : join(await mkdtemp(join(tmpdir(), "furb-demo-")), "fieldnotes"));
-  if (!record && !cwd) await seedDemoFiles(directory);
+  const directory = cwd ?? (record ? dirname(record) : undefined);
+  if (!directory) throw new Error("A demo World needs a directory or a record.");
   const world = new World({
     ...options,
     cwd: directory,
@@ -53,7 +70,7 @@ export async function createDemoWorld(options: WorldOptions): Promise<World> {
 }
 
 export async function demoSession(seed = false, preferences?: Preferences): Promise<Session> {
-  const { life, world } = await openEngine({ demo: true });
+  const { life, world } = await openEngine({ demo: true, cwd: await demoDirectory() });
   const session = new Session(life, world, true, preferences);
   await session.refresh();
   if (seed) await seedDemo(session);

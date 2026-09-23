@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { mkdir, readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { mkdir, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { RecordLock } from "@furb/engine";
 import { openEngine } from "./bridge.ts";
+import { expandHome, furbDirectory } from "./files.ts";
 import type { EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { inspectRecords } from "./records.ts";
-import { Session } from "./session.ts";
+import { Session, savedView } from "./session.ts";
 
 export type SessionStatus =
   | "saved"
@@ -37,7 +37,6 @@ export interface SessionEntry {
   status: SessionStatus;
   unread: boolean;
   error?: string;
-  held?: number;
   modified?: number;
   size?: number;
   cost?: number;
@@ -47,6 +46,43 @@ export interface Workspace {
   name: string;
   collapsed: boolean;
   sessions: SessionEntry[];
+}
+/** A workspace as workspaces.json keeps it. */
+interface SavedWorkspace {
+  directory: string;
+  name: string;
+  collapsed: boolean;
+  records: string[];
+}
+/** One change of the saved list: a workspace it names, made when the list has none, and what changes in it. */
+interface ListChange {
+  directory: string;
+  collapsed?: boolean;
+  add?: string;
+  remove?: string;
+}
+
+/** The workspaces that the file at a path lists, and none when there is no file. A file that holds no list is
+ * refused. */
+function readList(path: string): SavedWorkspace[] {
+  let data: { workspaces?: unknown } | null;
+  try {
+    data = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+  if (!Array.isArray(data?.workspaces)) throw new Error(`${path} holds no list of workspaces.`);
+  return data.workspaces
+    .filter((item) => item && typeof item.directory === "string")
+    .map((item) => ({
+      directory: item.directory,
+      name: typeof item.name === "string" ? item.name : basename(item.directory),
+      collapsed: item.collapsed === true,
+      records: Array.isArray(item.records)
+        ? item.records.filter((path: unknown): path is string => typeof path === "string")
+        : [],
+    }));
 }
 
 /** Status comes from live acts. A saved record is not presented as a running session. */
@@ -74,8 +110,12 @@ export class Workspaces extends EventEmitter {
   private readonly opening = new Map<string, Promise<SessionEntry>>();
   private readonly subscriptions = new Map<Session, () => void>();
   private readonly inspected = new Map<string, string>();
+  /** Ends the inspections of saved records that are still at work when the workspaces close. */
+  private readonly stop = new AbortController();
   private selection = 0;
   private closed = false;
+  /** Whether the list file could not be read, so that this run leaves it as it is. */
+  private damaged = false;
   readonly path: string;
   constructor(
     readonly preferences = new Preferences(),
@@ -85,46 +125,56 @@ export class Workspaces extends EventEmitter {
     super();
     this.path = path;
     try {
-      const data = JSON.parse(readFileSync(this.path, "utf8")) as { workspaces?: unknown };
-      if (Array.isArray(data?.workspaces))
-        for (const item of data.workspaces) {
-          if (!item || typeof item.directory !== "string") continue;
-          this.groups.push({
-            directory: item.directory,
-            name: typeof item.name === "string" ? item.name : basename(item.directory),
-            collapsed: item.collapsed === true,
-            sessions: Array.isArray(item.records)
-              ? item.records
-                  .filter((path: unknown): path is string => typeof path === "string")
-                  .map((path: string) => ({
-                    path,
-                    name: basename(path, ".jsonl"),
-                    status: "saved",
-                    unread: false,
-                  }))
-              : [],
-          });
-        }
+      for (const item of readList(path))
+        this.groups.push({
+          directory: item.directory,
+          name: item.name,
+          collapsed: item.collapsed,
+          sessions: item.records.map((record) => ({
+            path: record,
+            name: basename(record, ".jsonl"),
+            status: "saved",
+            unread: false,
+          })),
+        });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT")
-        this.notice = "Could not read the workspace list. Add a project folder to restore it.";
+      this.refuseList(error);
     }
   }
-  save(): void {
+  private refuseList(error: unknown): void {
+    this.damaged = true;
+    const reason = error instanceof Error ? error.message : String(error);
+    this.notice = `Could not read the workspace list at ${this.path}: ${reason.replace(/\.?$/, ".")} Repair or remove it; this run does not change it.`;
+  }
+  /** Apply a change to the list as the file holds it now, so that what another instance saved stays. */
+  private save(change: ListChange): void {
+    let list: SavedWorkspace[];
+    try {
+      list = readList(this.path);
+    } catch (error) {
+      this.refuseList(error);
+      return;
+    }
+    let group = list.find((group) => group.directory === change.directory);
+    if (!group) {
+      group = {
+        directory: change.directory,
+        name: basename(change.directory),
+        collapsed: false,
+        records: [],
+      };
+      list.push(group);
+    }
+    if (change.collapsed !== undefined) group.collapsed = change.collapsed;
+    if (change.add && !group.records.includes(change.add)) group.records.unshift(change.add);
+    if (change.remove) group.records = group.records.filter((record) => record !== change.remove);
     mkdirSync(dirname(this.path), { recursive: true });
-    writeFileSync(
-      `${this.path}.tmp`,
-      JSON.stringify({
-        workspaces: this.groups.map((group) => ({
-          directory: group.directory,
-          name: group.name,
-          collapsed: group.collapsed,
-          records: group.sessions.map((session) => session.path),
-        })),
-      }),
-      { mode: 0o600 },
-    );
+    writeFileSync(`${this.path}.tmp`, JSON.stringify({ workspaces: list }), { mode: 0o600 });
     renameSync(`${this.path}.tmp`, this.path);
+    if (this.damaged) {
+      this.damaged = false;
+      this.notice = "";
+    }
   }
   groupOf(entry = this.current): Workspace | undefined {
     return this.groups.find((group) => group.sessions.includes(entry as SessionEntry));
@@ -143,13 +193,7 @@ export class Workspaces extends EventEmitter {
     return order.find((status) => group.sessions.some((entry) => entry.status === status)) ?? "idle";
   }
   async add(directory: string): Promise<Workspace> {
-    const expanded =
-      directory === "~"
-        ? homedir()
-        : directory.startsWith("~/")
-          ? join(homedir(), directory.slice(2))
-          : directory;
-    const path = await realpath(resolve(expanded));
+    const path = await realpath(resolve(expandHome(directory)));
     if (!(await stat(path)).isDirectory()) throw new Error("A workspace must be a project folder.");
     let group = this.groups.find((group) => group.directory === path);
     if (!group) {
@@ -157,7 +201,7 @@ export class Workspaces extends EventEmitter {
       this.groups.push(group);
     }
     await this.scan(group);
-    this.save();
+    this.save({ directory: group.directory });
     this.emit("change");
     return group;
   }
@@ -173,39 +217,52 @@ export class Workspaces extends EventEmitter {
       if (!group.sessions.some((entry) => entry.path === path))
         group.sessions.push({ path, name: basename(name, ".jsonl"), status: "saved", unread: false });
     }
-    group.sessions = group.sessions.filter((entry) => entry.session || existsSync(entry.path));
+    // A session that opens stands in the list before its record does.
+    const saved = (entry: SessionEntry) => !entry.session && !this.opening.has(entry.path);
+    group.sessions = group.sessions.filter((entry) => !saved(entry) || existsSync(entry.path));
     await Promise.all(
       group.sessions.map(async (entry) => {
+        if (entry.session) entry.cost = entry.session.cost;
+        if (!saved(entry)) return;
         const info = await stat(entry.path);
         entry.modified = info.mtimeMs;
         entry.size = info.size;
-        if (entry.session) {
-          entry.cost = entry.session.cost;
-          return;
-        }
-        const metadata = await readFile(`${entry.path}.ui.json`, "utf8")
-          .then((text) => JSON.parse(text))
-          .catch(() => ({}));
-        if (typeof metadata?.sessionName === "string") entry.name = metadata.sessionName;
-        entry.cost = typeof metadata?.cost === "number" ? metadata.cost : 0;
+        const { view } = savedView(entry.path);
+        if (typeof view.sessionName === "string") entry.name = view.sessionName;
+        entry.cost = typeof view.cost === "number" ? view.cost : 0;
       }),
     );
     const changed: string[] = [];
-    for (const entry of group.sessions.filter((entry) => !entry.session)) {
+    for (const entry of group.sessions.filter(saved)) {
       const key = `${entry.modified}:${entry.size}`;
       if (this.inspected.get(entry.path) !== key) {
         this.inspected.set(entry.path, key);
         changed.push(entry.path);
       }
     }
-    const states = await inspectRecords(changed);
-    for (const entry of group.sessions) {
-      const state = states[entry.path];
-      if (!state || entry.session) continue;
-      entry.held = state.held;
-      entry.error = state.error;
-      entry.status = state.error ? "error" : state.held ? "paused" : "saved";
-    }
+    this.inspect(changed);
+  }
+  /** Find the unfinished work of saved records by their replay, which takes a time that grows with each record, so
+   * the rows show their state when it comes and nothing waits for it. */
+  private inspect(paths: string[]): void {
+    inspectRecords(paths, this.stop.signal).then(
+      (states) => {
+        for (const group of this.groups)
+          for (const entry of group.sessions) {
+            const state = states[entry.path];
+            if (!state || entry.session || this.opening.has(entry.path)) continue;
+            entry.error = state.error;
+            entry.status = state.error ? "error" : state.held ? "paused" : "saved";
+          }
+        this.emit("change");
+      },
+      (error: unknown) => {
+        if (this.closed) return;
+        for (const path of paths) this.inspected.delete(path);
+        this.notice = String(error);
+        this.emit("change");
+      },
+    );
   }
   async refresh(): Promise<void> {
     await Promise.all(
@@ -245,7 +302,7 @@ export class Workspaces extends EventEmitter {
     this.subscriptions.set(session, changed);
     session.on("change", changed);
     changed();
-    this.save();
+    this.save({ directory: group.directory, add: path });
     return row;
   }
   private async load(entry: SessionEntry, group: Workspace): Promise<SessionEntry> {
@@ -259,17 +316,10 @@ export class Workspaces extends EventEmitter {
       let session: Session | undefined;
       let opened: Awaited<ReturnType<typeof openEngine>> | undefined;
       try {
-        const metadata = await readFile(`${entry.path}.ui.json`, "utf8")
-          .then((text) => JSON.parse(text))
-          .catch(() => ({}));
-        opened = await openEngine({
-          ...this.options,
-          cwd: group.directory,
-          record: entry.path,
-          demo: metadata.demo ?? this.options.demo,
-        });
+        const demo = savedView(entry.path).view.demo ?? this.options.demo ?? false;
+        opened = await openEngine({ ...this.options, cwd: group.directory, record: entry.path, demo });
         const { life, world } = opened;
-        session = new Session(life, world, metadata.demo ?? this.options.demo ?? false, this.preferences);
+        session = new Session(life, world, demo, this.preferences);
         await session.refresh();
         if (this.closed) throw new Error("The workspace is closed.");
         return this.adopt(session, group);
@@ -297,14 +347,13 @@ export class Workspaces extends EventEmitter {
     entry.unread = false;
     entry.status = activityStatus(entry.session as Session);
     group.collapsed = false;
-    this.save();
+    this.save({ directory: group.directory, collapsed: false });
     this.emit("select", entry.session);
     this.emit("change");
   }
   async create(group = this.groupOf(), name?: string): Promise<SessionEntry> {
     if (!group) throw new Error("Add a workspace first.");
-    const directory = join(group.directory, ".furb/sessions");
-    await mkdir(directory, { recursive: true });
+    const directory = await furbDirectory(group.directory, "sessions");
     const path = join(
       directory,
       `${new Date().toISOString().replaceAll(":", "-")}-${randomUUID().slice(0, 8)}.jsonl`,
@@ -338,7 +387,7 @@ export class Workspaces extends EventEmitter {
   toggle(group?: Workspace): void {
     if (group) {
       group.collapsed = !group.collapsed;
-      this.save();
+      this.save({ directory: group.directory, collapsed: group.collapsed });
     } else {
       this.preferences.sidebar = !this.preferences.sidebar;
       this.preferences.save();
@@ -349,11 +398,13 @@ export class Workspaces extends EventEmitter {
     await this.opening.get(entry.path);
     const group = this.groupOf(entry);
     if (!group) throw new Error("This session has no workspace.");
-    if (this.current === entry) {
-      const next = group.sessions.find((next) => next !== entry);
-      if (next) await this.select(next);
-      else await this.create(group);
+    // The current session moves to the first other session that opens, and to a new one when none does. A session
+    // that does not open keeps its error on its row.
+    for (const next of group.sessions.filter((other) => other !== entry)) {
+      if (this.current !== entry) break;
+      await this.select(next).catch(() => {});
     }
+    if (this.current === entry) await this.create(group);
     if (entry.session) {
       const listener = this.subscriptions.get(entry.session);
       if (listener) entry.session.off("change", listener);
@@ -361,11 +412,12 @@ export class Workspaces extends EventEmitter {
       await entry.session.dispose();
       entry.session = undefined;
     }
+    // The lock file stays where it is. RecordLock does not check that the file it locked is still the file at the
+    // path, so a move or a removal of it by name could let two processes own one record.
     const lease = new RecordLock(entry.path);
-    const directory = join(group.directory, ".furb/trash", randomUUID());
     const moved: [string, string][] = [];
     try {
-      await mkdir(directory, { recursive: true });
+      const directory = await furbDirectory(group.directory, "trash", randomUUID());
       for (const suffix of ["", ".ui.json", ".world.json", ".changes.jsonl", ".images"]) {
         const source = `${entry.path}${suffix}`;
         if (!existsSync(source)) continue;
@@ -379,7 +431,7 @@ export class Workspaces extends EventEmitter {
         { mode: 0o600 },
       );
       group.sessions = group.sessions.filter((candidate) => candidate !== entry);
-      this.save();
+      this.save({ directory: group.directory, remove: entry.path });
       this.emit("change");
       if (this.current?.session) this.current.session.notice = `Session moved to ${directory}`;
       return directory;
@@ -392,6 +444,7 @@ export class Workspaces extends EventEmitter {
   }
   async dispose(): Promise<void> {
     this.closed = true;
+    this.stop.abort(new Error("The workspaces are closed."));
     await Promise.allSettled([...this.opening.values()]);
     for (const [session, changed] of this.subscriptions) session.off("change", changed);
     await Promise.all([...this.subscriptions.keys()].map((session) => session.dispose()));

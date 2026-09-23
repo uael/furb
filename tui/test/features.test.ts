@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,13 +7,15 @@ import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { clipboardImage } from "../src/clipboard.ts";
-import { demoSession } from "../src/demo.ts";
+import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import { externalEditor } from "../src/editor.ts";
 import { Extensions } from "../src/extensions.ts";
 import { fileReferences, projectFiles } from "../src/files.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
 import { idle } from "./idle.ts";
+
+afterAll(removeDemoDirectories);
 
 test("rungs retain clicked folds across views and reopen, with running, failed, and done labels and gate findings", async () => {
   let session = await demoSession();
@@ -270,7 +272,7 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
     const directory = session.world.directory;
     await writeFile(join(directory, "review notes.txt"), "Unique context for this check.");
     expect(await projectFiles(directory)).toContain("review notes.txt");
-    expect(fileReferences('Read @"review notes.txt" and @README.md')).toEqual([
+    expect(await fileReferences('Read @"review notes.txt" and @README.md', directory)).toEqual([
       "review notes.txt",
       "README.md",
     ]);

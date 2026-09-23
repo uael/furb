@@ -73,7 +73,8 @@ export class Snapshots {
       view.actorDirty = true;
     }
   }
-  take(requested: string): Snapshot {
+  /** The view of a chain, with the acts that changed after a count of changes of the act table. */
+  take(requested: string, since = 0): Snapshot {
     // An act table derived again knows acts whose facts the views were read without, so every view reads again.
     if (this.generation !== this.world.activity.generation) {
       this.generation = this.world.activity.generation;
@@ -113,8 +114,7 @@ export class Snapshots {
     }
     if (view.textDirty) {
       view.textDirty = false;
-      view.turns = this.life.turns(selected);
-      view.rendered = this.life.rendered(selected);
+      ({ turns: view.turns, rendered: view.rendered } = this.life.rendering(selected));
     }
     if (view.directoryDirty) {
       view.directoryDirty = false;
@@ -128,9 +128,12 @@ export class Snapshots {
       this.entries = this.world.records.entries.length;
       this.dispatched = [...queueDispatches(this.world.records.entries).keys()];
     }
+    const { acts, whole, count } = this.world.activity.since(since);
     return {
       selected,
-      acts: [...this.world.activity.acts.values()],
+      acts,
+      whole,
+      count,
       paused: this.world.isPaused(selected) || this.world.held.size > 0,
       dispatched: this.dispatched,
       roster: view.roster,

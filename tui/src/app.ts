@@ -1,5 +1,5 @@
-import { basename, join } from "node:path";
-import { imageContent, shapes } from "@furb/engine";
+import { basename } from "node:path";
+import { imageContent, imagePath, shapes } from "@furb/engine";
 import { display, isTag, safeText } from "@furb/engine/world";
 import {
   type BoxOptions,
@@ -965,11 +965,11 @@ export class App {
         );
       });
     } else if (w.view === "changes") {
-      if (w.world.changes.length > 20)
+      if (w.world.changes > 20)
         add("change-pages", String(w.changePage), "", c.muted, (box) => {
           box.add(
             this.text(
-              `Writes ${w.changePage * 20 + 1} to ${Math.min((w.changePage + 1) * 20, w.world.changes.length)} of ${w.world.changes.length}`,
+              `Writes ${w.changePage * 20 + 1} to ${Math.min((w.changePage + 1) * 20, w.world.changes)} of ${w.world.changes}`,
               c.muted,
             ),
           );
@@ -1661,7 +1661,7 @@ export class App {
   }
   private imageActions(uri: string): void {
     const content = imageContent(this.session.world.imageDirectory, uri);
-    const file = join(this.session.world.imageDirectory, uri.slice("furb-image://".length));
+    const file = imagePath(this.session.world.imageDirectory, uri).path;
     const pending = this.session.images[this.session.selected]?.find((image) => image.uri === uri);
     this.openPalette(pending?.name ?? "Image attachment", [
       {
@@ -2947,7 +2947,7 @@ export class App {
   private changePage(step: number): void {
     this.session.changePage = Math.max(
       0,
-      Math.min(Math.ceil(this.session.world.changes.length / 20) - 1, this.session.changePage + step),
+      Math.min(Math.ceil(this.session.world.changes / 20) - 1, this.session.changePage + step),
     );
     void this.session.refresh().catch(this.session.fail);
   }

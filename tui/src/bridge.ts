@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { type Act, actorParts, type Fact, type ImageAttachment, type Life, type World } from "@furb/engine";
+import type { Act, Fact, ImageAttachment, Life, World } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
 import type { EngineOptions } from "./models.ts";
 import type { ActRow, FollowUp } from "./session.ts";
@@ -8,7 +8,12 @@ export interface Snapshot {
   dispatched: string[];
   paused: boolean;
   roster: [string, string[], number][];
+  /** The acts that changed after the count the session asked with, or every act when `whole` says so. */
   acts: ActRow[];
+  /** Whether the acts are the whole table, which the session takes in place of its own. */
+  whole: boolean;
+  /** The count of changes of the act table that the acts are read at. */
+  count: number;
   selected: string;
   turns: ReturnType<Life["turns"]>;
   rendered: string[];
@@ -39,7 +44,6 @@ export interface WorldState {
   held: [string, string][];
   /** How many file changes the World holds. */
   changes: number;
-  models: ReturnType<World["route"]>[];
 }
 
 export class HostView extends EventEmitter {
@@ -55,9 +59,8 @@ export class HostView extends EventEmitter {
   prompts = new Map<string, { id: string; shape: string; message: string }>();
   streams = new Map<string, { chain: string; text: string; thinking: string }>();
   held = new Map<string, string>();
-  /** The file changes of the World, of which a view reads the count alone. */
-  changes = { length: 0 };
-  private models: ReturnType<World["route"]>[] = [];
+  /** How many file changes the World holds. */
+  changes = 0;
   constructor(private request: (target: string, method: string, args: unknown[]) => Promise<unknown>) {
     super();
   }
@@ -75,19 +78,16 @@ export class HostView extends EventEmitter {
     this.prompts = new Map(state.prompts.map((prompt) => [prompt.id, prompt]));
     this.streams = new Map(state.streams);
     this.held = new Map(state.held);
-    this.changes = { length: state.changes };
-    this.models = state.models;
+    this.changes = state.changes;
     if (incoming.length) this.emit("facts", incoming);
     this.emit("change");
   }
-  route(actor: string): ReturnType<World["route"]> {
-    const model = this.models.find((model) =>
-      [actor, actorParts(actor).model].some(
-        (name) => `${model.provider}:${model.id}` === name || model.id === name,
-      ),
-    );
-    if (!model) throw new Error(`No model ${actor}.`);
-    return model;
+  route(actor: string): Promise<ReturnType<World["route"]>> {
+    return this.request("world", "route", [actor]) as Promise<ReturnType<World["route"]>>;
+  }
+  /** The name in the roster of the model that a name gives, and nothing when it gives none. */
+  model(name: string): Promise<string | null> {
+    return this.request("library", "model", [name]) as Promise<string | null>;
   }
   answer(id: string, value: string): Promise<unknown> {
     return this.request("world", "answer", [id, value]);
@@ -104,8 +104,8 @@ export class HostView extends EventEmitter {
   source(): Promise<string> {
     return this.request("library", "source", []) as Promise<string>;
   }
-  snapshot(chain: string): Promise<Snapshot> {
-    return this.request("library", "snapshot", [chain]) as Promise<Snapshot>;
+  snapshot(chain: string, since = 0): Promise<Snapshot> {
+    return this.request("library", "snapshot", [chain, since]) as Promise<Snapshot>;
   }
   readChanges(start: number, count: number): Promise<FileChange[]> {
     return this.request("library", "changes", [start, count]) as Promise<FileChange[]>;
@@ -156,7 +156,15 @@ export async function openEngine(options: EngineOptions): Promise<{ life: Engine
     waiting.clear();
     world.emit("fault", new Error(event.message));
   };
-  const root = (await request("world", "open", [options])) as string;
+  let root: string;
+  try {
+    root = (await request("world", "open", [options])) as string;
+  } catch (error) {
+    // No caller holds a worker whose life did not open, so it ends here.
+    closed = true;
+    worker.terminate();
+    throw error;
+  }
   const life = new Proxy(
     { root },
     {

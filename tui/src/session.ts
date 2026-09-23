@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Fact, ImageAttachment, LiveAct, Turn, Usage } from "@furb/engine";
-import { actorParts, shapes } from "@furb/engine";
+import { actorParts, decodeRecord, imagePath, imageReference, imageReferences, shapes } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
 import type { Engine, HostView } from "./bridge.ts";
-import { fileReferences, projectFiles } from "./files.ts";
+import { expandHome, fileReferences, furbDirectory, projectFiles } from "./files.ts";
 import { Preferences } from "./preferences.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { palettes, type ThemeName } from "./theme.ts";
@@ -21,6 +21,50 @@ export interface FollowUp {
   text: string;
   shape: string;
   actor: string;
+}
+
+/** The fields of a session that `<record>.ui.json` keeps, so that a later open shows the session as it was left. */
+const kept = [
+  "sessionName",
+  "demo",
+  "selected",
+  "actor",
+  "view",
+  "mode",
+  "shape",
+  "editing",
+  "histories",
+  "started",
+  "ladder",
+  "repls",
+  "queued",
+  "queueError",
+  "images",
+  "redo",
+  "drafts",
+  "scrolls",
+  "panes",
+  "folds",
+] as const;
+/** What `<record>.ui.json` holds: the kept fields of a session, and what the session had cost. */
+export type SavedView = Partial<Pick<Session, (typeof kept)[number]>> & { cost?: number };
+
+/** The saved view of a record: nothing when it has none, and the defaults with the reason when its file holds no
+ * view that can be read. */
+export function savedView(record: string): { view: SavedView; damage?: string } {
+  const path = `${record}.ui.json`;
+  try {
+    const view: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (view && typeof view === "object" && !Array.isArray(view)) return { view };
+    throw new Error("It holds no map.");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { view: {} };
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      view: {},
+      damage: `Could not read ${path}: ${reason.replace(/\.?$/, ".")} The session opened with its default view.`,
+    };
+  }
 }
 
 export class Session extends EventEmitter {
@@ -66,9 +110,13 @@ export class Session extends EventEmitter {
   started: Record<string, number> = {};
   directory = "";
   private refreshTask?: Promise<void>;
+  /** The count of changes of the act table that `acts` holds. */
+  private counted = 0;
   private dirty = false;
   private closed = false;
   private factFilter = { query: "", seen: 0, rows: [] as Fact[] };
+  /** The actor the operator chose for each chain, which the session shows until the rung that sets it has run. */
+  private readonly choices = new Map<string, { actor: string; rung?: string }>();
   constructor(
     readonly life: Engine,
     readonly world: HostView,
@@ -82,41 +130,13 @@ export class Session extends EventEmitter {
     const path = world.records.path;
     this.preferences =
       preferences ?? new Preferences(demo && path ? join(dirname(path), "ui-preferences.json") : undefined);
-    if (path && existsSync(`${path}.ui.json`)) {
-      const saved = JSON.parse(readFileSync(`${path}.ui.json`, "utf8")) as Partial<Session> & {
-        cost?: number;
-        collapsed?: string[];
-        expanded?: string[];
-        toggled?: string[];
-      };
-      this.savedCost = saved.cost ?? 0;
-      this.selected = saved.selected ?? this.selected;
-      this.actor = saved.actor ?? this.actor;
-      this.demo = saved.demo ?? this.demo;
-      this.sessionName = saved.sessionName ?? this.sessionName;
-      this.view = saved.view ?? this.view;
-      this.mode = saved.mode ?? this.mode;
-      this.shape = saved.shape ?? this.shape;
-      this.editing = saved.editing;
-      this.histories = saved.histories ?? {};
-      this.started = saved.started ?? {};
-      this.repls = saved.repls ?? {};
-      this.queued = saved.queued ?? [];
-      this.images = saved.images ?? {};
+    if (path) {
+      const { view, damage } = savedView(path);
+      Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
+      this.savedCost = view.cost ?? 0;
+      // A saved queue waits for the choice of the operator before it sends.
       this.queueHeld = this.queued.length > 0;
-      this.queueError = saved.queueError ?? "";
-      this.redo = saved.redo ?? [];
-      this.ladder = saved.ladder;
-      this.drafts = saved.drafts ?? {};
-      this.scrolls = saved.scrolls ?? {};
-      this.panes = { inspector: saved.panes?.inspector ?? this.panes.inspector };
-      this.folds =
-        saved.folds ??
-        Object.fromEntries([
-          ...(saved.collapsed ?? []).map((id) => [id, true]),
-          ...(saved.expanded ?? []).map((id) => [id, false]),
-          ...(saved.toggled ?? []).map((id) => [id, saved.view === "program"]),
-        ]);
+      if (damage) this.notice = damage;
     }
     world.on("change", this.changed);
     world.on("facts", this.factsChanged);
@@ -192,12 +212,25 @@ export class Session extends EventEmitter {
       do {
         this.dirty = false;
         const selected = this.selected;
-        const snapshot = await this.world.snapshot(selected);
+        const { acts, whole, count, ...snapshot } = await this.world.snapshot(selected, this.counted);
         if (this.selected !== selected) {
           this.dirty = true;
           continue;
         }
         Object.assign(this, snapshot);
+        // A snapshot carries the acts that changed since the session last read them, in the order of the table.
+        if (whole) this.acts = acts;
+        else if (acts.length) {
+          const rows = new Map(this.acts.map((act) => [act.id, act]));
+          for (const act of acts) rows.set(act.id, act);
+          this.acts = [...rows.values()];
+        }
+        this.counted = count;
+        // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
+        const choice = this.choices.get(selected);
+        if (choice?.rung && this.acts.find((act) => act.id === choice.rung)?.done)
+          this.choices.delete(selected);
+        else if (choice) this.actor = choice.actor;
         const dispatched = new Set(this.dispatched);
         const queued = this.queued.filter((entry) => !dispatched.has(entry.id));
         if (queued.length !== this.queued.length) {
@@ -247,10 +280,14 @@ export class Session extends EventEmitter {
   /** The files of the project the session works in: read again when asked fresh or when the directory moved, and
    * otherwise the read already made, so every reader of one read sees the same list. */
   projectFiles(fresh = false): Promise<string[]> {
-    const directory = this.directory || this.world.directory;
+    const directory = this.workingDirectory;
     if (fresh || this.fileList?.directory !== directory)
       this.fileList = { directory, read: projectFiles(directory) };
     return this.fileList.read;
+  }
+  /** The directory that the paths of the selected chain resolve against, as the World resolves them. */
+  get workingDirectory(): string {
+    return resolve(this.world.directory, this.directory);
   }
   get chains(): ActRow[] {
     return this.acts.filter((act) => act.kind === "chain");
@@ -282,9 +319,9 @@ export class Session extends EventEmitter {
     return act.kind === "prompt" && act.by === "operator";
   }
   async attachImage(path: string): Promise<void> {
-    if (!this.world.route(this.actor).input.includes("image"))
+    if (!(await this.world.route(this.actor)).input.includes("image"))
       throw new Error("Choose a model that accepts images before attaching one.");
-    const image = await this.world.attachImage(resolve(this.directory || this.world.directory, path));
+    const image = await this.world.attachImage(resolve(this.workingDirectory, expandHome(path)));
     const images = this.images[this.selected] ?? [];
     this.images[this.selected] = images;
     if (!images.some((current) => current.uri === image.uri)) images.push(image);
@@ -292,12 +329,7 @@ export class Session extends EventEmitter {
     this.notice = `${image.name} attached.`;
   }
   private withImages(text: string): string {
-    return [
-      text,
-      ...(this.images[this.selected] ?? []).map(
-        (image) => `![${image.name.replace(/[[\]\r\n]/g, "_")}](${image.uri})`,
-      ),
-    ].join("\n");
+    return [text, ...(this.images[this.selected] ?? []).map(imageReference)].join("\n");
   }
   labelOf(id: string): string {
     return id === this.life.root
@@ -356,16 +388,25 @@ export class Session extends EventEmitter {
   async drainQueue(): Promise<void> {
     if (this.closed || this.draining || this.queueHeld || this.world.held.size || !this.queued.length) return;
     this.draining = true;
+    // The queue is read again before each send, since the operator may remove or take back a follow-up meanwhile.
+    const queued = (entry: FollowUp) => this.queued.some((item) => item.id === entry.id);
+    const passed = new Set<string>();
+    const next = () =>
+      this.closed || this.queueHeld
+        ? undefined
+        : this.queued.find(
+            (entry) =>
+              !passed.has(entry.id) &&
+              !this.acts.find((act) => act.id === entry.chain)?.paused &&
+              !this.acts.some(
+                (act) => act.on === entry.chain && !act.done && ["prompt", "rung"].includes(act.kind),
+              ),
+          );
     try {
-      for (const entry of [...this.queued]) {
-        if (
-          this.acts.find((act) => act.id === entry.chain)?.paused ||
-          this.acts.some(
-            (act) => act.on === entry.chain && !act.done && ["prompt", "rung"].includes(act.kind),
-          )
-        )
-          continue;
+      for (let entry = next(); entry; entry = next()) {
+        passed.add(entry.id);
         await this.attachFiles(entry.text, entry.chain);
+        if (!queued(entry)) continue;
         this.track(await this.world.sendQueued(entry));
         this.queued = this.queued.filter((item) => item.id !== entry.id);
         this.save();
@@ -395,7 +436,8 @@ export class Session extends EventEmitter {
     this.notice = "Follow-up removed.";
   }
   private async attachFiles(text: string, chain = this.selected): Promise<void> {
-    for (const path of fileReferences(text))
+    const directory = resolve(this.world.directory, await this.life.cwd(chain));
+    for (const path of await fileReferences(text, directory))
       await this.life.result(await this.life.rung(`read(${JSON.stringify(path)})`, { on: chain }));
   }
   async undo(): Promise<void> {
@@ -420,21 +462,32 @@ export class Session extends EventEmitter {
     this.redo.push({ from: source, to: branch.id });
     await this.select(branch.id);
     let message = String(prompt.words[1] ?? "");
-    for (const match of message.matchAll(
-      /!\[([^\]]*)\]\((furb-image:\/\/[a-f0-9]{64}\.(?:png|jpg|gif|webp))\)/g,
-    )) {
-      const uri = match[2] ?? "";
-      const image = await this.world.attachImage(
-        join(this.world.imageDirectory, uri.slice("furb-image://".length)),
-      );
-      image.name = match[1] || image.name;
+    for (const reference of imageReferences(message)) {
+      const image = await this.world.attachImage(imagePath(this.world.imageDirectory, reference.uri).path);
+      image.name = reference.name || image.name;
       this.images[this.selected] ??= [];
       this.images[this.selected]?.push(image);
-      message = message.replace(match[0], "");
+      message = message.replace(reference.text, "");
     }
     this.emit("compose", message.trimEnd());
     this.notice = "Message removed from this branch. Module and files keep their current state.";
     this.save();
+  }
+
+  /** Set the actor of the selected chain by a rung of the operator. Until that rung has run, the session shows the
+   * choice and sends prompts to it. */
+  private async choose(actor: string): Promise<void> {
+    const chain = this.selected;
+    const choice: { actor: string; rung?: string } = { actor };
+    this.choices.set(chain, choice);
+    this.actor = actor;
+    try {
+      choice.rung = await this.life.rung(`actor = ${JSON.stringify(actor)}`, { on: chain });
+    } catch (error) {
+      if (this.choices.get(chain) === choice) this.choices.delete(chain);
+      throw error;
+    }
+    this.track(choice.rung);
   }
 
   async submit(input: string): Promise<void> {
@@ -557,16 +610,18 @@ export class Session extends EventEmitter {
           this.emit("models");
           break;
         }
-        // A model is named in full, provider:model, or by its model alone when one entry of the roster has it.
-        const models = this.roster.filter(([name]) => name !== "operator");
-        const named = models.filter(([name]) => name === argument || name.split(":").at(-1) === argument);
-        const [entry] = named;
-        if (!entry || named.length > 1)
-          throw new Error(`Choose one of ${models.map(([name]) => name).join(", ")}.`);
+        const name = await this.world.model(argument);
+        const entry = this.roster.find(([candidate]) => candidate === name);
+        if (!entry)
+          throw new Error(
+            `Choose one of ${this.roster
+              .filter(([candidate]) => candidate !== "operator")
+              .map(([candidate]) => candidate)
+              .join(", ")}.`,
+          );
         const current = this.actorChoice.effort;
         const effort = entry[1].includes(current) ? current : entry[1][0];
-        this.actor = effort ? `${entry[0]}/${effort}` : entry[0];
-        this.track(await this.life.rung(`actor = ${JSON.stringify(this.actor)}`, { on: this.selected }));
+        await this.choose(effort ? `${entry[0]}/${effort}` : entry[0]);
         break;
       }
       case "effort": {
@@ -578,8 +633,7 @@ export class Session extends EventEmitter {
         const offered = this.roster.find(([name]) => name === model)?.[1] ?? [];
         if (!offered.includes(argument))
           throw new Error(`This model offers ${offered.join(", ") || "no reasoning efforts"}.`);
-        this.actor = `${model}/${argument}`;
-        this.track(await this.life.rung(`actor = ${JSON.stringify(this.actor)}`, { on: this.selected }));
+        await this.choose(`${model}/${argument}`);
         break;
       }
       case "run": {
@@ -643,21 +697,26 @@ export class Session extends EventEmitter {
         break;
       }
       case "feed": {
-        const [id, ...words] = argument.split(" ");
+        const space = argument.indexOf(" ");
+        const id = space < 0 ? argument : argument.slice(0, space);
+        const text = space < 0 ? "" : argument.slice(space + 1);
         if (!id) throw new Error("Use /feed followed by an act id and text.");
-        await this.life.write({ path: `${id}/stdin`, content: words.join(" ") }, this.selected);
+        // A fed text is one line of input, and no text closes the input.
+        await this.life.write({ path: `${id}/stdin`, content: text && `${text}\n` }, this.selected);
         break;
       }
       case "close": {
         const split = argument.indexOf(" ");
         if (split < 0) throw new Error("Use /close followed by an act id and a JSON value.");
-        await this.life.close(JSON.parse(argument.slice(split + 1)), argument.slice(0, split));
+        // The record reader keeps what JSON.parse loses: 2.0 stays a float, and a whole number past the safe range
+        // is refused.
+        await this.life.close(decodeRecord(argument.slice(split + 1)), argument.slice(0, split));
         break;
       }
       case "export": {
         if (!argument) throw new Error("Use /export followed by a file path.");
         await writeFile(
-          argument,
+          expandHome(argument),
           JSON.stringify({ chain: this.selected, turns: this.turns, program: this.program }, null, 2),
           { flag: "wx" },
         );
@@ -666,8 +725,8 @@ export class Session extends EventEmitter {
       }
       case "share": {
         const path = argument
-          ? resolve(argument)
-          : join(this.world.directory, ".furb/shares", `${Date.now()}.html`);
+          ? resolve(expandHome(argument))
+          : join(await furbDirectory(this.world.directory, "shares"), `${Date.now()}.html`);
         await mkdir(dirname(path), { recursive: true });
         await writeFile(path, shareHtml(this), { flag: "wx", mode: 0o600 });
         this.notice = `Conversation saved to ${path}`;
@@ -699,43 +758,25 @@ export class Session extends EventEmitter {
     if (!record) return;
     const path = `${record}.ui.json`;
     this.savedCost = this.cost;
-    writeFileSync(
-      `${path}.tmp`,
-      JSON.stringify({
-        sessionName: this.sessionName,
-        demo: this.demo,
-        cost: this.savedCost,
-        selected: this.selected,
-        actor: this.actor,
-        view: this.view,
-        mode: this.mode,
-        shape: this.shape,
-        editing: this.editing,
-        histories: this.histories,
-        started: this.started,
-        ladder: this.ladder,
-        repls: this.repls,
-        queued: this.queued,
-        queueError: this.queueError,
-        images: this.images,
-        redo: this.redo,
-        drafts: this.drafts,
-        scrolls: this.scrolls,
-        panes: this.panes,
-        folds: this.folds,
-      }),
-      { mode: 0o600 },
-    );
+    const view: SavedView = {
+      ...Object.fromEntries(kept.map((key) => [key, this[key]])),
+      cost: this.savedCost,
+    };
+    writeFileSync(`${path}.tmp`, JSON.stringify(view), { mode: 0o600 });
     renameSync(`${path}.tmp`, path);
   }
+  /** Save the view, then end the World whatever the save came to. */
   async dispose(): Promise<void> {
     clearTimeout(this.noticeTimer);
-    this.save();
     this.closed = true;
     this.world.off("change", this.changed);
     this.world.off("fault", this.fail);
     this.world.off("facts", this.factsChanged);
-    await this.refreshTask?.catch(() => {});
-    await this.world.dispose();
+    try {
+      this.save();
+    } finally {
+      await this.refreshTask?.catch(() => {});
+      await this.world.dispose();
+    }
   }
 }

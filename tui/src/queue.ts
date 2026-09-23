@@ -9,8 +9,6 @@ export function queueHash(chain: string, shape: string, message: string, actor: 
 export function queueEvent(fact: Fact): { step: string; key: string; value: unknown } | undefined {
   if (fact[2] !== "operator") return undefined;
   if (fact[0] === "queue") return { step: String(fact[3]), key: String(fact[4]), value: fact[5] };
-  if (["queue_begin", "queue_sent", "queue_aborted"].includes(fact[0]))
-    return { step: fact[0].slice(6), key: String(fact[3]), value: fact[4] };
   return undefined;
 }
 

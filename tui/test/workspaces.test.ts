@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { RecordLock } from "@furb/engine";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
@@ -200,6 +201,149 @@ test("the left tree groups sessions, switches by mouse, collapses and toggles wi
   } finally {
     app?.dispose();
     screen.renderer.destroy();
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("the list of saved sessions comes before their replays, and a row shows its state when its replay lands", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-inspect-"));
+  const preferences = new Preferences(join(directory, "config/ui.json"));
+  let library = new Workspaces(preferences, { demo: true });
+  try {
+    const entry = await library.create(await library.add(directory), "Held");
+    await entry.session?.life.wait(60);
+    await library.dispose();
+    library = new Workspaces(preferences, { demo: true });
+    const row = (await library.add(directory)).sessions.find((candidate) => candidate.path === entry.path);
+    // The replay runs in a worker that loads the native engine first, so the list is there before it.
+    expect(row?.status).toBe("saved");
+    await until(library, () => row?.status === "paused");
+  } finally {
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("a session that opens keeps its row through a refresh that comes before its record", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-create-"));
+  const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), { demo: true });
+  try {
+    const group = await library.add(directory);
+    await library.create(group, "First");
+    const creating = library.create(group, "Second");
+    await until(library, () =>
+      group.sessions.some((entry) => entry.name === "Second" && entry.status === "opening"),
+    );
+    const row = group.sessions.find((entry) => entry.name === "Second");
+    expect(await stat(row?.path ?? "").catch(() => null)).toBeNull();
+    await library.refresh();
+    const created = await creating;
+    expect(created).toBe(row as SessionEntry);
+    expect(group.sessions.filter((entry) => entry.path === created.path)).toEqual([created]);
+    expect(library.current).toBe(created);
+    expect(created.session?.sessionName).toBe("Second");
+  } finally {
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("deleting the current session moves to the next session that opens, and to a new one when none does", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-delete-current-"));
+  const preferences = new Preferences(join(directory, "config/ui.json"));
+  let library = new Workspaces(preferences, { demo: true });
+  let lease: RecordLock | undefined;
+  try {
+    const held = await library.create(await library.add(directory), "Held elsewhere");
+    await library.dispose();
+    library = new Workspaces(preferences, { demo: true });
+    const group = await library.add(directory);
+    const current = await library.create(group, "Delete me");
+    lease = new RecordLock(held.path);
+    const sibling = group.sessions.find((entry) => entry.path === held.path);
+    expect(group.sessions.map((entry) => entry.name)).toEqual(["Delete me", "Held elsewhere"]);
+    await library.delete(current);
+    expect(sibling?.status).toBe("error");
+    expect(sibling?.error).toContain("Another process owns");
+    expect(library.current?.session).toBeDefined();
+    expect(library.current).not.toBe(current);
+    expect(library.current).not.toBe(sibling);
+    expect(await stat(current.path).catch(() => null)).toBeNull();
+  } finally {
+    lease?.dispose();
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("the workspace list keeps what each instance saves, and a list that cannot be read stays for the user to repair", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-list-"));
+  const preferences = new Preferences(join(directory, "config/ui.json"));
+  const path = join(directory, "config/workspaces.json");
+  const libraries: Workspaces[] = [];
+  const open = () => {
+    const library = new Workspaces(preferences, { demo: true });
+    libraries.push(library);
+    return library;
+  };
+  const listed = async () =>
+    (JSON.parse(await readFile(path, "utf8")) as { workspaces: { directory: string; collapsed: boolean }[] })
+      .workspaces;
+  try {
+    const project = async (name: string) => {
+      await mkdir(join(directory, name));
+      return realpath(join(directory, name));
+    };
+    const alpha = await project("alpha");
+    const beta = await project("beta");
+    const gamma = await project("gamma");
+    const damaged = `{"workspaces": [{"directory": ${JSON.stringify(alpha)}},]}`;
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, damaged);
+    const first = open();
+    expect(first.notice).toContain(`Could not read the workspace list at ${path}`);
+    await first.add(beta);
+    expect(await readFile(path, "utf8")).toBe(damaged);
+    await writeFile(path, JSON.stringify({ workspaces: [{ directory: alpha, records: [] }] }));
+    const betaGroup = first.groups.find((group) => group.directory === beta);
+    if (!betaGroup) throw new Error("No beta workspace.");
+    first.toggle(betaGroup);
+    expect(first.notice).toBe("");
+    expect((await listed()).map((group) => [group.directory, group.collapsed])).toEqual([
+      [alpha, false],
+      [beta, true],
+    ]);
+    const second = open();
+    await second.add(gamma);
+    first.toggle(betaGroup);
+    expect((await listed()).map((group) => [group.directory, group.collapsed])).toEqual([
+      [alpha, false],
+      [beta, false],
+      [gamma, false],
+    ]);
+    expect(open().groups.map((group) => group.directory)).toEqual([alpha, beta, gamma]);
+  } finally {
+    for (const library of libraries) await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("the .furb that the TUI makes in a project keeps itself out of version control", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-ignore-"));
+  const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), { demo: true });
+  const git = (...args: string[]) =>
+    Bun.spawnSync(["git", ...args], { cwd: join(directory, "project") }).stdout.toString();
+  try {
+    await mkdir(join(directory, "project"));
+    git("init", "-q");
+    await writeFile(join(directory, "project/app.txt"), "tracked\n");
+    const entry = await library.create(await library.add(join(directory, "project")), "Ignored");
+    await entry.session?.submit("/share");
+    await library.delete(entry);
+    expect(await readFile(join(directory, "project/.furb/.gitignore"), "utf8")).toBe("*\n");
+    expect(git("status", "--porcelain", "--untracked-files=all")).toBe("?? app.txt\n");
+  } finally {
     await library.dispose();
     await rm(directory, { recursive: true, force: true });
   }

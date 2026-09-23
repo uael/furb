@@ -7,7 +7,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
-import { demoSession, seedDemo, seedDemoFiles } from "../src/demo.ts";
+import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles } from "../src/demo.ts";
 import { Extensions } from "../src/extensions.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
@@ -149,14 +149,14 @@ try {
   test.mockInput.pressEscape();
   session.show("transcript");
   await capture("06-transcript");
-  const written = session.world.changes.length;
+  const written = session.world.changes;
   await session.life.result(
     await session.life.rung(
       'write(read("README.md").append("\\n## Keyboard\\nPress Ctrl+K to find a note.\\n"))',
       { on: session.selected },
     ),
   );
-  await until(session.world, () => session.world.changes.length > written);
+  await until(session.world, () => session.world.changes > written);
   session.show("changes");
   await capture("07-changes");
   app.palette();
@@ -438,4 +438,5 @@ try {
   test.renderer.destroy();
   await library.dispose();
   await extensions.dispose();
+  await removeDemoDirectories();
 }

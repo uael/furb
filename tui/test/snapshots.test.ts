@@ -153,3 +153,64 @@ test("an act of a kind an extension defines joins the act table, and what it tel
     await rm(cwd, { recursive: true, force: true });
   }
 }, 30000);
+
+test("a take after a change of the chain asks its turns and their text by one question", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-rendering-"));
+  const world = new World({ cwd });
+  try {
+    const life = world.open();
+    const calls: string[] = [];
+    const traced = new Proxy(life, {
+      get(target, key) {
+        const value = Reflect.get(target, key, target);
+        return typeof value === "function"
+          ? (...args: unknown[]) => {
+              calls.push(String(key));
+              return Reflect.apply(value, target, args);
+            }
+          : value;
+      },
+    }) as Life;
+    const snapshots = new Snapshots(traced, world);
+    snapshots.take(life.root);
+    await life.result(life.rung("changed = 1").id);
+    calls.length = 0;
+    const snapshot = snapshots.take(life.root);
+    expect(calls.filter((name) => ["turns", "rendered", "rendering"].includes(name))).toEqual(["rendering"]);
+    expect(snapshot.rendered.join("\n")).toContain("changed = 1");
+    expect(snapshot.turns).toEqual(life.turns(life.root));
+  } finally {
+    await world.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("a take carries the acts that changed after the count it is given, and every act after the table is derived again", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-delta-"));
+  const world = new World({ cwd });
+  try {
+    const life = world.open();
+    const snapshots = new Snapshots(life, world);
+    const first = snapshots.take(life.root);
+    expect(first.acts.map((act) => act.id)).toEqual([...world.activity.acts.keys()]);
+    const waiting = life.wait(60).id;
+    await Promise.resolve();
+    const second = snapshots.take(life.root, first.count);
+    expect([second.whole, second.acts.map((act) => act.id)]).toEqual([false, [waiting]]);
+    life.cancel(waiting);
+    await until(world, () => world.activity.acts.get(waiting)?.done === true);
+    const third = snapshots.take(life.root, second.count);
+    expect(third.acts.map((act) => [act.id, act.done])).toEqual([[waiting, true]]);
+    expect(snapshots.take(life.root, third.count).acts).toEqual([]);
+    await life.rung(
+      ["def noted(name):", '  yield ("done", name, "noted")', 'note = act("note", "", noted)'].join("\n"),
+    );
+    await until(world, () => [...world.activity.acts.values()].some((act) => act.kind === "note"));
+    const fourth = snapshots.take(life.root, third.count);
+    expect(fourth.whole).toBe(true);
+    expect(fourth.acts.map((act) => act.id)).toEqual([...world.activity.acts.keys()]);
+  } finally {
+    await world.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
+}, 30000);

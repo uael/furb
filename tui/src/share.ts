@@ -1,7 +1,7 @@
 import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { imageContent } from "@furb/engine";
+import { imageContent, imageReferences } from "@furb/engine";
 import { display, isTag } from "@furb/engine/world";
 import { Marked } from "marked";
 import type { Session } from "./session.ts";
@@ -46,14 +46,16 @@ export function shareHtml(session: Session): string {
       const act = session.acts.find((act) => act.id === (fields.id ?? fields.over));
       if (kind === "opened" && act?.kind === "prompt") {
         const message = String(fields.message ?? "");
-        const images = [...message.matchAll(/furb-image:\/\/[a-f0-9]{64}\.(?:png|jpg|gif|webp)/g)]
-          .map((match) => {
-            const image = imageContent(session.world.imageDirectory, match[0]);
+        const references = imageReferences(message);
+        const images = references
+          .map((reference) => {
+            const image = imageContent(session.world.imageDirectory, reference.uri);
             return `<img alt="Attached image" src="data:${image.mimeType};base64,${image.data}">`;
           })
           .join("");
+        const text = references.reduce((rest, reference) => rest.replace(reference.text, ""), message);
         sections.push(
-          `<section class="prompt"><h2>${session.isUserPrompt(act) ? "You" : "Observation"}</h2>${prose(message.replace(/!\[[^\]]*\]\(furb-image:\/\/[^)]+\)/g, ""))}${images}</section>`,
+          `<section class="prompt"><h2>${session.isUserPrompt(act) ? "You" : "Observation"}</h2>${prose(text)}${images}</section>`,
         );
       } else if (kind === "closed" && act?.kind === "prompt")
         sections.push(`<section><h2>Result</h2>${prose(display(act.value ?? body))}</section>`);
@@ -83,9 +85,10 @@ export function shareMarkdown(session: Session): string {
           lines.push(
             `## ${session.isUserPrompt(act) ? "You" : "Observation"}`,
             "",
-            String(fields.message ?? "").replace(
-              /!\[([^\]]*)\]\(furb-image:\/\/[^)]+\)/g,
-              "[Image: $1, included in conversation.html]",
+            imageReferences(String(fields.message ?? "")).reduce(
+              (text, reference) =>
+                text.replace(reference.text, `[Image: ${reference.name}, included in conversation.html]`),
+              String(fields.message ?? ""),
             ),
             "",
           );
