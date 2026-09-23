@@ -63,13 +63,14 @@ test("the pi-ai Claude provider forwards normalized system text, reuses a sessio
     expect(stalled.stopReason).toBe("error");
     expect(stalled.errorMessage).toContain("no progress");
     const signal = new AbortController();
-    const waiting = models.completeSimple(
+    const waiting = models.streamSimple(
       model,
       { systemPrompt: "ENGINE ONLY", messages: [{ role: "user", content: "WAIT", timestamp: 0 }] },
       { sessionId: "other", signal: signal.signal },
     );
-    setTimeout(() => signal.abort(), 25);
-    expect((await waiting).stopReason).toBe("aborted");
+    // The request is aborted once it is in flight, which its first event says.
+    for await (const event of waiting) if (event.type === "start") signal.abort();
+    expect((await waiting.result()).stopReason).toBe("aborted");
   } finally {
     cli.dispose();
     delete process.env.FURB_FAKE_LOG;

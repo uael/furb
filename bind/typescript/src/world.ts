@@ -433,12 +433,11 @@ export class World extends EventEmitter {
         .map((block) => block.text)
         .join("")
         .trim();
-      const fences = [...text.matchAll(/```(?:python|py)?\n([\s\S]*?)```/g)];
-      const word = fences.length === 1 ? (fences[0]?.[1] ?? text).trim() : text;
       const usage = reply.usage;
       return [
         "assistant",
-        [word],
+        // A model speaks python alone: a fence or prose around the code stays in the word, for the gate to refuse.
+        [text],
         [
           usage.input + usage.cacheRead + usage.cacheWrite,
           usage.output,

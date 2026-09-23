@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
+import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { clipboardImage } from "../src/clipboard.ts";
@@ -12,26 +13,7 @@ import { Extensions } from "../src/extensions.ts";
 import { fileReferences, projectFiles } from "../src/files.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
-
-function until(session: Session, condition: () => boolean): Promise<void> {
-  if (condition()) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const check = () => {
-      if (condition()) {
-        clearTimeout(timer);
-        session.off("change", check);
-        resolve();
-      }
-    };
-    const timer = setTimeout(() => {
-      session.off("change", check);
-      reject(new Error("The session did not settle."));
-    }, 10000);
-    session.on("change", check);
-  });
-}
-const idle = (session: Session) =>
-  until(session, () => !session.acts.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)));
+import { idle } from "./idle.ts";
 
 test("rungs retain clicked folds across views and reopen, with running, failed, and done labels and gate findings", async () => {
   let session = await demoSession();

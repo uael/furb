@@ -17,7 +17,9 @@ for await (const line of createInterface({ input: process.stdin })) {
   }
   if (text.includes("WAIT")) continue;
   calls++;
-  const word = `close(${JSON.stringify(`reply ${calls}`)})`;
+  const plain = `close(${JSON.stringify(`reply ${calls}`)})`;
+  // Asked to fence, the first reply wraps its code in a fence, which is no python.
+  const word = text.includes("FENCE") && calls === 1 ? `\`\`\`python\n${plain}\n\`\`\`` : plain;
   const think = text.includes("THINK");
   const say = (event: object) => process.stdout.write(`${JSON.stringify({ type: "stream_event", event })}\n`);
   const settle = (block: object) =>

@@ -3,25 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Life, World } from "@furb/engine";
+import { until } from "../../bind/typescript/test/until.ts";
 import { Snapshots } from "../src/snapshots.ts";
-
-function until(world: World, ready: () => boolean): Promise<void> {
-  if (ready()) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const changed = () => {
-      if (ready()) {
-        clearTimeout(timer);
-        world.off("change", changed);
-        resolve();
-      }
-    };
-    const timer = setTimeout(() => {
-      world.off("change", changed);
-      reject(new Error("The life did not change."));
-    }, 10000);
-    world.on("change", changed);
-  });
-}
 
 test("idle snapshots add no facts or sandbox calls as the act table grows, and streamed output needs no peek", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-snapshot-"));

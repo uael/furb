@@ -3,29 +3,13 @@ import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
+import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { seedDemoFiles } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
-
-function until(library: Workspaces, predicate: () => boolean): Promise<void> {
-  if (predicate()) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const done = () => {
-      if (!predicate()) return;
-      clearTimeout(timer);
-      library.off("change", done);
-      resolve();
-    };
-    const timer = setTimeout(() => {
-      library.off("change", done);
-      reject(new Error("Session status did not change."));
-    }, 10000);
-    library.on("change", done);
-  });
-}
 
 test("workspaces keep sessions alive, report background completion and input, and reopen saved records paused", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-spaces-"));
@@ -195,16 +179,16 @@ test("the left tree groups sessions, switches by mouse, collapses and toggles wi
     expect(library.preferences.sidebar).toBe(false);
     expect(app.scroll.x).toBe(1);
     expect(app.composer.plainText).toBe("keep this draft");
+    // The picker reads the workspaces again before it opens: the test awaits the picker the key opened.
+    const picker = app.workspacePicker;
+    let opened: Promise<void> | undefined;
+    app.workspacePicker = () => {
+      opened = picker();
+      return opened;
+    };
     screen.mockInput.pressKey("w", { ctrl: true });
-    // The picker refreshes the workspaces before it opens, so the frame is read until it shows, for two seconds.
-    for (
-      let tries = 0;
-      tries < 100 && !screen.captureCharFrame().includes("Workspaces & sessions");
-      tries++
-    ) {
-      await Bun.sleep(20);
-      await screen.flush();
-    }
+    await opened;
+    await screen.flush();
     expect(screen.captureCharFrame()).toContain("Workspaces & sessions");
     app.closeOverlay();
     library.toggle();

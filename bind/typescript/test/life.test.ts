@@ -10,6 +10,8 @@ async function open(record: unknown[] = [], answer = 'close("hello")') {
   const entries: unknown[] = [];
   const facts: unknown[] = [];
   const files = new Map<string, string>([["a", "one\ntwo\n"]]);
+  // A wait of no seconds is over at once; any other is over when the test says so, and never by the clock.
+  const waits: (() => void)[] = [];
   let asks = 0;
   const world = ({ kind, args }: WorldRequest): unknown => {
     switch (kind) {
@@ -37,9 +39,9 @@ async function open(record: unknown[] = [], answer = 'close("hello")') {
         return { path: args[1], content: args[2] };
       case "Ask":
         asks++;
-        return Bun.sleep(5).then(() => ["assistant", [answer], [20, 8, 0, 0, 0.001], null]);
+        return Promise.resolve(["assistant", [answer], [20, 8, 0, 0, 0.001], null]);
       case "Wait":
-        return Bun.sleep(Number(args[0]) * 1000).then(() => null);
+        return Number(args[0]) === 0 ? null : new Promise((resolve) => waits.push(() => resolve(null)));
       case "Prompt":
         return "operator answer";
       default:
@@ -48,7 +50,10 @@ async function open(record: unknown[] = [], answer = 'close("hello")') {
   };
   const life = new WorldAdapter(world, (batch) => facts.push(...batch)).boot(record as Entry[]);
   lives.push(life);
-  return { life, entries, facts, files, asks: () => asks };
+  const release = () => {
+    for (const done of waits.splice(0)) done();
+  };
+  return { life, entries, facts, release, files, asks: () => asks };
 }
 
 test("native queries are synchronous and acts await the real engine and async World", async () => {
@@ -65,28 +70,25 @@ test("native queries are synchronous and acts await the real engine and async Wo
 });
 
 test("a pending result leaves JavaScript and other native operations available", async () => {
-  const { life } = await open();
-  const id = life.wait(0.05).id;
+  const { life, release } = await open();
+  const id = life.wait(60).id;
   const pending = life.result(id);
   expect(await life.cwd()).toBe("/tmp");
   expect(await life.outcome(id)).toEqual({ done: false, value: null });
-  let ticked = false;
-  setTimeout(() => {
-    ticked = true;
-  }, 1);
+  release();
   expect(await pending).toBeNull();
-  expect(ticked).toBe(true);
 });
 
 test("pause holds a model response until wake and cancel rejects a native await", async () => {
-  const { life } = await open();
+  const { life, asks } = await open();
   await life.pause(life.root);
   const id = life.prompt("str", "Say hello").id;
-  await Bun.sleep(30);
+  // A paused chain asks no model, so nothing answers the prompt until the wake.
+  expect(asks()).toBe(0);
   expect((await life.outcome(id)).done).toBe(false);
   await life.wake(life.root);
   expect(await life.result<string>(id)).toBe("hello");
-  const later = life.wait(0.3).id;
+  const later = life.wait(60).id;
   const result = life.result(later).then(
     () => "resolved",
     (error: Error) => error.message,

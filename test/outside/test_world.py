@@ -313,12 +313,13 @@ def test_what_the_model_reads_of_a_tag_is_its_name_its_attributes_and_its_body()
   assert rendered([]) == ""
 
 
-def test_the_word_of_a_rung_is_the_code_of_the_answer_or_the_whole_of_it() -> None:
-  """A model that fences its code says the block alone; one that fences nothing says everything it wrote."""
+def test_the_word_of_a_rung_is_all_the_text_the_model_wrote() -> None:
+  """A model speaks python alone, so a fence and the prose around it stay in the word for the gate to refuse."""
   assert worded(ModelResponse(parts=[TextPart("close(1)")])) == "close(1)"
-  assert worded(ModelResponse(parts=[TextPart("here:\n```python\nclose(1)\n```\n")])) == "close(1)"
-  assert worded(ModelResponse(parts=[TextPart("```\nclose(1)\n```")])) == "close(1)"
-  assert worded(ModelResponse(parts=[TextPart("```\na\n```\n```\nb\n```")])) == "```\na\n```\n```\nb\n```"
+  assert (
+    worded(ModelResponse(parts=[TextPart("here:\n```python\nclose(1)\n```\n")])) == "here:\n```python\nclose(1)\n```"
+  )
+  assert worded(ModelResponse(parts=[TextPart("```\nclose(1)\n```")])) == "```\nclose(1)\n```"
 
 
 async def test_an_ask_carries_the_system_prompt_and_the_turns_in_their_roles(yard: Path) -> None:

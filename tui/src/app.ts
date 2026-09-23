@@ -113,7 +113,9 @@ export class App {
   private suggestionIndex = 0;
   /** The token whose suggestions Escape hid, which a change of the token shows again. */
   private dismissed = "";
-  private files?: { directory: string; paths?: string[]; error?: string };
+  /** The project files an `@` suggests, read again each time an `@` starts a word, and awaited by a caller. */
+  files?: { directory: string; read: Promise<void>; paths?: string[]; error?: string };
+  private lastToken = "";
   private readonly search: InputRenderable;
   private readonly paneKeys = new WeakMap<Renderable, string>();
   private readonly cards = new Map<
@@ -1539,10 +1541,11 @@ export class App {
       }
     }
   }
-  workspacePicker = (): void => {
+  /** The workspaces and their sessions in a palette, which opens once the workspaces are read again. */
+  workspacePicker = (): Promise<void> => {
     const library = this.options.workspaces;
-    if (!library) return;
-    void library
+    if (!library) return Promise.resolve();
+    return library
       .refresh()
       .then(() =>
         this.openPalette("Workspaces & sessions", [
@@ -1644,7 +1647,7 @@ export class App {
     }
     if (text === "/workspace") {
       consume();
-      this.workspacePicker();
+      await this.workspacePicker();
       return true;
     }
     if (text.startsWith("/workspace ")) {
@@ -1904,6 +1907,8 @@ export class App {
   private suggest = (): void => {
     const token = this.token();
     const key = token ? `${token.kind}${token.text}` : "";
+    const started = key === "@" && this.lastToken !== "@";
+    this.lastToken = key;
     if (key !== this.dismissed) this.dismissed = "";
     if (!token || this.overlay || this.dismissed) {
       this.suggestions = [];
@@ -1932,19 +1937,19 @@ export class App {
         }));
     } else {
       const directory = this.session.directory || this.session.world.directory;
-      if (this.files?.directory !== directory) {
-        const files: NonNullable<typeof this.files> = { directory };
-        this.files = files;
-        void projectFiles(directory)
-          .then((paths) => {
+      if (started || this.files?.directory !== directory) {
+        const files: NonNullable<typeof this.files> = { directory, read: Promise.resolve() };
+        files.read = projectFiles(directory).then(
+          (paths) => {
             files.paths = paths;
-          })
-          .catch((error: unknown) => {
-            files.error = error instanceof Error ? error.message : String(error);
-          })
-          .finally(() => {
             if (this.files === files && !this.closed) this.suggest();
-          });
+          },
+          (error: unknown) => {
+            files.error = error instanceof Error ? error.message : String(error);
+            if (this.files === files && !this.closed) this.suggest();
+          },
+        );
+        this.files = files;
       }
       const wanted = token.text.toLowerCase();
       this.suggestions = (this.files.paths ?? [])
@@ -2749,7 +2754,7 @@ export class App {
     }
     if (key.ctrl && key.name === "w" && !this.overlay) {
       key.preventDefault();
-      this.workspacePicker();
+      void this.workspacePicker();
       return;
     }
     if (key.ctrl && key.name === "\\" && !this.overlay) {

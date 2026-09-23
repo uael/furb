@@ -1,7 +1,8 @@
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
+import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoSession, seedDemo } from "../src/demo.ts";
@@ -9,6 +10,7 @@ import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
 import { sessionChoices } from "../src/sessions.ts";
 import { Workspaces } from "../src/workspaces.ts";
+import { idle } from "./idle.ts";
 
 test("the real native life drives conversation, program, activity, search, and responsive views", async () => {
   const session = await demoSession();
@@ -127,7 +129,7 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
   const snapshot = session.world.snapshot.bind(session.world);
   let release = () => {};
   try {
-    await Bun.sleep(300);
+    await idle(session);
     await session.refresh();
     app.render();
     await screen.flush();
@@ -237,7 +239,7 @@ test("operator answers and program edits act through the binding", async () => {
   const app = new App(test.renderer, session, { quit() {} });
   try {
     const id = await session.life.prompt("bool", "Continue with the change?", { to: "operator" });
-    await Bun.sleep(60);
+    await until(session.world, () => session.world.prompts.has(id));
     await session.refresh();
     app.render();
     await test.flush();
@@ -393,13 +395,16 @@ test("a progress tick keeps an in-flight act's card and body in place", async ()
     const card = app.scroll.getChildren().find((node) => node.id === id);
     if (!card) throw new Error("No card for the pending wait.");
     const body = card.getChildren().at(-1);
-    await Bun.sleep(300);
+    // The clock moves past a tick of the spinner and a second of the elapsed time, and the card stays.
+    setSystemTime(new Date(Date.now() + 1300));
     app.render();
     await screen.flush();
     expect(app.scroll.getChildren().find((node) => node.id === id)).toBe(card);
     expect(card.getChildren().at(-1)).toBe(body);
+    expect(screen.captureCharFrame()).toContain("1s since start");
     expect(screen.captureCharFrame()).toContain("since start");
   } finally {
+    setSystemTime();
     app.dispose();
     screen.renderer.destroy();
     await session.dispose();
@@ -488,7 +493,8 @@ test("editing a prompt program is a durable operator rung", async () => {
 
 test("slash commands and project files are suggested above the input as they are typed, and Ctrl+D twice exits", async () => {
   const session = await demoSession();
-  const screen = await createTestRenderer({ width: 120, height: 40 });
+  // In the kitty protocol an Escape is a key of its own, which the parser need not wait on to tell from Alt.
+  const screen = await createTestRenderer({ width: 120, height: 40, kittyKeyboard: true });
   let quits = 0;
   const app = new App(screen.renderer, session, {
     quit() {
@@ -526,9 +532,9 @@ test("slash commands and project files are suggested above the input as they are
 
     app.composer.setText("");
     await screen.mockInput.typeText("Read @READ");
+    await app.files?.read;
     expect(await frame()).toContain("@README.md");
     screen.mockInput.pressEscape();
-    await Bun.sleep(80);
     expect(await frame()).not.toContain("@README.md");
     await screen.mockInput.typeText("M");
     expect(await frame()).toContain("@README.md");
