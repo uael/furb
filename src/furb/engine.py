@@ -377,7 +377,7 @@ def bash(
 ) -> Act[Exit]:
   def ear(id):
     out, err, stdin = f"{id}/stdout", f"{id}/stderr", f"{id}/stdin"
-    streams, gone, mute = {out: Text(out), err: Text(err)}, "", "" if fed else "not fed"
+    streams, mute = {out: Text(out), err: Text(err)}, "" if fed else "not fed"
     if show is not HIDDEN:
       told("opened", id, ("command", command))
     while True:
@@ -387,11 +387,11 @@ def bash(
         case ("read", qid, _, _, path) if path in streams:
           yield "done", qid, streams[path]
         case ("write", qid, _, _, Text(path, text) as took) if path == stdin:
-          if takes := not (gone or mute):
+          if takes := not mute:
             yield "feed", id, text or None
             mute = "" if text else "closed"
-          yield "done", qid, took if takes else Refused(gone or mute)
-        case _ if gone:
+          yield "done", qid, took if takes else Refused(mute)
+        case _ if mute == "ended":
           continue
         case ("peek", qid, _, _, at) if at == id:
           yield "done", qid, Exit(None, *streams.values())
@@ -399,13 +399,13 @@ def bash(
           into = f"{id}/{stream}" if show_err else out
           streams[into] = streams[into].grow(text)
         case ("exited", about, _, code) if about == id:
-          gone = "ended"
+          mute = "ended"
           if show is not HIDDEN:
             shows = [(streams[one], what) for one, what in ((out, show), (err, show_err)) if what not in (None, HIDDEN)]
             told("closed", id, ("code", code), body=shows)
           yield "done", id, Exit(code, *streams.values())
         case ("cancel" | "close", *_) as a if covers(a, id):
-          gone = "ended"
+          mute = "ended"
           yield "done", id, ended(a, id)
 
   return act("bash", on, pausing(started(ear)), command, fed, timeout)
@@ -628,33 +628,28 @@ def started(ear, to=OPERATOR):
 
 def boot(record=(), **outside):
   get_running_loop()
-  kept, past = list(record), len(record)
   for table in (modules, acts, asked, outcomes):
     table.clear()
-  log, alive, made, busy, left, heard = [], {}, Counter(), set(), [], 0
+  log, alive, made, busy, left = [], {}, Counter(), set(), []
 
   def door():
-    answers = {e[1][1]: e[2] for e in kept if len(e) == 3}
+    answers = {e[1][1]: e[2] for e in record if len(e) == 3}
     while True:
       match a := (yield):
         case ("holds", qid, _, _, about):
-          yield "done", qid, [e[1] for e in kept[:past] if e[1][1] == about]
+          yield "done", qid, [e[1] for e in record if e[1][1] == about]
         case ("peek", qid, _, _, at):
           yield "done", qid, outcomes.get(at)
         case (_, qid, *_) if question(a) and qid in answers:
           yield "done", qid, answers[qid]
 
   def journal():
-    facts = {one[1]: one for _, one, *_ in kept if question(one)}
-    cursor, after, held = 0, "", set(facts)
-
-    def keep(entry):
-      kept.append(entry)
-      send("keep", "", entry)
+    facts = {one[1]: one for _, one, *_ in record if question(one)}
+    due, after, held = [*reversed(record)], "", set(facts)
 
     while True:
-      while cursor < past and heard == len(log):
-        match kept[cursor]:
+      while due and not log:
+        match due[-1]:
           case (_, (kind, qid, "operator", on, *words) as then) if question(then) and (not on or scope(on)):
             with site.set(OPERATOR):
               made[OPERATOR] = int(qid.rpartition(".")[2]) - 1
@@ -663,27 +658,25 @@ def boot(record=(), **outside):
             break
           case (_, (kind, about, by, *words) as then) if not question(then):
             held.add(id(send(kind, about, *words, by="record" if kind == "done" else by)))
-        cursor += 1
+        due.pop()
       a = yield
       match a:
-        case (_, qid, by, *words) if question(a):
-          ours = qid in acts
-          if ours and qid in facts and words[1:] != [*facts[qid][4:]]:
+        case (_, qid, by, *words) if a is acts.get(qid):
+          if words[1:] != [*facts.setdefault(qid, a)[4:]]:
             raise Drift(f"{qid} drifts")
-          if ours or by.startswith("rung://"):
-            facts.setdefault(qid, a)
-            if by == OPERATOR and ours and qid not in held:
-              held.add(qid)
-              keep((after, a))
-          if ours:
-            after = qid
+          if by == OPERATOR and qid not in held:
+            held.add(qid)
+            send("keep", "", (after, a))
+          after = qid
+        case (_, qid, by, *_) if a is asked.get(qid) and by.startswith("rung://"):
+          facts.setdefault(qid, a)
         case (kind, about, by, *words) if by in (WORLD, OPERATOR) and about in facts and id(a) not in held:
           answer = [words[0]] if kind == "done" and about in asked else []
           if about not in held:
             held.add(about)
-            keep((after, facts[about], *answer))
+            send("keep", "", (after, facts[about], *answer))
           if not answer:
-            keep((after, a))
+            send("keep", "", (after, a))
 
   def named(kind, on, *words):
     stem = by = site.get()
@@ -728,18 +721,15 @@ def boot(record=(), **outside):
     return outcomes.get(a[1])
 
   def dispatch():
-    nonlocal heard
     while not busy:
       if not left:
-        if heard == len(log) and (g := alive.get("journal")):
+        if not log and (g := alive.get("journal")):
           hears("journal", g, None)
-        if heard == len(log):
+        if not log:
           break
         left.extend(ears())
       name, g = left.pop(0)
-      a = log[heard]
-      if not left:
-        heard += 1
+      a = log[0] if left else log.pop(0)
       if alive.get(name) is g:
         hears(name, g, a)
 
