@@ -109,7 +109,7 @@ async def test_the_turns_of_a_root_are_printed_as_a_model_read_them(
   said = capsys.readouterr().out
   assert said.startswith("[user] ")
   assert "#chain1 root\n" in said
-  assert "\n\n#prompt1 to operator: say a word\nprompt1: Act[int] = Act('prompt1')\n\n#prompt1 closed 7" in said
+  assert "\n\n#prompt1 say a word\nprompt1: Act[int] = Act('prompt1')\n\n#prompt1 closed 7" in said
 
 
 def test_the_console_script_runs_one_command_of_the_operator(

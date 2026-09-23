@@ -25,7 +25,7 @@ async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
   assert got == [
     (
       "user",
-      f"#{root} root\n{root}: Act[object] = Act({root!r})\n\n#{root} stands {STANDS!r}\n\n#rung1\nk = 1\n\n#rung1 closed",
+      f"#{root} root\n{root}: Act[object] = Act({root!r})\n\n#{root} stands {STANDS!r}\n\n#rung1\nk = 1",
       None,
       None,
     )
@@ -89,7 +89,7 @@ async def test_the_chain_answers_for_its_turns() -> None:
   await engine.rung("cd('/x')", on=root)
   got = engine.turns(on=root)
   assert [role for role, *_ in got] == ["user"]
-  assert heads(got) == [f"#{root} root", f"#{root} stands {STANDS!r}", "#rung1", "#cd /x", "#rung1 closed"]
+  assert heads(got) == [f"#{root} root", f"#{root} stands {STANDS!r}", "#rung1", "#cd /x"]
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
   asking = said(held, "turns")[-1]

@@ -144,7 +144,7 @@ Each name has one meaning, which the contract's sentences use as given here.
   record is made again by running its words.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
-  asks for, with the message of the prompt each advances, and of the words it refuses.
+  asks for, with the message of the prompt each advances, and of the prompts and the words it refuses.
 - A drift is a hard error.
 - The engine owns the order of every run, and nothing of a model runs on the loop of the outside.
 - A chain with a source still asks its origin for its transcript, where the record is what a later life should make it

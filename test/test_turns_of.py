@@ -11,7 +11,7 @@ async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_las
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
   assert len(got) == 1
-  assert heads(got) == ["#chain1 root", f"#chain1 stands {STANDS!r}", "#rung1", "#rung1 closed"]
+  assert heads(got) == ["#chain1 root", f"#chain1 stands {STANDS!r}", "#rung1"]
   assert got[0][1] == "\n\n".join(paragraphs(got))
 
 
@@ -57,8 +57,8 @@ async def test_the_turns_are_folded_whole_at_each_ask() -> None:
     ["user", "assistant", "user", "assistant", "user"],
   ]
   assert [one[: len(asks[1])] for one in asks[1:]] == [asks[1]] * 2
-  assert heads(asks[1][-1:]) == ["#bash1 slow", "#rung1 closed", "#rung3 advance on prompt1"]
-  assert heads(asks[2][-1:]) == ["#bash1 exited 0", "#rung3 closed", "#rung5 advance on prompt1"]
+  assert heads(asks[1][-1:]) == ["#bash1 slow", "#rung3 advance on prompt1"]
+  assert heads(asks[2][-1:]) == ["#bash1 exited 0", "#rung5 advance on prompt1"]
   assert said(log, "bash")[0][1] == "bash1"
 
 

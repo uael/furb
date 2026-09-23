@@ -21,7 +21,6 @@ async def test_the_run_of_a_word_on_a_chain() -> None:
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   assert [(a[1], a[2], a[3]) for a in said(log, "tell") if a[1] in (laid, step)] == [
     (laid, laid, [f"#{laid}", "k = 1"]),
-    (laid, laid, [f"#{laid} closed"]),
     (step, root, [f"#{step} advance on {act}"]),
   ]
   assert [(a[1], a[2]) for a in said(log, "ask")] == [(step, root)]
@@ -57,12 +56,12 @@ async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -
   """A step that raised nothing and debugged nothing tells nothing."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  sand.script[root] = ["k = 1", "close(1)"]
   act = engine.prompt(int, "count", on=root)
   assert await act == 1
-  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  assert [a for a in said(log, "tell") if a[2] == step] == []
-  assert of(engine.turns(on=root), step) == [f"#{step} advance on {act}"]
+  steps = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert len(steps) == 2 and [a for a in said(log, "tell") if a[2] in steps] == []
+  assert [of(engine.turns(on=root), step) for step in steps] == [[f"#{step} advance on {act}"] for step in steps]
 
 
 async def test_the_open_of_a_rung_with_a_word_is_its_header_and_then_that_word() -> None:
@@ -72,7 +71,7 @@ async def test_the_open_of_a_rung_with_a_word_is_its_header_and_then_that_word()
   act = engine.rung("<S1>hi</S1>\nk = S1", on=root)
   await act
   assert said(log, "tell")[2] == ("tell", act, act, [f"#{act}", "<S1>hi</S1>\nk = S1"])
-  assert of(engine.turns(on=root), act) == [f"#{act}\n<S1>hi</S1>\nk = S1", f"#{act} closed"]
+  assert of(engine.turns(on=root), act) == [f"#{act}\n<S1>hi</S1>\nk = S1"]
   assert engine.modules[root]["k"] == "hi"
 
 
@@ -224,7 +223,6 @@ async def test_the_turns_of_the_chain_of_another_prompt_tell_the_rung_of_a_word_
     f"#{two} two\n{two}: Act[object] = Act({two!r})",
     f"#{two} stands {STANDS!r}",
     f"#{helper}\nhelper = 2",
-    f"#{helper} closed",
   ]
   assert of(engine.turns(on=root), helper) == []
 
@@ -237,7 +235,7 @@ async def test_a_word_its_caller_wrote_stands_in_a_user_turn_as_python_under_the
   await act
   role, py, usage, blocks = engine.turns(on=root)[-1]
   assert (role, usage, blocks) == ("user", None, None)
-  assert py.split("\n\n")[2:] == [f"#{act}\nk = 1", f"#{act} closed"]
+  assert py.split("\n\n")[2:] == [f"#{act}\nk = 1"]
   compile(py, "<turn>", "exec")
 
 

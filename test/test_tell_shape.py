@@ -11,7 +11,7 @@ async def test_a_tell_carries_notes_about_the_act_it_is_about() -> None:
   act = engine.rung("k = 1", on=root)
   assert await act is None
   told = [a for a in said(log, "tell") if a[1] == act]
-  assert [a[3] for a in told] == [[f"#{act}", "k = 1"], [f"#{act} closed"]]
+  assert [a[3] for a in told] == [[f"#{act}", "k = 1"]]
   assert paragraphs(engine.turns(on=root))[2:] == ["\n".join(a[3]) for a in told]
 
 

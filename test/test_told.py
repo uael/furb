@@ -27,11 +27,11 @@ async def test_a_closed_header_tells_the_act_with_what_it_came_to_as_python_show
   other = engine.prompt(str, "which?", to=OPERATOR, on=root)
   engine.close("k", other)
   assert await other == "k"
-  step = engine.rung("k = 1", on=root)
-  assert await step is None
+  step = engine.rung("k = 1\nclose(5)", on=root)
+  assert await step == 5
   await settle()
   closed = [head for head in heads(engine.turns(on=root)) if " closed" in head]
-  assert closed == [f"#{act} closed 21", f"#{other} closed 'k'", f"#{step} closed"]
+  assert closed == [f"#{act} closed 21", f"#{other} closed 'k'", f"#{step} closed 5"]
 
 
 async def test_told_says_a_tell_about_an_act_with_one_paragraph_headed_with_the_id_of_the_act() -> None:
@@ -41,7 +41,7 @@ async def test_told_says_a_tell_about_an_act_with_one_paragraph_headed_with_the_
   act = engine.rung("k = 1", on=root)
   assert await act is None
   told = [a for a in said(log, "tell") if a[1] == act]
-  assert [a[3] for a in told] == [[f"#{act}", "k = 1"], [f"#{act} closed"]]
+  assert [a[3] for a in told] == [[f"#{act}", "k = 1"]]
   made = engine.told(act, "said", "# more")
   assert made == ("tell", act, OPERATOR, [f"#{act} said", "# more"])
   _, held = engine.ask("transcript", root, root)

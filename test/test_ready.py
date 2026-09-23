@@ -72,4 +72,4 @@ async def test_the_old_words_stay_in_the_program_and_in_the_turns_after_a_rung_r
     laid: new,
   }
   assert [turn[1] for turn in engine.turns(on=root) if turn[0] == "assistant"] == [old]
-  assert engine.turns(on=root)[-1][1].endswith(f"#{laid}\n{new}\n\n#{laid} closed")
+  assert engine.turns(on=root)[-1][1].endswith(f"#{laid}\n{new}")

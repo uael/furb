@@ -65,7 +65,8 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
 
 def write(text: Text, on: str = "") -> Text:
   _, got = ask("write", on, text)
-  tell("write", text.path, *showing(got, differs(text.lines)))
+  if not isinstance(got, Text) or got.lines != text.lines:
+    tell("write", text.path, *showing(got, differs(text.lines)))
   return got
 
 
@@ -129,13 +130,13 @@ def cancel(id: str) -> None:
 
 def close(value: object, id: str = "") -> None:
   who = acting()
-  id = id or who
   match acts.get(who):
-    case ("rung", _, by, _, _, retells, *_) if id == who:
+    case ("rung", _, by, _, _, retells, *_):
       if retells:
         raise CancelledError()
-      if question(("prompt", by)):
+      if not id and question(("prompt", by)):
         id = by
+  id = id or who
   match acts.get(id):
     case ("prompt", _, _, on, shape, *_) if shape != "None" and not isinstance(value, BaseException):
       try:
@@ -177,7 +178,8 @@ def rung(word: str = "", retells: str = "", actor: str = "", returns: str = "", 
         case ("ran", about, _, value) if about == id:
           if retells and isinstance(value, CancelledError):
             value = None
-          told(id, "raised " + re.sub(r"^[\w.]*\.", "", repr(value)) if isinstance(value, BaseException) else "closed")
+          if isinstance(value, BaseException):
+            told(id, "raised " + re.sub(r"^[\w.]*\.", "", repr(value)))
           yield "done", id, value
           return
 
@@ -189,7 +191,7 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
 
   def ear(id):
     if to == OPERATOR:
-      told(id, f"to {to}: {message}", bound(id, named))
+      told(id, message, bound(id, named))
       yield from idle(id)
     while True:
       asking = rung(actor=to, returns=named)
@@ -254,7 +256,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     if source:
       _, theirs = ask("transcript", source, source)
       picked = (filter or (lambda x: x))([x for x in theirs if question(x)])
-      transcript += [it for it in theirs if it[1] == source or any(under(one[1], it[1]) for one in picked)]
+      transcript += [
+        it for it in theirs if it[0] == "holds" or it[1] == source or any(under(one[1], it[1]) for one in picked)
+      ]
       rungs.update(ask("program", source)[1])
     cut = len(transcript)
     transcript.append(told(id, f"{label} from {source}".strip() if source else label, bound(id)))
@@ -267,20 +271,19 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       if (a[3] if question(a) else scope(a[1])) != id:
         continue
       if question(a):
-        mine[about := a[1]] = len(transcript) + 1
+        if (about := a[1]) not in own:
+          mine[about] = len(transcript) + 1
         if about in acts and stands(about):
           yield "pause", about, []
         if (got := answers()) is not None:
           yield "done", about, got
-      if a[1] in mine and a[1] not in own and not (a[0] == "tell" and a[2] == id):
+      if a[1] in mine and not (a[0] == "tell" and a[2] == id):
         transcript.append(a)
-      if a[0] in ("ready", "done"):
-        waiting.pop(a[1], None)
       match a:
         case ("rung", rid, _, _, "", *_):
-          unseen = ""
           waiting[rid] = a
         case ("ready", rid, _, word):
+          waiting.pop(rid, None)
           rungs[rid] = word
           if rid in own:
             found = acts[rid][5] in refused
@@ -292,9 +295,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           else:
             program[rid] = unquoted(word)
             to_run.append(rid)
-        case ("prompt", pid, *_, to) if to and offered(standing, to) is None:
-          close(Refused(f"{to} no actor"), pid)
         case ("done", about, _, value):
+          waiting.pop(about, None)
           if isinstance(value, Exception) and about in program:
             modules[id]["raised"] = value
           if about == running:
@@ -311,15 +313,18 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         prompted = question(("prompt", maker := acts[asking][2]))
         if prompted and ("tell", maker) not in [x[:2] for x in transcript]:
           transcript.append(told(maker, acts[maker][5], bound(maker, acts[maker][4])))
-        q, held = ask("holds", id, asking)
-        transcript += [told(asking, f"advance on {maker}" if prompted else "advance"), q]
-        if binds := [
-          x for it in transcript[cut:] if it[0] == "tell" for x in it[3] if str(x).startswith(it[1] + ": Act[")
-        ]:
-          own.add(rung("\n".join(binds)))
-        cut = len(transcript)
-        if not held:
-          yield "ask", asking, id, acts[asking][6] or modules[id]["actor"], turns_of(transcript)
+        if offered(standing, to := acts[asking][6] or modules[id]["actor"]) is None:
+          close(Refused(f"{to} no actor"), maker if prompted else asking)
+        else:
+          q, held = ask("holds", id, asking)
+          transcript += [told(asking, f"advance on {maker}" if prompted else "advance"), q]
+          if binds := "\n".join(
+            x for it in transcript[cut:] if it[0] == "tell" for x in it[3] if str(x).startswith(it[1] + ": Act[")
+          ):
+            own.add(rung(binds))
+          cut, unseen = len(transcript), ""
+          if not held:
+            yield "ask", asking, id, to, turns_of(transcript)
       if to_run and not running:
         yield "run", (running := to_run.pop(0)), id, program[running], acts[running][5]
       if unseen and not running and all(x in outcomes for x in mine if question(("prompt", x))):
@@ -369,8 +374,7 @@ def bash(
   def ear(id):
     out, err = f"{id}/stdout", f"{id}/stderr"
     streams, mute = {out: Text(out), err: Text(err)}, "" if fed else "not fed"
-    if show is not HIDDEN:
-      told(id, command, bound(id, "Exit"))
+    told(id, "" if show is HIDDEN else command, bound(id, "Exit"))
     while True:
       match (yield):
         case ("merged", qid, _, _, about) if about == id:
@@ -555,13 +559,12 @@ def turns_of(heard):
 
 def unquoted(word):
   while m := re.search(r"(?ms)^<(S\d+)>\n?(.*)</\1>$", word):
-    word = word[: m.start()] + f"{m[1]} = {m[2]!r}" + re.sub(".", "", m[0]) + word[m.end() :]
+    word = word[: m.start()] + f"{m[1]} = {m[2]!r}" + "\n" * m[0].count("\n") + word[m.end() :]
   return word
 
 
 def offered(standing, to):
-  who, _, effort = to.partition("/")
-  return next((w for name, efforts, w in standing[0] if name == who and (not effort or effort in efforts)), None)
+  return next((w for name, efforts, w in standing[0] if to in (name, *[f"{name}/{x}" for x in efforts])), None)
 
 
 def covers(a, id):
@@ -636,7 +639,7 @@ def boot(record=(), **outside):
   log, alive, made, born, busy, heard = [], {}, Counter(), {}, set(), 0
 
   def door():
-    answers = {e[1][1]: (*e[2:], *e[1][3:])[0] for e in record if e[2:] or e[1][0] == "done"}
+    answers = {e[1][1]: e[2] if e[2:] else e[1][3] for e in record if e[2:] or e[1][0] == "done"}
     while True:
       match a := (yield):
         case ("holds", qid, _, _, about):

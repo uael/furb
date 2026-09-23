@@ -128,7 +128,7 @@ def drive(g: Ear, name: str) -> None:
 
 def span(lo: int, hi: int) -> Show:
   """span(lo, hi) is the show of the lines lo through hi, where a line under one is counted back from the end, so that span(1, 20) is the first twenty lines and span(-20, -1) is the last twenty.
-  A span that holds no line shows none, which HIDDEN is, and what a hidden show shows stands in no turns at all, neither its open nor its close.
+  A span that holds no line shows none, which HIDDEN is, so what a hidden show shows stands in no turns: an act that takes one tells its header and its binding alone, and a query that takes one tells nothing.
   """
 
 def grep(pattern: str) -> Show:
@@ -142,7 +142,7 @@ HEAD: Final[Show] = span(1, 2000)
 TAIL: Final[Show] = span(-250, -1)
 """TAIL is the span of the last 250 lines, which the stdout of a command without a show is told as."""
 HIDDEN: Final[Show] = span(0, 0)
-"""HIDDEN is the span of no line, which an act takes to tell nothing of itself."""
+"""HIDDEN is the span of no line, which an act takes to tell nothing of itself but its header and its binding."""
 
 def take(*ids: str, inside: bool = True) -> Filter:
   """take keeps the acts it names and everything they made.
@@ -478,7 +478,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   It holds the transcript of its origin first and tells its own open after it, and it holds nothing of the rungs it runs again, since every word of those stands in what it inherited.
   It hears no control that ends it, since nothing that happens to a chain ends it, and a control over a chain is over the acts on it, which end themselves.
   It holds no done of a query it does not hold, since the answer to what it asked of the gate is of the moment, so every done it holds answers a question it holds.
-  What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, and the open of the origin, which tells the standing.
+  What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, each holds of that transcript, which cuts its turns where an ask of the origin stood, and the open of the origin, which tells the standing.
   The filter is given every act, the queries of the operator among them, since what the operator asked of a chain no rung of it says again.
   What a chain said of itself it keeps whatever the filter says, so the open of the origin stands in the new chain.
   The source of a chain is a chain, by its name, and means the transcript of that chain as it stands.
@@ -543,7 +543,7 @@ def bash(
   A wake on a chain with a source starts no inherited command again, since only the owner starts an act.
   The World starts it, and starts it again in no later life, since the record holds what it did.
   Its stdin is written while it runs and it is fed, which it says to the World as a feed and answers with the text that landed, and a write of nothing closes it; a write of it takes no word once the command ended, and none at all when the command was not opened fed.
-  Without a show of its own, the stderr of it flows into its stdout, and the door of its stderr stays empty; with a hidden show it tells nothing at all, neither its open nor its close.
+  Without a show of its own, the stderr of it flows into its stdout, and the door of its stderr stays empty; with a hidden show it tells its header and its binding alone, and not its command and not its close.
   It answers a read of a stream and a peek while it runs, and once it has ended it lives on to answer a read of its streams and to refuse a write of its stdin, and nothing else reaches it, so a cancel does not end it, as it ends every other act, and a peek at it once it ended the life answers from its outcomes.
   It runs until it ends, until its timeout or until a cancel: the World is the one that ends it, at the timeout it reads off the act as at a cancel, since the World is the one running it, and the engine says nothing to make it.
   A pause stops no command: it runs on, and its close waits for the wake.

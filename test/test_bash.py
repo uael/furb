@@ -291,7 +291,7 @@ async def test_its_stdin_is_written_while_it_runs_and_it_is_fed() -> None:
 
 
 async def test_without_a_show_of_its_own_the_stderr_of_it_flows_into_its_stdout() -> None:
-  """Without a show of its own, the stderr of it flows into its stdout, and the door of its stderr stays empty; with a hidden show it tells nothing at all, neither its open nor its close."""
+  """Without a show of its own, the stderr of it flows into its stdout, and the door of its stderr stays empty; with a hidden show it tells its header and its binding alone, and not its command and not its close."""
   sand = Sand(stands=STANDS, auto=False)
   _, root = life(sand)
   one = engine.bash("run", on=root)
@@ -303,7 +303,10 @@ async def test_without_a_show_of_its_own_the_stderr_of_it_flows_into_its_stdout(
   quiet = engine.bash("quiet", show=HIDDEN, on=root)
   engine.send("exited", quiet, 0, by=WORLD)
   await quiet
-  assert paragraphs(engine.turns(on=root))[2:] == [f"#{one} run\n{one}: Act[Exit] = Act({one!r})"]
+  assert paragraphs(engine.turns(on=root))[2:] == [
+    f"#{one} run\n{one}: Act[Exit] = Act({one!r})",
+    f"#{quiet}\n{quiet}: Act[Exit] = Act({quiet!r})",
+  ]
 
 
 async def test_it_answers_a_read_of_a_stream_and_a_peek_while_it_runs() -> None:

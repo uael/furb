@@ -45,9 +45,10 @@ async def test_what_a_prompt_names_is_one_of_these_names_and_one_effort_of_that_
   await settle()
   assert engine.peek(right) is None and [a[4] for a in said(log, "ask")] == ["m/high"]
   ghost = engine.prompt(int, "hi", to="ghost/low", on=root)
+  engine.cancel(right)
   await settle()
   assert isinstance(engine.peek(ghost), Refused)
-  engine.cancel(right)
+  assert [a[4] for a in said(log, "ask")] == ["m/high"]
 
 
 async def test_an_actor_takes_an_effort_of_its_own_and_any_actor_takes_the_effort_that_is_not_named() -> None:

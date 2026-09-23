@@ -7,7 +7,7 @@ from furb.engine import Act, Text
 EVERY = (
   "x = bash('echo hi')\n"
   "read('a.txt')\n"
-  "write(Text('b.txt', 'x'))\n"
+  "write(Text('x://b.txt', 'x'))\n"
   "peek(__name__)\n"
   "turns()\n"
   "clock()\n"
@@ -65,7 +65,7 @@ async def test_a_paragraph_is_what_one_fact_that_tells_stands_as_in_a_turn() -> 
   assert await act is None
   got = engine.turns(on=root)
   assert got[-1][1] == "\n\n".join("\n".join(a[3]) for a in said(log, "tell"))
-  assert paragraphs(got)[2:] == [f"#{act}\nk = 1\nj = 2", f"#{act} closed"]
+  assert paragraphs(got)[2:] == [f"#{act}\nk = 1\nj = 2"]
 
 
 async def test_the_first_line_of_a_paragraph_is_its_header() -> None:
