@@ -27,10 +27,16 @@ def say(text: str) -> None:
   sys.stdout.flush()
 
 
-def lived(record: Path | None, cwd: Path, actor: str) -> tuple[Live, str, list[tuple]]:
-  """One life on the loop that runs: its World on the record, the Kernel of this interpreter, and its root."""
+def lived(record: Path | None, cwd: Path, actor: str, *, keeps: bool) -> tuple[Live, str, list[tuple]]:
+  """One life on the loop that runs: its World on the record, the Kernel of this interpreter, and its root.
+
+  The life is made again from what the record holds, and it keeps what it says to the record when it keeps. A
+  life that only reads a record keeps nothing, since a World given the record it reads appends to it: a stand of a
+  directory or an actor other than the one the record holds is a stood it keeps. The journal says the whole record
+  again before boot returns, so the life stands whole on its record when this gives the root.
+  """
   held = kept(record) if record is not None and record.is_file() else []
-  world = Live(str(cwd.absolute()), record, actor)
+  world = Live(str(cwd.absolute()), record if keeps else None, actor)
   root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating())
   return world, root, held
 
@@ -51,7 +57,7 @@ def again(held: Sequence[tuple], root: str, shape: type | None, message: str, to
 
 async def prompted(record: Path | None, cwd: Path, shape: type | None, message: str, to: str) -> object:
   """One prompt of the operator on the root of a life, awaited for the shape it asks for."""
-  _, root, held = lived(record, cwd, ACTOR)
+  _, root, held = lived(record, cwd, ACTOR, keeps=True)
   try:
     if name := again(held, root, shape, message, to):
       return await Act(name)
@@ -63,7 +69,7 @@ async def prompted(record: Path | None, cwd: Path, shape: type | None, message: 
 
 async def turned(record: Path, cwd: Path) -> None:
   """The turns of the root of a life made again from its record, each as the python a model reads of it."""
-  root = lived(record, cwd, ACTOR)[1]
+  root = lived(record, cwd, ACTOR, keeps=False)[1]
   try:
     for role, py, _, _ in engine.turns(on=root):
       say(f"[{role}] {py}")
@@ -73,7 +79,7 @@ async def turned(record: Path, cwd: Path) -> None:
 
 async def running(record: Path | None, cwd: Path, word: str) -> object:
   """One word its caller wrote, run as a rung on the root of a life, awaited for what the word gave."""
-  root = lived(record, cwd, ACTOR)[1]
+  root = lived(record, cwd, ACTOR, keeps=True)[1]
   try:
     return await engine.rung(word, on=root)
   finally:
