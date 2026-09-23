@@ -81,7 +81,8 @@ FENCE = re.compile(r"```(?:python|py)?\n(.*?)```", re.DOTALL)
 def wire(x: object) -> object:
   """The plain form of a value, which is how a record leaves a life: an exception its name and what it was made
   with, a text its path and its content, a shape its name beside its fields, a list and a tuple their entries, a map
-  its entries, and plain data is plain.
+  its entries, or its pairs when it holds the key `is`, so that unwire reads it as the map it is, and plain data is
+  plain.
   """
   match x:
     case BaseException():
@@ -89,7 +90,8 @@ def wire(x: object) -> object:
     case Text():
       return {"is": "Text", "path": x.path, "content": x.content}
     case dict():
-      return {k: wire(v) for k, v in x.items()}
+      plain = {k: wire(v) for k, v in x.items()}
+      return {"is": "dict", "args": [[[k, v] for k, v in plain.items()]]} if "is" in plain else plain
     case list() | tuple():
       return [wire(i) for i in x]
   if is_dataclass(x) and not isinstance(x, type):

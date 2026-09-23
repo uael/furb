@@ -174,26 +174,26 @@ class Living:
     self.callables: dict[str, Callable[..., object]] = {}
     self.life: _monty.Life | None = None
 
-  def ear(self, gen: Generator[tuple | None, tuple]) -> dict[str, object]:
-    """A generator of this interpreter, heard from now on under a name of its own, as the mark the engine reads:
-    its name, and whether it was started already, so that its stand-in stands where it stands."""
+  def ear(self, gen: Generator[tuple | None, tuple]) -> tuple[str, bool]:
+    """A generator of this interpreter, heard from now on under a name of its own: its name, and whether it was
+    started already, so that its stand-in stands where it stands. The door makes the mark the engine reads."""
     name = f"ear:{len(self.crossings)}"
     started = inspect.getgeneratorstate(gen) != inspect.GEN_CREATED
     self.crossings[name] = Crossing(gen)
-    return {"is": "ear", "name": name, "started": started}
+    return name, started
 
-  def callable(self, fn: Callable[..., object]) -> dict[str, object]:
-    """A callable of this interpreter, called back from now on under a name of its own, as the mark the engine
-    reads it by."""
+  def callable(self, fn: Callable[..., object]) -> str:
+    """A callable of this interpreter, called back from now on under a name of its own, which it gives. The door
+    makes the mark the engine reads."""
     name = f"callable:{len(self.callables)}"
     self.callables[name] = fn
-    return {"is": "callable", "name": name}
+    return name
 
   def called(self, name: str, args: tuple, kwargs: dict[str, object]) -> object:
-    """One callable of this interpreter, called back by its name with what the sandbox gave it, and what it gave: a
-    generator as the mark the engine reads an ear by, since a callable given to an act gives its ear."""
-    got = self.callables[name](*args, **kwargs)
-    return self.ear(got) if isinstance(got, Generator) else got
+    """One callable of this interpreter, called back by its name with what the sandbox gave it, and what it gave,
+    which the door carries in as it carries any value: a generator as an ear, since a callable given to an act
+    gives its ear."""
+    return self.callables[name](*args, **kwargs)
 
   def hears(self, name: str, fact: object) -> object:
     """One fact, heard by the ear of this name, or nothing at its birth, and what the ear did with it."""

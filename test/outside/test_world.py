@@ -658,6 +658,16 @@ def test_the_plain_form_of_a_value_leaves_as_json_and_comes_back_whole() -> None
   assert wire(Text("a", "b", Text("a", "c"))) == {"is": "Text", "path": "a", "content": "b"}
 
 
+def test_a_map_that_holds_the_key_is_leaves_as_its_pairs_and_comes_back_as_the_map_it_is() -> None:
+  """A map that holds the key is leaves a life as its pairs, so unwire makes the map again and never makes a value of
+  the name the map holds."""
+  held = {"is": "Refused", "args": ["x"], "text": Text("a", "b")}
+  plain = json.loads(json.dumps(wire(held)))
+  text = {"is": "Text", "path": "a", "content": "b"}
+  assert plain == {"is": "dict", "args": [[["is", "Refused"], ["args", ["x"]], ["text", text]]]}
+  assert unwire(plain) == held
+
+
 async def test_the_plain_form_of_a_whole_record_is_a_fixed_point_of_json(yard: Path) -> None:
   """Every entry a life kept leaves as json through wire and comes back equal, so a record holds nothing that json
   changes: no key that is no string, and no value that is not plain."""

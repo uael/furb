@@ -18,7 +18,9 @@ callable the engine made goes out as a handle the host calls it back by, and a c
 name the ears of the host call it back by. A class a word defined goes out by a handle too, with the class it
 was made with, which the host holds as a type of its own derived from the type that base is there, and the class
 comes back in by; an instance of one goes out with its fields under its class and comes back in made here from
-them, with no `__init__` run. An instance of a class that inherits `str` is a string, and crosses as one.
+them, with no `__init__` run. An instance of a class that inherits `str` is a string, and crosses as one. A map
+that holds the key `is` crosses as its pairs under `is` with the name `dict`, both ways, so no side reads the map
+of a word or of a host as a mark.
 """
 
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
@@ -107,9 +109,12 @@ def handled(x: object) -> int:
 def outward(x: object, names: Names) -> object:
   """A value as it goes out to the host: a callable or a class of the engine as its name, a callable the engine
   made as the handle the host holds it by, a class a word defined as that handle with the class it was made with
-  as it goes out, an instance of such a class with its fields under its class, and the entries of a container
-  each as they go out. Anything else the interpreter carries out as it is, a string of any class among it."""
+  as it goes out, an instance of such a class with its fields under its class, a map that holds the key IS as its
+  pairs, and the entries of a container each as they go out. Anything else the interpreter carries out as it is,
+  a string of any class among it."""
   match x:
+    case dict() if IS in x:
+      return {IS: "dict", "args": [[(k, outward(v, names)) for k, v in x.items()]]}
     case dict():
       return {k: outward(v, names) for k, v in x.items()}
     case list():
