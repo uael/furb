@@ -32,6 +32,8 @@ export type Engine = {
     : Life[K];
 };
 export interface WorldState {
+  completed: number;
+  cost: number;
   directory: string;
   imageDirectory: string;
   model: string;
@@ -47,6 +49,8 @@ export interface WorldState {
 }
 
 export class HostView extends EventEmitter {
+  completed = 0;
+  cost = 0;
   directory = "";
   imageDirectory = "";
   model = "";
@@ -63,6 +67,8 @@ export class HostView extends EventEmitter {
     super();
   }
   update(state: WorldState): void {
+    this.completed = state.completed;
+    this.cost = state.cost;
     this.directory = state.directory;
     this.imageDirectory = state.imageDirectory;
     this.model = state.model;

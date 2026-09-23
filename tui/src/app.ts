@@ -39,7 +39,7 @@ import {
   syntax,
   type ThemeName,
 } from "./theme.ts";
-import { type SessionStatus, statusLabels, type Workspace, type Workspaces } from "./workspaces.ts";
+import { type SessionStatus, statusLabels, type Workspaces } from "./workspaces.ts";
 
 const views: View[] = ["conversation", "program", "activity", "facts", "transcript", "changes"];
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
@@ -162,8 +162,6 @@ export class App {
     header.add(this.text("furb", c.text, { attributes: 1 }));
     this.head = this.text("", c.muted, { flexGrow: 1 });
     header.add(this.head);
-    if (options.workspaces)
-      header.add(this.text("Ctrl+W spaces", c.muted, { onMouseDown: () => this.workspacePicker() }));
     const commands = this.text("Ctrl+P", c.muted, { onMouseDown: () => this.palette() });
     header.add(commands);
     this.root.add(header);
@@ -265,7 +263,7 @@ export class App {
       flexShrink: 0,
       padding: space.inset,
       border: ["left"],
-      borderColor: c.accent,
+      borderColor: c.border,
       backgroundColor: c.panel,
     });
     center.add(this.composeBox);
@@ -1437,9 +1435,10 @@ export class App {
     this.hover = undefined;
     const heading = this.box({ flexDirection: "row", height: space.bar, marginBottom: space.section });
     heading.add(this.text("Workspaces", c.text, { attributes: 1, flexGrow: 1 }));
-    heading.add(this.text("‹", c.muted, { onMouseDown: () => library.toggle() }));
     this.sidebar.add(heading);
     if (library.notice) this.sidebar.add(this.text(library.notice, c.warning));
+    if (!library.groups.length)
+      this.sidebar.add(this.text("No workspaces. Use /workspace to add a project.", c.muted));
     for (const group of library.groups) {
       const status = library.groupStatus(group);
       const row = this.box({
@@ -1513,21 +1512,7 @@ export class App {
         );
         this.sidebar.add(row);
       }
-      this.sidebar.add(
-        this.text("  + New session", c.muted, {
-          height: space.bar,
-          onMouseDown: () => {
-            void library.create(group).catch(this.report);
-          },
-        }),
-      );
     }
-    this.sidebar.add(
-      this.text("+ Workspace", c.muted, {
-        marginTop: space.section,
-        onMouseDown: () => this.insert("/workspace "),
-      }),
-    );
   }
   workspacePicker = (): void => {
     const library = this.options.workspaces;
@@ -1537,13 +1522,16 @@ export class App {
       .then(() =>
         this.openPalette("Workspaces & sessions", [
           { label: "Add workspace", detail: "Open a project folder", run: () => this.insert("/workspace ") },
-          {
-            label: library.preferences.sidebar ? "Hide left sidebar" : "Show left sidebar",
-            detail: "Ctrl+\\",
-            run: () => library.toggle(),
-          },
           ...library.groups.flatMap((group) => [
-            { label: group.name, detail: group.directory, run: () => this.sessionsPicker(group) },
+            {
+              label: group.name,
+              detail: group.directory,
+              run: async () => {
+                const first = group.sessions[0];
+                if (first) await library.select(first);
+                else await library.create(group);
+              },
+            },
             ...group.sessions.map((entry) => ({
               label: `  ${entry.name}`,
               detail: `${statusLabels[entry.status]} · ${group.name}`,
@@ -1554,24 +1542,6 @@ export class App {
       )
       .catch(this.report);
   };
-  private sessionsPicker(group: Workspace): void {
-    const library = this.options.workspaces;
-    if (!library) return;
-    this.openPalette(group.name, [
-      {
-        label: "+ New session",
-        detail: group.directory,
-        run: async () => {
-          await library.create(group);
-        },
-      },
-      ...group.sessions.map((entry) => ({
-        label: entry.name,
-        detail: statusLabels[entry.status],
-        run: () => library.select(entry),
-      })),
-    ]);
-  }
   private async globalCommand(text: string): Promise<boolean> {
     const consume = () => {
       if (this.composer.plainText.trim() === text) this.composer.setText("");

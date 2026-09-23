@@ -96,6 +96,7 @@ export class WorldAdapter {
     readonly handle: WorldHandler,
     readonly onFacts?: (facts: Fact[]) => void,
     readonly onFault?: (error: unknown) => void,
+    readonly onFact?: (fact: Fact) => void,
   ) {}
 
   private get closed(): boolean {
@@ -254,7 +255,10 @@ export class WorldAdapter {
     const observer = (function* (): Ear {
       for (;;) {
         const fact = (yield null) as Fact;
-        if (fact) facts.push(fact);
+        if (fact) {
+          facts.push(fact);
+          owner.onFact?.(fact);
+        }
         if (!queued) {
           queued = true;
           queueMicrotask(() => {

@@ -37,6 +37,9 @@ export interface SessionEntry {
   unread: boolean;
   error?: string;
   held?: number;
+  modified?: number;
+  size?: number;
+  cost?: number;
 }
 export interface Workspace {
   directory: string;
@@ -171,19 +174,24 @@ export class Workspaces extends EventEmitter {
     }
     group.sessions = group.sessions.filter((entry) => entry.session || existsSync(entry.path));
     await Promise.all(
-      group.sessions
-        .filter((entry) => !entry.session)
-        .map(async (entry) => {
-          const metadata = await readFile(`${entry.path}.ui.json`, "utf8")
-            .then((text) => JSON.parse(text))
-            .catch(() => ({}));
-          if (typeof metadata?.sessionName === "string") entry.name = metadata.sessionName;
-        }),
+      group.sessions.map(async (entry) => {
+        const info = await stat(entry.path);
+        entry.modified = info.mtimeMs;
+        entry.size = info.size;
+        if (entry.session) {
+          entry.cost = entry.session.cost;
+          return;
+        }
+        const metadata = await readFile(`${entry.path}.ui.json`, "utf8")
+          .then((text) => JSON.parse(text))
+          .catch(() => ({}));
+        if (typeof metadata?.sessionName === "string") entry.name = metadata.sessionName;
+        entry.cost = typeof metadata?.cost === "number" ? metadata.cost : 0;
+      }),
     );
     const changed: string[] = [];
     for (const entry of group.sessions.filter((entry) => !entry.session)) {
-      const info = await stat(entry.path);
-      const key = `${info.mtimeMs}:${info.size}`;
+      const key = `${entry.modified}:${entry.size}`;
       if (this.inspected.get(entry.path) !== key) {
         this.inspected.set(entry.path, key);
         changed.push(entry.path);
@@ -221,19 +229,16 @@ export class Workspaces extends EventEmitter {
     if (entry.session && entry.session !== session) throw new Error("This session is already open.");
     entry.session = session;
     const row = entry;
-    let completed = session.world.facts.filter(
-      ([kind, id]) => kind === "done" && /^(prompt|rung|bash|wait):/.test(id),
-    ).length;
+    let completed = session.world.completed;
     const changed = () => {
       const status = activityStatus(session);
-      const next = session.world.facts.filter(
-        ([kind, id]) => kind === "done" && /^(prompt|rung|bash|wait):/.test(id),
-      ).length;
+      const next = session.world.completed;
       if (row !== this.current && next > completed) row.unread = true;
       completed = next;
       if (row === this.current) row.unread = false;
       row.status = row.unread && status === "idle" ? "done" : status;
       row.name = session.sessionName;
+      row.cost = session.cost;
       this.emit("change");
     };
     this.subscriptions.set(session, changed);

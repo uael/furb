@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import type { Fact, ImageAttachment, Turn, Usage } from "@furb/engine";
+import type { Fact, ImageAttachment, LiveAct, Turn, Usage } from "@furb/engine";
 import { actorParts, shapes } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
 import type { Engine, HostView } from "./bridge.ts";
@@ -13,17 +13,8 @@ import { shareHtml, shareMarkdown } from "./share.ts";
 import { palettes, type ThemeName } from "./theme.ts";
 
 export type View = "conversation" | "program" | "activity" | "facts" | "transcript" | "changes";
-export interface ActRow {
-  id: string;
-  kind: string;
-  by: string;
-  on: string;
-  words: unknown[];
-  done: boolean;
-  paused?: boolean;
-  run?: { status: "running" | "failed" | "done"; reason: string };
-  value: unknown;
-}
+export type ActRow = LiveAct;
+
 export interface FollowUp {
   id: string;
   chain: string;
@@ -677,17 +668,15 @@ export class Session extends EventEmitter {
     this.factFilter.seen = this.world.facts.length;
     return this.factFilter.rows;
   }
+  get cost(): number {
+    return Math.max(this.savedCost, this.world.cost);
+  }
   save(): void {
     this.preferences.save(this.theme);
     const record = this.world.records.path;
     if (!record) return;
     const path = `${record}.ui.json`;
-    this.savedCost = Math.max(
-      this.savedCost,
-      this.world.facts
-        .filter((fact) => fact[0] === "answer")
-        .reduce((sum, fact) => sum + ((fact[3] as Turn)[2]?.[4] ?? 0), 0),
-    );
+    this.savedCost = this.cost;
     writeFileSync(
       `${path}.tmp`,
       JSON.stringify({

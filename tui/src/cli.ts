@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { efforts, type WorldOptions } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
@@ -114,16 +114,7 @@ const newSession = async () => {
 const sessions = async () => {
   await library.refresh();
   const group = library.groupOf();
-  const entries = new Map((group?.sessions ?? []).map((entry) => [entry.path, entry]));
-  return sessionChoices(
-    dirname(library.current?.path ?? directory),
-    async (path) => {
-      const entry = entries.get(path);
-      if (entry) await library.select(entry);
-    },
-    newSession,
-    entries,
-  );
+  return sessionChoices(group, (entry) => library.select(entry), newSession);
 };
 const options = { quit, sessions, newSession, workspaces: library, extensions };
 app = new App(renderer, initial, options);

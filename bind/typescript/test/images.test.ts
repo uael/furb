@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ImageCache } from "../src/images.ts";
 import { imageContent, World } from "../src/index.ts";
 
 test("image attachments reach pi-ai and the Claude CLI as image blocks and remain available after replay", async () => {
@@ -31,6 +32,15 @@ test("image attachments reach pi-ai and the Claude CLI as image blocks and remai
     });
     expect(blocks.find((block: { type: string }) => block.type === "text").text).toContain(image.uri);
     expect(imageContent(world.imageDirectory, image.uri).data).toBe(data);
+    const cache = new ImageCache();
+    const first = cache.get(world.imageDirectory, image.uri);
+    first.data = "a caller cannot change the cached bytes";
+    expect(cache.get(world.imageDirectory, image.uri).data).toBe(data);
+    const asset = join(world.imageDirectory, image.uri.slice("furb-image://".length));
+    const original = await readFile(asset);
+    await writeFile(asset, Buffer.concat([original, Buffer.from("changed")]));
+    expect(() => cache.get(world.imageDirectory, image.uri)).toThrow("changed");
+    await writeFile(asset, original);
     await world.dispose();
     const before = await readFile(log, "utf8");
     world = new World({ record, claude: { bin } });

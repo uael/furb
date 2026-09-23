@@ -16,21 +16,13 @@ import {
 } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { Life } from "../index.cjs";
+import { Activity, type RunState } from "./activity.js";
 import { type FileChange, FileChanges } from "./changes.js";
 import { WorldAdapter, type WorldHandler, type WorldRequest } from "./ears.js";
-import { attachImage, type ImageAttachment, turnImages } from "./images.js";
+import { attachImage, type ImageAttachment, ImageCache, turnImages } from "./images.js";
 import { type ClaudeOptions, claudeProvider, zeroUsage } from "./providers/claude.js";
 import { RecordFile } from "./record.js";
-import {
-  actorParts,
-  display,
-  type Entry,
-  type Fact,
-  isTag,
-  type OperatorPrompt,
-  shapes,
-  type Turn,
-} from "./types.js";
+import { actorParts, type Entry, type Fact, type OperatorPrompt, shapes, type Turn } from "./types.js";
 
 export { display, isTag, safeText } from "./types.js";
 
@@ -84,6 +76,8 @@ export class World extends EventEmitter {
   readonly roster: string[];
   readonly prompts = new Map<string, OperatorPrompt>();
   readonly facts: Fact[] = [];
+  readonly activity = new Activity();
+  private readonly images = new ImageCache();
   readonly streams = new Map<string, { chain: string; text: string; thinking: string }>();
   readonly changes: FileChanges;
   readonly held = new Map<string, string>();
@@ -185,16 +179,24 @@ export class World extends EventEmitter {
   open(): Life {
     if (this.life) throw new Error("This World already owns a life.");
     try {
-      this.adapter = new WorldAdapter(this.handle, this.hear, (error) => this.emit("fault", error));
+      this.adapter = new WorldAdapter(
+        this.handle,
+        this.hear,
+        (error) => this.emit("fault", error),
+        (fact) => {
+          if (!this.stopped) {
+            this.facts.push(fact);
+            this.activity.hear(fact);
+          }
+        },
+      );
       this.life = this.adapter.boot(this.records.entries);
       if (this.holding) {
-        const ids = this.life.held("acts", [], "keys") as string[];
         const chains = new Set<string>();
-        for (const id of ids) {
-          const act = this.life.get(id);
-          if (!["chain", "grant"].includes(act[0]) && !this.life.outcome(id).done) {
-            this.held.set(id, act[0]);
-            chains.add(act[3]);
+        for (const act of this.activity.acts.values()) {
+          if (!["chain", "grant"].includes(act.kind) && !act.done) {
+            this.held.set(act.id, act.kind);
+            chains.add(act.on);
           }
         }
         for (const chain of chains) this.pause(chain);
@@ -320,9 +322,12 @@ export class World extends EventEmitter {
 
   private hear = (facts: Fact[]): void => {
     if (this.stopped) return;
-    this.facts.push(...facts);
     for (const [kind, id] of facts) {
-      if (this.holding && ["prompt", "rung", "bash", "wait"].includes(kind) && !this.life?.outcome(id).done)
+      if (
+        this.holding &&
+        ["prompt", "rung", "bash", "wait"].includes(kind) &&
+        !this.activity.acts.get(id)?.done
+      )
         this.held.set(id, kind);
       if (kind === "done") {
         this.held.delete(id);
@@ -368,7 +373,7 @@ export class World extends EventEmitter {
         )
           return blocks as AssistantMessage;
         if (role === "user") {
-          const images = turnImages(this.imageDirectory, parts);
+          const images = turnImages(this.imageDirectory, parts, this.images);
           if (images.length && !model.input.includes("image"))
             throw new Error(`${model.name} does not accept images.`);
           return {
@@ -613,13 +618,11 @@ export class World extends EventEmitter {
   async dispose(): Promise<void> {
     if (this.stopped) return;
     if (this.life && this.records.path) {
-      const ids = this.life.held("acts", [], "keys") as string[];
       const chains = new Set<string>();
-      for (const id of ids) {
-        const act = this.life.get(id);
-        if (!["chain", "grant"].includes(act[0]) && !this.life.outcome(id).done) {
-          chains.add(act[3]);
-          this.held.set(id, act[0]);
+      for (const act of this.activity.acts.values()) {
+        if (!["chain", "grant"].includes(act.kind) && !act.done) {
+          chains.add(act.on);
+          this.held.set(act.id, act.kind);
         }
       }
       for (const chain of chains) this.pause(chain);
@@ -640,44 +643,15 @@ export class World extends EventEmitter {
     this.cli?.dispose();
     this.changes.dispose();
     this.records.dispose();
+    this.images.clear();
     this.removeAllListeners();
   }
 
   isPaused(id: string): boolean {
-    const scope = this.life?.call<string>("scope", [id], {});
-    const last = this.records.entries.findLast(
-      ([, fact]) =>
-        ["pause", "wake"].includes(fact[0]) &&
-        (fact[1] === id || fact[1] === scope || this.life?.call<boolean>("under", [id, fact[1]], {})),
-    )?.[1];
-    return last?.[0] === "pause";
+    return this.activity.acts.get(id)?.paused ?? false;
   }
-  rungState(id: string): { status: "running" | "failed" | "done"; reason: string } {
-    const exception = (value: unknown): value is { is: string; args: unknown[] } =>
-      Boolean(value && typeof value === "object" && "is" in value && "args" in value);
-    const refused = this.facts
-      .filter((fact) => fact[0] === "tell" && fact[1] === id)
-      .flatMap((fact) => (Array.isArray(fact[3]) ? fact[3] : []))
-      .findLast((tag) => isTag(tag) && tag[0] === "refused");
-    if (refused && isTag(refused))
-      return { status: "failed", reason: typeof refused[2] === "string" ? refused[2] : display(refused[2]) };
-    const ran = this.facts.findLast((fact) => fact[0] === "ran" && fact[1] === id);
-    const outcome = this.life?.outcome(id);
-    const value = ran ? ran[3] : outcome?.value;
-    if (exception(value)) {
-      if (value.is === "CancelledError" && this.life) {
-        const act = this.life.get(id);
-        const parent = String(act[2]).startsWith("prompt://") ? this.life.outcome(String(act[2])) : undefined;
-        if (
-          act[5] ||
-          (outcome?.done && !exception(outcome.value)) ||
-          (parent?.done && !exception(parent.value))
-        )
-          return { status: "done", reason: "" };
-      }
-      return { status: "failed", reason: `${value.is}: ${value.args.map(display).join(", ")}` };
-    }
-    return { status: ran ? "done" : "running", reason: "" };
+  rungState(id: string): RunState {
+    return this.activity.acts.get(id)?.run ?? { status: "running", reason: "" };
   }
   private pause(chain: string): void {
     if (!this.isPaused(chain)) this.life?.pause(chain);

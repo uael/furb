@@ -12,7 +12,8 @@ attention first.
 
 ![Workspace tree](screenshots/31-workspace-tree.png)
 
-The other view captures below keep the left sidebar hidden. The workspace controls remain in the header.
+The other view captures below keep the left sidebar hidden. Ctrl+W opens the workspaces and sessions picker, and
+Ctrl+\\ shows the tree again.
 
 ## Welcome
 

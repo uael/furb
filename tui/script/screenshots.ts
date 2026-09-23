@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { Resvg } from "@resvg/resvg-js";
 import { App } from "../src/app.ts";
@@ -38,17 +38,12 @@ const options = () => ({
   },
   sessions: async () => {
     await library.refresh();
-    const entries = new Map((library.groupOf()?.sessions ?? []).map((entry) => [entry.path, entry]));
     return sessionChoices(
-      dirname(session.world.records.path ?? "."),
-      async (path) => {
-        const entry = entries.get(path);
-        if (entry) await library.select(entry);
-      },
+      library.groupOf(),
+      (entry) => library.select(entry),
       async () => {
         await library.create();
       },
-      entries,
     );
   },
 });

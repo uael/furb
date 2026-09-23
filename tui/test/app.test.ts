@@ -8,6 +8,7 @@ import { demoSession, seedDemo } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
 import { sessionChoices } from "../src/sessions.ts";
+import { Workspaces } from "../src/workspaces.ts";
 
 test("the real native life drives conversation, program, activity, search, and responsive views", async () => {
   const session = await demoSession();
@@ -261,6 +262,9 @@ test("operator answers and program edits act through the binding", async () => {
 
 test("resume preserves chains, programs, theme, and input drafts while unfinished work stays paused", async () => {
   const first = await demoSession(true);
+  let library = new Workspaces(first.preferences, { demo: true });
+  const group = await library.add(first.world.directory);
+  library.adopt(first, group);
   const screen = await createTestRenderer({ width: 120, height: 40 });
   const app = new App(screen.renderer, first, { quit() {} });
   const fork = first.chains.find((chain) => chain.id !== first.life.root);
@@ -277,16 +281,19 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
   const record = first.world.records.path;
   app.dispose();
   screen.renderer.destroy();
-  await first.dispose();
+  await library.dispose();
   if (!record) throw new Error("No saved record.");
-  const choices = await sessionChoices(
-    dirname(record),
+  library = new Workspaces(first.preferences, { demo: true });
+  await library.refresh();
+  const choices = sessionChoices(
+    library.groups[0],
     async () => {},
     async () => {},
   );
   expect(choices[1]?.detail).toContain("KiB");
   expect(choices[1]?.detail).toContain("Paused");
   expect(choices).toHaveLength(2);
+  await library.dispose();
   const opened = await openEngine({ record, demo: true });
   const second = new Session(opened.life, opened.world, true);
   await second.refresh();

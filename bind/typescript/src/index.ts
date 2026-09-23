@@ -1,4 +1,5 @@
 export * from "../index.cjs";
+export { Activity, type LiveAct, type RunState } from "./activity.js";
 export {
   type Call,
   type Ear,

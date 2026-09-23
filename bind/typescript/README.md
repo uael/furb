@@ -94,8 +94,9 @@ live in the record's `.world.json` companion. File snapshots append to `.changes
 loads a page of them. Keep both companions with the JSONL record.
 
 `inspectRecord(path)` reads pending work through the same native replay without taking a record lock,
-writing files, or starting a model or command. The TUI runs this inspection in its own worker. `World.isPaused`
-and `World.rungState` expose the shared pause and rung-state derivations used by the interface.
+writing files, or starting a model or command. The TUI runs this inspection in its own worker. `World.activity` holds
+the state of every act, derived once from the facts as the life hears them, so a host reads it without asking the
+sandbox. `World.isPaused` and `World.rungState` read it.
 
 `world.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type,
 size, and `furb-image://` reference. Put that reference in the prompt, for example

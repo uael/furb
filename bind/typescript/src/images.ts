@@ -38,17 +38,38 @@ export function attachImage(directory: string, path: string): ImageAttachment {
   }
   return { name: basename(path), uri: `furb-image://${file}`, mimeType, size: bytes.length };
 }
-export function imageContent(directory: string, uri: string): ImageContent {
+function imagePath(directory: string, uri: string): { path: string; digest: string } {
   const match = uri.match(/^furb-image:\/\/([a-f0-9]{64})\.(png|jpg|gif|webp)$/);
   if (!match) throw new Error("Invalid image attachment.");
-  const path = join(directory, `${match[1]}.${match[2]}`);
+  return { path: join(directory, `${match[1]}.${match[2]}`), digest: match[1] ?? "" };
+}
+export function imageContent(directory: string, uri: string): ImageContent {
+  const { path, digest } = imagePath(directory, uri);
   if (statSync(path).size > 20 * 1024 * 1024) throw new Error("The saved image is too large.");
   const bytes = readFileSync(path);
-  if (createHash("sha256").update(bytes).digest("hex") !== match[1])
+  if (createHash("sha256").update(bytes).digest("hex") !== digest)
     throw new Error("The saved image attachment has changed.");
   return { type: "image", data: bytes.toString("base64"), mimeType: imageType(bytes).mimeType };
 }
-export function turnImages(directory: string, parts: Turn[1]): ImageContent[] {
+export class ImageCache {
+  private readonly entries = new Map<string, { stamp: string; content: ImageContent }>();
+  get(directory: string, uri: string): ImageContent {
+    const { path } = imagePath(directory, uri);
+    const info = statSync(path);
+    if (info.size > 20 * 1024 * 1024) throw new Error("The saved image is too large.");
+    const stamp = `${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
+    let entry = this.entries.get(path);
+    if (!entry || entry.stamp !== stamp) {
+      entry = { stamp, content: imageContent(directory, uri) };
+      this.entries.set(path, entry);
+    }
+    return { ...entry.content };
+  }
+  clear(): void {
+    this.entries.clear();
+  }
+}
+export function turnImages(directory: string, parts: Turn[1], cache?: ImageCache): ImageContent[] {
   const uris = new Set<string>();
   for (const part of parts) {
     if (!isTag(part) || part[0] !== "opened") continue;
@@ -57,5 +78,5 @@ export function turnImages(directory: string, parts: Turn[1]): ImageContent[] {
     for (const match of message.matchAll(/furb-image:\/\/[a-f0-9]{64}\.(?:png|jpg|gif|webp)/g))
       uris.add(match[0]);
   }
-  return [...uris].map((uri) => imageContent(directory, uri));
+  return [...uris].map((uri) => (cache ? cache.get(directory, uri) : imageContent(directory, uri)));
 }

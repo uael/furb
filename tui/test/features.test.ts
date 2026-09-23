@@ -378,14 +378,16 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     await session.refresh();
     await session.dispose();
     const lines = (await readFile(record, "utf8")).trimEnd().split("\n");
-    const begin = lines.findIndex((line) => JSON.parse(line)[1][0] === "queue_begin");
+    const begin = lines.findIndex(
+      (line) => JSON.parse(line)[1][0] === "queue" && JSON.parse(line)[1][3] === "begin",
+    );
     expect(JSON.parse(lines[begin + 1] ?? "null")[1][0]).toBe("prompt");
     const state = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
     state.queued = [entry];
     await writeFile(`${record}.ui.json`, JSON.stringify(state));
     await writeFile(
       record,
-      `${lines.filter((line) => JSON.parse(line)[1][0] !== "queue_sent").join("\n")}\n`,
+      `${lines.filter((line) => !(JSON.parse(line)[1][0] === "queue" && JSON.parse(line)[1][3] === "sent")).join("\n")}\n`,
     );
     let opened = await openEngine({ record, demo: true });
     session = new Session(opened.life, opened.world, true);
@@ -401,7 +403,7 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     session = new Session(opened.life, opened.world, true);
     await session.refresh();
     expect(session.queued).toHaveLength(1);
-    expect(await readFile(record, "utf8")).toContain("queue_aborted");
+    expect(await readFile(record, "utf8")).toContain('"aborted"');
     const manual = await session.life.prompt(entry.shape, entry.text, { on: entry.chain, to: entry.actor });
     await session.refresh();
     expect(session.queued).toHaveLength(1);
