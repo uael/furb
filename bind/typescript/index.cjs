@@ -782,5 +782,6 @@ module.exports.Act = nativeBinding.Act
 module.exports.JsAct = nativeBinding.JsAct
 module.exports.Life = nativeBinding.Life
 module.exports.JsLife = nativeBinding.JsLife
+module.exports.RecordLock = nativeBinding.RecordLock
 module.exports.decodeRecord = nativeBinding.decodeRecord
 module.exports.engineSource = nativeBinding.engineSource

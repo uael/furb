@@ -69,11 +69,11 @@ export class HostView extends EventEmitter {
     this.roster = state.roster;
     this.records.path = state.path;
     const incoming = state.facts;
-    this.facts.push(...incoming);
+    for (const fact of incoming) this.facts.push(fact);
     this.prompts = new Map(state.prompts.map((prompt) => [prompt.id, prompt]));
     this.streams = new Map(state.streams);
     this.held = new Map(state.held);
-    this.changes.push(...state.changes);
+    for (const path of state.changes) this.changes.push(path);
     this.models = state.models;
     if (incoming.length) this.emit("facts", incoming);
     this.emit("change");

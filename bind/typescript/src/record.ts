@@ -1,16 +1,5 @@
-import {
-  closeSync,
-  existsSync,
-  fsyncSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  truncateSync,
-  unlinkSync,
-  writeSync,
-} from "node:fs";
-import { dirname } from "node:path";
-import { decodeRecord } from "../index.cjs";
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, truncateSync, writeSync } from "node:fs";
+import { decodeRecord, RecordLock } from "../index.cjs";
 import type { Entry } from "./types.js";
 
 export function readRecord(path: string, repair = false): Entry[] {
@@ -63,53 +52,22 @@ export function readRecord(path: string, repair = false): Entry[] {
   return entries;
 }
 
-/** An exclusive record lease shared by a running World and session file operations. */
-export class RecordLock {
-  private fd?: number;
-  constructor(readonly path: string) {
-    mkdirSync(dirname(path), { recursive: true });
-    try {
-      this.fd = openSync(`${path}.lock`, "wx", 0o600);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const pid = Number(readFileSync(`${path}.lock`, "utf8"));
-      if (!Number.isInteger(pid) || pid <= 0) throw new Error(`Invalid record lock: ${path}.lock`);
-      try {
-        process.kill(pid, 0);
-      } catch (dead) {
-        if ((dead as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-        unlinkSync(`${path}.lock`);
-        this.fd = openSync(`${path}.lock`, "wx", 0o600);
-      }
-      if (this.fd === undefined) throw new Error(`Another process owns ${path}.`);
-    }
-    writeSync(this.fd, String(process.pid));
-  }
-  dispose(): void {
-    if (this.fd === undefined) return;
-    closeSync(this.fd);
-    this.fd = undefined;
-    unlinkSync(`${this.path}.lock`);
-  }
-}
-
 /** One owner and one complete JSON value per line. A torn final line is removed before appending. */
 export class RecordFile {
-  readonly entries: Entry[] = [];
+  readonly entries: Entry[];
   private fd?: number;
   private lock?: RecordLock;
   constructor(
     readonly path?: string,
     readOnly = false,
   ) {
-    if (!path) return;
-    if (readOnly) {
-      this.entries.push(...readRecord(path));
+    if (!path || readOnly) {
+      this.entries = path ? readRecord(path) : [];
       return;
     }
     this.lock = new RecordLock(path);
     try {
-      this.entries.push(...readRecord(path, true));
+      this.entries = readRecord(path, true);
       this.fd = openSync(path, "a", 0o600);
     } catch (error) {
       this.dispose();

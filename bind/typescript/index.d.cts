@@ -67,6 +67,21 @@ export declare class Life {
 }
 export type JsLife = Life
 
+/**
+ * The lease of one record: a lock on the file beside the record, `<record>.lock`, which the process holds until
+ * it disposes the lease or ends. The kernel ends the lease of a process that ends, whatever the process number
+ * says after it. The file stays when the lease ends, since a lease that removed its file by name could remove
+ * the file that another process has locked since.
+ */
+export declare class RecordLock {
+  /** The lease of the record at this path, or the refusal when another holds it. */
+  constructor(path: string)
+  /** The record the lease is of. */
+  get path(): string
+  /** The lease ended: the lock is released, and another process may take it. */
+  dispose(): void
+}
+
 export interface BashOptions {
   fed?: boolean
   timeout?: number

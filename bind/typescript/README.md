@@ -100,7 +100,9 @@ Records preserve integral floats as `{"is":"float","args":["1"]}`. The native re
 precision before JavaScript can round a number. Queries are not journal entries. To keep a program edit
 across a later open, perform its `write` in a `rung`.
 
-Only one process owns a record. A torn final line is removed before an append; a damaged complete line fails.
+Only one process owns a record. Its `RecordLock` holds a lock on `<record>.lock`, which the system releases
+when the process ends, so a lease of a process that ended never blocks an open. The lock file stays beside the
+record. A torn final line is removed before an append; a damaged complete line fails.
 Closing a durable World pauses its chains. A later open holds unfinished work before any model or command
 runs, and `world.resume()` explicitly releases it. Interrupted commands keep their recorded output and end
 with a refusal on resume; they are never run twice without a new act. Wait deadlines and partial streams

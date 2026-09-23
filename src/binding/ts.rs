@@ -1,6 +1,7 @@
 //! Native TypeScript bindings. N-API generates the package loader and declarations from this surface.
 //! Queries and controls are synchronous. Acts carry their name and are awaited through a native Promise.
 mod host;
+mod lease;
 mod render;
 mod wire;
 
