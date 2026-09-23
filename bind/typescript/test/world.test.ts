@@ -21,7 +21,7 @@ import { alive, printPid, remove } from "./processes.ts";
 import { until } from "./until.ts";
 
 // A World with no model puts every prompt to the operator, so a test that asks a model names one, and its `answer`
-// replaces the request, so no CLI runs.
+// replaces the request, so no CLI runs. A later World that is given the models takes the saved model as its own.
 const offer = claudeProvider();
 const offered = createModels();
 offered.setProvider(offer.provider);
@@ -147,7 +147,7 @@ test("the standing takes each model's efforts from its pi-ai metadata", async ()
   }
 });
 
-test("a World holds the models its host gives it: a saved roster gains what the host offers since, and an id alone routes", async () => {
+test("a World offers the models its host names, and keeps the model and the effort chosen last as a preference", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-roster-"));
   const record = join(cwd, "session.jsonl");
   const cli = claudeProvider();
@@ -163,31 +163,42 @@ test("a World holds the models its host gives it: a saved roster gains what the 
   } finally {
     await alone.dispose();
   }
-  const first = new World({ cwd, record, models, model: "claude-cli:opus", roster: ["claude-cli:sonnet"] });
+  const first = new World({
+    cwd,
+    record,
+    models,
+    model: "claude-cli:opus",
+    effort: "high",
+    roster: ["claude-cli:sonnet"],
+  });
   try {
     first.open();
   } finally {
     await first.dispose();
   }
+  // The record holds the standing of the life, so the companion keeps no roster and no actor.
+  expect(JSON.parse(await readFile(`${record}.world.json`, "utf8")).options).toEqual({
+    cwd,
+    model: "claude-cli:opus",
+    effort: "high",
+  });
   const second = new World({ record, models, roster: ["claude-cli:fable"] });
   try {
-    expect(second.model).toBe("claude-cli:opus");
-    expect(second.roster).toEqual(["claude-cli:opus", "claude-cli:sonnet", "claude-cli:fable"]);
+    expect(second.roster).toEqual(["claude-cli:opus", "claude-cli:fable"]);
+    expect(second.actor).toBe("claude-cli:opus/high");
     expect(second.route("haiku").id).toBe("haiku");
     expect(() => second.route("nothing")).toThrow("Name one as provider:model");
   } finally {
     await second.dispose();
     cli.dispose();
   }
-  // Without the provider that offered them, the saved models stay, since the record was lived on them; only an ask
-  // of one fails.
+  // A preference the World cannot route falls away, so an inspection needs no model of the record.
   expect((await inspectRecord(record)).held).toEqual([]);
   const third = new World({ record });
   try {
-    expect(third.model).toBe("claude-cli:opus");
-    expect(third.roster).toEqual(["claude-cli:opus", "claude-cli:sonnet", "claude-cli:fable"]);
-    expect(third.actor).toBe("claude-cli:opus/low");
-    expect(() => third.route("claude-cli:opus")).toThrow("No model claude-cli:opus");
+    expect(third.model).toBeUndefined();
+    expect(third.roster).toEqual([]);
+    expect(third.actor).toBe("operator");
     expect(() => new World({ cwd, roster: ["claude-cli:opus"] })).toThrow("No model claude-cli:opus");
     // An answer replaces the request of a model, and a World with no model has none to replace.
     expect(() => new World({ cwd, answer: async () => said("close(1)") })).toThrow("offers no model");
@@ -255,6 +266,7 @@ test("unfinished model work and waits reopen held until the host confirms resume
   await first.dispose();
   const second = new World({
     record,
+    models: offered,
     answer: async () => {
       calls++;
       return ["assistant", ['close("resumed")'], null, null];
@@ -369,6 +381,7 @@ test("the record, not stale saved metadata, decides whether a reopened life has 
   let calls = 0;
   const second = new World({
     record,
+    models: offered,
     answer: async () => {
       calls++;
       return ["assistant", ['close("new answer")'], null, null];
@@ -605,7 +618,7 @@ test("resume lets go of the hold of the World alone, so a pause of the operator 
   life.pause(life.root);
   life.prompt("str", "later");
   await first.dispose();
-  const second = new World({ record, answer: async () => said('close("x")') });
+  const second = new World({ record, models: offered, answer: async () => said('close("x")') });
   try {
     const again = second.open();
     await second.resume();
@@ -623,7 +636,7 @@ test("a reopened World pauses no chain, so new work asks once the held work is g
   const first = new World({ cwd, record, ...modeled, answer: () => new Promise(() => {}) });
   const prompt = first.open().prompt("str", "first").id;
   await first.dispose();
-  const second = new World({ record, answer: async () => said('close("x")') });
+  const second = new World({ record, models: offered, answer: async () => said('close("x")') });
   try {
     const again = second.open();
     expect(second.held.has(prompt)).toBe(true);
@@ -741,7 +754,7 @@ test("record inspection reports held work when its replay starts or feeds a comm
   }
 });
 
-test("a later life stands on the models its record was lived on, though the host offers them no more", async () => {
+test("a later life stands on what its host offers now, and a stood tells its chains, though its work stays held", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-gone-model-"));
   const record = join(cwd, "life.jsonl");
   let calls = 0;
@@ -762,7 +775,14 @@ test("a later life stands on the models its record was lived on, though the host
   try {
     expect((await inspectRecord(record)).held.map(([id]) => id)).toEqual(held);
     const again = second.open();
-    expect(second.roster).toEqual(["claude-cli:sonnet"]);
+    expect(second.roster).toEqual([]);
+    const [, [, , actor]] = again.call<[unknown, [unknown, string, string]]>(
+      "ask",
+      ["stand", again.root],
+      {},
+    );
+    expect(actor).toBe("operator");
+    expect(second.facts.filter(([kind]) => kind === "stood").map(([, id]) => id)).toContain(again.root);
     expect(again.outcome(answered.id)).toEqual({ done: true, value: 5 });
     expect([...second.held.keys()]).toEqual(held);
   } finally {

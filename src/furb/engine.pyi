@@ -230,7 +230,7 @@ def cd(path: str, on: str = "") -> str:
 
 def cwd(on: str = "") -> str:
   """The working directory of a chain is the closest cd back in its transcript.
-  The working directory of a chain is the directory of the standing before any cd.
+  The working directory of a chain is the directory of the standing it stands on while no cd stands in its transcript, so a later standing moves no chain that a cd moved.
   The World resolves the path of a read, a write and a command against the working directory it asks the chain for.
   cwd gives the working directory that the paths of the chain resolve against.
   The chain answers for where its paths resolve, which is the closest cd back in what it heard.
@@ -379,7 +379,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A model answers any shape.
   A model asked with the shape None reads the message, works, and closes with nothing.
   A rung need not wait for a prompt of shape None.
-  The actor left unsaid is the default actor of the chain.
+  The actor left unsaid is the default actor of the chain when the prompt is made, which the prompt writes into the actor word of every rung it makes, so every life asks the one actor the record holds.
   A prompt to a model runs in steps until the prompt completes.
   The opened tag of a prompt tells the shape as python shows the expression.
   A rung whose word closes nothing ends its step, and the engine asks the model again.
@@ -443,7 +443,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A chain holds whole every act made on the chain.
   A chain holds every fact on it, and an act on another chain is that chain's.
   A prompt that a step of another chain made reads nothing of that chain.
-  The word of a rung rebinds the default actor like any name, and the last binding in record order wins.
+  The word of a rung rebinds the default actor like any name, and so does a stood, and the last binding in record order wins.
   The transcript of the root begins with the open of the root and then the standing.
   The transcript then holds the prompt of the operator, and the asks and the responses of the model.
   The engine reads its own names through the globals of the chain.
@@ -481,12 +481,12 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The source of a chain is a chain, by its name, and means the transcript of that chain as it stands.
   A source that names no chain of the life refuses the call in the caller, and no chain is made.
   A chain with a source asks its origin what it stands on, and the origin answers with its standing as it stands.
-  The chain answers a stand asked on it with what it stands on, so a grant reads the roster off the chain it is on.
+  The chain answers a stand asked on it with what it stands on, and a stand that names one of its questions with what it stood on when it heard that question, so a grant reads the window of a rung off the chain it is on.
   The chain answers a transcript asked of one of its names with its transcript up to that act, and whole for the chain itself.
   The chain answers a program asked on it with the word of every rung it holds that the gate let run, each under the name of that rung, in order.
   The chain retells the rungs of its origin through the program the origin answers, and it owns the rungs it retells, though it holds nothing of them.
   A replay makes the rungs of a chain again from its donor: it keeps each rung of the ladder while the words it is given repeat it, it makes one rung of what is left, and every rung of the chain after the first word that differs is gone.
-  A replay makes the module of the chain again, as it was at its birth, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in.
+  A replay makes the module of the chain again, as it was at its birth but on the standing the chain stands on then, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in.
   The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.
   A write of a door gives the words of that ladder alone, so a rung of the chain that is no rung of that ladder and stands before the first word that differs stands as it did.
   """
@@ -646,7 +646,7 @@ A second read of a text tells the model no line that an earlier read of the chai
 type Usage = tuple[int, int, int, int, float]
 """What one answer of a model cost: the words it read and wrote, of which the words it read again and the words it kept to read again, and its dollars.
 A usage holds the token counts and the dollars of one model response.
-The share of the window it filled is the words it read against the window of the actor, so no word of it says the share.
+The share of the window it filled is the words it read against the window of the actor its rung names, in the standing the chain stood on when that rung was born, so no word of it says the share.
 """
 type Turn = tuple[Literal["user", "assistant"], list[Tag | str], Usage | None, object]
 """One turn of what a model reads: who said it, what it holds, what the answer to it cost, and the blocks of the provider, which are its own, are read by nothing of the engine, and go back to it with the turn.
@@ -791,16 +791,21 @@ type Clock = tuple[Literal["clock"], str, str, str]
 """A clock is the question of a reading of the wall clock."""
 type Chance = tuple[Literal["chance"], str, str, str]
 """A chance is the question of a number the World draws."""
-type Stand = tuple[Literal["stand"], str, str, str]
+type Stand = tuple[Literal["stand"], str, str, str, *tuple[str, ...]]
 """What a chain stands on, which every chain without a source asks the World for as it opens, and a chain with a source asks of its origin, and which binds the actor and the directory of that chain from then on.
 A change of the World between two lives enters the transcript of a chain.
 The World answers a stand with the roster, the directory and the actor.
 A model asked on any chain of a later life finds the new roster in the transcript of its chain.
 The World answers it while the chain waits, since what a chain stands on is asked and never done.
-A chain asks what it stands on at its open and never again in that life, and every life asks the World again, so a change of the World reaches every chain of the next life.
+A chain asks what it stands on at its open, and the journal keeps that stand with its answer beside, so a later life opens the chain on what it stood on and replays it there.
+At its tip, once the record is said again whole, the journal asks the World what it stands on, and says it as a stood to every chain that stands on something else, so a change of the World reaches every chain after what it replayed.
 Each standing binds the default actor of the chain, under the name actor.
-The chain tells the standing it was answered under the name opened, with the roster, the directory and the actor.
+The chain tells each standing it takes under the name opened, with the roster, the directory and the actor.
 The chain holds no stand, since the standing it tells is what its transcript holds of it.
+"""
+type Stood = tuple[Literal["stood"], str, str, Standing]
+"""A stood says what a chain stands on from its place in the record on, and the journal keeps it, so a later life says it again at that place.
+A chain that hears a stood binds that standing and its default actor, and tells it there under the name opened, so the transcript grows at one end.
 """
 type Holds = tuple[Literal["holds"], str, str, str, str]
 """A holds is the question of what the record kept of an act.
@@ -892,6 +897,9 @@ def turns_of(heard: list[Fact]) -> list[Turn]:
   The turns end with a user turn, empty when nothing was told since the last answer.
   """
 
+def typed(standing: Standing) -> Standing:
+  """A standing as its declared type, whether the World or the record gave it, which is how a chain takes one and how the journal weighs one against what a chain stands on."""
+
 def offered(standing: Standing, to: str) -> int | None:
   """The window an actor reads, and nothing at all when the roster holds no such actor, or when that one takes no such effort."""
 
@@ -960,7 +968,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   It opens the root, the first act of any record, which every life opens under the one name, and which a record that holds it already gives back, and that root is what it gives back.
   What the record says a question came to, if it says anything, the facts this life kept among it, so that a chain with a source which asks again what its origin asked is answered from the record too.
   The record a life was opened from, which answers what it holds of an act, so that an act the World did once is done no more.
-  The journal: it hears everything, and keeps what the World said and what the operator said that is no query, of the acts and of the queries of a run it holds and of nothing else, since it keeps nothing that a later life works out again by asking, each entry of it after the words of the act it is about.
+  The journal: it hears everything, and keeps what the World said, what the operator said that is no query and the stood it says itself, of the acts, of the queries of a run and of the stand a chain asks at its open, and of nothing else, since it keeps nothing that a later life works out again by asking, each entry of it after the words of the act it is about.
   A query the operator asks is of the moment and enters no record, neither the query nor what it was answered, since nobody asks it again; a change the operator wants a later life to hold it makes a rung of, which is kept.
   What it keeps it says, so that the World holds the record and the journal alone says what belongs in it; a World that is durable keeps what it is told, one that is not keeps nothing, and either way what the World holds is what the life after it is given.
   Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard: a query nobody asks again it steps over; an act of the operator it says as the operator, once the chain it is on has been made again; a question of any other maker it says not, since the word of that maker says it again; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed.

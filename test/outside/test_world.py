@@ -471,14 +471,15 @@ async def test_the_record_is_kept_as_json_and_read_back_as_the_entries_it_holds(
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   said = kept(record)
-  assert [fact[0] for _, fact, *_ in said] == ["chain", "prompt", "rung", "answer"]
-  match said[3]:
+  assert [fact[0] for _, fact, *_ in said] == ["chain", "stand", "prompt", "rung", "answer"]
+  match said[4]:
     case (_, ("answer", _, _, (_, content, _, _))):
       assert [one for one in content if isinstance(one, str)] == ["close(1)"]
     case _:
-      pytest.fail(str(said[3]))
+      pytest.fail(str(said[4]))
   assert [json.loads(line)[1][0] for line in record.read_text(encoding="utf-8").splitlines()] == [
     "chain",
+    "stand",
     "prompt",
     "rung",
     "answer",

@@ -102,7 +102,7 @@ async def test_debug_enters_nothing_in_the_record() -> None:
   _, root = life(sand)
   await engine.rung("n = 1\ndebug(t'{n}')", on=root)
   await settle()
-  assert [fact[0] for _, fact, *_ in sand.record] == ["chain", "rung"]
+  assert [fact[0] for _, fact, *_ in sand.record] == ["chain", "stand", "rung"]
 
 
 async def test_it_is_no_act_and_it_enters_no_record() -> None:

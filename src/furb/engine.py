@@ -200,11 +200,10 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
     asking = None
     told("opened", id, ("shape", named), ("message", message), ("to", to))
     while True:
-      if who != OPERATOR and not asking:
-        asking = rung(actor=to, returns=named)
-      match (yield):
-        case ("done", about, *_) if about == asking:
-          asking = None
+      if who != OPERATOR:
+        asking = rung(actor=who, returns=named)
+      while (yield)[:2] != ("done", asking):
+        pass
 
   return act("prompt", on, pausing(ending(started(ear, who))), named, message, to)
 
@@ -214,19 +213,21 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     raise Refused(f"no chain {source}")
 
   def ear(id):
-    transcript, rungs, refused, retold, paused, mine = [], {}, {}, set(), set(), {id}
+    transcript, rungs, refused, retold, paused, mine = [], {}, {}, set(), set(), {id: None}
     waiting, asking, running, to_run, unseen = {}, None, "", [], ""
 
     def stands(name):
       return any(under(name, x) or x == id for x in paused)
+
+    def stood():
+      modules[id]["actor"] = standing[2]
+      transcript.append(told("opened", id, *zip(("roster", "directory", "actor"), standing, strict=True)))
 
     def program():
       return {one: rungs[one] for one in rungs if one not in refused}
 
     def answers():
       match a:
-        case ("program", *_):
-          return program()
         case ("read", _, by, _, path) | ("write", _, by, _, Text(path)) if path in mine and path.startswith(
           "prompt://"
         ):
@@ -237,16 +238,17 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             path, "\n".join(said for one, said in rungs.items() if one != by and under(acts[one][5] or one, path))
           )
         case ("transcript", _, _, _, at) if at in mine:
-          return transcript[
-            : transcript.index(where) + 1 if (where := acts.get(at) or asked.get(at)) in transcript else None
-          ]
-        case ("stand", *_):
-          return standing
-        case ("cd", *_):
+          return transcript[: [*transcript, where := acts.get(at) or asked.get(at)].index(where) + 1]
+      match a[0]:
+        case "program":
+          return program()
+        case "stand":
+          return mine.get(a[-1]) or standing
+        case "cd":
           return a[4]
-        case ("cwd", *_):
+        case "cwd":
           return next((x[4] for x in reversed(transcript) if x[0] == "cd"), standing[1])
-        case ("turns", *_):
+        case "turns":
           return turns_of(transcript)
 
     def replay(of="", words="", by=""):
@@ -272,16 +274,16 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       transcript += [it for it in theirs if it[1] == source or any(under(one[1], it[1]) for one in picked)]
       rungs.update(ask("program", source)[1])
     transcript.append(told("opened", id, ("label", label), ("source", source)))
-    _, standing = ask("stand", source or id)
-    if not source:
-      transcript.append(told("opened", id, *zip(("roster", "directory", "actor"), standing, strict=True)))
+    standing = typed(ask("stand", source or id)[1])
     replay()
+    if not source:
+      stood()
     while True:
       a = yield
       if (a[3] if question(a) else scope(a[1])) != id:
         continue
       if question(a):
-        mine.add(about := a[1])
+        mine[about := a[1]] = standing
         if about in acts and stands(about):
           yield "pause", about, []
         if (got := answers()) is not None:
@@ -292,11 +294,12 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         asking = None
       match a:
         case ("rung", rid, _, _, "", _, who, returns):
-          unseen, waiting[rid] = "", who or modules[id]["actor"]
-          transcript.append(told("opened", rid, ("actor", waiting[rid]), ("says", f"close({returns})")))
+          unseen = ""
+          waiting[rid] = rid
+          transcript.append(told("opened", rid, ("actor", who), ("says", f"close({returns})")))
         case ("ready", rid, _, word):
           retells = acts[rid][5]
-          found = refused.get(retells, []) if retells else ask("gate", id, word, program())[1]
+          found = refused.get(retells) if retells else ask("gate", id, word, program())[1]
           rungs[rid] = word
           if found:
             refused[rid] = found
@@ -315,6 +318,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             running = ""
           if not isinstance(value, CancelledError) and about in acts and acts[about][2] in rungs:
             unseen = about
+        case ("stood", _, _, now):
+          standing = typed(now)
+          stood()
         case ("wants", *_):
           running = ""
         case ("pause", about, *_) if a[2] != id:
@@ -322,11 +328,11 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("wake", about, *_):
           paused.discard(about)
       if not asking and (asking := next((x for x in waiting if not stands(x)), None)):
-        whom = waiting.pop(asking)
+        del waiting[asking]
         q, held = ask("holds", id, asking)
         transcript.append(q)
         if not held:
-          yield "ask", asking, id, whom, turns_of(transcript)
+          yield "ask", asking, id, acts[asking][6], turns_of(transcript)
       if to_run and not running:
         yield "run", (running := to_run.pop(0)), id, rungs[running], acts[running][5]
       if unseen and not running and all(x[1] in outcomes for x in transcript if x[0] == "prompt" and x[3] == id):
@@ -339,29 +345,22 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
   def ear(id):
     here = scope(id)
-    if not (usd or share) or (usd or 0) < 0 or not 0 <= (share or 0) <= 1:
-      yield "done", id, Refused(f"{usd}/{share} no ceiling")
+    if (bad := not (usd or share) or (usd or 0) < 0 or not 0 <= (share or 0) <= 1) or not isinstance(
+      transcript := ask("transcript", here, here)[1], list
+    ):
+      yield "done", id, Refused(f"{usd}/{share} no ceiling") if bad else transcript
       return
-    _, transcript = ask("transcript", here, here)
-    if not isinstance(transcript, list):
-      yield "done", id, transcript
-      return
-    _, standing = ask("stand", here)
-    spent, whose = 0.0, {}
+    spent = 0.0
     for old in transcript:
       match old:
         case ("grant", gid, *_) if gid != id and gid not in outcomes:
           close(None, gid)
-        case ("tell", rid, _, [("opened", [_, ("actor", whom), _], _)]):
-          whose[rid] = whom
     told("opened", id, ("usd", usd), ("share", share))
     while True:
       match (yield):
-        case ("tell", rid, _, [("opened", [_, ("actor", whom), _], _)]):
-          whose[rid] = whom
         case ("answer", about, _, (_, _, (seen, _, _, _, dollars), _)) if scope(about) == here:
           spent += dollars
-          filled = seen / (offered(standing, whose[about]) or WINDOW)
+          filled = seen / (offered(ask("stand", here, about)[1], acts[about][6]) or WINDOW)
           told("ledger", about, ("spent", spent), ("filled", filled))
           if (usd is not None and spent >= usd) or (share is not None and filled >= share):
             pause(here)
@@ -388,10 +387,12 @@ def bash(
         case ("read", qid, _, _, path) if path in streams:
           yield "done", qid, streams[path]
         case ("write", qid, _, _, Text(path, text) as took) if path == f"{id}/stdin":
-          if takes := not mute:
+          if mute:
+            took = Refused(mute)
+          else:
             yield "feed", id, text or None
             mute = "" if text else "closed"
-          yield "done", qid, took if takes else Refused(mute)
+          yield "done", qid, took
         case _ if mute == "ended":
           continue
         case ("peek", qid, _, _, at) if at == id:
@@ -406,11 +407,7 @@ def bash(
               "closed",
               id,
               ("code", code),
-              body=[
-                (one, what)
-                for one, what in zip(streams.values(), (show, show_err), strict=True)
-                if what not in (None, HIDDEN)
-              ],
+              body=[x for x in zip(streams.values(), (show, show_err), strict=True) if x[1] not in (None, HIDDEN)],
             )
           yield "done", id, Exit(code, *streams.values())
         case ("cancel" | "close", *_) as a if covers(a, id):
@@ -478,11 +475,11 @@ class Act[T = object](str):
       while self not in outcomes:
         yield
       got = outcomes[self]
-      f.set_exception(got) if isinstance(got, BaseException) else f.set_result(got)
+      (f.set_exception if isinstance(got, BaseException) else f.set_result)(got)
       f.exception()
 
     drive(waits(), f"waits://{lineage(self)}.{id(current_task())}")
-    return (yield from f.__await__())
+    return (yield from f)
 
 
 class Refused(Exception): ...
@@ -504,7 +501,7 @@ def acting():
 
 
 def question(a):
-  return a[1].startswith(f"{a[0]}://")
+  return a[1].startswith(a[0] + "://")
 
 
 def scope(name):
@@ -564,6 +561,10 @@ def turns_of(heard):
   return [*folded, ("user", tags, None, None)]
 
 
+def typed(standing):
+  return tuple((n, tuple(e), w) for n, e, w in standing[0]), *standing[1:]
+
+
 def offered(standing, to):
   return next((w for name, efforts, w in standing[0] if to in (name, *(f"{name}/{e}" for e in efforts))), None)
 
@@ -614,12 +615,11 @@ def ending(ear):
   def lived(id):
     g, a = ear(id), None
     while lives(g, a):
-      match a := (yield):
-        case ("done", about, *_) if about == id:
-          return
-        case ("cancel" | "close", *_) if covers(a, id):
-          yield "done", id, ended(a, id)
-          return
+      if (a := (yield))[:2] == ("done", id):
+        return
+      if a[0] in ("cancel", "close") and covers(a, id):
+        yield "done", id, ended(a, id)
+        return
 
   return lived
 
@@ -644,7 +644,7 @@ def boot(record=(), **outside):
     while True:
       match a := (yield):
         case ("holds", qid, _, _, about):
-          yield "done", qid, [e[1] for e in record if e[1][1] == about]
+          yield "done", qid, [q for _, q, *_ in record if q[1] == about]
         case ("peek", qid, _, _, at):
           yield "done", qid, outcomes.get(at)
         case (_, qid, *_) if question(a) and qid in answers:
@@ -652,12 +652,24 @@ def boot(record=(), **outside):
 
   def journal():
     facts = {one[1]: one for _, one, *_ in record if question(one)}
-    due, after, held = [*reversed(record)], "", set(facts)
-    made[OPERATOR] = max([0, *(int(q.rpartition(".")[2]) for q in facts if facts[q][2] == OPERATOR)])
+    due, after, held = [None, *reversed(record)], "", set(facts)
+    for q in facts:
+      if facts[q][2] == OPERATOR:
+        made[OPERATOR] = int(q.rpartition(".")[2])
+
+    def keep(name, *got):
+      if name not in held:
+        held.add(name)
+        send("keep", "", (after, facts[name], *got))
 
     while True:
       while due and not log:
         match due[-1]:
+          case None if modules:
+            now = typed(ask("stand", "")[1])
+            for on in modules:
+              if now != ask("stand", on)[1]:
+                send("stood", on, now)
           case (before, _) if before and not scope(before):
             break
           case (_, (kind, qid, "operator", on, *words) as then) if question(then) and (not on or scope(on)):
@@ -670,25 +682,21 @@ def boot(record=(), **outside):
           case (_, (kind, about, _, *words) as then) if scope(about) and not question(then):
             send(kind, about, *words, by="record")
         due.pop()
-      a = yield
-      match a:
-        case (_, qid, by, *words) if a is acts.get(qid):
-          if words[1:] != [*facts.setdefault(qid, a)[4:]]:
+      match a := (yield):
+        case (_, qid, by, _, *words) if a is acts.get(qid):
+          if words != [*facts.setdefault(qid, a)[4:]]:
             raise Drift(f"{qid} drifts")
           if by == OPERATOR:
-            if qid not in held:
-              held.add(qid)
-              send("keep", "", (after, a))
+            keep(qid)
           elif "://" not in by:
             after = qid
-        case (_, qid, by, *_) if a is asked.get(qid) and by.startswith("rung://"):
+        case (_, qid, by, *_) if a is asked.get(qid) and by.startswith(("rung://", "chain://")):
           facts.setdefault(qid, a)
-        case (kind, about, by, *words) if by in (WORLD, OPERATOR) and about in facts:
-          answer = [words[0]] if kind == "done" and about in asked else []
-          if about not in held:
-            held.add(about)
-            send("keep", "", (after, facts[about], *answer))
-          if not answer:
+        case (kind, about, by, *words) if by in (WORLD, OPERATOR, "journal") and about in facts:
+          if kind == "done" and about in asked:
+            keep(about, words[0])
+          else:
+            keep(about)
             send("keep", "", (after, a))
 
   def named(kind, on, *words):
@@ -754,8 +762,7 @@ def boot(record=(), **outside):
         living = lives(g, a)
       finally:
         busy.discard(name)
-        if not living:
-          alive.pop(name, None)
+        living or alive.pop(name, None)
 
   def live(g, name):
     if name in alive or (name == "journal" and name in outside):
@@ -767,4 +774,4 @@ def boot(record=(), **outside):
   globals().update(send=says, ask=asks, act=makes, drive=live)
   for who, hearer in [(OPERATOR, idle(OPERATOR)), ("record", door()), *outside.items(), ("journal", journal())]:
     live(hearer, who)
-  return Act(root) if (root := f"chain://{OPERATOR}.1") in acts else chain("root")
+  return Act(root) if (root := "chain://operator.1") in acts else chain("root")

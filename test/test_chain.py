@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import furb
-from conftest import DOOR, STANDS, Py, Sand, attr, life, ran, said, seen, settle, sown, tags
+from conftest import DOOR, STANDS, Py, Sand, attr, life, ran, relived, said, seen, settle, sown, tags
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Act, Refused, Text, take
 
@@ -407,7 +407,7 @@ async def test_a_prompt_that_a_step_of_another_chain_made_reads_nothing_of_that_
 
 
 async def test_the_word_of_a_rung_rebinds_the_default_actor_like_any_name() -> None:
-  """The word of a rung rebinds the default actor like any name, and the last binding in record order wins."""
+  """The word of a rung rebinds the default actor like any name, and so does a stood, and the last binding in record order wins."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["actor = 'n/low'\nclose(1)", "close(None)"]
@@ -417,6 +417,10 @@ async def test_the_word_of_a_rung_rebinds_the_default_actor_like_any_name() -> N
   sand.script[root] = ["close(2)", "close(None)"]
   assert await engine.prompt(int, "again", on=root) == 2
   assert [a[4] for a in said(log, "ask")][-1] == "n/low"
+  await relived(Sand(stands=STANDS), list(sand.record))
+  assert engine.modules[root]["actor"] == "n/low"
+  await relived(Sand(stands=(STANDS[0], "/w", "m/high")), list(sand.record))
+  assert engine.modules[root]["actor"] == "m/high"
 
 
 async def test_the_transcript_of_the_root_begins_with_the_open_of_the_root_and_then_the_standing() -> None:
@@ -907,7 +911,7 @@ async def test_a_chain_with_a_source_asks_its_origin_what_it_stands_on() -> None
 
 
 async def test_the_chain_answers_a_stand_asked_on_it_with_what_it_stands_on() -> None:
-  """The chain answers a stand asked on it with what it stands on, so a grant reads the roster off the chain it is on."""
+  """The chain answers a stand asked on it with what it stands on, and a stand that names one of its questions with what it stood on when it heard that question, so a grant reads the window of a rung off the chain it is on."""
   sand = Sand(stands=STANDS, cost=(200000, 0, 0, 0, 0.0))
   _, root = life(sand)
   assert engine.ask("stand", root)[1] == STANDS
@@ -917,6 +921,11 @@ async def test_the_chain_answers_a_stand_asked_on_it_with_what_it_stands_on() ->
   await settle()
   assert [attr(tag, "filled") for tag in tags(engine.turns(on=root), "ledger")] == [0.5]
   assert [a for a in sand.calls if a[0] == "stand"] == sand.calls[:1]
+  step = said(sand.calls, "ask")[0][1]
+  assert engine.ask("stand", root, step)[1] == STANDS
+  later = Sand(stands=((STANDS[0][0],), "/z", "operator"))
+  await relived(later, list(sand.record))
+  assert engine.ask("stand", root)[1] == later.stands and engine.ask("stand", root, step)[1] == STANDS
 
 
 async def test_the_chain_answers_a_transcript_asked_of_one_of_its_names() -> None:
@@ -1018,7 +1027,7 @@ async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
 
 
 async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_birth() -> None:
-  """A replay makes the module of the chain again, as it was at its birth, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in."""
+  """A replay makes the module of the chain again, as it was at its birth but on the standing the chain stands on then, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in."""
   sand = sown()
   _, root = life(sand)
   act = engine.prompt(None, "work", to=OPERATOR, on=root)
@@ -1035,3 +1044,8 @@ async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_bir
   assert engine.read(later, on=root) == Text(later, "c = 3\nclose(None)")
   assert engine.modules[root]["c"] == 3 and engine.modules[root]["a"] == 1
   assert "d" not in engine.modules[root]
+  await relived(Sand(stands=(STANDS[0], "/w", "m/high")), list(sand.record))
+  assert engine.modules[root]["actor"] == "m/high"
+  engine.write(Text(act, "a = 5"), on=root)
+  await settle()
+  assert engine.modules[root]["a"] == 5 and engine.modules[root]["actor"] == "m/high"

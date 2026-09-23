@@ -11,7 +11,7 @@ async def test_one_entry_of_the_record_the_act_made_last_before_its_fact_and_the
   log, _ = await lived(sand)
   reads = [e for e in sand.record if e[1][0] == "read"]
   assert [(len(e), e[2]) for e in reads] == [(3, Text("/w/a.txt", "one\ntwo\n"))]
-  assert [len(e) for e in sand.record if e[1][0] != "read"] == [2] * (len(sand.record) - 1)
+  assert [len(e) for e in sand.record if e[1][0] not in ("read", "stand")] == [2] * (len(sand.record) - 2)
   made = {one[1] for one in log if engine.question(one)}
   assert all(e[0] == "" or e[0] in made for e in sand.record)
 
@@ -46,5 +46,5 @@ async def test_the_record_is_a_sequence_of_entries_about_acts() -> None:
   await lived(sand)
   assert all(isinstance(e, tuple) for e in sand.record)
   assert all(e[1][1] in engine.acts or e[1][1] in engine.asked for e in sand.record)
-  kinds = ["chain", "prompt", "rung", "answer", "read", "bash", "out", "exited", "rung", "answer"]
+  kinds = ["chain", "stand", "prompt", "rung", "answer", "read", "bash", "out", "exited", "rung", "answer"]
   assert [e[1][0] for e in sand.record] == kinds

@@ -51,9 +51,10 @@ record. The host names what the World offers in `roster`, as `provider:model`, a
 which is the first of the roster when unsaid; a World given neither offers the operator alone, and a prompt
 that names no actor goes to the operator. A name without its provider routes to the one model of that id, by
 the rule that `modelNamed(models, name)` gives a host. A
-reopened record keeps its roster and model, and a model the host offers since then joins the roster. A saved
-model that the host no longer offers stays in the roster, since the record was made on it, and an ask of it
-fails. Configure an API provider through its pi-ai credentials.
+reopened World offers what its host names now. It keeps the model and the effort that the host chose last, and
+takes that model when the host names none and the World holds it. The record keeps the standing that each chain
+was lived on, and the later life tells each chain whose standing changed with a `stood`. Configure an API
+provider through its pi-ai credentials.
 
 The Claude CLI provider, `claudeProvider` from `@furb/engine/claude`, is a pi-ai provider that a host adds to
 its collection at run time. It follows the pooled session design in [dirt](https://github.com/uael/dirt/tree/main/packages/cli/src/providers).

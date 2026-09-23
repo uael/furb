@@ -18,14 +18,19 @@ async def test_the_working_directory_of_a_chain_is_the_closest_cd_back_in_its_tr
 
 
 async def test_the_working_directory_of_a_chain_is_the_directory_of_the_standing_before_any_cd() -> None:
-  """The working directory of a chain is the directory of the standing before any cd."""
+  """The working directory of a chain is the directory of the standing it stands on while no cd stands in its transcript, so a later standing moves no chain that a cd moved."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   assert STANDS[1] == "/w"
   assert engine.cwd(on=root) == "/w"
   two = engine.chain("two")
+  await engine.rung("cd('/deep')", on=two)
   await settle()
-  assert engine.cwd(on=two) == "/w"
+  assert engine.cwd(on=two) == "/deep"
+  later = (STANDS[0], "/z", STANDS[2])
+  life(Sand(stands=later), list(sand.record))
+  await settle(300)
+  assert engine.cwd(on=root) == "/z" and engine.cwd(on=two) == "/deep"
 
 
 async def test_the_world_resolves_the_path_of_a_read_a_write_and_a_command_against_the_working_directory() -> None:

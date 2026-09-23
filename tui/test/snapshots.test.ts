@@ -214,3 +214,30 @@ test("a take carries the acts that changed after the count it is given, and ever
     await rm(cwd, { recursive: true, force: true });
   }
 }, 30000);
+
+test("a stood about a chain drops the roster, the directory and the actor that its view read", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-stood-"));
+  const host = hostModels();
+  const world = new World({ cwd, models: host.models, model: defaultModel });
+  try {
+    const life = world.open();
+    const snapshots = new Snapshots(life, world);
+    const before = snapshots.take(life.root);
+    expect([before.roster.map(([name]) => name), before.directory, before.actor]).toEqual([
+      [defaultModel, "operator"],
+      cwd,
+      `${defaultModel}/low`,
+    ]);
+    life.send("stood", life.root, [[[["operator", [], 200000]], join(cwd, "elsewhere"), "operator"]]);
+    await Promise.resolve();
+    const after = snapshots.take(life.root);
+    expect([after.roster, after.directory, after.actor]).toEqual([
+      [["operator", [], 200000]],
+      join(cwd, "elsewhere"),
+      "operator",
+    ]);
+  } finally {
+    await world.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
+});

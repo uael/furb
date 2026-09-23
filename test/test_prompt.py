@@ -187,12 +187,15 @@ async def test_a_rung_need_not_wait_for_a_prompt_of_shape_none() -> None:
 
 
 async def test_the_actor_left_unsaid_is_the_default_actor_of_the_chain() -> None:
-  """The actor left unsaid is the default actor of the chain."""
+  """The actor left unsaid is the default actor of the chain when the prompt is made, which the prompt writes into the actor word of every rung it makes, so every life asks the one actor the record holds."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  sand.script[root] = ["actor = 'n/low'", "close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
-  assert [one[4] for one in said(log, "ask")] == ["m/low"] == [engine.modules[root]["actor"]]
+  assert [one[4] for one in said(log, "ask")] == ["m/low", "m/low"] == [one[6] for one in said(log, "rung")]
+  assert engine.modules[root]["actor"] == "n/low"
+  again, _ = await relived(Sand(stands=(STANDS[0], "/w", "n/low")), list(sand.record))
+  assert [one[6] for one in said(again, "rung")] == ["m/low", "m/low"] and said(again, "ask") == []
   alone = Sand(stands=(((OPERATOR, (), 200000),), "/w", OPERATOR))
   log, root = life(alone)
   shown = engine.prompt(str, "what now?", on=root)
