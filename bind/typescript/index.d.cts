@@ -116,6 +116,15 @@ export interface Inspection {
   value?: unknown
 }
 
+/**
+ * Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
+ * and at a shutdown, with the name of the event: `break`, `close`, `logoff` or `shutdown`. The system holds the
+ * process until the callback ends it, or, at a close, a logoff or a shutdown, until the system's own limit. A later
+ * callback replaces an earlier one. Ctrl+C stays SIGINT, which the host hears as a signal. A system that is not
+ * Windows has no such console, and gives this callback no event.
+ */
+export declare function onConsoleEnd(callback: (event: "break" | "close" | "logoff" | "shutdown") => void): void
+
 export interface Outcome {
   done: boolean
   value: unknown

@@ -602,6 +602,7 @@ dependencies = [
  "pyo3",
  "same-file",
  "serde_json",
+ "windows-sys",
 ]
 
 [[package]]

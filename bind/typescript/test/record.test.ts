@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RecordLock } from "../src/index.ts";
@@ -60,11 +60,16 @@ test("a holder may move the lock file, and two processes never own the record at
   const cwd = await mkdtemp(join(tmpdir(), "furb-lease-"));
   const path = join(cwd, "record.jsonl");
   const racer = join(import.meta.dir, "lease-racer.ts");
+  const roles = ["", "", "", "", "", "", "move", "move"];
   try {
-    const until = String(Date.now() + 1500);
-    const racers = ["", "", "", "", "", "", "move", "move"].map((role) =>
-      Bun.spawn([process.execPath, racer, path, until, role], { stdout: "pipe", stderr: "pipe" }),
+    const racers = roles.map((role) =>
+      Bun.spawn([process.execPath, racer, path, "50", role], { stdout: "pipe", stderr: "pipe" }),
     );
+    // The race starts once every contender has loaded, however long a system takes to start a process.
+    const ready = async () => (await readdir(cwd)).filter((name) => name.includes(".ready.")).length;
+    for (const deadline = Date.now() + 20000; (await ready()) < roles.length; await Bun.sleep(20))
+      if (Date.now() > deadline) throw new Error(`${await ready()} of ${roles.length} contenders are ready.`);
+    await writeFile(`${path}.go`, "");
     const ends = await Promise.all(
       racers.map(async (child) => ({
         code: await child.exited,
@@ -73,8 +78,8 @@ test("a holder may move the lock file, and two processes never own the record at
       })),
     );
     expect(ends.map(({ code, error }) => (code ? error : ""))).toEqual(ends.map(() => ""));
-    expect(ends.every(({ taken }) => taken > 0)).toBe(true);
+    expect(ends.map(({ taken }) => taken)).toEqual(ends.map(() => 50));
   } finally {
     await rm(cwd, { recursive: true });
   }
-}, 30000);
+}, 60000);

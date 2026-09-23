@@ -84,9 +84,9 @@ function windowsConsole(
 }
 
 // Unix ends a process by a signal from another; Windows sends Ctrl+Break to the processes of a console.
-const signals: NodeJS.Signals[] = process.platform === "win32" ? ["SIGBREAK"] : ["SIGHUP", "SIGTERM"];
-for (const signal of signals)
-  test(`${signal} ends the TUI as its quit does: the draft is saved, commands end, and the record is free`, async () => {
+const endings = process.platform === "win32" ? ["Ctrl+Break"] : ["SIGHUP", "SIGTERM"];
+for (const ending of endings)
+  test(`${ending} ends the TUI as its quit does: the draft is saved, commands end, and the record is free`, async () => {
     const directory = await mkdtemp(join(tmpdir(), "furb-signal-"));
     const project = join(directory, "project");
     const pidFile = join(directory, "command.pid");
@@ -94,7 +94,9 @@ for (const signal of signals)
     const cli = [process.execPath, join(import.meta.dir, "../src/cli.ts"), "--demo", "--cwd", project];
     const env = { ...process.env, FURB_CONFIG_DIR: join(directory, "config") };
     const tui =
-      process.platform === "win32" ? windowsConsole(cli, env, directory) : terminal(cli, env, signal);
+      process.platform === "win32"
+        ? windowsConsole(cli, env, directory)
+        : terminal(cli, env, ending as NodeJS.Signals);
     try {
       await eventually(() => tui.screen().includes("Ready"), "the first frame");
       tui.type(`!${printPid} > '${pidFile}'; sleep 30\r`);

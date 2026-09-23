@@ -3,6 +3,7 @@
 // argument exists. This process exits with the exit code of the command.
 import { dlopen, FFIType } from "bun:ffi";
 import { existsSync } from "node:fs";
+import { onConsoleEnd } from "@furb/engine";
 
 const { symbols } = dlopen("kernel32.dll", {
   FreeConsole: { args: [], returns: FFIType.i32 },
@@ -13,8 +14,9 @@ const CTRL_BREAK_EVENT = 1;
 const [trigger = "", ...command] = process.argv.slice(2);
 symbols.FreeConsole();
 if (!symbols.AllocConsole()) throw new Error("This process could not make a console of its own.");
-// This process hears the Ctrl+Break too, and lives on to give the exit code of the command.
-process.on("SIGBREAK", () => {});
+// Ctrl+Break reaches this process too, and the handler of the console end holds it, so it lives on to give the exit
+// code of the command.
+onConsoleEnd(() => {});
 const child = Bun.spawn(command, { stdin: "inherit", stdout: "inherit", stderr: "inherit" });
 let exited = false;
 void child.exited.then(() => {

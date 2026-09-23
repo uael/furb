@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { efforts, furbDirectory, type WorldOptions } from "@furb/engine";
+import { efforts, furbDirectory, onConsoleEnd, type WorldOptions } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
 import { App } from "./app.ts";
 import { demoDirectory, removeDemoDirectories } from "./demo.ts";
@@ -134,6 +134,7 @@ library.on("select", (session) => {
   app.dispose();
   app = new App(renderer, session, options);
 });
-// On Windows, a console that closes gives SIGHUP, and Ctrl+Break gives SIGBREAK.
-for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT", "SIGBREAK"] as const)
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)
   process.once(signal, () => void quit().finally(() => process.exit()));
+// The runtime gives no signal for Ctrl+Break or for the close of the console of Windows, and ends the process at once.
+onConsoleEnd(() => void quit().finally(() => process.exit()));

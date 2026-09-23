@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
@@ -41,12 +41,19 @@ test("record inspection derives pending work without taking its lock, writing fi
     const prompt = life.prompt("str", "Question", { to: "operator" }).id;
     const before = await readFile(record, "utf8");
     const metadata = await readFile(`${record}.world.json`, "utf8");
-    const lock = await readFile(`${record}.lock`, "utf8");
+    // The lock file holds no text, and Windows refuses a read of a file that another handle has locked, so the test
+    // reads what the system keeps of it.
+    const locked = async () => {
+      const { size, mtimeMs } = await stat(`${record}.lock`);
+      return { size, mtimeMs };
+    };
+    const lock = await locked();
+    // The World holds the lease while the inspection runs, so an inspection that took it would be refused.
     const first = await inspectRecord(record);
     expect(first.held.map(([id]) => id)).toEqual([waiting, prompt]);
     expect(await readFile(record, "utf8")).toBe(before);
     expect(await readFile(`${record}.world.json`, "utf8")).toBe(metadata);
-    expect(await readFile(`${record}.lock`, "utf8")).toBe(lock);
+    expect(await locked()).toEqual(lock);
     expect(await readFile(join(cwd, "value.txt"), "utf8")).toBe("once");
     life.cancel(waiting);
     life.close("answered", prompt);

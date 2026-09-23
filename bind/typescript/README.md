@@ -19,7 +19,9 @@ TypeScript World to JavaScript. The package runs on Bun and Node.js 22 or later,
 The supplied World runs a command with `/bin/sh`, and on Windows with the `sh` on `PATH`, such as the one of Git
 for Windows. It ends a command with the processes that the command started: on Unix by the process group of the
 command, and on Windows by its tree of processes, through `taskkill`. Build the native binary for the host before
-using the package.
+using the package. Bun gives no signal on Windows for Ctrl+Break or for the close of the console, and ends the process
+at once. `onConsoleEnd(callback)` hears these events there, and the system holds the process until the callback ends
+it; the TUI quits through it.
 
 ```ts
 import { boot } from "@furb/engine";
@@ -131,8 +133,9 @@ nothing more. `World.open` refuses such a record with the drift.
 
 Only one process owns a record. Its `RecordLock` holds a lock on `<record>.lock`, which the system releases
 when the process ends, so a lease of a process that ended never blocks an open. The holder may move the lock file
-with the record, and a process that locked the moved file opens the path again. A torn final line is removed before
-an append; a damaged complete line fails.
+with the record, and a process that locked the moved file opens the path again. On Windows the lock also refuses
+a read of the file by any other handle; the file holds no text, and nothing reads it. A torn final line is removed
+before an append; a damaged complete line fails.
 A later open holds unfinished work, in `world.held`, before any model, command, wait or operator question
 starts, and `world.resume()` explicitly releases it. The World pauses no chain to hold work, so every pause
 that the record holds stands after resume: one of the operator, of a grant, or of two failed asks in a row.
