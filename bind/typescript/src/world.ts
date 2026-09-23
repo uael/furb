@@ -91,8 +91,9 @@ export type { FileChange } from "./changes.js";
 type Actor = [name: string, efforts: string[], window: number];
 /** What the World keeps beside its record for the next life. */
 interface Saved {
-  options: WorldOptions;
-  actors?: Actor[];
+  /** The directory, and the model and the effort the host chose last, which a later World takes when its host names
+   * none. */
+  options: Pick<WorldOptions, "cwd" | "model" | "effort">;
   deadlines?: [string, number][];
   streams?: [string, { chain: string; text: string; thinking: string }][];
 }
@@ -168,19 +169,15 @@ export class World extends EventEmitter {
     let changes: FileChanges | undefined;
     try {
       this.models = options.models ?? builtinModels();
-      // What the host names must route. What a saved record names stays, whether it routes or not: the record was
-      // lived on it, so a later life stands on it too, and an ask of a model gone since fails as the ask it is.
-      for (const name of named.model ? [named.model, ...named.roster] : named.roster) this.route(name);
-      const kept = [saved?.options.model ?? "", ...(saved?.options.roster ?? [])].filter(Boolean);
-      this.model = named.model ?? kept[0] ?? named.roster[0];
-      this.roster = [...new Set([this.model, ...kept, ...named.roster])].filter((name) => name !== undefined);
-      const standing = new Map((saved?.actors ?? []).map(([name, ...rest]) => [name, rest] as const));
+      // What the host names must route. The model a saved record names is a preference of the host, which a later
+      // World takes only while it holds that model: the record keeps what it was lived on, and a stood tells each
+      // chain what it stands on now.
+      const preferred = saved?.options.model;
+      this.model = named.model ?? (preferred && this.offers(preferred) ? preferred : named.roster[0]);
+      this.roster = [...new Set([this.model, ...named.roster])].filter((name) => name !== undefined);
       this.actors = this.roster.map((name): Actor => {
-        const model = this.offers(name);
-        if (model) return [name, getSupportedThinkingLevels(model), model.contextWindow];
-        const actor = standing.get(name);
-        if (!actor) throw new Error(`No model ${name}, and the record keeps no standing of it.`);
-        return [name, ...actor];
+        const model = this.route(name);
+        return [name, getSupportedThinkingLevels(model), model.contextWindow];
       });
       const model = this.model ? this.offers(this.model) : undefined;
       this.effort = model ? clampThinkingLevel(model, options.effort ?? "low") : (options.effort ?? "low");
@@ -554,8 +551,7 @@ export class World extends EventEmitter {
     if (!record || this.options.readOnly) return;
     const path = `${record}.world.json`;
     const saved: Saved = {
-      options: { cwd: this.directory, model: this.model, effort: this.effort, roster: this.roster },
-      actors: this.actors,
+      options: { cwd: this.directory, model: this.model, effort: this.effort },
       deadlines: [...this.deadlines],
       streams: [...this.streams],
     };
