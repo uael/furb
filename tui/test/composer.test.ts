@@ -142,6 +142,11 @@ test("a command that the text names whole comes first among its suggestions", ()
 test("a sent text leaves its draft at once, and a program under edit opens from its door the next time", () =>
   composing(
     async ({ session, app, screen, frame }) => {
+      // /edit opens the latest prompt with a program, so the demo settles first: its last prompt may still run.
+      await until(
+        session,
+        () => !session.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)),
+      );
       const prompt = session.draftKey;
       await screen.mockInput.typeText("/edit");
       await frame();
