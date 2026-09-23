@@ -195,7 +195,7 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
   operator, and the host says the result into the life later, as the fact the engine waits for. It feeds a command
   and ends every command a control is over, and it keeps what the journal says to keep.
   """
-  cwd, ask, acts, under = verb(names, "cwd"), verb(names, "ask"), names["acts"], verb(names, "under")
+  cwd, ask, acts, covers = verb(names, "cwd"), verb(names, "ask"), names["acts"], verb(names, "covers")
   assert isinstance(acts, dict)
   running: set[str] = set()
 
@@ -233,8 +233,8 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
         world.feed(about, text)
       case ("exited", about, *_):
         running.discard(about)
-      case ("cancel" | "close", about, *_):
-        for one in [x for x in running if under(x, about) or acts[x][3] == about]:
+      case ("cancel" | "close", *_) as fact:
+        for one in [x for x in running if covers(fact, x)]:
           running.discard(one)
           world.slay(one)
       case ("keep", _, _, entry):

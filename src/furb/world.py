@@ -39,7 +39,7 @@ from pydantic_ai.models import Model
 from python_minifier import minify
 
 from furb import engine
-from furb.engine import WORLD, Drift, Refused, Text, under
+from furb.engine import WORLD, Drift, Refused, Text
 from furb.provider.claude import ACTOR, Claude, Settings, actors
 
 type World = Generator[tuple | None, tuple]
@@ -167,7 +167,6 @@ class Command:
   """
 
   id: str
-  on: str
   command: str
   fed: bool
   timeout: float
@@ -458,7 +457,7 @@ class Live:
           match acts[about]:
             case ("bash", _, _, on, command, fed, timeout):
               merged = engine.ask("merged", on, about)[1]
-              running[about] = held = Command(about, on, command, fed, timeout, bool(merged))
+              running[about] = held = Command(about, command, fed, timeout, bool(merged))
               start(self.ran(held, engine.cwd(on=on)))
             case ("wait", _, _, _, seconds):
               loop.call_later(seconds, partial(engine.send, "done", about, None, by=WORLD))
@@ -474,8 +473,8 @@ class Live:
           start(self.asked(rung, on, actor, turns))
         case ("feed", about, _, text) if about in running:
           running[about].feed(text)
-        case ("cancel" | "close", about, *_):
-          for one in [x for x in running.values() if under(x.id, about) or x.on == about]:
+        case ("cancel" | "close", *_):
+          for one in [x for x in running.values() if engine.covers(a, x.id)]:
             one.over = True
             one.slay()
             yield "exited", one.id, None

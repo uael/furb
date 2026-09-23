@@ -40,7 +40,7 @@ def world(yard: Path, model: Model[object] | None = None, record: Path | None = 
 
 def commanded(proc: Process | None = None) -> Command:
   """One command of the World, merged and unfed, with the process it is given or with none at all."""
-  return Command("bash1", "chain1", "x", False, TIMEOUT, True, proc)
+  return Command("bash1", "x", False, TIMEOUT, True, proc)
 
 
 async def drained() -> None:
@@ -177,6 +177,25 @@ async def test_a_cancelled_command_dies_instead_of_running_on(yard: Path) -> Non
   # World never returns: the tasks of the life fall to the test alone only when the whole group is dead.
   await drained()
   assert asyncio.all_tasks() == {asyncio.current_task()}
+
+
+async def test_a_command_ends_at_a_cancel_of_its_prompt_and_runs_on_after_a_close_of_it(yard: Path) -> None:
+  """The World ends a command only at a control that covers puts over it: a cancel is over everything under the
+  prompt it names, so it ends the command that a rung of the prompt made, and a close is over the act it names and
+  the words running under it, so the command runs to its end."""
+  live = world(yard, scripted(["c = bash('sleep 30')\nawait wait(60)", "c = bash('sleep 0.3; echo late')\nclose(1)"]))
+  root = life(live)
+  cancelled = engine.prompt(int, "go", on=root)
+  for _ in range(2000):
+    await asyncio.sleep(0.001)
+    if "bash1" in engine.acts:
+      break
+  engine.cancel(cancelled)
+  with pytest.raises(asyncio.CancelledError):
+    await engine.Act("bash1")
+  assert await engine.prompt(int, "go", on=root) == 1
+  got = await engine.Act[Exit]("bash2")
+  assert (got.code, got.stdout.content) == (0, "late\n")
 
 
 async def test_a_command_still_up_when_its_run_is_cancelled_is_reaped(yard: Path) -> None:
