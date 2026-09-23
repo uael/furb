@@ -233,7 +233,7 @@ export class World extends EventEmitter {
       (fact) => {
         if (this.stopped || this.momentary(fact)) return;
         this.facts.push(fact);
-        this.activity.hear(fact);
+        return this.activity.hear(fact);
       },
     );
     this.ears = this.adapter.ears;
@@ -392,8 +392,12 @@ export class World extends EventEmitter {
 
   /** Each kind of question the act table does not know, asked of the life once, outside any ear. */
   private learnKinds(): void {
+    const life = this.life;
+    if (!life) return;
     for (const [kind, id] of this.activity.unknown)
-      this.activity.learn(kind, this.life?.held("acts", [id], "in") === true, this.facts);
+      this.activity.learn(kind, life.held("acts", [id], "in") === true, this.facts, (question) =>
+        life.call(question.verb, question.args ?? [], question.kwargs ?? {}),
+      );
   }
 
   /** Whether a fact answers a query the operator asked outside a run. Such a query is of the moment: the record

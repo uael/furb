@@ -141,7 +141,8 @@ that were started live in the record's `.world.json` companion. File snapshots a
 `inspectRecord(path, models)` reads pending work through the same native replay without taking a record lock,
 writing files, or starting a model or command. The TUI runs this inspection in its own worker. `World.activity` holds
 the state of every act, derived once from the facts as the life hears them, so a host reads it without asking the
-sandbox. `World.isPaused` and `World.rungState` read it.
+sandbox. It asks the engine's `covers` which live acts a pause or a wake is over, one call for each act whose state
+the control would change. `World.isPaused` and `World.rungState` read it.
 
 `world.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type,
 size, and `furb-image://` reference. Put that reference in the prompt as a Markdown image,

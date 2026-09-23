@@ -32,7 +32,7 @@ const fault = (error: unknown) =>
     : { is: "Refused", args: [error instanceof Error ? error.message : String(error)] };
 const synchronous = (value: unknown) => {
   if (value && typeof value === "object" && "then" in value && typeof value.then === "function")
-    throw new Error("This World query must answer synchronously.");
+    throw new Error("A request to the World or a callable of the host must answer synchronously.");
   return value ?? null;
 };
 
@@ -100,7 +100,8 @@ export class WorldAdapter {
     readonly handle: WorldHandler,
     readonly onFacts?: (facts: Fact[]) => void,
     readonly onFault?: (error: unknown) => void,
-    readonly onFact?: (fact: Fact) => void,
+    /** Hears each fact, and may ask the life while it hears through the calls it yields. */
+    readonly onFact?: (fact: Fact) => Generator<Call, void, unknown> | undefined,
   ) {
     const owner = this;
     let queued = false;
@@ -110,7 +111,8 @@ export class WorldAdapter {
         const fact = (yield null) as Fact;
         if (fact) {
           facts.push(fact);
-          onFact?.(fact);
+          const hearing = onFact?.(fact);
+          if (hearing) yield* hearing;
         }
         if (!queued) {
           queued = true;

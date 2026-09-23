@@ -1,3 +1,4 @@
+import type { Call } from "./ears.js";
 import { display, type Fact, isTag } from "./types.js";
 
 export interface RunState {
@@ -12,18 +13,20 @@ export interface LiveAct {
   words: unknown[];
   done: boolean;
   value: unknown;
+  /** Whether a pause stands over the act while it lives. */
   paused: boolean;
   run?: RunState;
 }
+/** The questions the table asks the engine while it hears a fact. */
+type Hearing<T = void> = Generator<Call, T, unknown>;
 const exception = (value: unknown): value is { is: string; args: unknown[] } =>
   Boolean(value && typeof value === "object" && "is" in value && "args" in value);
-const lineage = (id: string) => id.split("://").at(-1) ?? "";
-const under = (id: string, parent: string) =>
-  Boolean(parent) && `${lineage(id)}.`.startsWith(`${lineage(parent)}.`);
+const covers = (control: Fact, id: string): Call => ({ verb: "covers", args: [control, id] });
 
-/** The observable state of acts, updated once as facts enter the life. No sandbox query is needed but one per
- * kind of question the file does not make: a kind is made by one verb, an act or a query, and the last ear hears
- * every act but only a query nobody answered, so a fact alone cannot say which its kind is. */
+/** The observable state of acts, updated once as facts enter the life. It asks the engine what a fact alone cannot
+ * say. One question per kind of question the file does not make: a kind is made by one verb, an act or a query,
+ * and the last ear hears every act but only a query nobody answered. And covers, for a pause or a wake and each
+ * live act whose state it would change, and for a new act and the controls that could decide its state. */
 export class Activity {
   readonly acts = new Map<string, LiveAct>();
   completed = 0;
@@ -42,15 +45,17 @@ export class Activity {
   private changed = new Map<string, number>();
   /** The count of changes when the table was last derived again: a reader behind it takes the whole table. */
   private derived = 0;
-  private controls = new Map<string, { paused: boolean; order: number }>();
+  /** The last pause or wake of each act it names, oldest first. A pause and a wake are over acts by the act they
+   * name alone, so an earlier control of the same name decides nothing more. */
+  private controls = new Map<string, Fact>();
   private children = new Map<string, Set<string>>();
   private ran = new Map<string, unknown>();
   private refused = new Map<string, string>();
   private merged = new Map<string, boolean>();
-  private order = 0;
 
-  /** What the life said of a kind: an act kind derives the table again from the facts, which now hold its acts. */
-  learn(kind: string, act: boolean, facts: readonly Fact[]): void {
+  /** What the life said of a kind: an act kind derives the table again from the facts, which now hold its acts, and
+   * asks the engine through the call it is given. */
+  learn(kind: string, act: boolean, facts: readonly Fact[], call: (question: Call) => unknown): void {
     this.kinds.set(kind, act);
     this.unknown.delete(kind);
     if (!act) return;
@@ -62,11 +67,13 @@ export class Activity {
     this.ran = new Map();
     this.refused = new Map();
     this.merged = new Map();
-    this.order = 0;
     this.generation++;
     this.changed = new Map();
     this.derived = this.changes;
-    for (const fact of facts) this.hear(fact);
+    for (const fact of facts) {
+      const hearing = this.hear(fact);
+      for (let step = hearing.next(); !step.done; step = hearing.next(call(step.value)));
+    }
   }
 
   /** The rows that changed after a count of changes, all of them when the table was derived again since, and the
@@ -80,7 +87,7 @@ export class Activity {
     this.changed.set(act.id, ++this.changes);
   }
 
-  hear(fact: Fact): void {
+  *hear(fact: Fact): Hearing {
     const [kind, id, by] = fact;
     const question = id.startsWith(`${kind}://`);
     const known = this.kinds.get(kind);
@@ -94,15 +101,9 @@ export class Activity {
         words: fact.slice(4),
         done: false,
         value: null,
-        paused: false,
+        paused: yield* this.pausedAtBirth(id),
         ...(kind === "rung" ? { run: { status: "running" as const, reason: "" } } : {}),
       };
-      let order = 0;
-      for (const [target, control] of this.controls)
-        if (control.order > order && (target === act.on || under(id, target))) {
-          act.paused = control.paused;
-          order = control.order;
-        }
       if (kind === "bash")
         act.value = {
           is: "Exit",
@@ -121,9 +122,10 @@ export class Activity {
       this.cost += Number(fact[3][2][4] ?? 0);
     if (kind === "pause" || kind === "wake") {
       const paused = kind === "pause";
-      this.controls.set(id, { paused, order: ++this.order });
-      for (const row of this.acts.values())
-        if (row.on === id || under(row.id, id)) {
+      this.controls.delete(id);
+      this.controls.set(id, fact);
+      for (const row of [...this.acts.values()])
+        if (!row.done && row.paused !== paused && (yield covers(fact, row.id))) {
           row.paused = paused;
           this.mark(row);
         }
@@ -156,6 +158,17 @@ export class Activity {
       stream.content += String(fact[3]);
       this.mark(act);
     }
+  }
+  /** Whether the last control over a new act is a pause. Only a control no older than the oldest pause can make
+   * it one. */
+  private *pausedAtBirth(id: string): Hearing<boolean> {
+    const controls = [...this.controls.values()];
+    const oldest = controls.findIndex(([kind]) => kind === "pause");
+    for (let at = controls.length - 1; oldest >= 0 && at >= oldest; at--) {
+      const control = controls[at] as Fact;
+      if (yield covers(control, id)) return control[0] === "pause";
+    }
+    return false;
   }
   private updateRun(act: LiveAct): void {
     if (act.kind !== "rung") return;

@@ -55,6 +55,40 @@ test("record inspection derives pending work without taking its lock, writing fi
   }
 });
 
+test("the act table holds an act paused while the last pause or wake that covers puts over it is a pause", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-paused-"));
+  const world = new World({ cwd });
+  try {
+    const life = world.open();
+    const two = life.chain("two").id;
+    const here = life.wait(60).id;
+    const there = life.wait(60, two).id;
+    const paused = () => [life.root, two, here, there].filter((id) => world.isPaused(id));
+    life.pause(two);
+    expect(paused()).toEqual([two, there]);
+    const later = life.wait(60, two).id;
+    expect(world.isPaused(later)).toBe(true);
+    life.pause(here);
+    expect(paused()).toEqual([two, here, there]);
+    life.wake(two);
+    expect(paused()).toEqual([here]);
+    expect(world.isPaused(later)).toBe(false);
+    life.pause(life.root);
+    life.wake(here);
+    expect(paused()).toEqual([life.root]);
+    expect(world.isPaused(life.wait(60).id)).toBe(true);
+    expect(world.isPaused(life.wait(60, two).id)).toBe(false);
+    // An act of a kind the file does not make derives the table again from every fact, with the same answers.
+    const generation = world.activity.generation;
+    await life.rung('note = act("note", "", idle)', { on: two });
+    await until(world, () => world.activity.generation > generation);
+    expect(paused()).toEqual([life.root]);
+  } finally {
+    await world.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("the standing takes each model's efforts from its pi-ai metadata", async () => {
   expect(getSupportedThinkingLevels(cliModel("sonnet"))).toEqual(["low", "medium", "high", "xhigh", "max"]);
   expect(actorParts("claude-cli:org/plain")).toEqual({ model: "claude-cli:org/plain", effort: "off" });
