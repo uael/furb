@@ -57,9 +57,13 @@ impl Fact {
     self.word(0).and_then(|one| one.as_str()).unwrap_or_default()
   }
 
-  /// Whether the fact is a question: one whose name begins with its kind.
+  /// Whether the fact is a question: one whose name is its kind and a number, as an act is named, or its kind, `@`
+  /// and more, as a query is named.
   pub fn question(&self) -> bool {
-    self.about().starts_with(&format!("{}://", self.kind()))
+    self.about().strip_prefix(self.kind()).is_some_and(|rest| match rest.strip_prefix('@') {
+      Some(maker) => !maker.is_empty(),
+      None => !rest.is_empty() && rest.bytes().all(|one| one.is_ascii_digit()),
+    })
   }
 
   fn at(&self, i: usize) -> &str {
@@ -71,14 +75,4 @@ impl PartialEq for Fact {
   fn eq(&self, other: &Self) -> bool {
     self.0.py_repr() == other.0.py_repr()
   }
-}
-
-/// The lineage of a name: what follows its scheme, which is what `under` compares.
-pub fn lineage(name: &str) -> &str {
-  name.rsplit_once("://").map_or(name, |(_, rest)| rest)
-}
-
-/// Whether a name is under another: the same lineage, or one that continues it by a dot.
-pub fn under(name: &str, of: &str) -> bool {
-  !of.is_empty() && format!("{}.", lineage(name)).starts_with(&format!("{}.", lineage(of)))
 }

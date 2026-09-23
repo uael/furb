@@ -57,16 +57,16 @@ async def first(yard: Path, record: Path) -> None:
   except TimeoutError:
     say(f"no answer in {STALL:.0f} seconds: {len(asks(world.calls))} ask(s) cost {spent(record):.4f} dollars")
     # A chain at the ceiling of its grant is paused and answers nothing more, which is why nothing came back.
-    shown = [tag for turn in engine.turns(on=root) for tag in turn[1] if isinstance(tag, tuple)]
-    if [tag for tag in shown if tag[0] == "paused"]:
+    heads = [line.split()[1:2] for turn in engine.turns(on=root) for line in turn[1].split("\n") if line[1:2].isalnum()]
+    if ["paused"] in heads:
       say(f"the chain is paused: the grant of {CEILING} dollars holds it at its ceiling")
     raise
   finally:
     await cool()
   say(f"the first life gave {got!r}, after {len(asks(world.calls))} ask(s)")
   for one in told(record):
-    _, content, usage, _ = one[3]
-    say(f"the word of the model:\n{'\n'.join(x for x in content if isinstance(x, str))}")
+    _, word, usage, _ = one[3]
+    say(f"the word of the model:\n{word}")
     say(f"the usage of the answer: {usage}")
   assert got == LINES, f"the model answered {got!r} and not {LINES}"
 

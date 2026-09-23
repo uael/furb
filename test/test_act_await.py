@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import STANDS, Sand, attr, life, said, settle, tags
+from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -77,10 +77,16 @@ async def test_a_word_that_awaits_a_chain_raises_refused_where_it_waited() -> No
   sand.script[root] = ["sub = chain('sub')\nawait sub\nclose(1)", "close(2)"]
   assert await engine.prompt(int, "fork", on=root) == 2
   await settle()
-  raised = tags(engine.turns(on=root), "raised")
-  assert [attr(one, "type") for one in raised] == ["Refused"]
-  assert "never settles" in str(attr(raised[0], "message"))
-  assert [a[4] for a in said(log, "chain")] == ["root", "sub"]
+  assert heads(engine.turns(on=root)) == [
+    "#chain1 root",
+    f"#chain1 stands {STANDS!r}",
+    "#prompt1 fork",
+    "#rung1 advance on prompt1",
+    "#rung1 raised Refused('chain2 never settles')",
+    "#rung3 advance on prompt1",
+    "#prompt1 closed 2",
+  ]
+  assert [(a[1], a[4]) for a in said(log, "chain")] == [("chain1", "root"), ("chain2", "sub")]
 
 
 async def test_the_awaiter_of_the_prompt_raises_that_exception() -> None:

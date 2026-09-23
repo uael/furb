@@ -41,7 +41,7 @@ from tempfile import gettempdir, mkdtemp
 from furb import engine
 from furb.cli import lived, say
 from furb.provider.claude import BIN, cool
-from furb.world import Live, kept, rendered
+from furb.world import Live, kept
 
 ROOT = Path(__file__).resolve().parent.parent
 """ROOT is the root of this repository, which the archive of a run stands under."""
@@ -516,7 +516,7 @@ def watched(record: Path, root: str, began: float, mark: dict[str, int]) -> str:
   """Say how the life is doing, and why it is going nowhere when it is.
 
   A chain past the ceiling of its grant is paused and buys nothing more, and nothing here wakes it, so the run is
-  over the moment the pause stands; the turns say it, since a control tells a tag of its own name. A life that
+  over the moment the pause stands; the turns say it, since a control tells a header of its own name. A life that
   buys answers and does nothing with them is wedged, which the mark of the last thing it did says.
   """
   numbers = numbered(record, root, began, None)
@@ -524,8 +524,8 @@ def watched(record: Path, root: str, began: float, mark: dict[str, int]) -> str:
     f"[deepswe] {numbers['wall_seconds']}s: asks={numbers['asks']} commands={numbers['commands']} "
     f"reads={numbers['reads']} writes={numbers['writes']} ${dollars(numbers):.4f}"
   )
-  named = [one[0] for turn in engine.turns(on=root) for one in turn[1] if isinstance(one, tuple)]
-  held = [one for one in named if one in ("paused", "woke")]
+  heads = [line.split()[1:2] for turn in engine.turns(on=root) for line in turn[1].split("\n") if line[1:2].isalnum()]
+  held = [one for (one,) in filter(None, heads) if one in ("paused", "woke")]
   if held[-1:] == ["paused"]:
     return "a pause stands over the chain, which buys nothing more"
   did = sum(counted(numbers, name) for name in ("commands", "reads", "writes"))
@@ -646,9 +646,9 @@ def turns(args: argparse.Namespace) -> int:
     root = engine.boot(kept(record), world=Live(str(WORK / args.task / "app"), None, args.to).hears())
     for _ in range(400):
       await asyncio.sleep(0)
-    for n, (role, content, _, _) in enumerate(engine.turns(on=root)):
+    for n, (role, py, _, _) in enumerate(engine.turns(on=root)):
       say(f"{'=' * 100}\n[{n} {role}]")
-      say(rendered(content))
+      say(py)
     await cool()
 
   asyncio.run(folded())

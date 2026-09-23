@@ -1,6 +1,6 @@
 """wake, which ends a pause and gives what waited."""
 
-from conftest import STANDS, Sand, gated, life, ran, said, settle, tags
+from conftest import STANDS, Sand, gated, life, paragraphs, ran, said, settle
 from furb import engine
 from furb.engine import WORLD
 
@@ -18,7 +18,11 @@ async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_hea
   engine.wake(act)
   await settle()
   assert (await act).code == 3
-  assert tags(engine.turns(on=root), "woke") == [("woke", [("over", act)], None)]
+  assert paragraphs(engine.turns(on=root))[-3:] == [
+    f"#{act} paused",
+    f"#{act} woke",
+    f"#{act} exited 3\n# {act}/stdout, 0 known",
+  ]
 
 
 async def test_delivery_carries_on_the_rungs_that_await_the_result_on_whatever_chain() -> None:
@@ -97,10 +101,11 @@ async def test_a_wake_gates_and_runs_a_held_response() -> None:
   act = engine.prompt(int, "count", on=root)
   engine.pause(root)
   await settle()
-  assert gated(log) == [] and said(log, "run") == []
+  bound = f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"
+  assert gated(log) == [] and ran(log) == [bound]
   engine.wake(root)
   await settle()
-  assert gated(log) == ["close(7)"] and ran(log) == ["close(7)"] and (await act) == 7
+  assert gated(log) == ["close(7)"] and ran(log) == [bound, "close(7)"] and (await act) == 7
 
 
 async def test_a_wake_makes_a_prompt_ask_with_the_transcript_as_it_grew() -> None:
@@ -111,13 +116,13 @@ async def test_a_wake_makes_a_prompt_ask_with_the_transcript_as_it_grew() -> Non
   act = engine.prompt(int, "count", on=root)
   engine.pause(act)
   await settle()
-  engine.send("tell", root, [("noted", [], None)])
+  engine.send("tell", root, [f"#{root} noted"])
   engine.wake(act)
   await settle()
   asks = said(log, "ask")
   assert len(asks) == 2 and (await act) == 2
-  assert "noted" in [name for name, *_ in tags(asks[1][5])]
-  assert "noted" not in [name for name, *_ in tags(asks[0][5])]
+  assert f"#{root} noted" in paragraphs(asks[1][5])
+  assert f"#{root} noted" not in paragraphs(asks[0][5])
 
 
 async def test_a_wake_makes_no_ask_twice_and_loses_none() -> None:

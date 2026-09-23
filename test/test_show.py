@@ -1,10 +1,11 @@
 """Show, what says which lines of a text the engine tells."""
 
-from conftest import MANY, life, said, settle, shown, sown, tags
+from conftest import MANY, life, paragraphs, said, settle, sown
 from furb import engine
 from furb.engine import HEAD, Text, differs, grep, span
 
 ODD = "odd = lambda lines: [i for i in range(1, len(lines) + 1) if i % 2]\nread('a.txt', odd)\nclose(1)\n"
+"""A word of a rung that writes a show of its own, which picks the odd lines, and reads with it."""
 
 
 def test_a_show_is_given_the_lines_of_a_text_and_gives_the_numbers_of_the_lines_to_tell() -> None:
@@ -22,8 +23,7 @@ async def test_a_show_is_any_callable_of_that_shape() -> None:
   _, root = life(sand)
   sand.script[root] = [ODD]
   assert await engine.prompt(int, "show the odd lines", on=root) == 1
-  told = tags(engine.turns(on=root), "read")[0]
-  assert [one[2] for one in shown(told)] == ["1 one"]
+  assert engine.turns(on=root)[-1][1] == "#read a.txt\n# /w/a.txt, 0 known\n# 1 one\n\n#prompt1 closed 1"
 
 
 async def test_a_show_is_no_word_of_a_fact() -> None:
@@ -33,8 +33,12 @@ async def test_a_show_is_no_word_of_a_fact() -> None:
   sand.script[root] = ["read('a.txt', span(1, 1))\nx = bash('echo hi', show=span(1, 1))\nclose(1)"]
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
+  command = said(log, "bash")[0][1]
   assert said(log, "bash")[0][4:] == ("echo hi", False, 600.0)
-  assert said(log, "read")[0][4:] == ("a.txt",)
+  assert [a[4:] for a in engine.asked.values() if a[0] == "read"] == [("a.txt",)]
   assert [word for entry in sand.record for word in (*entry[1], *entry[2:]) if callable(word)] == []
-  told = tags(engine.turns(on=root), "read")[0]
-  assert [one[2] for one in shown(told)] == ["1 one"]
+  told = [one for one in paragraphs(engine.turns(on=root)) if one.startswith(("#read ", f"#{command} exited"))]
+  assert told == [
+    "#read a.txt\n# /w/a.txt, 0 known\n# 1 one",
+    f"#{command} exited 0\n# {command}/stdout, 0 known\n# 1 ran echo hi",
+  ]

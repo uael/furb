@@ -9,6 +9,7 @@ import ast
 import asyncio
 import builtins
 import json
+import re
 import sys
 from asyncio import CancelledError
 from collections.abc import Coroutine, Generator, Sequence
@@ -57,6 +58,9 @@ STANDS = (((OPERATOR, (), 200000), ("m", ("low", "high"), 400000), ("n", ("low",
 
 WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nclose((await x).code)"
 """A word of a rung that reads a file, starts a command and gives back what the command came to."""
+
+BAD = "line 1: error[unresolved-reference] Name `BAD` used when not defined"
+"""BAD is what the gate finds against a word whose first line names BAD, which nothing binds."""
 
 MANY = "".join(f"line {i}\n" for i in range(1, 301))
 """A text of three hundred lines, which is longer than what a tell of a text shows of it."""
@@ -173,14 +177,16 @@ class Sand:
           yield "done", qid, self.stands or ((), "", "")
         case ("read", qid, _, on, path) if (full := resolved(engine.cwd(on=on), path)) in self.files:
           yield "done", qid, Text(full, self.files[full])
-        case ("write", qid, _, on, Text(path=path, content=content)) if "://" not in path:
+        case ("write", qid, _, on, Text(path=path, content=content)) if (
+          "://" not in path and path.split("/")[0] not in engine.acts
+        ):
           self.files[full := resolved(engine.cwd(on=on), path)] = content
           yield "done", qid, Text(full, content)
         case ("ask", rung, _, on, _, _):
           running[rung] = on
           if self.script.get(on):
             word = self.script[on].pop(0)
-            turn = ("assistant", [word], self.cost or (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
+            turn = ("assistant", word, self.cost or (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
             loop.call_soon(partial(engine.send, "answer", rung, turn, by=WORLD))
         case ("cancel" | "close", *_):
           for one in list(running):
@@ -258,8 +264,9 @@ def seen(held: list[tuple]):  # noqa: ANN201
 
 
 def gated(log: Sequence[tuple]) -> list[str]:
-  """Every word the gate was given in the life, in order, which the ready of each rung says."""
-  return [a[3] for a in said(log, "ready")]
+  """Every word the gate was given in the life, in order, which the ready of each rung says that no chain made: a
+  chain gates no word it wrote itself, and a rung that retells stands with the gate where its donor stood."""
+  return [a[3] for a in said(log, "ready") if engine.acts.get(engine.acts[a[1]][2], ("",))[0] != "chain"]
 
 
 def ran(log: Sequence[tuple]) -> list[str]:
@@ -269,11 +276,11 @@ def ran(log: Sequence[tuple]) -> list[str]:
 
 def findings(log: Sequence[tuple]) -> list[list[str]]:
   """What the gate found against each word it was given, in order, which the done of each gate query says."""
-  return [a[3] for a in said(log, "done") if a[1].startswith("gate://")]
+  return [a[3] for a in said(log, "done") if a[1].startswith("gate@")]
 
 
 def refusals(log: Sequence[tuple]) -> list[str]:
-  """The findings that refused a word, each as the body the refused tag tells them as."""
+  """The findings that refused a word, each as the lines the refused paragraph tells as comments."""
   return ["\n".join(found) for found in findings(log) if found]
 
 
@@ -445,31 +452,41 @@ def said(log: Sequence[tuple], kind: str) -> list[tuple]:
   return [a for a in log if a[0] == kind]
 
 
-def tags(got: Sequence[tuple], name: str = "") -> list[tuple]:
-  """Every tag a fold of turns holds, of that name when a name is given."""
-  return [g for _, content, _, _ in got for g in content if isinstance(g, tuple) and name in ("", g[0])]
+def paragraphs(got: Sequence[tuple]) -> list[str]:
+  """Every paragraph the user turns of a fold hold, in order: what one fact that tells stands as. A blank line that a
+  header follows is where one paragraph ends, since a word its caller wrote may hold a blank line of its own."""
+  return [one for role, py, _, _ in got if role == "user" and py for one in re.split(r"\n\n(?=#\w)", py)]
 
 
-def shown(tag: tuple) -> list[tuple]:
-  """The tags that a tag holds as its body, which is what a tell of a text shows of it."""
-  body = tag[2]
-  return (
-    [one for one in body if isinstance(one, tuple) and len(one) == 3 and isinstance(one[0], str)]
-    if isinstance(body, list)
-    else []
-  )
+def heads(got: Sequence[tuple]) -> list[str]:
+  """The header of every paragraph the user turns of a fold hold, in order, which is the first line of each."""
+  return [one.split("\n", 1)[0] for one in paragraphs(got)]
 
 
-def attr(tag: tuple, name: str) -> object:
-  """The value of the named attribute of a tag; a tag that holds no such attribute is a failed test."""
-  found = [value for key, value in tag[1] if key == name]
-  assert len(found) == 1, (tag[0], name, tag[1])
-  return found[0]
+def named(got: Sequence[tuple]) -> list[str]:
+  """What each header of the user turns of a fold names, in order: the id of an act, or the kind of a query."""
+  return [one[1:].split(" ", 1)[0] for one in heads(got)]
 
 
-def text_of(turn: tuple) -> str:
-  """The text of a turn, which is everything it holds that is text."""
-  return "\n".join(x for x in turn[1] if isinstance(x, str))
+def of(got: Sequence[tuple], name: str) -> list[str]:
+  """Every paragraph of the user turns of a fold whose header names that act, or that kind of query, in order."""
+  return [one for one in paragraphs(got) if one.split("\n", 1)[0].split(" ", 1)[0] == f"#{name}"]
+
+
+def bindings(root: str, act: str, shape: str) -> str:
+  """The word of the rung a fresh root writes at its first ask for a prompt: the bindings of the root and of that
+  prompt."""
+  return f"{engine.bound(root)}\n{engine.bound(act, shape)}"
+
+
+def gatings() -> list[tuple[str, list[str]]]:
+  """Every word the gate was asked of in the life, in order, with the words of the program it read that word after."""
+  got = []
+  for a in engine.asked.values():
+    match a:
+      case ("gate", _, _, _, str(word), dict(program)):
+        got.append((word, [str(one) for one in program.values()]))
+  return got
 
 
 def swapped(to: object) -> None:

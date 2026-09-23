@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from functools import partial
 
-from conftest import STANDS, Sand, World, attr, life, plain, relived, said, settle, sown, tags
+from conftest import STANDS, Sand, World, heads, life, paragraphs, plain, relived, said, settle, sown
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Refused
 
@@ -34,7 +34,7 @@ class Busy(Sand):
             engine.close(Refused("the World is busy"), rung)
           elif self.script.get(on):
             word = self.script[on].pop(0)
-            turn = ("assistant", [word], self.cost or (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
+            turn = ("assistant", word, self.cost or (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
             loop.call_soon(partial(engine.send, "answer", rung, turn, by=WORLD))
 
 
@@ -43,11 +43,24 @@ async def test_the_request_of_an_ask_is_the_transcript_of_the_chain_as_turns() -
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
-  assert await engine.prompt(int, "count", on=root) == 1
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 1
   await settle()
-  asked = said(log, "ask")[0]
-  assert list(asked[5]) == engine.turns(on=root)[:1]
-  assert [tag[0] for tag in asked[5][0][1] if isinstance(tag, tuple)] == ["opened"] * 4
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  (asked,) = said(log, "ask")
+  assert (
+    asked[5]
+    == engine.turns(on=root)[:1]
+    == [
+      (
+        "user",
+        f"#{root} root\n{root}: Act[object] = Act({root!r})\n\n#{root} stands {STANDS!r}\n\n"
+        f"#{act} count\n{act}: Act[int] = Act({act!r})\n\n#{step} advance on {act}",
+        None,
+        None,
+      )
+    ]
+  )
 
 
 async def test_the_model_reads_the_turns_of_the_chain_at_each_step() -> None:
@@ -68,11 +81,12 @@ async def test_an_ask_carries_the_rung_it_asks_for_the_chain_that_asks_the_actor
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
-  assert await engine.prompt(int, "count", on=root) == 1
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 1
   await settle()
-  word = said(log, "ask")[0]
-  assert word == ("ask", said(log, "rung")[0][1], root, root, "m/low", word[5])
-  assert [turn[0] for turn in word[5]] == ["user"]
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  (word,) = said(log, "ask")
+  assert word == ("ask", step, root, root, "m/low", engine.turns(on=root)[:1])
 
 
 async def test_an_ask_says_the_chain_that_asks_as_a_word() -> None:
@@ -97,12 +111,18 @@ async def test_an_ask_the_world_cannot_answer_is_the_worlds_to_close() -> None:
   sand.script[root] = ["close(7)"]
   one = engine.prompt(int, "count", on=root)
   await settle()
-  assert engine.peek(one) is None and len(said(log, "ask")) == 1
-  ends = [a for a in said(log, "done") if a[1] == said(log, "rung")[0][1]]
-  assert [type(a[3]).__name__ for a in ends] == ["Refused"]
+  (first,) = [a[1] for a in said(log, "rung") if a[2] == one]
+  assert engine.peek(one) is None and [a[1] for a in said(log, "ask")] == [first]
+  assert [(a[1], a[2]) for a in said(log, "pause")] == [(root, WORLD)]
+  assert [type(a[3]).__name__ for a in said(log, "done") if a[1] == first] == ["Refused"]
   engine.wake(root)
   await settle()
-  assert (await one) == 7 and len(said(log, "ask")) == 2
+  assert (await one) == 7
+  assert (
+    [a[1] for a in said(log, "ask")]
+    == [a[1] for a in said(log, "rung") if a[2] == one]
+    == [first, said(log, "ask")[1][1]]
+  )
 
 
 async def test_an_ask_hands_the_turns_of_the_chain_whole_folded_again_for_that_ask() -> None:
@@ -167,8 +187,8 @@ async def test_every_model_asked_on_a_chain_reads_all_the_turns_of_the_chain_as_
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   first, second = said(log, "ask")[0], said(log, "ask")[1]
-  assert tags(second[5])[: len(tags(first[5]))] == tags(first[5])
-  assert len(second[5]) > len(first[5])
+  assert paragraphs(second[5])[: len(paragraphs(first[5]))] == paragraphs(first[5])
+  assert second[5][:1] == first[5] and [turn[0] for turn in second[5]] == ["user", "assistant", "user"]
 
 
 async def test_as_many_asks_as_there_are_chains_are_in_flight_together() -> None:
@@ -204,10 +224,17 @@ async def test_a_new_prompt_reads_the_whole_transcript_of_the_chain_the_cancelle
   engine.cancel(first)
   await settle()
   sand.script[root] = ["close(2)", "close(None)"]
-  assert await engine.prompt(int, "two", on=root) == 2
-  told = said(log, "ask")[0][5]
-  assert [attr(tag, "id") for tag in tags(told, "opened")][:3] == [root, root, first]
-  assert [attr(tag, "over") for tag in tags(told, "cancelled")] == [first]
+  second = engine.prompt(int, "two", on=root)
+  assert await second == 2
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == second]
+  assert heads(said(log, "ask")[0][5]) == [
+    f"#{root} root",
+    f"#{root} stands {STANDS!r}",
+    f"#{first} to operator: one",
+    f"#{first} cancelled",
+    f"#{second} two",
+    f"#{step} advance on {second}",
+  ]
 
 
 async def test_no_prompt_that_a_pause_is_over_asks_a_model() -> None:
@@ -265,7 +292,7 @@ async def test_it_asks_for_no_rung_a_pause_stands_over() -> None:
 
 
 async def test_the_chain_asks_one_model_at_a_time() -> None:
-  """The chain asks one model at a time, which it reads from its transcript, the rung that has waited the longest among those it heard on itself that nothing has been said of, handing it the turns as they stand, for the World to render as it likes, so that many chains ask many models at once."""
+  """The chain asks one model at a time, which it reads from its transcript, the rung that has waited the longest among those it heard on itself that nothing has been said of, handing it the turns as they stand, for the World to hand its provider as it likes, so that many chains ask many models at once."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["close(1)", "close(2)"]
@@ -273,10 +300,10 @@ async def test_the_chain_asks_one_model_at_a_time() -> None:
   two = engine.prompt(int, "second", on=root)
   assert (await one, await two) == (1, 2)
   await settle()
-  asks, rungs = said(log, "ask"), said(log, "rung")
-  assert [a[1] for a in asks] == [rungs[0][1], rungs[1][1]]
+  asks = said(log, "ask")
+  assert [a[1] for a in asks] == [a[1] for a in said(log, "rung") if a[2] in (one, two)]
   assert [a[0] for a in log if a[0] in ("ask", "answer")] == ["ask", "answer", "ask", "answer"]
-  assert len(asks[0][5]) < len(asks[1][5])
+  assert asks[0][5] == engine.turns(on=root)[:1] and asks[1][5] == engine.turns(on=root)[:3]
   side = engine.chain("side")
   mine = engine.prompt(int, "here", on=root)
   theirs = engine.prompt(int, "there", on=side)

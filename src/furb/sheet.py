@@ -12,20 +12,22 @@ The word stands on a sheet of its own::
     actor = ""
     raised: BaseException | None = None
     try:
-      lineage("")
-      <the program of the chain before the word>
+      acting()
+      <a word of the program of the chain before the word>
     except BaseException:
       pass
+    <one try of its own for each other word of the program, in order>
     <the word>
 
 Every line of it is there for a reason. The body is async, so a word may await at its top level. The engine is
 laid first, whole, as the first rung of every chain: the module of a chain is the engine run as a word, so every
 name the engine binds, an import of its own among them, is a name the word may say, with the type the engine
-gives it. The two names a chain binds of its own come next, with the types the contract gives them. The program
-stands in a try, since a rung that raised keeps what it bound before the raise and the word after it runs all the
-same: ty reads the word through the except, with every name the program bound before it raised, and a rung that
-never ends leaves the word reachable the same way. A call opens the try, since ty reads an except that no
-statement before it can reach, and an empty program still has a body. And the engine, the program and the word
+gives it. The two names a chain binds of its own come next, with the types the contract gives them. Each word of
+the program stands in a try of its own, since a rung that raised keeps what it bound before the raise and the word
+after it runs all the same: ty reads the next word through the except, with every name the words before it bound
+before they raised, so a word that raises at its top level hides no name a later word binds, and a rung that
+never ends leaves the word reachable the same way. A call opens each try, since ty reads an except that no
+statement before it can reach, and an empty word still has a body. And the engine, the program and the word
 keep their own lines, so a finding is counted back to the line the model wrote.
 
 The word is read as the body of a module before ty reads what it means: the sheet stands it inside a function,
@@ -45,11 +47,12 @@ type Ear = Generator[tuple | None, tuple | None]
 BOUND = '  actor = ""\n  raised: BaseException | None = None\n'
 """BOUND binds the two names a chain binds of its own, the actor it stands on and what the last rung raised, with
 the types the contract gives them."""
-OPENED = '  try:\n    lineage("")\n'
-"""OPENED opens the program in a try, on a call, since ty reads an except that no statement before it can reach: a
-name the program bound before it raised reaches the word, and an empty program still has a body."""
+OPENED = "  try:\n    acting()\n"
+"""OPENED opens a word of the program in a try, on a call, since ty reads an except that no statement before it can
+reach: a name the word bound before it raised reaches every word after it, and an empty word still has a body."""
 CAUGHT = "  except BaseException:\n    pass\n"
-"""CAUGHT closes the program, so that a rung which raised or which never ends leaves the word reachable."""
+"""CAUGHT closes a word of the program, so that a rung which raised or which never ends leaves the words after it
+reachable."""
 
 
 def python(word: str) -> list[str]:
@@ -71,9 +74,10 @@ def laid(text: str, depth: int) -> str:
 
 def sheet(engine: str, program: Sequence[str], word: str) -> tuple[str, int]:
   """The word on a sheet of its own, and how many lines stand above the word, which every finding is counted back
-  by: the engine, as the first rung of the chain, then the two names the chain binds, then the program of the chain
-  before the word, then the word."""
-  above = "async def __body():\n" + laid(engine, 2) + BOUND + OPENED + laid("\n".join(program), 4) + CAUGHT
+  by: the engine, as the first rung of the chain, then the two names the chain binds, then each word of the program
+  of the chain before the word, in a try of its own, then the word."""
+  words = "".join(OPENED + laid(one, 4) + CAUGHT for one in program)
+  above = "async def __body():\n" + laid(engine, 2) + BOUND + (words or OPENED + CAUGHT)
   return above + laid(word, 2), above.count("\n")
 
 

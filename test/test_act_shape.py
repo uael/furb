@@ -14,7 +14,7 @@ async def test_the_name_of_an_act() -> None:
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   one = engine.prompt(None, "hi", to=OPERATOR, on=root)
-  assert isinstance(one, Act) and isinstance(one, str) and one.startswith("prompt://")
+  assert isinstance(one, Act) and isinstance(one, str) and one == "prompt1"
   await settle()
   assert engine.get(one)[:4] == ("prompt", one, OPERATOR, root)
   engine.pause(one)

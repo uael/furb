@@ -1,8 +1,8 @@
 """cwd, the working directory that the paths of a chain resolve against."""
 
-from conftest import STANDS, Sand, Where, attr, life, said, settle, tags
+from conftest import STANDS, Sand, Where, life, said, settle
 from furb import engine
-from furb.engine import Text
+from furb.engine import OPERATOR, Text
 
 
 async def test_the_working_directory_of_a_chain_is_the_closest_cd_back_in_its_transcript() -> None:
@@ -56,8 +56,10 @@ async def test_the_chain_answers_for_where_its_paths_resolve() -> None:
   assert engine.cwd(on=root) == "/w"
   engine.cd("/deep", on=root)
   assert engine.cwd(on=root) == "/deep"
-  answered = [one for one in said(log, "done") if one[1].startswith("cwd://")]
-  assert [(one[2], one[3]) for one in answered] == [(root, "/w"), (root, "/deep")]
+  asked = [a for a in engine.asked.values() if a[0] == "cwd"]
+  assert asked == [("cwd", "cwd@operator.2", OPERATOR, root), ("cwd", "cwd@operator.4", OPERATOR, root)]
+  answered = [a for a in said(log, "done") if a[1].startswith("cwd@")]
+  assert answered == [("done", "cwd@operator.2", root, "/w"), ("done", "cwd@operator.4", root, "/deep")]
 
 
 async def test_cwd_tells_the_path_it_was_answered() -> None:
@@ -67,4 +69,4 @@ async def test_cwd_tells_the_path_it_was_answered() -> None:
   sand.script[root] = ["cwd()\ncd('/x')\ncwd()\nclose(1)"]
   assert await engine.prompt(int, "where am i", on=root) == 1
   await settle()
-  assert [attr(tag, "path") for tag in tags(engine.turns(on=root), "cwd")] == ["/w", "/x"]
+  assert engine.turns(on=root)[-1][1] == "#cwd /w\n\n#cd /x\n\n#cwd /x\n\n#prompt1 closed 1"

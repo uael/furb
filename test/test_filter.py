@@ -1,6 +1,6 @@
 """Filter, what says which acts of a transcript the turns of a chain with a source keep."""
 
-from conftest import STANDS, Sand, life, lived, plain, relived, said, seen, settle, sown, tags
+from conftest import STANDS, Sand, life, lived, named, paragraphs, plain, relived, said, seen, settle, sown
 from furb import engine
 
 
@@ -15,21 +15,22 @@ async def test_a_filter_is_given_the_acts_of_the_transcript_up_to_the_source() -
   assert isinstance(theirs, list)
   facts = [one[1] for one in theirs if engine.question(one)]
   assert [one[1] for one in held] == facts[: len(held)]
-  named = {said(log, "prompt")[0][1], said(log, "rung")[0][1], said(log, "bash")[0][1]}
-  assert named <= {one[1] for one in held}
+  made = {said(log, "prompt")[0][1], said(log, "rung")[0][1], said(log, "bash")[0][1]}
+  assert made <= {one[1] for one in held}
 
 
 async def test_a_filter_says_which_acts_the_turns_of_that_chain_keep_each_with_its_entries() -> None:
   """A filter says which acts the turns of that chain keep, each with its entries."""
   sand = sown()
   log, root = await lived(sand)
-  step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
+  (one, ack), command = [a[1] for a in said(log, "prompt")], said(log, "bash")[0][1]
+  step, answered = [a[1] for a in said(log, "rung") if a[2] in (one, ack)]
   narrow = engine.chain("narrow", source=root, filter=engine.take(command, inside=False))
   await settle()
-  told = tags(engine.turns(on=narrow))
-  assert [tag for tag in told if ("id", command) in tag[1]] == []
-  assert [tag for tag in tags(engine.turns(on=root)) if ("id", command) in tag[1]] != []
-  assert [tag[0] for tag in told if ("id", step) in tag[1]] == ["opened"]
+  assert named(engine.turns(on=root)) == [root, root, one, step, "read", command, command, one, ack, answered, ack]
+  assert named(engine.turns(on=narrow)) == [root, root, one, step, "read", one, ack, answered, ack, narrow]
+  kept = [part for part in paragraphs(engine.turns(on=narrow)) if part.startswith(f"#{step} ")]
+  assert kept == [f"#{step} advance on {one}"]
 
 
 async def test_a_filter_is_any_callable_of_that_shape() -> None:
@@ -43,7 +44,7 @@ async def test_a_filter_is_any_callable_of_that_shape() -> None:
   side = await engine.prompt(str, "fork", on=root)
   await settle(200)
   command = said(log, "bash")[0][1]
-  assert [tag for tag in tags(engine.turns(on=side)) if ("id", command) in tag[1]] == []
+  assert command in named(engine.turns(on=root)) and command not in named(engine.turns(on=side))
   assert engine.modules[side]["n"] == 0
   assert engine.take(command, inside=False)([engine.get(command)]) == []
 
@@ -59,10 +60,10 @@ async def test_a_later_life_runs_the_filter_again_and_keeps_the_same_acts() -> N
   side = await engine.prompt(str, "fork", on=root)
   await settle(200)
   command = said(log, "bash")[0][1]
-  was = tags(engine.turns(on=side))
-  assert [tag for tag in was if ("id", command) in tag[1]] == []
+  was = [(role, py) for role, py, *_ in engine.turns(on=side)]
+  assert command in named(engine.turns(on=root)) and command not in named(engine.turns(on=side))
   _, over = await relived(Sand(stands=STANDS), plain(sand.record))
-  assert over == root and tags(engine.turns(on=side)) == was
+  assert over == root and [(role, py) for role, py, *_ in engine.turns(on=side)] == was
 
 
 async def test_a_filter_is_no_word_of_a_chain() -> None:

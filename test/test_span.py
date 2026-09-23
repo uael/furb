@@ -1,10 +1,11 @@
 """span, the show of the lines lo through hi."""
 
-from conftest import STANDS, Sand, life, said, settle, tags
+from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
-from furb.engine import HIDDEN, Text, span
+from furb.engine import HIDDEN, WORLD, Text, span
 
 LINES = Text("/w/n.txt", "".join(f"line {i}\n" for i in range(1, 31))).lines
+"""The lines of a text of thirty lines."""
 
 
 def test_span_lo_hi_is_the_show_of_the_lines_lo_through_hi() -> None:
@@ -25,5 +26,6 @@ async def test_a_span_that_holds_no_line_shows_none_which_hidden_is() -> None:
   act = engine.bash("quiet", show=HIDDEN, on=root)
   assert (await act).code == 0
   await settle()
-  _, command, *_ = said(log, "bash")[0]
-  assert [tag for tag in tags(engine.turns(on=root)) if ("id", command) in tag[1]] == []
+  assert said(log, "bash")[0][1] == act and said(log, "exited") == [("exited", act, WORLD, 0)]
+  assert [a for a in said(log, "tell") if a[1] == act] == []
+  assert heads(engine.turns(on=root)) == ["#chain1 root", f"#chain1 stands {STANDS!r}"]
