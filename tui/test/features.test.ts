@@ -10,7 +10,7 @@ import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { clipboardImage } from "../src/clipboard.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
-import { externalEditor } from "../src/editor.ts";
+import { externalEditor, opener } from "../src/editor.ts";
 import { Extensions } from "../src/extensions.ts";
 import { fileReferences, projectFiles } from "../src/files.ts";
 import { Session } from "../src/session.ts";
@@ -413,3 +413,11 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     await session.dispose();
   }
 }, 30000);
+
+test("a file opens with the command of the system it runs on", () => {
+  const path = "C:\\Users\\me\\a picture.png";
+  expect(opener("darwin", path)).toEqual(["open", path]);
+  expect(opener("win32", path)).toEqual(["cmd", "/c", "start", "", path]);
+  expect(opener("linux", path)).toEqual(["xdg-open", path]);
+  expect(opener("freebsd", path)).toEqual(["xdg-open", path]);
+});

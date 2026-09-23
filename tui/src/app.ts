@@ -23,7 +23,7 @@ import {
 } from "@opentui/core";
 import { clipboardImage } from "./clipboard.ts";
 import { commands } from "./commands.ts";
-import { externalEditor } from "./editor.ts";
+import { externalEditor, openFile } from "./editor.ts";
 import type { Extensions } from "./extensions.ts";
 import { clip, count, dollars, graphemes, kibibytes, share } from "./format.ts";
 import { chords, keys } from "./keys.ts";
@@ -139,8 +139,9 @@ export class App {
       closed: boolean;
     }
   >();
-  /** The offset the view scrolls to once the scroll box has laid out its new cards. */
-  private scrollTarget?: number;
+  /** The offset the view scrolls to, or the id of the card it brings into view, once the scroll box has laid out its
+   * cards. */
+  private scrollTarget?: number | string;
   private overlay?: BoxRenderable;
   private paletteInput?: InputRenderable;
   private paletteList?: BoxRenderable;
@@ -710,7 +711,7 @@ export class App {
     const w = this.session;
     const view = `${w.selected}:${w.view}:${w.ladder ?? ""}`;
     if (this.lastView !== view) {
-      if (this.lastView) w.scrolls[this.lastView] = this.scrollTarget ?? this.scroll.scrollTop;
+      if (this.lastView) w.scrolls[this.lastView] = this.top;
       this.clear(this.scroll);
       this.cards.clear();
       this.lastView = view;
@@ -1680,13 +1681,7 @@ export class App {
       {
         label: "Open image",
         detail: `${content.mimeType} · ${kibibytes(Buffer.byteLength(content.data, "base64"))}`,
-        run: async () => {
-          const child = Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", file], {
-            stdout: "ignore",
-            stderr: "pipe",
-          });
-          if (await child.exited) throw new Error(await new Response(child.stderr).text());
-        },
+        run: () => openFile(file),
       },
       ...(pending
         ? [
@@ -1778,13 +1773,7 @@ export class App {
       {
         label: "Open HTML",
         detail: path,
-        run: async () => {
-          const child = Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", path], {
-            stdout: "ignore",
-            stderr: "pipe",
-          });
-          if (await child.exited) throw new Error(await new Response(child.stderr).text());
-        },
+        run: () => openFile(path),
       },
       {
         label: "Copy path",
@@ -2067,7 +2056,7 @@ export class App {
           run: () => {
             this.folds.set(card.state, !card.closed);
             this.renderContent();
-            this.scroll.scrollChildIntoView(id);
+            this.scrollAfterLayout(id);
           },
         })),
     );
@@ -2500,7 +2489,7 @@ export class App {
       chain: this.session.selected,
       view: this.session.view,
       search: this.session.search,
-      top: this.scrollTarget ?? this.scroll.scrollTop,
+      top: this.top,
       ladder: this.session.ladder,
       mode: this.session.mode,
     });
@@ -2513,7 +2502,7 @@ export class App {
       this.session.ladder = undefined;
     this.session.show(view);
     this.render();
-    if (id) this.scroll.scrollChildIntoView(id);
+    this.scrollAfterLayout(id);
   }
   private async back(): Promise<void> {
     const previous = this.navigation.pop();
@@ -2527,18 +2516,23 @@ export class App {
     this.scroll.scrollTo(previous.top);
     this.scrollAfterLayout(previous.top);
   }
-  /** Scroll to an offset once the scroll box has laid out the cards that it holds now, since it clamps an offset to
-   * the layout it has. */
-  private scrollAfterLayout(top?: number): void {
-    if (top === undefined) return;
+  /** Scroll to an offset, or bring a card into view, once the scroll box has laid out the cards that it holds now,
+   * since it clamps an offset to the layout it has and places a card by the layout it has. */
+  private scrollAfterLayout(target?: number | string): void {
+    if (target === undefined) return;
     if (this.scrollTarget === undefined) this.renderer.once("frame", this.laidOut);
-    this.scrollTarget = top;
+    this.scrollTarget = target;
   }
   private laidOut = (): void => {
     if (this.closed || this.scrollTarget === undefined) return;
-    this.scroll.scrollTo(this.scrollTarget);
+    if (typeof this.scrollTarget === "number") this.scroll.scrollTo(this.scrollTarget);
+    else this.scroll.scrollChildIntoView(this.scrollTarget);
     this.scrollTarget = undefined;
   };
+  /** The offset the view stands at, which is the one it scrolls to once it is laid out. */
+  private get top(): number {
+    return typeof this.scrollTarget === "number" ? this.scrollTarget : this.scroll.scrollTop;
+  }
   chains(): void {
     this.openPalette(
       "Chains",
@@ -2932,7 +2926,7 @@ export class App {
     clearInterval(this.tick);
     this.closed = true;
     this.keepDraft();
-    this.session.scrolls[this.lastView] = this.scrollTarget ?? this.scroll.scrollTop;
+    this.session.scrolls[this.lastView] = this.top;
     this.renderer.off("frame", this.laidOut);
     this.session.folds = Object.fromEntries(this.folds);
     this.session.save();

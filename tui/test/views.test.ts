@@ -166,3 +166,60 @@ test("a relative path that the operator types is read from the directory of the 
     await session.dispose();
   }
 }, 30000);
+
+test("a card that the view goes to, or that Details expands, is in view once the view has laid it out", async () => {
+  const session = await demoSession(true);
+  const screen = await createTestRenderer({ width: 120, height: 24 });
+  const app = new App(screen.renderer, session, { quit() {} });
+  const laid = async () => {
+    app.render();
+    await screen.flush();
+    await screen.flush();
+  };
+  const card = (id: string) => {
+    const found = app.scroll.getChildren().find((node) => node.id === id);
+    if (!found) throw new Error(`No card ${id} in the view.`);
+    return found;
+  };
+  // A card taller than the view is in view when its top is at the top of the view.
+  const seen = (id: string) => {
+    const { y, height } = card(id);
+    const view = app.scroll.viewport;
+    return y >= view.y && (y + height <= view.y + view.height || y === view.y);
+  };
+  try {
+    for (let i = 0; i < 24; i++) await session.command(`/run v${i} = ${i}`);
+    await session.command("/run target = 1");
+    // A rung the World has not run yet stands in the program once it runs.
+    await until(session, () => Object.values(session.program).includes("target = 1"));
+    const rung = Object.entries(session.program).find(([, word]) => word === "target = 1")?.[0];
+    if (!rung) throw new Error("No rung in the program.");
+    session.show("conversation");
+    await session.refresh();
+    await laid();
+    await app.inspect("target");
+    await laid();
+    screen.mockInput.pressEnter();
+    await laid();
+    expect(session.view).toBe("program");
+    expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.viewport.height * 2);
+    expect(seen(rung)).toBe(true);
+    session.show("facts");
+    await laid();
+    const view = app.scroll.viewport;
+    const last = app.scroll.getChildren().find((node) => node.y === view.y + view.height - 1);
+    if (!last) throw new Error("No card on the last line of the view.");
+    const shut = card(last.id).height;
+    app.details();
+    const heading = (last.getChildren()[0] as TextRenderable).plainText.replace(/^[▸▾] /, "");
+    await screen.mockInput.typeText(heading);
+    screen.mockInput.pressEnter();
+    await laid();
+    expect(card(last.id).height).toBeGreaterThan(shut);
+    expect(seen(last.id)).toBe(true);
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await session.dispose();
+  }
+});

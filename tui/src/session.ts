@@ -584,7 +584,9 @@ export class Session extends EventEmitter {
     if (!text) return;
     this.error = "";
     this.notice = "";
-    if (this.editing) {
+    // No program of Python starts with a slash, so a slash command is a command under edit too, as it is in Python.
+    if (text.startsWith("/")) await this.command(text);
+    else if (this.editing) {
       await this.life.result(
         await this.life.rung(`write(Text(${JSON.stringify(this.editing)}, ${JSON.stringify(input)}))`, {
           on: this.selected,
@@ -592,8 +594,7 @@ export class Session extends EventEmitter {
       );
       this.notice = "Program updated and replayed.";
       this.editing = undefined;
-    } else if (text.startsWith("/")) await this.command(text);
-    else if (text.startsWith("!")) await this.command(`/bash ${text.slice(1).trimStart()}`);
+    } else if (text.startsWith("!")) await this.command(`/bash ${text.slice(1).trimStart()}`);
     else {
       const pending = this.operatorPrompt;
       if (pending) await this.world.answer(pending.id, input);

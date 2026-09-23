@@ -137,7 +137,8 @@ changing that source. Enter sends a message straight to the engine. The engine g
 ask to the rung that has waited longest. Alt+Enter or `/queue text` holds a follow-up until the chain's
 current prompt and rungs complete. `/queue` edits or removes waiting messages. Saved queues require a resume
 choice; a dispatch recorded before a crash is not sent twice. Editing a prompt's program writes its door and uses the engine's
-replay. Python input uses the same gate as a model's word and marks a refused line in the word and editor.
+replay. A slash command typed while a program is under edit runs as a command, since no Python program starts with a
+slash. Python input uses the same gate as a model's word and marks a refused line in the word and editor.
 The editor keeps submitted input history, matches brackets, and indents a new Python line.
 `@` opens project file search. A reference that names a file, such as `@README.md` or `@"file name.txt"`, is read
 before the message is sent; any other @word, such as `@dataclass`, stays text. A leading `!` runs a shell

@@ -123,7 +123,7 @@ async function capture(name: string): Promise<void> {
     `${output}/${name}.png`,
     new Resvg(parts.join(""), { font: { loadSystemFonts: true } }).render().asPng(),
   );
-  await writeFile(`/tmp/furb-${name}.txt`, test.captureCharFrame());
+  await writeFile(join(tmpdir(), `furb-${name}.txt`), test.captureCharFrame());
 }
 
 try {

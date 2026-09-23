@@ -241,3 +241,23 @@ test("a command that opens a picker opens it in the view, and the session refuse
     );
     expect(await frame()).toContain("Ready · model");
   }));
+
+test("a slash command typed under edit runs as the command it names, and the program stays as its door holds it", () =>
+  composing(
+    async ({ session, app }) => {
+      app.composer.setText("/edit");
+      await app.submit();
+      await until(session, () => session.editing !== undefined);
+      const editing = session.editing;
+      if (!editing) throw new Error("No program under edit.");
+      const program = app.composer.plainText;
+      app.composer.setText("/name renamed");
+      await app.submit();
+      expect(session.sessionName).toBe("renamed");
+      expect(session.editing).toBe(editing);
+      const door = (await session.life.read(editing, undefined, session.selected)) as { content: string };
+      expect(door.content).toBe(program);
+    },
+    undefined,
+    true,
+  ));

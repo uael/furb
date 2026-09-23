@@ -29,3 +29,17 @@ export async function externalEditor(
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+/** The command that opens a file in the application the system gives its type. `start` is a command of cmd, and its
+ * first quoted word is the title of a window, so an empty title comes before the path. */
+export function opener(platform: NodeJS.Platform, path: string): string[] {
+  if (platform === "darwin") return ["open", path];
+  if (platform === "win32") return ["cmd", "/c", "start", "", path];
+  return ["xdg-open", path];
+}
+
+/** Open a file in the application the system gives its type, and raise what the command said when it fails. */
+export async function openFile(path: string): Promise<void> {
+  const child = Bun.spawn(opener(process.platform, path), { stdout: "ignore", stderr: "pipe" });
+  if (await child.exited) throw new Error(await new Response(child.stderr).text());
+}
