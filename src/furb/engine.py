@@ -349,20 +349,19 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
       yield "done", id, transcript
       return
     _, standing = ask("stand", here)
-    actor, spent, filled = "", 0.0, 0.0
+    spent, filled = 0.0, 0.0
     for old in transcript:
       match old:
         case ("grant", gid, *_) if gid != id and gid not in outcomes:
           close(None, gid)
-        case ("ask", _, _, _, who, _):
-          actor = who
     told("opened", id, ("usd", usd), ("share", share))
     while True:
       match (yield):
-        case ("ask", _, _, whose, who, _) if whose == here:
-          actor = who
         case ("answer", about, _, (_, _, (seen, _, _, _, dollars), _)) if scope(about) == here:
-          spent, filled = spent + dollars, seen / (offered(standing, actor) or WINDOW)
+          spent, filled = (
+            spent + dollars,
+            seen / (offered(standing, acts[about][6] or modules[here]["actor"]) or WINDOW),
+          )
           told("ledger", about, ("spent", spent), ("filled", filled))
           if (usd is not None and spent >= usd) or (share is not None and filled >= share):
             pause(here)

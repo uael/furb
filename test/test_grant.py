@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, attr, life, ran, said, settle, tags
+from conftest import STANDS, Sand, attr, life, plain, ran, said, settle, tags
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -20,6 +20,10 @@ async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_bot
   await settle()
   told = tags(engine.turns(on=root), "ledger")
   assert [(attr(tag, "spent"), attr(tag, "filled")) for tag in told] == [(1.5, 0.2), (3.0, 0.2), (4.5, 0.2)]
+  _, again = life(Sand(stands=STANDS, cost=COST), plain(sand.record))
+  await settle()
+  retold = tags(engine.turns(on=again), "ledger")
+  assert [(attr(tag, "spent"), attr(tag, "filled")) for tag in retold] == [(1.5, 0.2), (3.0, 0.2), (4.5, 0.2)]
 
 
 async def test_grant_on_a_chain_puts_a_ceiling_on_it_dollars_a_share_of_the_window_or_both() -> None:
