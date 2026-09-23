@@ -633,7 +633,7 @@ def boot(record=(), **outside):
   kept, past = list(record), len(record)
   for table in (modules, acts, asked, outcomes):
     table.clear()
-  log, alive, made, busy, heard = [], {}, Counter(), set(), 0
+  log, alive, made, busy, left, heard = [], {}, Counter(), set(), [], 0
 
   def door():
     answers = {e[1][1]: e[2] for e in kept if len(e) == 3}
@@ -736,15 +736,18 @@ def boot(record=(), **outside):
   def dispatch():
     nonlocal heard
     while not busy:
-      if heard == len(log):
-        if g := alive.get("journal"):
+      if not left:
+        if heard == len(log) and (g := alive.get("journal")):
           hears("journal", g, None)
         if heard == len(log):
           break
-      for name, g in ears():
-        if alive.get(name) is g:
-          hears(name, g, log[heard])
-      heard += 1
+        left.extend(ears())
+      name, g = left.pop(0)
+      a = log[heard]
+      if not left:
+        heard += 1
+      if alive.get(name) is g:
+        hears(name, g, a)
 
   def hears(name, g, a):
     with site.set(name):
