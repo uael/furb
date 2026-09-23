@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoWorkspace, seedDemo } from "../src/demo.ts";
+import { Preferences } from "../src/preferences.ts";
 import { sessionChoices } from "../src/sessions.ts";
 import { Workspace } from "../src/workspace.ts";
 
@@ -13,11 +14,20 @@ test("the real native life drives conversation, program, activity, search, and r
   const app = new App(test.renderer, workspace, { quit() {} });
   try {
     await test.flush();
-    expect(test.captureCharFrame()).toContain("A little space for ambitious work.");
+    expect(test.captureCharFrame()).toContain("Explore a codebase");
+    expect(workspace.theme).toBe("github");
+    expect(app.scroll.x).toBe(1);
+    expect(app.scroll.height).toBeGreaterThanOrEqual(39);
+    expect(test.captureCharFrame()).not.toContain("No budget set");
+    expect(test.captureCharFrame()).not.toContain("Session saved");
     await seedDemo(workspace);
     app.render();
     await test.flush();
-    expect(test.captureCharFrame()).toContain("RESULT");
+    expect(test.captureCharFrame()).toContain("Result");
+    const conversation = test.captureCharFrame();
+    expect(conversation.indexOf("Explore this project")).toBeLessThan(
+      conversation.indexOf("A clear starting point"),
+    );
     workspace.show("program");
     app.render();
     await test.flush();
@@ -26,9 +36,10 @@ test("the real native life drives conversation, program, activity, search, and r
     app.render();
     await test.flush();
     expect(app.scroll.getChildren().some((child) => child.id.startsWith("bash://"))).toBe(true);
+    expect(test.captureCharFrame()).not.toContain("failed");
     app.palette();
     await test.flush();
-    expect(test.captureCharFrame()).toContain("COMMANDS");
+    expect(test.captureCharFrame()).toContain("Commands");
     await test.mockInput.typeText("budget");
     await test.flush();
     expect(test.captureCharFrame()).toContain("Set budget");
@@ -39,10 +50,75 @@ test("the real native life drives conversation, program, activity, search, and r
     app.render();
     await test.flush();
     expect(test.captureCharFrame()).toContain("furb");
-    expect(test.captureCharFrame()).not.toContain("THIS CHAIN");
+    expect(test.captureCharFrame()).not.toContain("Chains");
   } finally {
     app.dispose();
     test.renderer.destroy();
+    await workspace.dispose();
+  }
+}, 30000);
+
+test("model and effort change independently and a theme preference applies to a new session", async () => {
+  const first = await demoWorkspace();
+  let second: Workspace | undefined;
+  try {
+    await first.submit("/effort high");
+    expect(first.actor).toBe("claude-cli:sonnet/high");
+    await first.submit("/model claude-cli:opus");
+    expect(first.actor).toBe("claude-cli:opus/high");
+    await first.submit("/effort low");
+    expect(first.actor).toBe("claude-cli:opus/low");
+    first.theme = "paper";
+    first.save();
+    const opened = await openEngine({ demo: true });
+    second = new Workspace(opened.life, opened.world, true, new Preferences(first.preferences.path));
+    expect(second.theme).toBe("paper");
+    expect(second.world.records.path).not.toBe(first.world.records.path);
+    expect(first.preferences.path).toBe(join(dirname(first.world.records.path ?? ""), "ui-preferences.json"));
+  } finally {
+    await second?.dispose();
+    await first.dispose();
+  }
+}, 30000);
+
+test("every view shows an empty result, loading, and an error in its feed", async () => {
+  const workspace = await demoWorkspace();
+  const screen = await createTestRenderer({ width: 120, height: 42 });
+  const app = new App(screen.renderer, workspace, { quit() {} });
+  try {
+    for (const view of ["conversation", "program", "activity", "facts", "transcript", "changes"] as const) {
+      workspace.show(view);
+      await workspace.refresh();
+      workspace.query = "nothing matches this";
+      app.render();
+      await screen.flush();
+      expect(screen.captureCharFrame()).toContain(`No matching ${view}`);
+      const snapshot = workspace.world.snapshot.bind(workspace.world);
+      let release = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      workspace.world.snapshot = async (chain) => {
+        await gate;
+        return snapshot(chain);
+      };
+      const loading = workspace.refresh();
+      app.render();
+      await screen.flush();
+      expect(screen.captureCharFrame()).toContain(`Loading ${view}`);
+      release();
+      await loading;
+      workspace.world.snapshot = snapshot;
+      workspace.fail(new Error(`Could not load ${view}`));
+      app.render();
+      await screen.flush();
+      expect(screen.captureCharFrame()).toContain(`Could not load ${view}`);
+      expect(screen.captureCharFrame()).toContain("Refresh view");
+      workspace.error = "";
+    }
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
     await workspace.dispose();
   }
 }, 30000);
@@ -142,7 +218,7 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
   try {
     app.rewind();
     await screen.flush();
-    expect(screen.captureCharFrame()).toContain("REWIND TRANSCRIPT");
+    expect(screen.captureCharFrame()).toContain("Rewind transcript");
     const selected = new Promise<void>((resolve, reject) => {
       const changed = () => {
         if (workspace.selected === source && !workspace.error) return;
@@ -217,7 +293,7 @@ test("a name inside a transcript tag opens the same live inspector as Python cod
     expect(row).toBeGreaterThanOrEqual(0);
     const column = lines[row]?.indexOf("answer") ?? -1;
     await screen.mockMouse.click(column + 1, row, 0, { modifiers: { ctrl: true } });
-    await screen.waitForFrame((frame) => frame.includes("ANSWER · INT"), { maxPasses: 200 });
+    await screen.waitForFrame((frame) => frame.includes("answer · int"), { maxPasses: 200 });
     expect(screen.captureCharFrame()).toContain("17");
   } finally {
     app.dispose();

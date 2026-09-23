@@ -14,8 +14,8 @@ bun run tui -- --resume .furb/sessions/example.jsonl
 
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
 a new life. Sessions are saved under `.furb/sessions` in the selected directory. Keep the `.jsonl`,
-`.world.json`, `.changes.jsonl`, and `.ui.json` files together. The last file saves the selected chain, view, theme, prompt
-shape, drafts, scroll positions, and pane widths. An unfinished session opens paused and offers a resume
+`.world.json`, `.changes.jsonl`, and `.ui.json` files together. The last file saves the selected chain, view, prompt
+shape, drafts, scroll positions, and sidebar width. An unfinished session opens paused and offers a resume
 choice. The native engine replays completed work from the record.
 The picker shows held work as of the last save. Opening a session reads its actual unfinished work from the
 record, so an old metadata file cannot hold work that has already completed.
@@ -23,7 +23,12 @@ record, so an old metadata file cannot hold work that has already completed.
 The six views show the conversation, accepted Python program, acts, facts, exact model transcript, and file
 diffs. Each chain has its own conversation and module. Python words have offline Tree-sitter colors and
 line numbers. Hover over a name for its current value; Ctrl+click or Ctrl+G opens its fields and definition.
-Click a block heading to collapse it. Drag either separator to resize a pane. Select text and press Ctrl+Y
+GitHub Dark is the default. Theme preferences are shared by sessions and saved in `$XDG_CONFIG_HOME/furb/ui.json`
+(or `~/.config/furb/ui.json`). `FURB_CONFIG_DIR` selects another configuration directory. Demo sessions keep
+their preferences with the demo so they do not change the user's theme.
+
+The feed has no card borders or blank rows between events. Acts start as one-line summaries; click a row or
+use `/details` to expand its named fields and output. Drag the right separator to resize the sidebar. Select text and press Ctrl+Y
 to copy it through OSC 52, where the terminal supports it.
 
 | Key | Action |
@@ -32,7 +37,7 @@ to copy it through OSC 52, where the terminal supports it.
 | Ctrl+1 through Ctrl+6 | Switch view |
 | Ctrl+P | Search commands |
 | Ctrl+B / Ctrl+N | Switch / create a chain |
-| Ctrl+M / Ctrl+T | Model and effort / theme |
+| Ctrl+M / Shift+Tab / Ctrl+T | Model / effort / theme |
 | Ctrl+O | Saved sessions |
 | Ctrl+F / PageUp / PageDown | Search / scroll |
 | Ctrl+R / Ctrl+Space | Python input / complete a name |
@@ -56,6 +61,7 @@ to copy it through OSC 52, where the terminal supports it.
 | `/name name` | Set a name in the session picker |
 | `/chain label` | A conversation with its own state |
 | `/fork label` | Copy this chain's current transcript and program |
+| `/details` | Expand or collapse an act in the current view |
 | `/rewind` | Choose the last act the new chain should read |
 | `/pause [id]` | Hold delivery while work completes |
 | `/wake [id]` | Deliver pending work |
@@ -70,7 +76,8 @@ to copy it through OSC 52, where the terminal supports it.
 | `/feed id text` | Send input to a command; empty text closes input |
 | `/close id JSON` | Close an act with a JSON value |
 | `/export path` | Write the transcript and program to a new JSON file |
-| `/model model/effort` | Use a model from the life's roster |
+| `/model [model]` | Use a model from this chain's roster |
+| `/effort [level]` | Set the reasoning effort of the selected model |
 | `/shape type` | Choose the result type of the next prompt |
 | `/inspect name` | Read a value from this chain's module |
 | `/theme name` | Change the palette of every surface |
@@ -82,6 +89,8 @@ changing that source. A message sent while work runs enters the engine's queue. 
 ask to the rung that has waited longest. Editing a prompt's program writes its door and uses the engine's
 replay. Python input uses the same gate as a model's word and marks a refused line in the word and editor.
 The editor keeps submitted input history, matches brackets, and indents a new Python line.
+`/model` and `/effort` open separate pickers. Each model offers the efforts in its pi-ai metadata, saved in
+the chain's roster. A model change keeps the current effort if the new model offers it.
 
 The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
 historical checkpoint. `/rewind` offers an act picker and uses the engine's `take` filter to choose which

@@ -7,6 +7,7 @@ import { openEngine } from "../src/bridge.ts";
 import { demoWorkspace, seedDemo } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { sessionChoices } from "../src/sessions.ts";
+import { palettes } from "../src/theme.ts";
 import { Workspace } from "../src/workspace.ts";
 
 const output = resolve("docs/screenshots");
@@ -31,15 +32,12 @@ async function capture(name: string): Promise<void> {
   const frame = test.captureSpans();
   const cell = 9,
     rowHeight = 20,
-    top = 36;
+    top = 0;
   const width = frame.cols * cell,
     height = frame.rows * rowHeight + top;
   const parts = [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#101817"/><rect width="100%" height="${top}" fill="#243329"/><text x="${width / 2}" y="23" text-anchor="middle" font-family="Menlo,DejaVu Sans Mono,monospace" font-size="12" fill="#a3b7a8">furb · ${xml(name.replaceAll("-", " "))}</text>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="${palettes[workspace.theme].background}"/>`,
   ];
-  ["#e59b88", "#ddc086", "#a7c991"].forEach((fill, i) => {
-    parts.push(`<circle cx="${18 + i * 19}" cy="18" r="5" fill="${fill}"/>`);
-  });
   for (const [line, content] of frame.lines.entries()) {
     let column = 0;
     for (const span of content.spans) {
@@ -78,8 +76,12 @@ try {
   app.scroll.scrollTo(10000);
   await capture("04-activity");
   workspace.show("facts");
-  workspace.query = "answer";
+  app.render();
+  await test.flush();
+  test.mockInput.pressKey("f", { ctrl: true });
+  await test.mockInput.typeText("answer");
   await capture("05-facts");
+  test.mockInput.pressEscape();
   workspace.show("transcript");
   await capture("06-transcript");
   await workspace.life.result(
@@ -96,6 +98,9 @@ try {
   app.closeOverlay();
   app.models();
   await capture("09-models");
+  app.closeOverlay();
+  app.effortPicker();
+  await capture("26-effort");
   app.closeOverlay();
   await workspace.life.prompt("bool", "Apply the search shortcut to the main chain?", {
     on: workspace.selected,
@@ -130,7 +135,7 @@ try {
   test.resize(82, 32);
   await capture("17-narrow");
   test.resize(152, 46);
-  workspace.theme = "forest";
+  workspace.theme = "github";
   const command = await workspace.life.bash(
     "printf 'Building the search index...\\n'; sleep 1; printf '3 notes indexed.\\n'",
     { on: workspace.selected },
@@ -139,6 +144,15 @@ try {
   await workspace.refresh();
   workspace.show("activity");
   workspace.query = command;
+  await workspace.refresh();
+  app.render();
+  await test.flush();
+  const commandRow = app.scroll
+    .getChildren()
+    .find((node) => node.id === command)
+    ?.getChildren()[0];
+  if (!commandRow) throw new Error("The command row is not visible.");
+  await test.mockMouse.click(commandRow.x + 1, commandRow.y);
   await capture("22-live-command");
   await workspace.life.result(command);
   const progress = await workspace.life.prompt("str", "show live progress", { on: workspace.selected });
@@ -178,6 +192,28 @@ try {
   await test.flush();
   app.composer.setText("result = len(notes.lines)\nprint(result)");
   await capture("25-prompt-repl");
+
+  app.dispose();
+  await workspace.dispose();
+  workspace = await demoWorkspace();
+  app = new App(test.renderer, workspace, { quit() {} });
+  workspace.show("facts");
+  await workspace.refresh();
+  app.render();
+  await test.flush();
+  test.mockInput.pressKey("f", { ctrl: true });
+  await test.mockInput.typeText("no matching fact");
+  await capture("27-empty-results");
+  test.mockInput.pressEscape();
+  const running = workspace.life.rung("total = 0\nfor item in range(1000000):\n  total += item");
+  workspace.show("program");
+  const reading = workspace.refresh();
+  await capture("28-loading");
+  await workspace.life.result(await running);
+  await reading;
+  await workspace.submit("/read missing-file.txt");
+  await Bun.sleep(80);
+  await capture("29-error");
 } finally {
   app.dispose();
   test.renderer.destroy();

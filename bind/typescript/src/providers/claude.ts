@@ -71,6 +71,15 @@ export function cliModel(id: string): Model<Api> {
     provider: CLAUDE,
     baseUrl: "",
     reasoning: true,
+    thinkingLevelMap: {
+      off: null,
+      minimal: "low",
+      low: "low",
+      medium: "medium",
+      high: "high",
+      xhigh: "xhigh",
+      max: "max",
+    },
     input: ["text", "image"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: id.includes("haiku") ? 200000 : 1000000,
@@ -491,7 +500,9 @@ export function claudeProvider(options: ClaudeOptions = {}): { provider: Provide
         if (getCurrentTools(context.messages).length)
           throw new Error("furb's Claude provider accepts pure completions only.");
         const system = getCurrentSystemPrompt(context.messages);
-        const effort = settings.reasoning === "minimal" ? "low" : settings.reasoning;
+        const mapped = settings.reasoning ? model.thinkingLevelMap?.[settings.reasoning] : undefined;
+        if (mapped === null) throw new Error(`${model.id} does not offer ${settings.reasoning}.`);
+        const effort = mapped ?? settings.reasoning;
         const key = JSON.stringify([model.id, effort, system, settings.sessionId ?? randomUUID()]);
         let session = sessions.get(key);
         if (!session) {

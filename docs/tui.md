@@ -6,7 +6,7 @@ capture them again. The generator is `tui/script/screenshots.ts`.
 
 ## Welcome
 
-Start a conversation, choose an action, or create a chain.
+Start from a compact feed and an input line, with one right sidebar. GitHub Dark is the default.
 
 ![Welcome](screenshots/01-welcome.png)
 
@@ -52,11 +52,17 @@ Search actions without leaving the keyboard.
 
 ![Command palette](screenshots/08-command-palette.png)
 
-## Models and effort
+## Models
 
-Choose a model and effort from the life’s roster.
+Choose a model from the chain's roster. Effort has its own picker.
 
-![Models and effort](screenshots/09-models.png)
+![Models](screenshots/09-models.png)
+
+## Effort
+
+Choose one of the efforts that the selected model offers.
+
+![Effort](screenshots/26-effort.png)
 
 ## Operator question
 
@@ -102,7 +108,7 @@ Find the keys and slash commands.
 
 ## Narrow terminal
 
-The side panels make room for the main view.
+The right sidebar makes room for the main view.
 
 ![Narrow terminal](screenshots/17-narrow.png)
 
@@ -154,3 +160,21 @@ back after a reopen. The module and files keep their current state.
 Open a prompt's program with its own input draft. Run operator Python or edit the prompt's door.
 
 ![Prompt REPL](screenshots/25-prompt-repl.png)
+
+## Empty results
+
+A search with no matching facts has an empty state in the feed.
+
+![Empty results](screenshots/27-empty-results.png)
+
+## Loading
+
+The view shows its pending read while the worker runs a Python word. The interface remains available.
+
+![Loading](screenshots/28-loading.png)
+
+## Error
+
+A failed read shows its error in the view with a refresh action.
+
+![Error](screenshots/29-error.png)

@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { efforts, shapes } from "@furb/engine";
+import { actorParts, shapes } from "@furb/engine";
 import { display, isTag, safeText } from "@furb/engine/world";
 import {
   type BoxOptions,
@@ -24,13 +24,32 @@ import {
 import { createTwoFilesPatch } from "diff";
 import { commands } from "./commands.ts";
 import { loadParsers } from "./parsers.ts";
-import { theme as c, palettes, setTheme, syntax, type ThemeName } from "./theme.ts";
+import {
+  theme as c,
+  defaultTheme,
+  palettes,
+  setTheme,
+  spacing as space,
+  syntax,
+  type ThemeName,
+} from "./theme.ts";
 import type { ActRow, View, Workspace } from "./workspace.ts";
 
 const views: View[] = ["conversation", "program", "activity", "facts", "transcript", "changes"];
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const short = (id: string) => id.replace(/^[^:]+:\/\//, "");
-const count = (value: number) => (value > 999 ? `${(value / 1000).toFixed(1)}k` : String(value));
+const count = (value: number) =>
+  value >= 1_000_000
+    ? `${Number((value / 1_000_000).toFixed(1))}M`
+    : value >= 1000
+      ? `${Number((value / 1000).toFixed(1))}k`
+      : String(value);
+interface BlockOptions {
+  compact?: boolean;
+  heading?: boolean;
+  group?: string;
+  act?: ActRow;
+}
 interface Choice {
   label: string;
   detail: string;
@@ -48,7 +67,7 @@ export class App {
   readonly composer: TextareaRenderable;
   readonly scroll: ScrollBoxRenderable;
   private style: ReturnType<typeof syntax>;
-  private theme: ThemeName = "forest";
+  private theme: ThemeName = defaultTheme;
   private draftKey = "";
   private hover?: BoxRenderable;
   private questionDocument?: ScrollBoxRenderable;
@@ -56,18 +75,20 @@ export class App {
   private editorVersion = 0;
   private closed = false;
   private readonly collapsed = new Set<string>();
-  private readonly sidebar: BoxRenderable;
+  private readonly expanded = new Set<string>();
   private readonly inspector: BoxRenderable;
   private readonly splitters: BoxRenderable[] = [];
   private readonly tabs: BoxRenderable;
   private readonly head: TextRenderable;
-  private readonly hint: TextRenderable;
   private readonly status: TextRenderable;
   private readonly composeBox: BoxRenderable;
   private readonly promptBox: BoxRenderable;
   private readonly search: InputRenderable;
   private readonly paneKeys = new WeakMap<Renderable, string>();
-  private readonly cards = new Map<string, { node: BoxRenderable; heading: TextRenderable; key: string }>();
+  private readonly cards = new Map<
+    string,
+    { node: BoxRenderable; heading: TextRenderable; key: string; compact: boolean }
+  >();
   private overlay?: BoxRenderable;
   private paletteInput?: InputRenderable;
   private paletteList?: BoxRenderable;
@@ -96,6 +117,7 @@ export class App {
   ) {
     setTheme(workspace.theme);
     for (const id of workspace.collapsed) this.collapsed.add(id);
+    for (const id of workspace.expanded) this.expanded.add(id);
     this.theme = workspace.theme;
     this.style = syntax();
     this.root = this.box({
@@ -107,59 +129,32 @@ export class App {
     });
     renderer.root.add(this.root);
     const header = this.box({
-      height: 3,
-      paddingX: 2,
+      height: space.bar,
+      paddingX: space.inset,
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: c.panel,
-      gap: 2,
+      gap: space.between,
     });
-    header.add(this.text("▰  furb", c.accent, { width: 12 }));
+    header.add(this.text("furb", c.text, { attributes: 1 }));
     this.head = this.text("", c.muted, { flexGrow: 1 });
     header.add(this.head);
-    const commands = this.text("⌘  Ctrl+P  commands", c.muted, { onMouseDown: () => this.palette() });
+    const commands = this.text("Ctrl+P", c.muted, { onMouseDown: () => this.palette() });
     header.add(commands);
     this.root.add(header);
 
     const body = this.box({ flexGrow: 1, flexShrink: 1, flexDirection: "row", minHeight: 0 });
     this.root.add(body);
-    this.sidebar = new ScrollBoxRenderable(renderer, {
-      width: workspace.panes.sidebar,
-      flexShrink: 0,
-      scrollX: false,
-      scrollY: true,
-      backgroundColor: c.panel,
-      contentOptions: { padding: 1, gap: 1, minHeight: "100%" },
-      verticalScrollbarOptions: { visible: false },
-      horizontalScrollbarOptions: { visible: false },
-    });
-    body.add(this.sidebar);
-    const leftSplitter = this.box({
-      width: 1,
-      backgroundColor: c.border,
-      onMouseDrag: (event) => {
-        workspace.panes.sidebar = Math.max(18, Math.min(44, event.x));
-        this.sidebar.width = workspace.panes.sidebar;
-      },
-      onMouseOver() {
-        this.backgroundColor = c.teal;
-      },
-      onMouseOut() {
-        this.backgroundColor = c.border;
-      },
-    });
-    body.add(leftSplitter);
-    this.splitters.push(leftSplitter);
     const center = this.box({
       flexGrow: 1,
       flexShrink: 1,
       minHeight: 0,
       minWidth: 0,
-      paddingX: 2,
-      paddingTop: 1,
+      paddingX: space.inset,
+      gap: space.stack,
     });
     body.add(center);
-    this.tabs = this.box({ height: 2, flexDirection: "row", gap: 2 });
+    this.tabs = this.box({ height: space.bar, flexDirection: "row", gap: space.between });
     center.add(this.tabs);
     this.search = new InputRenderable(renderer, {
       id: "search",
@@ -167,7 +162,7 @@ export class App {
       visible: false,
       backgroundColor: c.raised,
       textColor: c.text,
-      placeholderColor: c.faint,
+      placeholderColor: c.muted,
     });
     this.search.on(InputRenderableEvents.INPUT, (value: string) => {
       workspace.query = value;
@@ -182,35 +177,20 @@ export class App {
       scrollX: false,
       stickyScroll: true,
       stickyStart: "bottom",
-      contentOptions: { gap: 1, paddingBottom: 1 },
+      contentOptions: { gap: space.stack, paddingBottom: space.stack },
       verticalScrollbarOptions: { visible: false },
       horizontalScrollbarOptions: { visible: false },
     });
     center.add(this.scroll);
     this.promptBox = this.box({
       id: "operator-prompt",
-      maxHeight: 8,
+      height: space.bar,
       visible: false,
-      padding: 1,
-      border: true,
-      borderStyle: "rounded",
-      borderColor: c.yellow,
-      backgroundColor: c.raised,
+      backgroundColor: c.panel,
       onMouseDown: () => this.question(),
     });
     center.add(this.promptBox);
-    this.composeBox = this.box({
-      id: "composer-box",
-      border: true,
-      borderStyle: "rounded",
-      borderColor: c.border,
-      paddingX: 1,
-      paddingTop: 1,
-      height: 6,
-      flexShrink: 0,
-      backgroundColor: c.panel,
-      titleColor: c.muted,
-    });
+    this.composeBox = this.box({ id: "composer-box", height: 1, flexShrink: 0, backgroundColor: c.panel });
     center.add(this.composeBox);
     this.composer = new TextareaRenderable(renderer, {
       id: "composer",
@@ -218,7 +198,7 @@ export class App {
       minHeight: 1,
       placeholder: "What would you like to build?",
       textColor: c.text,
-      placeholderColor: c.faint,
+      placeholderColor: c.muted,
       backgroundColor: c.panel,
       focusedBackgroundColor: c.panel,
       focusedTextColor: c.text,
@@ -229,6 +209,7 @@ export class App {
       ],
       syntaxStyle: this.style,
       onContentChange: () => {
+        this.schedule();
         void this.highlightEditor();
       },
       onCursorChange: () => {
@@ -239,9 +220,7 @@ export class App {
       },
     });
     this.composeBox.add(this.composer);
-    this.hint = this.text("", c.muted, { height: 1 });
-    this.composeBox.add(this.hint);
-    this.status = this.text("", c.faint, { height: 2, paddingTop: 1 });
+    this.status = this.text("", c.muted, { height: space.bar, truncate: true });
     center.add(this.status);
     const rightSplitter = this.box({
       width: 1,
@@ -251,7 +230,7 @@ export class App {
         this.inspector.width = workspace.panes.inspector;
       },
       onMouseOver() {
-        this.backgroundColor = c.teal;
+        this.backgroundColor = c.accent;
       },
       onMouseOut() {
         this.backgroundColor = c.border;
@@ -265,23 +244,19 @@ export class App {
       scrollX: false,
       scrollY: true,
       backgroundColor: c.panel,
-      contentOptions: { padding: 1, gap: 0, minHeight: "100%" },
+      contentOptions: { paddingX: space.inset, gap: space.stack, minHeight: "100%" },
       verticalScrollbarOptions: { visible: false },
       horizontalScrollbarOptions: { visible: false },
     });
     body.add(this.inspector);
-    this.root.add(
-      this.text(
-        "  F1 help   Ctrl+N chain   Ctrl+F search   Ctrl+M model   Ctrl+O sessions   Ctrl+Q quit",
-        c.faint,
-        { height: 1, bg: c.panel },
-      ),
-    );
     workspace.on("change", this.schedule);
     workspace.on("compose", this.compose);
     workspace.on("inspect", this.inspect);
     workspace.on("resume", this.resume);
     workspace.on("rewind", this.rewind);
+    workspace.on("models", this.models);
+    workspace.on("efforts", this.effortPicker);
+    workspace.on("details", this.details);
     renderer.keyInput.on("keypress", this.key);
     renderer.on("resize", this.render);
     this.tick = setInterval(() => {
@@ -384,76 +359,18 @@ export class App {
       this.draftKey = draftKey;
       this.composer.setText(w.drafts[draftKey] ?? "");
     }
-    this.sidebar.visible = this.renderer.width >= 95;
-    this.inspector.visible = this.renderer.width >= 132;
-    if (this.splitters[0]) this.splitters[0].visible = this.sidebar.visible;
-    if (this.splitters[1]) this.splitters[1].visible = this.inspector.visible;
-    this.head.content = `${w.sessionName}  /  ${w.label}${w.demo ? "   DEMO" : ""}`;
-    const sidebarState = [
-      w.selected,
-      w.sessionName,
-      this.theme,
-      w.chains.map((chain) => [
-        chain.id,
-        w.labelOf(chain.id),
-        w.acts.filter((act) => act.on === chain.id && !act.done && ["prompt", "bash"].includes(act.kind))
-          .length,
-      ]),
-      [...w.world.prompts.keys()],
-    ];
-    if (this.paneChanged(this.sidebar, sidebarState)) {
-      this.clear(this.sidebar);
-      this.sidebar.add(this.text("WORKSPACE", c.faint));
-      this.sidebar.add(this.text(basename(w.world.directory), c.text));
-      this.sidebar.add(this.text("CHAINS", c.faint, { marginTop: 1 }));
-      for (const chain of w.chains) {
-        const selected = chain.id === w.selected;
-        const row = this.box({
-          paddingX: 1,
-          paddingY: 1,
-          backgroundColor: selected ? c.selected : c.panel,
-          onMouseDown: () => {
-            void w.select(chain.id).catch(w.fail);
-          },
-        });
-        const pending = w.acts.filter(
-          (act) => act.on === chain.id && !act.done && ["prompt", "bash"].includes(act.kind),
-        ).length;
-        const needsInput = [...w.world.prompts.values()].some(
-          (prompt) => w.acts.find((act) => act.id === prompt.id)?.on === chain.id,
-        );
-        row.add(
-          this.text(
-            `${needsInput ? "?" : selected ? "▸" : "·"} ${w.labelOf(chain.id)}`,
-            needsInput ? c.yellow : selected ? c.accent : c.muted,
-          ),
-        );
-        row.add(
-          this.text(`  ${pending ? `${pending} active` : "ready"}  ·  ${short(chain.id)}`, c.faint, {
-            height: 1,
-            truncate: true,
-          }),
-        );
-        this.sidebar.add(row);
-      }
-      this.sidebar.add(
-        this.text("+ New chain", c.teal, { marginTop: 1, onMouseDown: () => this.insert("/chain ") }),
-      );
-      this.sidebar.add(this.text("⑂ Fork this chain", c.muted, { onMouseDown: () => this.insert("/fork ") }));
-      this.sidebar.add(this.box({ flexGrow: 1 }));
-      this.sidebar.add(this.text(w.world.records.path ? "●  Session saved" : "○  In memory", c.accent));
-      this.sidebar.add(this.text("One life. Every step kept.", c.faint));
-    }
-
+    this.inspector.visible = this.renderer.width >= 100;
+    if (this.splitters[0]) this.splitters[0].visible = this.inspector.visible;
+    this.head.content = `${w.sessionName} / ${w.label}`;
     if (this.paneChanged(this.tabs, [w.view, this.theme, this.renderer.width])) {
       this.clear(this.tabs);
       for (const [index, view] of views.entries()) {
         const label =
-          this.renderer.width < 132
+          this.renderer.width < 110
             ? ["Chat", "Code", "Acts", "Facts", "Transcript", "Diffs"][index]
             : title(view);
         this.tabs.add(
-          this.text(`${index + 1} ${label}`, w.view === view ? c.accent : c.faint, {
+          this.text(`${index + 1} ${label}`, w.view === view ? c.accent : c.muted, {
             onMouseDown: () => w.show(view),
             attributes: w.view === view ? 1 : 0,
           }),
@@ -464,31 +381,35 @@ export class App {
     this.promptBox.visible = !!pending;
     if (this.paneChanged(this.promptBox, [pending, this.theme])) {
       this.clear(this.promptBox);
-      if (pending) {
-        this.promptBox.add(this.text(`?  YOUR INPUT  ·  ${pending.shape}`, c.yellow));
-        this.promptBox.add(this.text(pending.message, c.text, { maxHeight: 3, truncate: true }));
-        this.promptBox.add(this.text("Reply below, click here, or press Ctrl+A.", c.muted));
-      }
+      if (pending)
+        this.promptBox.add(
+          this.text(`Reply (${pending.shape}): ${pending.message}`, c.warning, { height: 1, truncate: true }),
+        );
     }
     this.composer.placeholder = w.editing
       ? "Edit this prompt's Python program..."
       : pending
         ? `Your ${pending.shape} answer...`
         : w.mode === "python"
-          ? "Write Python. Ctrl+Space completes a name. Ctrl+R returns to chat."
+          ? "Write Python..."
           : "Ask anything, or type / for a command...";
-    this.composeBox.borderColor = w.editing || pending ? c.yellow : c.border;
-    this.composeBox.title = w.editing
-      ? " EDIT PROGRAM "
-      : pending
-        ? " REPLY TO OPERATOR PROMPT "
-        : w.mode === "python"
-          ? ` PYTHON${w.ladder ? ` · ${short(w.ladder)}` : ""} · same gate, same chain `
-          : "";
-    this.hint.content = `${w.actor}  → ${w.shape}  ${w.paused ? "◌ paused" : w.world.streams.size ? "● working" : "○ ready"}    Enter send  ·  Shift+Enter newline`;
-    this.status.fg = w.error ? c.red : c.faint;
-    this.status.content =
-      w.error || `${w.notice}  ${w.world.records.path ? basename(w.world.records.path) : ""}`;
+    this.composeBox.height = Math.min(
+      6,
+      Math.max(1, this.composer.lineCount, this.composer.lineInfo.lineSources.length),
+    );
+    const { model, effort } = actorParts(w.actor);
+    const state = w.loading
+      ? "loading"
+      : w.error
+        ? "error"
+        : w.paused
+          ? "paused"
+          : pending
+            ? "input needed"
+            : w.activity.some((act) => !act.done && ["prompt", "rung", "bash", "wait"].includes(act.kind))
+              ? "working"
+              : "ready";
+    this.status.content = `${state} · model ${model} · effort ${effort}${pending ? "" : ` · ${w.mode === "python" || w.editing ? "Python" : `returns ${w.shape}`}`}${w.world.records.path ? ` · ${basename(w.world.records.path)}` : ""}`;
     this.renderContent();
     this.renderInspector();
     const diagnostics = JSON.stringify([w.rejectedWord, w.findings]);
@@ -505,41 +426,41 @@ export class App {
     color: RGBA,
     body: (box: BoxRenderable) => void,
     index: number,
+    options: BlockOptions = {},
   ): void {
-    key += this.collapsed.has(id) ? ":collapsed" : ":open";
-    const heading = `${this.collapsed.has(id) ? "▸" : "▾"} ${label}`;
+    const closed = options.compact ? !this.expanded.has(id) : this.collapsed.has(id);
+    key = options.compact && closed ? "closed" : `${key}:${closed}`;
+    const heading = `${options.compact ? (closed ? "▸ " : "▾ ") : ""}${label}`;
+    const visible = Boolean(label) && (options.heading !== false || closed);
     const prior = this.cards.get(id);
     if (prior?.key === key) {
       prior.heading.content = heading;
       prior.heading.fg = color;
-      prior.node.borderColor = color;
+      prior.heading.visible = visible;
+      if (this.scroll.getChildren()[index] !== prior.node) this.scroll.add(prior.node, index);
       return;
     }
-    if (prior) {
-      prior.node.destroyRecursively();
-      this.cards.delete(id);
-    }
-    const box = this.box({
-      id,
-      paddingX: 1,
-      paddingY: 1,
-      border: ["left"],
-      borderColor: color,
-      backgroundColor: c.panel,
-      flexShrink: 0,
-    });
+    prior?.node.destroyRecursively();
+    const box = this.box({ id, gap: space.stack, flexShrink: 0 });
     const labelNode = this.text(heading, color, {
-      marginBottom: this.collapsed.has(id) ? 0 : 1,
-      onMouseDown: () => {
-        if (this.collapsed.has(id)) this.collapsed.delete(id);
-        else this.collapsed.add(id);
+      height: space.bar,
+      truncate: true,
+      visible,
+      onMouseDown: (event) => {
+        if (event.button === 2 && options.act) {
+          this.actActions(this.workspace.acts.find((act) => act.id === options.act?.id) ?? options.act);
+          return;
+        }
+        const held = options.compact ? this.expanded : this.collapsed;
+        if (held.has(id)) held.delete(id);
+        else held.add(id);
         this.renderContent();
       },
     });
     box.add(labelNode);
-    if (!this.collapsed.has(id)) body(box);
+    if (!closed) body(box);
     this.scroll.add(box, index);
-    this.cards.set(id, { key, node: box, heading: labelNode });
+    this.cards.set(id, { key, node: box, heading: labelNode, compact: options.compact ?? false });
   }
   private code(content: string): CodeRenderable {
     const code = new CodeRenderable(this.renderer, {
@@ -596,7 +517,7 @@ export class App {
 
   renderContent(): void {
     const w = this.workspace;
-    const view = `${w.selected}:${w.view}:${w.query}`;
+    const view = `${w.selected}:${w.view}:${w.ladder ?? ""}`;
     if (this.lastView !== view) {
       if (this.lastView) w.scrolls[this.lastView] = this.scroll.scrollTop;
       this.clear(this.scroll);
@@ -606,304 +527,375 @@ export class App {
       this.scroll.scrollTo(w.scrolls[view] ?? 0);
     }
     const existing = new Set(this.cards.keys());
-    let order = 0;
-    const add = (id: string, key: string, label: string, color: RGBA, body: (box: BoxRenderable) => void) => {
+    let order = 0,
+      group = "";
+    const add = (
+      id: string,
+      key: string,
+      label: string,
+      color: RGBA,
+      body: (box: BoxRenderable) => void,
+      options: BlockOptions = {},
+    ) => {
       existing.delete(id);
-      this.card(id, key, label, color, body, order++);
+      const heading = !options.group || group !== options.group;
+      group = options.group ?? "";
+      this.card(id, key, label, color, body, order++, { ...options, heading: options.heading ?? heading });
     };
     const matches = (text: string) => !w.query || text.toLowerCase().includes(w.query.toLowerCase());
+    if (w.error && !(w.view === "program" && w.findings.length))
+      add("view-error", w.error, "", c.danger, (box) => {
+        box.add(this.text(w.error, c.danger));
+        box.add(
+          this.text("Refresh view", c.link, {
+            onMouseDown: () => {
+              w.error = "";
+              void w.refresh().catch(w.fail);
+            },
+          }),
+        );
+      });
+    if (w.loading)
+      add("view-loading", w.view, "", c.muted, (box) => box.add(this.text(`Loading ${w.view}...`, c.muted)));
+    let items = 0;
     if (w.view === "conversation") {
-      let items = 0;
-      for (const [index, turn] of w.turns.entries()) {
+      const seen = new Set<string>();
+      for (const [index, turn] of w.turns.entries())
         for (const [part, content] of turn[1].entries()) {
           const id = `turn-${index}-${part}`;
           if (typeof content === "string") {
             if (!matches(content)) continue;
             items++;
-            add(id, content, `✦  ${w.actor.split("/")[0]}  ·  Python`, c.teal, (box) => {
-              box.add(this.code(content));
-              box.add(
-                this.text("Inspect names: hover or Ctrl+click  ·  Ctrl+G opens the inspector", c.faint, {
-                  marginTop: 1,
-                }),
-              );
-            });
-          } else if (isTag(content)) {
-            const [name, attrs, body] = content;
-            const attributes = Object.fromEntries(attrs);
-            const act = String(attributes.id ?? attributes.over ?? "");
-            if (
-              (name === "opened" &&
-                (act.startsWith("chain://") ||
-                  act.startsWith("grant://") ||
-                  (act.startsWith("rung://") && w.acts.find((one) => one.id === act)?.by !== "operator"))) ||
-              (name === "closed" && act.startsWith("rung://") && body === null) ||
-              name === "ledger"
-            )
-              continue;
-            if (!matches(JSON.stringify(content))) continue;
-            const prompt = act.startsWith("prompt://");
-            const label =
-              name === "opened" && prompt
-                ? w.acts.find((one) => one.id === act)?.by === "operator"
-                  ? "YOU"
-                  : "OBSERVATION"
-                : name === "closed" && prompt
-                  ? "✦  RESULT"
-                  : `${name.toUpperCase()}  ${act.split("://")[0] || ""}`;
-            const color =
-              name === "raised" || name === "refused"
-                ? c.red
-                : name === "closed" && prompt
-                  ? c.accent
-                  : name === "opened" && prompt
-                    ? c.yellow
-                    : c.muted;
+            add(
+              id,
+              content,
+              `Python · ${this.preview(content, 11)}`,
+              c.muted,
+              (box) => box.add(this.numbered(content)),
+              { compact: true },
+            );
+            continue;
+          }
+          if (!isTag(content)) continue;
+          const [name, attrs, body] = content;
+          const fields = Object.fromEntries(attrs);
+          const actId = String(fields.id ?? fields.over ?? "");
+          const act = w.acts.find((act) => act.id === actId);
+          if (
+            name === "ledger" ||
+            (act &&
+              (["chain", "grant"].includes(act.kind) ||
+                (act.kind === "rung" && (act.by !== "operator" || !act.words[0]))) &&
+              ["opened", "closed"].includes(name))
+          )
+            continue;
+          if (!matches(JSON.stringify(content))) continue;
+          if (act?.kind === "prompt" && name === "opened") {
             items++;
-            add(id, JSON.stringify(content), label, color, (box) => {
-              if (prompt && name === "opened") {
-                box.add(this.markdown(String(attributes.message ?? "")));
-                box.add(this.reference("Open prompt REPL", act));
-                return;
-              }
-              if (act)
-                box.add(
-                  this.reference(`${act}${["raised", "refused"].includes(name) ? " · open word" : ""}`, act),
-                );
-              for (const [key, value] of attrs.filter(([key]) => !["id", "over"].includes(key))) {
-                box.add(
-                  typeof value === "string" && (key === "path" || value.includes("://"))
-                    ? this.reference(`${key}: ${value}`, value)
-                    : this.text(`${key}: ${display(value)}`, c.faint),
-                );
-              }
-              if (body !== null && body !== "") {
-                if (prompt && name === "closed")
-                  box.add(this.markdown(display(w.acts.find((one) => one.id === act)?.value ?? body)));
-                else if (name === "opened" && act.startsWith("rung://") && typeof body === "string")
-                  box.add(this.numbered(body));
-                else this.renderBody(box, body);
-              }
-            });
+            add(
+              id,
+              JSON.stringify(content),
+              act.by === "operator" ? "You" : "Observation",
+              c.muted,
+              (box) => box.add(this.markdown(String(fields.message ?? ""))),
+              { group: act.by === "operator" ? "user" : "observation", act },
+            );
+          } else if (act?.kind === "prompt" && name === "closed") {
+            items++;
+            add(
+              id,
+              JSON.stringify(content),
+              "Result",
+              c.muted,
+              (box) => box.add(this.markdown(display(act.value ?? body))),
+              { group: "assistant", act },
+            );
+          } else if (act && ["opened", "closed"].includes(name)) {
+            if (seen.has(act.id)) continue;
+            seen.add(act.id);
+            items++;
+            add(
+              act.id,
+              JSON.stringify(act),
+              this.actSummary(act),
+              this.actColor(act),
+              (box) => this.actDetails(box, act),
+              { compact: true, act },
+            );
+          } else {
+            items++;
+            const detail = attrs
+              .filter(([key]) => !["id", "over"].includes(key))
+              .map(([key, value]) => `${key}: ${display(value)}`)
+              .join(" · ");
+            const summary = `${name}${detail ? ` · ${this.preview(detail, Bun.stringWidth(name) + 5)}` : actId ? ` · ${short(actId)}` : ""}`;
+            add(
+              id,
+              JSON.stringify(content),
+              summary,
+              ["raised", "refused"].includes(name) ? c.danger : c.muted,
+              (box) => {
+                if (actId) box.add(this.reference(actId, actId));
+                for (const [key, value] of attrs.filter(([key]) => !["id", "over"].includes(key)))
+                  box.add(
+                    typeof value === "string" && (key === "path" || value.includes("://"))
+                      ? this.reference(`${key}: ${value}`, value)
+                      : this.text(`${key}: ${display(value)}`, c.muted),
+                  );
+                if (body !== null && body !== "") this.renderBody(box, body);
+              },
+              { compact: true, act },
+            );
           }
         }
-      }
       for (const [id, stream] of w.world.streams) {
         if (stream.chain !== w.selected) continue;
         items++;
         add(
           `stream-${id}`,
           stream.text + stream.thinking,
-          w.paused ? "◌  HELD RESPONSE" : `${this.progress(id)}  WORKING`,
-          c.teal,
+          w.paused ? "Response held" : this.progress(id),
+          c.muted,
           (box) => {
             if (stream.thinking) box.add(this.text(stream.thinking, c.muted));
             if (stream.text) box.add(this.code(stream.text));
-            else box.add(this.text("The model is thinking. You can keep exploring this life.", c.muted));
           },
         );
       }
-      if (!items)
-        add("welcome", "welcome", "", c.panel, (box) => {
-          box.add(
-            this.text(
-              "       ▄▄▄▄  ▄   ▄  ▄▄▄   ▄▄▄▄\n       █▄▄   █   █  █  █  █▄▄█\n       █     ▀▄▄▄▀  █ ▀▄  █▄▄█",
-              c.accent,
-              { marginTop: 2, marginBottom: 2 },
-            ),
-          );
-          box.add(this.text("A little space for ambitious work.", c.text, { marginBottom: 1 }));
-          box.add(
-            this.text(
-              "Think in conversations. Work in chains.\nEvery step is yours to inspect, pause, and replay.",
-              c.muted,
-              { marginBottom: 2 },
-            ),
-          );
+      if (!items && !w.query && !w.loading && !w.error) {
+        add("welcome", "welcome", "", c.muted, (box) => {
           for (const [label, prompt] of [
             ["Explore a codebase", "Read the README and explain how this project works."],
             ["Make something better", "Find one useful improvement in this project and implement it."],
             ["Start with a plan", "Read the project and propose a small, testable plan."],
-          ]) {
-            box.add(
-              this.text(`↗  ${label}`, c.teal, {
-                marginBottom: 1,
-                onMouseDown: () => this.insert(prompt ?? ""),
-              }),
-            );
-          }
-          box.add(this.text("Ctrl+P opens every action. F1 shows the keys.", c.faint, { marginTop: 1 }));
+          ])
+            box.add(this.text(label ?? "", c.muted, { onMouseDown: () => this.insert(prompt ?? "") }));
         });
+        items++;
+      }
     } else if (w.view === "program") {
       const ladder = w.acts.find((act) => act.id === w.ladder);
-      if (ladder)
+      if (ladder) {
+        items++;
         add(
           "prompt-repl",
-          JSON.stringify(ladder) + w.paused,
-          `${ladder.done ? "✓" : w.paused ? "◌" : "◐"} PROMPT REPL · ${short(ladder.id)}`,
-          c.yellow,
-          (box) => {
-            box.add(this.markdown(String(ladder.words[1] ?? "")));
-            box.add(
-              this.text(
-                `Result type: ${String(ladder.words[0])} · ${ladder.done ? "closed" : w.paused ? "paused" : "pending"}`,
-                c.faint,
-              ),
-            );
-            box.add(
-              this.text("Edit this prompt's program", c.blue, {
-                onMouseDown: () => this.action(`/edit ${ladder.id}`),
-              }),
-            );
-            box.add(
-              this.text("Show all programs", c.muted, {
-                onMouseDown: () => {
-                  w.ladder = undefined;
-                  this.render();
-                },
-              }),
-            );
-          },
+          JSON.stringify(ladder),
+          `Prompt ${short(ladder.id)} · ${ladder.done ? "closed" : "pending"}`,
+          c.muted,
+          (box) => box.add(this.markdown(String(ladder.words[1] ?? ""))),
         );
-      if (w.findings.length && (!w.ladder || w.repls[w.ladder]?.includes(w.rejectedAct)))
-        add("findings", w.rejectedWord + w.findings.join("\n"), "GATE FINDINGS", c.red, (box) => {
+      }
+      if (w.findings.length && (!w.ladder || w.repls[w.ladder]?.includes(w.rejectedAct))) {
+        items++;
+        add("findings", w.rejectedWord + w.findings.join("\n"), "Refused Python", c.danger, (box) => {
           box.add(this.numbered(w.rejectedWord, w.findings));
-          for (const finding of w.findings) box.add(this.text(`! ${finding}`, c.red));
+          for (const finding of w.findings) box.add(this.text(finding, c.danger));
         });
+      }
       const words = Object.entries(w.program).filter(
         ([id]) => !w.ladder || short(id).startsWith(`${short(w.ladder)}.`) || w.repls[w.ladder]?.includes(id),
       );
-      for (const [id, word] of words) {
-        if (matches(word))
-          add(id, word, `λ  ${id}`, c.teal, (box) => {
-            box.add(
-              new LineNumberRenderable(this.renderer, {
-                target: this.code(word),
-                fg: c.faint,
-                minWidth: 3,
-                paddingRight: 1,
-              }),
-            );
-          });
-      }
-      if (!words.length)
-        add("empty", "program", "NO PROGRAM YET", c.faint, (box) =>
-          box.add(this.text("Accepted Python words will appear here. Use /run to write a rung.")),
-        );
+      for (const [id, word] of words)
+        if (matches(word)) {
+          items++;
+          add(id, word, `rung ${short(id)}`, c.muted, (box) => box.add(this.numbered(word)));
+        }
     } else if (w.view === "activity") {
-      for (const act of w.activity) {
-        if (!matches(JSON.stringify(act))) continue;
-        add(
-          act.id,
-          JSON.stringify(act),
-          `${act.done ? "✓" : this.progress(act.id)}  ${act.kind.toUpperCase()}  ·  ${short(act.id)}`,
-          act.done ? c.accent : c.yellow,
-          (box) => {
-            box.add(this.text(act.words.map(display).join("\n"), c.muted));
-            if (act.kind === "bash" && act.value && typeof act.value === "object") {
-              const exit = act.value as {
-                stdout?: { content: string };
-                stderr?: { content: string };
-                code?: number;
-              };
-              if (exit.stdout?.content) {
-                box.add(this.text("stdout", c.faint));
-                box.add(this.text(exit.stdout.content));
-              }
-              if (exit.stderr?.content) {
-                box.add(this.text("stderr", c.red));
-                box.add(this.text(exit.stderr.content, c.red));
-              }
-              if (act.done) box.add(this.text(`exit ${exit.code ?? "timeout"}`, c.muted));
-            } else if (act.done) box.add(this.text(display(act.value), c.text, { marginTop: 1 }));
-            if (!act.done)
-              box.add(
-                this.text("Pause   Resume   Cancel", c.teal, {
-                  marginTop: 1,
-                  onMouseDown: () => this.actActions(act),
-                }),
-              );
-          },
-        );
-      }
-      if (!w.activity.length)
-        add("empty", "activity", "NO ACTS YET", c.faint, (box) =>
-          box.add(this.text("Prompts, commands, waits, and grants appear here as they run.")),
-        );
+      for (const act of w.activity)
+        if (matches(JSON.stringify(act))) {
+          items++;
+          add(
+            act.id,
+            JSON.stringify(act),
+            this.actSummary(act),
+            this.actColor(act),
+            (box) => this.actDetails(box, act),
+            { compact: true, act },
+          );
+        }
     } else if (w.view === "transcript") {
       w.turns.forEach((turn, index) => {
         const text = w.rendered[index] ?? "";
-        if (matches(text))
-          add(
-            `transcript-${index}`,
-            text,
-            `${turn[0].toUpperCase()}  ·  turn ${index + 1}`,
-            turn[0] === "assistant" ? c.teal : c.yellow,
-            (box) => box.add(turn[0] === "assistant" ? this.code(text) : this.transcriptText(text)),
-          );
+        if (!matches(text)) return;
+        items++;
+        add(
+          `transcript-${index}`,
+          text,
+          `${turn[0]} · ${index + 1}`,
+          c.muted,
+          (box) => box.add(turn[0] === "assistant" ? this.code(text) : this.transcriptText(text)),
+          { group: turn[0] },
+        );
       });
     } else if (w.view === "changes") {
       if (w.world.changes.length > 20)
-        add(
-          "change-pages",
-          String(w.changePage),
-          `WRITES ${w.changePage * 20 + 1} TO ${Math.min((w.changePage + 1) * 20, w.world.changes.length)} OF ${w.world.changes.length}`,
-          c.faint,
-          (box) => {
-            for (const [label, step] of [
-              ["Previous page · Ctrl+PageUp", -1],
-              ["Next page · Ctrl+PageDown", 1],
-            ] as const)
-              box.add(this.text(label, c.blue, { onMouseDown: () => this.changePage(step) }));
-          },
-        );
-      for (const [index, change] of w.changes.entries()) {
-        if (!matches(change.path)) continue;
-        const diff = createTwoFilesPatch(change.path, change.path, change.before, change.after);
-        add(`change-${index}`, diff, `±  ${change.path}`, c.teal, (box) =>
+        add("change-pages", String(w.changePage), "", c.muted, (box) => {
           box.add(
-            new DiffRenderable(this.renderer, {
-              diff,
-              view: this.renderer.width > 145 ? "split" : "unified",
-              syntaxStyle: this.style,
-              fg: c.text,
-              showLineNumbers: true,
-              lineNumberFg: c.faint,
-              lineNumberBg: c.panel,
-              contextBg: c.panel,
-              addedBg: c.selected,
-              removedBg: c.removed,
-              addedSignColor: c.accent,
-              removedSignColor: c.red,
-              wrapMode: "word",
-            }),
-          ),
-        );
-      }
-      if (!w.world.changes.length)
-        add("empty", "changes", "NO FILE CHANGES", c.faint, (box) =>
-          box.add(this.text("Writes through the World appear here with their before and after lines.")),
-        );
+            this.text(
+              `Writes ${w.changePage * 20 + 1} to ${Math.min((w.changePage + 1) * 20, w.world.changes.length)} of ${w.world.changes.length}`,
+              c.muted,
+            ),
+          );
+          for (const [label, step] of [
+            ["Previous page", -1],
+            ["Next page", 1],
+          ] as const)
+            box.add(this.text(label, c.link, { onMouseDown: () => this.changePage(step) }));
+        });
+      for (const [index, change] of w.changes.entries())
+        if (matches(change.path)) {
+          items++;
+          const diff = createTwoFilesPatch(change.path, change.path, change.before, change.after);
+          add(`change-${index}`, diff, change.path, c.muted, (box) =>
+            box.add(
+              new DiffRenderable(this.renderer, {
+                diff,
+                view: this.renderer.width > 145 ? "split" : "unified",
+                syntaxStyle: this.style,
+                fg: c.text,
+                showLineNumbers: true,
+                lineNumberFg: c.muted,
+                lineNumberBg: c.background,
+                contextBg: c.background,
+                addedBg: c.selected,
+                removedBg: c.removed,
+                addedSignColor: c.success,
+                removedSignColor: c.danger,
+                wrapMode: "word",
+              }),
+            ),
+          );
+        }
     } else {
       const facts = w.filteredFacts();
       for (const [index, fact] of facts.slice(-300).entries()) {
-        const id = `fact-${index}`;
+        items++;
         add(
-          id,
+          `fact-${index}`,
           JSON.stringify(fact),
-          `${String(index + Math.max(0, facts.length - 300) + 1).padStart(4, "0")}  ${fact[0]}  ·  ${fact[1]}`,
-          c.teal,
+          `${index + Math.max(0, facts.length - 300) + 1} · ${fact[0]} · ${fact[1]}`,
+          c.muted,
           (box) => {
-            box.add(this.text(`by ${fact[2]}`, c.faint));
-            box.add(this.text(JSON.stringify(fact.slice(3), null, 2), c.muted));
+            box.add(this.text(`by ${fact[2]}`, c.muted));
+            box.add(this.text(JSON.stringify(fact.slice(3), null, 2)));
           },
+          { compact: true },
         );
       }
+    }
+    if (!items && !w.loading && !w.error) {
+      const empty = {
+        conversation: "No conversation yet.",
+        program: "No accepted Python yet. Use /run to write a rung.",
+        activity: "No acts yet.",
+        facts: "No facts yet.",
+        transcript: "No transcript yet.",
+        changes: "No file changes yet.",
+      };
+      const message = w.query ? `No matching ${w.view} for “${w.query}”.` : empty[w.view];
+      add("empty", message, "", c.muted, (box) => box.add(this.text(message, c.muted)));
     }
     for (const id of existing) {
       this.cards.get(id)?.node.destroyRecursively();
       this.cards.delete(id);
     }
+  }
+
+  private preview(text: string, reserve = 2): string {
+    const line = text.replace(/\s+/g, " ");
+    const width = Math.max(8, this.scroll.width - reserve);
+    if (Bun.stringWidth(line) <= width) return line;
+    let result = "";
+    for (const character of line) {
+      if (Bun.stringWidth(result + character) >= width - 1) break;
+      result += character;
+    }
+    return `${result}…`;
+  }
+  private failure(act: ActRow): boolean {
+    return Boolean(
+      act.value &&
+        typeof act.value === "object" &&
+        "is" in act.value &&
+        "args" in act.value &&
+        act.value.is !== "CancelledError",
+    );
+  }
+  private actColor(act: ActRow): RGBA {
+    if (this.failure(act)) return c.danger;
+    return this.workspace.world.prompts.has(act.id) ? c.warning : c.muted;
+  }
+  private actSummary(act: ActRow): string {
+    const held = this.workspace.world.held.has(act.id);
+    const fault = this.failure(act);
+    const cancelled =
+      act.value && typeof act.value === "object" && "is" in act.value && act.value.is === "CancelledError";
+    const parent = this.workspace.acts.find((candidate) => candidate.id === act.by);
+    const answered = act.kind === "rung" && parent?.kind === "prompt" && parent.done && !this.failure(parent);
+    const state =
+      act.kind === "grant"
+        ? act.done
+          ? "ended ceiling"
+          : "active ceiling"
+        : act.done
+          ? fault
+            ? "failed"
+            : cancelled && !answered
+              ? "cancelled"
+              : "done"
+          : held
+            ? "held"
+            : this.workspace.world.prompts.has(act.id)
+              ? "needs input"
+              : this.workspace.paused && act.kind !== "bash"
+                ? "paused"
+                : `running ${this.progress(act.id)}`;
+    const words =
+      act.kind === "prompt"
+        ? String(act.words[1])
+        : act.kind === "grant"
+          ? [
+              act.words[0] === null ? "" : `$${act.words[0]}`,
+              act.words[1] === null ? "" : `${Number(act.words[1]) * 100}% context`,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : act.kind === "wait"
+            ? `${act.words[0]}s`
+            : String(this.workspace.program[act.id] || act.words[0] || "awaiting model");
+    const prefix = `${act.kind} · `,
+      suffix = ` · ${state}`;
+    return `${prefix}${this.preview(words, Bun.stringWidth(prefix + suffix) + 2)}${suffix}`;
+  }
+  private actDetails(box: BoxRenderable, act: ActRow): void {
+    const fields: Record<string, string[]> = {
+      prompt: ["shape", "message", "actor"],
+      rung: ["word", "retells", "actor", "returns"],
+      bash: ["command", "stdin open", "timeout (seconds)", "stdout show", "stderr show"],
+      wait: ["seconds"],
+      grant: ["dollar ceiling", "context ceiling"],
+    };
+    box.add(this.reference(act.id, act.id));
+    for (const [index, value] of act.words.entries()) {
+      if (value === null || value === "" || (act.kind === "rung" && index === 0)) continue;
+      box.add(
+        this.text(`${fields[act.kind]?.[index] ?? `argument ${index + 1}`}: ${display(value)}`, c.muted),
+      );
+    }
+    if (act.kind === "rung" && (this.workspace.program[act.id] || act.words[0]))
+      box.add(this.numbered(String(this.workspace.program[act.id] || act.words[0])));
+    if (act.kind === "bash" && act.value && typeof act.value === "object") {
+      const exit = act.value as { stdout?: { content: string }; stderr?: { content: string }; code?: number };
+      if (exit.stdout?.content) {
+        box.add(this.text("stdout", c.muted));
+        box.add(this.text(exit.stdout.content));
+      }
+      if (exit.stderr?.content) {
+        box.add(this.text("stderr", c.danger));
+        box.add(this.text(exit.stderr.content, c.danger));
+      }
+      if (act.done) box.add(this.text(`exit: ${exit.code ?? "timeout"}`, c.muted));
+    } else if (act.done && act.value !== null) box.add(this.text(display(act.value), this.actColor(act)));
   }
 
   private renderBody(box: BoxRenderable, body: unknown): void {
@@ -913,12 +905,12 @@ export class App {
     }
     for (const one of body) {
       if (isTag(one)) {
-        box.add(this.text(one[0].toUpperCase(), c.teal, { marginTop: 1 }));
+        box.add(this.text(title(one[0]), c.muted, { marginTop: space.section }));
         for (const [key, value] of one[1])
           box.add(
             typeof value === "string" && (key === "path" || value.includes("://"))
               ? this.reference(`${key}: ${value}`, value)
-              : this.text(`${key}: ${display(value)}`, c.faint),
+              : this.text(`${key}: ${display(value)}`, c.muted),
           );
         this.renderBody(box, one[2]);
       } else if (Array.isArray(one) && typeof one[0] === "number" && typeof one[1] === "string") {
@@ -930,22 +922,22 @@ export class App {
   private numbered(word: string, findings: string[] = []): LineNumberRenderable {
     const lines = new LineNumberRenderable(this.renderer, {
       target: this.code(word),
-      fg: c.faint,
+      fg: c.muted,
       minWidth: 3,
-      paddingRight: 1,
+      paddingRight: space.inset,
     });
     for (const finding of findings) {
       const line = Number(finding.match(/line (\d+)/)?.[1] ?? 0) - 1;
       if (line >= 0) {
         lines.setLineColor(line, { gutter: c.removed, content: c.removed });
-        lines.setLineSign(line, { before: "!", beforeColor: c.red });
+        lines.setLineSign(line, { before: "!", beforeColor: c.danger });
       }
     }
     return lines;
   }
 
   private reference(label: string, value: string): TextRenderable {
-    const node = this.text(label, c.blue, { attributes: 8 });
+    const node = this.text(label, c.link, { attributes: 8 });
     node.onMouseDown = () => {
       void this.follow(value).catch(this.workspace.fail);
     };
@@ -999,16 +991,16 @@ export class App {
         top: Math.max(1, Math.min(y + 1, this.renderer.height - 8)),
         width: Math.min(58, this.renderer.width - 4),
         maxHeight: 7,
-        padding: 1,
+        padding: space.inset,
         border: true,
-        borderColor: c.blue,
+        borderColor: c.link,
         backgroundColor: c.raised,
         zIndex: 30,
         onMouseDown: () => {
           void this.follow(value).catch(this.workspace.fail);
         },
       });
-      this.hover.add(this.text(value, c.blue));
+      this.hover.add(this.text(value, c.link));
       this.hover.add(this.text(detail.slice(0, 400), c.text, { maxHeight: 4 }));
       this.root.add(this.hover);
     } catch {
@@ -1025,7 +1017,11 @@ export class App {
       chunks.push({
         __isChunk: true,
         text: match[0],
-        fg: match[0].startsWith("<") ? c.teal : match[0].startsWith('"') ? c.accent : c.yellow,
+        fg: match[0].startsWith("<")
+          ? c.syntaxKeyword
+          : match[0].startsWith('"')
+            ? c.syntaxString
+            : c.syntaxType,
       });
       at = match.index + match[0].length;
     }
@@ -1080,76 +1076,63 @@ export class App {
       !this.paneChanged(this.inspector, [
         this.theme,
         w.selected,
-        w.label,
         w.directory,
-        w.paused,
-        w.world.streams.size,
         w.usage,
-        w.actor,
-        this.renderer.height,
-        w.activity.map((act) => [act.id, act.done]),
+        w.chains,
+        w.activity.filter((act) => act.kind === "grant"),
       ])
     )
       return;
     this.clear(this.inspector);
-    this.inspector.add(this.text("THIS CHAIN", c.faint));
-    this.inspector.add(this.text(w.label, c.accent));
-    this.inspector.add(this.text(short(w.selected), c.faint));
-    this.inspector.add(
-      this.text(w.directory || w.world.directory, c.faint, { maxHeight: 2, truncate: true }),
-    );
-    this.inspector.add(
-      this.text(
-        w.paused ? "◌ Paused" : w.world.streams.size ? "● Working" : "✓ Ready",
-        w.paused ? c.yellow : c.teal,
-      ),
-    );
-    this.inspector.add(this.text("USAGE", c.faint, { marginTop: 1 }));
-    const usage = w.usage;
-    this.inspector.add(this.text(`$${usage[4].toFixed(4)}  total`, c.text));
-    this.inspector.add(
-      this.text(`${count(usage[0])} input    ${count(usage[1])} output\n${count(usage[2])} cached`, c.muted),
-    );
-    const last = [...w.turns].reverse().find((turn) => turn[2])?.[2];
-    const share = (last?.[0] ?? 0) / w.world.route(w.actor).contextWindow;
-    const filled = Math.min(20, Math.round(share * 20));
-    this.inspector.add(
-      this.text(
-        `${"━".repeat(filled)}${"─".repeat(20 - filled)}\n${(share * 100).toFixed(1)}% of context`,
-        c.accent,
-      ),
-    );
-    const grant = w.activity.find((act) => act.kind === "grant" && !act.done);
-    this.inspector.add(
-      this.text(
-        grant
-          ? `Budget  ${grant.words[0] === null ? "context share" : `$${grant.words[0]}`}`
-          : "No budget set",
-        c.muted,
-        { onMouseDown: () => this.insert("/grant ") },
-      ),
-    );
-    this.inspector.add(this.text("RECENT ACTS", c.faint, { marginTop: 1 }));
-    for (const act of w.activity.slice(this.renderer.height < 40 ? -2 : -4)) {
-      const row = this.box({ onMouseDown: () => this.actActions(act) });
-      row.add(this.text(`${act.done ? "✓" : "◌"} ${act.kind}`, act.done ? c.muted : c.yellow));
-      row.add(
-        this.text(String(w.program[act.id] || act.words[0] || short(act.id)).split("\n")[0] ?? "", c.faint, {
+    this.inspector.add(this.text("Chains", c.text, { attributes: 1 }));
+    for (const chain of w.chains)
+      this.inspector.add(
+        this.text(w.labelOf(chain.id), chain.id === w.selected ? c.accent : c.muted, {
           height: 1,
           truncate: true,
+          attributes: chain.id === w.selected ? 1 : 0,
+          bg: chain.id === w.selected ? c.selected : c.panel,
+          onMouseDown: () => {
+            void w.select(chain.id).catch(w.fail);
+          },
         }),
       );
-      this.inspector.add(row);
-    }
-    this.inspector.add(this.box({ flexGrow: 1 }));
+    this.inspector.add(this.text("Directory", c.text, { attributes: 1, marginTop: space.section }));
+    const directory = w.directory || w.world.directory;
+    const width = w.panes.inspector - space.inset * 2;
+    const path = Bun.stringWidth(directory) > width ? `…${directory.slice(1 - width)}` : directory;
     this.inspector.add(
-      this.text(w.paused ? "▶  Resume chain" : "Ⅱ  Pause chain", c.teal, {
-        onMouseDown: () => this.action(w.paused ? "/wake" : "/pause"),
+      this.text(path, c.muted, {
+        height: 1,
+        truncate: true,
+        onMouseDown: () => this.showValue("Directory", directory),
       }),
     );
-    this.inspector.add(this.text("×  Cancel work", c.muted, { onMouseDown: () => this.action("/cancel") }));
+    const usage = w.usage;
+    if (usage.some((amount) => amount > 0)) {
+      const ledger = w.turns
+        .flatMap((turn) => turn[1])
+        .findLast((part) => isTag(part) && part[0] === "ledger");
+      const share =
+        ledger && isTag(ledger) ? Number(ledger[1].find(([name]) => name === "filled")?.[1]) : undefined;
+      this.inspector.add(
+        this.text(w.demo ? "Simulated usage" : "Usage", c.text, { attributes: 1, marginTop: space.section }),
+      );
+      this.inspector.add(
+        this.text(
+          `$${usage[4].toFixed(4)}${share !== undefined && Number.isFinite(share) ? ` · ${(share * 100).toFixed(1)}% context` : ""}`,
+        ),
+      );
+      this.inspector.add(this.text(`${count(usage[0])} in · ${count(usage[1])} out`, c.muted));
+      if (usage[2]) this.inspector.add(this.text(`${count(usage[2])} cached`, c.muted));
+    }
+    const grant = w.activity.find((act) => act.kind === "grant" && !act.done);
+    if (grant) {
+      this.inspector.add(this.text("Ceiling", c.text, { attributes: 1, marginTop: space.section }));
+      if (grant.words[0] !== null) this.inspector.add(this.text(`$${grant.words[0]}`));
+      if (grant.words[1] !== null) this.inspector.add(this.text(`${Number(grant.words[1]) * 100}% context`));
+    }
   }
-
   private insert(text: string): void {
     this.closeOverlay();
     this.composer.setText(text);
@@ -1168,9 +1151,6 @@ export class App {
           this.workspace.show("activity");
         },
       },
-      { label: "Pause", detail: "Hold delivery to this act", run: () => this.action(`/pause ${act.id}`) },
-      { label: "Resume", detail: "Deliver held work", run: () => this.action(`/wake ${act.id}`) },
-      { label: "Cancel", detail: "End this act and its work", run: () => this.action(`/cancel ${act.id}`) },
       ...(act.kind === "prompt"
         ? [
             {
@@ -1204,8 +1184,6 @@ export class App {
                 : this.action(`/${name}`),
         })),
     );
-    choices.push({ label: "Choose model", detail: "Model and reasoning effort", run: () => this.models() });
-    choices.push({ label: "Choose theme", detail: "Forest, paper, or midnight", run: () => this.themes() });
     choices.push({
       label: "Inspect a name",
       detail: "Values from this chain's module",
@@ -1230,24 +1208,54 @@ export class App {
     choices.push({ label: "Help", detail: "Keyboard and slash commands", run: () => this.help() });
     this.openPalette("Commands", choices);
   }
-  models(): void {
+  models = (): void => {
     this.openPalette(
-      "Model & effort",
-      this.workspace.world.roster.flatMap((model) =>
-        efforts.map((effort) => ({
-          label: `${model}/${effort}`,
-          detail: `${count(this.workspace.world.route(model).contextWindow)} context  ·  ${model.startsWith("claude-cli:") ? "Claude subscription" : "pi-ai"}`,
-          run: () => this.action(`/model ${model}/${effort}`),
+      "Model",
+      this.workspace.roster
+        .filter(([name]) => name !== "operator")
+        .map(([name, , window]) => ({
+          label: name,
+          detail: `${count(window)} context${name === actorParts(this.workspace.actor).model ? " · selected" : ""}`,
+          run: () => this.action(`/model ${name}`),
         })),
-      ),
     );
-  }
+  };
+  effortPicker = (): void => {
+    const { model, effort } = actorParts(this.workspace.actor);
+    const offered = this.workspace.roster.find(([name]) => name === model)?.[1] ?? [];
+    this.openPalette(
+      `Effort · ${model}`,
+      offered.map((name) => ({
+        label: `${name}${name === effort ? " · current" : ""}`,
+        detail: "",
+        run: () => this.action(`/effort ${name}`),
+      })),
+      offered.indexOf(effort),
+    );
+  };
+  details = (): void => {
+    this.openPalette(
+      "Details",
+      [...this.cards]
+        .filter(([, card]) => card.compact)
+        .map(([id, card]) => ({
+          label: card.heading.plainText.replace(/^[▸▾] /, ""),
+          detail: this.expanded.has(id) ? "Collapse" : "Expand",
+          run: () => {
+            if (this.expanded.has(id)) this.expanded.delete(id);
+            else this.expanded.add(id);
+            this.renderContent();
+            this.scroll.scrollChildIntoView(id);
+          },
+        })),
+    );
+  };
   themes(): void {
     this.openPalette(
       "Color theme",
       Object.keys(palettes).map((name) => ({
-        label: title(name),
-        detail: name === "paper" ? "A quiet light theme" : "A quiet dark theme",
+        label: name === "github" ? "GitHub Dark" : title(name),
+        detail: name === "paper" ? "Light" : "Dark",
         run: () => {
           this.workspace.theme = name as ThemeName;
           this.render();
@@ -1301,7 +1309,7 @@ export class App {
     this.composer.focusedBackgroundColor = c.panel;
     this.composer.textColor = c.text;
     this.composer.focusedTextColor = c.text;
-    this.composer.placeholderColor = c.faint;
+    this.composer.placeholderColor = c.muted;
     this.composer.cursorColor = c.accent;
     this.clear(this.scroll);
     this.cards.clear();
@@ -1420,7 +1428,7 @@ export class App {
         .answer(question.id, input.value)
         .then(() => this.closeOverlay())
         .catch((failure) => {
-          error.fg = c.red;
+          error.fg = c.danger;
           error.content = String(failure);
         });
     });
@@ -1449,17 +1457,17 @@ export class App {
         top: Math.max(1, Math.min(y + 1, this.renderer.height - 9)),
         width,
         maxHeight: 8,
-        padding: 1,
+        padding: space.inset,
         border: true,
         borderStyle: "rounded",
-        borderColor: c.teal,
+        borderColor: c.text,
         backgroundColor: c.raised,
         zIndex: 30,
         onMouseDown: () => this.inspect(name),
       });
-      this.hover.add(this.text(`${name}  ·  ${inspected.kind}`, c.teal));
+      this.hover.add(this.text(`${name}  ·  ${inspected.kind}`, c.text));
       this.hover.add(this.text(inspected.representation.slice(0, 280), c.text, { maxHeight: 4 }));
-      this.hover.add(this.text("Click to expand  ·  Ctrl+G keyboard inspector", c.faint));
+      this.hover.add(this.text("Click to expand  ·  Ctrl+G keyboard inspector", c.muted));
       this.root.add(this.hover);
     } catch {
       this.hover?.destroyRecursively();
@@ -1524,9 +1532,9 @@ export class App {
             document.add(
               new LineNumberRenderable(this.renderer, {
                 target: this.code(lines.slice(at, next < 0 ? undefined : at + next + 1).join("\n")),
-                fg: c.faint,
+                fg: c.muted,
                 lineNumberOffset: at,
-                paddingRight: 1,
+                paddingRight: space.inset,
               }),
             );
             this.paletteList?.add(document);
@@ -1702,7 +1710,7 @@ export class App {
       })),
     );
   }
-  openPalette(label: string, choices: Choice[]): void {
+  openPalette(label: string, choices: Choice[], selected = 0): void {
     this.closeOverlay();
     this.composer.blur();
     const width = Math.min(76, this.renderer.width - 4);
@@ -1713,8 +1721,8 @@ export class App {
       top: 4,
       width,
       maxHeight: Math.max(12, this.renderer.height - 8),
-      padding: 1,
-      gap: 1,
+      padding: space.inset,
+      gap: space.stack,
       border: true,
       borderStyle: "rounded",
       borderColor: c.accent,
@@ -1722,19 +1730,19 @@ export class App {
       zIndex: 20,
     });
     this.root.add(this.overlay);
-    this.overlay.add(this.text(`${label.toUpperCase()}   /   Esc to close`, c.accent));
+    this.overlay.add(this.text(label, c.text, { attributes: 1 }));
     this.paletteInput = new InputRenderable(this.renderer, {
       id: "palette-search",
       placeholder: "Type to filter...",
       backgroundColor: c.panel,
       textColor: c.text,
-      placeholderColor: c.faint,
+      placeholderColor: c.muted,
     });
     this.overlay.add(this.paletteInput);
-    this.paletteList = this.box({ gap: 1 });
+    this.paletteList = this.box({ gap: space.stack });
     this.overlay.add(this.paletteList);
     this.filtered = choices;
-    this.selection = 0;
+    this.selection = Math.max(0, selected);
     this.paletteInput.on(InputRenderableEvents.INPUT, (value: string) => {
       this.filtered = choices.filter((choice) =>
         `${choice.label} ${choice.detail}`.toLowerCase().includes(value.toLowerCase()),
@@ -1749,20 +1757,25 @@ export class App {
   private renderChoices(): void {
     if (!this.paletteList) return;
     this.clear(this.paletteList);
-    const max = Math.max(2, Math.floor((this.renderer.height - 17) / 3));
+    const max = Math.max(2, Math.floor((this.renderer.height - 12) / 2));
     const start = Math.max(0, this.selection - max + 1);
     for (const [index, choice] of this.filtered.slice(start, start + max).entries()) {
       const selected = index + start === this.selection;
       const row = this.box({
-        paddingX: 1,
         backgroundColor: selected ? c.selected : c.raised,
         onMouseDown: () => {
           this.selection = index + start;
           this.choose();
         },
       });
-      row.add(this.text(`${selected ? "▸" : " "} ${choice.label}`, selected ? c.accent : c.text));
-      row.add(this.text(`  ${choice.detail}`, c.muted));
+      row.add(
+        this.text(`${selected ? "▸" : " "} ${choice.label}`, selected ? c.accent : c.text, {
+          height: 1,
+          truncate: true,
+          attributes: selected ? 1 : 0,
+        }),
+      );
+      if (choice.detail) row.add(this.text(`  ${choice.detail}`, c.muted, { height: 1, truncate: true }));
       this.paletteList.add(row);
     }
     if (!this.filtered.length) this.paletteList.add(this.text("No matching actions.", c.muted));
@@ -1789,10 +1802,12 @@ export class App {
         ["Ctrl+1 through Ctrl+6", "Conversation / program / activity / facts / transcript / changes"],
         ["Ctrl+P", "Search all actions"],
         ["Ctrl+B", "Switch chains"],
-        ["Ctrl+N / Ctrl+M / Ctrl+O", "New chain / choose model / saved sessions"],
+        ["Ctrl+N / Ctrl+M / Shift+Tab / Ctrl+O", "New chain / model / effort / saved sessions"],
         ["Ctrl+F / PageUp / PageDown", "Filter the current view / scroll"],
         ["Ctrl+R / Ctrl+Space / Tab", "Python input / complete a name / complete a slash command"],
         ["Ctrl+G / Ctrl+click a name", "Inspect a value and follow its definition"],
+        ["Click an act / /details", "Expand or collapse details"],
+        ["Right-click an act", "Inspect its value or prompt program"],
         ["Ctrl+L / Ctrl+A", "Prompt programs / answer an operator question"],
         ["Ctrl+T / Ctrl+Y", "Themes / copy the selected text"],
         ["Ctrl+C / Ctrl+Q", "Clear or cancel / save and quit"],
@@ -1812,6 +1827,11 @@ export class App {
     );
   }
   private key = (key: KeyEvent): void => {
+    if (!this.overlay && key.name === "tab" && key.shift) {
+      key.preventDefault();
+      this.effortPicker();
+      return;
+    }
     if (key.ctrl && ["pageup", "pagedown"].includes(key.name) && this.workspace.view === "changes") {
       key.preventDefault();
       this.changePage(key.name === "pageup" ? -1 : 1);
@@ -1967,6 +1987,7 @@ export class App {
     this.workspace.drafts[this.draftKey] = this.composer.plainText;
     this.workspace.scrolls[this.lastView] = this.scroll.scrollTop;
     this.workspace.collapsed = [...this.collapsed];
+    this.workspace.expanded = [...this.expanded];
     this.workspace.save();
     if (this.redraw) clearTimeout(this.redraw);
     if (this.hoverTimer) clearTimeout(this.hoverTimer);
@@ -1975,6 +1996,9 @@ export class App {
     this.workspace.off("inspect", this.inspect);
     this.workspace.off("resume", this.resume);
     this.workspace.off("rewind", this.rewind);
+    this.workspace.off("models", this.models);
+    this.workspace.off("efforts", this.effortPicker);
+    this.workspace.off("details", this.details);
     this.renderer.keyInput.off("keypress", this.key);
     this.renderer.off("resize", this.render);
     this.root.destroyRecursively();

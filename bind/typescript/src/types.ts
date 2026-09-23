@@ -1,15 +1,22 @@
 import { stripVTControlCharacters } from "node:util";
-import type { ThinkingLevel } from "@earendil-works/pi-ai";
+import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { Life } from "../index.cjs";
 
 export const efforts = [
+  "off",
   "minimal",
   "low",
   "medium",
   "high",
   "xhigh",
   "max",
-] as const satisfies readonly ThinkingLevel[];
+] as const satisfies readonly ModelThinkingLevel[];
+export function actorParts(actor: string): { model: string; effort: string } {
+  const at = actor.lastIndexOf("/");
+  return at < 0
+    ? { model: actor, effort: "off" }
+    : { model: actor.slice(0, at), effort: actor.slice(at + 1) };
+}
 export const shapes = ["str", "None", "bool", "int", "float", "list", "dict"] as const;
 
 export type Turn = Awaited<ReturnType<Life["turns"]>>[number];

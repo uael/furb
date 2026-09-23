@@ -2,8 +2,52 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createModels } from "@earendil-works/pi-ai";
 import { boot, decodeRecord, type Ear, Ears, type Fact, World } from "../src/index.ts";
+import { claudeProvider, cliModel } from "../src/providers/claude.ts";
 import { RecordFile } from "../src/record.ts";
+
+test("the standing takes each model's efforts from its pi-ai metadata", async () => {
+  const cli = claudeProvider();
+  const models = createModels();
+  models.setProvider({
+    ...cli.provider,
+    getModels: () => [
+      { ...cliModel("org/plain"), reasoning: false },
+      {
+        ...cliModel("focused"),
+        thinkingLevelMap: {
+          off: null,
+          minimal: null,
+          low: "low",
+          medium: null,
+          high: "high",
+          xhigh: null,
+          max: null,
+        },
+      },
+    ],
+  });
+  const world = new World({ models, model: "claude-cli:org/plain", roster: ["claude-cli:focused"] });
+  try {
+    const life = world.open();
+    const [, [roster]] = life.call<[unknown, [[string, string[], number][], string, string]]>(
+      "ask",
+      ["stand", life.root],
+      {},
+    );
+    expect(roster.map(([name, efforts]) => [name, efforts])).toEqual([
+      ["claude-cli:org/plain", ["off"]],
+      ["claude-cli:focused", ["low", "high"]],
+      ["operator", []],
+    ]);
+    expect(world.effort).toBe("off");
+    expect(world.route("claude-cli:org/plain/off").id).toBe("org/plain");
+  } finally {
+    await world.dispose();
+    cli.dispose();
+  }
+});
 
 test("the default World serves files and streams commands without any TUI", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-world-"));

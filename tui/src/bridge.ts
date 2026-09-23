@@ -1,9 +1,10 @@
 import { EventEmitter } from "node:events";
-import type { Act, Fact, Life, World, WorldOptions } from "@furb/engine";
+import { type Act, actorParts, type Fact, type Life, type World, type WorldOptions } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
 import type { ActRow } from "./workspace.ts";
 
 export interface Snapshot {
+  roster: [string, string[], number][];
   acts: ActRow[];
   selected: string;
   turns: ReturnType<Life["turns"]>;
@@ -66,8 +67,11 @@ export class HostView extends EventEmitter {
     this.emit("change");
   }
   route(actor: string): ReturnType<World["route"]> {
-    const name = actor.split("/")[0];
-    const model = this.models.find((model) => `${model.provider}:${model.id}` === name || model.id === name);
+    const model = this.models.find((model) =>
+      [actor, actorParts(actor).model].some(
+        (name) => `${model.provider}:${model.id}` === name || model.id === name,
+      ),
+    );
     if (!model) throw new Error(`No model ${actor}.`);
     return model;
   }

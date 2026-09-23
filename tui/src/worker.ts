@@ -68,7 +68,13 @@ self.onmessage = async ({ data }) => {
       });
       const selected = acts.some((act) => act.id === data.args[0]) ? (data.args[0] as string) : owner.root;
       const [, program] = owner.call<[unknown, Record<string, string>]>("ask", ["program", selected], {});
+      const [, [roster]] = owner.call<[unknown, [Snapshot["roster"], string, string]]>(
+        "ask",
+        ["stand", selected],
+        {},
+      );
       value = {
+        roster,
         acts,
         selected,
         turns: owner.turns(selected),

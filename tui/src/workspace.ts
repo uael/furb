@@ -1,11 +1,12 @@
 import { EventEmitter } from "node:events";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { basename } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { Fact, Turn, Usage } from "@furb/engine";
-import { shapes } from "@furb/engine";
+import { actorParts, shapes } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
 import type { Engine, HostView } from "./bridge.ts";
+import { Preferences } from "./preferences.ts";
 import { palettes, type ThemeName } from "./theme.ts";
 
 export type View = "conversation" | "program" | "activity" | "facts" | "transcript" | "changes";
@@ -31,17 +32,21 @@ export class Workspace extends EventEmitter {
   changePage = 0;
   program: Record<string, string> = {};
   query = "";
-  notice = "Ready when you are.";
-  error = "";
+  notice = "";
+  readonly errors: Record<string, string> = {};
+  loading = false;
   editing?: string;
   ladder?: string;
-  theme: ThemeName = "forest";
+  theme: ThemeName;
+  readonly preferences: Preferences;
   mode: "prompt" | "python" = "prompt";
   shape = "str";
   drafts: Record<string, string> = {};
   scrolls: Record<string, number> = {};
-  panes = { sidebar: 25, inspector: 31 };
+  panes = { inspector: 28 };
   collapsed: string[] = [];
+  expanded: string[] = [];
+  roster: [string, string[], number][] = [];
   findings: string[] = [];
   rejectedWord = "";
   rejectedAct = "";
@@ -58,12 +63,16 @@ export class Workspace extends EventEmitter {
     readonly life: Engine,
     readonly world: HostView,
     readonly demo = false,
+    preferences?: Preferences,
   ) {
     super();
     this.selected = life.root;
     this.actor = `${world.model}/${world.effort}`;
     this.sessionName = basename(world.directory);
     const path = world.records.path;
+    this.preferences =
+      preferences ?? new Preferences(demo && path ? join(dirname(path), "ui-preferences.json") : undefined);
+    this.theme = this.preferences.theme;
     if (path && existsSync(`${path}.ui.json`)) {
       const saved = JSON.parse(readFileSync(`${path}.ui.json`, "utf8")) as Partial<Workspace> & {
         cost?: number;
@@ -74,7 +83,6 @@ export class Workspace extends EventEmitter {
       this.demo = saved.demo ?? this.demo;
       this.sessionName = saved.sessionName ?? this.sessionName;
       this.view = saved.view ?? this.view;
-      this.theme = saved.theme ?? this.theme;
       this.mode = saved.mode ?? this.mode;
       this.shape = saved.shape ?? this.shape;
       this.editing = saved.editing;
@@ -84,8 +92,9 @@ export class Workspace extends EventEmitter {
       this.ladder = saved.ladder;
       this.drafts = saved.drafts ?? {};
       this.scrolls = saved.scrolls ?? {};
-      this.panes = saved.panes ?? this.panes;
+      this.panes = { inspector: saved.panes?.inspector ?? this.panes.inspector };
       this.collapsed = saved.collapsed ?? [];
+      this.expanded = saved.expanded ?? [];
     }
     world.on("change", this.changed);
     world.on("facts", this.factsChanged);
@@ -124,10 +133,18 @@ export class Workspace extends EventEmitter {
     this.error = error instanceof Error ? error.message : String(error);
     this.emit("change");
   };
+  get error(): string {
+    return this.errors[`${this.selected}:${this.view}`] ?? "";
+  }
+  set error(value: string) {
+    this.errors[`${this.selected}:${this.view}`] = value;
+  }
 
   refresh(): Promise<void> {
     this.dirty = true;
     if (this.refreshTask) return this.refreshTask;
+    this.loading = true;
+    this.emit("change");
     this.refreshTask = (async () => {
       do {
         this.dirty = false;
@@ -166,6 +183,8 @@ export class Workspace extends EventEmitter {
       } while (this.dirty && !this.closed);
     })().finally(() => {
       this.refreshTask = undefined;
+      this.loading = false;
+      if (!this.closed) this.emit("change");
     });
     return this.refreshTask;
   }
@@ -215,17 +234,26 @@ export class Workspace extends EventEmitter {
     this.view = view;
     this.query = "";
     this.emit("change");
-    if (view === "changes") void this.refresh().catch(this.fail);
+    void this.refresh().catch(this.fail);
   }
 
   private track(id: string): void {
+    const chain = this.selected,
+      view = this.view;
     void this.life
       .result(id)
       .then(() => {
+        if (this.selected === chain && this.view === view) this.error = "";
         this.notice = "Work complete.";
         return this.refresh();
       })
-      .catch(this.fail);
+      .catch((error: unknown) => {
+        if (this.closed) return;
+        if (error instanceof Error && error.message.startsWith("CancelledError")) {
+          this.notice = "Work cancelled.";
+          void this.refresh().catch(this.fail);
+        } else this.fail(error);
+      });
   }
 
   async submit(input: string): Promise<void> {
@@ -286,6 +314,9 @@ export class Workspace extends EventEmitter {
       case "fork":
         await this.select(await this.life.chain(argument || `${this.label} fork`, this.selected));
         break;
+      case "details":
+        this.emit("details");
+        break;
       case "rewind":
         this.emit("rewind");
         break;
@@ -307,11 +338,29 @@ export class Workspace extends EventEmitter {
         break;
       }
       case "model": {
-        const model = argument.split("/")[0] ?? "";
-        if (!this.world.roster.includes(model)) throw new Error("Choose a model in this life's roster.");
-        this.actor = argument.includes("/") ? argument : `${argument}/${this.world.effort}`;
+        if (!argument) {
+          this.emit("models");
+          break;
+        }
+        const entry = this.roster.find(([name]) => name === argument && name !== "operator");
+        if (!entry) throw new Error("Choose a model in this chain's roster.");
+        const current = actorParts(this.actor).effort;
+        const effort = entry[1].includes(current) ? current : entry[1][0];
+        this.actor = effort ? `${argument}/${effort}` : argument;
         this.track(await this.life.rung(`actor = ${JSON.stringify(this.actor)}`, { on: this.selected }));
-        this.notice = `Model set to ${this.actor}.`;
+        break;
+      }
+      case "effort": {
+        if (!argument) {
+          this.emit("efforts");
+          break;
+        }
+        const { model } = actorParts(this.actor);
+        const offered = this.roster.find(([name]) => name === model)?.[1] ?? [];
+        if (!offered.includes(argument))
+          throw new Error(`This model offers ${offered.join(", ") || "no reasoning efforts"}.`);
+        this.actor = `${model}/${argument}`;
+        this.track(await this.life.rung(`actor = ${JSON.stringify(this.actor)}`, { on: this.selected }));
         break;
       }
       case "run": {
@@ -403,6 +452,7 @@ export class Workspace extends EventEmitter {
     return this.factFilter.rows;
   }
   save(): void {
+    this.preferences.save(this.theme);
     const record = this.world.records.path;
     if (!record) return;
     const path = `${record}.ui.json`;
@@ -421,7 +471,6 @@ export class Workspace extends EventEmitter {
         selected: this.selected,
         actor: this.actor,
         view: this.view,
-        theme: this.theme,
         mode: this.mode,
         shape: this.shape,
         editing: this.editing,
@@ -433,6 +482,7 @@ export class Workspace extends EventEmitter {
         scrolls: this.scrolls,
         panes: this.panes,
         collapsed: this.collapsed,
+        expanded: this.expanded,
       }),
       { mode: 0o600 },
     );

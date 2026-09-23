@@ -3,14 +3,24 @@ import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import type { Api, AssistantMessage, Message, Model, Models, ThinkingLevel } from "@earendil-works/pi-ai";
+import {
+  type Api,
+  type AssistantMessage,
+  clampThinkingLevel,
+  getSupportedThinkingLevels,
+  type Message,
+  type Model,
+  type Models,
+  type ModelThinkingLevel,
+  type ThinkingLevel,
+} from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { Life } from "../index.cjs";
 import { type FileChange, FileChanges } from "./changes.js";
 import { WorldAdapter, type WorldHandler, type WorldRequest } from "./ears.js";
 import { type ClaudeOptions, claudeProvider, zeroUsage } from "./providers/claude.js";
 import { RecordFile } from "./record.js";
-import { type Entry, efforts, type Fact, type OperatorPrompt, shapes, type Turn } from "./types.js";
+import { actorParts, type Entry, type Fact, type OperatorPrompt, shapes, type Turn } from "./types.js";
 
 export { display, isTag, safeText } from "./types.js";
 
@@ -18,7 +28,7 @@ export interface WorldOptions {
   cwd?: string;
   record?: string;
   model?: string;
-  effort?: ThinkingLevel;
+  effort?: ModelThinkingLevel;
   models?: Models;
   roster?: string[];
   claude?: ClaudeOptions;
@@ -56,7 +66,7 @@ interface Running {
 export class World extends EventEmitter {
   readonly directory: string;
   readonly model: string;
-  readonly effort: ThinkingLevel;
+  readonly effort: ModelThinkingLevel;
   readonly records: RecordFile;
   readonly models: Models;
   readonly roster: string[];
@@ -104,7 +114,6 @@ export class World extends EventEmitter {
     this.options = options;
     this.directory = resolve(options.cwd ?? process.cwd());
     this.model = options.model ?? "claude-cli:sonnet";
-    this.effort = options.effort ?? "low";
     let records: RecordFile | undefined;
     let changes: FileChanges | undefined;
     try {
@@ -123,6 +132,7 @@ export class World extends EventEmitter {
         ]),
       ];
       for (const name of this.roster) this.route(name);
+      this.effort = clampThinkingLevel(this.route(this.model), options.effort ?? "low");
       this.records = records = new RecordFile(options.record ? resolve(options.record) : undefined);
       this.changes = changes = new FileChanges(this.records.path);
       if (!this.changes.length) for (const change of legacyChanges) this.changes.append(change);
@@ -140,13 +150,14 @@ export class World extends EventEmitter {
   }
 
   route(actor: string): Model<Api> {
-    const name = actor.split("/")[0] ?? actor;
-    const separator = name.indexOf(":");
-    const provider = separator < 0 ? "claude-cli" : name.slice(0, separator);
-    const id = separator < 0 ? name : name.slice(separator + 1);
-    const model = this.models.getModel(provider, id);
-    if (!model) throw new Error(`No model ${name}. Use provider:model, for example claude-cli:sonnet.`);
-    return model;
+    for (const name of [actor, actorParts(actor).model]) {
+      const separator = name.indexOf(":");
+      const provider = separator < 0 ? "claude-cli" : name.slice(0, separator);
+      const id = separator < 0 ? name : name.slice(separator + 1);
+      const model = this.models.getModel(provider, id);
+      if (model) return model;
+    }
+    throw new Error(`No model ${actor}. Use provider:model, for example claude-cli:sonnet.`);
   }
 
   open(): Life {
@@ -189,7 +200,11 @@ export class World extends EventEmitter {
       case "Stand":
         return [
           [
-            ...this.roster.map((name) => [name, efforts, this.route(name).contextWindow]),
+            ...this.roster.map((name) => [
+              name,
+              getSupportedThinkingLevels(this.route(name)),
+              this.route(name).contextWindow,
+            ]),
             ["operator", [], 200000],
           ],
           this.directory,
@@ -355,7 +370,8 @@ export class World extends EventEmitter {
         {
           signal,
           sessionId: chain,
-          reasoning: (actor.split("/")[1] || this.effort) as ThinkingLevel,
+          reasoning:
+            actorParts(actor).effort === "off" ? undefined : (actorParts(actor).effort as ThinkingLevel),
         },
       );
       for await (const event of stream) {

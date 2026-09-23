@@ -24,9 +24,10 @@ export async function sessionChoices(
           .catch(() => ({}) as { held?: unknown[] }),
       ]);
       const unfinished = world.held?.length ?? 0;
+      const savedAt = `${info.mtime.toLocaleDateString()} ${info.mtime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}`;
       return {
         label: metadata.sessionName ?? basename(file, ".jsonl"),
-        detail: `${unfinished ? `Last saved: Paused · ${unfinished} unfinished acts · ` : ""}${info.mtime.toLocaleString()} · $${(metadata.cost ?? 0).toFixed(4)} · ${(info.size / 1024).toFixed(1)} KiB`,
+        detail: `${unfinished ? `Last saved: Paused · ${unfinished} act${unfinished === 1 ? "" : "s"} · ` : ""}${savedAt} · $${(metadata.cost ?? 0).toFixed(4)} · ${(info.size / 1024).toFixed(1)} KiB`,
         run: () => open(path),
       };
     }),
