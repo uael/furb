@@ -536,6 +536,13 @@ async def test_an_act_of_the_operator_is_said_again_through_its_verb() -> None:
   assert said(again, "bash") == said(log, "bash") and said(again, "chain") == said(log, "chain")
   assert engine.read(f"{one}/stdout", on=over).content == "ran echo hi\n"
   assert [attr(tag, "id") for tag in tags(engine.turns(on=over), "closed")] == [one]
+  await engine.rung("def remind(text, on=''):\n  return act('remind', on, idle, text)\n", on=over)
+  remind = engine.modules[over]["remind"]
+  assert callable(remind)
+  note = remind("soon", on=over)
+  await settle()
+  third, root = await relived(Sand(stands=STANDS), [*sand.record, *later.record])
+  assert root == over and said(third, "remind") == [("remind", note, OPERATOR, over, "soon")]
 
 
 async def test_the_record_answers_a_question_said_again_from_what_it_holds_of_it() -> None:

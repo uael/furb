@@ -662,7 +662,7 @@ def boot(record=(), **outside):
           case (_, (kind, _, "operator", on, *words) as then) if question(then) and (not on or on in said):
             with site.set(OPERATOR):
               made[OPERATOR] = int(then[1].rpartition(".")[2]) - 1
-              globals()[kind](*words, on=on)
+              modules.get(on, globals())[kind](*words, on=on)
           case (before, (_, about, *_)) if not (about in said and before in said):
             break
           case (_, (kind, about, by, *words) as then) if not question(then):
