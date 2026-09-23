@@ -16,21 +16,24 @@ async def test_a_holds_is_the_question_of_what_the_record_kept_of_an_act() -> No
   held = engine.ask("holds", over, command)[1]
   assert isinstance(held, list)
   assert [one[0] for one in held] == ["bash", "out", "exited"]
-  assert engine.ask("holds", over, "bash://nobody")[1] == []
+  assert engine.ask("holds", over, "bash9")[1] == []
 
 
 async def test_the_chain_holds_its_holds_in_the_transcript() -> None:
   """The chain holds its holds in the transcript, where the ask stands in a life that asks, so the fold cuts a user turn there in every life."""
   sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  log, root = life(sand)
   sand.script[root] = ["x = bash('slow')", "y = 2", "close(3)"]
-  assert await engine.prompt(int, "count", on=root) == 3
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 3
   await settle()
+  steps = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert [a[1] for a in said(log, "ask")] == steps
   was = engine.turns(on=root)
   assert [turn[0] for turn in was] == ["user", "assistant", "user", "assistant", "user", "assistant", "user"]
   _, over = await relived(Sand(stands=STANDS), list(sand.record))
   _, held = engine.ask("transcript", over, over)
   assert isinstance(held, list)
   asked = [one for one in held if one[0] == "holds" and one[2] == over]
-  assert [one[4] for one in asked] == [f"rung://operator.2.{n}" for n in (1, 2, 3)]
+  assert [one[4] for one in asked] == steps
   assert engine.turns(on=over) == was

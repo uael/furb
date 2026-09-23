@@ -59,7 +59,7 @@ async def test_one_that_raises_while_it_hears_is_broken_the_same_way() -> None:
   engine.bash("echo again", on=root)
   assert len(said(log, "bash")) == 2
   assert said(heard, "bash") == said(log, "bash") and said(after, "bash") == said(log, "bash")[1:]
-  assert [e[1] for e in sand.record if e[1][0] == "bash"] == said(log, "bash")
+  assert [e[0] for e in sand.record if e[0][0] == "bash"] == said(log, "bash")
 
 
 async def test_a_generator_brought_to_life_under_a_name_and_nothing_more() -> None:

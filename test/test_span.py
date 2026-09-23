@@ -1,10 +1,11 @@
 """span, the show of the lines lo through hi."""
 
-from conftest import STANDS, Sand, life, said, settle, tags
+from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
-from furb.engine import HIDDEN, Text, span
+from furb.engine import HIDDEN, WORLD, Text, span
 
 LINES = Text("/w/n.txt", "".join(f"line {i}\n" for i in range(1, 31))).lines
+"""The lines of a text of thirty lines."""
 
 
 def test_span_lo_hi_is_the_show_of_the_lines_lo_through_hi() -> None:
@@ -18,12 +19,14 @@ def test_span_lo_hi_is_the_show_of_the_lines_lo_through_hi() -> None:
 
 
 async def test_a_span_that_holds_no_line_shows_none_which_hidden_is() -> None:
-  """A span that holds no line shows none, which HIDDEN is, and what a hidden show shows stands in no turns at all, neither its open nor its close."""
+  """A span that holds no line shows none, which HIDDEN is, so what a hidden show shows stands in no turns: an act that takes one tells its header and its binding alone, and a query that takes one tells nothing."""
   assert span(0, 0)(LINES) == HIDDEN(LINES) == []
-  sand = Sand(stands=STANDS)
+  sand = Sand(files={"/w/n.txt": "one\n"}, stands=STANDS)
   log, root = life(sand)
   act = engine.bash("quiet", show=HIDDEN, on=root)
   assert (await act).code == 0
+  assert await engine.rung("read('n.txt', HIDDEN)", on=root) is None
   await settle()
-  _, command, *_ = said(log, "bash")[0]
-  assert [tag for tag in tags(engine.turns(on=root)) if ("id", command) in tag[1]] == []
+  assert said(log, "bash")[0][1] == act and said(log, "exited") == [("exited", act, WORLD, 0)]
+  assert [a[3] for a in said(log, "tell") if a[1] == act] == [[f"#{act}", f"{act}: Act[Exit] = Act({act!r})"]]
+  assert [one for one in heads(engine.turns(on=root)) if one.startswith(("#bash", "#read"))] == [f"#{act}"]

@@ -2,6 +2,7 @@
 
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
+from furb.engine import OPERATOR
 
 
 async def test_a_cwd_gives_the_working_directory_of_the_chain_it_is_on() -> None:
@@ -13,5 +14,7 @@ async def test_a_cwd_gives_the_working_directory_of_the_chain_it_is_on() -> None
   engine.cd("/x", on=root)
   engine.cd("/y", on=two)
   assert (engine.cwd(on=root), engine.cwd(on=two)) == ("/x", "/y")
-  answered = [one for one in said(log, "done") if one[1].startswith("cwd://")]
-  assert [(one[2], one[3]) for one in answered] == [(root, "/x"), (two, "/y")]
+  asked = [a for a in engine.asked.values() if a[0] == "cwd"]
+  assert asked == [("cwd", "cwd@operator.5", OPERATOR, root), ("cwd", "cwd@operator.6", OPERATOR, two)]
+  answered = [a for a in said(log, "done") if a[1].startswith("cwd@")]
+  assert answered == [("done", "cwd@operator.5", root, "/x"), ("done", "cwd@operator.6", two, "/y")]

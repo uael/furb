@@ -65,10 +65,10 @@ async def test_a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it(ya
   record = await answered(yard)
   world, root, said = lived(record, yard, "opus/low")
   await settle()
-  assert root == "chain://operator.1"
+  assert root == "chain1"
   assert world.directory == str(yard)
-  assert [fact[0] for _, fact, *_ in said] == [fact[0] for _, fact, *_ in kept(record)]
-  assert any(fact[0] == "prompt" for _, fact, *_ in said)
+  assert [fact[0] for fact, *_ in said] == [fact[0] for fact, *_ in kept(record)]
+  assert any(fact[0] == "prompt" for fact, *_ in said)
 
 
 async def test_a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again(yard: Path) -> None:
@@ -77,7 +77,7 @@ async def test_a_prompt_the_record_already_holds_is_taken_up_and_never_asked_aga
   record = await answered(yard)
   _world, root, said = lived(record, yard, "opus/low")
   name = again(said, root, int, "say a word", OPERATOR)
-  assert name == "prompt://operator.2"
+  assert name == "prompt1"
   assert await Act(name) == 7
   assert again(said, root, int, "another word", OPERATOR) == ""
   assert again(said, root, str, "say a word", OPERATOR) == ""
@@ -102,14 +102,14 @@ async def test_a_word_its_caller_wrote_runs_on_the_root(yard: Path) -> None:
 async def test_the_turns_of_a_root_are_printed_as_a_model_read_them(
   yard: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-  """The turns of the root of a life made again from its record, each as the text a model reads of it."""
+  """The turns of the root of a life made again from its record, each as the python a model reads of it."""
   record = await answered(yard)
   capsys.readouterr()
   await turned(record, yard)
   said = capsys.readouterr().out
   assert said.startswith("[user] ")
-  assert '<opened id="chain://operator.1"' in said
-  assert '<closed over="prompt://operator.2">' in said
+  assert "#chain1 root\n" in said
+  assert "\n\n#prompt1 say a word\nprompt1: Act[int] = Act('prompt1')\n\n#prompt1 closed 7" in said
 
 
 def test_the_console_script_runs_one_command_of_the_operator(

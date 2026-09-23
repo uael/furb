@@ -1,6 +1,6 @@
 """TAIL, the span that the stdout of a command without a show is told as."""
 
-from conftest import MANY, STANDS, Sand, attr, life, said, settle, shown, tags
+from conftest import MANY, STANDS, Sand, life, paragraphs, said, settle
 from furb import engine
 from furb.engine import TAIL, WORLD, span
 
@@ -12,13 +12,11 @@ async def test_tail_is_the_span_of_the_last_250_lines() -> None:
   log, root = life(sand)
   act = engine.bash("many", on=root)
   await settle()
-  _, command, *_ = said(log, "bash")[0]
+  command = said(log, "bash")[0][1]
   engine.send("out", command, MANY, "stdout", by=WORLD)
   engine.send("exited", command, 0, by=WORLD)
   assert (await act).code == 0
-  closed = [tag for tag in tags(engine.turns(on=root), "closed") if attr(tag, "id") == command]
-  told = shown(closed[0])[0]
-  assert attr(told, "path") == f"{command}/stdout"
-  assert told[2].splitlines()[0] == "51 line 51"
-  assert told[2].splitlines()[-1] == "300 line 300"
-  assert len(told[2].splitlines()) == 250
+  told = "\n".join(
+    [f"#{command} exited 0", f"# {command}/stdout, 0 known", *[f"# {i} line {i}" for i in range(51, 301)]]
+  )
+  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{command} exited")] == [told]

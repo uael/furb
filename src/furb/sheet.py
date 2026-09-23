@@ -13,11 +13,11 @@ The word stands on a sheet of its own::
     actor = ""
     raised: BaseException | None = None
     try:
-      lineage("")
-      <one rung of the program of the chain before the word>
+      acting()
+      <a word of the program of the chain before the word>
     except BaseException:
       pass
-    <the same for each rung after it>
+    <one try of its own for each other word of the program, in order>
     <the word>
 
 Every line of it is there for a reason. The gate gives the checker the engine once, as the module MODULE, which
@@ -26,11 +26,12 @@ word may await at its top level. The module of a chain holds every name of the e
 among them, so the body binds each of them first, with the type the engine gives it. Each is a plain binding, as
 it is in the module of a chain, so a word may read a name of the engine and bind it again to any value, as the
 contract lets it. The two names a chain binds of its own come next, with the types the contract gives them. Each
-rung stands in a try of its own, since a rung that raised keeps what it bound before the raise and the rung after
-it runs all the same: ty reads the word through each except, with every name the program bound, and a rung that
-never ends leaves the word reachable the same way. A try of its own for each rung also keeps the reading short,
-since ty reads a try in a time that grows faster than the rungs inside it. And the program and the word keep their
-own lines, so a finding is counted back to the line the model wrote.
+word of the program stands in a try of its own, since a rung that raised keeps what it bound before the raise and
+the word after it runs all the same: ty reads the next word through the except, with every name the words before
+it bound before they raised, so a word that raises at its top level hides no name a later word binds, and a rung
+that never ends leaves the word reachable the same way. A call opens each try, since ty reads an except that no
+statement before it can reach, and an empty word still has a body. And the program and the word keep their own
+lines, so a finding is counted back to the line the model wrote.
 
 The word is read as the body of a module before ty reads what it means: the sheet stands it inside a function,
 where a return is legal and the engine takes none, so a word the interpreter will not take as a body is a finding
@@ -52,11 +53,12 @@ word that imports the engine by the name of its package is refused, as the run r
 BOUND = '  actor = ""\n  raised: BaseException | None = None\n'
 """BOUND binds the two names a chain binds of its own, the actor it stands on and what the last rung raised, with
 the types the contract gives them."""
-OPENED = '  try:\n    lineage("")\n'
-"""OPENED opens a rung in a try, on a call, since ty reads an except that no statement before it can reach: a name
-the rung bound before it raised reaches the word."""
+OPENED = "  try:\n    acting()\n"
+"""OPENED opens a word of the program in a try, on a call, since ty reads an except that no statement before it can
+reach: a name the word bound before it raised reaches every word after it, and an empty word still has a body."""
 CAUGHT = "  except BaseException:\n    pass\n"
-"""CAUGHT closes a rung, so that a rung which raised or which never ends leaves the word reachable."""
+"""CAUGHT closes a word of the program, so that a rung which raised or which never ends leaves the words after it
+reachable."""
 
 
 def python(word: str) -> list[str]:
@@ -79,11 +81,11 @@ def laid(text: str, depth: int) -> str:
 def sheet(engine: dict[str, object], program: Sequence[str], word: str) -> tuple[str, int]:
   """The word on a sheet of its own, and how many lines stand above the word, which every finding is counted back
   by: every name of the engine, which is a key of its module that is not private, bound from MODULE; then the two
-  names the chain binds; then each rung of the program of the chain before the word, in a try of its own; then the
+  names the chain binds; then each word of the program of the chain before the word, in a try of its own; then the
   word."""
   names = "".join(f"  {name} = {MODULE}.{name}\n" for name in engine if not name.startswith("_"))
-  rungs = "".join(OPENED + laid(one, 4) + CAUGHT for one in program)
-  above = f"import {MODULE}\nasync def __body():\n{names}{BOUND}{rungs}"
+  words = "".join(OPENED + laid(one, 4) + CAUGHT for one in program)
+  above = f"import {MODULE}\nasync def __body():\n{names}{BOUND}{words or OPENED + CAUGHT}"
   return above + laid(word, 2), above.count("\n")
 
 

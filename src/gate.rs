@@ -209,9 +209,9 @@ mod tests {
   }
 
   #[test]
-  fn each_rung_of_the_program_stands_in_a_try_of_its_own() {
+  fn each_word_of_the_program_stands_in_a_try_of_its_own() {
     let (text, _) = sheet(&["a = 1", "b = 2"], "close(a + b)");
-    assert_eq!(text.matches("  try:\n    lineage(\"\")\n").count(), 2);
+    assert_eq!(text.matches("  try:\n    acting()\n").count(), 2);
     assert_eq!(said(&["raise ValueError('x')\na = 1", "b = 2"], "close(b)"), vec![]);
   }
 }

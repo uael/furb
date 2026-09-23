@@ -1,12 +1,13 @@
 """Act.__await__, to await an act for what it comes to."""
 
+import asyncio
 from asyncio import CancelledError
 
 import pytest
 
-from conftest import STANDS, Sand, attr, life, said, settle, tags
+from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
-from furb.engine import OPERATOR
+from furb.engine import OPERATOR, WORLD, Exit, Text
 
 
 async def test_to_await_an_act_gives_the_value_of_the_act_when_the_act_completes() -> None:
@@ -77,10 +78,16 @@ async def test_a_word_that_awaits_a_chain_raises_refused_where_it_waited() -> No
   sand.script[root] = ["sub = chain('sub')\nawait sub\nclose(1)", "close(2)"]
   assert await engine.prompt(int, "fork", on=root) == 2
   await settle()
-  raised = tags(engine.turns(on=root), "raised")
-  assert [attr(one, "type") for one in raised] == ["Refused"]
-  assert "never settles" in str(attr(raised[0], "message"))
-  assert [a[4] for a in said(log, "chain")] == ["root", "sub"]
+  assert heads(engine.turns(on=root)) == [
+    "#chain1 root",
+    f"#chain1 stands {STANDS!r}",
+    "#prompt1 fork",
+    "#rung1 advance on prompt1",
+    "#rung1 raised Refused('chain2 never settles')",
+    "#rung3 advance on prompt1",
+    "#prompt1 closed 2",
+  ]
+  assert [(a[1], a[4]) for a in said(log, "chain")] == [("chain1", "root"), ("chain2", "sub")]
 
 
 async def test_the_awaiter_of_the_prompt_raises_that_exception() -> None:
@@ -108,3 +115,9 @@ async def test_a_run_that_awaits_it_hands_it_to_whoever_steps_the_run() -> None:
   assert [(a[3], a[2]) for a in said(log, "wants")] == [(command[1], command[2])]
   mine = engine.bash("echo again", on=root)
   assert (await mine).code == 0 and [a[3] for a in said(log, "wants")] == [command[1]]
+  sand.auto = False
+  slow = engine.bash("slow", on=root)
+  with pytest.raises(TimeoutError):
+    await asyncio.wait_for(slow, 0.01)
+  engine.send("exited", slow, 0, by=WORLD)
+  assert engine.outcomes[slow] == Exit(0, Text(f"{slow}/stdout"), Text(f"{slow}/stderr"))

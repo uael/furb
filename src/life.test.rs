@@ -33,6 +33,8 @@ struct Yard {
   read: Rc<RefCell<Vec<String>>>,
   /// The entries it kept, shared with the test, which is the record of the life.
   kept: Rc<RefCell<Vec<Object>>>,
+  /// Every command it was told to end before its time, shared with the test.
+  slain: Rc<RefCell<Vec<String>>>,
   voice: Option<Voice>,
 }
 
@@ -43,17 +45,23 @@ impl Yard {
       words: Rc::new(RefCell::new(words.iter().map(|one| (*one).to_owned()).collect())),
       read: Rc::default(),
       kept: Rc::default(),
+      slain: Rc::default(),
       voice: None,
     }
   }
 }
 
-/// A command of the yard, which cannot be fed and ends on its own.
-struct Ran;
+/// A command of the yard, which cannot be fed and ends on its own, and which notes that it was told to end.
+struct Ran {
+  about: String,
+  slain: Rc<RefCell<Vec<String>>>,
+}
 
 impl Running for Ran {
   fn feed(&mut self, _text: Option<String>) {}
-  fn slay(&mut self) {}
+  fn slay(&mut self) {
+    self.slain.borrow_mut().push(self.about.clone());
+  }
 }
 
 impl World for Yard {
@@ -106,7 +114,7 @@ impl World for Yard {
     Box::pin(async move {
       Object::tuple([
         Object::string("assistant"),
-        Object::list([Object::string(word)]),
+        Object::string(word),
         Object::none(),
         Object::list([]),
       ])
@@ -115,6 +123,7 @@ impl World for Yard {
 
   fn run(&mut self, command: Command) -> Box<dyn Running> {
     let voice = self.voice.clone().expect("a yard is opened before a command runs");
+    let ran = Ran { about: command.about.clone(), slain: Rc::clone(&self.slain) };
     thread::spawn(move || {
       let got = std::process::Command::new("sh")
         .arg("-c")
@@ -132,7 +141,7 @@ impl World for Yard {
         Err(_) => voice.exited(&command.about, None),
       }
     });
-    Box::new(Ran)
+    Box::new(ran)
   }
 
   fn wait(&mut self, _seconds: f64) -> Later<()> {
@@ -177,6 +186,7 @@ struct Lived {
   at: PathBuf,
   read: Rc<RefCell<Vec<String>>>,
   kept: Rc<RefCell<Vec<Object>>>,
+  slain: Rc<RefCell<Vec<String>>>,
 }
 
 impl Lived {
@@ -187,20 +197,47 @@ impl Lived {
     }
     fs::create_dir_all(&at).expect("a yard of the test");
     let world = Yard::new(at.clone(), words);
-    let (read, kept) = (Rc::clone(&world.read), Rc::clone(&world.kept));
+    let (read, kept, slain) =
+      (Rc::clone(&world.read), Rc::clone(&world.kept), Rc::clone(&world.slain));
     let life = Life::boot(world, record)?;
-    Ok(Lived { life, at, read, kept })
+    Ok(Lived { life, at, read, kept, slain })
   }
 
   fn root(&self) -> String {
     self.life.root().to_owned()
+  }
+
+  /// The life driven until it holds an act of this name.
+  fn made(&mut self, id: &str) {
+    while !self
+      .life
+      .held("acts", vec![Object::string(id)], "in")
+      .unwrap()
+      .as_ref()
+      .as_bool()
+      .unwrap()
+    {
+      block_on(self.life.drive()).unwrap();
+      thread::sleep(Duration::from_millis(5));
+    }
+  }
+
+  /// What an act came to, once the World has said it.
+  fn settled(&mut self, id: &str) -> Object {
+    loop {
+      if let Some(got) = self.life.outcome(id).unwrap() {
+        return got;
+      }
+      block_on(self.life.drive()).unwrap();
+      thread::sleep(Duration::from_millis(5));
+    }
   }
 }
 
 #[test]
 fn a_life_of_the_real_engine_opens_on_its_root_and_answers_what_the_root_stands_on() {
   let mut lived = Lived::new("opens", &[], vec![]).unwrap();
-  assert_eq!(lived.root(), "chain://operator.1");
+  assert_eq!(lived.root(), "chain1");
   assert!(lived.life.raised().is_none(), "{:?}", lived.life.raised());
   let cwd = lived.life.cwd(&lived.root()).unwrap();
   assert_eq!(cwd.as_ref().as_str(), Some(lived.at.display().to_string().as_str()));
@@ -262,6 +299,22 @@ fn a_command_runs_on_this_machine_and_speaks_its_exit_from_its_own_thread() {
 }
 
 #[test]
+fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it() {
+  let words = ["await bash('sleep 0.5')", "c = bash('sleep 0.2; echo late')\nclose(1)"];
+  let mut lived = Lived::new("controls", &words, vec![]).unwrap();
+  let root = lived.root();
+  let cancelled = lived.life.prompt("int", "go", "", &root).unwrap().id().to_owned();
+  lived.made("bash1");
+  lived.life.cancel(&cancelled).unwrap();
+  assert_eq!(*lived.slain.borrow(), ["bash1"]);
+  let got = block_on(lived.life.prompt("int", "go", "", &root).unwrap()).unwrap();
+  assert_eq!(got.as_ref().as_int(), Some(1));
+  let exit = Exit::of(lived.settled("bash2").as_ref()).expect("the command came to its exit");
+  assert_eq!((exit.code, exit.stdout.content.as_str()), (Some(0), "late\n"));
+  assert_eq!(*lived.slain.borrow(), ["bash1"]);
+}
+
+#[test]
 fn a_wait_is_done_when_the_world_says_so() {
   let mut lived = Lived::new("waits", &[], vec![]).unwrap();
   let root = lived.root();
@@ -303,7 +356,7 @@ fn a_callable_of_the_host_is_called_back_by_the_sandbox_with_what_the_word_gave_
 #[test]
 fn what_the_engine_raised_reaches_the_host_as_the_fault_it_is() {
   let mut lived = Lived::new("faults", &[], vec![]).unwrap();
-  let no = lived.life.get("bash://operator.9").unwrap_err();
+  let no = lived.life.get("bash9").unwrap_err();
   assert_eq!(no.name, "KeyError");
   let no = lived.life.word("nowhere", vec![]).unwrap_err();
   assert_eq!(no.name, "NameError");
@@ -313,8 +366,9 @@ fn what_the_engine_raised_reaches_the_host_as_the_fault_it_is() {
 fn a_second_life_on_the_record_the_world_kept_makes_the_same_acts_again() {
   let mut first = Lived::new("again", &["close(len(read('a.txt').lines))"], vec![]).unwrap();
   let root = first.root();
-  first.life.write(&Text::new("a.txt", "one\ntwo\n"), &root).unwrap();
-  first.life.cwd(&root).unwrap();
+  // The file is put there by hand: a write of the operator is a query, which takes a number of the operator's,
+  // and a later life that says it not would name its acts otherwise.
+  fs::write(first.at.join("a.txt"), "one\ntwo\n").unwrap();
   let act = first.life.prompt("int", "count", "", &root).unwrap();
   let id = act.id().to_owned();
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(2));

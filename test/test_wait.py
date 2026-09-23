@@ -1,6 +1,6 @@
 """wait, the act the World is done with when its seconds have passed."""
 
-from conftest import STANDS, Sand, life, said, settle, tags
+from conftest import STANDS, Sand, life, paragraphs, said, settle
 from furb import engine
 from furb.engine import WORLD
 
@@ -20,19 +20,20 @@ async def test_a_wait_stands_in_no_turns() -> None:
   """A wait stands in no turns, since a wait is no work of a model."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  was = tags(engine.turns(on=root))
+  was = engine.turns(on=root)
   act = engine.wait(0, on=root)
   assert await act is None
-  assert tags(engine.turns(on=root)) == was
-  assert [tag for tag in was if ("id", act) in tag[1]] == []
+  assert engine.turns(on=root) == was
+  assert [one for one in paragraphs(was) if act in one] == []
 
 
 async def test_it_tells_nothing_and_answers_nothing() -> None:
   """It tells nothing and answers nothing, since a wait is no work of a model."""
   sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  log, root = life(sand)
   act = engine.wait(0, on=root)
   assert await act is None
-  assert [tag for tag in tags(engine.turns(on=root)) if ("id", act) in tag[1]] == []
+  assert [one for one in said(log, "tell") if one[1] == act] == []
+  assert [one for one in paragraphs(engine.turns(on=root)) if act in one] == []
   assert engine.read(f"{act}/stdout", on=root) is None
   assert engine.peek(act, on=root) is None

@@ -6,6 +6,8 @@ Each name has one meaning, which the contract's sentences use as given here.
 
 - engine: the program in engine.py, which is the whole system prompt of a model.
 - operator: the person or program that calls the engine from outside a rung.
+- outside: a host that makes acts under a site of its own, which is neither the operator nor an act; an act of the
+  outside is one that neither the operator nor an act made.
 - model: a language model that answers with python code.
 - provider: the service that runs a model.
 - actor: the operator, or a model at an effort, named model/effort; it answers prompts and makes acts.
@@ -14,7 +16,11 @@ Each name has one meaning, which the contract's sentences use as given here.
 - window: the context size of a model in tokens, as its roster entry says.
 - share: the part of a window that one model response used.
 - standing: what a chain stands on, which the World answers it, or its origin for a chain with a source: the roster,
-  the directory and the default actor.
+  the directory and the default actor; the record holds each standing a chain took, at its place.
+- tip: the point of a later life where the journal has said the record again whole, after which the life goes on
+  past it.
+- stood: the fact that says what a chain stands on from its place in the record on, which the journal says at the
+  tip for a chain whose standing the World changed.
 - default actor: the actor a prompt goes to when the prompt leaves the actor unsaid, bound as `actor` in the chain.
 - World: the ear of the outside that boot takes under the name WORLD, which reaches the disk, the machine, the
   actors and the record; it keeps what the journal says it keeps, and does what it hears it is started to do.
@@ -39,15 +45,17 @@ Each name has one meaning, which the contract's sentences use as given here.
   generator that boot is given from the outside are ears too.
 - done: the fact that settles the act it names, or answers the question it names.
 - outcome: what a question came to, held under its name once its done lands: the value or the exception.
-- id: the name of a question, as a string, kind://lineage.n: its kind, the lineage of its maker, and its number
-  among that maker's.
-- maker: the one whose lineage the name of an act hangs off.
-- lineage: the makers of an act, one under the other, which its name holds after its kind; chains form a tree by
-  name, from the operator through their makers.
+- id: the name of a question, as a string. An act is its kind and its number among the acts of that kind, as
+  bash1, which python can bind; a query is its kind, @, its maker and its number among what that maker made, as
+  read@rung1.2.
+- maker: the one that made a question, which its fact says as who said it; for a rung that retells, the rung it
+  retells.
+- lineage: the makers of an act, one under the other, which the life holds and under walks; chains form a tree by
+  maker, from the operator.
 - under: what an act is to its ancestors.
 - scope: the chain an act is on, and itself for a chain.
-- root: chain://operator.1, which boot opens.
-- chain: an act, chain://lineage.n, that holds the facts on it, with a module and a working directory of its own;
+- root: chain1, which boot opens.
+- chain: an act, chainN, that holds the facts on it, with a module and a working directory of its own;
   with a source it holds, besides, the acts it inherited.
 - origin: the chain that a chain with a source stands on.
 - source: the chain a new chain retells, by its id, which means the transcript of that chain as it stands with the
@@ -55,9 +63,17 @@ Each name has one meaning, which the contract's sentences use as given here.
 - filter: a callable that says which acts of the transcript up to the source the turns of the new chain keep; take
   makes the filter of the file.
 - transcript: the facts a chain holds, in the order it heard them.
-- tag: one thing a turn says: a name, attributes as pairs of a name and a value, and a body.
-- tell: a fact that carries tags about the act it is of, which the turns are folded from and the record keeps none of.
-- turn: one item of what a model reads of a transcript, folded from the tells: a role, a content, a usage and blocks.
+- note: one thing a tell says: python as it stands, or a text and its show.
+- paragraph: what one fact that tells stands as in a turn: its notes, with a blank line between two paragraphs.
+- header: the first line of a paragraph: # and, with no space, the id of the act or the kind of the query it is
+  of, then its words.
+- advance: the header the chain tells last before an ask, which names the rung it asks for and the prompt that
+  rung advances.
+- binding: a statement that binds the name of an act to the act, which a turn shows and a rung the chain writes
+  runs.
+- tell: a fact that carries notes about the act it is of, which the turns are folded from and the record keeps
+  none of.
+- turn: one item of what a model reads of a transcript, folded from the tells: a role, python, a usage and blocks.
 - known: a line that a model was told, in the transcript of its chain.
 - prompt: the act that sends a message to an actor and wants a response of a shape.
 - message: the text a prompt carries.
@@ -70,7 +86,7 @@ Each name has one meaning, which the contract's sentences use as given here.
 - ladder: the rungs of one prompt, in order, which the name of that prompt is the door of.
 - program: the words of rungs, in order, each under the name of its rung; the program of a ladder is the words of
   its rungs, the words the gate refused among them, which its door shows, and the program of a chain is the words
-  of every rung the gate let run, which the gate reads a word after.
+  of every rung that runs, as python, which the gate reads a word after.
 - replay: the making of the rungs of a chain again from a donor, which is how a chain with a source stands on its
   origin and how a write of a door edits the program of a ladder.
 - donor: the rungs a replay retells, and, for one rung, the rung of the record it stands for, whose acts it shares
@@ -83,6 +99,7 @@ Each name has one meaning, which the contract's sentences use as given here.
 - text: what read gives, and what write is given and gives back as it landed; a Text, with a path and a content.
 - show: a callable given the lines of a text, which gives the numbers of the lines the engine tells; span, grep and
   differs make the shows of the file.
+- quote: a string a word writes between two marks, <Sn> and </Sn>, which binds Sn when the word runs.
 - template: a python template string, each interpolation of which carries an expression and its value.
 - debug: the verb that tells the interpolations of a template, a tell and no act.
 - control: a pause, a wake, a cancel or a close; a close is a cancel with a value, and a cancel a close with
@@ -92,18 +109,19 @@ Each name has one meaning, which the contract's sentences use as given here.
 - ledger: what the grant holds: the dollars of the answers since it was made and the share the last one filled.
 - journal: the ear of the life that hears everything and says a keep for each entry of the record.
 - record: the entries the journal keeps, in the order they were said.
-- entry: one line of the record: the act of the outside made last before its fact, and the fact; for a query of a
-  run, its answer beside.
+- entry: one line of the record: the fact, and for a query of a run its answer beside.
 - plain: the form of a value on the wire, which the World may keep an entry as: nothing, a boolean, a number, a
   string, a list of plain, or a table from a string to plain.
 - drift: an act that, made again, does not agree with the record.
+- pending: what the record shows begun and not done when boot returns: a command, a wait or a prompt to the operator
+  that the World started, or a rung that its chain asked for; it waits for a wake that the life says.
 
 ## Laws no test holds
 
 - A model does everything with the python that the model writes.
 - The engine hosts itself.
 - The system prompt a model reads is the engine, minified in layout alone, and nothing else.
-- The engine phrases everything else that a model reads, and the World renders any tag.
+- The engine phrases everything that a model reads, as python, and the World renders nothing.
 - Everything that the file defines is public, and what is in engine.py is the API, the same for the model and for the
   operator.
 - The defaults of every verb are public names in the file.
@@ -111,7 +129,7 @@ Each name has one meaning, which the contract's sentences use as given here.
 - What the engine does to the word of a rung it does to itself.
 - The prompt is the one channel of the engine: every exchange between the operator, the models and a chain is a prompt.
 - A model extends the engine from a step: an extension writes verbs and ears, shows and filters as callables, and
-  rebinds names, and it tells tags of its own, from a door or from a rebound verb.
+  rebinds names, and it tells notes of its own, from a door or from a rebound verb.
 - The engine has no registry, no plugin surface, no permission and no REPL: the record says who made each act.
 - Within a chain, a rung binds, passes and returns any python value, plain or not.
 - When its share of the window is high, a model opens a chain with a source and a take that is not inside.
@@ -133,7 +151,7 @@ Each name has one meaning, which the contract's sentences use as given here.
   record is made again by running its words.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
-  asks for and of the words it refuses.
+  asks for, with the message of the prompt each advances, and of the prompts and the words it refuses.
 - A drift is a hard error.
 - The engine owns the order of every run, and nothing of a model runs on the loop of the outside.
 - A chain with a source still asks its origin for its transcript, where the record is what a later life should make it

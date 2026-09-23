@@ -3,10 +3,15 @@
 A test of the World stands its life on a Kernel that gates everything and runs nothing; a test of the Kernel stands
 its life on a World that answers a standing and refuses every other question. Neither asks a model or reads a disk.
 Every fact is a tuple, as the contract says: (kind, about, by, *words), and a question (kind, id, by, on, *words).
+
+A model of the suite answers with a coroutine, so the provider awaits it on the loop of the life. A plain function
+would be run on a thread, and what it answers would land after a time of the machine and not after a count of turns
+of the loop, so a test that gives the loop room would pass or fail by the load of the machine.
 """
 
 import asyncio
 import os
+import re
 import sys
 from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager
@@ -30,7 +35,7 @@ def scripted(words: Sequence[str], usd: float = 0.0) -> FunctionModel:
   """A model that answers each ask with the next word of a script, and with nothing once the script runs out."""
   said = list(words)
 
-  def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+  async def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     del messages, info
     word = said.pop(0) if said else "close(None)"
     spent = RequestUsage(input_tokens=100, output_tokens=20, cost=Decimal(str(usd)))
@@ -43,7 +48,7 @@ def watched(seen: list[list[ModelMessage]], words: Sequence[str] = ()) -> Functi
   """A model that keeps every list of messages it was handed, so a test reads what the World built."""
   said = list(words)
 
-  def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+  async def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     del info
     seen.append(list(messages))
     return ModelResponse(parts=[TextPart(said.pop(0) if said else "close(None)")])
@@ -61,7 +66,7 @@ def reply(text: str) -> ModelResponse:
   return ModelResponse(parts=[ThinkingPart(content="", signature="sig"), TextPart(content=text)])
 
 
-def worlds(stands: tuple) -> Words:
+def worlds(stands: list) -> Words:
   """A World of the suite: it answers a stand, it does a wait, and it refuses every other question it is put but a
   gate, which is the gate's to answer and none of the World's.
 
@@ -88,7 +93,7 @@ def worlds(stands: tuple) -> Words:
 def broken(why: str = "the model was not there") -> FunctionModel:
   """A model that answers nothing at all, which is what an ask the World cannot answer looks like."""
 
-  def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+  async def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     del messages, info
     raise RuntimeError(why)
 
@@ -98,7 +103,7 @@ def broken(why: str = "the model was not there") -> FunctionModel:
 def mute(times: int = 1, word: str = "close(3)") -> FunctionModel:
   """A model that answers nothing for its first asks and answers after them, which is a fault of the moment."""
 
-  def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+  async def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     del messages, info
     nonlocal times
     if times > 0:
@@ -147,11 +152,11 @@ async def settle(n: int = 2000) -> None:
     await asyncio.sleep(0)
 
 
-def tags(root: str, name: str = "") -> list[tuple]:
-  """Every tag of that name in the turns of a chain."""
+def heads(root: str) -> list[str]:
+  """The header of every paragraph in the user turns of a chain, which is the first line of each."""
   return [
-    one
-    for _, content, _, _ in engine.turns(on=root)
-    for one in content
-    if isinstance(one, tuple) and name in ("", one[0])
+    one.split("\n", 1)[0]
+    for role, py, _, _ in engine.turns(on=root)
+    if role == "user" and py
+    for one in re.split(r"\n\n(?=#\w)", py)
   ]

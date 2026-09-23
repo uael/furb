@@ -5,7 +5,7 @@ from asyncio import CancelledError
 from collections.abc import Generator
 from functools import partial
 
-from conftest import STANDS, Py, Sand, Where, World, gated, life, ran, said, settle, sown
+from conftest import STANDS, Py, Sand, Where, World, life, ran, said, settle, sown
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Exit, Refused, Text
 
@@ -26,14 +26,14 @@ class Knows(Sand):
           made[qid] = a
         case ("stand", qid, *_):
           self.calls.append(a)
-          yield "done", qid, self.stands or ((), "", "")
+          yield "done", qid, self.stands or [[], "", ""]
         case ("start", about, _):
           self.calls.append(a)
           yield "done", about, f"did {made[about][0]}"
         case ("ask", rung, _, on, _, _) if self.script.get(on):
           self.calls.append(a)
           word = self.script[on].pop(0)
-          turn = ("assistant", [word], (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
+          turn = ("assistant", word, (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
           loop.call_soon(partial(engine.send, "answer", rung, turn, by=WORLD))
 
 
@@ -78,7 +78,7 @@ async def test_the_world_performs_any_fact_that_an_extension_defines_and_that_th
   _, root = life(sand)
   sand.script[root] = [PING]
   assert await engine.prompt(str, "an act of my own", on=root) == "did ping"
-  assert [a[1] for a in said(sand.calls, "start")] == ["ping://operator.2.1.1"]
+  assert [a[1] for a in said(sand.calls, "start")] == ["ping1"]
 
 
 async def test_the_facts_that_the_world_says_of_its_own_are_for_the_acts_that_complete_later() -> None:
@@ -127,21 +127,29 @@ async def test_an_ear_is_any_generator_of_that_shape() -> None:
   assert engine.read("note://one", on=root) == Text("note://one", "kept")
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
   assert [a[0] for a in sand.calls] == ["stand", "ask", "read", "read"]
-  assert [a[4] for a in kept if a[0] == "run"] == ["close(1)"]
+  assert [a[4] for a in kept if a[0] == "run"] == [
+    "chain1: Act[object] = Act('chain1')\nprompt1: Act[int] = Act('prompt1')",
+    "close(1)",
+  ]
   assert [a[4] for a in kept if a[0] == "read"] == ["note://one"]
   assert {"chain", "prompt", "rung", "ask", "answer", "run", "ran"} <= {a[0] for a in kept}
 
 
 async def test_the_chain_has_the_gate_read_and_the_kernel_begin_every_rung() -> None:
-  """The chain has the gate read and the Kernel begin every rung, by the facts gate and run."""
+  """The chain has the gate read every rung but the ones it wrote itself, and the Kernel begin every rung, by the facts gate and run."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   await engine.rung("k = 1", on=root)
   sand.script[root] = ["close(k + 1)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
-  assert gated(log) == ["k = 1", "close(k + 1)"] and ran(log) == gated(log)
-  assert [one[2] for one in said(log, "done") if one[1].startswith("gate://")] == ["gate", "gate"]
+  assert ran(log) == [
+    "k = 1",
+    "chain1: Act[object] = Act('chain1')\nprompt1: Act[int] = Act('prompt1')",
+    "close(k + 1)",
+  ]
+  assert [one[2] for one in said(log, "done") if one[1].startswith("gate@")] == ["gate", "gate"]
+  assert [(one[1], one[2]) for one in said(log, "rung") if one[4]] == [("rung1", "operator"), ("rung3", root)]
 
 
 async def test_the_kernel_runs_the_word_of_a_run_in_the_module_of_the_chain_the_run_names() -> None:
@@ -151,12 +159,19 @@ async def test_the_kernel_runs_the_word_of_a_run_in_the_module_of_the_chain_the_
   sand.script[root] = ["x = bash('echo hi')\nout = await x\nclose(out.code)"]
   assert await engine.prompt(int, "run it", on=root) == 0
   await settle()
-  command, step = said(log, "bash")[0][1], said(log, "rung")[0][1]
-  assert [one[3] for one in said(log, "done") if one[1].startswith("gate://")] == [[]]
-  assert [(one[1], one[3]) for one in said(log, "run")] == [(step, root)]
-  assert [(one[1], one[3]) for one in said(log, "wants")] == [(step, command)]
-  assert [(one[1], type(one[3]).__name__) for one in said(log, "sent")] == [(step, "Exit")]
-  assert [isinstance(one[3], CancelledError) for one in said(log, "ran")] == [True]
+  assert [one[3] for one in said(log, "done") if one[1].startswith("gate@")] == [[]]
+  assert [(one[1], one[3]) for one in said(log, "run")] == [
+    ("rung2", "chain1"),
+    ("rung1", "chain1"),
+    ("rung4", "chain1"),
+  ]
+  assert [(one[1], one[3]) for one in said(log, "wants")] == [("rung1", "bash1")]
+  assert [(one[1], type(one[3]).__name__) for one in said(log, "sent")] == [("rung1", "Exit")]
+  assert [(one[1], type(one[3])) for one in said(log, "ran")] == [
+    ("rung2", type(None)),
+    ("rung1", CancelledError),
+    ("rung4", type(None)),
+  ]
   out = engine.modules[root]["out"]
   assert isinstance(out, Exit) and out.code == 0
 
@@ -167,5 +182,4 @@ async def test_the_kernel_sets_the_site_to_the_rung_whose_word_it_steps() -> Non
   log, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nclose((await x).code)"]
   assert await engine.prompt(int, "run it", on=root) == 0
-  step, command = said(log, "rung")[0][1], said(log, "bash")[0]
-  assert command[2] == step and engine.site.get() == OPERATOR
+  assert [(one[1], one[2]) for one in said(log, "bash")] == [("bash1", "rung1")] and engine.site.get() == OPERATOR

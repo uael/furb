@@ -49,6 +49,10 @@ control flow in it changes the odds of a good or a bad response, so a flaw in it
 two shapes both pass every gate, the one that serves the meaning of every word is the one, and a shape that is
 green and incoherent is not done.
 
+Read the whole file and list each incoherence: a truth with two homes, a word with two meanings, a part held by the
+wrong owner. Probe each, build its reshape, and measure its size and the suite. Keep what adds coherence, then read
+the whole file again.
+
 ## The suite
 
 The suite drives the engine through its public API alone, end to end, from the module the operator gives.
@@ -57,8 +61,8 @@ The suite drives the engine through its public API alone, end to end, from the m
   it performed, the entries it kept, and what it fed its commands. `Dead` refuses every question but the standing, and
   `Where` asks the chain where it stands at every path. `Py` is a Kernel that is python, with the gate of the crate,
   which refuses a word that is not python or that names what nothing binds, such as `BAD`. `life` boots a life on them,
-  `settle` gives the loop room, `plain` sends a record through the wire and back, and `tags`, `attr`, `said` and
-  `text_of` read the facts and the turns.
+  `settle` gives the loop room, `plain` sends a record through the wire and back, `said` reads the facts, and
+  `paragraphs` and `heads` read the turns, which are python.
 - One test file per definition of the contract: `test_<name>.py` for a function, a global or a type alias,
   `test_<class>_<method>.py` for a method, in lower case, with dunder underscores stripped. A capitalized definition
   whose lower-case name is another definition's, `Bash` beside `bash`, has `test_<name>_shape.py`.

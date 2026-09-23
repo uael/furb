@@ -1,6 +1,6 @@
 """differs, the show of the lines that differ, which is what a write shows."""
 
-from conftest import attr, life, settle, shown, sown, tags
+from conftest import life, settle, sown
 from furb import engine
 
 GROWS = (
@@ -24,5 +24,5 @@ async def test_differs_lines_is_the_show_of_the_lines_that_differ_from_the_lines
   sand.script[root] = [GROWS]
   assert await engine.prompt(str, "a door of my own", on=root) == "one\ntwo\n"
   await settle()
-  wrote = tags(engine.turns(on=root), "write")
-  assert [(attr(one, "known"), one[2]) for one in shown(wrote[0])] == [(0, "1 one\n2 two")]
+  told = "#write note://a\n# note://a, 0 known\n# 1 one\n# 2 two"
+  assert engine.turns(on=root)[-1][1] == f"{told}\n\n#prompt1 closed 'one\\ntwo\\n'"

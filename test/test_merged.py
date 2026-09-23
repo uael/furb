@@ -12,12 +12,8 @@ async def test_a_merged_is_the_question_of_whether_the_stderr_of_a_command_flows
   one = engine.bash("plain", on=root)
   two = engine.bash("split", show_err=TAIL, on=root)
   await settle()
-  asked = []
-  for word in engine.asked.values():
-    match word:
-      case ("merged", _, by, on, about):
-        asked.append((by, on, about))
-  assert asked == [(WORLD, root, one), (WORLD, root, two)]
-  answered = [word for word in said(log, "done") if word[1].startswith("merged://")]
-  assert [(word[2], word[3]) for word in answered] == [(one, True), (two, False)]
+  asked = [word for word in engine.asked.values() if word[0] == "merged"]
+  assert asked == [("merged", "merged@world.1", WORLD, root, one), ("merged", "merged@world.2", WORLD, root, two)]
+  answered = [word for word in said(log, "done") if word[1] in engine.asked and word[1].startswith("merged@")]
+  assert answered == [("done", "merged@world.1", one, True), ("done", "merged@world.2", two, False)]
   assert log.index(answered[0]) < min(i for i, word in enumerate(log) if word[0] == "out")

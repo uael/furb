@@ -14,7 +14,7 @@ async def test_what_an_ear_says() -> None:
 
   def note() -> Generator[tuple | None, tuple]:
     """An ear that says one saying and keeps it beside the fact the bus made of it."""
-    saying = ("tell", root, [("noted", [], None)])
+    saying = ("tell", root, ["#chain1 noted"])
     kept.append(saying)
     kept.append((yield saying))
     while True:
@@ -22,9 +22,9 @@ async def test_what_an_ear_says() -> None:
 
   engine.drive(note(), "note")
   saying, fact = kept
-  assert saying == ("tell", root, [("noted", [], None)])
-  assert fact == ("tell", root, "note", [("noted", [], None)]) == log[-1]
+  assert saying == ("tell", "chain1", ["#chain1 noted"])
+  assert fact == ("tell", "chain1", "note", ["#chain1 noted"]) == log[-1]
   assert len(fact) == len(saying) + 1 and fact[2] == "note"
   act = engine.bash("echo hi", on=root)
   opened = next(one for one in said(log, "tell") if one[1] == act)
-  assert opened == ("tell", act, act, [("opened", [("id", act), ("command", "echo hi")], None)])
+  assert opened == ("tell", "bash1", "bash1", ["#bash1 echo hi", "bash1: Act[Exit] = Act('bash1')"])
