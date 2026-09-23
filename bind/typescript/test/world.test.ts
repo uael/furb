@@ -900,3 +900,30 @@ test("a read keeps the byte order mark of a file, as a write does", async () => 
     await rm(cwd, { recursive: true });
   }
 });
+
+test("a World with no model puts to the operator every prompt that names no actor, the acknowledgment among them", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-operator-alone-"));
+  let acknowledged: (message: string) => void = () => {};
+  const acknowledgment = new Promise<string>((resolve) => {
+    acknowledged = resolve;
+  });
+  // The first example of the README, whose callback answers for the operator.
+  const session = boot({
+    cwd,
+    record: join(cwd, "work.jsonl"),
+    operator: async ({ shape, message }) => {
+      if (shape === "None") acknowledged(message);
+      return shape === "str" ? `You asked: ${message}` : null;
+    },
+  });
+  try {
+    expect(await session.life.prompt<string>("str", "What is this project?")).toBe(
+      "You asked: What is this project?",
+    );
+    session.life.rung('b = bash("true")');
+    expect(await acknowledgment).toBe("bash://operator.3.1 done");
+  } finally {
+    await session.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
