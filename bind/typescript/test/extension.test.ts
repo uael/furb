@@ -115,7 +115,7 @@ test("an extension of a path plays its word, and its part for a World hears, ask
       const [echo] = resolveExtensions(cwd).filter((one) => one.name === "echo");
       expect(echo?.builtin).toBe(false);
       expect(echo?.world.ts).toBe(join(cwd, "echo/world.ts"));
-      expect(echo?.word?.split("\n")[0]).toBe("");
+      expect(echo?.word?.startsWith("def echo(")).toBe(true);
       expect(() => new World({ cwd, extensions: resolveExtensions(cwd) })).toThrow(
         "The extension echo has a World part",
       );

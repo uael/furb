@@ -90,7 +90,7 @@ def builtin_extensions() -> list[Extension]:
 
 def word_of(source: str) -> str:
   """The word of the python part of an extension, which a host plays as a rung: the file with its line ends made LF
-  and every top-level import from `furb` made empty lines, and nothing else changed. A file python cannot parse
+  and less every top-level import from `furb`, which leaves no line of its own, and nothing else changed. A file python cannot parse
   raises Refused."""
 
 def missing_words(program: list[str], words: list[str]) -> list[str]:

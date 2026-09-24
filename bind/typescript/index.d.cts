@@ -168,6 +168,6 @@ export interface RungOptions {
 
 /**
  * The word of the python part of an extension, which a host plays as a rung: the file with its line ends made LF
- * and every top-level import from `furb` made empty lines. It throws for a file python cannot parse.
+ * and less every top-level import from `furb`, which leaves no line of its own. It throws for a file python cannot parse.
  */
 export declare function wordOf(source: string): string

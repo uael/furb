@@ -88,24 +88,41 @@ fn a_word_without_an_import_of_furb_is_itself() {
 }
 
 #[test]
-fn a_top_level_import_from_furb_becomes_an_empty_line_so_every_line_keeps_its_number() {
+fn a_top_level_import_from_furb_leaves_no_line_of_its_own() {
   let module = "import re\nfrom furb.engine import ask\nfrom furb.builtin.files import Text\n\
     from furb.extensions.x import y\nfrom furb import engine\nx = ask\n";
-  assert_eq!(worded(module), "import re\n\n\n\n\nx = ask\n");
-  assert_eq!(worded(module).lines().count(), module.lines().count());
+  assert_eq!(worded(module), "import re\nx = ask\n");
 }
 
 #[test]
-fn a_parenthesized_import_over_several_lines_becomes_as_many_empty_lines() {
+fn a_parenthesized_or_continued_import_leaves_no_line_of_its_own() {
+  let cut = "import re\nx = ask\n";
+  assert_eq!(worded("import re\nfrom furb.engine import (\n  ask,\n  tell,\n)\nx = ask\n"), cut);
+  assert_eq!(worded("import re\nfrom furb.engine import ask, \\\n  tell\nx = ask\n"), cut);
+  assert_eq!(worded("import re\nfrom furb.engine import ask  # the bus\nx = ask\n"), cut);
+}
+
+#[test]
+fn the_empty_lines_where_an_import_stood_are_the_most_of_those_on_either_side() {
+  let module = "import re\nfrom dataclasses import dataclass\n\nfrom furb.engine import ask\n\
+    from furb.builtin.files import read\n\n\ndef f():\n  return ask\n";
   assert_eq!(
-    worded("from furb.engine import (\n  ask,\n  tell,\n)\nx = ask\n"),
-    "\n\n\n\nx = ask\n"
+    worded(module),
+    "import re\nfrom dataclasses import dataclass\n\n\ndef f():\n  return ask\n"
+  );
+  assert_eq!(
+    worded("import re\n\nfrom furb.engine import ask\n\nimport os\n"),
+    "import re\n\nimport os\n"
   );
 }
 
 #[test]
-fn a_backslash_continued_import_becomes_as_many_empty_lines() {
-  assert_eq!(worded("from furb.engine import ask, \\\n  tell\nx = ask\n"), "\n\nx = ask\n");
+fn a_word_starts_and_ends_with_its_code() {
+  assert_eq!(
+    worded("from furb.engine import ask\n\n\ndef f():\n  return ask\n"),
+    "def f():\n  return ask\n"
+  );
+  assert_eq!(worded("x = 1\n\n\nfrom furb.engine import ask\n"), "x = 1\n");
 }
 
 #[test]
@@ -130,13 +147,13 @@ fn an_import_that_shares_its_line_takes_its_semicolon_with_it() {
 #[test]
 fn a_line_end_is_lf_on_every_machine() {
   assert_eq!(worded("x = 1\r\ny = 2\r\n"), "x = 1\ny = 2\n");
-  assert_eq!(worded("from furb.engine import ask\r\nx = ask\r\n"), "\nx = ask\n");
+  assert_eq!(worded("from furb.engine import ask\r\nx = ask\r\n"), "x = ask\n");
 }
 
 #[test]
 fn every_other_byte_stays_as_it_is() {
   let module = "x = '''a  \nb\t'''   \nfrom furb.engine import ask\ny = 2  \n";
-  assert_eq!(worded(module), "x = '''a  \nb\t'''   \n\ny = 2  \n");
+  assert_eq!(worded(module), "x = '''a  \nb\t'''   \ny = 2  \n");
   let plain = "x = 1   \n\n\ny = 2";
   assert_eq!(worded(plain), plain);
 }
@@ -650,7 +667,7 @@ fn extensions_gives_the_builtins_and_the_path_extensions_of_both_configs_in_orde
     got.iter().map(|one| one.name.as_str()).collect::<Vec<_>>(),
     ["files", "bash", "two", "one"]
   );
-  assert_eq!(words(&got)[2..], ["\ntwo = ask\n".to_owned(), "one = 1\n".to_owned()]);
+  assert_eq!(words(&got)[2..], ["two = ask\n".to_owned(), "one = 1\n".to_owned()]);
   assert_eq!(lives(&got), ["one()"]);
 }
 
@@ -717,9 +734,6 @@ fn the_skills_extension_of_the_repository_loads_the_same_by_a_path_a_git_remote_
     assert!(one.tui.as_ref().is_some_and(|tui| tui.ends_with("tui.ts") && tui.is_file()));
   }
   let word = got[0].word.clone().unwrap();
-  assert_eq!(
-    word.lines().count(),
-    fs::read_to_string(skills().join("skills.py")).unwrap().lines().count()
-  );
-  assert!(word.starts_with("from dataclasses import dataclass\n\n\n\n\n"));
+  assert!(word.starts_with("from dataclasses import dataclass\n\n\ndef skills("), "{word}");
+  assert!(!word.contains("furb"));
 }

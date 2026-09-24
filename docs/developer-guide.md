@@ -125,7 +125,7 @@ extensions](extensions.md) says how to write one, how a config names it, and how
 2. Write the test first, in `test/<name>/` for a builtin or in `extensions/<name>/test/`. Its docstring is exactly
    one sentence of the contract, and the harness runs it on both engines.
 3. Change the python part. It is a module that imports from `furb.engine` and from the extensions it requires; the
-   crate blanks those imports when it makes the word. The hygiene laws hold its word as they hold the engine.
+   crate cuts those imports out when it makes the word. The hygiene laws hold its word as they hold the engine.
 4. Change the parts for a World and for the TUI, and their bun tests. A part imports only types from
    `@furb/engine`.
 

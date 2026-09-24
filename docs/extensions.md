@@ -106,11 +106,13 @@ A python part has one of two forms, and one rule serves both:
   `from furb.engine import ask, tell` and `from furb.builtin.files import Text, read`. An editor, ruff and ty check
   it, and it has its own tests. The builtins and the skills extension are of this form.
 
-The word of a module is the module with each line of a top-level `from furb...` import made an empty line, and its
-line ends made LF. Every other line stays as it is, so a finding of the gate points at the line of the file. A word
-of form (a) has no such import, so the host plays it as it is.
+The word of a module is the module less each top-level `from furb...` import, with its line ends made LF. An import
+leaves no line of its own: the empty lines where it stood are as many as stood on either side of it, and a word
+starts and ends with its code. Every other byte stays as it is. The word is what a model reads in the turns of every
+chain, so it reads as a python file that a person wrote, and the gate and the TUI number its lines as the model reads
+them. A word of form (a) has no such import, so the host plays it as it is.
 
-Why the imports are blanked, and the gate and the Kernel do not follow them: the module of a chain already binds
+Why the imports are cut out, and the gate and the Kernel do not follow them: the module of a chain already binds
 every name of the engine and of each word played before it, and the engine reads its own names through the globals
 of the chain, so a name that a later rung binds again is used from its next use on. An import would pin the object
 of the module it names, and a verb bound again would not reach the word. The sandbox of monty holds no package
@@ -231,7 +233,7 @@ write or bash drifts. No tool migrates it.
   holds.
 - **builtin**: an extension that the crate carries, on unless a config turns it off.
 - **manifest**: the field `furb` of the `package.json` of an extension.
-- **word of a module**: the module with its imports of furb made empty lines and its line ends made LF.
+- **word of a module**: the module less its imports of furb, with its line ends made LF.
 - **life word**: a word of the manifest that the host plays in every life.
 - **play**: to run a word as a rung on a chain, as the World.
 - **config**: `config.json` of the config directory, or `.furb/config.json` of a project.

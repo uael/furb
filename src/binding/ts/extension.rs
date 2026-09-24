@@ -131,7 +131,7 @@ pub fn resolve_extensions(
 }
 
 /// The word of the python part of an extension, which a host plays as a rung: the file with its line ends made LF
-/// and every top-level import from `furb` made empty lines. It throws for a file python cannot parse.
+/// and less every top-level import from `furb`, which leaves no line of its own. It throws for a file python cannot parse.
 #[napi]
 pub fn word_of(source: String) -> napi::Result<String> {
   extension::word(&source).map_err(refused)

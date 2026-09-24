@@ -1,8 +1,8 @@
 # The names of the builtin extensions
 
 The builtin extensions are `files`, `bash` and `grant`. Each is a module of form (b): a python module that imports
-what it uses from the engine and from the extensions it requires, whose word the crate makes by blanking those
-imports. Each has its contract beside it, `<name>.pyi`, and its suite in `test/<name>/`. They are on unless a config
+what it uses from the engine and from the extensions it requires, whose word the crate makes by cutting those
+imports out. Each has its contract beside it, `<name>.pyi`, and its suite in `test/<name>/`. They are on unless a config
 turns them off, and the engine knows none of them. `docs/extensions.md` says how a host plays them.
 
 Each name has one meaning, which the sentences of the contracts of the builtins use as given here, beside the names

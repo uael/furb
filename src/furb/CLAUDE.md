@@ -149,7 +149,7 @@ Each name has one meaning, which the contract's sentences use as given here.
 - Each technical name has one meaning.
 - The engine knows no extension: a host plays the word of each one as a rung, as the World, on every chain without
   a source, once the life stands on its record and at the birth of each such chain.
-- The word of a module is the module with each line of a top-level import from furb made an empty line.
+- The word of a module is the module less each top-level import from furb, which leaves no line of its own.
 - ty check passes on engine.py.
 - There is one root per record, and one process at a time owns a record.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a

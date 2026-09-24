@@ -3,8 +3,8 @@
 //! The python part of an extension is a file that a host plays as a rung, the World on every chain without a
 //! source. The file is a word as it is, or a python module that imports what it uses from the engine and from the
 //! extensions it requires, so that an editor, ruff and ty read it. The module of a chain binds every name of the
-//! engine and of each word played before it already, so the host makes the word of a module by blanking those
-//! imports, and the word reads every name through the globals of the chain, where a later rung may rebind it.
+//! engine and of each word played before it already, so the host makes the word of a module by cutting those
+//! imports out, and the word reads every name through the globals of the chain, where a later rung may rebind it.
 //!
 //! Every host shares this module: the host in TypeScript, the host in python and a host in rust read the same
 //! config, fetch into the same cache, read the same manifests, play the extensions in the same order, make the same
@@ -748,16 +748,18 @@ pub fn missing<'a>(program: &[&str], words: &'a [String]) -> Vec<&'a str> {
   words.iter().map(String::as_str).filter(|one| !program.contains(one)).collect()
 }
 
-/// The word of a python part: the file with its line ends made LF, and every top-level `from furb... import` made
-/// blank, and nothing else changed.
+/// The word of a python part: the file with its line ends made LF, less every top-level `from furb... import`, and
+/// nothing else changed.
 ///
 /// A line end is LF first, so a word is the same on every machine, and a clone that writes CRLF plays no word
-/// again. Each line of such an import becomes an empty line, so every other line keeps its number and a finding of
-/// the gate points at the line of the file. An import that shares its line with another statement leaves that
-/// statement, and the semicolon between the two goes with the import. Every other byte stays as it is, the space at
-/// the end of a line among them, since a string may hold it. A file with no such import is a word already. A file
-/// python cannot parse is refused with the line of the fault, so a host says it once when it loads the extension
-/// and no chain plays a broken word.
+/// again. The word is what a model reads in the turns of every chain, so an import leaves no trace in it: its lines
+/// go, and the empty lines around the place it stood keep the most of those before it and those after it, as many as
+/// stood on either side, so two top-level statements stand apart as they did. A word that starts or ends there
+/// starts or ends with its code. An import that shares its line with another statement leaves that statement, and
+/// the semicolon between the two goes with the import. Every other byte stays as it is, the space at the end of a
+/// line among them, since a string may hold it; an empty line next to a top-level statement is in no string. A file
+/// with no such import is a word already. A file python cannot parse is refused with the line of the fault, so a host
+/// says it once when it loads the extension and no chain plays a broken word.
 pub fn word(source: &str) -> Result<String, Error> {
   let source = source.replace("\r\n", "\n");
   let parsed = ruff_python_parser::parse_module(&source).map_err(|fault| Error::Word {
@@ -785,11 +787,42 @@ pub fn word(source: &str) -> Result<String, Error> {
   cuts.reverse();
   let mut out = source.clone();
   for cut in cuts {
-    let (start, end) = joined(&out, usize::from(cut.start()), usize::from(cut.end()));
-    let kept: String = out[start..end].chars().filter(|&c| c == '\n').collect();
-    out.replace_range(start..end, &kept);
+    let (start, end) = (usize::from(cut.start()), usize::from(cut.end()));
+    let (first, rest) = (out[..start].rfind('\n').map_or(0, |at| at + 1), out[end..].find('\n'));
+    let tail = rest.map_or(&out[end..], |at| &out[end..end + at]).trim_start();
+    if out[first..start].trim().is_empty() && (tail.is_empty() || tail.starts_with('#')) {
+      out.replace_range(first..rest.map_or(out.len(), |at| end + at + 1), "");
+      spaced(&mut out, first);
+    } else {
+      let (start, end) = joined(&out, start, end);
+      out.replace_range(start..end, "");
+    }
   }
   Ok(out)
+}
+
+/// The empty lines around the place a statement was cut out at, made the most of those before it and those after it,
+/// and none at the start or at the end of the word.
+fn spaced(out: &mut String, at: usize) {
+  let empty = |line: &str| line.trim().is_empty();
+  let (mut from, mut before) = (at, 0);
+  while from > 0 {
+    let line = out[..from - 1].rfind('\n').map_or(0, |one| one + 1);
+    if !empty(&out[line..from - 1]) {
+      break;
+    }
+    (from, before) = (line, before + 1);
+  }
+  let (mut to, mut after) = (at, 0);
+  while to < out.len() {
+    let line = out[to..].find('\n').map_or(out.len(), |one| to + one);
+    if !empty(&out[to..line]) {
+      break;
+    }
+    (to, after) = ((line + 1).min(out.len()), after + 1);
+  }
+  let kept = if from == 0 || to == out.len() { 0 } else { before.max(after) };
+  out.replace_range(from..to, &"\n".repeat(kept));
 }
 
 /// The span of an import with the semicolon that joins it to a statement on its line: the one after it, or else
