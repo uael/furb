@@ -7,8 +7,9 @@ wherever the engine runs.
 
 The word stands on a sheet of its own::
 
+  import __engine__
   async def __body():
-    <the engine>
+    <each name of the engine> = __engine__.<that name>
     actor = ""
     raised: BaseException | None = None
     try:
@@ -19,16 +20,18 @@ The word stands on a sheet of its own::
     <one try of its own for each other word of the program, in order>
     <the word>
 
-Every line of it is there for a reason. The body is async, so a word may await at its top level. The engine is
-laid first, whole, as the first rung of every chain: the module of a chain is the engine run as a word, so every
-name the engine binds, an import of its own among them, is a name the word may say, with the type the engine
-gives it. The two names a chain binds of its own come next, with the types the contract gives them. Each word of
-the program stands in a try of its own, since a rung that raised keeps what it bound before the raise and the word
-after it runs all the same: ty reads the next word through the except, with every name the words before it bound
-before they raised, so a word that raises at its top level hides no name a later word binds, and a rung that
-never ends leaves the word reachable the same way. A call opens each try, since ty reads an except that no
-statement before it can reach, and an empty word still has a body. And the engine, the program and the word
-keep their own lines, so a finding is counted back to the line the model wrote.
+Every line of it is there for a reason. The gate gives the checker the engine once, as the module MODULE, which
+the sheet alone imports, so a reading costs the program and the word and not the engine. The body is async, so a
+word may await at its top level. The module of a chain holds every name of the engine, an import of the engine
+among them, so the body binds each of them first, with the type the engine gives it. Each is a plain binding, as
+it is in the module of a chain, so a word may read a name of the engine and bind it again to any value, as the
+contract lets it. The two names a chain binds of its own come next, with the types the contract gives them. Each
+word of the program stands in a try of its own, since a rung that raised keeps what it bound before the raise and
+the word after it runs all the same: ty reads the next word through the except, with every name the words before
+it bound before they raised, so a word that raises at its top level hides no name a later word binds, and a rung
+that never ends leaves the word reachable the same way. A call opens each try, since ty reads an except that no
+statement before it can reach, and an empty word still has a body. And the program and the word keep their own
+lines, so a finding is counted back to the line the model wrote.
 
 The word is read as the body of a module before ty reads what it means: the sheet stands it inside a function,
 where a return is legal and the engine takes none, so a word the interpreter will not take as a body is a finding
@@ -44,6 +47,9 @@ type Checked = Callable[[str], Sequence[tuple[int, str]]]
 type Ear = Generator[tuple | None, tuple | None]
 """An ear, as the engine hears one."""
 
+MODULE = "__engine__"
+"""MODULE is the name the checker holds the engine under. The sheet alone imports it, and no word knows it, so a
+word that imports the engine by the name of its package is refused, as the run refuses it."""
 BOUND = '  actor = ""\n  raised: BaseException | None = None\n'
 """BOUND binds the two names a chain binds of its own, the actor it stands on and what the last rung raised, with
 the types the contract gives them."""
@@ -72,16 +78,18 @@ def laid(text: str, depth: int) -> str:
   return "".join(f"{' ' * depth}{line}\n" if line.strip() else "\n" for line in text.split("\n"))
 
 
-def sheet(engine: str, program: Sequence[str], word: str) -> tuple[str, int]:
+def sheet(engine: dict[str, object], program: Sequence[str], word: str) -> tuple[str, int]:
   """The word on a sheet of its own, and how many lines stand above the word, which every finding is counted back
-  by: the engine, as the first rung of the chain, then the two names the chain binds, then each word of the program
-  of the chain before the word, in a try of its own, then the word."""
+  by: every name of the engine, which is a key of its module that is not private, bound from MODULE; then the two
+  names the chain binds; then each word of the program of the chain before the word, in a try of its own; then the
+  word."""
+  names = "".join(f"  {name} = {MODULE}.{name}\n" for name in engine if not name.startswith("_"))
   words = "".join(OPENED + laid(one, 4) + CAUGHT for one in program)
-  above = "async def __body():\n" + laid(engine, 2) + BOUND + (words or OPENED + CAUGHT)
+  above = f"import {MODULE}\nasync def __body():\n{names}{BOUND}{words or OPENED + CAUGHT}"
   return above + laid(word, 2), above.count("\n")
 
 
-def gate(engine: str, program: Sequence[str], word: str, checked: Checked) -> list[str]:
+def gate(engine: dict[str, object], program: Sequence[str], word: str, checked: Checked) -> list[str]:
   """What the gate finds against a word: the word is read for what the interpreter will take, and then ty reads it
   on its sheet after the program of its chain, and each finding below the word is counted back to its line."""
   if found := python(word):
@@ -90,9 +98,9 @@ def gate(engine: str, program: Sequence[str], word: str, checked: Checked) -> li
   return [f"line {n - above}: {why}" for n, why in checked(text) if n > above]
 
 
-def gating(engine: str, checked: Checked) -> Ear:
-  """The gate as the ear of a life: it answers each gate with what it finds against the word on the sheet of that
-  engine, after the program the gate says."""
+def gating(engine: dict[str, object], checked: Checked) -> Ear:
+  """The gate as the ear of a life: it answers each gate with what it finds against the word on the sheet of the
+  engine whose names it is given, after the program the gate says."""
   while True:
     match (yield):
       case ("gate", qid, _, _, word, program):

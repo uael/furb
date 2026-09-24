@@ -1,0 +1,122 @@
+import { RGBA, SyntaxStyle } from "@opentui/core";
+
+const forest = {
+  background: "#101817",
+  panel: "#15211e",
+  raised: "#1c2b26",
+  selected: "#2a4034",
+  border: "#30463b",
+  text: "#e3e9df",
+  muted: "#91a697",
+  accent: "#b7d89b",
+  success: "#88cabe",
+  warning: "#e5c28a",
+  danger: "#eea79a",
+  link: "#a5bdd4",
+  removed: "#392924",
+  syntaxKeyword: "#88cabe",
+  syntaxString: "#b7d89b",
+  syntaxNumber: "#e5c28a",
+  syntaxFunction: "#a5bdd4",
+  syntaxType: "#a5bdd4",
+  syntaxComment: "#91a697",
+};
+export const palettes = {
+  github: {
+    background: "#0d1117",
+    panel: "#161b22",
+    raised: "#21262d",
+    selected: "#1f2a3a",
+    border: "#30363d",
+    text: "#e6edf3",
+    muted: "#8b949e",
+    accent: "#58a6ff",
+    success: "#3fb950",
+    warning: "#d29922",
+    danger: "#f85149",
+    link: "#58a6ff",
+    removed: "#3a1d1f",
+    syntaxKeyword: "#ff7b72",
+    syntaxString: "#a5d6ff",
+    syntaxNumber: "#79c0ff",
+    syntaxFunction: "#d2a8ff",
+    syntaxType: "#ffa657",
+    syntaxComment: "#8b949e",
+  },
+  forest,
+  paper: {
+    background: "#f3f1e9",
+    panel: "#eae8de",
+    raised: "#fffdf5",
+    selected: "#d9e4d0",
+    border: "#bbc4b4",
+    text: "#243329",
+    muted: "#526757",
+    accent: "#3c673c",
+    success: "#246e68",
+    warning: "#896123",
+    danger: "#ac4238",
+    link: "#325f92",
+    removed: "#f4d9d1",
+    syntaxKeyword: "#cf222e",
+    syntaxString: "#0a3069",
+    syntaxNumber: "#0550ae",
+    syntaxFunction: "#8250df",
+    syntaxType: "#953800",
+    syntaxComment: "#6e7781",
+  },
+  midnight: {
+    background: "#141722",
+    panel: "#1b2030",
+    raised: "#252c40",
+    selected: "#354162",
+    border: "#3c4761",
+    text: "#e4e9f4",
+    muted: "#9daec7",
+    accent: "#bbc3ff",
+    success: "#81cfda",
+    warning: "#e6c38b",
+    danger: "#f09eac",
+    link: "#99bfff",
+    removed: "#392934",
+    syntaxKeyword: "#81cfda",
+    syntaxString: "#bbc3ff",
+    syntaxNumber: "#e6c38b",
+    syntaxFunction: "#99bfff",
+    syntaxType: "#99bfff",
+    syntaxComment: "#9daec7",
+  },
+};
+export type ThemeName = keyof typeof palettes;
+export const defaultTheme: ThemeName = "github";
+export const spacing = { inset: 1, stack: 0, section: 1, bar: 1, between: 2 } as const;
+// Each role has its own color object, even when two roles have the same RGB value.
+export const theme = Object.fromEntries(
+  Object.entries(palettes[defaultTheme]).map(([role, hex]) => [role, RGBA.fromHex(hex)]),
+) as Record<keyof typeof forest, RGBA>;
+export function setTheme(name: ThemeName): void {
+  for (const role of Object.keys(theme) as (keyof typeof theme)[])
+    theme[role] = RGBA.fromHex(palettes[name][role]);
+}
+export function syntax(): SyntaxStyle {
+  return SyntaxStyle.fromStyles({
+    default: { fg: theme.text },
+    keyword: { fg: theme.syntaxKeyword },
+    string: { fg: theme.syntaxString },
+    comment: { fg: theme.syntaxComment, italic: true },
+    number: { fg: theme.syntaxNumber },
+    function: { fg: theme.syntaxFunction },
+    type: { fg: theme.syntaxType },
+    operator: { fg: theme.muted },
+    punctuation: { fg: theme.muted },
+    diagnostic: { fg: theme.danger, bg: theme.removed, underline: true },
+    matching: { fg: theme.accent, bg: theme.selected, bold: true },
+    "markup.heading": { fg: theme.text, bold: true },
+    "markup.strong": { fg: theme.text, bold: true },
+    "markup.list": { fg: theme.muted },
+    "markup.raw": { fg: theme.syntaxString },
+    "markup.link": { fg: theme.link },
+    "markup.quote": { fg: theme.muted, italic: true },
+    "markup.italic": { fg: theme.text, italic: true },
+  });
+}

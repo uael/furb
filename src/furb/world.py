@@ -11,7 +11,6 @@ import codecs
 import json
 import os
 import random
-import re
 import signal
 import subprocess
 import sys
@@ -38,7 +37,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models import Model
 from python_minifier import minify
 
-from furb import engine
+from furb import engine, python
 from furb.engine import WORLD, Drift, Refused, Text
 from furb.provider.claude import ACTOR, Claude, Settings, actors
 
@@ -54,7 +53,7 @@ MUTE = "{} answered nothing"
 
 
 SYSTEM = minify(
-  Path(engine.__file__).read_text(encoding="utf-8"),
+  Path(python.__file__).read_text(encoding="utf-8"),
   remove_annotations=False,
   remove_pass=False,
   combine_imports=False,
@@ -72,8 +71,6 @@ SYSTEM = minify(
 
 PARTS = TypeAdapter(list[ModelResponsePart])
 """PARTS reads the parts of an answer back into the shapes the provider gave, whether from a record or from the answer."""
-FENCE = re.compile(r"```(?:python|py)?\n(.*?)```", re.DOTALL)
-"""FENCE finds a block of code in what a model wrote, since the word of a rung is the code and nothing around it."""
 
 
 def wire(x: object) -> object:
@@ -113,10 +110,9 @@ def unwire(x: object) -> object:
 
 
 def worded(got: ModelResponse) -> str:
-  """The word of the rung, which is what the model wrote: the one block of code it holds, or the whole of it."""
-  text = "".join(one.content for one in got.parts if isinstance(one, TextPart)).strip()
-  found = FENCE.findall(text)
-  return str(found[0]).strip() if len(found) == 1 else text
+  """The word of the rung, which is all the text the model wrote: a model speaks python and nothing else, so a
+  fence or a line of prose around the code is part of the word, which the gate refuses."""
+  return "".join(one.content for one in got.parts if isinstance(one, TextPart)).strip()
 
 
 def truth(line: str) -> bool:

@@ -373,12 +373,11 @@ class Running:
       self.ended(one, got)
 
 
-def gating(gate: Gate, sheet: Names, source: str) -> Ear:
+def gating(gate: Gate, sheet: Names, engine: Names) -> Ear:
   """The gate as the ear of a life: it reads the word of a rung on its sheet, after the program the gate says.
 
-  The sheet is `furb.sheet`'s, written here as the python package writes it, with the engine laid first as the
-  first rung of the chain, and the reading of it is the gate of the host, given the sheet, which answers each
-  finding by its line.
+  The sheet is `furb.sheet`'s, written here as the python package writes it, from the names of the module of the
+  engine, and the reading of it is the gate of the host, given the sheet, which answers each finding by its line.
   """
 
   def checked(text: str) -> list[tuple[int, str]]:
@@ -389,7 +388,7 @@ def gating(gate: Gate, sheet: Names, source: str) -> Ear:
   while True:
     match (yield):
       case ("gate", qid, _, _, word, program):
-        yield "done", qid, verb(sheet, "gate")(source, [*program.values()], word, checked)
+        yield "done", qid, verb(sheet, "gate")(engine, [*program.values()], word, checked)
 
 
 def kernel(names: Names) -> Ear:
@@ -414,14 +413,7 @@ def module(source: str) -> dict[str, object]:
 
 
 def opened(
-  engine: Names,
-  sheet: Names,
-  source: str,
-  record: object,
-  world: World | None,
-  gate: Gate,
-  ears: Ears,
-  names: list[str],
+  engine: Names, sheet: Names, record: object, world: World | None, gate: Gate, ears: Ears, names: list[str]
 ) -> tuple:
   """A life of that engine, opened from what a World kept of the life before it, on the ears of these names, in
   this order: the root it opened on, and what boot raised, if it raised.
@@ -440,7 +432,7 @@ def opened(
     for name in names
   }
   try:
-    root = verb(engine, "boot")(entries, kernel=kernel(engine), gate=gating(gate, sheet, source), **outside)
+    root = verb(engine, "boot")(entries, kernel=kernel(engine), gate=gating(gate, sheet, engine), **outside)
   except BaseException as no:
     # What boot raised comes out of the entry the operator went in by, and the life goes on: a drift breaks the
     # journal and keeps nothing more, so the root stands when the record held it.
