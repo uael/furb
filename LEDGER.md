@@ -139,21 +139,6 @@ with this ledger.
   keep, note, outcomes, pause, pause_shape, pausing, peek, peek_shape, prompt, question, question_shape, ready,
   refused, send, wake, wake_shape.
 
-## Next steps, in order
-
-1. TypeScript: napi exposes the extension API of the crate (config, cache, fetch, manifest, order, word), and the
-   `Life` of napi plays the words itself; TS keeps the World parts (generic World, the builtin parts of files and
-   bash), the TUI parts, and the dynamic import of their code. README; then TUI parts and app.ts/session.ts
-   (bash/grant/read/cd specifics), docs, screenshots (bun must be >= 1.4.2 for the TUI; host has 1.3.11).
-2. `extensions/skills/`: package.json manifest, skills.py + skills.pyi + tests, world.ts (finds SKILL.md under
-   `.furb/skills`, the config dir `skills/`, and `.claude/skills`), tui.ts (`/skills`, `/skill <name>`); prove path,
-   git (local bare repo) and npm (local tarball) loading in tests.
-3. docs/extensions.md, CLAUDE.md, src/furb/CLAUDE.md (technical names: door, text, command, merged, show, grant,
-   ledger move to the extensions; add ladder, extension), developer guide, READMEs; every gate green
-   (`uv run pytest -q`, hygiene, ruff format/check, `uv run ty check --error-on-warning`, cargo fmt/clippy/test,
-   `uv run pre-commit run --all-files`, bun check/lint/test). Delete this ledger. Tell the owner a release of `furb`
-   (pypi, tag `v*`) and a publish of `@furb/skills` (npm) are theirs to do.
-
 - The builtin suites are done (commits c252c1e to this one): the builtins are python modules of form (b), which
   import from `furb.engine` and `furb.builtin.files`; ruff reads them with the vocabulary ignores of the engine (the
   contract fixes their signatures, and a word types its verbs and nothing else), and ty reads them with
@@ -200,7 +185,21 @@ with this ledger.
   birth, a 0.1.0 record opens (fixture `test/outside/record-0.1.0.jsonl`, made by the code of b104b8c; the crate
   test opens it too). `uv run pytest -q`: 1565 passed, 4 skipped, coverage 100%. ruff, ty, cargo test (90), clippy
   and fmt are green.
-- Next: step 2 (TypeScript), per PLAN.md part 2 and part 4 section 4 (ts.rs exposure).
+
+## Next steps, in order
+
+1. TypeScript: napi exposes the extension API of the crate (config, cache, fetch, manifest, order, word), and the
+   `Life` of napi plays the words itself; TS keeps the World parts (generic World, the builtin parts of files and
+   bash), the TUI parts, and the dynamic import of their code. README; then TUI parts and app.ts/session.ts
+   (bash/grant/read/cd specifics), docs, screenshots (bun must be >= 1.4.2 for the TUI; host has 1.3.11).
+2. `extensions/skills/`: package.json manifest, skills.py + skills.pyi + tests, world.ts (finds SKILL.md under
+   `.furb/skills`, the config dir `skills/`, and `.claude/skills`), tui.ts (`/skills`, `/skill <name>`); prove path,
+   git (local bare repo) and npm (local tarball) loading in tests.
+3. docs/extensions.md, CLAUDE.md, src/furb/CLAUDE.md (technical names: door, text, command, merged, show, grant,
+   ledger move to the extensions; add ladder, extension), developer guide, READMEs; every gate green
+   (`uv run pytest -q`, hygiene, ruff format/check, `uv run ty check --error-on-warning`, cargo fmt/clippy/test,
+   `uv run pre-commit run --all-files`, bun check/lint/test). Delete this ledger. Tell the owner a release of `furb`
+   (pypi, tag `v*`) and a publish of `@furb/skills` (npm) are theirs to do.
 
 ## Questions for the owner
 
