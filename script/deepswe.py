@@ -83,6 +83,12 @@ stand untouched, or the suite looks for its modules under the rewritten root and
 """
 CONTAINER = ("apt-get", "apt", "apk", "yum", "dnf")
 """CONTAINER is every step of a Dockerfile that only a container can take, which this rig steps over."""
+INSTALLERS = ("pip", "poetry")
+"""INSTALLERS is every installer of the python of an image that a step of a Dockerfile calls.
+
+The interpreter of the checkout holds each one that the image holds, at the version of the image. pip 26.2 could not
+build an sdist that a step of dateutil fetches, and the steps of textual and tomlkit call a poetry this host lacks.
+"""
 MANIFEST = "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"
 """MANIFEST is the two forms of the manifest of one image that a registry is asked for."""
 SAID = (
@@ -432,7 +438,9 @@ def generic(repo: Path, lang: str, env: Mapping[str, str], swaps: Sequence[tuple
 
 def installed(task: Path, repo: Path, lang: str) -> None:
   """Take the steps of the task's own Dockerfile in the checkout, so the tree is the one its verifier wants."""
-  env = {"npm_config_confirm_modules_purge": "false"}
+  # A step of poetry reads and writes its config in the workroot: no setting of the host reaches the step, and
+  # `poetry config` changes nothing of the host.
+  env = {"npm_config_confirm_modules_purge": "false", "POETRY_CONFIG_DIR": str(repo.parent / "poetry")}
   swaps = SAID
   dists: Mapping[str, tuple[str, str, bool]] = {}
   if lang == "python":
@@ -442,14 +450,14 @@ def installed(task: Path, repo: Path, lang: str) -> None:
     if ran([tool("uv"), "venv", "--no-project", "--seed", "--python", version, str(repo / ".venv")]):
       say(f"[deepswe] uv could not make an interpreter of python {version}")
       raise SystemExit(1)
-    # The pip of a step is the pip of the image: pip 26.2 could not build an sdist that a step of dateutil fetches.
-    if "pip" in dists and ran([tool("uv"), "pip", "install", "-q", "--python", str(python), f"pip=={dists['pip'][0]}"]):
-      say(f"[deepswe] uv could not install the pip {dists['pip'][0]} of the image")
+    pins = constrained(dists, repo.parent / "constraints.txt")
+    held = [f"{name}=={dists[name][0]}" for name in INSTALLERS if name in dists]
+    if held and ran([tool("uv"), "pip", "install", "-q", "--python", str(python), "-c", str(pins), *held]):
+      say(f"[deepswe] uv could not install {' and '.join(held)}, as the image holds them")
       raise SystemExit(1)
     # A constraint in the environment of pip reaches the builds that pip isolates, where the image had none, so it
     # is told on the command line of each install.
-    pins = shlex.quote(str(constrained(dists, repo.parent / "constraints.txt")))
-    swaps = (*swaps, ("python3 -m pip install ", f"python3 -m pip install -c {pins} "))
+    swaps = (*swaps, ("python3 -m pip install ", f"python3 -m pip install -c {shlex.quote(str(pins))} "))
   told = steps(task)
   if not told:
     say(f"[deepswe] {task.name}: the Dockerfile says no step; installing by language instead")
