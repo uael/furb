@@ -1,22 +1,26 @@
-//! The extensions: what a host plays on a chain, and where it finds it.
+//! The extensions: what a host adds to the engine, and where it finds it.
 //!
-//! The python part of an extension is a file that a host plays as a rung, the World on every chain without a
-//! source. The file is a word as it is, or a python module that imports what it uses from the engine and from the
-//! extensions it requires, so that an editor, ruff and ty read it. The module of a chain binds every name of the
-//! engine and of each word played before it already, so the host makes the word of a module by cutting those
-//! imports out, and the word reads every name through the globals of the chain, where a later rung may rebind it.
+//! The builtins, files, bash and grant, are definitions of the engine itself. A host that turns one off cuts its
+//! definitions out of the system prompt, and the engine that runs stays whole. The python part of any other
+//! extension is a word that the engine module runs after the engine, so every chain binds its names from its birth
+//! and the system prompt reads it after the engine. The file is a word as it is, or a python module that imports
+//! what it uses from the engine and from the extensions it requires, so that an editor, ruff and ty read it. The
+//! module of the engine binds every name of the engine and of each word before it already, so the host makes the
+//! word of a module by cutting those imports out. A life word is a word that a host plays as a rung, as the World,
+//! in every life on each chain without a source.
 //!
 //! Every host shares this module: the host in TypeScript, the host in python and a host in rust read the same
-//! config, fetch into the same cache, read the same manifests, play the extensions in the same order, make the same
-//! word of a module, and play a word on a chain by the same rule. What stays in each host is its own: the parts of
-//! an extension for a World and for a TUI, and how it loads their code.
+//! config, fetch into the same cache, read the same manifests, order the extensions the same, make the same word of
+//! a module, the same engine source and the same system prompt, and play a life word on a chain by the same rule.
+//! What stays in each host is its own: the parts of an extension for a World and for a TUI, and how it loads their
+//! code.
 //!
 //! The config is a json file, `{"extensions": {name: form}}`, in the config directory of the user and in the
 //! directory `.furb` of the project, which names an extension by its key: `false` turns it off, `true` turns it on,
-//! and a path, a git remote or an npm package says where it stands. The builtins, files, bash and grant, are on
-//! unless a config turns them off. An extension stands in a directory whose `package.json` holds a field `furb`,
-//! its manifest: its name, which is its key, the file of its python part, the word it plays in every life, the
-//! files of its parts for a World and for a TUI, and the names it requires.
+//! and a path, a git remote or an npm package says where it stands. The builtins are on unless a config turns them
+//! off. An extension stands in a directory whose `package.json` holds a field `furb`, its manifest: its name, which
+//! is its key, the file of its python part, the word it plays in every life, the files of its parts for a World and
+//! for a TUI, and the names it requires.
 
 use std::{
   collections::HashSet,
@@ -26,7 +30,7 @@ use std::{
   process::Command,
 };
 
-use ruff_python_ast::Stmt;
+use ruff_python_ast::{Expr, Stmt};
 use ruff_text_size::{Ranged, TextRange};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -36,8 +40,31 @@ use crate::value::Fault;
 /// The package the engine and the extensions are imported from, whose imports a word leaves out.
 const PACKAGE: &str = "furb";
 
-/// The name of the builtins, in the order a host plays them.
-const BUILTINS: [&str; 3] = ["files", "bash", "grant"];
+/// The builtins, in the order a host takes them: the name of each, the builtins it requires, and the top-level names
+/// of the engine it defines, which leave the system prompt when it is off.
+const BUILTINS: [(&str, &[&str], &[&str]); 3] = [
+  (
+    "files",
+    &[],
+    &[
+      "dataclass",
+      "span",
+      "grep",
+      "differs",
+      "HEAD",
+      "TAIL",
+      "HIDDEN",
+      "read",
+      "write",
+      "cd",
+      "cwd",
+      "Text",
+      "showing",
+    ],
+  ),
+  ("bash", &["files"], &["TIMEOUT", "bash", "Exit"]),
+  ("grant", &[], &["WINDOW", "grant"]),
+];
 
 /// What went wrong with an extension, which a host says once when it loads the extensions and plays nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -268,7 +295,7 @@ pub fn read_settings(file: &Path, home: Option<&Path>) -> Result<Vec<(String, Se
 pub fn merged(layers: &[(PathBuf, Vec<(String, Setting)>)]) -> Result<Vec<Entry>, Error> {
   let mut out: Vec<Entry> = BUILTINS
     .iter()
-    .map(|&name| Entry {
+    .map(|&(name, ..)| Entry {
       name: name.to_owned(),
       on: true,
       source: Some(Source::Builtin),
@@ -615,25 +642,26 @@ pub struct Extension {
   pub tui: Option<PathBuf>,
 }
 
-/// The builtin extensions, in the order a host plays them: files, bash, which requires files, and grant. Their
-/// words are the words of the files the python package ships, and their other parts are each host's own.
+/// The builtin extensions, in the order a host takes them: files, bash, which requires files, and grant. Each is
+/// definitions of the engine, so none has a word, and their parts for a World and for a TUI are each host's own.
 pub fn builtins() -> Vec<Extension> {
-  let builtin = |name: &str, source: &str, requires: &[&str]| Extension {
-    name: name.to_owned(),
-    root: None,
-    word: Some(
-      word(source).unwrap_or_else(|error| panic!("the builtin {name} does not parse: {error}")),
-    ),
-    life: None,
-    requires: requires.iter().map(|&one| one.to_owned()).collect(),
-    world: Worlds::default(),
-    tui: None,
-  };
-  vec![
-    builtin("files", include_str!("furb/builtin/files.py"), &[]),
-    builtin("bash", include_str!("furb/builtin/bash.py"), &["files"]),
-    builtin("grant", include_str!("furb/builtin/grant.py"), &[]),
-  ]
+  BUILTINS
+    .iter()
+    .map(|&(name, requires, _)| Extension {
+      name: name.to_owned(),
+      root: None,
+      word: None,
+      life: None,
+      requires: requires.iter().map(|&one| one.to_owned()).collect(),
+      world: Worlds::default(),
+      tui: None,
+    })
+    .collect()
+}
+
+/// The top-level names of the engine that a builtin defines, and none for a name that is no builtin.
+pub fn defined(name: &str) -> &'static [&'static str] {
+  BUILTINS.iter().find(|&&(one, ..)| one == name).map_or(&[], |&(_, _, names)| names)
 }
 
 /// The extension in a directory, loaded under the name its config gives it: its manifest, whose name must be that
@@ -730,22 +758,87 @@ pub fn extensions(
   ordered(&entries, out)
 }
 
-/// The words of the python parts of the extensions, in their order, which a host plays once on each chain without
-/// a source.
+/// The words of the python parts of the extensions, in their order, which the module of the engine runs after the
+/// engine.
 pub fn words(extensions: &[Extension]) -> Vec<String> {
   extensions.iter().filter_map(|one| one.word.clone()).collect()
 }
 
-/// The life words of the extensions, in their order, which a host plays in every life on each chain without a
-/// source, after the words.
+/// The life words of the extensions, in their order, which a host plays as rungs in every life on each chain without
+/// a source: once boot stands on its record, and at the birth of each such chain after.
 pub fn lives(extensions: &[Extension]) -> Vec<String> {
   extensions.iter().filter_map(|one| one.life.clone()).collect()
 }
 
-/// The words that a program lacks, in their order: a word is missing when no word of the program is the same
-/// string. This is the rule a host plays by, after boot on every chain without a source and at the birth of each.
-pub fn missing<'a>(program: &[&str], words: &'a [String]) -> Vec<&'a str> {
-  words.iter().map(String::as_str).filter(|one| !program.contains(one)).collect()
+/// The text, then each word after an empty line, and the text as it is when there is no word.
+fn appended(text: &str, words: &[String]) -> String {
+  let mut out = text.to_owned();
+  for one in words {
+    if !out.is_empty() && !out.ends_with('\n') {
+      out.push('\n');
+    }
+    out.push('\n');
+    out.push_str(one);
+  }
+  out
+}
+
+/// The source of the engine that a life runs, and that the gate reads a word on: the engine, then the words of the
+/// extensions, in their order. The builtins stay in it whole, on or off.
+pub fn source(words: &[String]) -> String {
+  appended(crate::ENGINE, words)
+}
+
+/// The system prompt of a life: the engine as the host minified it, less the top-level statements that define only
+/// names of a builtin that `taken` does not name, then the words of the extensions, in their order. The engine that
+/// runs stays whole, so an answer of the engine to a verb that a builtin defines stays in the prompt, and does
+/// nothing while no verb asks it.
+pub fn system(engine: &str, taken: &[&str], words: &[String]) -> Result<String, Error> {
+  let off: HashSet<&str> = BUILTINS
+    .iter()
+    .filter(|&&(name, ..)| !taken.contains(&name))
+    .flat_map(|&(_, _, names)| names.iter().copied())
+    .collect();
+  let cut = cut(engine, |statement| {
+    let names = binds(statement);
+    !names.is_empty() && names.iter().all(|name| off.contains(name))
+  })
+  .map_err(|(line, why)| Error::Word { name: "the engine".to_owned(), line, why })?;
+  Ok(appended(&cut, words))
+}
+
+/// The names a top-level statement binds: a function, a class, the targets of an assignment, the names of an import
+/// and a type alias, and none for any other statement.
+fn binds(statement: &Stmt) -> Vec<&str> {
+  fn targets(target: &Expr) -> Vec<&str> {
+    match target {
+      Expr::Name(one) => vec![one.id.as_str()],
+      Expr::Tuple(one) => one.elts.iter().flat_map(targets).collect(),
+      Expr::List(one) => one.elts.iter().flat_map(targets).collect(),
+      _ => Vec::new(),
+    }
+  }
+  match statement {
+    Stmt::FunctionDef(one) => vec![one.name.as_str()],
+    Stmt::ClassDef(one) => vec![one.name.as_str()],
+    Stmt::Assign(one) => one.targets.iter().flat_map(targets).collect(),
+    Stmt::AnnAssign(one) => targets(&one.target),
+    Stmt::TypeAlias(one) => targets(&one.name),
+    Stmt::ImportFrom(one) => {
+      one.names.iter().map(|alias| alias.asname.as_ref().unwrap_or(&alias.name).as_str()).collect()
+    }
+    Stmt::Import(one) => one
+      .names
+      .iter()
+      .map(|alias| {
+        alias.asname.as_ref().map_or_else(
+          || alias.name.as_str().split('.').next().unwrap_or_default(),
+          |named| named.as_str(),
+        )
+      })
+      .collect(),
+    _ => Vec::new(),
+  }
 }
 
 /// The word of a python part: the file with its line ends made LF, less every top-level `from furb... import`, and
@@ -761,31 +854,32 @@ pub fn missing<'a>(program: &[&str], words: &'a [String]) -> Vec<&'a str> {
 /// with no such import is a word already. A file python cannot parse is refused with the line of the fault, so a host
 /// says it once when it loads the extension and no chain plays a broken word.
 pub fn word(source: &str) -> Result<String, Error> {
-  let source = source.replace("\r\n", "\n");
-  let parsed = ruff_python_parser::parse_module(&source).map_err(|fault| Error::Word {
-    name: String::new(),
-    line: source[..usize::from(fault.location.start())].matches('\n').count() + 1,
-    why: fault.error.to_string(),
+  cut(&source.replace("\r\n", "\n"), |statement| match statement {
+    Stmt::ImportFrom(import) if import.level == 0 => import.module.as_ref().is_some_and(|module| {
+      let name = module.id.as_str();
+      name == PACKAGE || name.strip_prefix(PACKAGE).is_some_and(|rest| rest.starts_with('.'))
+    }),
+    _ => false,
+  })
+  .map_err(|(line, why)| Error::Word { name: String::new(), line, why })
+}
+
+/// The source less each top-level statement that `which` picks, and nothing else changed: the lines of a statement
+/// go, and the empty lines around the place it stood keep the most of those before it and those after it, so two
+/// top-level statements stand apart as they did, and the text starts and ends with its code. A statement that shares
+/// its line with another leaves that statement, and the semicolon between the two goes with it. A source python
+/// cannot parse gives the line of the fault and what it is.
+fn cut(source: &str, which: impl Fn(&Stmt) -> bool) -> Result<String, (usize, String)> {
+  let parsed = ruff_python_parser::parse_module(source).map_err(|fault| {
+    (
+      source[..usize::from(fault.location.start())].matches('\n').count() + 1,
+      fault.error.to_string(),
+    )
   })?;
-  let mut cuts: Vec<TextRange> = parsed
-    .syntax()
-    .body
-    .iter()
-    .filter_map(|statement| match statement {
-      Stmt::ImportFrom(import)
-        if import.level == 0
-          && import.module.as_ref().is_some_and(|module| {
-            let name = module.id.as_str();
-            name == PACKAGE || name.strip_prefix(PACKAGE).is_some_and(|rest| rest.starts_with('.'))
-          }) =>
-      {
-        Some(import.range())
-      }
-      _ => None,
-    })
-    .collect();
+  let mut cuts: Vec<TextRange> =
+    parsed.syntax().body.iter().filter(|&one| which(one)).map(Ranged::range).collect();
   cuts.reverse();
-  let mut out = source.clone();
+  let mut out = source.to_owned();
   for cut in cuts {
     let (start, end) = (usize::from(cut.start()), usize::from(cut.end()));
     let (first, rest) = (out[..start].rfind('\n').map_or(0, |at| at + 1), out[end..].find('\n'));
@@ -825,7 +919,7 @@ fn spaced(out: &mut String, at: usize) {
   out.replace_range(from..to, &"\n".repeat(kept));
 }
 
-/// The span of an import with the semicolon that joins it to a statement on its line: the one after it, or else
+/// The span of a statement with the semicolon that joins it to another on its line: the one after it, or else
 /// the one before it.
 fn joined(text: &str, start: usize, end: usize) -> (usize, usize) {
   let after = &text[end..];

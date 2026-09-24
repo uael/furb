@@ -18,11 +18,12 @@ async def test_a_transcript_is_the_question_of_the_transcript_of_a_chain_up_to_a
   assert engine.outcomes[asking[1]] == held
   _, first, *_ = said(log, "prompt")[0]
   assert [a[1] for a in held if a[0] == "prompt"] == [first]
+  ceiling = engine.grant(usd=10.0, on=root)
   twin = engine.chain("twin", source=root)
   await settle(300)
   _, now = engine.ask("transcript", root, root)
   assert isinstance(now, list)
-  assert [(a[2], a[4]) for a in said(now, "transcript") if a[2] != OPERATOR] == [(twin, root)]
+  assert [(a[2], a[4]) for a in said(now, "transcript") if a[2] in (ceiling, twin)] == [(twin, root)]
   cut, upto = engine.ask("transcript", root, first)
   assert isinstance(upto, list)
   assert cut == ("transcript", cut[1], OPERATOR, root, first) and len(upto) < len(now)

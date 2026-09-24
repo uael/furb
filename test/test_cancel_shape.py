@@ -9,12 +9,12 @@ from furb.engine import WORLD
 
 async def test_a_cancel_ends_everything_it_is_over() -> None:
   """A cancel ends everything it is over: each of them is done with CancelledError, and none of them says anything of its own again."""
-  sand = Sand(stands=STANDS)
+  sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
-  sand.script[root] = ["x = wait(100)\nclose(await x)"]
+  sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   one = engine.prompt(int, "go", on=root)
   await settle()
-  step, command = said(log, "rung")[0][1], said(log, "wait")[0][1]
+  step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
   engine.cancel(one)
   await settle()
   assert [type(engine.peek(x)).__name__ for x in (one, step, command)] == ["CancelledError"] * 3
@@ -26,12 +26,12 @@ async def test_a_cancel_ends_everything_it_is_over() -> None:
 
 async def test_a_cancel_reaches_to_any_depth_and_on_whatever_chain() -> None:
   """A cancel reaches to any depth, and on whatever chain."""
-  sand = Sand(stands=STANDS)
+  sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
-  sand.script[root] = ["two = chain('two')\nx = wait(100, on=two)\nclose(await x)"]
+  sand.script[root] = ["two = chain('two')\nx = bash('slow', on=two)\nclose((await x).code)"]
   one = engine.prompt(int, "go", on=root)
   await settle()
-  step, command = said(log, "rung")[0][1], said(log, "wait")[0][1]
+  step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
   assert engine.get(command)[3] == said(log, "chain")[-1][1] != root
   assert engine.under(command, step) and engine.under(step, one)
   engine.cancel(one)

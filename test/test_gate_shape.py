@@ -31,7 +31,7 @@ async def test_a_gate_says_the_program_of_the_chain_before_that_rung() -> None:
     "k = 1",
     "x = BAD",
     "y = 2",
-    "p = get(acting())[2]\nask('ladder', '', p, ask('ladder', '', p)[1].replace('y = 2', 'k = 3'))",
+    "write(read(get(acting())[2]).replace('y = 2', 'k = 3'))",
     "close(k)",
   ]
   act = engine.prompt(int, "edit", on=root)
@@ -47,10 +47,7 @@ async def test_a_gate_says_the_program_of_the_chain_before_that_rung() -> None:
     ("k = 1", [bind]),
     ("x = BAD", [bind, "k = 1"]),
     ("y = 2", [bind, "k = 1"]),
-    (
-      "p = get(acting())[2]\nask('ladder', '', p, ask('ladder', '', p)[1].replace('y = 2', 'k = 3'))",
-      [bind, "k = 1", "y = 2"],
-    ),
+    ("write(read(get(acting())[2]).replace('y = 2', 'k = 3'))", [bind, "k = 1", "y = 2"]),
     ("k = 3", [bind, "k = 1"]),
     ("close(k)", [bind, "k = 1", "k = 3"]),
   ]
@@ -84,13 +81,13 @@ async def test_the_chain_has_the_word_of_a_rung_gated_before_it_runs() -> None:
 
 
 async def test_a_refused_word_of_a_rung_stands_in_the_ladder_of_its_prompt() -> None:
-  """A refused word of a rung stands in the ladder of its prompt, which a ladder of that prompt gives, and it is no part of the program of the chain, which holds the words that run."""
+  """A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["k = BAD", "close(7)", "close(None)"]
   act = engine.prompt(int, "try", on=root)
   assert await act == 7
-  assert engine.ask("ladder", root, act)[1] == "k = BAD\nclose(7)"
+  assert engine.read(act, on=root).content == "k = BAD\nclose(7)"
   _, program = engine.ask("program", root)
   assert isinstance(program, dict)
   assert list(program.values()) == [bindings(root, act, "int"), "close(7)"] == ran(log)
@@ -104,7 +101,7 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
   act = engine.prompt(int, "count", on=root)
   assert await act == 1
   await settle()
-  engine.ask("ladder", root, act, engine.ask("ladder", root, act)[1])
+  engine.write(engine.read(act, on=root), on=root)
   await settle(300)
   bind = bindings(root, act, "int")
   assert gated(log) == ["k = 1", "x = BAD", "close(k)"]
@@ -121,7 +118,7 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
   assert [(a[1], a[3][0]) for a in said(log, "tell") if a[3][0].endswith(" refused")] == [
     (first[2], f"#{first[2]} refused")
   ]
-  assert engine.ask("ladder", root, act)[1] == "k = 1\nx = BAD\nclose(k)"
+  assert engine.read(act, on=root).content == "k = 1\nx = BAD\nclose(k)"
   assert engine.ask("program", root)[1] == {copies[0][0]: bind, copies[1][0]: "k = 1", copies[3][0]: "close(k)"}
 
 

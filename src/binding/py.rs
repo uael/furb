@@ -354,11 +354,13 @@ impl Life {
 }
 
 /// The gate of the crate, for the Kernel of this interpreter to read a sheet with: what the checker of this thread
-/// found on the sheet, each error by its line, and no warning. The checker is the one every life of monty on the
-/// thread gates with, so a word is judged once and the same.
+/// found on the sheet, read against the engine the Kernel runs, each error by its line, and no warning. The engine
+/// is the engine of the crate unless it is given. The checker is the one every life of monty on the thread gates
+/// with, so a word is judged once and the same.
 #[pyfunction]
-fn gate(py: Python<'_>, sheet: &str) -> PyResult<Vec<(usize, String)>> {
-  match crate::gate::checked(sheet) {
+#[pyo3(signature = (sheet, engine = None))]
+fn gate(py: Python<'_>, sheet: &str, engine: Option<&str>) -> PyResult<Vec<(usize, String)>> {
+  match crate::gate::checked(sheet, engine.unwrap_or(crate::ENGINE)) {
     Ok(found) => Ok(found),
     Err(fault) => Err(raised(py, &Made::new(py)?, &fault)),
   }
@@ -424,8 +426,8 @@ fn places() -> (String, String) {
   (here.config.display().to_string(), here.cache.display().to_string())
 }
 
-/// The word of the python part of an extension, which a host plays as a rung: the file less its imports of the
-/// engine and of the extensions, as the crate makes it for every host. A file python cannot parse raises Refused.
+/// The word of the python part of an extension, which the module of the engine runs after the engine: the file less
+/// its imports of the engine and of the extensions, as the crate makes it for every host. A file python cannot parse raises Refused.
 #[pyfunction]
 fn word_of(py: Python<'_>, source: &str) -> PyResult<String> {
   match extension::word(source) {
@@ -434,11 +436,27 @@ fn word_of(py: Python<'_>, source: &str) -> PyResult<String> {
   }
 }
 
-/// The words that a program lacks, in their order, which is the rule a host plays the words by.
+/// The system prompt of a life: the engine as the host minified it, less the definitions of each builtin that
+/// `taken` does not name, then the words of the extensions, in their order. An engine python cannot parse raises
+/// Refused.
 #[pyfunction]
-fn missing_words(program: Vec<String>, words: Vec<String>) -> Vec<String> {
-  let held: Vec<&str> = program.iter().map(String::as_str).collect();
-  extension::missing(&held, &words).into_iter().map(str::to_owned).collect()
+fn system_prompt(
+  py: Python<'_>,
+  engine: &str,
+  taken: Vec<String>,
+  words: Vec<String>,
+) -> PyResult<String> {
+  let taken: Vec<&str> = taken.iter().map(String::as_str).collect();
+  match extension::system(engine, &taken, &words) {
+    Ok(prompt) => Ok(prompt),
+    Err(error) => Err(raised(py, &Made::new(py)?, &Fault::from(error))),
+  }
+}
+
+/// The source of the engine that a life runs and that the gate reads a word on: the engine, then the words.
+#[pyfunction]
+fn engine_source(words: Vec<String>) -> String {
+  extension::source(&words)
 }
 
 /// What the engine raised, raised here as the exception it is.
@@ -736,7 +754,8 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<PyExtension>()?;
   module.add_function(wrap_pyfunction!(builtin_extensions, module)?)?;
   module.add_function(wrap_pyfunction!(word_of, module)?)?;
-  module.add_function(wrap_pyfunction!(missing_words, module)?)?;
+  module.add_function(wrap_pyfunction!(system_prompt, module)?)?;
+  module.add_function(wrap_pyfunction!(engine_source, module)?)?;
   module.add_function(wrap_pyfunction!(extensions, module)?)?;
   module.add_function(wrap_pyfunction!(places, module)?)?;
   Ok(())

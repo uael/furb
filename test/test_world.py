@@ -10,12 +10,12 @@ async def test_world_is_the_name_that_boot_takes_the_world_under() -> None:
   assert WORLD == "world"
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["x = wait(0)\nawait x\nclose(1)"]
-  assert await engine.prompt(int, "run it", on=root) == 1
+  sand.script[root] = ["x = bash('echo hi')\nclose((await x).code)"]
+  assert await engine.prompt(int, "run it", on=root) == 0
   await settle()
-  _, command, *_ = said(log, "wait")[0]
+  _, command, *_ = said(log, "bash")[0]
   assert said(log, "answer")[0][2] == WORLD
-  assert [a[2] for a in log if a[:2] == ("done", command)] == [WORLD]
+  assert [a[2] for a in log if a[0] in ("out", "exited")] == [WORLD, WORLD]
   _, standing, *_ = said(log, "stand")[0]
   assert [a[2] for a in said(log, "done") if a[1] == standing] == [WORLD]
   assert [a[1] for a in said(sand.calls, "start")] == [command]

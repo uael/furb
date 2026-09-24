@@ -91,9 +91,6 @@ MADE: dict[int, object] = {}
 """MADE holds every callable the engine made and every class a word defined that crossed to the host, by its
 handle, which is its identity, for as long as the host holds the handle: the host says when it forgot one, and it
 is dropped then."""
-WORDS: list[str] = []
-"""WORDS are the words of the python parts of the extensions the host plays, which stand empty while boot says the
-record again."""
 LIVES: list[str] = []
 """LIVES are the life words of the extensions the host plays, which stand empty while boot says the record again."""
 
@@ -305,22 +302,18 @@ def crossing(name: str, ears: Ears, names: Names) -> Ear:
 
 
 def plays(engine: Names, chain: str) -> None:
-  """The extensions, played on a chain as rungs by whoever speaks: each word its program lacks, in order, and then
-  each life word."""
-  got = verb(engine, "ask")("program", chain)
-  assert isinstance(got, tuple)
-  held = list(got[1].values()) if isinstance(got[1], dict) else []
-  for word in [*[one for one in WORDS if one not in held], *LIVES]:
+  """The life words of the extensions, played on a chain as rungs by whoever speaks, in order."""
+  for word in LIVES:
     verb(engine, "rung")(word, on=chain)
 
 
 def playing(world: Ear, engine: Names) -> Ear:
-  """The World, which plays the extensions on each chain born without a source once the life stands on its record,
+  """The World, which plays the life words on each chain born without a source once the life stands on its record,
   and hands every fact to the World it wraps and every saying of that World to the bus."""
   a = None
   while True:
     match a:
-      case ("chain", str(id), _, _, _, "") if WORDS or LIVES:
+      case ("chain", str(id), _, _, _, "") if LIVES:
         plays(engine, id)
     try:
       said = world.send(a)
@@ -329,10 +322,9 @@ def playing(world: Ear, engine: Names) -> Ear:
     a = yield said
 
 
-def played(engine: Names, words: list[str], lives: list[str]) -> None:
-  """The extensions, played as the World on every chain without a source once boot stands on the record, and on each
+def played(engine: Names, lives: list[str]) -> None:
+  """The life words, played as the World on every chain without a source once boot stands on the record, and on each
   such chain at its birth from then on."""
-  WORDS[:] = words
   LIVES[:] = lives
   site, acts = engine["site"], engine["acts"]
   assert isinstance(site, ContextVar)
@@ -487,7 +479,6 @@ def opened(
   of a run what it was answered.
   """
   MADE.clear()
-  WORDS.clear()
   LIVES.clear()
   kept = again(record, engine, ears)
   assert isinstance(kept, list)

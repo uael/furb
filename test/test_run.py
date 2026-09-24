@@ -2,7 +2,7 @@
 
 from itertools import pairwise
 
-from conftest import STANDS, Py, Sand, job, kept, life, plain, ran, relived, said, settle, sown, watched
+from conftest import STANDS, Py, Sand, kept, life, plain, ran, relived, said, settle, sown, watched
 from furb import engine
 from furb.engine import WORLD, modules
 
@@ -49,13 +49,13 @@ async def test_a_run_names_the_rung_that_the_word_retells() -> None:
   sand = sown()
   log: list[tuple] = []
   root = engine.boot(kernel=kept(Py().kernel()), probe=watched(log), world=sand.hears())
-  await engine.rung("t = clock()", on=root)
+  await engine.rung("t = read('a.txt')", on=root)
   twin = engine.chain("twin", source=root)
   await settle(300)
   mine = [a for a in said(log, "run") if a[3] == twin]
   theirs = [a for a in said(log, "run") if a[3] == root]
   assert [a[5] for a in theirs] == [""] and [a[5] for a in mine] == [theirs[0][1]]
-  assert [a[0] for a in sand.calls].count("clock") == 1
+  assert [a[0] for a in sand.calls].count("read") == 1
   assert modules[twin]["t"] == modules[root]["t"]
 
 
@@ -90,20 +90,20 @@ async def test_the_last_rung_to_bind_a_name_wins() -> None:
 
 async def test_one_rung_runs_at_a_time_on_a_chain_and_rungs_interleave_at_their_awaits() -> None:
   """One rung runs at a time on a chain, and rungs interleave at their awaits, whether they are rungs of one chain or of many."""
-  sand = Sand(stands=STANDS)
+  sand = Sand(files={"/w/a.txt": "one\ntwo\n"}, stands=STANDS, auto=False)
   log, root = life(sand)
   two = engine.chain("two")
-  sand.script[root] = ["x = wait(100)\nawait x\nclose(1)"]
-  sand.script[two] = ["y = wait(100)\nawait y\nclose(2)"]
+  sand.script[root] = ["x = bash('slow here')\nclose((await x).code)"]
+  sand.script[two] = ["y = bash('slow there')\nclose((await y).code)"]
   here = engine.prompt(int, "go", on=root)
   there = engine.prompt(int, "go", on=two)
   await settle()
   assert [engine.scope(a[1]) for a in said(log, "wants")] == [root, two]
   assert here not in engine.outcomes and there not in engine.outcomes
-  for a in said(log, "wait"):
-    engine.send("done", a[1], None, by=WORLD)
+  for a in said(log, "bash"):
+    engine.send("exited", a[1], 0, by=WORLD)
   await settle()
-  assert ((await here), (await there)) == (1, 2)
+  assert ((await here), (await there)) == (0, 0)
 
 
 async def test_the_word_of_a_rung_runs_again_in_every_chain_made_from_its_chain() -> None:
@@ -153,43 +153,42 @@ async def test_a_prompt_after_such_a_rung_finds_what_it_bound() -> None:
 
 async def test_the_chain_runs_one_word_at_a_time() -> None:
   """The chain runs one word at a time."""
-  sand = Sand(stands=STANDS)
+  sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
-  first = engine.rung("x = wait(100)\nclose(await x)", on=root)
+  first = engine.rung("x = bash('echo hi')\nclose(await x)", on=root)
   second = engine.rung("k = 2\nclose(k)", on=root)
   await settle()
   runs = [i for i, a in enumerate(log) if a[0] == "run"]
-  assert len(runs) == 2 and ran(log) == ["x = wait(100)\nclose(await x)", "k = 2\nclose(k)"]
+  assert len(runs) == 2 and ran(log) == ["x = bash('echo hi')\nclose(await x)", "k = 2\nclose(k)"]
   for one, two in pairwise(runs):
     assert [a for a in log[one:two] if a[0] in ("wants", "ran") and a[1] == log[one][1]]
-  engine.send("done", said(log, "wait")[0][1], None, by=WORLD)
+  engine.send("exited", said(log, "bash")[0][1], 0, by=WORLD)
   await settle()
   assert first in engine.outcomes and await second == 2
 
 
 async def test_a_word_that_waits_for_an_act_gives_the_chain_to_the_next_word() -> None:
   """A word that waits for an act gives the chain to the next word, which runs while it waits, and the waiting word runs on at the done of what it awaits."""
-  sand = Sand(stands=STANDS)
+  sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
-  one = job(root)
-  waiting = engine.rung(f"out = await Act({one!r})\nk = out", on=root)
+  waiting = engine.rung("x = bash('slow')\nout = await x\nk = out.code", on=root)
   after = engine.rung("k = 2", on=root)
   await settle()
   assert engine.outcomes[after] is None and waiting not in engine.outcomes and engine.modules[root]["k"] == 2
-  engine.send("finished", one, 0, by=WORLD)
+  engine.send("exited", "bash1", 0, by=WORLD)
   await settle()
   assert engine.outcomes[waiting] is None and engine.modules[root]["k"] == 0
   moves = [
     (a[0], a[1])
     for a in log
-    if (a[1] in (waiting, after) and a[0] in ("run", "wants", "sent", "ran")) or a[:2] == ("done", one)
+    if (a[1] in (waiting, after) and a[0] in ("run", "wants", "sent", "ran")) or a[:2] == ("done", "bash1")
   ]
   assert moves == [
     ("run", waiting),
     ("wants", waiting),
     ("run", after),
     ("ran", after),
-    ("done", one),
+    ("done", "bash1"),
     ("sent", waiting),
     ("ran", waiting),
   ]

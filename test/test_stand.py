@@ -1,6 +1,6 @@
 """Stand, what a chain stands on."""
 
-from conftest import STANDS, Sand, life, paragraphs, plain, relived, rows, said, settle, sown, stood, where
+from conftest import STANDS, Sand, life, paragraphs, plain, relived, rows, said, settle, sown, stood
 from furb import engine
 from furb.engine import WORLD
 
@@ -14,12 +14,12 @@ async def test_what_a_chain_stands_on() -> None:
   _, root = life(sand)
   two = engine.chain("two")
   assert [a[3] for a in said(sand.calls, "stand")] == [root, two]
-  assert engine.modules[root]["actor"] == "m/low" and where(root) == "/w"
-  assert engine.modules[two]["actor"] == "m/low" and where(two) == "/w"
+  assert engine.modules[root]["actor"] == "m/low" and engine.cwd(on=root) == "/w"
+  assert engine.modules[two]["actor"] == "m/low" and engine.cwd(on=two) == "/w"
   side = engine.chain("side", source=root)
   await settle(300)
   assert [a[3] for a in said(sand.calls, "stand")] == [root, two]
-  assert engine.modules[side]["actor"] == "m/low" and where(side) == "/w"
+  assert engine.modules[side]["actor"] == "m/low" and engine.cwd(on=side) == "/w"
 
 
 async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_a_chain() -> None:
@@ -40,7 +40,7 @@ async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_
     over,
     rows(over, LATER),
   )
-  assert where(over) == "/z" and engine.modules[over]["actor"] == "o/low"
+  assert engine.cwd(on=over) == "/z" and engine.modules[over]["actor"] == "o/low"
 
 
 async def test_the_world_answers_a_stand_with_the_roster_the_directory_and_the_actor() -> None:
@@ -110,7 +110,7 @@ async def test_at_its_tip_the_journal_asks_the_world_what_it_stands_on() -> None
   assert [a[1] for a in said(again, "stood")] == [root, two, side]
   assert [e[0][:2] for e in later.record] == [("stood", root), ("stood", two), ("stood", side)]
   for one in (root, two, side):
-    assert where(one) == "/z" and engine.modules[one]["actor"] == "o/low"
+    assert engine.cwd(on=one) == "/z" and engine.modules[one]["actor"] == "o/low"
   twin = engine.chain("twin", source=root)
   await settle(300)
   assert engine.modules[twin]["actor"] == "o/low"

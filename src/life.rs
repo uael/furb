@@ -22,7 +22,7 @@ use std::{
 use monty_types::{MontyUuid, NamedValues, ResourceLimits};
 
 use crate::{
-  ENGINE, PREAMBLE, SHEET,
+  PREAMBLE, SHEET,
   ear::{Ears, Reply},
   fact::Fact,
   gate::checked,
@@ -72,6 +72,8 @@ enum Worldly {
 
 /// The host, as the sandbox reaches it: the World, the ears, and everything in flight. The gate is the thread's.
 struct Hosting {
+  /// The source of the engine the life runs, which the gate reads a word on.
+  source: String,
   world: Worldly,
   ears: Option<Box<dyn Ears>>,
   voice: Voice,
@@ -98,7 +100,7 @@ impl Hosting {
     };
     if on == id(objects::GATE) {
       let sheet = text(args.first().map(Object::as_ref));
-      let found = checked(&sheet)?;
+      let found = checked(&sheet, &self.source)?;
       return Ok(Object::list(found.into_iter().map(|(line, why)| {
         Object::tuple([Object::int(i64::try_from(line).unwrap_or_default()), Object::string(why)])
       })));
@@ -345,16 +347,16 @@ impl Opening {
     self
   }
 
-  /// The words of the extensions, which the life plays as the World on every chain without a source: once boot
-  /// stands on its record, on each chain whose program lacks one, and at the birth of each such chain after.
+  /// The words of the extensions, which the module of the engine runs after the engine, so every chain binds their
+  /// names from its birth, and the gate reads a word after them.
   #[must_use]
   pub fn words(mut self, words: impl IntoIterator<Item = impl Into<String>>) -> Self {
     self.words.extend(words.into_iter().map(Into::into));
     self
   }
 
-  /// The life words of the extensions, which the life plays as the World in every life on every chain without a
-  /// source, after the words: once boot stands on its record, and at the birth of each such chain after.
+  /// The life words of the extensions, which the life plays as rungs, as the World, in every life on every chain
+  /// without a source: once boot stands on its record, and at the birth of each such chain after.
   #[must_use]
   pub fn lives(mut self, lives: impl IntoIterator<Item = impl Into<String>>) -> Self {
     self.lives.extend(lives.into_iter().map(Into::into));
@@ -374,7 +376,9 @@ impl Opening {
       names.insert(0, WORLD.to_owned());
     }
     let typed = matches!(world, Worldly::Typed(_));
-    let host = Hosting { world, ears, voice, later: Vec::new(), calls: Vec::new() };
+    let source = crate::extension::source(&words);
+    let host =
+      Hosting { source: source.clone(), world, ears, voice, later: Vec::new(), calls: Vec::new() };
     let mut inner = Inner { sand: Sand::new(limits), host, watchers: HashMap::new() };
     inner.ran(PREAMBLE, vec![])?;
     // The three objects of the host and the two modules are bound as names of the session, which every later
@@ -384,7 +388,7 @@ impl Opening {
     let got = inner.ran(
       opening,
       vec![
-        ("__source", Object::string(ENGINE)),
+        ("__source", Object::string(source)),
         ("__sheet_source", Object::string(SHEET)),
         ("__record", Object::list(record)),
         (
@@ -401,13 +405,10 @@ impl Opening {
     let got = got.as_ref();
     let root = entry(&got, 0).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
     let raised = entry(&got, 1).and_then(Fault::of);
-    if raised.is_none() && !(words.is_empty() && lives.is_empty()) {
+    if raised.is_none() && !lives.is_empty() {
       inner.run(
-        "played(__engine, __words, __lives)",
-        vec![
-          ("__words", Object::list(words.into_iter().map(Object::string))),
-          ("__lives", Object::list(lives.into_iter().map(Object::string))),
-        ],
+        "played(__engine, __lives)",
+        vec![("__lives", Object::list(lives.into_iter().map(Object::string)))],
       )?;
     }
     Ok(Life { held: inner, root, raised })

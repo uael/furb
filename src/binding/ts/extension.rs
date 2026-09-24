@@ -130,16 +130,22 @@ pub fn resolve_extensions(
   .map_err(refused)
 }
 
-/// The word of the python part of an extension, which a host plays as a rung: the file with its line ends made LF
-/// and less every top-level import from `furb`, which leaves no line of its own. It throws for a file python cannot parse.
+/// The word of the python part of an extension, which the module of the engine runs after the engine: the file with
+/// its line ends made LF and less every top-level import from `furb`, which leaves no line of its own. It throws for
+/// a file python cannot parse.
 #[napi]
 pub fn word_of(source: String) -> napi::Result<String> {
   extension::word(&source).map_err(refused)
 }
 
-/// The words that a program lacks, in their order, which is the rule a host plays the words by.
+/// The system prompt of a life: the engine as the build minified it, less the definitions of each builtin that
+/// `taken` does not name, then the words of the extensions, in their order.
 #[napi]
-pub fn missing_words(program: Vec<String>, words: Vec<String>) -> Vec<String> {
-  let held: Vec<&str> = program.iter().map(String::as_str).collect();
-  extension::missing(&held, &words).into_iter().map(str::to_owned).collect()
+pub fn system_prompt(
+  engine: String,
+  taken: Vec<String>,
+  words: Vec<String>,
+) -> napi::Result<String> {
+  let taken: Vec<&str> = taken.iter().map(String::as_str).collect();
+  extension::system(&engine, &taken, &words).map_err(refused)
 }

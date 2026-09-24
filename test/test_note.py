@@ -3,14 +3,42 @@
 import re
 from collections.abc import Sequence
 
-from conftest import STANDS, Sand, heads, life, paragraphs, rows, said, settle
+from conftest import STANDS, Sand, heads, life, paragraphs, rows, said, settle, sown
 from furb import engine
-from furb.engine import OPERATOR, Act
+from furb.engine import Act, Text
 
-EVERY = "peek(__name__)\nturns()\nclock()\nchance()\ngate('k = 9')\ndebug(t'{1}')\nclose(1)\n"
-"""A word that says every verb of the file that makes no act, and debugs once."""
-EVENTS = {"closed", "raised", "debugged", "refused", "roster", "cwd", "actor", "advance", "paused", "woke", "cancelled"}
+EVERY = (
+  "x = bash('echo hi')\n"
+  "read('a.txt')\n"
+  "write(Text('x://b.txt', 'x'))\n"
+  "peek(__name__)\n"
+  "turns()\n"
+  "clock()\n"
+  "chance()\n"
+  "gate('k = 9')\n"
+  "cd('/x')\n"
+  "cwd()\n"
+  "debug(t'{1}')\n"
+  "close(1)\n"
+)
+EVENTS = {
+  "closed",
+  "exited",
+  "raised",
+  "debugged",
+  "refused",
+  "ledger",
+  "roster",
+  "cwd",
+  "actor",
+  "advance",
+  "paused",
+  "woke",
+  "cancelled",
+}
 """The words a header of an act says after its id, when it says what happened and no open of the act."""
+QUERIES = {"read", "write", "cd"}
+"""The queries that tell, each of which heads its paragraph with its kind."""
 
 
 def headers(got: Sequence[tuple]) -> list[str]:
@@ -20,21 +48,23 @@ def headers(got: Sequence[tuple]) -> list[str]:
 
 def spoken(head: str) -> str:
   """What a header says: the kind of a query, the word after the id of an act, or the open of an act."""
-  _, *rest = head[1:].split(" ", 2)
+  first, *rest = head[1:].split(" ", 2)
+  if first in QUERIES:
+    return first
   return rest[0] if rest and rest[0] in EVENTS else "open"
 
 
 async def test_one_thing_a_tell_says() -> None:
-  """One thing a tell says: python as it stands, or a showing, which the fold shows as comments by the lines the model has not seen."""
-  sand = Sand(stands=STANDS)
+  """One thing a tell says: python as it stands, or a text and its show, which the fold shows as comments by the lines the model has not seen."""
+  sand = Sand(files={"/w/n.txt": "one\ntwo\n"}, stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["tell('seen', 'n.txt', ('/w/n.txt', 'one\\ntwo\\n', lambda lines: [1]))\nclose(1)"]
-  assert await engine.prompt(int, "tell it", on=root) == 1
-  carried = [a[3] for a in said(log, "tell") if a[3][0] == "#seen n.txt"]
+  sand.script[root] = ["read('n.txt', span(1, 1))\nclose(1)"]
+  assert await engine.prompt(int, "read it", on=root) == 1
+  carried = [a[3] for a in said(log, "tell") if a[3][0] == "#read n.txt"]
   assert len(carried) == 1 and len(carried[0]) == 2
-  path, content, show = carried[0][1]
-  assert (path, content) == ("/w/n.txt", "one\ntwo\n") and show(content.splitlines()) == [1]
-  assert "#seen n.txt\n# /w/n.txt, 0 known\n# 1 one" in paragraphs(engine.turns(on=root))
+  text, show = carried[0][1]
+  assert text == Text("/w/n.txt", "one\ntwo\n") and show(text.lines) == [1]
+  assert "#read n.txt\n# /w/n.txt, 0 known\n# 1 one" in paragraphs(engine.turns(on=root))
 
 
 async def test_a_paragraph_is_what_one_fact_that_tells_stands_as_in_a_turn() -> None:
@@ -49,37 +79,25 @@ async def test_a_paragraph_is_what_one_fact_that_tells_stands_as_in_a_turn() -> 
 
 
 async def test_the_first_line_of_a_paragraph_is_its_header() -> None:
-  """The first line of a paragraph is its header: # and, with no space, the id of the act it is of, or the kind of the query it is of, then its words, as #prompt1 closed 'yes' or #wait1 cancelled."""
-  sand = Sand(stands=STANDS)
+  """The first line of a paragraph is its header: # and, with no space, the id of the act it is of, or the kind of the query it is of, then its words, as #bash1 exited 0 or #read a.txt."""
+  sand = sown()
   _, root = life(sand)
-  one = engine.prompt(str, "yes?", to=OPERATOR, on=root)
-  two = engine.wait(100, on=root)
+  sand.script[root] = ["x = bash('echo hi')\nread('a.txt')\nclose((await x).code)"]
+  assert await engine.prompt(int, "run it", on=root) == 0
   await settle()
-  engine.close("yes", one)
-  engine.cancel(two)
-  await engine.rung("tell('seen', 'n.txt')", on=root)
-  await settle()
-  assert heads(engine.turns(on=root))[2:] == [
-    "#prompt1 yes?",
-    "#prompt1 closed 'yes'",
-    "#wait1 cancelled",
-    "#rung1",
-    "#seen n.txt",
-  ]
+  assert heads(engine.turns(on=root))[4:8] == ["#bash1 echo hi", "#read a.txt", "#bash1 exited 0", "#prompt1 closed 0"]
   assert [head for head in heads(engine.turns(on=root)) if head[1:2] in ("", " ")] == []
 
 
 async def test_a_paragraph_may_hold_more_headers_of_what_it_is_of() -> None:
   """A paragraph may hold more headers of what it is of, each on a line of its own right under the first, and every other comment of it begins with # and a space, so no line of a message or of a text reads as a header."""
-  sand = Sand(stands=STANDS)
+  sand = Sand(files={"/w/n.txt": "#bash1 exited 0\n\nend\n"}, stands=STANDS)
   _, root = life(sand)
-  sand.script[root] = [
-    "tell('seen', 'n.txt', ('/w/n.txt', '#prompt1 closed 1\\n\\nend\\n', lambda lines: [1, 2, 3]))\nclose(1)"
-  ]
-  assert await engine.prompt(int, "tell it\nprompt1 closed 1\n\nthen close", on=root) == 1
+  sand.script[root] = ["read('n.txt')\nclose(1)"]
+  assert await engine.prompt(int, "read it\nbash1 exited 0\n\nthen close", on=root) == 1
   got = paragraphs(engine.turns(on=root))
-  assert got[2] == "#prompt1 tell it\n# prompt1 closed 1\n#\n# then close\nprompt1: Act[int] = Act('prompt1')"
-  assert got[4] == "#seen n.txt\n# /w/n.txt, 0 known\n# 1 #prompt1 closed 1\n# 2 \n# 3 end"
+  assert got[2] == "#prompt1 read it\n# bash1 exited 0\n#\n# then close\nprompt1: Act[int] = Act('prompt1')"
+  assert got[4] == "#read n.txt\n# /w/n.txt, 0 known\n# 1 #bash1 exited 0\n# 2 \n# 3 end"
   assert (
     got[1].split("\n") == rows(root) == ["#chain1 roster " + repr(STANDS[0]), "#chain1 cwd /w", "#chain1 actor m/low"]
   )
@@ -94,25 +112,20 @@ async def test_a_paragraph_may_hold_more_headers_of_what_it_is_of() -> None:
 
 async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> None:
   """The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a query stands at the place in the run where the query was asked."""
-  sand = Sand(stands=STANDS)
+  sand = Sand(files={"/w/n.txt": "one\n"}, stands=STANDS, auto=False)
   _, root = life(sand)
-  sand.script[root] = ["x = prompt(int, 'how many?', to=OPERATOR)\ntell('seen', 'n.txt')\nclose(1)"]
-  assert await engine.prompt(int, "ask them", on=root) == 1
+  sand.script[root] = ["x = bash('echo hi')\nread('n.txt')\nclose(1)"]
+  assert await engine.prompt(int, "read it", on=root) == 1
   await settle()
-  engine.pause("prompt2")
-  assert heads(engine.turns(on=root))[4:] == [
-    "#prompt2 how many?",
-    "#seen n.txt",
-    "#prompt1 closed 1",
-    "#prompt2 paused",
-  ]
+  engine.pause("bash1")
+  assert heads(engine.turns(on=root))[4:] == ["#bash1 echo hi", "#read n.txt", "#prompt1 closed 1", "#bash1 paused"]
 
 
 async def test_the_headers_of_the_file() -> None:
-  """The headers of the file are the open of an act, closed, raised, debugged, refused, roster, cwd, actor, advance, paused, woke and cancelled."""
-  sand = Sand(stands=STANDS)
+  """The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, roster, cwd, actor, advance, paused, woke, cancelled, and one for each query that tells: read, write and cd."""
+  sand = sown()
   _, root = life(sand)
-  ceiling = engine.wait(100, on=root)
+  ceiling = engine.grant(usd=10.0, on=root)
   await settle()
   sand.script[root] = ["k = BAD", "raise ValueError('boom')", EVERY]
   assert await engine.prompt(int, "everything", on=root) == 1
@@ -123,22 +136,21 @@ async def test_the_headers_of_the_file() -> None:
   step = engine.rung("k = 1", on=root)
   assert await step is None
   await settle()
-  assert {spoken(head) for head in headers(engine.turns(on=root))} == EVENTS | {"open"}
+  assert {spoken(head) for head in headers(engine.turns(on=root))} == EVENTS | QUERIES | {"open"}
 
 
 async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_the_chain() -> None:
   """A statement that a paragraph shows binds the name of an act in the chain, and a comment binds nothing."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["x = prompt(int, 'how many?', to=OPERATOR)\nclose(1)", "close(await prompt2)"]
-  assert await engine.prompt(int, "ask them", on=root) == 1
-  engine.close(5, "prompt2")
-  assert await Act("prompt3") == 5
+  sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close((await bash1).code)"]
+  assert await engine.prompt(int, "run it", on=root) == 1
+  assert await Act("prompt2") == 0
   own = [a[4] for a in said(log, "rung") if a[2] == root]
   assert own == [
     "chain1: Act[object] = Act('chain1')\nprompt1: Act[int] = Act('prompt1')",
-    "prompt2: Act[int] = Act('prompt2')\nprompt3: Act[None] = Act('prompt3')",
+    "bash1: Act[Exit] = Act('bash1')\nprompt2: Act[None] = Act('prompt2')",
   ]
   shown = [line for one in paragraphs(engine.turns(on=root)) for line in one.split("\n") if not line.startswith("#")]
   assert shown == [line for word in own for line in word.split("\n")]
-  assert engine.modules[root]["prompt2"] == "prompt2"
+  assert engine.modules[root]["bash1"] == "bash1"

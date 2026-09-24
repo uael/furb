@@ -6,11 +6,11 @@ from furb.engine import OPERATOR, WORLD
 
 
 async def made(sand: Sand) -> tuple[str, str, str, str]:
-  """A life whose prompt makes a rung, whose word starts a wait: the chain, the prompt, the rung and the wait."""
+  """A life whose prompt makes a rung, whose word starts a command: the chain, the prompt, the rung and the command."""
   log, root = life(sand)
-  sand.script[root] = ["x = wait(0)\nclose(1)"]
+  sand.script[root] = ["x = bash('echo hi')\nclose(1)"]
   assert await engine.prompt(int, "run it", on=root) == 1
-  return root, said(log, "prompt")[0][1], said(log, "rung")[0][1], said(log, "wait")[0][1]
+  return root, said(log, "prompt")[0][1], said(log, "rung")[0][1], said(log, "bash")[0][1]
 
 
 async def test_whether_one_act_is_another_or_was_made_by_it_which_the_life_says() -> None:
@@ -24,16 +24,12 @@ async def test_whether_one_act_is_another_or_was_made_by_it_which_the_life_says(
 
 async def test_an_act_is_under_every_ancestor_of_the_act() -> None:
   """An act is under every ancestor of the act, which the maker of each says in turn, up to the operator or an ear of the outside."""
-  root, asking, step, command = await made(Sand(stands=STANDS))
-  assert (asking, step, command) == ("prompt1", "rung1", "wait1")
+  _, asking, step, command = await made(Sand(stands=STANDS))
+  assert (asking, step, command) == ("prompt1", "rung1", "bash1")
   assert engine.under(command, step) and engine.under(command, asking) and engine.under(command, command)
   assert engine.acts[asking][2] == OPERATOR and engine.under(command, OPERATOR)
-  token = engine.site.set(WORLD)
-  try:
-    reading, _ = engine.ask("clock", root)
-  finally:
-    engine.site.reset(token)
-  assert reading[2] == WORLD and engine.under(reading[1], WORLD) and not engine.under(reading[1], OPERATOR)
+  (merged,) = [engine.asked[name] for name in engine.asked if name.startswith("merged@")]
+  assert merged[2] == WORLD and engine.under(merged[1], WORLD) and not engine.under(merged[1], OPERATOR)
 
 
 async def test_an_act_is_under_its_chain_only_when_the_chain_made_it() -> None:
@@ -49,6 +45,6 @@ async def test_nothing_is_under_a_name_of_nothing() -> None:
   """Nothing is under a name of nothing."""
   _, _, _, command = await made(Sand(stands=STANDS))
   assert not engine.under(command, "")
-  assert not engine.under("wait9", "wait9x")
+  assert not engine.under("bash9", "bash9x")
   assert not engine.under("", "")
   assert not engine.under("", "chain1")

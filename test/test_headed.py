@@ -6,8 +6,8 @@ from furb import engine
 
 async def test_the_header_of_a_paragraph() -> None:
   """The header of a paragraph: # and the name with no space between, then the text, whose later lines are comments."""
-  assert engine.headed("prompt1", "closed 3") == "#prompt1 closed 3"
-  assert engine.headed("clock", "1001.0") == "#clock 1001.0"
+  assert engine.headed("bash1", "exited 0") == "#bash1 exited 0"
+  assert engine.headed("read", "a.txt") == "#read a.txt"
   assert engine.headed("rung1") == "#rung1"
   assert engine.headed("prompt1", "count them\n\nall of them") == "#prompt1 count them\n#\n# all of them"
   sand = Sand(stands=STANDS)

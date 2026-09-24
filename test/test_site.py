@@ -10,13 +10,13 @@ async def test_who_is_speaking_is_the_site_which_every_fact_is_said_from() -> No
   sand = sown()
   log, root = life(sand)
   assert engine.site.get() == OPERATOR
-  sand.script[root] = ["here = site.get()\nclock()\nclose(here)"]
+  sand.script[root] = ["here = site.get()\nread('a.txt')\nclose(here)"]
   step = await engine.prompt(str, "who speaks", on=root)
   assert step == said(log, "rung")[0][1]
-  assert said(log, "clock")[0][2] == step
+  assert said(log, "read")[0][2] == step
   assert said(log, "answer")[0][2] == WORLD
-  engine.clock(on=root)
-  assert said(log, "clock")[-1][2] == OPERATOR
+  engine.read("a.txt", on=root)
+  assert said(log, "read")[-1][2] == OPERATOR
   engine.drive(keeping([], ("done", "none://one", None)), "keeper")
   assert said(log, "done")[-1][2] == "keeper"
   assert engine.site.get() == OPERATOR

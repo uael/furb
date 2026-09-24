@@ -9,21 +9,21 @@ async def test_an_act_the_world_does_says_start_at_its_birth() -> None:
   """An act the World does says start at its birth, and the facts of the World about it come after."""
   sand = Sand()
   log, root = life(sand)
-  act = engine.wait(0, on=root)
+  act = engine.bash("echo hi", on=root)
   await settle()
   about = [a for a in log if a[1] == act]
-  assert [a[0] for a in about] == ["wait", "start", "done"]
-  assert [i for i, a in enumerate(about) if a[2] == WORLD] == [2]
+  assert [a[0] for a in about[:2]] == ["bash", "start"]
+  assert [i for i, a in enumerate(about) if a[2] == WORLD] == [3, 4]
 
 
-async def test_the_world_starts_a_wait_at_its_start_which_the_wait_says_at_its_birth() -> None:
-  """The World starts a wait at its start, which the wait says at its birth."""
+async def test_the_world_starts_a_command_at_its_start_which_the_command_says_at_its_birth() -> None:
+  """The World starts a command at its start, which the command says at its birth."""
   sand = Sand()
   log, root = life(sand)
-  act = engine.wait(0, on=root)
+  act = engine.bash("echo hi", on=root)
   assert [a[1] for a in said(sand.calls, "start")] == [act]
   assert said(log, "start")[0][2] == act
-  assert (await act) is None
+  assert (await act).code == 0
 
 
 async def test_a_prompt_to_a_model_is_the_engines_to_do_so_it_says_no_start() -> None:

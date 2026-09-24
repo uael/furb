@@ -9,11 +9,12 @@ async def test_the_open_of_an_act_tells_the_id_and_what_the_act_says_of_itself()
   """The open of an act tells the id and what the act says of itself, and no actor and no arguments as such."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
+  act = engine.bash("echo hi", fed=True, timeout=9.0, on=root)
+  assert (await act).code == 0
   await settle()
   opened = next(a[3] for a in said(log, "tell") if a[1] == act)
-  assert opened == [f"#{act} how many?", f"{act}: Act[int] = Act('{act}')"]
-  assert said(log, "prompt")[0][4:] == ("int", "how many?", OPERATOR)
+  assert opened == [f"#{act} echo hi", f"{act}: Act[Exit] = Act('{act}')"]
+  assert said(log, "bash")[0][4:] == ("echo hi", True, 9.0)
 
 
 async def test_a_closed_header_tells_the_act_with_what_it_came_to_as_python_shows_it() -> None:

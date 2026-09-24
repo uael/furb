@@ -1,4 +1,10 @@
-use std::{collections::HashMap, ffi::OsString, fs, path::PathBuf, process::Command};
+use std::{
+  collections::{HashMap, HashSet},
+  ffi::OsString,
+  fs,
+  path::PathBuf,
+  process::Command,
+};
 
 use super::*;
 
@@ -460,25 +466,103 @@ fn the_builtins_are_files_bash_and_grant_and_bash_requires_files() {
     held.iter().map(|one| one.requires.clone()).collect::<Vec<_>>(),
     [vec![], vec!["files".to_owned()], vec![]]
   );
-  assert!(
-    held
-      .iter()
-      .all(|one| one.root.is_none() && one.world == Worlds::default() && one.tui.is_none())
-  );
+  assert!(held.iter().all(|one| {
+    one.root.is_none()
+      && one.word.is_none()
+      && one.life.is_none()
+      && one.world == Worlds::default()
+      && one.tui.is_none()
+  }));
   assert!(held.iter().all(|one| one.life.is_none()));
 }
 
+/// The names that each top-level statement of a source binds, in order.
+fn bound(source: &str) -> Vec<Vec<String>> {
+  let parsed = ruff_python_parser::parse_module(source).unwrap();
+  parsed
+    .syntax()
+    .body
+    .iter()
+    .map(|one| binds(one).into_iter().map(str::to_owned).collect())
+    .collect()
+}
+
 #[test]
-fn the_word_of_each_builtin_is_the_word_of_the_file_the_package_ships() {
+fn each_name_a_builtin_defines_is_bound_at_the_top_of_the_engine_by_statements_of_that_builtin_alone()
+ {
+  let statements = bound(crate::ENGINE);
+  let mut seen = HashSet::new();
   for one in builtins() {
-    let path = format!("{}/src/furb/builtin/{}.py", env!("CARGO_MANIFEST_DIR"), one.name);
-    let shipped = fs::read_to_string(path).unwrap();
-    assert_eq!(one.word, Some(worded(&shipped)));
-    assert!(!one.word.unwrap().contains("from furb"));
+    let names = defined(&one.name);
+    assert!(!names.is_empty(), "{}", one.name);
+    for name in names {
+      assert!(seen.insert(*name), "{name} is defined by two builtins");
+      let binding: Vec<&Vec<String>> =
+        statements.iter().filter(|all| all.iter().any(|x| x == name)).collect();
+      assert!(!binding.is_empty(), "the engine binds no {name}");
+      assert!(
+        binding.iter().all(|all| all.iter().all(|x| names.contains(&x.as_str()))),
+        "{name} is bound beside a name of no builtin {}",
+        one.name
+      );
+    }
   }
-  assert_eq!(
-    words(&builtins()),
-    builtins().into_iter().filter_map(|one| one.word).collect::<Vec<_>>()
+  assert!(defined("skills").is_empty());
+}
+
+#[test]
+fn the_prompt_with_every_builtin_taken_and_no_word_is_the_engine_it_was_given() {
+  let taken = ["files", "bash", "grant"];
+  assert_eq!(system(crate::ENGINE, &taken, &[]).unwrap(), crate::ENGINE);
+  assert_eq!(system("x=1", &taken, &[]).unwrap(), "x=1");
+}
+
+#[test]
+fn a_builtin_that_is_off_leaves_the_prompt_with_its_definitions_and_nothing_else() {
+  let prompt = system(crate::ENGINE, &["files", "bash"], &[]).unwrap();
+  assert!(!prompt.contains("def grant(") && !prompt.contains("WINDOW = "));
+  assert!(
+    prompt.contains("def bash(") && prompt.contains("class Text:") && prompt.contains("def chain(")
+  );
+  let bare = system(crate::ENGINE, &[], &[]).unwrap();
+  for gone in
+    ["def read(", "def write(", "def cd(", "def cwd(", "def bash(", "@dataclass", "class Text:"]
+  {
+    assert!(!bare.contains(gone), "{gone}");
+  }
+  for gone in
+    ["class Exit:", "HEAD, TAIL, HIDDEN", "TIMEOUT = ", "from dataclasses import dataclass"]
+  {
+    assert!(!bare.contains(gone), "{gone}");
+  }
+  assert!(bare.contains("def shown(") && bare.contains("def take(") && bare.contains("def boot("));
+  let left: HashSet<String> = bound(&bare).into_iter().flatten().collect();
+  let whole: HashSet<String> = bound(crate::ENGINE).into_iter().flatten().collect();
+  let cut: HashSet<&str> = builtins().iter().flat_map(|one| defined(&one.name)).copied().collect();
+  assert_eq!(left, whole.iter().filter(|x| !cut.contains(x.as_str())).cloned().collect());
+  assert!(!bare.contains("\n\n\n\n"), "no cut leaves more empty lines than stood there");
+}
+
+#[test]
+fn the_prompt_cuts_a_statement_that_shares_its_line_and_keeps_the_other() {
+  assert_eq!(system("WINDOW=1;x=2\ny=3\n", &["files", "bash"], &[]).unwrap(), "x=2\ny=3\n");
+  assert_eq!(system("a=1\ndef grant():\n\tpass\nb=2\n", &[], &[]).unwrap(), "a=1\nb=2\n");
+}
+
+#[test]
+fn the_words_follow_the_engine_after_an_empty_line_in_their_order() {
+  let words = ["a = 1\n".to_owned(), "b = 2\n".to_owned()];
+  assert_eq!(system("x=1", &[], &words).unwrap(), "x=1\n\na = 1\n\nb = 2\n");
+  assert_eq!(source(&words), format!("{}\na = 1\n\nb = 2\n", crate::ENGINE));
+  assert_eq!(source(&[]), crate::ENGINE);
+}
+
+#[test]
+fn an_engine_that_does_not_parse_is_refused_with_its_line() {
+  let refused = system("x = 1\ny = (\n", &[], &[]).unwrap_err();
+  assert!(
+    matches!(&refused, Error::Word { name, line: 2 | 3, .. } if name == "the engine"),
+    "{refused:?}"
   );
 }
 
@@ -532,14 +616,6 @@ fn a_cycle_of_requirements_is_refused() {
   let entries = [entry("a", true), entry("b", true)];
   let got = ordered(&entries, vec![named("a", &["b"]), named("b", &["a"])]).unwrap_err();
   assert_eq!(got, Error::Cycle { names: vec!["a".to_owned(), "b".to_owned()] });
-}
-
-#[test]
-fn the_missing_words_are_the_words_the_program_lacks_in_their_order() {
-  let words = vec!["a = 1".to_owned(), "b = 2".to_owned(), "c = 3".to_owned()];
-  assert_eq!(missing(&[], &words), ["a = 1", "b = 2", "c = 3"]);
-  assert_eq!(missing(&["x = 0", "b = 2"], &words), ["a = 1", "c = 3"]);
-  assert_eq!(missing(&["c = 3", "a = 1", "b = 2"], &words), Vec::<&str>::new());
 }
 
 #[test]
@@ -668,7 +744,7 @@ fn extensions_gives_the_builtins_and_the_path_extensions_of_both_configs_in_orde
     got.iter().map(|one| one.name.as_str()).collect::<Vec<_>>(),
     ["files", "bash", "two", "one"]
   );
-  assert_eq!(words(&got)[2..], ["two = ask\n".to_owned(), "one = 1\n".to_owned()]);
+  assert_eq!(words(&got), ["two = ask\n".to_owned(), "one = 1\n".to_owned()]);
   assert_eq!(lives(&got), ["one()"]);
 }
 
