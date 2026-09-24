@@ -20,8 +20,8 @@ It gives the extension API of the crate too, the same for every host:
 - `word_of(source)` gives the word of a python part, `system_prompt(engine, taken, words)` the system prompt of a life,
   which is the text the life runs, `cut_names(taken)` the names it cuts, and `pinned(record, taken, words)` what a
   life on a record takes and runs, and whether it pins them.
-- `Life(ears, names, record, words, lives, taken=, engine=)` runs its system prompt, pins, and plays the life words,
-  and `life.system` gives that text. `gate(sheet, engine)` reads a sheet against a system prompt.
+- `Life(ears, names, record, words, lives, taken=None, engine=None)` runs its system prompt, pins, and plays the life
+  words, and `life.system` gives that text. `gate(sheet, engine)` reads a sheet against a system prompt.
 
 The command line of furb runs the system prompt of the life in the module of the engine with these, pins it, plays
 the life words, and holds the parts for a World of the builtins it takes. [The guide of the

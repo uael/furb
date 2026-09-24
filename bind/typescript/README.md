@@ -34,8 +34,7 @@ const session = await boot({
 });
 try {
   const { life } = session;
-  console.log(life.clock()); // A synchronous query.
-  console.log(life.call("cwd", [], { on: life.root })); // A verb of the files extension, by its name.
+  console.log(life.call("cwd", [], { on: life.root })); // A synchronous query.
   const work = life.prompt<string>("str", "What is this project?");
   console.log(work.id);
   const answer = await work;
@@ -45,9 +44,8 @@ try {
 }
 ```
 
-The default `World` provides time, chance, records, waits, model requests, and operator questions, and it
-hands every other fact to the parts of its extensions: the builtin parts of `files` and `bash` give files,
-streamed shell commands, stdin, and timeouts. It knows no provider of its own: it asks the pi-ai collection it is given in
+The default `World` provides files, streamed shell commands, stdin, timeouts, time, chance, records, model
+requests, and operator questions. It knows no provider of its own: it asks the pi-ai collection it is given in
 `models`, the built-in providers when it is given none, and it preserves provider response blocks in the
 record. The host names what the World offers in `roster`, as `provider:model`, and the default actor in `model`,
 which is the first of the roster when unsaid; a World given neither offers the operator alone, and a prompt
@@ -110,8 +108,8 @@ continues, as in the Python binding. `Ears.callable` carries a JavaScript show o
 from the `Ears` the life boots on: `world.ears` for the supplied World, and `session.ears` from `boot`.
 `Life.call` reaches every public engine verb beyond the named methods.
 
-Values use the Python record form. Faults carry `is` and `args`. A value of a class that a word defined, such as
-the `Text` of the files extension and the `Exit` of the bash extension, crosses out as
+Values use the Python record form. Text and Exit carry `is` plus their fields. Faults carry `is` and `args`. A
+value of a class that a word defined, such as the `Skill` of the skills extension, crosses out as
 `{is: "instance", class: {is: "class", id, name, base}, value}`, where `value` holds its fields. `unwrapped(value)`
 gives every instance in a value as its fields, `isInstance(value, name)` says whether a value is an instance of a
 class of that name, and `remade(instance, fields)` gives an instance with other fields, which crosses back into the
@@ -131,8 +129,8 @@ as its digits in a string. `inspect(name, chain)` also gives the Python type and
 
 Records preserve integral floats as `{"is":"float","args":["1"]}`. The native record reader checks integer
 precision before JavaScript can round a number. A query of a rung enters the record with its answer, and a
-query that the host asks outside a rung enters none. To keep a program edit across a later open, write the new
-program to the door of its prompt in a `rung`, as `write(Text(prompt, program))`.
+query that the host asks outside a rung enters none. To keep a program edit across a later open, perform its
+`write` in a `rung`.
 
 A record whose replay drifts gives a life all the same, and `life.raised` holds the drift; that life keeps
 nothing more. `World.open` refuses such a record with the drift.
@@ -184,10 +182,10 @@ host in TypeScript needs:
   `FURB_CONFIG_DIR` and `FURB_CACHE_DIR`, then the directories of XDG, of Windows, and of the home. `wordOf(source)`
   gives the word of a python part.
 - `Life.boot(callback, names, record, {engine, taken, words, lives})` runs the system prompt of the life: the engine,
-  less the definitions of each builtin it does not take, then the words, or what the record pins; it pins them on an
-  empty record. `life.system` gives that text. The life plays the life words as the World, on every chain without a
-  source, once boot stands on its record and at the birth of each such chain after. The supplied World and `boot`
-  give the engine as the build minified it, and the extensions, and the World sends `life.system` to each model.
+  less the definitions of each builtin it does not take, then the words, or what the record pins, which it pins on an
+  empty record. `life.system` gives that text. The life plays the life words as the World on every chain without a
+  source. The supplied World and `boot` give the minified engine and the extensions, and the World sends
+  `life.system` to each model.
 - `World.load(options)` resolves the extensions of the directory when the options name none, imports the part for a
   World of each one, and gives the World. `new World(options)` takes the `extensions` and the `parts` it is given,
   and the builtins when it is given none. It refuses an extension whose part for a World it does not hold.

@@ -5,18 +5,16 @@ that boot is given, each a generator under a name: the World, the Kernel and the
 contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/CLAUDE.md` holds the technical names of
 the engine and the laws that no test can hold. `script/CLAUDE.md` says how to run the DeepSWE rig.
 
-The system prompt of a life is the text the life runs: the engine less the definitions of each builtin extension,
-`files`, `bash` or `grant`, that a config turns off, then the word of each other extension, which runs in the module
-of the engine after the engine, before boot. The official extensions live in `extensions/`, each with its manifest,
-its contract and its suite in `extensions/<name>/test/`. The crate reads the configs, fetches, orders and makes the
-words of the extensions and the system prompt in `src/extension.rs`. `docs/extensions.md` is the guide of the
-extensions.
+The system prompt of a life is the text the life runs: the engine, less the definitions of each builtin extension,
+`files`, `bash` or `grant`, that a config turns off, then the word of each other extension. The official extensions
+live in `extensions/`, each with its manifest, its contract and its suite in `extensions/<name>/test/`.
+`src/extension.rs` reads the configs, fetches the extensions, orders them, and makes their words and the system
+prompt. `docs/extensions.md` is the guide of the extensions.
 
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
 
-- `src/lib.rs` says what the crate gives: `Life`, whose methods are the verbs of the contract, which runs its system
-  prompt, pins its builtins and its words in its record and plays the life words, `World`, the one
+- `src/lib.rs` says what the crate gives: `Life`, whose methods are the verbs of the contract, `World`, the one
   trait that a host writes, and `extension`, the extension API that every host shares, which napi and pyo3 give too.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
 - The Kernel and the gate are the crate's. The gate is the type checker of monty. It reads a word on the sheet of
@@ -29,17 +27,15 @@ API of its own:
 The suite runs on both engines. `test/outside/test_monty.py` proves what the door carries that no sentence of the
 contract says.
 
-The TypeScript side is a bun workspace at the root, with three kinds of packages:
+The TypeScript side is a bun workspace at the root, with three packages:
 
 - `bind/typescript` is the crate through N-API. Its queries and controls are synchronous, and its acts can be
   awaited. It includes a World with pi-ai models and records, which hands every other fact to the parts of its
-  extensions, the builtin parts of files and bash among them, builds the system prompt with the crate, and gives the
-  shapes of a part for a World and for the TUI.
-  `bind/typescript/README.md` says how to use it. The TUI imports its build in `bind/typescript/dist`, which
-  `bun run build` makes again.
+  extensions for a World, those of files and bash among them. `bind/typescript/README.md` says how to use it. The
+  TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
 - `tui` is the OpenTUI application on that package. The engine and its World run in a worker, `tui/src/worker.ts`,
-  which also holds the demo World and its scripted answers, and the parts of the extensions for the TUI load in the
-  thread that draws; the builtin parts are in `tui/src/builtin/`. `tui/README.md` says what the TUI does, and
+  which also holds the demo World and its scripted answers. The parts of the extensions for the TUI load in the
+  thread that draws, those of the builtins from `tui/src/builtin/`. `tui/README.md` says what the TUI does, and
   `docs/tui.md` shows each screen. The gallery and the animation come from `tui/script/`.
 - `extensions/skills` is the skills extension, the npm package `@furb/skills`.
 

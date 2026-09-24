@@ -20,9 +20,9 @@ An extension has up to three parts, and one part at least:
 
 ## The builtins
 
-The builtins are `files` (read, write, cd, cwd, Text and the shows), `bash` (bash and Exit) and `grant` (grant).
+The builtins are `files` (read, write, cd, cwd and their shows), `bash` (bash and Exit) and `grant` (grant).
 They are definitions of `engine.py` itself, so the engine and its contract say what they do. Each has its parts for
-a World and for the TUI in each host. They are on unless a config turns them off.
+a World and for the TUI in the hosts. They are on unless a config turns them off.
 
 A host that turns a builtin off cuts its definitions out of the system prompt, which is the text the life runs: the
 crate holds the top-level names each builtin defines, and cuts each top-level statement of the engine that binds only
@@ -245,19 +245,6 @@ skill.
 
 A record of furb 0.1.0 opens. It answers a read and a write with a text as the mark of its class, and the life
 replays each query from the record by its name, so a read and a write of that record give the text as it is.
-
-## The names of the extension system
-
-- **extension**: what a host adds to the engine: a word, a life word, and parts for a World and for the TUI.
-- **builtin**: files, bash or grant: definitions of `engine.py` that a host takes unless a config turns them off.
-- **manifest**: the field `furb` of the `package.json` of an extension.
-- **word of an extension**: the python that the module of the engine runs after the engine, before boot.
-- **word of a module**: the module less its imports of furb, with its line ends made LF.
-- **life word**: a word of the manifest that the host plays as a rung in every life.
-- **pin**: the fact `extensions` of the World, which says the builtins a life takes and the words it runs, so a later
-  life runs the same.
-- **config**: `config.json` of the config directory, or `.furb/config.json` of a project.
-- **cache**: where furb keeps the extensions it fetched.
 
 ## Trust
 
