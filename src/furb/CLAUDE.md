@@ -16,7 +16,8 @@ Each name has one meaning, which the contract's sentences use as given here.
 - window: the context size of a model in tokens, as its roster entry says.
 - share: the part of a window that one model response used.
 - standing: what a chain stands on, which the World answers it, or its origin for a chain with a source: the roster,
-  the directory and the default actor; the record holds each standing a chain took, at its place.
+  the directory and the default actor; the record holds each standing a chain took, at its place, and the chain
+  tells it in one paragraph, under the headers roster, cwd and actor.
 - tip: the point of a later life where the journal has said the record again whole, after which the life goes on
   past it.
 - stood: the fact that says what a chain stands on from its place in the record on, which the journal says at the

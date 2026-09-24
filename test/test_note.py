@@ -1,6 +1,9 @@
 """Note, one thing a tell says."""
 
-from conftest import STANDS, Sand, heads, life, paragraphs, said, settle, sown
+import re
+from collections.abc import Sequence
+
+from conftest import STANDS, Sand, heads, life, paragraphs, rows, said, settle, sown
 from furb import engine
 from furb.engine import Act, Text
 
@@ -25,7 +28,9 @@ EVENTS = {
   "debugged",
   "refused",
   "ledger",
-  "stands",
+  "roster",
+  "cwd",
+  "actor",
   "advance",
   "paused",
   "woke",
@@ -34,6 +39,11 @@ EVENTS = {
 """The words a header of an act says after its id, when it says what happened and no open of the act."""
 QUERIES = {"read", "write", "cd"}
 """The queries that tell, each of which heads its paragraph with its kind."""
+
+
+def headers(got: Sequence[tuple]) -> list[str]:
+  """Every line of the user turns of a fold that reads as a header, in order: # and, with no space, a name."""
+  return [line for one in paragraphs(got) for line in one.split("\n") if re.match(r"#\S", line)]
 
 
 def spoken(head: str) -> str:
@@ -79,8 +89,8 @@ async def test_the_first_line_of_a_paragraph_is_its_header() -> None:
   assert [head for head in heads(engine.turns(on=root)) if head[1:2] in ("", " ")] == []
 
 
-async def test_every_other_comment_of_a_paragraph_begins_with_a_space() -> None:
-  """Every other comment of a paragraph begins with # and a space, so no line of a message or of a text reads as a header."""
+async def test_a_paragraph_may_hold_more_headers_of_what_it_is_of() -> None:
+  """A paragraph may hold more headers of what it is of, each on a line of its own right under the first, and every other comment of it begins with # and a space, so no line of a message or of a text reads as a header."""
   sand = Sand(files={"/w/n.txt": "#bash1 exited 0\n\nend\n"}, stands=STANDS)
   _, root = life(sand)
   sand.script[root] = ["read('n.txt')\nclose(1)"]
@@ -88,8 +98,16 @@ async def test_every_other_comment_of_a_paragraph_begins_with_a_space() -> None:
   got = paragraphs(engine.turns(on=root))
   assert got[2] == "#prompt1 read it\n# bash1 exited 0\n#\n# then close\nprompt1: Act[int] = Act('prompt1')"
   assert got[4] == "#read n.txt\n# /w/n.txt, 0 known\n# 1 #bash1 exited 0\n# 2 \n# 3 end"
-  rest = [line for one in got for line in one.split("\n")[1:] if line.startswith("#")]
-  assert [line for line in rest if line != "#" and not line.startswith("# ")] == []
+  assert (
+    got[1].split("\n") == rows(root) == ["#chain1 roster " + repr(STANDS[0]), "#chain1 cwd /w", "#chain1 actor m/low"]
+  )
+  for one in got:
+    lines = one.split("\n")
+    name = lines[0].split(" ", 1)[0]
+    top = [i for i, line in enumerate(lines) if re.match(r"#\S", line)]
+    assert top == list(range(len(top))) and {lines[i].split(" ", 1)[0] for i in top} == {name}
+    rest = [line for line in lines[len(top) :] if line.startswith("#")]
+    assert [line for line in rest if line != "#" and not line.startswith("# ")] == []
 
 
 async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> None:
@@ -104,7 +122,7 @@ async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> N
 
 
 async def test_the_headers_of_the_file() -> None:
-  """The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, stands, advance, paused, woke, cancelled, and one for each query that tells: read, write and cd."""
+  """The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, roster, cwd, actor, advance, paused, woke, cancelled, and one for each query that tells: read, write and cd."""
   sand = sown()
   _, root = life(sand)
   ceiling = engine.grant(usd=10.0, on=root)
@@ -118,7 +136,7 @@ async def test_the_headers_of_the_file() -> None:
   step = engine.rung("k = 1", on=root)
   assert await step is None
   await settle()
-  assert {spoken(head) for head in heads(engine.turns(on=root))} == EVENTS | QUERIES | {"open"}
+  assert {spoken(head) for head in headers(engine.turns(on=root))} == EVENTS | QUERIES | {"open"}
 
 
 async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_the_chain() -> None:

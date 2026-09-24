@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import STANDS, Py, Sand, gated, heads, kept, life, of, paragraphs, ran, said, settle, sown, watched
+from conftest import STANDS, Py, Sand, gated, heads, kept, life, of, paragraphs, ran, said, settle, sown, stood, watched
 from furb import engine
 from furb.engine import WORLD, Exit, Refused, Text
 
@@ -235,7 +235,7 @@ async def test_the_turns_of_the_chain_of_another_prompt_tell_the_rung_of_a_word_
   (helper,) = [a[1] for a in said(log, "rung") if a[4] == "helper = 2"]
   assert paragraphs(engine.turns(on=two)) == [
     f"#{two} two\n{two}: Act[object] = Act({two!r})",
-    f"#{two} stands {STANDS!r}",
+    stood(two),
     f"#{helper}\nhelper = 2",
   ]
   assert of(engine.turns(on=root), helper) == []

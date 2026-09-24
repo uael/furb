@@ -58,8 +58,9 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
         else if (word === "closed") items.push({ type: "result", key, act, parallel: closes > 1 });
         else shown();
       } else if (act && ["chain", "grant"].includes(act.kind)) {
-        // The inspector shows what the chain stands on, so its standing is no card of the conversation.
-        if (!opens(paragraph) && !ENDS.includes(word) && word !== "stands") shown();
+        // The inspector shows what the chain stands on, so its standing, headed by its roster, is no card of the
+        // conversation.
+        if (!opens(paragraph) && !ENDS.includes(word) && word !== "roster") shown();
       } else if (act && (opens(paragraph) || ENDS.includes(word))) {
         if (!seen.has(act.id)) items.push({ type: "act", key: act.id, act });
         seen.add(act.id);

@@ -8,7 +8,24 @@ from pathlib import Path
 import pytest
 
 import furb
-from conftest import DOOR, STANDS, Py, Sand, heads, life, named, paragraphs, ran, relived, said, seen, settle, sown
+from conftest import (
+  DOOR,
+  STANDS,
+  Py,
+  Sand,
+  heads,
+  life,
+  named,
+  paragraphs,
+  ran,
+  relived,
+  rows,
+  said,
+  seen,
+  settle,
+  sown,
+  stood,
+)
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Act, Refused, Text, take
 
@@ -26,11 +43,6 @@ def binding(id: str, of: str = "object") -> str:
 def opened(id: str, text: str) -> str:
   """The paragraph that opens a chain: its header with its words, then the statement that binds its name."""
   return f"#{id} {text}\n{binding(id)}"
-
-
-def stood(id: str) -> str:
-  """The paragraph of the standing of the suite, as a chain without a source tells it."""
-  return f"#{id} stands {STANDS!r}"
 
 
 def steps(log: list[tuple], by: str) -> list[str]:
@@ -491,7 +503,7 @@ async def test_the_transcript_of_the_root_begins_with_the_open_of_the_root_and_t
   _, root = life(sand)
   held = engine.ask("transcript", root, root)[1]
   assert isinstance(held, list)
-  assert held[:2] == [("tell", root, root, [f"#{root} root", binding(root)]), ("tell", root, root, [stood(root)])]
+  assert held[:2] == [("tell", root, root, [f"#{root} root", binding(root)]), ("tell", root, root, rows(root))]
   assert paragraphs(engine.turns(on=root))[:2] == [opened(root, "root"), stood(root)]
 
 
@@ -924,7 +936,7 @@ async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin(
   assert isinstance(held, list) and isinstance(theirs, list)
   assert command in held and [a[1] for a in held if a[0] == "prompt"] == [one]
   assert made(held) == [one, command[2], command[1]]
-  assert notes(held, root) == [[f"#{root} root", binding(root)], [stood(root)]]
+  assert notes(held, root) == [[f"#{root} root", binding(root)], rows(root)]
   assert [a for a in held if a[0] == "holds"] == [a for a in theirs if a[0] == "holds"] != []
   got = engine.turns(on=twin)
   assert [role for role, *_ in got] == ["user", "assistant", "user"]
@@ -954,7 +966,7 @@ async def test_what_a_chain_said_of_itself_it_keeps_whatever_the_filter_says() -
   await engine.rung("k = 1", on=root)
   twin = engine.chain("twin", source=root, filter=take())
   await settle()
-  assert heads(engine.turns(on=twin)) == [f"#{root} root", stood(root), f"#{twin} twin from {root}"]
+  assert heads(engine.turns(on=twin)) == [f"#{root} root", rows(root)[0], f"#{twin} twin from {root}"]
 
 
 async def test_the_source_of_a_chain_is_a_chain_by_its_name() -> None:

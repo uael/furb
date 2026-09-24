@@ -70,8 +70,10 @@ async def test_the_world_answers_what_a_chain_stands_on(yard: Path) -> None:
   await settle()
   standing = engine.ask("stand", root)[1]
   assert isinstance(standing, list)
-  assert f"#{root} stands {standing!r}" in heads(root)
   roster, directory, actor = standing
+  assert f"#{root} roster {roster!r}" in heads(root)
+  told = "\n\n".join(py for role, py, _, _ in engine.turns(on=root) if role == "user")
+  assert f"\n\n#{root} roster {roster!r}\n#{root} cwd {directory}\n#{root} actor {actor}\n\n" in f"{told}\n\n"
   assert directory == str(yard)
   assert actor == "opus/low"
   assert isinstance(roster, list)

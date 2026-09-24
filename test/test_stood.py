@@ -1,6 +1,6 @@
 """Stood, what a chain stands on from its place in the record on."""
 
-from conftest import STANDS, Sand, heads, life, plain, relived, said, settle
+from conftest import STANDS, Sand, life, paragraphs, plain, relived, said, settle, stood
 from furb import engine
 
 LATER = [[["operator", [], 200000], ["o", ["low"], 200000]], "/z", "o/low"]
@@ -34,7 +34,7 @@ async def test_a_stood_says_what_a_chain_stands_on_from_its_place_in_the_record_
 
 
 async def test_a_chain_that_hears_a_stood_binds_that_standing() -> None:
-  """A chain that hears a stood binds that standing and its default actor, and tells it there under the header stands, so the transcript grows at one end."""
+  """A chain that hears a stood binds that standing and its default actor, and tells it there under the headers roster, cwd and actor, so the transcript grows at one end."""
   first = Sand(stands=STANDS)
   _, root = life(first)
   assert await engine.rung("k = 1", on=root) is None
@@ -43,5 +43,11 @@ async def test_a_chain_that_hears_a_stood_binds_that_standing() -> None:
   _, over = await relived(Sand(stands=LATER), plain(first.record))
   now = engine.turns(on=over)
   assert now[0][1][: len(was[0][1])] == was[0][1]
-  assert heads(now)[-1] == f"#{root} stands {LATER!r}"
+  assert (
+    paragraphs(now)[-1]
+    == stood(root, LATER)
+    == "\n".join(
+      ["#chain1 roster [['operator', [], 200000], ['o', ['low'], 200000]]", "#chain1 cwd /z", "#chain1 actor o/low"]
+    )
+  )
   assert engine.modules[root]["actor"] == "o/low"

@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, heads, life, paragraphs, ran, said, settle
+from conftest import STANDS, Sand, heads, life, paragraphs, ran, rows, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -160,7 +160,7 @@ async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one
   got = [engine.outcomes[act] for act in (none, below, beyond)]
   assert [type(one) for one in got] == [Refused, Refused, Refused]
   assert [str(one) for one in got] == ["None/None no ceiling", "-1.0/None no ceiling", "None/1.5 no ceiling"]
-  assert heads(engine.turns(on=root)) == [f"#{root} root", f"#{root} stands {STANDS!r}"]
+  assert heads(engine.turns(on=root)) == [f"#{root} root", rows(root)[0]]
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
   assert isinstance(engine.outcomes[ghost], Refused) and said(log, "ask") == []
