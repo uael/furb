@@ -49,8 +49,10 @@ export class Snapshots {
     const answered = kind === "done" ? questionKind(id) : undefined;
     const chain = ["cd", "write"].includes(kind)
       ? String(fact[3])
-      : (act?.on ??
-        (answered === "cd" || answered === "write" ? this.world.activity.acts.get(by)?.on : undefined));
+      : kind === "stood"
+        ? id
+        : (act?.on ??
+          (answered === "cd" || answered === "write" ? this.world.activity.acts.get(by)?.on : undefined));
     if (["run", "ran", "ready", "wants", "sent"].includes(kind))
       for (const cached of this.chains.values()) cached.actor = undefined;
     const view = chain ? this.chains.get(chain) : undefined;
@@ -63,6 +65,9 @@ export class Snapshots {
     )
       view.turns = undefined;
     if (["tell", "ready", "run", "ran"].includes(kind)) view.program = undefined;
+    // A stood says the standing that its chain takes, the roster, the directory and the actor, and tells it there.
+    if (kind === "stood")
+      Object.assign(view, { roster: undefined, directory: undefined, actor: undefined, turns: undefined });
     if (kind === "cd" || answered === "cd") {
       view.directory = undefined;
       view.turns = undefined;
