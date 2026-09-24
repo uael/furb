@@ -141,30 +141,14 @@ with this ledger.
 
 ## Next steps, in order
 
-1. Crate and Python host (decision 6). (a) Crate: a module `src/extension.rs` with `src/extension.test.rs`: the
-   config (home `$XDG_CONFIG_HOME/furb` or `FURB_CONFIG_DIR`, and local `<project>/.furb/config.json`, merged by
-   name, paths resolved against the directory of their file, `~` expanded), the cache (`$XDG_CACHE_HOME/furb`), the
-   fetch (path; git by the `git` command; npm by `npm pack` and `tar`), the manifest (`package.json` field `furb`),
-   the order by `requires` with the refusal of a missing requirement, the builtins (`files`, `bash`, `grant`, their
-   words by `include_str!`), and the word of a module (decision 5; parse with ruff_python_parser, which monty already
-   pulls, or by lines). The play rule: `Life` plays the words itself, once after boot on every chain without a source
-   whose program lacks them, and at the birth of each chain without a source, as the World (site `world`). The
-   python engine host gets the same rule from the crate as a function of the program and the words (the missing
-   words, in order), which it calls at the same two moments. (b) Crate cleanup: preamble `worldly` forwards unknown
-   facts, world.rs gains a generic hears/answered, life.rs loses the typed read/write/cd/cwd/grant/bash, value.rs and
-   wire.rs lose Text/Exit, gate.rs and life.test.rs are fixed (play `include_str!("furb/builtin/*.py")` through the
-   word rule where a test needs a builtin), py.rs exposes the extension API, furb_monty engine drops "span", "grep",
-   ... from PURE and bash/grant from ACTS. (c) Python host: world.py and cli.py use the extension API of furb_monty
-   for the config, the fetch, the manifests, the order and the words, keep python world parts for files and bash,
-   and load no external world part yet (decision 4: later). test/outside follows.
-2. TypeScript: napi exposes the extension API of the crate (config, cache, fetch, manifest, order, word), and the
+1. TypeScript: napi exposes the extension API of the crate (config, cache, fetch, manifest, order, word), and the
    `Life` of napi plays the words itself; TS keeps the World parts (generic World, the builtin parts of files and
    bash), the TUI parts, and the dynamic import of their code. README; then TUI parts and app.ts/session.ts
    (bash/grant/read/cd specifics), docs, screenshots (bun must be >= 1.4.2 for the TUI; host has 1.3.11).
-3. `extensions/skills/`: package.json manifest, skills.py + skills.pyi + tests, world.ts (finds SKILL.md under
+2. `extensions/skills/`: package.json manifest, skills.py + skills.pyi + tests, world.ts (finds SKILL.md under
    `.furb/skills`, the config dir `skills/`, and `.claude/skills`), tui.ts (`/skills`, `/skill <name>`); prove path,
    git (local bare repo) and npm (local tarball) loading in tests.
-4. docs/extensions.md, CLAUDE.md, src/furb/CLAUDE.md (technical names: door, text, command, merged, show, grant,
+3. docs/extensions.md, CLAUDE.md, src/furb/CLAUDE.md (technical names: door, text, command, merged, show, grant,
    ledger move to the extensions; add ladder, extension), developer guide, READMEs; every gate green
    (`uv run pytest -q`, hygiene, ruff format/check, `uv run ty check --error-on-warning`, cargo fmt/clippy/test,
    `uv run pre-commit run --all-files`, bun check/lint/test). Delete this ledger. Tell the owner a release of `furb`
@@ -205,7 +189,18 @@ with this ledger.
   `missing_words`, and `Extension` with `word` and `life`. `cargo test` (89), clippy (no feature, python,
   typescript) and fmt are green. Always run the crate tests under `timeout`: a test that awaits an act nobody
   ends hangs (an act a World closes must be wrapped in `ending`).
-- Next in this step: the Python host (PLAN.md part 4 section 5, commit 6), then step 2 (TypeScript).
+- Python host done (commit fd95163): `src/furb/world.py` keeps the core in `Live.hears` and hands every other fact
+  to parts (`Part` protocol: `kinds` and `hears(a)` yielding sayings; `Files` and `Bash`, table `BUILTINS`); a
+  start of a kind no part does is closed with `Refused("the World does no <kind>")`; `Live.words`, `lives`, `parts`,
+  `booted`, `start()`, `where(on)`, `plays(chain)`, `play()`; `world.verb(on, name)` says a verb a chain binds.
+  `unwire` keeps an unknown mark as plain data. `cli.py` loads `furb_monty.extensions(cwd)`, plays after boot,
+  gains `furb update`, and ends with `furb: <why>` on a `Refused` of the config. The provider has its own operator
+  `WINDOW`. test/outside is green (FURB_CONFIG_DIR and FURB_CACHE_DIR set per test), with new tests: grant off by
+  config, a project extension with a life word, a config error, update, an unknown start refused, words played at
+  birth, a 0.1.0 record opens (fixture `test/outside/record-0.1.0.jsonl`, made by the code of b104b8c; the crate
+  test opens it too). `uv run pytest -q`: 1565 passed, 4 skipped, coverage 100%. ruff, ty, cargo test (90), clippy
+  and fmt are green.
+- Next: step 2 (TypeScript), per PLAN.md part 2 and part 4 section 4 (ts.rs exposure).
 
 ## Questions for the owner
 
@@ -215,6 +210,15 @@ with this ledger.
 - engine.pyi, `turns`: "a text stands by the lines it has not seen" keeps the word text, whose technical name moved
   to the files extension; the core says showing. Should it say "a showing stands by the lines the model has not
   seen"? The test proves it with a showing.
+
+- A record of 0.1.0 (decision 16): its rungs call read, write and bash, which were verbs of the engine then. A
+  later life plays the builtin words only after boot replays the record (decision 2), so the old words find no
+  `read` while they replay: the gate refuses them (or they raise), and what they bound is gone. The life opens with
+  no drift when nothing hangs on those acts, which the test proves with a record of a read and a write. A record
+  whose old word made an act that the chain then acknowledged (a bash whose done made an acknowledgment prompt)
+  drifts at the rung of that prompt, since the prompt is not made again. Should an old record play the builtin
+  words at the birth of its root while it replays, which shifts the names of its rungs, or is it enough that such a
+  record opens when nothing hangs on the old acts?
 
 ## Environment notes
 
