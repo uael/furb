@@ -1,12 +1,16 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  builtinExtensions,
   decodeRecord,
   type Ear,
   Ears,
   type Entry,
   type Fact,
+  isQuestion,
   type Life,
+  unwrapped,
   WorldAdapter,
+  type WorldPart,
   type WorldRequest,
 } from "../src/index.ts";
 import { display } from "../src/world.ts";
@@ -15,6 +19,34 @@ const lives: Life[] = [];
 afterEach(async () => {
   for (const life of lives.splice(0)) await life.dispose();
 });
+
+/** The words of the builtins, which a life plays on each chain without a source. */
+const words = builtinExtensions().flatMap((one) => (one.word ? [one.word] : []));
+
+/** A part of the World that reads and writes files in memory, and does the work of bash, which the test says. */
+function memory(files: Map<string, string>): WorldPart {
+  return {
+    kinds: ["bash"],
+    *hears([kind, qid, , , path, content]) {
+      if (kind === "read" && isQuestion(kind, qid))
+        yield [
+          "done",
+          qid,
+          files.has(String(path))
+            ? { path, content: files.get(String(path)) }
+            : { is: "Refused", args: ["missing file"] },
+        ];
+      else if (kind === "write" && isQuestion(kind, qid)) {
+        files.set(String(path), String(content));
+        yield ["done", qid, { path, content }];
+      }
+    },
+  };
+}
+
+/** One verb said by the operator on a chain, the root when none is said. */
+const said = <T = unknown>(life: Life, verb: string, args: unknown[] = [], kwargs: Record<string, unknown> = {}) =>
+  life.call<T>(verb, args, { on: life.root, ...kwargs });
 
 async function open(record: unknown[] = [], answer = 'close("hello")') {
   const entries: unknown[] = [];
@@ -41,12 +73,6 @@ async function open(record: unknown[] = [], answer = 'close("hello")') {
         return 123.5;
       case "Chance":
         return 0.25;
-      case "Read":
-        if (!files.has(String(args[1]))) throw new Error("missing file");
-        return { path: args[1], content: files.get(String(args[1])) };
-      case "Write":
-        files.set(String(args[1]), String(args[2]));
-        return { path: args[1], content: args[2] };
       case "Ask":
         asks++;
         return Promise.resolve(["assistant", answer, [20, 8, 0, 0, 0.001], null]);
@@ -58,7 +84,9 @@ async function open(record: unknown[] = [], answer = 'close("hello")') {
         return null;
     }
   };
-  const life = new WorldAdapter(world, (batch) => facts.push(...batch)).boot(record as Entry[]);
+  const adapter = new WorldAdapter(world, { onFacts: (batch) => facts.push(...batch) });
+  adapter.parts = [memory(files)];
+  const life = adapter.boot(record as Entry[], words);
   lives.push(life);
   const release = () => {
     for (const done of waits.splice(0)) done();
@@ -83,8 +111,9 @@ test("a pending result leaves JavaScript and other native operations available",
   const { life, release } = await open();
   const id = life.wait(60).id;
   const pending = life.result(id);
-  expect(await life.cwd()).toBe("/tmp");
+  expect(said(life, "cwd")).toBe("/tmp");
   expect(await life.outcome(id)).toEqual({ done: false, value: null });
+  await Bun.sleep(1);
   release();
   expect(await pending).toBeNull();
 });
@@ -112,20 +141,39 @@ test("pause holds a model response until wake and cancel rejects a native await"
 
 test("text, command results, and engine callables cross N-API", async () => {
   const { life } = await open();
-  expect(await life.read<Record<string, string>>("a")).toEqual({
-    is: "Text",
-    path: "a",
-    content: "one\ntwo\n",
-  });
-  expect(() => life.read("missing")).toThrow("missing file");
-  const show = await life.span(1, 1);
+  const text = said(life, "read", ["a"]);
+  expect(text).toMatchObject({ is: "instance", class: { is: "class", name: "Text" } });
+  expect(unwrapped(text)).toEqual({ path: "a", content: "one\ntwo\n", before: null });
+  expect(() => said(life, "read", ["missing"])).toThrow("missing file");
+  const span = life.held<{ is: "made"; id: number }>("modules", [life.root, "span"], "at");
+  const show = life.made<{ is: "made"; id: number }>(span.id, [1, 1], {});
   expect(await life.made<number[]>(show.id, [["one", "two"]], {})).toEqual([1]);
   await life.forget(show.id);
-  const command = life.bash("fake", { fed: true }).id;
+  const command = said<string>(life, "bash", ["fake"], { fed: true });
   await life.send("out", command, ["hello\n", "stdout"]);
   await life.send("exited", command, [0]);
   const exit = await life.result(command);
-  expect(exit).toMatchObject({ is: "Exit", code: 0, stdout: { is: "Text", content: "hello\n" } });
+  expect(unwrapped(exit)).toMatchObject({ code: 0, stdout: { path: `${command}/stdout`, content: "hello\n" } });
+});
+
+test("the World closes the start of an act whose kind no part does with why", async () => {
+  const { life } = await open();
+  const id = (await life.rung("done = act('job', acting(), started(ending(idle)))\nclose(done)")) as string;
+  const outcome = life.outcome(id);
+  expect(outcome.done).toBe(true);
+  expect(outcome.value).toEqual({ is: "Refused", args: ["the World does no job"] });
+});
+
+test("a life plays the words of the extensions once on each chain without a source", async () => {
+  const first = await open();
+  const program = (life: Life, chain: string) =>
+    Object.values(life.call<[unknown, Record<string, string>]>("ask", ["program", chain], {})[1]);
+  expect(program(first.life, first.life.root)).toEqual(words);
+  const fork = first.life.chain("fork").id;
+  expect(program(first.life, fork)).toEqual(words);
+  const second = await open(first.entries);
+  expect(second.entries).toHaveLength(0);
+  expect(program(second.life, second.life.root)).toEqual(words);
 });
 
 test("a second life replays model answers and durable rung effects without asking again", async () => {
@@ -140,7 +188,7 @@ test("a second life replays model answers and durable rung effects without askin
   expect(second.files.has("b")).toBe(false);
   expect(second.entries).toHaveLength(0);
   const fork = second.life.chain("branch", second.life.root).id;
-  expect(await second.life.cwd(fork)).toBe("/tmp");
+  expect(said(second.life, "cwd", [], { on: fork })).toBe("/tmp");
 });
 
 test("dispose rejects pending native results and further operations", async () => {
@@ -151,7 +199,7 @@ test("dispose rejects pending native results and further operations", async () =
   );
   await life.dispose();
   expect(await result).toContain("disposed");
-  expect(() => life.cwd()).toThrow("disposed");
+  expect(() => life.clock()).toThrow("disposed");
 });
 
 test("map order and live Python values cross without losing their meaning", async () => {
@@ -194,7 +242,7 @@ test("every ear hears a fact whose values have no plain form, and each value cro
       .join("\n"),
   ).toContain("debugged d = {1: 'a'}");
   // The World hears on: it serves a read, a write and a wait after that fact.
-  expect(life.read<{ content: string }>("a").content).toBe("one\ntwo\n");
+  expect(unwrapped<{ content: string }>(said(life, "read", ["a"])).content).toBe("one\ntwo\n");
   await life.rung('write(Text("c", "after"))');
   expect(files.get("c")).toBe("after");
   expect(await life.wait(0)).toBeNull();
@@ -244,7 +292,7 @@ test("a life whose replay drifts is kept, with what boot raised", async () => {
   expect(second.life.raised).toMatchObject({ is: "Drift" });
   expect(String(second.life.raised?.args[0])).toContain("drifts");
   expect(second.life.root).toBe("chain1");
-  expect(second.life.cwd(second.life.chain("two").id)).toBe("/tmp");
+  expect(second.life.clock(second.life.chain("two").id)).toBe(123.5);
 });
 
 test("every ear is given the turns of an ask as the python the chain folded", () => {

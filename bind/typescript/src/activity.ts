@@ -1,4 +1,4 @@
-import type { Call } from "./ears.js";
+import type { Call, WorldPart } from "./extension.js";
 import { display, type Fact, isQuestion, uncommented } from "./types.js";
 
 export interface RunState {
@@ -15,6 +15,9 @@ export interface LiveAct {
   value: unknown;
   /** Whether a pause stands over the act while it lives. */
   paused: boolean;
+  /** Whether the World does the work of the act and was started on it: a start said so, or the record showed the
+   * act begun. */
+  started: boolean;
   run?: RunState;
 }
 /** The questions the table asks the engine while it hears a fact. */
@@ -29,12 +32,15 @@ const covers = (control: Fact, id: string): Call => ({ verb: "covers", args: [co
  * live act whose state it would change, and for a new act and the controls that could decide its state. */
 export class Activity {
   readonly acts = new Map<string, LiveAct>();
+  /** How many acts of work are done: a prompt, a rung, or an act the World was started on, which the World made
+   * not itself. */
   completed = 0;
   cost = 0;
-  /** Each kind of question and whether its verb makes acts: the file's own acts, then the kinds the life said. */
-  private readonly kinds = new Map(
-    ["chain", "prompt", "rung", "bash", "wait", "grant"].map((kind) => [kind, true]),
-  );
+  /** Each kind of question and whether its verb makes acts: the acts of the engine and of the parts of the World,
+   * then the kinds the life said. */
+  private readonly kinds: Map<string, boolean>;
+  /** What each part of the World adds to the table of its acts. */
+  private readonly views: WorldPart[];
   /** A question of each kind not known yet, which the owner of the life asks it about outside any ear. */
   readonly unknown = new Map<string, string>();
   /** How many times the table was derived again, which a reader of it compares to know that. */
@@ -51,7 +57,12 @@ export class Activity {
   private children = new Map<string, Set<string>>();
   private ran = new Map<string, unknown>();
   private refused = new Map<string, string>();
-  private merged = new Map<string, boolean>();
+
+  constructor(parts: readonly WorldPart[] = []) {
+    const kinds = ["chain", "prompt", "rung", "wait", ...parts.flatMap((part) => part.kinds ?? [])];
+    this.kinds = new Map(kinds.map((kind) => [kind, true]));
+    this.views = parts.filter((part) => part.live);
+  }
 
   /** What the life said of a kind: an act kind derives the table again from the facts, which now hold its acts, and
    * asks the engine through the call it is given. */
@@ -66,7 +77,6 @@ export class Activity {
     this.children = new Map();
     this.ran = new Map();
     this.refused = new Map();
-    this.merged = new Map();
     this.generation++;
     this.changed = new Map();
     this.derived = this.changes;
@@ -102,15 +112,11 @@ export class Activity {
         done: false,
         value: null,
         paused: yield* this.pausedAtBirth(id),
+        started: false,
         ...(kind === "rung" ? { run: { status: "running" as const, reason: "" } } : {}),
       };
-      if (kind === "bash")
-        act.value = {
-          is: "Exit",
-          code: null,
-          stdout: { is: "Text", path: `${id}/stdout`, content: "" },
-          stderr: { is: "Text", path: `${id}/stderr`, content: "" },
-        };
+      for (const part of this.views)
+        if (part.kinds?.includes(kind) && part.live?.born) act.value = part.live.born(act);
       this.acts.set(id, act);
       this.mark(act);
       if (!this.children.has(by)) this.children.set(by, new Set());
@@ -129,11 +135,20 @@ export class Activity {
           row.paused = paused;
           this.mark(row);
         }
+    } else if (kind === "start" && act) {
+      act.started = true;
+      this.mark(act);
     } else if (kind === "done") {
-      if (isQuestion("merged", id) && this.acts.get(by)?.kind === "bash")
-        this.merged.set(by, Boolean(fact[3]));
+      // An act that the World does the work of asks the record at its birth whether it holds the act, under a query
+      // that the act made: a record that holds it shows it begun, so the life starts it again only at a wake.
+      const asker = this.acts.get(/^holds@(\w+)\.\d+$/.exec(id)?.[1] ?? "");
+      if (asker && asker.kind !== "chain" && Array.isArray(fact[3]) && fact[3].length && !asker.started) {
+        asker.started = true;
+        this.mark(asker);
+      }
       if (act) {
-        if (!act.done && ["prompt", "rung", "bash", "wait"].includes(act.kind)) this.completed++;
+        if (!act.done && act.by !== "world" && (act.started || act.kind === "prompt" || act.kind === "rung"))
+          this.completed++;
         act.done = true;
         act.value = fact[3];
         this.mark(act);
@@ -153,11 +168,10 @@ export class Activity {
         this.refused.set(id, uncommented(findings.map(String).join("\n").split("\n")));
         this.updateRun(act);
       }
-    } else if (kind === "out" && act?.kind === "bash" && !act.done) {
-      const value = act.value as { stdout: { content: string }; stderr: { content: string } };
-      const stream = fact[4] === "stderr" && this.merged.get(id) === false ? value.stderr : value.stdout;
-      stream.content += String(fact[3]);
-      this.mark(act);
+    }
+    for (const part of this.views) {
+      const changed = part.live?.hears?.(fact, this.acts);
+      if (changed) this.mark(changed);
     }
   }
   /** Whether the last control over a new act is a pause. Only a control no older than the oldest pause can make

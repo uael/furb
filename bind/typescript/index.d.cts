@@ -19,8 +19,12 @@ export declare class Act {
 export type JsAct = Act
 
 export declare class Life {
-  /** Open on JavaScript ears, using the same call and reply protocol as the Python binding. */
-  static boot(callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null): Life
+  /**
+   * Open on JavaScript ears, using the same call and reply protocol as the Python binding. The life plays the
+   * words of the extensions and their life words as the World, on every chain without a source, once boot stands on
+   * its record and at the birth of each such chain after.
+   */
+  static boot(callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null, words?: string[] | null, lives?: string[] | null): Life
   get root(): string
   /** What boot raised, and nothing when it raised nothing. After a drift the life goes on, with nothing kept. */
   get raised(): { is: string; args: unknown[] } | null
@@ -42,18 +46,12 @@ export declare class Life {
    */
   inspect(name: string, chain?: string | undefined | null): Inspection
   chain(label: string, source?: string | null, filter?: unknown, on?: string | null): Act & PromiseLike<never>
-  grant(options: GrantOptions): Act & PromiseLike<null>
-  bash(command: string, options?: BashOptions | undefined | null): Act & PromiseLike<ExitValue>
   wait(seconds: number, chain?: string | undefined | null): Act & PromiseLike<null>
-  read<T = TextValue>(path: string, show?: unknown, chain?: string | null): T
-  write<T = TextValue>(text: TextValue, chain?: string | undefined | null): T
   peek<T = unknown>(id: string, chain?: string | undefined | null): T | null
   get(id: string): [string, string, string, string, ...unknown[]]
   /** The turns of a chain, each the python a model reads, which the engine wrote. */
   turns(chain?: string | undefined | null): Array<['user' | 'assistant', string, [number, number, number, number, number] | null, unknown]>
   scope(id: string): string
-  cwd(chain?: string | undefined | null): string
-  cd(path: string, chain?: string | undefined | null): string
   clock(chain?: string | undefined | null): number
   chance(chain?: string | undefined | null): number
   gate(word: string, chain?: string | undefined | null): Array<string>
@@ -62,9 +60,6 @@ export declare class Life {
   cancel(id: string): void
   close(value: unknown, id: string): void
   send(kind: string, about: string, words: Array<any>, by?: string | undefined | null): [string, string, string, ...unknown[]]
-  span(lo: number, hi: number): { is: 'made'; id: number }
-  grep(pattern: string): { is: 'made'; id: number }
-  differs(lines: Array<string>): { is: 'made'; id: number }
   take(ids: Array<string>, inside?: boolean | undefined | null): { is: 'made'; id: number }
   /** Drop this sandbox and reject pending waits. The World must stop its own processes and timers. */
   dispose(): void
@@ -85,28 +80,39 @@ export declare class RecordLock {
   dispose(): void
 }
 
-export interface BashOptions {
-  fed?: boolean
-  timeout?: number
-  show?: any
-  showErr?: any
-  on?: string
-}
+/** The builtin extensions, files, bash and grant, in the order a host plays them. */
+export declare function builtinExtensions(): Array<Extension>
+
+/** The cache directory of the user, as this process finds it. */
+export declare function cacheDirectory(): string
+
+/** The config directory of the user, as this process finds it. */
+export declare function configDirectory(): string
 
 export declare function decodeRecord(line: string): unknown
 
 export declare function engineSource(): string
 
-export interface ExitValue {
-  code?: number
-  stdout: TextValue
-  stderr: TextValue
+/**
+ * One extension as a host plays it: its name, whether the crate carries it, the directory it stands in, the word
+ * of its python part and its life word, the names it requires, and the files of its parts for a World and for a
+ * TUI.
+ */
+export interface Extension {
+  name: string
+  builtin: boolean
+  root?: string
+  word?: string
+  life?: string
+  requires: Array<string>
+  world: ExtensionWorld
+  tui?: string
 }
 
-export interface GrantOptions {
-  usd?: number
-  share?: number
-  on?: string
+/** The files of the parts of an extension for a World, one for each language a host writes its World in. */
+export interface ExtensionWorld {
+  ts?: string
+  py?: string
 }
 
 export interface Inspection {
@@ -115,6 +121,9 @@ export interface Inspection {
   representation: string
   value?: unknown
 }
+
+/** The words that a program lacks, in their order, which is the rule a host plays the words by. */
+export declare function missingWords(program: Array<string>, words: Array<string>): Array<string>
 
 /**
  * Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
@@ -135,13 +144,30 @@ export interface PromptOptions {
   on?: string
 }
 
+/**
+ * The extensions a host plays for a project: the builtins and what the config of the user and the config of the
+ * project name, fetched into the cache once, and again on a refresh, loaded, and ordered by what each requires. It
+ * throws with what failed: a config, a fetch, a manifest, a requirement or a word.
+ */
+export declare function resolveExtensions(project: string, options?: ResolveOptions | undefined | null): Array<Extension>
+
+/**
+ * What a resolution of the extensions of a project does beside reading: fetch each one again, and install the
+ * dependencies of an extension whose part for a World is TypeScript.
+ */
+export interface ResolveOptions {
+  refresh?: boolean
+  install?: boolean
+}
+
 export interface RungOptions {
   retells?: string
   actor?: string
   on?: string
 }
 
-export interface TextValue {
-  path: string
-  content: string
-}
+/**
+ * The word of the python part of an extension, which a host plays as a rung: the file with its line ends made LF
+ * and every top-level import from `furb` made empty lines. It throws for a file python cannot parse.
+ */
+export declare function wordOf(source: string): string

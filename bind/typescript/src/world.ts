@@ -1,8 +1,7 @@
-import { type ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import {
   type Api,
   type AssistantMessage,
@@ -15,14 +14,16 @@ import {
   type ThinkingLevel,
 } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import { decodeRecord, type Life } from "../index.cjs";
+import { builtinExtensions, decodeRecord, type Extension, type Life, resolveExtensions } from "../index.cjs";
 import { Activity, type RunState } from "./activity.js";
 import { FileChanges } from "./changes.js";
-import { type Ears, WorldAdapter, type WorldHandler, type WorldRequest } from "./ears.js";
+import { type Ears, WorldAdapter, type WorldHandler, type WorldRequest, worldContext } from "./ears.js";
+import type { WorldExtension, WorldPart } from "./extension.js";
+import { builtinWorldParts, loadWorldParts } from "./extensions.js";
 import { attachImage, type ImageAttachment, ImageCache, turnImages } from "./images.js";
 import { furbDirectory, saveFile } from "./project.js";
 import { RecordFile } from "./record.js";
-import { shell } from "./shell.js";
+import { at } from "./shell.js";
 import {
   actorParts,
   type Entry,
@@ -43,23 +44,6 @@ let prompt: string | undefined;
 function system(): string {
   prompt ??= JSON.parse(readFileSync(new URL("../system.json", import.meta.url), "utf8")) as string;
   return prompt;
-}
-
-/** The kinds of act whose work the record may show begun and not done, which waits for a wake. */
-const PENDING = ["prompt", "rung", "bash", "wait"];
-/** The longest delay that one timer holds, in milliseconds. */
-const LONGEST = 2 ** 31 - 1;
-
-/** Calls the action at a time, through timers of LONGEST at most, and never for a time that is not finite; gives the
- * cancel. */
-function at(time: number, action: () => void): () => void {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const wait = () => {
-    timer = setTimeout(step, Math.min(Math.max(time - Date.now(), 0), LONGEST));
-  };
-  const step = () => (Date.now() < time ? wait() : action());
-  if (Number.isFinite(time)) wait();
-  return () => clearTimeout(timer);
 }
 
 /** A value the operator gives, in the shape its prompt wants: a whole number crosses as an int, so a float prompt
@@ -90,6 +74,10 @@ export interface WorldOptions {
     prompt: { id: string; shape: string; message: string },
     signal: AbortSignal,
   ) => Promise<unknown>;
+  /** The extensions the life plays, as the crate resolves them; the builtins when unsaid. */
+  extensions?: Extension[];
+  /** The parts for a World of the extensions that are no builtins, by name, which `World.load` imports. */
+  parts?: Record<string, WorldExtension>;
 }
 
 export type { FileChange } from "./changes.js";
@@ -104,20 +92,6 @@ interface Saved {
   deadlines?: [string, number][];
   streams?: [string, { chain: string; text: string; thinking: string }][];
 }
-interface Command {
-  id: string;
-  here: string;
-  command: string;
-  fed: boolean;
-  timeout: number | null;
-  merged: boolean;
-}
-interface Running {
-  child: ChildProcessWithoutNullStreams;
-  cancel(): void;
-  stop(): void;
-}
-
 /** Files, processes, pi-ai models, and durable records. The engine and its order remain native. */
 export class World extends EventEmitter {
   readonly directory: string;
@@ -129,7 +103,11 @@ export class World extends EventEmitter {
   readonly roster: string[];
   readonly prompts = new Map<string, OperatorPrompt>();
   readonly facts: Fact[] = [];
-  readonly activity = new Activity();
+  readonly activity: Activity;
+  /** The extensions the life plays, in order. */
+  readonly extensions: Extension[];
+  /** The parts of the extensions for this World, in the order of their extensions. */
+  readonly parts: WorldPart[];
   private readonly images = new ImageCache();
   readonly streams = new Map<string, { chain: string; text: string; thinking: string }>();
   readonly changes: FileChanges;
@@ -143,15 +121,12 @@ export class World extends EventEmitter {
   private readonly adapter: WorldAdapter;
   private readonly controller = new AbortController();
   private readonly asks = new Map<string, AbortController>();
-  private readonly commands = new Map<string, Running>();
   private readonly options: WorldOptions;
   /** The roster with the efforts and the window of each actor, which the standing of every chain gives. */
   private readonly actors: Actor[];
   /** Keys the conversations of this life at a provider, since the ids of chains repeat in every life. */
   private readonly conversations = randomUUID();
-  private delivery: Promise<unknown> = Promise.resolve();
   private stopped = false;
-  private readonly feeds = new Map<string, (string | null)[]>();
   private readonly deadlines = new Map<string, number>();
   /** How many of the facts the World has given its host. */
   private emitted = 0;
@@ -172,6 +147,13 @@ export class World extends EventEmitter {
     }
     this.options = options;
     this.directory = resolve(options.cwd ?? process.cwd());
+    this.extensions = options.extensions ?? builtinExtensions();
+    const makers = this.extensions.map((one) => {
+      const made = one.builtin ? builtinWorldParts[one.name] : options.parts?.[one.name];
+      if (!made && !one.builtin && one.world.ts)
+        throw new Error(`The extension ${one.name} has a World part in ${one.world.ts}, which this World holds not.`);
+      return made;
+    });
     let records: RecordFile | undefined;
     let changes: FileChanges | undefined;
     try {
@@ -201,16 +183,28 @@ export class World extends EventEmitter {
       changes?.dispose();
       throw error;
     }
-    this.adapter = new WorldAdapter(
-      this.handle,
-      this.hear,
-      (error) => this.emit("fault", error),
-      (fact) => {
+    this.adapter = new WorldAdapter(this.handle, {
+      onFacts: this.hear,
+      onFault: (error) => this.emit("fault", error),
+      onFact: (fact) => {
         if (this.stopped || this.momentary(fact)) return;
         this.facts.push(fact);
         return this.activity.hear(fact);
       },
-    );
+      readOnly: options.readOnly,
+    });
+    const context = worldContext(this.adapter, {
+      directory: this.directory,
+      readOnly: Boolean(options.readOnly),
+      signal: this.controller.signal,
+      change: (change) => {
+        this.changes.append(change);
+        // A listener may ask the life, which no ear may do while it speaks, so the host hears of it after the ear.
+        queueMicrotask(() => this.emit("change"));
+      },
+    });
+    this.parts = this.adapter.parts = makers.flatMap((made) => (made ? [made(context)] : []));
+    this.activity = new Activity(this.parts);
     this.ears = this.adapter.ears;
   }
 
@@ -237,10 +231,24 @@ export class World extends EventEmitter {
     return attachImage(this.imageDirectory, resolve(this.directory, path));
   }
 
+  /** A World on the extensions of its directory, as the crate resolves them when the options name none, with the
+   * part for a World of each, imported. */
+  static async load(options: WorldOptions = {}): Promise<World> {
+    const extensions =
+      options.extensions ?? (options.readOnly ? [] : resolveExtensions(resolve(options.cwd ?? process.cwd())));
+    return new World({ ...options, extensions, parts: await loadWorldParts(extensions, options.parts) });
+  }
+
   open(): Life {
     if (this.life) throw new Error("This World already owns a life.");
     try {
-      this.life = this.adapter.boot(this.records.entries);
+      // An inspection plays nothing, since it says nothing new.
+      const played = this.options.readOnly ? [] : this.extensions;
+      this.life = this.adapter.boot(
+        this.records.entries,
+        played.flatMap((one) => (one.word ? [one.word] : [])),
+        played.flatMap((one) => (one.life ? [one.life] : [])),
+      );
       // A life that drifted keeps nothing more, so this World refuses to open on it.
       const raised = this.life.raised;
       if (raised) throw new Error(`${raised.is}: ${raised.args.map(String).join(" ")}`);
@@ -248,7 +256,8 @@ export class World extends EventEmitter {
       // The journal said the whole record again before boot returned, so every act that is not done now is one the
       // record showed begun and not done.
       for (const act of this.activity.acts.values())
-        if (PENDING.includes(act.kind) && !act.done && !act.paused) this.pending.set(act.id, act.kind);
+        if ((act.started || act.kind === "prompt" || act.kind === "rung") && !act.done && !act.paused)
+          this.pending.set(act.id, act.kind);
       this.save();
       return this.life;
     } catch (error) {
@@ -264,10 +273,7 @@ export class World extends EventEmitter {
 
   handle = ({ kind, args }: WorldRequest): unknown => {
     // An inspection says no wake, so the engine starts nothing, and a World that inspects does nothing new.
-    if (
-      this.options.readOnly &&
-      ["Read", "Write", "Clock", "Chance", "Ask", "Run", "Wait", "Prompt"].includes(kind)
-    )
+    if (this.options.readOnly && ["Clock", "Chance", "Ask", "Wait", "Prompt"].includes(kind))
       throw new Error("Record inspection cannot do new work of the World.");
     switch (kind) {
       case "Stand":
@@ -279,39 +285,6 @@ export class World extends EventEmitter {
       case "Keep":
         this.records.keep(args[0] as Entry);
         return null;
-      case "Read": {
-        const path = this.path(String(args[0]), String(args[1]));
-        let info: ReturnType<typeof statSync>;
-        try {
-          info = statSync(path);
-        } catch (error) {
-          // A path that names nothing is said in plain words, which the model and the operator both read.
-          if ((error as NodeJS.ErrnoException).code === "ENOENT")
-            throw new Error(`There is no file at ${path}.`);
-          throw error;
-        }
-        if (!info.isFile() || info.size > 524288)
-          throw new Error(`Read needs a text file at most 524288 bytes: ${path}`);
-        return {
-          path,
-          content: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(readFileSync(path)),
-        };
-      }
-      case "Write": {
-        const path = this.path(String(args[0]), String(args[1]));
-        let before = "";
-        try {
-          before = readFileSync(path, "utf8");
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }
-        mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, String(args[2]));
-        this.changes.append({ path, before, after: String(args[2]) });
-        // A listener may ask the life, which no ear may do while it speaks, so the host hears of it after the ear.
-        queueMicrotask(() => this.emit("change"));
-        return { path, content: readFileSync(path, "utf8") };
-      }
       case "Ask":
         return this.ask(String(args[0]), String(args[1]), String(args[2]), args[3] as Turn[]);
       case "Wait": {
@@ -337,31 +310,10 @@ export class World extends EventEmitter {
           else signal.addEventListener("abort", abort, { once: true });
         });
       }
-      case "Run":
-        this.run(args[0] as Command);
-        return null;
-      case "Feed": {
-        const id = String(args[0]);
-        const child = this.commands.get(id)?.child;
-        if (!child)
-          this.feeds.set(id, [...(this.feeds.get(id) ?? []), args[1] === null ? null : String(args[1])]);
-        else if (args[1] === null) child.stdin.end();
-        else child.stdin.write(String(args[1]));
-        return null;
-      }
-      case "Slay":
-        this.commands.get(String(args[0]))?.stop();
-        this.feeds.delete(String(args[0]));
-        return null;
       case "Prompt":
         return this.prompt(String(args[0]), String(args[1]), String(args[2]));
     }
   };
-
-  private path(here: string, path: string): string {
-    if (path.includes("://")) throw new Error(`No file at ${path}.`);
-    return resolve(this.directory, here, path);
-  }
 
   /** Each kind of question the act table does not know, asked of the life once, outside any ear. */
   private learnKinds(): void {
@@ -390,7 +342,6 @@ export class World extends EventEmitter {
       if (kind === "done") {
         this.pending.delete(id);
         this.streams.delete(id);
-        this.feeds.delete(id);
         this.asks.get(id)?.abort();
         this.asks.delete(id);
         const prompt = this.prompts.get(id);
@@ -592,71 +543,6 @@ export class World extends EventEmitter {
     this.emit("change");
   }
 
-  private send(kind: string, id: string, words: unknown[]): void {
-    this.delivery = this.delivery
-      .then(async () => {
-        if (!this.stopped) await this.life?.send(kind, id, words, "world");
-      })
-      .catch((error) => {
-        this.emit("fault", error);
-      });
-  }
-
-  private run(command: Command): void {
-    const child = spawn(shell, ["-c", command.merged ? `exec 2>&1\n${command.command}` : command.command], {
-      cwd: resolve(this.directory, command.here),
-      stdio: "pipe",
-      detached: process.platform !== "win32",
-      windowsHide: true,
-    });
-    let late = false;
-    // A command ends with every process it started: on Unix its process group, which it leads, and on Windows,
-    // which has no process group that a program can signal, its tree of processes.
-    const stop = () => {
-      if (!child.pid) return;
-      try {
-        if (process.platform === "win32")
-          spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
-            stdio: "ignore",
-            windowsHide: true,
-          });
-        else process.kill(-child.pid, "SIGKILL");
-      } catch {}
-    };
-    // A command with no timeout runs until it ends.
-    const cancel = at(
-      command.timeout === null ? Number.POSITIVE_INFINITY : Date.now() + command.timeout * 1000,
-      () => {
-        late = true;
-        stop();
-      },
-    );
-    this.commands.set(command.id, { child, cancel, stop });
-    if (!command.fed) child.stdin.end();
-    child.stdin.on("error", () => {});
-    for (const text of this.feeds.get(command.id) ?? []) {
-      if (text === null) child.stdin.end();
-      else child.stdin.write(text);
-    }
-    this.feeds.delete(command.id);
-    for (const name of ["stdout", "stderr"] as const) {
-      child[name].setEncoding("utf8");
-      child[name].on("data", (text: string) => this.send("out", command.id, [text, name]));
-    }
-    child.on("error", (error) => {
-      cancel();
-      this.commands.delete(command.id);
-      this.delivery = this.delivery.then(async () => {
-        if (!this.stopped) await this.life?.close({ is: "Refused", args: [error.message] }, command.id);
-      });
-    });
-    child.on("close", (code) => {
-      cancel();
-      this.commands.delete(command.id);
-      this.send("exited", command.id, [late ? null : code]);
-    });
-  }
-
   /** Save what the next life needs, then end the life whatever the save came to. */
   async dispose(): Promise<void> {
     if (this.stopped) return;
@@ -669,11 +555,12 @@ export class World extends EventEmitter {
       this.controller.abort();
       for (const request of this.prompts.values()) request.reject(new Error("The World was disposed."));
       this.prompts.clear();
-      for (const command of this.commands.values()) {
-        command.cancel();
-        command.stop();
-      }
-      this.commands.clear();
+      for (const part of this.parts)
+        try {
+          await part.dispose?.();
+        } catch (error) {
+          this.emit("fault", error);
+        }
       this.images.clear();
       this.removeAllListeners();
       // The lease of the record goes last, since a directory that refuses its removal throws here.
@@ -712,23 +599,47 @@ export interface Session {
   ears: Ears;
   dispose(): Promise<void>;
 }
-/** Use the built-in World, or replace it with a host callback. */
-export function boot(
+/** Use the built-in World, or replace it with a host callback, on the extensions of the directory as the crate
+ * resolves them when the options name none. A host callback does what every World does itself, and the parts of the
+ * extensions do the rest, as they do in the built-in World. */
+export async function boot(
   options: WorldOptions & { world?: WorldHandler; entries?: Entry[]; onFacts?: (facts: Fact[]) => void } = {},
-): Session {
+): Promise<Session> {
   if (options.world) {
-    const adapter = new WorldAdapter(options.world, options.onFacts);
-    const life = adapter.boot(options.entries);
+    const directory = resolve(options.cwd ?? process.cwd());
+    const extensions = options.extensions ?? resolveExtensions(directory);
+    const made = await loadWorldParts(extensions, { ...builtinWorldParts, ...options.parts });
+    const controller = new AbortController();
+    const adapter = new WorldAdapter(options.world, { onFacts: options.onFacts });
+    const context = worldContext(adapter, {
+      directory,
+      readOnly: false,
+      signal: controller.signal,
+      change: () => {},
+    });
+    adapter.parts = extensions.flatMap((one) => {
+      const part = made[one.name];
+      if (!part && one.world.ts)
+        throw new Error(`The extension ${one.name} has a World part in ${one.world.ts}, which this World holds not.`);
+      return part ? [part(context)] : [];
+    });
+    const life = adapter.boot(
+      options.entries,
+      extensions.flatMap((one) => (one.word ? [one.word] : [])),
+      extensions.flatMap((one) => (one.life ? [one.life] : [])),
+    );
     return {
       life,
       ears: adapter.ears,
       dispose: async () => {
         adapter.stopped = true;
+        controller.abort();
+        for (const part of adapter.parts) await part.dispose?.();
         life.dispose();
       },
     };
   }
-  const world = new World(options);
+  const world = await World.load(options);
   if (options.onFacts) world.on("facts", options.onFacts);
   const life = world.open();
   return { life, world, ears: world.ears, dispose: () => world.dispose() };

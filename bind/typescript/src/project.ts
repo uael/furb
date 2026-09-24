@@ -2,12 +2,14 @@ import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** The directory `.furb/<parts>` of a project, made when it is absent. Records, file contents, shares and images
- * stay there, so the `.furb` it makes holds an ignore rule that keeps all of it out of version control. */
+ * stay there, so the `.furb` holds an ignore rule that keeps all of it out of version control but the config of the
+ * project, `config.json`, which names the extensions of the project for everyone who works on it. The rule is
+ * written whenever it is missing. */
 export function furbDirectory(project: string, ...parts: string[]): string {
   const furb = join(project, ".furb");
+  mkdirSync(furb, { recursive: true });
   try {
-    mkdirSync(furb);
-    writeFileSync(join(furb, ".gitignore"), "*\n");
+    writeFileSync(join(furb, ".gitignore"), "*\n!config.json\n", { flag: "wx" });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
   }

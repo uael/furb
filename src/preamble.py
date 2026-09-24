@@ -512,13 +512,19 @@ def opened(
 def called(engine: Names, ears: Ears, name: str, args: list, kwargs: dict) -> object:
   """One verb, called by the operator with values of the host, and what it gave, as it goes out: the verb of the
   chain it is said on, when that chain binds the name, since an extension binds its verbs there, and the verb of the
-  engine otherwise."""
+  engine otherwise. A verb said with no chain is said on the chain of who speaks, as the engine resolves it."""
   words, held = again(args, engine, ears), again(kwargs, engine, ears)
   assert isinstance(words, list)
   assert isinstance(held, dict)
-  modules = engine["modules"]
+  modules, scope, site = engine["modules"], engine["scope"], engine["site"]
   assert isinstance(modules, dict)
-  chain = modules.get(held.get("on"), engine)
+  assert callable(scope)
+  assert isinstance(site, ContextVar)
+  on = held.get("on") or scope(site.get())
+  chain = modules.get(on, engine)
+  if name not in chain and name not in engine:
+    why = f"name {name!r} is not defined on {on}" if on else f"name {name!r} is not defined, and no chain was said"
+    raise NameError(why)
   return outward(verb(chain if name in chain else engine, name)(*words, **held), engine)
 
 

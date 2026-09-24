@@ -1,14 +1,31 @@
 export * from "../index.cjs";
 export { Activity, type LiveAct, type RunState } from "./activity.js";
 export {
-  type Call,
+  type AdapterOptions,
   type Ear,
   Ears,
-  type Saying,
+  fault,
   WorldAdapter,
   type WorldHandler,
   type WorldRequest,
+  worldContext,
 } from "./ears.js";
+export {
+  type Call,
+  type Fault,
+  type Hearing,
+  type Instance,
+  isInstance,
+  type LiveView,
+  remade,
+  type Saying,
+  type Spawned,
+  unwrapped,
+  type WorldContext,
+  type WorldExtension,
+  type WorldPart,
+} from "./extension.js";
+export { builtinWorldParts, imported, loadWorldParts } from "./extensions.js";
 export {
   type ImageAttachment,
   imageContent,
@@ -18,7 +35,7 @@ export {
   imageType,
 } from "./images.js";
 export { furbDirectory, saveFile } from "./project.js";
-export { shell } from "./shell.js";
+export { shell, spawnShell } from "./shell.js";
 export type { Entry, Fact, OperatorPrompt, Paragraph, Turn, Usage } from "./types.js";
 export {
   actorParts,

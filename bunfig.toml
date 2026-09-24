@@ -1,0 +1,4 @@
+[test]
+# No config and no cache of the developer reach a test: each run has a config directory and a cache directory of its
+# own, empty.
+preload = ["./bind/typescript/test/preload.ts"]

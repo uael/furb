@@ -88,7 +88,7 @@ test("a World with no record keeps its images in a .furb that keeps itself out o
     const image = world.attachImage(path);
     expect(imageContent(world.imageDirectory, image.uri).data).toBe(pixel);
     expect(world.imageDirectory).toBe(join(directory, ".furb/images"));
-    expect(await readFile(join(directory, ".furb/.gitignore"), "utf8")).toBe("*\n");
+    expect(await readFile(join(directory, ".furb/.gitignore"), "utf8")).toBe("*\n!config.json\n");
     const status = Bun.spawnSync(["git", "status", "--porcelain", "--untracked-files=all"], {
       cwd: directory,
     });
