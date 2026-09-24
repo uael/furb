@@ -67,7 +67,8 @@ export class Ears {
       return { error: fault(error) };
     }
   };
-  /** The life on these ears, from the record, which plays the words of the extensions and their life words. */
+  /** The life on these ears, from the record, which runs the words of the extensions in the module of the engine, or
+   * the words the record pins, and plays their life words. */
   boot(record: Entry[] = [], words: string[] = [], lives: string[] = []): Life {
     return Life.boot(this.callback, [...this.ears.keys()], record, words, lives);
   }
@@ -279,7 +280,8 @@ export class WorldAdapter {
         },
       );
   }
-  /** The life on this World, from the record, which plays the words of the extensions and their life words. */
+  /** The life on this World, from the record, which runs the words of the extensions in the module of the engine, or
+   * the words the record pins, and plays their life words. */
   boot(record: Entry[] = [], words: string[] = [], lives: string[] = []): Life {
     this.life = this.ears.boot(record, words, lives);
     return this.life;

@@ -56,6 +56,6 @@ repos:
         name: cargo test
         entry: cargo test
         language: system
-        # The crate carries the words of the builtins, and its tests load the skills extension of the repository.
+        # The crate carries the engine, and its tests load the skills extension of the repository.
         types_or: [rust, python, toml, json, ts]
         pass_filenames: false

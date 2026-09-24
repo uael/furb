@@ -214,13 +214,13 @@ can open the file, copy its path, or upload the selected conversation to an unli
 `gh`. Upload happens only when chosen. Anyone with its link can read the shared conversation. `/export`
 keeps the structured JSON export. `/context` sets the context ceiling.
 
-A session plays the extensions that the configs name: the builtins `files`, `bash` and `grant`, and each
+A session takes the extensions that the configs name: the builtins `files`, `bash` and `grant`, and each
 extension that `config.json` of the config directory or `.furb/config.json` of the project names. The worker
 fetches and loads them when the session opens, and the TUI loads the part of each extension for the TUI. A part
 gives slash commands, prefixes of the input such as `!`, how the acts of its kinds show, lines of the sidebar, and
 what it does before a message is sent. `/extensions` lists the extensions of the session, and
-`/extensions update` fetches each one again, which a new session plays. The feed shows the words that the World
-plays on a chain as one line, `extensions`, which names them. See [the example](examples/project-summary), whose
+`/extensions update` fetches each one again, which a new session takes. The feed shows the rungs of the life words
+that the World plays on a chain as one line, `extensions`, which names their extensions. See [the example](examples/project-summary), whose
 `package.json` names its part for the TUI alone, and [the guide of the extensions](../docs/extensions.md).
 
 `bun run screenshots` captures the real rendered views through OpenTUI's test renderer. The screenshots use

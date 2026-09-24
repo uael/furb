@@ -131,8 +131,8 @@ as its digits in a string. `inspect(name, chain)` also gives the Python type and
 
 Records preserve integral floats as `{"is":"float","args":["1"]}`. The native record reader checks integer
 precision before JavaScript can round a number. A query of a rung enters the record with its answer, and a
-query that the host asks outside a rung enters none. To keep a program edit across a later open, ask the `ladder`
-of its prompt with the new program in a `rung`, as `ask("ladder", "", prompt, program)`.
+query that the host asks outside a rung enters none. To keep a program edit across a later open, write the new
+program to the door of its prompt in a `rung`, as `write(Text(prompt, program))`.
 
 A record whose replay drifts gives a life all the same, and `life.raised` holds the drift; that life keeps
 nothing more. `World.open` refuses such a record with the drift.
@@ -171,21 +171,23 @@ supported, with a 20 MiB limit per image. Keep `.images` with the record when mo
 
 ## Extensions
 
-An extension adds verbs to the life, and parts to the World and to the TUI. [The guide of the
+An extension adds verbs to the engine that a model reads, and parts to the World and to the TUI. [The guide of the
 extensions](../../docs/extensions.md) says how to write one and how a config names it. This package gives what a
 host in TypeScript needs:
 
-- `resolveExtensions(project, {refresh, install})` gives the extensions that a host plays for a project: the
+- `resolveExtensions(project, {refresh, install})` gives the extensions that a host takes for a project: the
   builtins `files`, `bash` and `grant`, and what `config.json` of the config directory and `.furb/config.json` of the
   project name, fetched once into the cache, and again on a refresh. Each `Extension` has its `name`, whether it is
   `builtin`, its `root`, the `word` of its python part and its `life` word, what it `requires`, and the files of its
   parts, `world.ts`, `world.py` and `tui`. It throws with what failed. `builtinExtensions()` gives the builtins
   alone. `configDirectory()` and `cacheDirectory()` give the directories, which `process.env` names:
   `FURB_CONFIG_DIR` and `FURB_CACHE_DIR`, then the directories of XDG, of Windows, and of the home. `wordOf(source)`
-  gives the word of a python part, and `missingWords(program, words)` the words that a program lacks.
-- `Life.boot(callback, names, record, words, lives)` plays the words and the life words as the World, on every chain
-  without a source, once boot stands on its record and at the birth of each such chain after. The supplied World
-  and `boot` give them.
+  gives the word of a python part, and `systemPrompt(engine, taken, words)` the system prompt of a life: the engine
+  less the definitions of each builtin that `taken` does not name, then the words.
+- `Life.boot(callback, names, record, words, lives)` runs the words in the module of the engine after the engine, or
+  the words the record pins, and pins them when the record pins none; `life.words` gives the words it runs. It plays
+  the life words as the World, on every chain without a source, once boot stands on its record and at the birth of
+  each such chain after. The supplied World and `boot` give them, and the World builds its system prompt from them.
 - `World.load(options)` resolves the extensions of the directory when the options name none, imports the part for a
   World of each one, and gives the World. `new World(options)` takes the `extensions` and the `parts` it is given,
   and the builtins when it is given none. It refuses an extension whose part for a World it does not hold.

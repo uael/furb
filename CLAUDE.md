@@ -5,18 +5,20 @@ that boot is given, each a generator under a name: the World, the Kernel and the
 contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/CLAUDE.md` holds the technical names of
 the engine and the laws that no test can hold. `script/CLAUDE.md` says how to run the DeepSWE rig.
 
-The engine knows no extension. The builtin extensions, `files`, `bash` and `grant`, live in `src/furb/builtin/`, each
-a module with its contract beside it and its suite in `test/<name>/`; `src/furb/builtin/CLAUDE.md` holds their names.
-The official extensions live in `extensions/`, each with its manifest, its contract and its suite in
-`extensions/<name>/test/`. The crate reads the configs, fetches, orders and makes the words of the extensions in
-`src/extension.rs`, and plays them. `docs/extensions.md` is the guide of the extensions.
+The builtin extensions, `files`, `bash` and `grant`, are definitions of `engine.py`. A host that turns one off cuts
+its definitions out of the system prompt, and the engine that runs keeps them. The word of any other extension runs
+in the module of the engine after the engine, before boot, and the system prompt reads it after the engine. The
+official extensions live in `extensions/`, each with its manifest, its contract and its suite in
+`extensions/<name>/test/`. The crate reads the configs, fetches, orders and makes the words of the extensions, the
+engine source with the words and the system prompt in `src/extension.rs`. `docs/extensions.md` is the guide of the
+extensions.
 
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
 
-- `src/lib.rs` says what the crate gives: `Life`, whose methods are the verbs of the contract and which plays the words
-  of the extensions it is given, `World`, the one trait that a host writes, and `extension`, the extension API that
-  every host shares, which napi and pyo3 give too.
+- `src/lib.rs` says what the crate gives: `Life`, whose methods are the verbs of the contract, which runs the words of
+  the extensions in the module of the engine, pins them in its record and plays their life words, `World`, the one
+  trait that a host writes, and `extension`, the extension API that every host shares, which napi and pyo3 give too.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
 - The Kernel and the gate are the crate's. The gate is the type checker of monty. It reads a word on the sheet of
   the engine, `src/furb/sheet.py`, against the typeshed of the sandbox. The gate of the python package reads
@@ -32,7 +34,8 @@ The TypeScript side is a bun workspace at the root, with three kinds of packages
 
 - `bind/typescript` is the crate through N-API. Its queries and controls are synchronous, and its acts can be
   awaited. It includes a World with pi-ai models and records, which hands every other fact to the parts of its
-  extensions, the builtin parts of files and bash among them, and the shapes of a part for a World and for the TUI.
+  extensions, the builtin parts of files and bash among them, builds the system prompt with the crate, and gives the
+  shapes of a part for a World and for the TUI.
   `bind/typescript/README.md` says how to use it. The TUI imports its build in `bind/typescript/dist`, which
   `bun run build` makes again.
 - `tui` is the OpenTUI application on that package. The engine and its World run in a worker, `tui/src/worker.ts`,
@@ -83,12 +86,12 @@ The suite drives the engine through its public API alone, end to end, from the m
 - `test/conftest.py` is the harness. `Sand` is a World in memory: files by path, scripted words by chain id, the calls
   it performed, the entries it kept, and what it fed its commands. `Dead` refuses every question but the standing, and
   `Where` asks the chain where it stands at every path. `Py` is a Kernel that is python, with the gate of the crate,
-  which refuses a word that is not python or that names what nothing binds, such as `BAD`. A `Sand` plays the `words`
-  of extensions, as a host plays them, and their life words, `lives`, and `answers` answers the question of an
-  extension by its kind; `FILES`, `BASH` and `GRANT` are the words of the builtins, and `extension(name)` gives the
-  words of an extension of the repository. `life` boots a life on them, `settle` gives the loop room, `plain` sends a
-  record through the wire and back, `said` reads the facts, `paragraphs` and `heads` read the turns, which are
-  python, and `verb`, `Bound` and `job` say the verbs of an extension on a chain.
+  which refuses a word that is not python or that names what nothing binds, such as `BAD`. A `Sand` runs the `words`
+  of extensions in the module of the engine before boot, as a host does, plays their life words, `lives`, and
+  `answers` answers the question of an extension by its kind; `extension(name)` gives the words of an extension of
+  the repository, and `pristine` gives the module of the engine back as it was after each test. `life` boots a life
+  on them, `settle` gives the loop room, `plain` sends a record through the wire and back, `said` reads the facts,
+  and `paragraphs` and `heads` read the turns, which are python.
 - One test file per definition of the contract: `test_<name>.py` for a function, a global or a type alias,
   `test_<class>_<method>.py` for a method, in lower case, with dunder underscores stripped. A capitalized definition
   whose lower-case name is another definition's, `Bash` beside `bash`, has `test_<name>_shape.py`.
@@ -101,14 +104,13 @@ The suite drives the engine through its public API alone, end to end, from the m
   `test/conftest.py`.
 - `test/outside/` holds the tests of the World, the Kernel, the command line and the provider, which stand outside
   the hygiene laws.
-- The suite of a builtin extension is `test/<name>/`, and the suite of an extension of the repository is
-  `extensions/<name>/test/`, whose `conftest.py` gives the harness of `test/conftest.py`. Each runs on both engines,
-  under the same laws, against its own contract.
+- The suite of an extension of the repository is `extensions/<name>/test/`, whose `conftest.py` gives the harness of
+  `test/conftest.py`. It runs on both engines, under the same laws, against its own contract.
 
 ## The hygiene laws
 
 `test/test_hygiene.py` holds each contract and its suite to these laws, and it must stay green. A contract is
-`engine.pyi`, a `src/furb/builtin/<name>.pyi`, or an `extensions/<name>/<name>.pyi`:
+`engine.pyi` or an `extensions/<name>/<name>.pyi`:
 
 1. Every sentence of a definition has exactly one test, in the file of that definition, whose docstring is that
    sentence. A constructor and a property are no definitions of their own: their sentences are the class's.
@@ -119,9 +121,8 @@ The suite drives the engine through its public API alone, end to end, from the m
 6. The minified `engine.py` parses to the same program as the file on disk.
 7. No name in `engine.py` is bound again beneath a scope that already binds it: a parameter, a local, a loop
    target or an import never takes the spelling of a name of an enclosing function or of the module. Every word
-   keeps one meaning. The word of each builtin and of each extension of the repository, as the crate makes it, binds
-   no name again beneath a name of the engine or of another word, but an import that binds a name as another word
-   binds it.
+   keeps one meaning. The word of each extension of the repository, as the crate makes it, binds no name again
+   beneath a name of the engine or of another word, but an import that binds a name as another word binds it.
 8. Each extension of the repository has a manifest that names its python part, a contract beside that part, and a
    suite in its folder `test`.
 
@@ -131,12 +132,11 @@ Run every command from the root of the repository.
 
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
   `furb-monty`. After a change of the crate, `uv sync --reinstall-package furb-monty` builds it again.
-- `uv run pytest -q`: the suite and the suites of the extensions on both engines, with the coverage of `furb` and of `furb_monty`, which must be
-  whole but for the four stubs of the bus that the toml excludes with their reason.
+- `uv run pytest -q`: the suite and the suites of the extensions on both engines, with the coverage of `furb` and of
+  `furb_monty`, which must be whole but for the four stubs of the bus that the toml excludes with their reason.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
 - `uv run ruff format src test script extensions` then `uv run ruff check src test script extensions`: format and
-  lint. Two spaces of
-  indentation, 120 columns.
+  lint. Two spaces of indentation, 120 columns.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against the contracts.
 - `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test`: the gates of the crate. The
   tests of a module stand beside it, `src/life.test.rs` beside `src/life.rs`, and those of the life drive the real

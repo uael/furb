@@ -244,7 +244,7 @@ the config directory, or in `.furb/config.json` of the project, which a project 
 ```
 
 A path, a git remote and an npm package each name an extension, and `false` turns one off, a builtin among them.
-The next session plays the change. `/extensions` lists the extensions of the session, and `/extensions update`
+The next session takes the change. `/extensions` lists the extensions of the session, and `/extensions update`
 fetches each one again. [The guide of the extensions](extensions.md) says more.
 
 ![Extension command](screenshots/42-extension-command.png)

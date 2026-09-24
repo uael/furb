@@ -40,10 +40,9 @@ bun install && bun run build     # The TypeScript workspace and the N-API packag
 | `src/furb/engine.py` | The engine, one file. It depends only on the Python interpreter. |
 | `src/furb/engine.pyi` | The contract. The docstring of each definition holds its laws. |
 | `src/furb/CLAUDE.md` | The technical names of the engine, and the laws that no test can hold. |
-| `src/furb/builtin/` | The builtin extensions `files`, `bash` and `grant`: each a module, its contract, and its names in `CLAUDE.md`. |
 | `extensions/` | The official extensions, such as `skills`, each with its manifest, its contract, its parts and its suite. |
-| `src/extension.rs` | The extension API of the crate: the configs, the cache, the fetch, the manifests, the order and the words. |
-| `test/` | The suite: one file for each definition, and one test for each sentence; `test/<name>/` for each builtin. |
+| `src/extension.rs` | The extension API of the crate: the configs, the cache, the fetch, the manifests, the order, the words and the system prompt. |
+| `test/` | The suite: one file for each definition, and one test for each sentence. |
 | `test/outside/` | The tests of the World, the Kernel, the command line, and the provider. |
 | `src/*.rs` | The crate `furb`, which runs the same engine in monty, a Python interpreter written in Rust. |
 | `bind/python` | The package `furb-monty`, the crate for Python. |
@@ -59,8 +58,8 @@ bun install && bun run build     # The TypeScript workspace and the N-API packag
 3. The gate, a type checker, reads the word first. A word that it refuses does not run, and the model reads the
    reason in its next turn.
 4. The Kernel runs the word in the module of its chain. Each call such as `prompt` or `wait` makes an act, which
-   the World serves: the models, a wait, and the record. `read` and `bash` come from the builtin extensions, whose
-   words each chain plays first, and whose parts in the World serve the disk and the machine.
+   the World serves: the models, a wait, and the record. `read` and `bash` are definitions of the engine, the builtin
+   extensions, whose parts in the World serve the disk and the machine.
 5. Each act says what it did as a fact. The chain folds its facts into turns, which are the Python that the model
    reads next.
 
@@ -117,15 +116,16 @@ and the TypeScript gates on Linux, on macOS, and on Windows.
 
 ## Changing or writing an extension
 
-An extension adds verbs to the life, and parts to the World and to the TUI. [The guide of the
+An extension adds verbs to the engine that a model reads, and parts to the World and to the TUI. The builtins are
+definitions of the engine, so a change of one is a change of the engine, under the rules above. [The guide of the
 extensions](extensions.md) says how to write one, how a config names it, and how to publish it.
 
-1. Read the contract of the extension, `src/furb/builtin/<name>.pyi` or `extensions/<name>/<name>.pyi`, and its
-   names in `src/furb/builtin/CLAUDE.md`.
-2. Write the test first, in `test/<name>/` for a builtin or in `extensions/<name>/test/`. Its docstring is exactly
-   one sentence of the contract, and the harness runs it on both engines.
-3. Change the python part. It is a module that imports from `furb.engine` and from the extensions it requires; the
-   crate cuts those imports out when it makes the word. The hygiene laws hold its word as they hold the engine.
+1. Read the contract of the extension, `extensions/<name>/<name>.pyi`.
+2. Write the test first, in `extensions/<name>/test/`. Its docstring is exactly one sentence of the contract, and the
+   harness runs it on both engines.
+3. Change the python part. It is a module that imports from `furb.engine`; the crate cuts those imports out when it
+   makes the word, which the module of the engine runs after the engine. The hygiene laws hold its word as they hold
+   the engine.
 4. Change the parts for a World and for the TUI, and their bun tests. A part imports only types from
    `@furb/engine`.
 

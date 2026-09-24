@@ -1,25 +1,37 @@
 # Extensions
 
-An extension adds verbs to the life of furb, and work to the World and to the TUI. The engine knows no extension:
-a host plays the word of each one as a rung, and holds its parts. This guide says what an extension is, where furb
-finds one, how to write one, and how to publish one. The skills extension in `extensions/skills` is the example
-that each section points to.
+An extension adds verbs to the engine that a model reads, and work to the World and to the TUI. This guide says what
+an extension is, where furb finds one, how to write one, and how to publish one. The skills extension in
+`extensions/skills` is the example that each section points to.
 
 ## What an extension is
 
-An extension has up to three parts, and it has one part at least:
+An extension has up to three parts, and one part at least:
 
-- A **python part**: a python file whose word the host plays as a rung on every chain without a source. It defines
-  the verbs that a model calls, such as `read`, `bash` or `skill`.
+- A **python part**: python that the module of the engine runs after the engine, before boot. Every chain binds its
+  names from its birth, as it binds the names of the engine, and the system prompt reads it after the engine. It
+  defines the verbs that a model calls, such as `skills` and `skill`. The manifest may also give a **life word**,
+  which the host plays as a rung, as the World, in every life on each chain without a source.
 - A **part for a World**: code of the host that does the work of the extension outside the sandbox. It answers the
-  questions of the extension, and it does the acts of its kinds. The TypeScript host has these parts now, and the
-  manifest keeps a place for parts in python.
+  questions of the extension with plain data, and it does the acts of its kinds. The TypeScript host has these
+  parts now, and the manifest keeps a place for parts in python.
 - A **part for the TUI**: slash commands, how the acts of its kinds show, lines of the sidebar, and what it does
   before a message is sent.
 
-The builtins are extensions too: `files` (read, write, cd, cwd, Text and the shows), `bash` (bash and Exit) and
-`grant` (grant). They are on unless a config turns them off. The crate carries their words, so every host plays the
-same words.
+## The builtins
+
+The builtins are `files` (read, write, cd, cwd, Text and the shows), `bash` (bash and Exit) and `grant` (grant).
+They are definitions of `engine.py` itself, so the engine and its contract say what they do. Each has its parts for
+a World and for the TUI in each host. They are on unless a config turns them off.
+
+A host that turns a builtin off cuts its definitions out of the system prompt: the crate holds the top-level names
+each builtin defines, and cuts each top-level statement of the minified engine that binds only such names. The
+engine that runs stays whole. The code of the engine that only answers a verb of a builtin, as the chain answers a
+read of the door of a prompt, stays in the prompt, and does nothing while no verb asks it. The World holds no part of
+a builtin that is off, so it refuses the work of that builtin if a word asks for it.
+
+`bash` requires `files`. A read and a write cross to the World and back as plain data, a path and a content, and
+the engine makes the `Text`, so no class of the engine crosses to a World.
 
 ## Where furb looks
 
@@ -65,8 +77,8 @@ furb fetches an extension once, the first time a config names it:
 - An npm package goes to `<cache>/extensions/npm/<name>@<version>/`. furb runs `npm pack` and unpacks the tarball
   itself. When the package has dependencies, furb runs `npm install --omit=dev --ignore-scripts` there.
 
-To fetch every extension again, run `furb update` or `/extensions update` in the TUI. A new session plays the
-change.
+To fetch every extension again, run `furb update` or `/extensions update` in the TUI. A new session takes the
+change; a session that exists runs the words it pinned.
 
 ## The manifest
 
@@ -86,13 +98,13 @@ An extension is a folder with a `package.json`, whose field `furb` is its manife
 ```
 
 - `name` is the name of the extension, which a config uses.
-- `python` names its python part. `life` is a word that the host plays in every life, after the word of the module.
+- `python` names its python part. `life` is its life word.
 - `world` names its part for a World, one file for each language that a host writes its World in: `ts` now, and
   `py` later.
 - `tui` names its part for the TUI.
-- `requires` names the extensions whose words its word reads.
+- `requires` names the extensions whose names its word reads.
 
-furb plays the builtins first, then the extensions of the config of the user, then those of the config of the
+furb takes the builtins first, then the extensions of the config of the user, then those of the config of the
 project. An extension stands after each extension it requires. furb refuses an extension whose requirement is off,
 and says to turn it off too, or to turn the requirement on. It refuses a cycle of requirements, and a python part
 that does not parse, with its file and its line.
@@ -101,42 +113,45 @@ that does not parse, with its file and its line.
 
 A python part has one of two forms, and one rule serves both:
 
-- **Form (a)**: a word, a python file that the host plays as it is.
-- **Form (b)**: a real module, which imports what it uses from the engine and from the extensions it requires, as
-  `from furb.engine import ask, tell` and `from furb.builtin.files import Text, read`. An editor, ruff and ty check
-  it, and it has its own tests. The builtins and the skills extension are of this form.
+- **Form (a)**: a word, a python file that the host runs as it is.
+- **Form (b)**: a real module, which imports what it uses from the engine, as `from furb.engine import ask, read,
+  tell`. An editor, ruff and ty check it, and it has its own tests. The skills extension is of this form.
 
 The word of a module is the module less each top-level `from furb...` import, with its line ends made LF. An import
 leaves no line of its own: the empty lines where it stood are as many as stood on either side of it, and a word
-starts and ends with its code. Every other byte stays as it is. The word is what a model reads in the turns of every
-chain, so it reads as a python file that a person wrote, and the gate and the TUI number its lines as the model reads
-them. A word of form (a) has no such import, so the host plays it as it is.
+starts and ends with its code. Every other byte stays as it is. The word is what the system prompt reads, so it
+reads as a python file that a person wrote. A word of form (a) has no such import, so the host runs it as it is.
 
-Why the imports are cut out, and the gate and the Kernel do not follow them: the module of a chain already binds
-every name of the engine and of each word played before it, and the engine reads its own names through the globals
-of the chain, so a name that a later rung binds again is used from its next use on. An import would pin the object
-of the module it names, and a verb bound again would not reach the word. The sandbox of monty holds no package
-`furb`, so the gate and the Kernel stay blind to packages, and the program that a model reads holds no import it
-cannot run.
+**Where it runs.** The module of the engine runs each word after the engine, in the order of the extensions, before
+boot. Every chain copies the module of the engine at its birth, so every chain binds the names of the words, and a
+later rung may bind any of them again, as it may bind a name of the engine. The gate reads a word of a model after
+the engine and the words, so it refuses a name that neither binds. A word defines; it asks the bus only from a verb,
+since no life lives while it runs.
 
-**When it plays.** The host plays the words of the extensions as the World, on every chain without a source, as
-rungs. It plays nothing while boot replays the record. Once the life stands on its record, it plays each word that
-the program of such a chain does not hold yet, in order, then each life word. From then on it plays them at the
-birth of each such chain. A chain with a source runs the words of its origin again, so it gets nothing of its own.
-The crate holds this rule, so every host plays the same. A later life plays a word that changed as one more rung,
-and that word binds last. One limit: a model that opens a chain and prompts it in the same word gets its first ask
-before the rungs of the words, and they run before its answer.
+**What a word may use.** A word speaks through the bus: `ask` for a query, `act` for an act, `send` for a fact,
+`tell` for notes. The World answers a question of an extension with plain data, and the verb makes its own values of
+it.
 
-**What a word may use.** A word runs in the module of a chain, which binds the engine and the words before it. It
-speaks through the bus: `ask` for a query, `act` for an act, `send` for a fact, `tell` for notes. The World answers
-a question of an extension with plain data, and the verb makes its own values of it, so a record holds no class of
-an extension. A later life reads the record before any word of an extension runs.
+**The pin.** A life says once, as the World, the words it runs, in a fact of the kind `extensions` about the root,
+which the record keeps. A later life on that record runs the words its record pins, whatever the configs say then,
+since a record is made again by running its words. A life with no word pins nothing. The crate holds this rule, so
+every host runs the same words.
+
+**The life word.** The host plays each life word as a rung, as the World, on every chain without a source, once
+the life stands on its record, and at the birth of each such chain after. A chain with a source runs the rungs of
+its origin again, so it plays nothing of its own.
 
 **Its contract and its suite.** An extension of the repository has its contract beside its python part, as
 `skills.pyi`, and its suite in `test/`. The hygiene laws hold it as they hold the engine: one test for each
 sentence, whose docstring is that sentence, and no name of its word bound again beneath a name of the engine or of
-another word. A test of the suite plays the words through the harness of `test/conftest.py`, which runs each test
-on both engines.
+another word. A test of the suite runs the words through the harness of `test/conftest.py`, which runs each test on
+both engines.
+
+## The system prompt
+
+The system prompt of a life is the engine, minified in layout alone, less the definitions of each builtin that a
+config turns off, then the word of each extension the life runs, each after an empty line. The crate makes it for
+every host: `system_prompt` in python, `systemPrompt` in TypeScript.
 
 ## The part for a World
 
@@ -190,7 +205,8 @@ The file exports a function as its default, which gives a `TuiPart`:
 
 The context gives the life, the chain on screen and its directory, the acts, `call` for a verb on that chain,
 `path`, `notify`, `submit`, `track` and `show`. Two parts that claim one command, one prefix or one kind are
-refused with both names. `/extensions` lists the extensions of a session.
+refused with both names. `/extensions` lists the extensions of a session. The feed shows the rungs of the life words
+that the World played as one line, `extensions`, which names their extensions.
 
 ## Walkthrough: the skills extension
 
@@ -198,8 +214,9 @@ refused with both names. `/extensions` lists the extensions of a session.
 
 - `package.json`: the manifest above, and the npm package `@furb/skills`.
 - `skills.py`: the python part, of form (b). `skills()` asks the World a `skills` question on its chain, and tells
-  one line for each skill that is new, changed or gone since the question before it. `skill(name)` reads the
-  `SKILL.md` of a skill into the chain through `read`, so the manifest requires `files`.
+  one line for each skill that is new, changed or gone since the question before it, which it finds in `asked` and
+  `outcomes`. `skill(name)` reads the `SKILL.md` of a skill into the chain through `read`, so the manifest requires
+  `files`.
 - `skills.pyi` and `test/`: its contract and the suite of its sentences, on both engines.
 - `world.ts`: the part for a World, which answers the `skills` question with the skills of `.furb/skills`,
   `.claude/skills` and the config directory, as plain data.
@@ -208,8 +225,8 @@ refused with both names. `/extensions` lists the extensions of a session.
 
 The life word, `skills()`, runs in every life, so a chain tells its skills before its first ask, and a later life
 tells what changed. The crate test and the TypeScript test prove that skills loads the same by a path, a git remote
-and an npm package. The python host plays its word and holds no part of it for a World, so there `skills()` finds
-no skill.
+and an npm package. The python host runs its word and holds no part of it for a World, so there `skills()` finds no
+skill.
 
 ## Publishing an extension
 
@@ -221,26 +238,23 @@ no skill.
 
 ## Records of 0.1.0
 
-A record of furb 0.1.0 opens. Its words called `read`, `write` and `bash`, which were verbs of the engine then, and
-the reader keeps the mark of a class it does not know, as `{"is": "Text", ...}`, as its plain fields. The words of
-the builtins are played after the record replays, so an old word finds no `read` while it replays and the gate
-refuses it. Such a record opens when nothing hangs on its old acts. A record whose later acts hang on an old read,
-write or bash drifts. No tool migrates it.
+A record of furb 0.1.0 opens. It answers a read and a write with a text as the mark of its class, and the life
+replays each query from the record by its name, so a read and a write of that record give the text as it is.
 
 ## The names of the extension system
 
-- **extension**: a word that a host plays on a chain, with a part for a World and a part for the TUI that the host
-  holds.
-- **builtin**: an extension that the crate carries, on unless a config turns it off.
+- **extension**: what a host adds to the engine: a word, a life word, and parts for a World and for the TUI.
+- **builtin**: files, bash or grant: definitions of `engine.py` that a host takes unless a config turns them off.
 - **manifest**: the field `furb` of the `package.json` of an extension.
+- **word of an extension**: the python that the module of the engine runs after the engine, before boot.
 - **word of a module**: the module less its imports of furb, with its line ends made LF.
-- **life word**: a word of the manifest that the host plays in every life.
-- **play**: to run a word as a rung on a chain, as the World.
+- **life word**: a word of the manifest that the host plays as a rung in every life.
+- **pin**: the fact `extensions` of the World, which says the words a life runs, so a later life runs the same.
 - **config**: `config.json` of the config directory, or `.furb/config.json` of a project.
 - **cache**: where furb keeps the extensions it fetched.
 
 ## Trust
 
-The python part runs in the sandbox, as every word does. A part for a World and a part for the TUI run with the
+The python part runs in the sandbox, as the engine does. A part for a World and a part for the TUI run with the
 rights of the user, as any program the user starts. Name only the extensions that you trust. furb runs every npm
 command with `--ignore-scripts`, so a fetch runs no script of a package.
