@@ -47,3 +47,7 @@ class Life:
 def gate(sheet: str) -> list[tuple[int, str]]:
   """The gate of the crate, for the Kernel of this interpreter to read a sheet with: what the checker found on the
   sheet, each error by its line, and no warning. It raises when the checker could not read the sheet."""
+
+def word(source: str) -> str:
+  """The word of the python part of an extension, which a host plays as a rung: the file with its line ends made LF
+  and every top-level import from `furb` made empty lines, and nothing else changed."""
