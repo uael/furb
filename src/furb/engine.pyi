@@ -660,6 +660,7 @@ type Prompt = tuple[Literal["prompt"], str, str, str, str, str, str]
 """A prompt carries the name of the shape, the message and the actor of a prompt."""
 type Chain = tuple[Literal["chain"], str, str, str, str, str]
 """A chain carries the label and the source of a chain, and every chain is chainN whether boot or chain opened it."""
+
 def under(name: str, of: str) -> bool:
   """Whether one act is another or was made by it, which the life says, since every question says who made it.
   An act is under every ancestor of the act, which the maker of each says in turn, up to the operator or an ear of the outside.
