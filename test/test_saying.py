@@ -4,6 +4,7 @@ from collections.abc import Generator
 
 from conftest import STANDS, Sand, life, said
 from furb import engine
+from furb.engine import OPERATOR
 
 
 async def test_what_an_ear_says() -> None:
@@ -25,6 +26,6 @@ async def test_what_an_ear_says() -> None:
   assert saying == ("tell", "chain1", ["#chain1 noted"])
   assert fact == ("tell", "chain1", "note", ["#chain1 noted"]) == log[-1]
   assert len(fact) == len(saying) + 1 and fact[2] == "note"
-  act = engine.bash("echo hi", on=root)
+  act = engine.prompt(str, "hi", to=OPERATOR, on=root)
   opened = next(one for one in said(log, "tell") if one[1] == act)
-  assert opened == ("tell", "bash1", "bash1", ["#bash1 echo hi", "bash1: Act[Exit] = Act('bash1')"])
+  assert opened == ("tell", "prompt1", "prompt1", ["#prompt1 hi", "prompt1: Act[str] = Act('prompt1')"])
