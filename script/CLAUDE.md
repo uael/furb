@@ -76,6 +76,10 @@ A grant bounds the money and not the work, so two more bounds end a run that goe
 - Each step of the rig itself ends after half an hour, so an install that waits for input it never gets does not
   hold the run.
 
+The commands of the model, the steps of a seed and a grade do not see the venv of furb that runs the rig. The rig
+takes it out of the PATH and out of VIRTUAL_ENV before it does anything. In a python task, a command of the model
+finds the venv of the checkout first on its PATH, and then the tools of the host.
+
 The process of the life runs in the checkout. A word of a model runs in that process, so a word that joins a path
 to the working directory of python writes inside the tree that is graded, and not outside it.
 

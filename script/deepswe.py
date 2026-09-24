@@ -30,6 +30,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import time
 import tomllib
 from collections.abc import Mapping, Sequence
@@ -768,8 +769,25 @@ def seed(args: argparse.Namespace) -> int:
   return 0
 
 
+def outside() -> None:
+  """Take the venv that runs the rig out of the environment that every child of the rig inherits.
+
+  `uv run` puts the venv of furb first on the PATH and names it in VIRTUAL_ENV. A command of a model, a step of a
+  seed and a grade are children of the rig, and each would find the python, the pip and the pytest of furb there.
+  A rig that runs on a python with no venv has nothing of its own to take out.
+  """
+  own = Path(sys.prefix).resolve()
+  if own == Path(sys.base_prefix).resolve():
+    return
+  path = os.environ.get("PATH", "").split(os.pathsep)
+  os.environ["PATH"] = os.pathsep.join(one for one in path if Path(one).resolve() != own / "bin")
+  if (named := os.environ.get("VIRTUAL_ENV")) and Path(named).resolve() == own:
+    del os.environ["VIRTUAL_ENV"]
+
+
 def main() -> None:
   """The door of the operator onto the whole rig."""
+  outside()
   whole = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
   verbs = whole.add_subparsers(dest="verb", required=True)
   named = argparse.ArgumentParser(add_help=False)
