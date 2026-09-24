@@ -73,7 +73,7 @@ def write(text: Text, on: str = "") -> Text:
 
 def peek(at: str, on: str = "") -> object:
   _, got = ask("peek", on, at)
-  tell("peek", at)
+  tell("peek", f"{at} {got!r}")
   return got
 
 
@@ -595,11 +595,9 @@ def pausing(ear):
   def lived(id):
     g, held, paused = ear(id), [None], False
     while True:
-      if not paused:
-        for b in held:
-          if not lives(g, b):
-            return
-        held = []
+      while held and not paused:
+        if not lives(g, held.pop(0)):
+          return
       match a := (yield):
         case ("pause" | "wake", *_) if covers(a, id):
           paused = a[0] == "pause"

@@ -2,24 +2,27 @@
 
 from conftest import life, said, settle, sown
 from furb import engine
-from furb.engine import OPERATOR, Text
+from furb.engine import OPERATOR, Exit, Text
 
 
 async def test_what_a_query_tells_of_itself() -> None:
   """What a query tells of itself: a paragraph headed with its kind, its words and what it was answered, said on the run that asked it, and nothing at all outside a run."""
   sand = sown()
   log, root = life(sand)
-  sand.script[root] = ["read('a.txt')\ncwd()\nclose(1)"]
+  sand.script[root] = ["read('a.txt')\ncwd()\npeek(bash('echo hi'))\nclose(1)"]
   assert await engine.prompt(int, "ask things", on=root) == 1
   await settle()
   _, step, *_ = said(log, "rung")[0]
+  running = Exit(None, Text("bash1/stdout"), Text("bash1/stderr"))
   told = [a[3] for a in said(log, "tell") if a[1] == step and a[2] == step]
-  assert [notes[0] for notes in told] == ["#read a.txt", "#cwd /w"]
-  assert [len(notes) for notes in told] == [2, 1] and told[0][1][0] == Text("/w/a.txt", "one\ntwo\n")
+  assert [notes[0] for notes in told] == ["#read a.txt", "#cwd /w", f"#peek bash1 {running!r}"]
+  assert [len(notes) for notes in told] == [2, 1, 1] and told[0][1][0] == Text("/w/a.txt", "one\ntwo\n")
   assert "#read a.txt\n# /w/a.txt, 0 known\n# 1 one\n# 2 two\n\n#cwd /w" in engine.turns(on=root)[-1][1]
+  assert f"\n\n#peek bash1 {running!r}\n\n" in engine.turns(on=root)[-1][1]
   was = engine.turns(on=root)
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
   assert engine.cwd(on=root) == "/w"
+  assert engine.peek("bash1", on=root) == Exit(0, Text("bash1/stdout", "ran echo hi\n"), Text("bash1/stderr"))
   assert engine.turns(on=root) == was
 
 
