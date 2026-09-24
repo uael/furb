@@ -53,7 +53,7 @@ async def test_the_turns_of_what_a_chain_has_heard() -> None:
 
 
 async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operator() -> None:
-  """The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines it has not seen, which the one that tells it says the show of."""
+  """The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a showing stands by the lines the model has not seen, which the one that tells it says the show of."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   word = "tell('seen', 'n', ('/w/n', 'one\\ntwo\\n', lambda lines: [2]))\nclose(1)"

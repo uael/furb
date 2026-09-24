@@ -39,7 +39,7 @@ async def test_a_show_is_any_callable_of_that_shape() -> None:
 
 
 async def test_a_show_is_no_word_of_a_fact() -> None:
-  """A show is no word of a fact: the verb that was given it keeps it for what it tells, and the ear of the act closes over it, so no record holds one."""
+  """A show is no word of an act: the verb that was given it keeps it for what it tells, and the ear of the act closes over it, so no record holds one."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   await engine.rung(LOOK, on=root)

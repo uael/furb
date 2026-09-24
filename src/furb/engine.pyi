@@ -70,7 +70,7 @@ The Kernel sets the site to the rung whose word it steps, for as long as it step
 type Show = Callable[[list[str]], list[int]]
 """A show is given the lines of the content of a showing and gives the numbers of the lines to tell.
 A show is any callable of that shape, so a word adds a show by writing one.
-A show is no word of a fact: the verb that was given it keeps it for what it tells, and the ear of the act closes over it, so no record holds one.
+A show is no word of an act: the verb that was given it keeps it for what it tells, and the ear of the act closes over it, so no record holds one.
 """
 type Filter = Callable[[list[Question]], list[Question]]
 """A filter is given the acts of the transcript up to the source of a chain that has one.
@@ -143,7 +143,7 @@ def peek(at: str, on: str = "") -> object:
 def turns(on: str = "") -> list[Turn]:
   """The turns of a chain, folded from what it has heard.
   The turns of what a chain has heard: every fact that carries notes stands as a paragraph of them, and nothing else stands at all.
-  The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines it has not seen, which the one that tells it says the show of.
+  The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a showing stands by the lines the model has not seen, which the one that tells it says the show of.
   The chain answers for its turns, folded from what it has heard.
   """
 

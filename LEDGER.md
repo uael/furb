@@ -70,6 +70,15 @@ external extension. Tell the owner if the pypi package `furb` (and npm `@furb/sk
 9. Later answered by the owner (decision 17): a requirement that is off refuses the extension that needs it, with a
    message that says to turn that one off too. An upgraded word is played as one more rung, and it binds last.
 
+10. Ruled by the lead, who holds every decision of the owner (the owner approved the changes of the lead to
+    engine.pyi): the sentence of `Show` says "A show is no word of an act", since a tell carries a showing, and so
+    its show, as a word, while the record keeps no tell. The sentence of `turns` says "a showing stands by the lines
+    the model has not seen", since text is a word of the files extension now. The tests carry the new sentences.
+11. Ruled by the lead: a record of 0.1.0 gets no replay of the builtin words at the birth of its root (that renumbers
+    the rungs and drifts), and no tool migrates it. Such a record opens when nothing hangs on its old acts, which a
+    test proves on each host. docs/extensions.md and the release note say that a record of 0.1.0 whose later acts
+    hang on an old read, write or bash drifts.
+
 PLAN.md (by the lead) holds the plan of the remaining steps and more decisions of the lead (part 1, binding). Read it
 with this ledger.
 
@@ -203,21 +212,8 @@ with this ledger.
 
 ## Questions for the owner
 
-- engine.pyi, `Show`: "A show is no word of a fact" holds for the acts (no show is a word of a `bash` or of a verb's
-  act), but a `tell` carries its notes as a word, and a `Showing` note holds its show. The record keeps no tell, so
-  no record holds a show, which is the point of the sentence. Should it say "no word of an act" instead?
-- engine.pyi, `turns`: "a text stands by the lines it has not seen" keeps the word text, whose technical name moved
-  to the files extension; the core says showing. Should it say "a showing stands by the lines the model has not
-  seen"? The test proves it with a showing.
-
-- A record of 0.1.0 (decision 16): its rungs call read, write and bash, which were verbs of the engine then. A
-  later life plays the builtin words only after boot replays the record (decision 2), so the old words find no
-  `read` while they replay: the gate refuses them (or they raise), and what they bound is gone. The life opens with
-  no drift when nothing hangs on those acts, which the test proves with a record of a read and a write. A record
-  whose old word made an act that the chain then acknowledged (a bash whose done made an acknowledgment prompt)
-  drifts at the rung of that prompt, since the prompt is not made again. Should an old record play the builtin
-  words at the birth of its root while it replays, which shifts the names of its rungs, or is it enough that such a
-  record opens when nothing hangs on the old acts?
+None open. The owner handed every decision to the lead: decide by the bar of CLAUDE.md, write the decision and why
+here, and go on.
 
 ## Environment notes
 
