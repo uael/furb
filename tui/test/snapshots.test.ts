@@ -25,10 +25,11 @@ test("idle snapshots add no facts or sandbox calls as the act table grows, and s
       },
     }) as Life;
     const snapshots = new Snapshots(traced, world);
-    snapshots.take(life.root);
+    // The root and the rungs of the words of the builtins, which the World played.
+    const born = snapshots.take(life.root).acts.length;
     for (let index = 0; index < 100; index++) life.wait(60);
     await Promise.resolve();
-    expect(snapshots.take(life.root).acts).toHaveLength(101);
+    expect(snapshots.take(life.root).acts).toHaveLength(born + 100);
     await Promise.resolve();
     const before = [...calls],
       facts = world.facts.length;
@@ -40,14 +41,17 @@ test("idle snapshots add no facts or sandbox calls as the act table grows, and s
     expect(world.facts.length).toBe(facts);
     expect(calls.filter((name) => ["get", "outcome", "scope", "peek"].includes(name))).toEqual([]);
 
-    const command = life.bash('printf first; read line; printf "$line"; read hold', { fed: true }).id;
+    const command = life.call<string>("bash", ['printf first; read line; printf "$line"; read hold'], {
+      fed: true,
+      on: life.root,
+    });
     const output = () =>
       (world.activity.acts.get(command)?.value as { stdout?: { content: string } })?.stdout?.content;
     await until(world, () => output() === "first");
     snapshots.take(life.root);
     await Promise.resolve();
     const streamed = [...calls];
-    life.write({ path: `${command}/stdin`, content: "second\n" });
+    life.call("ask", ["write", life.root, `${command}/stdin`, "second\n"], {});
     await until(world, () => output() === "firstsecond");
     const snapshot = snapshots.take(life.root);
     expect(snapshot.acts.find((act) => act.id === command)?.value).toMatchObject({

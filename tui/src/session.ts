@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import type { Fact, ImageAttachment, LiveAct, Turn } from "@furb/engine";
+import type { Fact, ImageAttachment, LiveAct, TuiContext, Turn } from "@furb/engine";
 import {
   actorParts,
   decodeRecord,
@@ -13,13 +13,13 @@ import {
   imageReferences,
   saveFile,
   shapes,
+  unwrapped,
 } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
-import { expandHome, fileReferences, projectFiles, shortenHome } from "./files.ts";
-import { dollars } from "./format.ts";
+import { expandHome, projectFiles, shortenHome } from "./files.ts";
 import { Preferences } from "./preferences.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { palettes, type ThemeName } from "./theme.ts";
@@ -52,9 +52,10 @@ export const statusLabels: Record<SessionStatus, string> = {
   error: "Error",
   opening: "Opening",
 };
-/** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
+/** Whether an act is at work: it lives, no pause holds it, and its work takes time: a prompt, a rung, or an act the
+ * World was started on. */
 export const working = (act: ActRow): boolean =>
-  !act.done && !act.paused && ["prompt", "rung", "bash", "wait"].includes(act.kind);
+  !act.done && !act.paused && (act.kind === "prompt" || act.kind === "rung" || act.started);
 /** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
  * than a cancel. */
 export function failed(act: ActRow): boolean {
@@ -229,30 +230,10 @@ export class Session extends EventEmitter {
   set theme(value: ThemeName) {
     this.preferences.save(value);
   }
+  /** Every fact of an act refreshes the views, whatever the kind an extension gave it, and a fact of a query of the
+   * moment, whose name holds an @, refreshes nothing. */
   private factsChanged = (facts: Fact[]) => {
-    if (
-      facts.some(
-        ([kind, id]) =>
-          [
-            "chain",
-            "prompt",
-            "rung",
-            "bash",
-            "wait",
-            "grant",
-            "answer",
-            "out",
-            "exited",
-            "close",
-            "cancel",
-            "pause",
-            "wake",
-            "tell",
-          ].includes(kind) ||
-          (kind === "done" && /^(prompt|rung|bash|wait|grant)\d+$/.test(id)),
-      )
-    )
-      void this.refresh().catch(this.fail);
+    if (facts.some(([, id]) => !id.includes("@"))) void this.refresh().catch(this.fail);
   };
   fail = (error: unknown) => {
     this.error = error instanceof Error ? error.message : String(error);
@@ -355,9 +336,7 @@ export class Session extends EventEmitter {
   }
   /** What the session is doing, over the acts of one chain or of every chain. */
   status(chain?: string): SessionStatus {
-    const acts = this.acts.filter(
-      (act) => act.kind !== "chain" && act.kind !== "grant" && (!chain || act.on === chain),
-    );
+    const acts = this.acts.filter((act) => !this.world.parts.hidden(act) && (!chain || act.on === chain));
     if (chain ? this.error : Object.values(this.errors).some(Boolean)) return "error";
     if (this.queueHeld && this.queued.length) return "blocked";
     if (this.world.pending.size) return "paused";
@@ -437,6 +416,26 @@ export class Session extends EventEmitter {
   }
   isUserPrompt(act: ActRow): boolean {
     return act.kind === "prompt" && act.by === "operator";
+  }
+  /** The names of the extensions whose words the World plays on each chain. */
+  get played(): string[] {
+    return this.world.extensions.flatMap((one) => (one.word || one.life ? [one.name] : []));
+  }
+  /** What a reference holds, which the operator follows: the text at a path, as the read of the chain on screen gives
+   * it, and the program of a prompt, as its ladder gives it, when the chain reads no such path. A read of the
+   * operator outside an act tells nothing, so it takes no show. */
+  async follow(value: string): Promise<string> {
+    try {
+      return unwrapped<{ content: string }>(await this.life.call("read", [value], { on: this.selected }))
+        .content;
+    } catch (error) {
+      if (this.actOf(value)?.kind !== "prompt") throw error;
+      const [, program] = (await this.life.call("ask", ["ladder", this.selected, value], {})) as [
+        unknown,
+        string,
+      ];
+      return program;
+    }
   }
   /** The act that a name or a door names: the act whose name is the first part of the path. */
   actOf(path: string): ActRow | undefined {
@@ -574,10 +573,46 @@ export class Session extends EventEmitter {
     this.save();
     this.notice = "Follow-up removed.";
   }
+  /** What the parts of the extensions do before a message is sent on a chain, as the files extension reads each
+   * file that the message names with @. */
   private async attachFiles(text: string, chain = this.selected): Promise<void> {
-    const directory = resolve(this.world.directory, await this.life.cwd(chain));
-    for (const path of await fileReferences(text, directory))
-      await this.life.result(await this.life.rung(`read(${JSON.stringify(path)})`, { on: chain }));
+    await this.world.parts.prompting(text, await this.contextOf(chain));
+  }
+  /** Where the paths of a chain resolve: the directory of the World, and what the `cwd` of the chain gives, when
+   * the chain binds one. */
+  private async directoryOf(chain: string): Promise<string> {
+    if (chain === this.selected) return this.workingDirectory;
+    const here = await this.life.call("cwd", [], { on: chain }).catch(() => "");
+    return resolve(this.world.directory, String(here));
+  }
+  /** What a part of an extension is given on a chain: the life, the chain and where its paths resolve, and the ways
+   * to reach this session. */
+  async contextOf(chain = this.selected): Promise<TuiContext> {
+    return this.contextOn(chain, await this.directoryOf(chain));
+  }
+  /** What a part of an extension is given on the chain on screen, now, with the files of the project as the view has
+   * read them. */
+  here(files?: () => string[] | undefined): TuiContext {
+    return this.contextOn(this.selected, this.workingDirectory, files);
+  }
+  private contextOn(chain: string, directory: string, files?: () => string[] | undefined): TuiContext {
+    return {
+      life: this.life,
+      chain,
+      directory,
+      acts: this.acts,
+      call: (verb, args = [], kwargs = {}) => this.life.call(verb, args, { on: chain, ...kwargs }),
+      path: (typed) => this.path(typed),
+      projectFiles: files ?? (() => undefined),
+      notify: (message) => {
+        this.notice = message;
+      },
+      submit: (message) => this.submit(message),
+      track: (id) => this.track(id),
+      show: (view) => {
+        this.view = view;
+      },
+    };
   }
   /** The name of a new branch of this chain: its name and the first number that no chain takes, as Main 2. */
   private branchLabel(): string {
@@ -615,7 +650,7 @@ export class Session extends EventEmitter {
     if (chain !== this.selected) await this.select(chain);
     const at = this.activity.findIndex((act) => act.id === id);
     const act = this.activity[at];
-    if (!act || ["chain", "grant"].includes(act.kind)) throw new Error(`There is no act ${id} to rewind to.`);
+    if (!act || this.world.parts.hidden(act)) throw new Error(`There is no act ${id} to rewind to.`);
     const message = this.isUserPrompt(act);
     // Every act after the point leaves the branch, a grant or a chain among them, so that the branch reads no ceiling
     // and no branch that came later.
@@ -672,16 +707,18 @@ export class Session extends EventEmitter {
     this.error = "";
     this.notice = "";
     // No program of Python starts with a slash, so a slash command is a command under edit too, as it is in Python.
+    const prefixed = this.world.parts.prefixed(text);
     if (text.startsWith("/")) await this.command(text);
     else if (this.editing) {
+      // The ladder of a prompt given a word replays the program of that prompt with it, which the rung asks.
       await this.life.result(
-        await this.life.rung(`write(Text(${JSON.stringify(this.editing)}, ${JSON.stringify(input)}))`, {
+        await this.life.rung(`ask("ladder", "", ${JSON.stringify(this.editing)}, ${JSON.stringify(input)})`, {
           on: this.selected,
         }),
       );
       this.notice = "Program updated and replayed.";
       this.editing = undefined;
-    } else if (text.startsWith("!")) await this.command(`/bash ${text.slice(1).trimStart()}`);
+    } else if (prefixed) await this.command(`/${prefixed.command} ${prefixed.argument}`);
     else {
       const pending = this.operatorPrompt;
       if (pending) await this.world.answer(pending.id, input);
@@ -755,23 +792,6 @@ export class Session extends EventEmitter {
           ? "Completed rungs collapse automatically."
           : "Rungs keep their open state.";
         break;
-      case "grant": {
-        const amount = Number(argument);
-        if (!argument || !Number.isFinite(amount) || amount < 0)
-          throw new Error("Use /grant followed by a dollar amount.");
-        const id = await this.life.grant({ usd: amount, on: this.selected });
-        const got = await this.life.outcome(id);
-        if (got.done) throw new Error(JSON.stringify(got.value));
-        this.notice = `Budget set to ${dollars(amount)}. Use /wake if paused.`;
-        break;
-      }
-      case "context": {
-        const amount = Number(argument);
-        if (!argument || !Number.isFinite(amount) || amount < 0 || amount > 1)
-          throw new Error("Use /context with a number from 0 to 1.");
-        await this.life.grant({ share: amount, on: this.selected });
-        break;
-      }
       case "model": {
         if (!argument) throw new Error("Use /model followed by a model name.");
         const name = await this.world.model(argument);
@@ -820,18 +840,6 @@ export class Session extends EventEmitter {
         this.theme = argument as ThemeName;
         this.preferences.save(this.theme);
         break;
-      case "bash":
-        this.track(await this.life.bash(argument, { on: this.selected }));
-        this.view = "feed";
-        break;
-      case "read": {
-        this.track(await this.life.rung(`read(${JSON.stringify(argument)})`, { on: this.selected }));
-        this.view = "feed";
-        break;
-      }
-      case "cd":
-        this.track(await this.life.rung(`cd(${JSON.stringify(argument)})`, { on: this.selected }));
-        break;
       case "edit": {
         // The latest prompt with a program: one of its rungs holds a word the gate let run on this chain.
         const id =
@@ -844,19 +852,13 @@ export class Session extends EventEmitter {
                 this.activity.some((rung) => rung.by === act.id && Object.hasOwn(this.program, rung.id)),
             )?.id;
         if (!id) throw new Error("There is no prompt program to edit.");
-        const got = (await this.life.read(id, undefined, this.selected)) as { content: string };
+        const [, program] = (await this.life.call("ask", ["ladder", this.selected, id], {})) as [
+          unknown,
+          string,
+        ];
         this.editing = id;
-        this.emit("compose", this.drafts[this.draftKey] ?? got.content);
+        this.emit("compose", this.drafts[this.draftKey] ?? program);
         this.notice = "Edit the Python program, then submit to replay it.";
-        break;
-      }
-      case "feed": {
-        const space = argument.indexOf(" ");
-        const id = space < 0 ? argument : argument.slice(0, space);
-        const text = space < 0 ? "" : argument.slice(space + 1);
-        if (!id) throw new Error("Use /feed followed by an act id and text.");
-        // A fed text is one line of input, and no text closes the input.
-        await this.life.write({ path: `${id}/stdin`, content: text && `${text}\n` }, this.selected);
         break;
       }
       case "close": {
@@ -888,8 +890,11 @@ export class Session extends EventEmitter {
         this.emit("shared", path, shareMarkdown(this));
         break;
       }
-      default:
-        throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
+      default: {
+        const given = this.world.parts.commands.get(command);
+        if (!given) throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
+        await given.run(argument, await this.contextOf());
+      }
     }
   }
 

@@ -1,5 +1,5 @@
-/** Names, labels, arguments, and help for every slash command. An argument in angle brackets is needed, and one in
- * square brackets may be left out. */
+/** Names, labels, arguments, and help for every slash command of the TUI. An argument in angle brackets is needed,
+ * and one in square brackets may be left out. The extensions add commands of their own. */
 export const commands = {
   new: ["New session", "", "Start a fresh life"],
   model: ["Choose model", "[model]", "Choose the model that answers on this chain"],
@@ -17,18 +17,12 @@ export const commands = {
   image: ["Attach image", "[path]", "Attach an image file, or paste one from the clipboard"],
   editor: ["External editor", "", "Edit this draft with VISUAL or EDITOR"],
   run: ["Run Python", "<python>", "Write a rung through the gate"],
-  bash: ["Run command", "<command>", "Stream a shell command"],
-  read: ["Read file", "<path>", "Show a file to this chain"],
-  cd: ["Change directory", "<path>", "Change this chain's working directory"],
   edit: ["Edit program", "[prompt id]", "Change a prompt's program and replay it"],
   inspect: ["Inspect a name", "<name>", "Read a value from this chain's module"],
   details: ["Details", "", "Expand or collapse an act in the current view"],
-  grant: ["Set budget", "<dollars>", "Pause at a dollar ceiling"],
-  context: ["Set context ceiling", "<fraction>", "Pause at a share of the model window"],
   pause: ["Pause chain", "[id]", "Hold delivery while work completes"],
   wake: ["Resume chain", "[id]", "Deliver pending work"],
   cancel: ["Cancel work", "[id]", "End an act or the selected chain's work"],
-  feed: ["Feed command", "<id> [text]", "Send a line of input to a command; no text closes its input"],
   close: ["Answer an act", "<id> <json>", "Close an act with a JSON value"],
   name: ["Name this session", "<name>", "Set a name in the session picker"],
   share: ["Share conversation", "[path]", "Export a standalone HTML conversation"],
@@ -37,6 +31,6 @@ export const commands = {
   sidebar: ["Toggle sidebar", "", "Show or hide the chains, the usage, and the workspaces"],
   delete: ["Delete session", "", "Move a session and its files to the workspace trash"],
   autocollapse: ["Automatic rung collapse", "", "Toggle collapse of completed rungs"],
-  extension: ["Load extension", "<path>", "Load commands from a TypeScript or JavaScript extension"],
+  extensions: ["Extensions", "[update]", "List the extensions of this session, or fetch them again"],
   exit: ["Exit", "", "Save every session and quit"],
 } as const;

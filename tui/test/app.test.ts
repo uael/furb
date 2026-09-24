@@ -69,6 +69,13 @@ test("the real native life drives the feed, the transcript, the palette, and res
     session.show("transcript");
     app.render();
     await test.flush();
+    // The transcript opens with the words of the builtins, which the World played, and the word of the model follows.
+    for (let top = 0; !test.captureCharFrame().includes('notes = read("README.md")'); top += 20) {
+      if (top > app.scroll.scrollHeight) break;
+      app.scroll.scrollTo(top);
+      app.render();
+      await test.flush();
+    }
     expect(test.captureCharFrame()).toContain('notes = read("README.md")');
     session.show("feed");
     app.palette();
@@ -442,6 +449,10 @@ test("a name inside a transcript tag opens the same live inspector as Python cod
     await session.life.result(await session.life.rung("answer = 17"));
     await session.refresh();
     session.show("transcript");
+    app.render();
+    await screen.flush();
+    // The transcript opens with the words of the builtins, which the World played, so the rung stands at its end.
+    app.scroll.scrollTo(app.scroll.scrollHeight);
     app.render();
     await screen.flush();
     const lines = screen.captureCharFrame().split("\n");

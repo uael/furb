@@ -1,7 +1,6 @@
 import { mkdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { saveFile } from "@furb/engine";
+import { configDirectory, saveFile } from "@furb/engine";
 import { defaultTheme, palettes, type ThemeName } from "./theme.ts";
 
 export class Preferences {
@@ -12,18 +11,8 @@ export class Preferences {
   foldRungs = true;
   notice = "";
   private saved = "";
-  constructor(
-    readonly path = join(
-      process.env.FURB_CONFIG_DIR ??
-        join(
-          process.env.XDG_CONFIG_HOME ??
-            (process.platform === "win32" ? process.env.APPDATA : undefined) ??
-            join(homedir(), ".config"),
-          "furb",
-        ),
-      "ui.json",
-    ),
-  ) {
+  /** The preferences in `ui.json` of the config directory, which the config of the extensions shares. */
+  constructor(readonly path = join(configDirectory(), "ui.json")) {
     try {
       const saved = JSON.parse(readFileSync(path, "utf8")) as {
         theme?: string;

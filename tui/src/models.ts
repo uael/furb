@@ -6,7 +6,10 @@ import { type ClaudeOptions, claudeProvider } from "@furb/engine/claude";
 export const defaultModel = "claude-cli:sonnet";
 
 /** What a session asks of its worker, as plain data: the options of its World, and the Claude CLI it reaches. */
-export type EngineOptions = Omit<WorldOptions, "models"> & { demo?: boolean; claude?: ClaudeOptions };
+export type EngineOptions = Omit<WorldOptions, "models" | "parts"> & {
+  demo?: boolean;
+  claude?: ClaudeOptions;
+};
 
 /** The models of the TUI: every provider of pi-ai, with the Claude CLI added to them as a provider of its own. */
 export function hostModels(claude?: ClaudeOptions) {

@@ -2,7 +2,7 @@ import { pathToFileURL } from "node:url";
 import type { Extension } from "../index.cjs";
 import bash from "./builtin/bash.js";
 import files from "./builtin/files.js";
-import type { WorldExtension } from "./extension.js";
+import type { TuiExtension, TuiPart, WorldExtension } from "./extension.js";
 
 /** The parts for a World in TypeScript of the builtin extensions, by the name of their extension. Grant has none. */
 export const builtinWorldParts: Readonly<Record<string, WorldExtension>> = { files, bash };
@@ -27,5 +27,21 @@ export async function loadWorldParts(
   for (const one of extensions)
     if (!parts[one.name] && !one.builtin && one.world.ts)
       parts[one.name] = await imported<WorldExtension>(one, one.world.ts, "World");
+  return parts;
+}
+
+/** The parts for the TUI of the extensions, in their order: the part the host gives for a builtin, and the file each
+ * other extension names for the TUI, imported and made. */
+export async function loadTuiParts(
+  extensions: readonly Extension[],
+  builtin: Readonly<Record<string, TuiExtension>> = {},
+): Promise<{ name: string; part: TuiPart }[]> {
+  const parts: { name: string; part: TuiPart }[] = [];
+  for (const one of extensions) {
+    const made = one.builtin
+      ? builtin[one.name]
+      : one.tui && (await imported<TuiExtension>(one, one.tui, "TUI"));
+    if (made) parts.push({ name: one.name, part: await made() });
+  }
   return parts;
 }

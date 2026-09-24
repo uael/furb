@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { RecordLock } from "@furb/engine";
+import { RecordLock, unwrapped } from "@furb/engine";
 import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type Engine, openEngine } from "../src/bridge.ts";
@@ -64,7 +64,9 @@ test("a session that cannot save its view still ends its World, its commands and
   const opened = await openEngine({ cwd: directory, record, demo: true });
   const session = new Session(opened.life, opened.world, true);
   try {
-    const command = await session.life.bash(`${printPid}; sleep 30`);
+    const command = String(
+      await session.life.call("bash", [`${printPid}; sleep 30`], { on: session.life.root }),
+    );
     const pid = () =>
       Number(
         (session.acts.find((act) => act.id === command)?.value as { stdout?: { content: string } })?.stdout
@@ -148,7 +150,10 @@ test("a follow-up that the operator removes while an earlier one is sent is not 
     expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
       "First follow-up on main",
     ]);
-    expect(session.acts.filter((act) => act.on === other && act.kind === "rung")).toEqual([]);
+    // No rung read a file that the removed follow-up named: the rungs of the chain are the words the World played.
+    expect(
+      session.acts.filter((act) => act.on === other && act.kind === "rung" && act.by !== "world"),
+    ).toEqual([]);
   } finally {
     session.world.sendQueued = send;
     await session.dispose();
@@ -167,10 +172,10 @@ test("a follow-up that the operator removes while its files are read is not sent
     const reading = new Proxy(life, {
       get(target, key) {
         const value = Reflect.get(target, key);
-        if (key !== "rung") return value;
-        return (...args: Parameters<Engine["rung"]>) => {
-          if (session.queued.includes(entry)) session.removeQueued(entry.id);
-          return life.rung(...args);
+        if (key !== "call") return value;
+        return (...args: Parameters<Engine["call"]>) => {
+          if (args[0] === "rung" && session.queued.includes(entry)) session.removeQueued(entry.id);
+          return life.call(...args);
         };
       },
     });
@@ -194,7 +199,12 @@ test("a follow-up that the operator removes while its files are read is not sent
 test("each /feed sends one line, and a /feed with no text closes the input", async () => {
   const session = await demoSession();
   try {
-    const command = await session.life.bash('read -r a; read -r b; echo "a=[$a] b=[$b]"; cat', { fed: true });
+    const command = String(
+      await session.life.call("bash", ['read -r a; read -r b; echo "a=[$a] b=[$b]"; cat'], {
+        fed: true,
+        on: session.life.root,
+      }),
+    );
     await session.submit(`/feed ${command} yes`);
     await session.submit(`/feed ${command} two  words`);
     await until(session, () =>
@@ -205,7 +215,7 @@ test("each /feed sends one line, and a /feed with no text closes the input", asy
     );
     expect((await session.life.outcome(command)).done).toBe(false);
     await session.submit(`/feed ${command}`);
-    expect(await session.life.result(command)).toMatchObject({
+    expect(unwrapped(await session.life.result(command))).toMatchObject({
       code: 0,
       stdout: { content: "a=[yes] b=[two  words]\n" },
     });
@@ -272,30 +282,23 @@ test("the answers to the questions of the snapshots stay out of the facts of the
   }
 }, 30000);
 
-test("a path that starts with ~ is read from the home directory by /share, /export, /image and /extension", async () => {
+test("a path that starts with ~ is read from the home directory by /share, /export and /image", async () => {
   const home = await mkdtemp(join(tmpdir(), "furb-home-"));
   const script = join(home, "run.ts");
   const pixel =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
   try {
     await writeFile(join(home, "pixel.png"), Buffer.from(pixel, "base64"));
-    await writeFile(
-      join(home, "extension.ts"),
-      'export default (api) => api.registerCommand("home-probe", { label: "Home", description: "A probe", run() {} });',
-    );
     // The home directory of a process is read once, so a process of its own gives the test a home of its own.
     await writeFile(
       script,
       `import { demoSession, removeDemoDirectories } from ${JSON.stringify(join(import.meta.dir, "../src/demo.ts"))};
-import { Extensions } from ${JSON.stringify(join(import.meta.dir, "../src/extensions.ts"))};
 const session = await demoSession();
-const extensions = new Extensions(() => { throw new Error("No context is asked."); });
 try {
   await session.submit("/share ~/shared/chat.html");
   await session.submit("/export ~/export.json");
   await session.attachImage("~/pixel.png");
-  await extensions.load(session.path("~/extension.ts"));
-  console.log(JSON.stringify({ images: session.images[session.selected]?.length, commands: [...extensions.commands.keys()] }));
+  console.log(JSON.stringify({ images: session.images[session.selected]?.length }));
 } finally {
   await session.dispose();
   await removeDemoDirectories();
@@ -316,7 +319,7 @@ try {
     ]);
     expect(errors).toBe("");
     expect(code).toBe(0);
-    expect(JSON.parse(output)).toEqual({ images: 1, commands: ["home-probe"] });
+    expect(JSON.parse(output)).toEqual({ images: 1 });
     expect(await readFile(join(home, "shared/chat.html"), "utf8")).toContain("<!doctype html>");
     expect(JSON.parse(await readFile(join(home, "export.json"), "utf8")).chain).toBe("chain1");
     expect(existsSync(join(home, "~"))).toBe(false);

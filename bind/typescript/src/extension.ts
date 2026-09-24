@@ -1,4 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import type { Act, Life } from "../index.cjs";
 import type { LiveAct } from "./activity.js";
 import type { FileChange } from "./changes.js";
 import type { Fact } from "./types.js";
@@ -78,6 +79,101 @@ export interface WorldContext {
   /** The refusal of a question, as it crosses. */
   refused(message: string): Fault;
 }
+
+/** A life seen from another thread: each method gives a promise, and an act gives its name. */
+export type Remote<T> = {
+  [K in keyof T]: T[K] extends (...args: infer A) => infer R
+    ? (...args: A) => Promise<R extends Act ? string : Awaited<R>>
+    : T[K];
+};
+
+/** What the TUI gives a part: the life, the chain on screen and where its paths resolve, and the ways to reach the
+ * session. The code of an extension reaches the TUI through this alone. */
+export interface TuiContext {
+  life: Remote<Life>;
+  /** The chain on screen. */
+  chain: string;
+  /** The directory that the paths of the chain on screen resolve against. */
+  directory: string;
+  /** The acts of the session, as the views read them, with the value of each as its plain data. */
+  acts: readonly LiveAct[];
+  /** A verb said on the chain on screen, unless the keywords name another chain. */
+  call(verb: string, args?: unknown[], kwargs?: Record<string, unknown>): Promise<unknown>;
+  /** A path that the operator typed, with `~` as the home, against the directory of the chain. */
+  path(typed: string): string;
+  /** The files of the project, once the TUI has read them. */
+  projectFiles(): string[] | undefined;
+  notify(message: string): void;
+  submit(message: string): Promise<void>;
+  /** An act that the session follows until it is done, and shows the failure of. */
+  track(id: string): void;
+  show(view: "feed" | "transcript" | "changes"): void;
+}
+/** A value that the argument of a command takes, which the suggestions offer. A value with more after it waits for
+ * the rest, and any other value runs the command when it is chosen. */
+export interface TuiValue {
+  value: string;
+  detail: string;
+  more?: boolean;
+}
+/** A slash command of a part: its label, its argument (in angle brackets when it is needed, in square brackets when
+ * it may be left out), what it does, the key that says it, whether its value is a path of the project, the values
+ * its argument takes, and what it does when it runs. */
+export interface TuiCommand {
+  label: string;
+  argument?: string;
+  detail: string;
+  keys?: string;
+  paths?: boolean;
+  values?(context: TuiContext): TuiValue[];
+  run(argument: string, context: TuiContext): void | Promise<void>;
+}
+/** How the TUI shows an act of a kind of a part. By default an act shows its kind as its title and its first word as
+ * its subject, and it is at work while it lives, no pause holds it, and the World was started on it. */
+export interface ActView {
+  subject?(act: LiveAct): string;
+  /** What the card of the act shows under its heading while it is folded, and whether that is the tail. */
+  preview?(act: LiveAct): { text: string; tail?: boolean } | undefined;
+  /** What the card shows when it opens: streams of text, each with its name when it has one, then notes under them,
+   * each with its label. */
+  details?(act: LiveAct):
+    | {
+        streams?: { name: string; content: string; failure?: boolean }[];
+        notes?: { label?: string; text: string; tone?: "faint" | "success" | "danger" }[];
+      }
+    | undefined;
+  /** A pause does not hold its work, as a command runs on while its chain is paused. */
+  runsPaused?: boolean;
+  /** It stands over its chain: a dot while it lives, and "ended" once it is done. */
+  standing?: boolean;
+  /** It is no card, no point to rewind to, and no state of its chain. */
+  hidden?: boolean;
+  /** The header words that tell how it ended, which its card shows as its state. */
+  ends?: string[];
+  /** The names of its words, which its details show. */
+  fields?: string[];
+}
+/** What a part adds to the sidebar for the chain on screen: rows under the usage, and a mark on the meter of the
+ * context with the words of its tip. */
+export interface SidebarPart {
+  rows?: { name: string; value: string; tone?: "muted" | "text" }[];
+  meter?: { mark: number; tip: string };
+}
+/** The part of an extension for the TUI: its commands, the prefixes of the input that say a command, how it shows the
+ * acts of its kinds, the header words of the notes that no card shows, the header words whose detail is a path, what
+ * it adds to the sidebar, and what it does before a message of the operator is sent. */
+export interface TuiPart {
+  commands?: Record<string, TuiCommand>;
+  prefixes?: Record<string, string>;
+  acts?: Record<string, ActView>;
+  quiet?: string[];
+  paths?: string[];
+  sidebar?(view: { acts: readonly LiveAct[]; chain: string }): SidebarPart | undefined;
+  prompting?(message: string, context: TuiContext): Promise<void>;
+  dispose?(): void | Promise<void>;
+}
+/** The default export of the file an extension names for the TUI. */
+export type TuiExtension = () => TuiPart | Promise<TuiPart>;
 
 /** A value of a class that a word defined, as it crosses out of the life: its class, and its fields. */
 export interface Instance {
