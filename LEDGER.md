@@ -141,12 +141,7 @@ with this ledger.
 
 ## Next steps, in order
 
-1. Rewrite test/files, test/bash, test/grant with `Sand(words=BASH|FILES|GRANT)`, `Bound(root)` for verbs, fix ids
-   (extension rungs take rung1.. and their words stand in the turns), one test per sentence of each .pyi.
-   Make the builtins modules of form (b) (decision 5): they import from `furb.engine` and `furb.builtin.files`, ruff
-   and ty check them with no per-file ignore; exclude them from coverage only (they run as words in a chain). The
-   word rule lands in the crate first (a function of `furb_monty`), and `conftest.BUILTIN` makes the words with it.
-2. Crate and Python host (decision 6). (a) Crate: a module `src/extension.rs` with `src/extension.test.rs`: the
+1. Crate and Python host (decision 6). (a) Crate: a module `src/extension.rs` with `src/extension.test.rs`: the
    config (home `$XDG_CONFIG_HOME/furb` or `FURB_CONFIG_DIR`, and local `<project>/.furb/config.json`, merged by
    name, paths resolved against the directory of their file, `~` expanded), the cache (`$XDG_CACHE_HOME/furb`), the
    fetch (path; git by the `git` command; npm by `npm pack` and `tar`), the manifest (`package.json` field `furb`),
@@ -162,18 +157,35 @@ with this ledger.
    ... from PURE and bash/grant from ACTS. (c) Python host: world.py and cli.py use the extension API of furb_monty
    for the config, the fetch, the manifests, the order and the words, keep python world parts for files and bash,
    and load no external world part yet (decision 4: later). test/outside follows.
-3. TypeScript: napi exposes the extension API of the crate (config, cache, fetch, manifest, order, word), and the
+2. TypeScript: napi exposes the extension API of the crate (config, cache, fetch, manifest, order, word), and the
    `Life` of napi plays the words itself; TS keeps the World parts (generic World, the builtin parts of files and
    bash), the TUI parts, and the dynamic import of their code. README; then TUI parts and app.ts/session.ts
    (bash/grant/read/cd specifics), docs, screenshots (bun must be >= 1.4.2 for the TUI; host has 1.3.11).
-4. `extensions/skills/`: package.json manifest, skills.py + skills.pyi + tests, world.ts (finds SKILL.md under
+3. `extensions/skills/`: package.json manifest, skills.py + skills.pyi + tests, world.ts (finds SKILL.md under
    `.furb/skills`, the config dir `skills/`, and `.claude/skills`), tui.ts (`/skills`, `/skill <name>`); prove path,
    git (local bare repo) and npm (local tarball) loading in tests.
-5. docs/extensions.md, CLAUDE.md, src/furb/CLAUDE.md (technical names: door, text, command, merged, show, grant,
+4. docs/extensions.md, CLAUDE.md, src/furb/CLAUDE.md (technical names: door, text, command, merged, show, grant,
    ledger move to the extensions; add ladder, extension), developer guide, READMEs; every gate green
    (`uv run pytest -q`, hygiene, ruff format/check, `uv run ty check --error-on-warning`, cargo fmt/clippy/test,
    `uv run pre-commit run --all-files`, bun check/lint/test). Delete this ledger. Tell the owner a release of `furb`
    (pypi, tag `v*`) and a publish of `@furb/skills` (npm) are theirs to do.
+
+- The builtin suites are done (commits c252c1e to this one): the builtins are python modules of form (b), which
+  import from `furb.engine` and `furb.builtin.files`; ruff reads them with the vocabulary ignores of the engine (the
+  contract fixes their signatures, and a word types its verbs and nothing else), and ty reads them with
+  `invalid-argument-type` and `invalid-return-type` off (the bus answers object, and a verb gives the act of its
+  kind), and coverage omits them (they run as words). The crate has `src/extension.rs` with `word` (LF first,
+  blank the top-level `from furb` imports, keep every other byte, refuse a file that does not parse with its line),
+  `builtins`, `words`, `missing`, `Extension`, `Worlds` and `Error::Word`, with `src/extension.test.rs`. furb_monty
+  gives `Extension`, `builtin_extensions`, `word_of` and `missing_words`. `conftest.BUILTIN` reads the words from
+  the crate; the builtin suites run on both engines (`pytest_generate_tests` parametrizes every suite folder but
+  `outside`); the no-shadow law reads the word the crate makes and accepts an import that binds a name the way the
+  engine or another word binds it. `uv run pytest -q --no-cov test --ignore=test/outside`: 1430 passed, 4 skipped,
+  hygiene green; ruff and ty clean on the suite. Test helpers added to conftest: `sown(words)`, `worded(word,
+  words)` (runs a word on a fresh root), `texted(got)` and `exited(got)` (read a Text or an Exit on both engines:
+  monty gives the fields of a word's class and no method), `made(on, name, *args)` (call a class or a show that a
+  chain binds, as the operator). To pass HIDDEN itself (a verb compares it by identity), use
+  `getattr(Bound(root), "HIDDEN")`. `unwire` keeps the mark of a class it does not know as plain data.
 
 ## Questions for the owner
 

@@ -99,14 +99,15 @@ def wire(x: object) -> object:
 
 
 def unwire(x: object) -> object:
-  """The value again from its plain form, as the World of this machine reads it back."""
+  """The value again from its plain form, as the World of this machine reads it back: the mark of a class this
+  interpreter does not know stays the plain data it is, as a record of 0.1.0 holds a Text."""
   match x:
     case list():
       return [unwire(i) for i in x]
-    case {"is": str(name), **rest}:
+    case {"is": str(name), **rest} if name in (known := vars(builtins) | vars(engine)):
       held = rest.pop("args", [])
       args = [unwire(i) for i in held] if isinstance(held, list) else []
-      return (vars(builtins) | vars(engine))[name](*args, **{str(k): unwire(v) for k, v in rest.items()})
+      return known[name](*args, **{str(k): unwire(v) for k, v in rest.items()})
     case dict():
       return {k: unwire(v) for k, v in x.items()}
   return x
@@ -322,8 +323,8 @@ class Bound:
 
 
 def made(on: str, name: str, *args: object) -> object:
-  """An instance of a class that the module of a chain binds, made by the operator, which goes back into the life as
-  the instance it is on each engine."""
+  """What a callable that the module of a chain binds gives, called by the operator with no chain: an instance of a
+  class of a word, or a show, which goes back into the life as itself on each engine."""
   kind = getattr(Bound(on), name)
   assert callable(kind)
   return kind(*args)
@@ -539,6 +540,12 @@ def texted(got: object) -> tuple[object, object]:
   """The path and the content of a text a verb gave, which is how a test reads an instance of a class of a word on
   each engine: the engine of monty gives its fields and no method."""
   return getattr(got, "path", None), getattr(got, "content", None)
+
+
+def exited(got: object) -> tuple[object, tuple[object, object], tuple[object, object]]:
+  """The code of an Exit and the path and the content of each of its streams, which is how a test reads what a
+  command came to on each engine."""
+  return getattr(got, "code", None), texted(getattr(got, "stdout", None)), texted(getattr(got, "stderr", None))
 
 
 async def worded(word: str, words: Sequence[str] = FILES) -> object:
