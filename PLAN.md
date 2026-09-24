@@ -36,8 +36,17 @@ documents and the releases. Part 4 is the plan of the crate and the Python host.
 11. The TUI gives no `{is: "name", name: "HIDDEN"}` any more (`app.ts:2439`, `app.ts:2454`): a read of the operator
     outside an act tells nothing already, so it gives no show.
 12. `/edit` reads and writes a door through the core `ladder` query, so it needs no extension.
-13. The last line `skills()` of `extensions/skills/skills.py` stays for now, so a chain tells its skills before its
-    first ask. The owner may drop it; the lead asks.
+13. The owner chose (answered): the skills extension refreshes what lives outside the record.
+    - A manifest may name a `life` word beside `python`: `"furb": {"python": "skills.py", "life": "skills()"}`.
+      The module of `python` defines names alone and is played once per chain, by the play rule. The `life` word is
+      played as the World in every life: after boot, on each live chain without a source, and at the birth of each
+      chain without a source right after the words of the modules. Never while the record replays. The crate
+      carries the rule, so every host plays it the same way. A chain with a source gets nothing of its own.
+    - `skills.py` has no last line `skills()`. `skills()` compares what the World answers now with what the
+      transcript of its chain told before (as `cwd` reads the transcript), and tells one line for each skill that
+      is new or whose description changed, one line for each skill that is gone, and nothing when nothing changed.
+      The first life tells every skill; a resume tells what changed.
+    - The TUI part of skills gives `/reload-skills`, which runs the rung `skills()` on the chain on screen.
 
 14. Part 4 amends. A World in rust says the kinds of act it does (`fn kinds(&self) -> Vec<String>`, empty by
     default), as a World part in TypeScript says `acts`. The stand-in closes a start of a kind that is no wait, no
@@ -47,8 +56,15 @@ documents and the releases. Part 4 is the plan of the crate and the Python host.
     when the extension loads, with its file and its line, so the host says it once and plays nothing, and no chain
     plays a broken word at each birth. It turns CRLF into LF (decision 7), where part 4 keeps CRLF. An import that
     shares its line with another statement goes with its semicolon, as the code does now, where part 4 refuses it.
-16. A record of an earlier version holds `{"is": "Text"}` and the old shape of a write, so it does not open. The
-    release note says so. No reader of the old shape is kept unless the owner asks for one; the lead asks.
+16. The owner chose (answered): `Text`, `read` and `write` keep their signatures and meanings. Only what the word
+    asks the World and what the World answers are plain data. A record of 0.1.0 still opens: the reader of a record
+    (`unwire` in `src/furb/world.py`, `again` in `src/preamble.py`, the reader of `bind/typescript`) keeps the mark of
+    a class it does not know, `{"is": "Text", ...}`, as its plain fields, and `landed()` makes the Text of it. On
+    replay a query takes its answer by its name and nothing compares its words, so the old shape of the write
+    question does not drift. A test opens a real record of 0.1.0 on each host.
+17. The owner chose (answered): a requirement that is off refuses the extension that needs it, with a message that
+    says to turn that one off too. An extension whose word changed (an upgrade) is played as one more rung on a chain
+    whose record holds the old word, and the later word binds last.
 
 ## Part 2: the TypeScript host and the TUI
 
