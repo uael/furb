@@ -1,7 +1,8 @@
 # furb TUI
 
 An OpenTUI application built on `@furb/engine`. The TUI owns a Bun worker for each open life and its World.
-Rendering, input, and syntax coloring stay responsive while the sandbox gates and runs Python.
+Rendering, input, and syntax coloring stay responsive while the sandbox gates and runs Python. The TUI needs Bun
+1.4.2 or later. On Windows, Bun 1.3 crashes the TUI when it calls into OpenTUI.
 
 ```sh
 uv sync
