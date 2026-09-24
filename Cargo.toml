@@ -33,6 +33,11 @@ typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build", "dep:serde_json",
 monty = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 monty-type-checking = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 monty-types = { git = "https://github.com/uael/monty", rev = "b70678d3" }
+# The parser of python that monty reads a word with, which the crate reads the python part of an extension with:
+# the word of a module is the module less its imports of the engine.
+ruff_python_ast = "0.0.9"
+ruff_python_parser = "0.0.9"
+ruff_text_size = "0.0.9"
 pyo3 = { version = "0.29.2", features = ["generate-import-lib"], optional = true }
 napi = { version = "3", default-features = false, features = ["napi6", "serde-json", "dyn-symbols"], optional = true }
 napi-derive = { version = "3", optional = true }

@@ -21,6 +21,7 @@
 //! globals of a chain hold what the engine defines and nothing more.
 
 pub mod ear;
+pub mod extension;
 pub mod fact;
 pub mod gate;
 pub mod life;
