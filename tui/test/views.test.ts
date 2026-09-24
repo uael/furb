@@ -217,7 +217,7 @@ test("a card that the view goes to, or that Details expands, is in view once the
     expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.viewport.height * 2);
     expect(seen(rung)).toBe(true);
     // Folded rungs take a row each, so that the heading of one stands at the foot of the view.
-    session.preferences.autoCollapseRungs = true;
+    session.preferences.foldRungs = true;
     app.scroll.scrollTo(app.scroll.scrollHeight);
     await laid();
     const view = app.scroll.viewport;
@@ -386,7 +386,8 @@ test("the toggle, the keys of the footer, and the palette answer the mouse, and 
     ).toBe(open);
     expect(screen.renderer.getSelection()?.getSelectedText()).toBeTruthy();
     expect(session.notice).toStartWith("Copied");
-    // A click on the heading folds the card.
+    // A rung that is over starts folded to its heading, and a click on the heading opens it.
+    expect(open).toBe(1);
     await screen.mockMouse.click(heading.x + 2, heading.y);
     app.render();
     await screen.flush();
@@ -394,8 +395,8 @@ test("the toggle, the keys of the footer, and the palette answer the mouse, and 
       app.scroll
         .getChildren()
         .find((node) => node.id === card.id)
-        ?.getChildren(),
-    ).toHaveLength(1);
+        ?.getChildren().length,
+    ).toBeGreaterThan(1);
   } finally {
     app.dispose();
     screen.renderer.destroy();

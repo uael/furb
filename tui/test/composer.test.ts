@@ -455,3 +455,39 @@ test("the usage counts each token once, and the context share shows from the fir
     expect(shown).not.toContain("Cached");
     expect(shown).toContain("━");
   }));
+
+test("a paused chain says so at the end of its feed and in the footer, and Resume wakes it", () =>
+  composing(async ({ session, screen, frame }) => {
+    await session.submit("/pause");
+    await until(session, () => session.paused);
+    let shown = await frame();
+    expect(shown).toContain("This chain is paused");
+    expect(shown).toContain("/wake resume");
+    const lines = shown.split("\n");
+    const row = lines.findIndex((line) => line.includes("Resume") && line.includes("runs what waits"));
+    await screen.mockMouse.click((lines[row] ?? "").indexOf("Resume") + 1, row);
+    await until(session, () => !session.paused);
+    shown = await frame();
+    expect(shown).not.toContain("This chain is paused");
+  }));
+
+test("a message sent to a paused chain wakes it, and the answer comes", () =>
+  composing(async ({ session, app }) => {
+    await session.submit("/pause");
+    await until(session, () => session.paused);
+    app.composer.setText("Explore this project.");
+    await app.submit();
+    expect(session.paused).toBe(false);
+    expect(session.notice).toBe("The paused chain resumed with this message.");
+    await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
+  }));
+
+test("a notice cut to the room of the footer shows whole in a tip while the pointer is over it", () =>
+  composing(async ({ session, screen, frame }) => {
+    session.notice = `A notice longer than its line ${"and longer ".repeat(12)}to its very end`;
+    const lines = (await frame()).split("\n");
+    const row = lines.findIndex((line) => line.includes("A notice longer"));
+    expect(lines[row]).not.toContain("to its very end");
+    await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("A notice") + 2, row);
+    expect(await frame()).toContain("to its very end");
+  }));

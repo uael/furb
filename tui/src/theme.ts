@@ -13,6 +13,8 @@ interface Palette {
   selected: string;
   border: string;
   text: string;
+  /** The text of an answer, a step softer than the text of the chrome. */
+  prose: string;
   muted: string;
   /** Line numbers, separators, and connectors. */
   faint: string;
@@ -44,6 +46,7 @@ export const palettes = {
     selected: "#1c2d42",
     border: "#30363d",
     text: "#e6edf3",
+    prose: "#c9d1d9",
     muted: "#8b949e",
     faint: "#6e7681",
     accent: "#58a6ff",
@@ -69,6 +72,7 @@ export const palettes = {
     selected: "#243a30",
     border: "#2c4238",
     text: "#e3e9df",
+    prose: "#c9d1c4",
     muted: "#91a697",
     faint: "#66796b",
     accent: "#b7d89b",
@@ -94,6 +98,7 @@ export const palettes = {
     selected: "#dbe5d2",
     border: "#c9cfbf",
     text: "#243329",
+    prose: "#324237",
     muted: "#56685a",
     faint: "#86938a",
     accent: "#3c673c",
@@ -119,6 +124,7 @@ export const palettes = {
     selected: "#2e3955",
     border: "#36405a",
     text: "#e4e9f4",
+    prose: "#c6cee0",
     muted: "#9daec7",
     faint: "#6d7a93",
     accent: "#bbc3ff",
@@ -155,6 +161,7 @@ export const glyph = {
   open: "▾",
   closed: "▸",
   dot: "●",
+  running: "◉",
   ring: "○",
   held: "◌",
   asks: "◆",

@@ -8,7 +8,8 @@ export class Preferences {
   theme: ThemeName = defaultTheme;
   sidebar = true;
   sidebarWidth = 32;
-  autoCollapseRungs = false;
+  /** Whether a rung that is over starts folded in the feed. */
+  foldRungs = true;
   notice = "";
   private saved = "";
   constructor(
@@ -28,11 +29,11 @@ export class Preferences {
         theme?: string;
         sidebar?: boolean;
         sidebarWidth?: number;
-        autoCollapseRungs?: boolean;
+        foldRungs?: boolean;
       } | null;
       if (saved?.theme && Object.hasOwn(palettes, saved.theme)) this.theme = saved.theme as ThemeName;
       if (typeof saved?.sidebar === "boolean") this.sidebar = saved.sidebar;
-      if (typeof saved?.autoCollapseRungs === "boolean") this.autoCollapseRungs = saved.autoCollapseRungs;
+      if (typeof saved?.foldRungs === "boolean") this.foldRungs = saved.foldRungs;
       if (typeof saved?.sidebarWidth === "number")
         this.sidebarWidth = Math.max(26, Math.min(48, saved.sidebarWidth));
     } catch (error) {
@@ -46,7 +47,7 @@ export class Preferences {
       theme,
       sidebar: this.sidebar,
       sidebarWidth: this.sidebarWidth,
-      autoCollapseRungs: this.autoCollapseRungs,
+      foldRungs: this.foldRungs,
     });
   }
   save(theme = this.theme): void {

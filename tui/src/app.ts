@@ -205,6 +205,8 @@ export class App {
   private readonly railHeading: BoxRenderable;
   private readonly railSpaces: ScrollBoxRenderable;
   private readonly railUsage: BoxRenderable;
+  /** Whether the sidebar lists the finished chains, which fold under a row of their own. */
+  private showResting = false;
   /** The switch of the mode of the input, which the layout places. */
   private readonly modeBox: BoxRenderable;
   private readonly railSplitter: BoxRenderable;
@@ -288,6 +290,8 @@ export class App {
   private statusKey = "";
   /** Whether the footer shows a spinner, which the tick turns. */
   private statusMoves = false;
+  /** The whole text of the footer, which a notice cut to its room shows in a tip. */
+  private statusWhole = "";
   private readonly tick: ReturnType<typeof setInterval>;
   private readonly navigation: {
     chain: string;
@@ -514,7 +518,10 @@ export class App {
     this.composeBox.add(metaLine);
     center.add(edge("bottom"));
     const footer = this.box({ height: space.bar, flexDirection: "row", gap: space.between });
-    this.status = this.text("", c.muted, { height: space.bar, truncate: true, flexGrow: 1, flexShrink: 1 });
+    this.status = this.whole(
+      this.text("", c.muted, { height: space.bar, truncate: true, flexGrow: 1, flexShrink: 1 }),
+      () => this.statusWhole,
+    );
     footer.add(this.status);
     this.hints = this.box({ height: space.bar, flexDirection: "row" });
     footer.add(this.hints);
@@ -658,7 +665,7 @@ export class App {
     fg = c.text,
     options: ConstructorParameters<typeof TextRenderable>[1] = {},
   ): TextRenderable {
-    return new TextRenderable(this.renderer, {
+    const node = new TextRenderable(this.renderer, {
       content: typeof content === "string" ? safeText(content) : styled(content),
       fg,
       // A text truncates only on a line it does not wrap, so a text that truncates keeps one line with an ellipsis.
@@ -666,6 +673,27 @@ export class App {
       flexShrink: 0,
       ...options,
     });
+    return options.truncate && !options.onMouseOver ? this.whole(node) : node;
+  }
+  /** A text cut to its room shows the whole of it in a tip while the pointer is over it: the text that the terminal
+   * cut, or the whole that a caller gives for a text that it cut itself. */
+  private whole(node: TextRenderable, full?: () => string): TextRenderable {
+    const over = node.onMouseOver,
+      out = node.onMouseOut;
+    node.onMouseOver = (event) => {
+      over?.call(node, event);
+      // A drag selects text, and no tip comes between the drag and what it selects.
+      if (event.isDragging) return;
+      const text = full ? full() : node.plainText;
+      const cut = full ? text !== node.plainText : Bun.stringWidth(text) > node.width;
+      if (cut && text) this.tip([[text, c.text]], event.x, event.y);
+    };
+    node.onMouseOut = (event) => {
+      out?.call(node, event);
+      this.hover?.destroyRecursively();
+      this.hover = undefined;
+    };
+    return node;
   }
   /** The columns of the feed: the screen but the sidebar that shows, its divider, and the gutters. It is known
    * before the feed is laid out. */
@@ -738,8 +766,11 @@ export class App {
     // The text leaves its draft as it is sent, so what is typed while it is sent stays in the composer.
     this.composer.setText("");
     try {
-      if (!(await this.globalCommand(content.trim())))
+      if (!(await this.globalCommand(content.trim()))) {
+        const woke = !content.startsWith("/") && (await this.session.wakeForInput());
         await this.session.submit(python ? `/run ${content}` : content);
+        if (woke) this.session.notice = "The paused chain resumed with this message.";
+      }
       const history = this.session.histories[key] ?? [];
       this.session.histories[key] = history;
       if (content && history.at(-1) !== content) history.push(content);
@@ -875,26 +906,23 @@ export class App {
   };
 
   /** A switch between a few choices, which the views and the mode of the input share. A track in a color of its own
-   * holds a segment for each choice. The chosen segment is filled with the color of its choice and stands out by half
-   * a cell at each side, the segment under the pointer lights in place, and a click chooses a segment. The chord that
-   * moves the switch stands after the track. */
+   * holds a segment for each choice, two columns of space at each side of its label. The chosen segment is filled
+   * with the color of its choice from edge to edge, the segment under the pointer lights in place, and a click chooses
+   * a segment. The chord that moves the switch stands after the track. */
   private switcher(
     box: BoxRenderable,
     choices: { label: string; badge?: string; color: RGBA; run?: () => void }[],
     chosen: number,
     chord: string,
-    ground: RGBA,
     track: RGBA,
   ): void {
-    box.add(this.text([[glyph.halfRight, track, 0, ground]], track, { height: space.bar }));
     for (const [index, choice] of choices.entries()) {
       const active = index === chosen;
       const fill = active ? choice.color : track;
       const parts = (lit: boolean): Part[] => [
-        [active ? glyph.halfRight : " ", choice.color, 0, track],
-        [choice.label, active ? c.background : lit ? c.text : c.muted, active ? bold : 0, fill],
+        [`  ${choice.label}`, active ? c.background : lit ? c.text : c.muted, active ? bold : 0, fill],
         [choice.badge ? ` ${choice.badge}` : "", active ? c.background : lit ? c.text : c.faint, 0, fill],
-        [active ? glyph.halfLeft : " ", choice.color, 0, track],
+        ["  ", c.text, 0, fill],
       ];
       // The pointer recolors the segment that it is over, and builds no node, so that a press and its release land on
       // the same segment.
@@ -914,8 +942,7 @@ export class App {
       });
       box.add(segment);
     }
-    box.add(this.text([[glyph.halfLeft, track, 0, ground]], track, { height: space.bar }));
-    if (chord) box.add(this.text(` ${chord}`, c.faint, { height: space.bar }));
+    if (chord) box.add(this.text(`  ${chord}`, c.faint, { height: space.bar }));
   }
   /** The top line: the session and the chain at its left, each a button, and the toggle of the views at its right. */
   private renderTop(): void {
@@ -928,19 +955,15 @@ export class App {
     // switch, then the directory. A part that finds no room is left out, and a session name that is still too long is
     // cut at its end.
     const chord = `${kitty ? "⌃" : "⌥"}1-3`;
-    const toggle =
-      views.reduce(
-        (sum, view) =>
-          sum +
-          viewLabels[view].length +
-          2 +
-          (view === "changes" && changes ? String(changes).length + 1 : 0),
-        0,
-      ) + 2;
+    const toggle = views.reduce(
+      (sum, view) =>
+        sum + viewLabels[view].length + 4 + (view === "changes" && changes ? String(changes).length + 1 : 0),
+      0,
+    );
     const head = Bun.stringWidth(w.sessionName) + 3 + Bun.stringWidth(w.label);
     const room = this.feedWidth - space.between;
-    const hint = head + toggle + chord.length + 1 <= room;
-    const folder = head + 3 + Bun.stringWidth(directory) + toggle + (hint ? chord.length + 1 : 0) <= room;
+    const hint = head + toggle + chord.length + 2 <= room;
+    const folder = head + 3 + Bun.stringWidth(directory) + toggle + (hint ? chord.length + 2 : 0) <= room;
     const name = clip(w.sessionName, Math.max(8, room - toggle - 3 - Bun.stringWidth(w.label)));
     if (this.paneChanged(this.toggle, [shown, changes, kitty, hint, this.theme])) {
       this.clear(this.toggle);
@@ -955,7 +978,6 @@ export class App {
         views.indexOf(shown),
         // F1 lists the chord where the top line has no room for it.
         hint ? chord : "",
-        c.background,
         c.panel,
       );
     }
@@ -1023,9 +1045,9 @@ export class App {
     const shown = { chord: !edited, provider: prompt && Boolean(provider), shape: prompt, effort: prompt };
     const gaps = 3;
     const width = () =>
-      (edited ? Bun.stringWidth(mode) + 4 : "Prompt".length + "Python".length + 6) +
+      (edited ? Bun.stringWidth(mode) + 4 : "Prompt".length + "Python".length + 8) +
       gaps +
-      (shown.chord ? 3 : 0) +
+      (shown.chord ? 4 : 0) +
       Bun.stringWidth(`on ${w.label}`) +
       (pending ? gaps + Bun.stringWidth(`returns ${pending.shape}`) : 0) +
       (prompt ? gaps + Bun.stringWidth(name) : 0) +
@@ -1048,8 +1070,7 @@ export class App {
     // The mode of the input is a switch between a prompt and Python, and an answer or a program that the input edits
     // is a switch of one segment, which only its key leaves.
     this.clear(this.modeBox);
-    const [ground, track] = [c.panel, c.raised];
-    if (edited) this.switcher(this.modeBox, [{ label: mode, color: modeColor }], 0, "", ground, track);
+    if (edited) this.switcher(this.modeBox, [{ label: mode, color: modeColor }], 0, "", c.raised);
     else
       this.switcher(
         this.modeBox,
@@ -1059,8 +1080,7 @@ export class App {
         ],
         w.mode === "python" ? 1 : 0,
         shown.chord ? "⌃R" : "",
-        ground,
-        track,
+        c.raised,
       );
     button(
       [
@@ -1169,6 +1189,7 @@ export class App {
               ["Esc", "leave the program", () => this.leaveEdit()],
             ]
           : [
+              ...(w.paused ? ([["/wake", "resume", () => this.action("/wake")]] as const) : []),
               ...(w.operatorPrompt ? ([["⌃A", "answer", () => this.question()]] as const) : []),
               ...(!w.paused &&
               w.activity.some((act) => act.kind === "prompt" && !act.done && !asksOperator(act))
@@ -1191,6 +1212,7 @@ export class App {
     ];
     const room =
       this.feedWidth - Bun.stringWidth(plain(hints)) - Bun.stringWidth(plain(state)) - space.between * 2;
+    this.statusWhole = notice ? `${plain(state)}   ${notice}` : plain(state);
     if (notice && room >= 8)
       state.push(
         ["   ", c.text],
@@ -1232,11 +1254,7 @@ export class App {
   ): void {
     const rung = options.act?.kind === "rung" ? options.act : undefined;
     const state = rung?.id ?? id;
-    const closed =
-      this.folds.get(state) ??
-      (rung
-        ? this.session.preferences.autoCollapseRungs && rung.run?.status === "done"
-        : Boolean(options.compact));
+    const closed = this.folded(state, rung, Boolean(options.compact));
     key =
       options.compact && closed && !options.preview
         ? "closed"
@@ -1376,7 +1394,7 @@ export class App {
       column: x - node.x + (info.lineStartCols[row] ?? 0) - (info.lineStartCols[first] ?? 0),
     };
   }
-  private markdown(content: string, fg = c.text): MarkdownRenderable {
+  private markdown(content: string, fg = c.prose): MarkdownRenderable {
     return new MarkdownRenderable(this.renderer, {
       content: safeText(content),
       syntaxStyle: this.style,
@@ -1384,11 +1402,12 @@ export class App {
     });
   }
 
-  /** Whether a card is folded: by the operator's click, or else as its kind starts. */
+  /** Whether a card is folded: by the operator's click, or else as its kind starts. A rung that runs or failed stands
+   * open, and any other rung starts folded when the preference says so. */
   private folded(state: string, rung?: ActRow, compact = false): boolean {
     return (
       this.folds.get(state) ??
-      (rung ? this.session.preferences.autoCollapseRungs && rung.run?.status === "done" : compact)
+      (rung ? this.session.preferences.foldRungs && !working(rung) && !failed(rung) : compact)
     );
   }
   renderContent(): void {
@@ -1758,6 +1777,47 @@ export class App {
           { act, collapsible: true, title: label },
         );
       }
+      // A paused chain says so at the end of its feed, with the reason that the last failure gave, and a button that
+      // resumes it, since nothing new runs on it until then.
+      if (w.paused && !w.search) {
+        const failure = w.activity.findLast((act) => act.kind === "rung" && act.run?.status === "failed")?.run
+          ?.reason;
+        add("paused", `paused:${failure ?? ""}:${this.theme}`, [], (box) => {
+          const panel = this.panel(box, c.warning);
+          panel.add(
+            this.text([
+              [`${glyph.held} `, c.warning],
+              ["This chain is paused", c.text, bold],
+              ["  New work waits until it resumes.", c.muted],
+            ]),
+          );
+          if (failure)
+            panel.add(
+              this.inset(
+                space.between,
+                this.whole(
+                  this.text(clip(shortenHomes(failure).split("\n")[0] ?? "", this.feedWidth - 8), c.danger),
+                  () => shortenHomes(failure),
+                ),
+              ),
+            );
+          const row = this.box({
+            flexDirection: "row",
+            marginTop: space.section,
+            paddingLeft: space.between,
+          });
+          row.add(
+            this.hoverable(
+              this.text([["Resume", c.accent, bold]], c.accent, {
+                onMouseUp: this.click(() => this.action("/wake")),
+              }),
+            ),
+          );
+          row.add(this.text("  runs what waits, once the cause is fixed", c.faint));
+          panel.add(row);
+        });
+        items++;
+      }
       if (!items && !w.search && !w.loading && !w.error) {
         const { width, height } = this.scroll.viewport;
         add("welcome", `welcome:${width}:${height}:${this.theme}`, [], (box) => this.welcome(box, height));
@@ -1959,14 +2019,17 @@ export class App {
       }),
     );
     column.add(
-      this.text(
-        [
-          [clip(shortenHome(w.workingDirectory), 40, "end"), c.faint],
-          ["   ", c.faint],
-          [w.actorChoice.model.replace(/^[^:]*:/, ""), c.faint],
-        ],
-        c.faint,
-        { truncate: true },
+      this.whole(
+        this.text(
+          [
+            [clip(shortenHome(w.workingDirectory), 40, "end"), c.faint],
+            ["   ", c.faint],
+            [w.actorChoice.model.replace(/^[^:]*:/, ""), c.faint],
+          ],
+          c.faint,
+          { truncate: true },
+        ),
+        () => `${shortenHome(w.workingDirectory)}   ${w.actorChoice.model.replace(/^[^:]*:/, "")}`,
       ),
     );
     // Each way to start is a card of two lines that a click puts in the composer. The cards are as wide as their
@@ -2054,7 +2117,8 @@ export class App {
       return (box) =>
         this.excerpt(box, `${fault.is}: ${fault.args.map(display).join(", ")}`, false, c.danger);
     }
-    if (act.kind === "bash" && act.value && typeof act.value === "object") {
+    // A command shows the tail of its output while it runs, and folds to its heading once it is over.
+    if (act.kind === "bash" && !act.done && act.value && typeof act.value === "object") {
       const exit = act.value as { stdout?: { content: string }; stderr?: { content: string } };
       const output = [exit.stdout?.content, exit.stderr?.content].filter(Boolean).join("\n");
       if (output) return (box) => this.excerpt(box, output, true);
@@ -2081,12 +2145,15 @@ export class App {
       return act.done
         ? { word: "ended", mark: glyph.ring, color: c.faint }
         : { word: "", mark: glyph.dot, color: c.accent };
+    // A rung that a pause holds waits for the wake, and says so, where it would otherwise seem to run.
     if (act.kind === "rung")
       return act.run?.status === "failed"
         ? { word: "failed", mark: glyph.failed, color: c.danger }
         : act.run?.status === "done"
           ? { word: "", mark: glyph.done, color: c.success }
-          : running();
+          : act.paused
+            ? { word: "waits for resume", mark: glyph.held, color: c.warning }
+            : running();
     if (act.done)
       return failed(act)
         ? { word: "failed", mark: glyph.failed, color: c.danger }
@@ -2095,7 +2162,8 @@ export class App {
           : { word: "", mark: glyph.done, color: c.success };
     if (w.world.pending.has(act.id)) return { word: "pending", mark: glyph.ring, color: c.faint };
     if (w.world.prompts.has(act.id)) return { word: "needs input", mark: glyph.asks, color: c.warning };
-    if (act.paused && act.kind !== "bash") return { word: "paused", mark: glyph.held, color: c.warning };
+    if (act.paused && act.kind !== "bash")
+      return { word: "waits for resume", mark: glyph.held, color: c.warning };
     return running();
   }
   /** The heading of an act: its state, its kind, what it is about, and the word of its state. A rung is named by its
@@ -2160,7 +2228,7 @@ export class App {
     return [
       [`${glyph.dot} `, c.secondary],
       [name, c.text, bold],
-      [effort && effort !== "off" ? `  ${effort} effort` : "", c.faint],
+      [effort && effort !== "off" ? `  ${effort}` : "", c.faint],
       [
         parallel
           ? `  answers “${this.preview(String(act.words[1]).split("\n")[0] ?? "", Bun.stringWidth(name) + 34)}”`
@@ -2426,15 +2494,30 @@ export class App {
   }
 
   /** What a chain is doing, read off its own acts, and nothing for a chain at rest. */
+  /** The state of a chain. A chain that the operator started, directly or by a word of their own, and that finished
+   * its work while another chain was shown, is finished and not yet seen until the operator opens it. */
   private chainStatus(id: string): SessionStatus {
     const w = this.session;
     const acts = w.acts.filter((act) => act.on === id && act.kind !== "chain" && act.kind !== "grant");
-    if (acts.some((act) => w.world.prompts.has(act.id))) return "blocked";
-    if (acts.some((act) => w.world.pending.has(act.id))) return "paused";
-    if (acts.some(working)) return "working";
-    if (acts.some((act) => act.paused && !act.done)) return "paused";
     const latest = acts.at(-1);
-    return latest && failed(latest) ? "error" : "idle";
+    const status: SessionStatus = acts.some((act) => w.world.prompts.has(act.id))
+      ? "blocked"
+      : acts.some((act) => w.world.pending.has(act.id))
+        ? "paused"
+        : acts.some(working)
+          ? "working"
+          : acts.some((act) => act.paused && !act.done)
+            ? "paused"
+            : latest && failed(latest)
+              ? "error"
+              : "idle";
+    const before = w.phases.get(id);
+    w.phases.set(id, status);
+    const chain = w.acts.find((act) => act.id === id);
+    const mine = chain?.by === "operator" || w.actOf(chain?.by ?? "")?.by === "operator";
+    if (id === w.selected || status !== "idle") w.unread.delete(id);
+    else if (before === "working" && mine) w.unread.add(id);
+    return status === "idle" && w.unread.has(id) ? "done" : status;
   }
   private renderRail(): void {
     if (!this.rail.visible) return;
@@ -2456,6 +2539,7 @@ export class App {
         width,
         w.chains.map((chain) => [chain.id, w.labelOf(chain.id), this.chainStatus(chain.id)]),
         grant?.words,
+        this.showResting,
       ])
     )
       return;
@@ -2484,11 +2568,15 @@ export class App {
     section("Chains", "⌃B", "", () => this.chains());
     const first = this.railSession.getChildren()[0];
     if (first) first.marginTop = 0;
-    // The chains take six rows at most, and the rest wait behind a button that lists them all.
-    const shown = w.chains.length > 7 ? 6 : w.chains.length;
-    for (const chain of w.chains.slice(0, shown)) {
+    // A chain that is shown, or that has something to say, stands in the list, and the finished chains fold under a
+    // row of their own, which a click opens. The list takes six rows at most, and the rest wait behind a button that
+    // lists them all.
+    const states = new Map(w.chains.map((chain) => [chain.id, this.chainStatus(chain.id)]));
+    const active = w.chains.filter((chain) => chain.id === w.selected || states.get(chain.id) !== "idle");
+    const resting = w.chains.filter((chain) => !active.includes(chain));
+    const chainLine = (chain: ActRow) => {
       const selected = chain.id === w.selected;
-      const status = this.chainStatus(chain.id);
+      const status = states.get(chain.id) ?? "idle";
       const line = this.hoverable(
         this.box({
           flexDirection: "row",
@@ -2507,26 +2595,46 @@ export class App {
           [
             [selected ? glyph.mark : " ", c.accent],
             [" "],
+            [`${this.statusDot(status)} `, this.statusColor(status)],
             [
-              status === "idle" ? `${glyph.ring} ` : `${this.statusDot(status)} `,
-              status === "idle" ? c.faint : this.statusColor(status),
+              w.labelOf(chain.id),
+              selected ? c.text : status === "idle" ? c.faint : c.muted,
+              selected ? bold : 0,
             ],
-            [w.labelOf(chain.id), selected ? c.text : c.muted, selected ? bold : 0],
           ],
           c.muted,
           { truncate: true, flexShrink: 1 },
         ),
       );
       this.railSession.add(line);
-    }
-    if (w.chains.length > shown)
+    };
+    const shown = active.length > 7 ? 6 : active.length;
+    for (const chain of active.slice(0, shown)) chainLine(chain);
+    if (active.length > shown)
       add(
         [
           ["   ", c.faint],
-          [`${w.chains.length - shown} more`, c.accent],
+          [`${active.length - shown} more`, c.accent],
         ],
         { onMouseUp: this.click(() => this.chains()) },
       );
+    if (resting.length) {
+      add(
+        [
+          ["  "],
+          [`${this.showResting ? glyph.open : glyph.closed} `, c.faint],
+          ["Finished", c.faint],
+          [`  ${resting.length}`, c.faint],
+        ],
+        {
+          onMouseUp: this.click(() => {
+            this.showResting = !this.showResting;
+            this.render();
+          }),
+        },
+      );
+      if (this.showResting) for (const chain of resting.slice(0, 12)) chainLine(chain);
+    }
     target = this.railUsage;
     const spend = w.spend;
     const ceiling =
@@ -2593,12 +2701,19 @@ export class App {
             ? c.accent
             : c.faint;
   }
+  /** The mark of a state, one shape for each: at work, waiting on the operator, paused, failed, finished and not yet
+   * seen, and at rest. */
   private statusDot(status: SessionStatus): string {
-    return status === "saved" || status === "idle"
-      ? glyph.ring
-      : status === "paused"
-        ? glyph.held
-        : glyph.dot;
+    return {
+      working: glyph.running,
+      opening: glyph.running,
+      blocked: glyph.asks,
+      paused: glyph.held,
+      error: glyph.failed,
+      done: glyph.dot,
+      idle: glyph.ring,
+      saved: glyph.ring,
+    }[status];
   }
   /** The workspaces in the sidebar, under the session: each folder with its sessions, which scroll on their own. */
   private renderWorkspaces(): void {
@@ -2675,10 +2790,13 @@ export class App {
       this.railSpaces.add(
         this.inset(
           space.inset + 3,
-          this.text(clip(shortenHome(group.directory), inner - space.inset - 1, "end"), c.faint, {
-            height: space.bar,
-            truncate: true,
-          }),
+          this.whole(
+            this.text(clip(shortenHome(group.directory), inner - space.inset - 1, "end"), c.faint, {
+              height: space.bar,
+              truncate: true,
+            }),
+            () => shortenHome(group.directory),
+          ),
         ),
       );
       for (const entry of group.sessions) {
@@ -2722,17 +2840,19 @@ export class App {
       marginTop: space.section,
     });
   }
-  /** A tip that stands under the pointer and ends at its left, or above it on the last rows, inside the screen. */
+  /** A tip that stands under the pointer and ends at its left, or above it where the rows under it cannot hold it,
+   * inside the screen. It never covers the row of the pointer, or the pointer would leave the text that shows it. */
   private tip(parts: Part[], x: number, y: number): void {
     this.hover?.destroyRecursively();
     const size = Math.min(
       this.renderer.width - 2,
       Math.max(25, Bun.stringWidth(plain(parts)) + space.between),
     );
+    const rows = Math.max(1, Math.ceil(Bun.stringWidth(plain(parts)) / Math.max(1, size - space.inset * 2)));
     this.hover = this.box({
       position: "absolute",
       left: Math.max(1, Math.min(x - size, this.renderer.width - size - 1)),
-      top: y + 1 < this.renderer.height - 1 ? y + 1 : y - 1,
+      top: y + 1 + rows <= this.renderer.height ? y + 1 : Math.max(0, y - rows),
       width: size,
       paddingX: space.inset,
       backgroundColor: c.raised,
@@ -4697,28 +4817,33 @@ export class App {
       const mark: Part | undefined =
         choice.mark ??
         (choice.status ? [`${this.statusDot(choice.status)} `, this.statusColor(choice.status)] : undefined);
+      // A label or a detail that the row cut shows whole in a tip while the pointer is over it.
+      const markText = mark ? mark[0] : "";
       block.add(
-        this.text(
-          [
-            ...(mark ? [mark] : []),
-            // A label is cut at its end where the column of the details starts, a gap before it.
+        this.whole(
+          this.text(
             [
-              choice.detail
-                ? clip(
-                    choice.label,
-                    Math.max(4, column - space.between - (mark ? Bun.stringWidth(mark[0]) : 0)),
-                  )
-                : choice.label,
-              fg,
-              selected ? bold : 0,
+              ...(mark ? [mark] : []),
+              // A label is cut at its end where the column of the details starts, a gap before it.
+              [
+                choice.detail
+                  ? clip(
+                      choice.label,
+                      Math.max(4, column - space.between - (mark ? Bun.stringWidth(mark[0]) : 0)),
+                    )
+                  : choice.label,
+                fg,
+                selected ? bold : 0,
+              ],
             ],
-          ],
-          fg,
-          {
-            width: choice.detail ? column : undefined,
-            flexShrink: choice.detail ? 0 : 1,
-            truncate: true,
-          },
+            fg,
+            {
+              width: choice.detail ? column : undefined,
+              flexShrink: choice.detail ? 0 : 1,
+              truncate: true,
+            },
+          ),
+          () => `${markText}${choice.label}`,
         ),
       );
       if (choice.swatch)
@@ -4731,19 +4856,22 @@ export class App {
         );
       if (choice.detail)
         block.add(
-          this.text(
-            clip(
-              choice.detail.replace(/\s*\n\s*/g, " "),
-              Math.max(
-                8,
-                inner -
-                  space.between -
-                  column -
-                  (choice.swatch ? choice.swatch.length * 2 + space.between : 0),
+          this.whole(
+            this.text(
+              clip(
+                choice.detail.replace(/\s*\n\s*/g, " "),
+                Math.max(
+                  8,
+                  inner -
+                    space.between -
+                    column -
+                    (choice.swatch ? choice.swatch.length * 2 + space.between : 0),
+                ),
               ),
+              selected ? c.text : c.muted,
+              { truncate: true, flexShrink: 1 },
             ),
-            selected ? c.text : c.muted,
-            { truncate: true, flexShrink: 1 },
+            () => choice.detail.replace(/\s*\n\s*/g, " "),
           ),
         );
       this.paletteList.add(block);
@@ -4784,10 +4912,15 @@ export class App {
     const kitty = this.renderer.capabilities?.kitty_keyboard === true;
     const legend: [string, RGBA, string][] = [
       [`${spin(0)} Working`, c.accent, "A model or a command runs"],
+      [`${glyph.running} Running`, c.accent, "A chain or a session has work in progress"],
       [`${glyph.asks} Input needed`, c.warning, "A question waits for your answer"],
       [`${glyph.held} Paused`, c.warning, "Work waits until you wake it"],
       [`${glyph.done} Done`, c.success, "The act ended and gave its value"],
-      [`${glyph.dot} Finished, unread`, c.success, "A session in the tree ended while you were away"],
+      [
+        `${glyph.dot} Finished, unread`,
+        c.success,
+        "A chain you started, or a session, ended while you were away",
+      ],
       [`${glyph.failed} Failed`, c.danger, "The act raised, or the gate refused its Python"],
       [`${glyph.ring} Ready`, c.faint, "Nothing runs, or the work is saved or pending"],
     ];

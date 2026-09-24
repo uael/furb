@@ -57,7 +57,8 @@ Your message stands in a panel with a bar at its left, as you typed it. Each run
 numbered Python, and the acts that it made stand under it with a preview of their output. The answer of a prompt
 comes under the name of the model that gave it. A question that a model asks you stands in a panel with a yellow
 bar, and your answer follows it. One mark means one state in every view, dialog, and sidebar: a spinner for work
-that runs, `◆` for a question that waits for you, `◌` for paused work, `✓` for a done act, `✗` for a failure, and
+that runs, `◉` for a chain or a session at work, `◆` for a question that waits for you, `◌` for paused work, `✓`
+for a done act, `✗` for a failure, `●` for a chain you started or a session that finished while you were away, and
 `○` for rest. F1 lists them. A rung opens while it runs. Click its heading or use ⌥D to fold it to its mark, its
 name, and its first line. Its fold stays the same across views and after reopening. `/autocollapse` opts into
 automatic collapse when a rung completes. Right-click an act to inspect it, edit its program, or branch after it.

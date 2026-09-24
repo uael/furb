@@ -36,19 +36,26 @@ test("the real native life drives the feed, the transcript, the palette, and res
     await seedDemo(session);
     app.render();
     await test.flush();
-    // The answer of a prompt stands under the name of the model that gave it.
+    // The answer of a prompt stands under the name of the model that gave it, once its markdown is drawn.
     expect(test.captureCharFrame()).toContain("● sonnet");
+    for (let pass = 0; pass < 100 && !test.captureCharFrame().includes("A clear starting point"); pass++) {
+      await new Promise((done) => setTimeout(done, 20));
+      app.render();
+      await test.flush();
+    }
     const conversation = test.captureCharFrame();
     expect(conversation.indexOf("Explore this project")).toBeLessThan(
       conversation.indexOf("A clear starting point"),
     );
-    expect(conversation).toContain("✓ local storage");
+    // A command that is over folds to its heading, and its output shows once it opens.
+    expect(conversation).not.toContain("└ ✓ capture");
     const command = app.scroll.getChildren().find((node) => /^bash\d+$/.test(node.id));
     const heading = command?.getChildren()[0];
     if (!heading) throw new Error("No command heading.");
     await test.mockMouse.click(heading.x, heading.y);
     await test.flush();
     expect(test.captureCharFrame()).toContain("exit 0");
+    expect(test.captureCharFrame()).toContain("✓ local storage");
     const expanded = app.scroll
       .getChildren()
       .find((node) => node.id === command?.id)

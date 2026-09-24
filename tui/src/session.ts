@@ -359,6 +359,21 @@ export class Session extends EventEmitter {
     const latest = acts.at(-1);
     return latest && failed(latest) ? "error" : "idle";
   }
+  /** A message or a word that the operator sends to a paused chain wakes the chain first, since the operator who
+   * writes to it wants it to go on: work that a reopened record held starts again, and the pause over the chain ends.
+   * It says whether the chain was paused. */
+  async wakeForInput(): Promise<boolean> {
+    if (!this.paused) return false;
+    if (this.world.pending.size) await this.world.resume();
+    await this.refresh();
+    if (this.paused) await this.life.wake(this.selected);
+    await this.refresh();
+    return true;
+  }
+  /** The chains that the operator started and that finished their work while another chain was shown, which wait for
+   * the operator to look at them, and the state that each chain had when the view last read it. */
+  readonly unread = new Set<string>();
+  readonly phases = new Map<string, SessionStatus>();
   get chains(): ActRow[] {
     return this.acts.filter((act) => act.kind === "chain");
   }
@@ -720,9 +735,9 @@ export class Session extends EventEmitter {
         this.enqueue(argument);
         break;
       case "autocollapse":
-        this.preferences.autoCollapseRungs = !this.preferences.autoCollapseRungs;
+        this.preferences.foldRungs = !this.preferences.foldRungs;
         this.preferences.save();
-        this.notice = this.preferences.autoCollapseRungs
+        this.notice = this.preferences.foldRungs
           ? "Completed rungs collapse automatically."
           : "Rungs keep their open state.";
         break;
