@@ -16,7 +16,7 @@ import pytest
 import furb
 import furb_monty.engine
 from conftest import OPERATOR, STANDS, Dead, Py, Sand, settle, swapped
-from furb import engine
+from furb import engine, kernel
 from furb.engine import Refused
 
 
@@ -160,9 +160,11 @@ async def test_boot_refuses_a_kernel_or_a_gate_of_this_interpreter() -> None:
 
 
 async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_rung_runs_it() -> None:
-  """The gate reads a word against the typeshed of the sandbox and a chain that is a module, so it accepts a name of
-  the builtins of python, or a name ty gives every module, exactly when a rung runs a word that names it. A refused
-  word never runs, so a refused name is run as the Kernel runs a word, in the globals of the chain."""
+  """The gate reads a word against the typeshed of the sandbox and a chain of the sandbox, which is a module, so it
+  accepts a name of the builtins of python, or a name ty gives every module, exactly when a rung runs a word that
+  names it. A refused word never runs, so a refused name is run as the Kernel runs a word, in the globals of the
+  chain. A word is judged the same on both engines, so the gate of python finds the same of every name, though
+  python runs some that it refuses."""
   root = engine.boot((), world=Sand(stands=STANDS).hears())
   # The names ty gives every module are those of module_type_implicit_global_symbol in ty_python_semantic: the names
   # that the typeshed of the sandbox declares in the class types.ModuleType, but __dict__, __init__ and __getattr__,
@@ -172,7 +174,9 @@ async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_r
   names = sorted({*vars(builtins), *module})
   # Every rung grows the program that each later sheet reads again, so a sheet and a rung for each name cost
   # seconds. One word holds every name, one on each line, and the line of a finding is the name it refuses.
-  found = engine.gate("\n".join(f"got = {name}" for name in names), on=root)
+  word = "\n".join(f"got = {name}" for name in names)
+  found = engine.gate(word, on=root)
+  assert kernel.gate(word, []) == found
   refused = sorted({names[int(one.split(":")[0].removeprefix("line ")) - 1] for one in found})
   probe = (
     f"ran = []\nfor name in {refused!r}:\n  try:\n    eval(compile('got = ' + name, 'probe', 'exec'), dict(globals()))\n"
