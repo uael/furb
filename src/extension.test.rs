@@ -276,16 +276,23 @@ fn a_path_resolves_against_the_directory_of_its_config_file() {
   let file = PathBuf::from("/c/d/config.json");
   let text = r#"{"extensions": {"a": "../p", "b": {"git": "./r.git"}, "c": {"npm": "../n.tgz"}, "d": {"npm": "name"}}}"#;
   let got = settings(text, &file, None).unwrap();
-  assert_eq!(got[0].1, Setting::From(Source::Path("/c/d/../p".into())));
+  assert_eq!(got[0].1, Setting::From(Source::Path("/c/p".into())));
   assert_eq!(
     got[1].1,
-    Setting::From(Source::Git { url: "/c/d/./r.git".to_owned(), reference: None, path: None })
+    Setting::From(Source::Git { url: "/c/d/r.git".to_owned(), reference: None, path: None })
   );
   assert_eq!(
     got[2].1,
-    Setting::From(Source::Npm { package: "/c/d/../n.tgz".to_owned(), version: None })
+    Setting::From(Source::Npm { package: "/c/n.tgz".to_owned(), version: None })
   );
   assert_eq!(got[3].1, Setting::From(Source::Npm { package: "name".to_owned(), version: None }));
+}
+
+#[test]
+fn a_path_reads_as_the_directory_it_is_before_the_disk_is_asked() {
+  assert_eq!(tidy(Path::new("/c/d/../p/./q")), PathBuf::from("/c/p/q"));
+  assert_eq!(tidy(Path::new("../../p")), PathBuf::from("../../p"));
+  assert_eq!(tidy(Path::new("/../p")), PathBuf::from("/p"));
 }
 
 #[test]

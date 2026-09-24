@@ -1,5 +1,5 @@
-import { Life } from "../index.cjs";
 import { resolve } from "node:path";
+import { Life } from "../index.cjs";
 import type { FileChange } from "./changes.js";
 import type { Call, Fault, Hearing, Saying, WorldContext, WorldPart } from "./extension.js";
 import { spawnShell } from "./shell.js";
@@ -191,7 +191,10 @@ export class WorldAdapter {
         let value: unknown;
         try {
           value = synchronous(
-            this.handle({ kind: (kind.charAt(0).toUpperCase() + kind.slice(1)) as WorldRequest["kind"], args: [] }),
+            this.handle({
+              kind: (kind.charAt(0).toUpperCase() + kind.slice(1)) as WorldRequest["kind"],
+              args: [],
+            }),
           );
           if (
             (kind === "clock" || kind === "chance") &&

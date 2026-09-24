@@ -71,7 +71,10 @@ export interface WorldContext {
   change(change: FileChange): void;
   /** A command of the shell, started in a directory, with its stderr in its stdout when it is merged, its stdin open
    * when it is fed, and ended at its timeout in seconds. */
-  spawn(command: string, options: { cwd: string; merged: boolean; fed: boolean; timeout: number | null }): Spawned;
+  spawn(
+    command: string,
+    options: { cwd: string; merged: boolean; fed: boolean; timeout: number | null },
+  ): Spawned;
   /** The refusal of a question, as it crosses. */
   refused(message: string): Fault;
 }

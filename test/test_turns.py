@@ -69,12 +69,10 @@ async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operato
 async def test_the_chain_answers_for_its_turns() -> None:
   """The chain answers for its turns, folded from what it has heard."""
   sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  log, root = life(sand)
   await engine.rung("tell('seen', 'x')", on=root)
   got = engine.turns(on=root)
   assert [role for role, *_ in got] == ["user"]
   assert heads(got) == [f"#{root} root", rows(root)[0], "#rung1", "#seen x"]
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
-  asking = said(held, "turns")[-1]
-  assert [a[2] for a in said(held, "done") if a[1] == asking[1]] == [root]
+  asking = [a for a in engine.asked.values() if a[0] == "turns"][-1]
+  assert [a[2] for a in said(log, "done") if a[1] == asking[1]] == [root]

@@ -167,6 +167,23 @@ pub struct Entry {
 /// The settings of one config, read from its text: each name of its extensions with what it says, in the order of
 /// the file. A path, and a git remote or an npm package that starts with `./`, `../` or `~`, resolves against the
 /// directory of the file, and a `~` expands to the home.
+/// A path with each `.` dropped and each `..` taking the name before it away, as the path reads and before the disk
+/// is asked, so the path a config names reads as the directory it is. A `..` at the root stays at the root.
+pub fn tidy(path: &Path) -> PathBuf {
+  use std::path::Component::{CurDir, Normal, ParentDir, Prefix, RootDir};
+  let mut out = PathBuf::new();
+  for part in path.components() {
+    match (part, out.components().next_back()) {
+      (CurDir, _) | (ParentDir, Some(RootDir | Prefix(_))) => {}
+      (ParentDir, Some(Normal(_))) => {
+        out.pop();
+      }
+      (other, _) => out.push(other),
+    }
+  }
+  out
+}
+
 pub fn settings(
   text: &str,
   file: &Path,
@@ -188,7 +205,7 @@ pub fn settings(
         |home| home.join(one[1..].trim_start_matches(['/', '\\'])),
       )
     } else {
-      at.join(one)
+      tidy(&at.join(one))
     }
   };
   let nearby = |one: &str| {

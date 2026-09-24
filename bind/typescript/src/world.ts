@@ -151,7 +151,9 @@ export class World extends EventEmitter {
     const makers = this.extensions.map((one) => {
       const made = one.builtin ? builtinWorldParts[one.name] : options.parts?.[one.name];
       if (!made && !one.builtin && one.world.ts)
-        throw new Error(`The extension ${one.name} has a World part in ${one.world.ts}, which this World holds not.`);
+        throw new Error(
+          `The extension ${one.name} has a World part in ${one.world.ts}, which this World holds not.`,
+        );
       return made;
     });
     let records: RecordFile | undefined;
@@ -235,7 +237,8 @@ export class World extends EventEmitter {
    * part for a World of each, imported. */
   static async load(options: WorldOptions = {}): Promise<World> {
     const extensions =
-      options.extensions ?? (options.readOnly ? [] : resolveExtensions(resolve(options.cwd ?? process.cwd())));
+      options.extensions ??
+      (options.readOnly ? [] : resolveExtensions(resolve(options.cwd ?? process.cwd())));
     return new World({ ...options, extensions, parts: await loadWorldParts(extensions, options.parts) });
   }
 
@@ -620,7 +623,9 @@ export async function boot(
     adapter.parts = extensions.flatMap((one) => {
       const part = made[one.name];
       if (!part && one.world.ts)
-        throw new Error(`The extension ${one.name} has a World part in ${one.world.ts}, which this World holds not.`);
+        throw new Error(
+          `The extension ${one.name} has a World part in ${one.world.ts}, which this World holds not.`,
+        );
       return part ? [part(context)] : [];
     });
     const life = adapter.boot(

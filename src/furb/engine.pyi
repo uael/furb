@@ -408,6 +408,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   It holds the transcript of its origin first and tells its own open after it, and it holds nothing of the rungs it runs again, since every word of those stands in what it inherited.
   It hears no control that ends it, since nothing that happens to a chain ends it, and a control over a chain is over the acts on it, which end themselves.
   It holds no done of a query it does not hold, since the answer to what it asked of the gate is of the moment, so every done it holds answers a question it holds.
+  It holds none of the answers it gives, since the answer to a transcript holds that transcript, so a transcript that held it would hold itself, and every read of it would carry the reads before it.
   What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, each holds of that transcript, which cuts its turns where an ask of the origin stood, and the open of the origin, which tells the standing.
   The filter is given every act, the queries of the operator among them, since what the operator asked of a chain no rung of it says again.
   What a chain said of itself it keeps whatever the filter says, so the open of the origin stands in the new chain.

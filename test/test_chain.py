@@ -113,7 +113,7 @@ async def test_the_entry_that_opens_a_chain_with_a_source_carries_its_label_afte
   held = engine.ask("transcript", twin, twin)[1]
   assert isinstance(was, list) and isinstance(held, list)
   opens = ("tell", twin, twin, [f"#{twin} twin from {root}", binding(twin)])
-  assert held == [*was, asked, ("done", asked[1], root, was), opens]
+  assert held == [*was, asked, opens]
 
 
 async def test_chain_gives_the_new_chain_which_never_completes() -> None:
@@ -749,7 +749,7 @@ async def test_the_transcript_of_a_chain_with_a_source_holds_the_entries_up_to_t
   held = engine.ask("transcript", twin, twin)[1]
   assert isinstance(was, list) and isinstance(held, list)
   opens = ("tell", twin, twin, [f"#{twin} twin from {root}", binding(twin)])
-  assert held == [*was, asked, ("done", asked[1], root, was), opens]
+  assert held == [*was, asked, opens]
   assert all(on(a) == root for a in held[:-1])
 
 
@@ -941,6 +941,19 @@ async def test_it_holds_no_done_of_a_query_it_does_not_hold() -> None:
   gates = [a[1] for a in engine.asked.values() if a[0] == "gate"]
   assert [a[1] for a in said(log, "done") if a[1] in gates] == gates == [f"gate@{root}.4"]
   assert [a for a in held if a[1] in gates] == []
+
+
+async def test_it_holds_none_of_the_answers_it_gives() -> None:
+  """It holds none of the answers it gives, since the answer to a transcript holds that transcript, so a transcript that held it would hold itself, and every read of it would carry the reads before it."""
+  sand = sown()
+  _, root = life(sand)
+  first = engine.ask("transcript", root, root)
+  program = engine.ask("program", root)
+  second = engine.ask("transcript", root, root)
+  held = second[1]
+  assert isinstance(held, list)
+  assert held[-2:] == [first[0], program[0]]
+  assert [a for a in held if a[0] == "done" and a[2] == root] == []
 
 
 async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin() -> None:

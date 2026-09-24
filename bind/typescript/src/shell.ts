@@ -39,7 +39,10 @@ export function spawnShell(
     if (!child.pid) return;
     try {
       if (process.platform === "win32")
-        spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore", windowsHide: true });
+        spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+          stdio: "ignore",
+          windowsHide: true,
+        });
       else process.kill(-child.pid, "SIGKILL");
     } catch {}
   };

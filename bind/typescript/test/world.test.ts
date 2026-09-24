@@ -238,7 +238,7 @@ test("the default World serves files and streams commands without any TUI", asyn
   const session = await boot({ cwd });
   try {
     const { life } = session;
-    expect(verb(life, "cwd")).toBe(cwd);
+    expect(verb<string>(life, "cwd")).toBe(cwd);
     write(life, "hello.txt", "hello\n");
     expect(read(life, "hello.txt").content).toBe("hello\n");
     const command = bash(life, "printf 'snow: 雪\\n'; printf 'problem\\n' >&2", {
@@ -1059,5 +1059,29 @@ test("a World with no model puts to the operator every prompt that names no acto
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
+  }
+});
+
+test("a record of 0.1.0 opens with no drift, and the World plays the words of the extensions after", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-old-record-"));
+  const record = join(cwd, "record.jsonl");
+  await writeFile(record, await readFile(join(import.meta.dir, "../../../test/outside/record-0.1.0.jsonl")));
+  await writeFile(join(cwd, "a.txt"), "one\ntwo\nthree\n");
+  const world = new World({ cwd, record });
+  try {
+    const life = world.open();
+    expect(life.raised).toBeNull();
+    expect(life.root).toBe("chain1");
+    // The word of 0.1.0 reads a verb that the engine held then and an extension binds now, after the replay, so the
+    // gate refuses it while the record replays; nothing hangs on it, so nothing drifts.
+    expect(life.outcome("rung1")).toEqual({ done: true, value: { is: "Refused", args: [] } });
+    expect(read(life, "a.txt")).toEqual({
+      path: join(cwd, "a.txt"),
+      content: "one\ntwo\nthree\n",
+      before: null,
+    });
+  } finally {
+    await world.dispose();
+    await rm(cwd, { recursive: true, force: true });
   }
 });

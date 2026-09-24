@@ -27,7 +27,14 @@ export default function bash(context: WorldContext): WorldPart {
     else if (text === null) child.stdin.end();
     else child.stdin.write(text);
   }
-  function run(id: string, here: string, command: string, fed: boolean, timeout: number | null, mixed: boolean): void {
+  function run(
+    id: string,
+    here: string,
+    command: string,
+    fed: boolean,
+    timeout: number | null,
+    mixed: boolean,
+  ): void {
     const spawned = context.spawn(command, { cwd: context.at(here), merged: mixed, fed, timeout });
     const { child } = spawned;
     running.set(id, spawned);
@@ -55,7 +62,14 @@ export default function bash(context: WorldContext): WorldPart {
         const [, , , on, command, fed, timeout] = made.get(id) as Fact;
         const here = yield* context.where(String(on));
         const [, mixed] = (yield { verb: "ask", args: ["merged", on, id] }) as [unknown, unknown];
-        run(id, here, String(command), Boolean(fed), typeof timeout === "number" ? timeout : null, Boolean(mixed));
+        run(
+          id,
+          here,
+          String(command),
+          Boolean(fed),
+          typeof timeout === "number" ? timeout : null,
+          Boolean(mixed),
+        );
       } else if (kind === "feed" && made.has(id)) feed(id, fact[3] === null ? null : String(fact[3]));
       else if (kind === "cancel" || kind === "close") {
         for (const [one, spawned] of [...running])

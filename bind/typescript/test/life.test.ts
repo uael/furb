@@ -45,8 +45,12 @@ function memory(files: Map<string, string>): WorldPart {
 }
 
 /** One verb said by the operator on a chain, the root when none is said. */
-const said = <T = unknown>(life: Life, verb: string, args: unknown[] = [], kwargs: Record<string, unknown> = {}) =>
-  life.call<T>(verb, args, { on: life.root, ...kwargs });
+const said = <T = unknown>(
+  life: Life,
+  verb: string,
+  args: unknown[] = [],
+  kwargs: Record<string, unknown> = {},
+) => life.call<T>(verb, args, { on: life.root, ...kwargs });
 
 async function open(record: unknown[] = [], answer = 'close("hello")') {
   const entries: unknown[] = [];
@@ -111,7 +115,7 @@ test("a pending result leaves JavaScript and other native operations available",
   const { life, release } = await open();
   const id = life.wait(60).id;
   const pending = life.result(id);
-  expect(said(life, "cwd")).toBe("/tmp");
+  expect(said<string>(life, "cwd")).toBe("/tmp");
   expect(await life.outcome(id)).toEqual({ done: false, value: null });
   await Bun.sleep(1);
   release();
@@ -143,7 +147,7 @@ test("text, command results, and engine callables cross N-API", async () => {
   const { life } = await open();
   const text = said(life, "read", ["a"]);
   expect(text).toMatchObject({ is: "instance", class: { is: "class", name: "Text" } });
-  expect(unwrapped(text)).toEqual({ path: "a", content: "one\ntwo\n", before: null });
+  expect(unwrapped<object>(text)).toEqual({ path: "a", content: "one\ntwo\n", before: null });
   expect(() => said(life, "read", ["missing"])).toThrow("missing file");
   const span = life.held<{ is: "made"; id: number }>("modules", [life.root, "span"], "at");
   const show = life.made<{ is: "made"; id: number }>(span.id, [1, 1], {});
@@ -153,7 +157,10 @@ test("text, command results, and engine callables cross N-API", async () => {
   await life.send("out", command, ["hello\n", "stdout"]);
   await life.send("exited", command, [0]);
   const exit = await life.result(command);
-  expect(unwrapped(exit)).toMatchObject({ code: 0, stdout: { path: `${command}/stdout`, content: "hello\n" } });
+  expect(unwrapped(exit)).toMatchObject({
+    code: 0,
+    stdout: { path: `${command}/stdout`, content: "hello\n" },
+  });
 });
 
 test("the World closes the start of an act whose kind no part does with why", async () => {
@@ -188,7 +195,7 @@ test("a second life replays model answers and durable rung effects without askin
   expect(second.files.has("b")).toBe(false);
   expect(second.entries).toHaveLength(0);
   const fork = second.life.chain("branch", second.life.root).id;
-  expect(said(second.life, "cwd", [], { on: fork })).toBe("/tmp");
+  expect(said<string>(second.life, "cwd", [], { on: fork })).toBe("/tmp");
 });
 
 test("dispose rejects pending native results and further operations", async () => {

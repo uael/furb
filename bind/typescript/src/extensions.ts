@@ -11,7 +11,9 @@ export const builtinWorldParts: Readonly<Record<string, WorldExtension>> = { fil
 export async function imported<T>(extension: Extension, file: string, part: string): Promise<T> {
   const module = (await import(pathToFileURL(file).href)) as { default?: unknown };
   if (typeof module.default !== "function")
-    throw new Error(`The ${part} part of the extension ${extension.name}, ${file}, exports no default function.`);
+    throw new Error(
+      `The ${part} part of the extension ${extension.name}, ${file}, exports no default function.`,
+    );
   return module.default as T;
 }
 

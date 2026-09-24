@@ -2,8 +2,15 @@
 //! manifests, the order and the words, given as plain objects. The host keeps what is its own: the parts of an
 //! extension for a World and for a TUI, and the import of their code.
 
-use std::path::{Path, PathBuf};
+use std::{
+  ffi::OsString,
+  path::{Path, PathBuf},
+};
 
+use napi::{
+  Env,
+  bindgen_prelude::{JsObjectValue, Object as JsObject},
+};
 use napi_derive::napi;
 
 use crate::{Fault, extension};
@@ -61,16 +68,39 @@ fn refused(error: extension::Error) -> napi::Error {
   napi::Error::from_reason(Fault::from(error).message())
 }
 
-/// The config directory of the user, as this process finds it.
-#[napi]
-pub fn config_directory() -> String {
-  extension::Places::here().config.display().to_string()
+/// The places of this process, from its environment as JavaScript holds it, `process.env`, which a runtime may keep
+/// apart from the environment of the system, and from its home.
+fn places(env: &Env) -> napi::Result<extension::Places> {
+  let variables: JsObject =
+    env.get_global()?.get_named_property::<JsObject>("process")?.get_named_property("env")?;
+  let mut held = std::collections::HashMap::new();
+  for key in [
+    "FURB_CONFIG_DIR",
+    "FURB_CACHE_DIR",
+    "XDG_CONFIG_HOME",
+    "XDG_CACHE_HOME",
+    "APPDATA",
+    "LOCALAPPDATA",
+  ] {
+    if let Some(value) = variables.get::<String>(key)? {
+      held.insert(key, OsString::from(value));
+    }
+  }
+  #[allow(deprecated)]
+  let home = std::env::home_dir();
+  Ok(extension::Places::of(|key| held.get(key).cloned(), home, cfg!(windows)))
 }
 
-/// The cache directory of the user, as this process finds it.
+/// The config directory of the user, as the environment of JavaScript says it.
 #[napi]
-pub fn cache_directory() -> String {
-  extension::Places::here().cache.display().to_string()
+pub fn config_directory(env: Env) -> napi::Result<String> {
+  Ok(places(&env)?.config.display().to_string())
+}
+
+/// The cache directory of the user, as the environment of JavaScript says it.
+#[napi]
+pub fn cache_directory(env: Env) -> napi::Result<String> {
+  Ok(places(&env)?.cache.display().to_string())
 }
 
 /// The builtin extensions, files, bash and grant, in the order a host plays them.
@@ -84,11 +114,12 @@ pub fn builtin_extensions() -> Vec<JsExtension> {
 /// throws with what failed: a config, a fetch, a manifest, a requirement or a word.
 #[napi]
 pub fn resolve_extensions(
+  env: Env,
   project: String,
   options: Option<ResolveOptions>,
 ) -> napi::Result<Vec<JsExtension>> {
   let options = options.unwrap_or(ResolveOptions { refresh: None, install: None });
-  let places = extension::Places::here();
+  let places = places(&env)?;
   extension::extensions(
     &places,
     Path::new(&project),

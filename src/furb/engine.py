@@ -220,7 +220,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           yield "pause", about, []
         if (got := answers()) is not None:
           yield "done", about, got
-      if a[1] in mine and not (a[0] == "tell" and a[2] == id):
+      if a[1] in mine and not (a[0] in ("tell", "done") and a[2] == id):
         transcript.append(a)
       match a:
         case ("rung", rid, _, _, "", *_):

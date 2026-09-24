@@ -83,10 +83,10 @@ export declare class RecordLock {
 /** The builtin extensions, files, bash and grant, in the order a host plays them. */
 export declare function builtinExtensions(): Array<Extension>
 
-/** The cache directory of the user, as this process finds it. */
+/** The cache directory of the user, as the environment of JavaScript says it. */
 export declare function cacheDirectory(): string
 
-/** The config directory of the user, as this process finds it. */
+/** The config directory of the user, as the environment of JavaScript says it. */
 export declare function configDirectory(): string
 
 export declare function decodeRecord(line: string): unknown

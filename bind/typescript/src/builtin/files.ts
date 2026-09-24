@@ -28,7 +28,8 @@ export default function files(context: WorldContext): WorldPart {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error(`There is no file at ${path}.`);
       throw error;
     }
-    if (!info.isFile() || info.size > CAP) throw new Error(`Read needs a text file at most ${CAP} bytes: ${path}`);
+    if (!info.isFile() || info.size > CAP)
+      throw new Error(`Read needs a text file at most ${CAP} bytes: ${path}`);
     return {
       path,
       content: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(readFileSync(path)),
@@ -53,7 +54,10 @@ export default function files(context: WorldContext): WorldPart {
       if (path.includes("://")) return;
       let value: unknown;
       try {
-        if (yield* door(path)) throw new Error(`${path} is the door of nothing that ${kind === "read" ? "lives" : "takes a word"}`);
+        if (yield* door(path))
+          throw new Error(
+            `${path} is the door of nothing that ${kind === "read" ? "lives" : "takes a word"}`,
+          );
         const at = context.at(yield* context.where(String(on)), path);
         value = kind === "read" ? read(at) : write(at, String(content));
       } catch (error) {
