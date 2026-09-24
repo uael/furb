@@ -799,6 +799,8 @@ def run(args: argparse.Namespace) -> int:
   if not args.resume:
     shutil.rmtree(run_dir, ignore_errors=True)
   run_dir.mkdir(parents=True, exist_ok=True)
+  # A config of the user would add extensions to the system prompt, which is the engine and nothing else here.
+  os.environ["FURB_CONFIG_DIR"] = str(run_dir)
   told = (task / "instruction.md").read_text(encoding="utf-8").rstrip()
   if (app / ".venv" / "bin").is_dir():
     # The commands of the model find the interpreter of the checkout first, as the verifier will.
