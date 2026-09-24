@@ -698,7 +698,6 @@ impl Life {
     let got = self.verb("chain", vec![Object::string(label), Object::string(source)], kwargs)?;
     self.act(got)
   }
-
 }
 
 impl std::fmt::Debug for Life {

@@ -77,12 +77,20 @@ impl Yard {
 
   /// The verb that asks the chain of a question where its paths resolve.
   fn cwd(on: &str) -> Reply {
-    Reply::Calls { name: "cwd".to_owned(), args: vec![], kwargs: vec![("on".to_owned(), Object::string(on))] }
+    Reply::Calls {
+      name: "cwd".to_owned(),
+      args: vec![],
+      kwargs: vec![("on".to_owned(), Object::string(on))],
+    }
   }
 
   /// The verb that asks whether a control is over a command.
   fn covers(fact: &Object, id: &str) -> Reply {
-    Reply::Calls { name: "covers".to_owned(), args: vec![fact.clone(), Object::string(id)], kwargs: vec![] }
+    Reply::Calls {
+      name: "covers".to_owned(),
+      args: vec![fact.clone(), Object::string(id)],
+      kwargs: vec![],
+    }
   }
 
   /// The next command a control may be over, asked, or nothing when none is left.
@@ -113,7 +121,11 @@ fn spawned(voice: Voice, about: String, command: String, here: String) {
     match got {
       Ok(out) => {
         let said = |text: &[u8], stream: &str| {
-          Fact::says("out", &about, [Object::string(String::from_utf8_lossy(text)), Object::string(stream)])
+          Fact::says(
+            "out",
+            &about,
+            [Object::string(String::from_utf8_lossy(text)), Object::string(stream)],
+          )
         };
         voice.say(said(&out.stdout, "stdout"));
         if !out.stderr.is_empty() {
@@ -189,7 +201,8 @@ impl World for Yard {
   }
 
   fn hears(&mut self, fact: &Fact) -> Reply {
-    let word = |at: usize| fact.word(at).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
+    let word =
+      |at: usize| fact.word(at).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
     match fact.kind() {
       "bash" if fact.question() => {
         self.commands.insert(fact.about().to_owned(), (word(1), fact.on().to_owned()));
@@ -360,7 +373,8 @@ impl Lived {
 
   /// The words of the program of a chain, in order.
   fn program(&mut self, on: &str) -> Vec<String> {
-    let got = self.life.verb("ask", vec![Object::string("program"), Object::string(on)], vec![]).unwrap();
+    let got =
+      self.life.verb("ask", vec![Object::string("program"), Object::string(on)], vec![]).unwrap();
     let got = got.as_ref();
     let held = entry(&got, 1).and_then(|one| one.pairs()).unwrap_or_default();
     held.into_iter().map(|(_, word)| word.as_str().unwrap_or_default().to_owned()).collect()
@@ -381,7 +395,10 @@ impl Lived {
     for name in names {
       let fact = self.life.get(&name).unwrap();
       if fact.on() == on {
-        out.push((fact.by().to_owned(), fact.word(2).and_then(|one| one.as_str()).unwrap_or_default().to_owned()));
+        out.push((
+          fact.by().to_owned(),
+          fact.word(2).and_then(|one| one.as_str()).unwrap_or_default().to_owned(),
+        ));
       }
     }
     out
@@ -407,7 +424,8 @@ fn a_life_of_the_real_engine_opens_on_its_root_and_answers_what_the_root_stands_
 fn the_world_answers_a_question_of_an_extension_through_a_verb_it_says() {
   let mut lived = Lived::new("reads", &[], vec![]).unwrap();
   let root = lived.root();
-  block_on(lived.life.rung("write(Text('a.txt', 'one\\ntwo\\n'))", "", "", &root).unwrap()).unwrap();
+  block_on(lived.life.rung("write(Text('a.txt', 'one\\ntwo\\n'))", "", "", &root).unwrap())
+    .unwrap();
   assert_eq!(fs::read_to_string(lived.at.join("a.txt")).unwrap(), "one\ntwo\n");
   let got = lived.said("read", vec![Object::string("a.txt")], &root).unwrap();
   let got = got.as_ref();
@@ -503,7 +521,10 @@ fn a_prompt_of_the_operator_is_closed_with_what_the_operator_answered() {
 fn a_start_the_world_does_not_do_is_closed_with_its_refusal() {
   let mut lived = Lived::new("unknown", &[], vec![]).unwrap();
   let root = lived.root();
-  let got = lived.life.word("act('job', __on, started(idle))", vec![("__on", Object::string(&root))]).unwrap();
+  let got = lived
+    .life
+    .word("act('job', __on, started(ending(idle)))", vec![("__on", Object::string(&root))])
+    .unwrap();
   let id = got.as_ref().as_str().unwrap().to_owned();
   let no = block_on(lived.life.awaited(&id)).unwrap_err();
   assert_eq!((no.name.as_str(), no.message()), ("Refused", "the World does no job".to_owned()));
@@ -596,7 +617,10 @@ fn a_chain_with_a_source_is_played_no_word_of_its_own() {
   assert_eq!(lived.program(&twin), builtin());
   let rungs = lived.rungs(&twin);
   assert_eq!(rungs.len(), 3);
-  assert!(rungs.iter().all(|(by, retells)| by == &twin && retells.starts_with("rung")), "{rungs:?}");
+  assert!(
+    rungs.iter().all(|(by, retells)| by == &twin && retells.starts_with("rung")),
+    "{rungs:?}"
+  );
 }
 
 #[test]

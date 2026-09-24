@@ -125,7 +125,7 @@ mod tests {
 
   #[test]
   fn the_names_of_the_engine_bound_from_its_module_give_no_finding_of_their_own() {
-    let (text, above) = sheet(&["k = 1", "x = read('a')"], "close(k)");
+    let (text, above) = sheet(&["k = 1", "x = clock()"], "close(k)");
     assert_eq!(
       found(&text),
       Vec::<(usize, String)>::new(),
@@ -136,7 +136,7 @@ mod tests {
 
   #[test]
   fn a_sheet_the_gate_accepts_gives_no_finding() {
-    assert_eq!(said(&[], "close(len(read('a.txt').lines))"), vec![]);
+    assert_eq!(said(&[], "close(len(turns()))"), vec![]);
   }
 
   #[test]
@@ -163,7 +163,7 @@ mod tests {
 
   #[test]
   fn a_word_may_await_an_act_at_its_top_level() {
-    assert_eq!(said(&[], "close((await bash('ls')).code)"), vec![]);
+    assert_eq!(said(&[], "close(await wait(0))"), vec![]);
   }
 
   #[test]
@@ -177,7 +177,7 @@ mod tests {
     for word in [
       "close(hasattr(1, 'a'))",
       "close(getattr(1, 'a', None))",
-      "setattr(Exit, 'a', 1)",
+      "setattr(Refused, 'a', 1)",
       "close(open)",
     ] {
       assert_eq!(said(&[], word), vec![], "{word}");
@@ -202,7 +202,7 @@ mod tests {
 
   #[test]
   fn a_word_that_imports_the_engine_by_its_package_is_refused() {
-    for word in ["import furb\nclose(furb)", "from furb.engine import read\nclose(read)"] {
+    for word in ["import furb\nclose(furb)", "from furb.engine import clock\nclose(clock)"] {
       let found = said(&[], word);
       assert_eq!(found.len(), 1, "{found:?}");
       assert!(found[0].1.contains("unresolved-import"), "{found:?}");
@@ -211,14 +211,14 @@ mod tests {
 
   #[test]
   fn a_word_binds_a_name_of_the_engine_again_to_any_value() {
-    assert_eq!(said(&[], "read = 1\nclose(read)"), vec![]);
-    assert_eq!(said(&[], "old = HEAD\nHEAD = old\nclose(TIMEOUT + 1)"), vec![]);
-    assert_eq!(said(&[], "x = read('a')\nread = 1\nclose(x)"), vec![]);
+    assert_eq!(said(&[], "clock = 1\nclose(clock)"), vec![]);
+    assert_eq!(said(&[], "old = OPERATOR\nOPERATOR = old\nclose(len(OPERATOR) + 1)"), vec![]);
+    assert_eq!(said(&[], "x = clock()\nclock = 1\nclose(x)"), vec![]);
   }
 
   #[test]
   fn a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last() {
-    let found = said(&["read = 1"], "close(read('a'))");
+    let found = said(&["clock = 1"], "close(clock())");
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(found[0].1.contains("call-non-callable"), "{found:?}");
   }
@@ -227,6 +227,26 @@ mod tests {
   fn a_word_may_use_the_async_forms_at_its_top_level() {
     let word = "async def g():\n  yield 1\nasync for x in g():\n  close([y async for y in g()])";
     assert_eq!(said(&[], word), vec![]);
+  }
+
+  #[test]
+  fn the_word_of_every_builtin_passes_the_gate_after_the_words_before_it() {
+    let words = crate::extension::words(&crate::extension::builtins());
+    for (at, word) in words.iter().enumerate() {
+      let before: Vec<&str> = words[..at].iter().map(String::as_str).collect();
+      assert_eq!(said(&before, word), vec![], "the word of builtin {at}");
+    }
+    let all: Vec<&str> = words.iter().map(String::as_str).collect();
+    assert_eq!(found(&sheet(&all, "close(1)").0), vec![]);
+  }
+
+  #[test]
+  fn a_word_reads_a_name_an_extension_bound_in_the_program() {
+    let words = crate::extension::words(&crate::extension::builtins());
+    assert_eq!(said(&[&words[0]], "close(read('a').lines)"), vec![]);
+    let found = said(&[], "close(read('a').lines)");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].1.contains("unresolved-reference"), "{found:?}");
   }
 
   #[test]

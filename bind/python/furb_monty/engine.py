@@ -33,13 +33,12 @@ python = furb.python
 NAMES = vars(python)
 """NAMES are the names of the engine of this interpreter."""
 PURE = frozenset({
-  "span", "grep", "differs", "HEAD", "TAIL", "HIDDEN",
-  "question", "headed", "commented", "bound", "showing", "shown", "turns_of", "unquoted", "offered", "ended", "idle",
+  "question", "headed", "commented", "bound", "shown", "turns_of", "unquoted", "offered", "ended", "idle",
 })  # fmt: skip
 """PURE are the callables of the engine that read no life, so the engine of this interpreter answers them."""
 HELD = ("modules", "acts", "asked", "outcomes")
 """HELD are the maps of the life, which stand in the sandbox and are read there."""
-ACTS = frozenset({"wait", "rung", "prompt", "chain", "grant", "bash", "act"})
+ACTS = frozenset({"wait", "rung", "prompt", "chain", "act"})
 """ACTS are the verbs that give an act, whose name comes back as the act it names."""
 END = object()
 """END is what a thread of a generator is given when the life it was heard in is over."""

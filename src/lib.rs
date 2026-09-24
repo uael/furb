@@ -38,9 +38,9 @@ pub mod binding;
 
 pub use crate::{
   ear::{Ears, Reply},
+  extension::Extension,
   fact::Fact,
   life::{Act, Came, Life, Opening},
-  extension::Extension,
   value::{Fault, Object, ObjectRef},
   world::{Actor, Later, Said, Standing, Voice, World},
 };
