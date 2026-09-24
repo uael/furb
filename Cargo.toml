@@ -33,6 +33,8 @@ typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build", "dep:serde_json",
 monty = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 monty-type-checking = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 monty-types = { git = "https://github.com/uael/monty", rev = "b70678d3" }
+# The hash a dump is stamped with: the engine it holds and the build that made it. Monty hashes with it already.
+sha2 = { version = "0.10", default-features = false }
 pyo3 = { version = "0.29.2", features = ["generate-import-lib"], optional = true }
 napi = { version = "3", default-features = false, features = ["napi6", "serde-json", "dyn-symbols"], optional = true }
 napi-derive = { version = "3", optional = true }
@@ -48,3 +50,4 @@ windows-sys = { version = "0.61", features = ["Win32_System_Console"], optional 
 
 [build-dependencies]
 napi-build = { version = "2", optional = true }
+sha2 = { version = "0.10", default-features = false }

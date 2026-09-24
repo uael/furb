@@ -13,7 +13,8 @@ use pyo3::{
   exceptions::{PyBaseException, PyTypeError},
   prelude::*,
   types::{
-    PyBool, PyDict, PyFloat, PyFunction, PyInt, PyList, PyModule, PyString, PyTuple, PyType,
+    PyBool, PyBytes, PyDict, PyFloat, PyFunction, PyInt, PyList, PyModule, PyString, PyTuple,
+    PyType,
   },
 };
 
@@ -254,6 +255,35 @@ impl Life {
     let held =
       life::Life::open_on(hosted, names).boot(kept).map_err(|fault| raised(py, &made, &fault))?;
     Ok(Life { held, made, ears })
+  }
+
+  /// A life restored from a dump of one that stood still, on the ears of the host under the names it was
+  /// dumped with, and on the record a World kept, which the dump must match.
+  #[staticmethod]
+  fn restored(
+    py: Python<'_>,
+    ears: Py<PyAny>,
+    names: Vec<String>,
+    dump: &[u8],
+    record: Bound<'_, PyAny>,
+  ) -> PyResult<Self> {
+    let made = Made::new(py)?;
+    let kept = of_python(&made, &ears, &record)?;
+    let kept: Vec<Object> =
+      kept.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
+    let hosted = Hosted { host: ears.clone_ref(py), made: made.clone_ref(py) };
+    let held = life::Life::open_on(hosted, names)
+      .restore(dump, kept)
+      .map_err(|fault| raised(py, &made, &fault))?;
+    Ok(Life { held, made, ears })
+  }
+
+  /// The life as bytes, where it stands still, for a later life to go on from.
+  fn dump<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+    match self.held.dump() {
+      Ok(bytes) => Ok(PyBytes::new(py, &bytes)),
+      Err(fault) => Err(raised(py, &self.made, &fault)),
+    }
   }
 
   /// The root chain of the life, which is the first act of any record.

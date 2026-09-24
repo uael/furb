@@ -58,7 +58,11 @@ export class Activity {
   learn(kind: string, act: boolean, facts: readonly Fact[], call: (question: Call) => unknown): void {
     this.kinds.set(kind, act);
     this.unknown.delete(kind);
-    if (!act) return;
+    if (act) this.derive(facts, call);
+  }
+
+  /** The table derived again from the facts, which it asks the engine about through the call it is given. */
+  derive(facts: readonly Fact[], call: (question: Call) => unknown): void {
     this.acts.clear();
     this.completed = 0;
     this.cost = 0;

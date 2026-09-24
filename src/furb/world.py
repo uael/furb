@@ -37,6 +37,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models import Model
 from python_minifier import minify
 
+import furb_monty.engine
 from furb import engine, python
 from furb.engine import WORLD, Drift, Refused, Text
 from furb.provider.claude import ACTOR, Claude, Settings, actors
@@ -212,6 +213,9 @@ class Live:
   `mute` holds, for each chain, the actor whose last ask on that chain answered nothing, so a second such ask in a
   row pauses the chain, and an answer between the two ends the row.
   `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
+  `owed` holds each act the World does work for and has not said the end of: an ask, a command, a wait and a
+  prompt to the operator. The life stands still when it holds none, and only then is it dumped. `restored` says
+  whether the life was restored from the dump beside the record, and not booted on the record.
   """
 
   directory: str
@@ -224,6 +228,44 @@ class Live:
   mute: dict[str, str] = field(default_factory=dict)
   reader: asyncio.StreamReader | None = None
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
+  owed: set[str] = field(default_factory=set)
+  restored: bool = False
+
+  @property
+  def dumped(self) -> Path | None:
+    """The dump beside the record: the life where it stood still when a World of the record last ended."""
+    return None if self.record is None else self.record.with_name(f"{self.record.name}.dump")
+
+  def open(self, record: Sequence[tuple] = (), **ears: World) -> str:
+    """The life of this World on the record it is given, with these ears beside it, which gives the root.
+
+    The engine of monty restores the life from the dump beside the record when the dump matches the record, the
+    engine and the build, and boots it on the record otherwise; the engine of this interpreter dumps no life, so it
+    boots.
+    """
+    if engine is furb_monty.engine and (dumped := self.dumped) is not None and dumped.is_file():
+      with suppress(Refused):
+        root = furb_monty.engine.restore(dumped.read_bytes(), record, world=self.hears(), **ears)
+        self.restored = True
+        return root
+    return engine.boot(record, world=self.hears(), **ears)
+
+  def dispose(self) -> None:
+    """The end of the World, which leaves the dump of the life beside the record when the life stands still: this
+    World owes it no work, and the life refuses no dump. A life that does not stand still leaves no dump, and an
+    older one goes, since it is of a record that stands no more."""
+    if engine is not furb_monty.engine or (dumped := self.dumped) is None:
+      return
+    dump = None
+    if not self.owed:
+      with suppress(Refused):
+        dump = furb_monty.engine.dump()
+    if dump is None:
+      dumped.unlink(missing_ok=True)
+      return
+    draft = dumped.with_name(f"{dumped.name}.tmp")
+    draft.write_bytes(dump)
+    draft.replace(dumped)
 
   def buys(self, name: str) -> Model[object]:
     """The model a name asks for, bought once, or the one model the World was given for every name it hears."""
@@ -425,12 +467,20 @@ class Live:
     except ValueError as no:
       engine.close(Refused(f"{line!r} is no {shape}: {no}"), about)
 
+  def owes(self, a: tuple) -> None:
+    """What the World owes the life once it hears a fact: the act a start or an ask names, until the World hears the
+    fact that ends it."""
+    match a:
+      case ("start" | "ask", about, *_):
+        self.owed.add(about)
+      case ("done" | "answer" | "exited", about, *_):
+        self.owed.discard(about)
+
   def hears(self) -> World:  # noqa: PLR0912
     """The World as one generator for one life: it does the act a start names, answers the questions that are its
     own, feeds and ends its commands, answers an ask with the turn of a model, and keeps what it is told.
     """
     running: dict[str, Command] = {}
-    acts: dict[str, tuple] = {}
     jobs: set[Task[None]] = set()
     loop = asyncio.get_running_loop()
 
@@ -445,11 +495,13 @@ class Live:
       # Every fact the World answered or performed, and none that it only heard.
       if a[0] in ("start", "stand", "read", "write", "ask", "feed", "clock", "chance"):
         self.calls.append(a)
+      self.owes(a)
       match a:
-        case (_, id, *_) if engine.question(a) and id in engine.acts:
-          acts[id] = a
         case ("start", about, _):
-          match acts[about]:
+          # The act is read of the life, which holds every act, since the World of a restored life never heard the
+          # acts of the life the dump came from.
+          act: tuple = engine.acts[about]
+          match act:
             case ("bash", _, _, on, command, fed, timeout):
               merged = engine.ask("merged", on, about)[1]
               running[about] = held = Command(about, command, fed, timeout, bool(merged))

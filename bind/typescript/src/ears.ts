@@ -38,6 +38,8 @@ const synchronous = (value: unknown) => {
 /** JavaScript generators use the same crossing as Python generators, including nested bus calls. */
 export class Ears {
   private readonly ears = new Map<string, Ear>();
+  /** The names of the ears that stand at a wait. */
+  private readonly waiting = new Set<string>();
   private readonly functions = new Map<string, (...args: never[]) => unknown>();
   private serial = 0;
   constructor(ears: Record<string, Ear>) {
@@ -61,6 +63,11 @@ export class Ears {
       }
       const ear = this.ears.get(String(name));
       if (!ear) throw new Error(`Unknown ear ${name}.`);
+      // A generator drops what its first step is given. An ear of a restored life hears a fact first, since the life
+      // the dump came from heard its birth, so the ear goes to its first wait before it, and what it says there it
+      // said in that life.
+      if (kind === "hears" && value !== null && !this.waiting.has(String(name))) ear.next();
+      this.waiting.add(String(name));
       const answer = value as [string, unknown];
       const next =
         kind === "answered"
@@ -79,6 +86,11 @@ export class Ears {
   boot(record: Entry[] = []): Life {
     return Life.boot(this.callback, [...this.ears.keys()], record);
   }
+  /** A life restored from a dump of one that stood still, on the record the World holds. A dump that does not match
+   * that record, the engine or the build is refused, and the host boots instead. */
+  restore(dump: Uint8Array, record: Entry[] = []): Life {
+    return Life.restore(this.callback, [...this.ears.keys()], dump, record);
+  }
 }
 
 /** A ready adapter for the crate's World operations. Async work says its result later on the same life. */
@@ -87,6 +99,9 @@ export class WorldAdapter {
   stopped = false;
   /** The ears the life boots on, whose callable carries a show or a filter of the host into the life. */
   readonly ears: Ears;
+  /** Each act the World does work for that it has not said the end of: an ask, a command, a wait and a prompt to the
+   * operator. The life stands still when it holds none. */
+  readonly owed = new Set<string>();
   private readonly running = new Set<string>();
   /** The actor whose last ask on each chain answered nothing, so a second such ask in a row pauses the chain. */
   private readonly mute = new Map<string, string>();
@@ -135,6 +150,8 @@ export class WorldAdapter {
   }
 
   private later(request: WorldRequest, done: (value: unknown) => void, fail: (error: unknown) => void): void {
+    const id = request.kind === "Wait" ? request.args[1] : request.args[0];
+    this.owed.add(String(id));
     queueMicrotask(() => {
       if (this.closed) return;
       Promise.resolve()
@@ -144,7 +161,6 @@ export class WorldAdapter {
         })
         .catch((error) => {
           if (this.closed) return;
-          const id = request.kind === "Wait" ? request.args[1] : request.args[0];
           if (typeof id === "string" && this.life?.outcome(id).done) return;
           try {
             this.speak(() => fail(error));
@@ -159,6 +175,7 @@ export class WorldAdapter {
       const fact = (yield null) as Fact;
       if (!fact) continue;
       const [kind, id, , ...words] = fact;
+      if (["answer", "done", "exited"].includes(kind)) this.owed.delete(id);
       if (["stand", "clock", "chance", "read", "write"].includes(kind)) {
         let value: unknown;
         try {
@@ -225,6 +242,7 @@ export class WorldAdapter {
           const here = yield { verb: "cwd", kwargs: { on: act[3] } };
           const [, merged] = (yield { verb: "ask", args: ["merged", act[3], id] }) as [unknown, boolean];
           this.running.add(id);
+          this.owed.add(id);
           try {
             synchronous(
               this.handle({
@@ -274,6 +292,12 @@ export class WorldAdapter {
   }
   boot(record: Entry[] = []): Life {
     this.life = this.ears.boot(record);
+    return this.life;
+  }
+  /** The life restored from a dump of one that stood still, on the record the World holds, or the refusal of a dump
+   * that does not match it. */
+  restore(dump: Uint8Array, record: Entry[] = []): Life {
+    this.life = this.ears.restore(dump, record);
     return this.life;
   }
 }

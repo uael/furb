@@ -16,14 +16,20 @@ afterEach(async () => {
   for (const life of lives.splice(0)) await life.dispose();
 });
 
-async function open(record: unknown[] = [], answer = 'close("hello")') {
+async function open(record: unknown[] = [], answer = 'close("hello")', dump?: Uint8Array) {
   const entries: unknown[] = [];
   const facts: unknown[] = [];
+  /** The kind of every request of the World that does work, with the act it is for. */
+  const work: string[] = [];
   const files = new Map<string, string>([["a", "one\ntwo\n"]]);
   // A wait of no seconds is over at once; any other is over when the test says so, and never by the clock.
   const waits: (() => void)[] = [];
   let asks = 0;
   const world = ({ kind, args }: WorldRequest): unknown => {
+    if (["Ask", "Run", "Wait", "Prompt"].includes(kind))
+      work.push(
+        `${kind} ${kind === "Run" ? (args[0] as { id: string }).id : kind === "Wait" ? args[1] : args[0]}`,
+      );
     switch (kind) {
       case "Stand":
         return [
@@ -58,12 +64,13 @@ async function open(record: unknown[] = [], answer = 'close("hello")') {
         return null;
     }
   };
-  const life = new WorldAdapter(world, (batch) => facts.push(...batch)).boot(record as Entry[]);
+  const adapter = new WorldAdapter(world, (batch) => facts.push(...batch));
+  const life = dump ? adapter.restore(dump, record as Entry[]) : adapter.boot(record as Entry[]);
   lives.push(life);
   const release = () => {
     for (const done of waits.splice(0)) done();
   };
-  return { life, entries, facts, release, files, asks: () => asks };
+  return { life, entries, facts, release, files, work, asks: () => asks };
 }
 
 test("native queries are synchronous and acts await the real engine and async World", async () => {
@@ -274,4 +281,87 @@ test("every ear is given the turns of an ask as the python the chain folded", ()
   } finally {
     life.dispose();
   }
+});
+
+test("a life dumped where it stands still is restored on the record and goes on, and its ears hear the next fact", async () => {
+  const first = await open();
+  await first.life.rung("k = len(read('a').lines)");
+  const dump = first.life.dump();
+  const record = [...first.entries];
+  const second = await open(record, 'close("hello")', dump);
+  expect(second.life.root).toBe(first.life.root);
+  expect(second.life.inspect("k").value).toBe(2);
+  expect(await second.life.rung("close(k + 1)")).toBe(3);
+  expect(second.asks()).toBe(0);
+  // The World of the restored life hears the first fact said after the restore, which is its first read.
+  expect(second.life.read<{ content: string }>("a").content).toBe("one\ntwo\n");
+  expect(second.facts.length).toBeGreaterThan(0);
+});
+
+test("a dump that does not match its record, its engine or its build is refused with each part that differs", async () => {
+  const first = await open();
+  await first.life.rung("k = 1");
+  const dump = first.life.dump();
+  const record = [...first.entries];
+  const restamped = (name: string) => {
+    const end = dump.indexOf("\n\n");
+    const head = dump
+      .subarray(0, end)
+      .toString("utf8")
+      .split("\n")
+      .map((line) =>
+        line.startsWith(`${name} `) ? `${name} ${"0".repeat(line.length - name.length - 1)}` : line,
+      );
+    return Buffer.concat([Buffer.from(head.join("\n")), dump.subarray(end)]);
+  };
+  expect(() => new WorldAdapter(() => null).restore(dump, record.slice(0, -1) as Entry[])).toThrow(
+    /^Refused: the dump does not match: it is of a record of \d+ entries that end with /,
+  );
+  expect(() => new WorldAdapter(() => null).restore(restamped("engine"), record as Entry[])).toThrow(
+    "Refused: the dump does not match: it holds another engine",
+  );
+  expect(() => new WorldAdapter(() => null).restore(restamped("build"), record as Entry[])).toThrow(
+    "Refused: the dump does not match: another build of the crate made it",
+  );
+  expect(() => new WorldAdapter(() => null).restore(Buffer.from("not a dump"), [])).toThrow(
+    "Refused: no dump of a life",
+  );
+});
+
+test("a life whose boot raised is refused its dump, since a restore raises nothing", async () => {
+  const word = "import random\nawait wait(random.random() + 1)\nclose(1)";
+  const first = await open([], word);
+  const settled = first.life.result<number>(first.life.prompt("int", "roll").id);
+  await Bun.sleep(20);
+  first.release();
+  expect(await settled).toBe(1);
+  const second = await open(first.entries, word);
+  expect(second.life.raised).toMatchObject({ is: "Drift" });
+  expect(() => second.life.dump()).toThrow(
+    /^Refused: a life is dumped where it stands still, and its boot raised Drift: /,
+  );
+});
+
+test("a restored life holds its pending work unstarted until a wake, as a booted life does", async () => {
+  const first = await open();
+  const shown = first.life.prompt("str", "Why?", { to: "operator" }).id;
+  const asked = first.life.prompt("str", "Say hello").id;
+  // The life ends before its World does the work it started.
+  const record = [...first.entries];
+  await first.life.dispose();
+  const still = await open(record);
+  const dump = still.life.dump();
+  const lives = [await open(record), await open(record, 'close("hello")', dump)];
+  for (const { life, work } of lives) {
+    await Promise.resolve();
+    expect(work).toEqual([]);
+    life.wake(life.root);
+    expect(await life.result<string>(shown)).toBe("operator answer");
+    expect(await life.result<string>(asked)).toBe("hello");
+  }
+  const [booted, restored] = lives as [(typeof lives)[number], (typeof lives)[number]];
+  expect(booted.work).toEqual(["Ask rung1", `Prompt ${shown}`]);
+  expect(restored.work).toEqual(booted.work);
+  expect(restored.entries).toEqual(booted.entries);
+  expect(await restored.life.turns()).toEqual(await booted.life.turns());
 });

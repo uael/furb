@@ -25,6 +25,7 @@ pub mod fact;
 pub mod gate;
 pub mod life;
 mod sand;
+mod stamp;
 pub mod value;
 pub mod world;
 

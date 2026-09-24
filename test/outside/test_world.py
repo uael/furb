@@ -26,6 +26,10 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, UserProm
 from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
+import furb
+import furb.world
+import furb_monty.engine
+from conftest import swapped
 from furb import engine
 from furb.engine import OPERATOR, TIMEOUT, Exit, Refused, Text
 from furb.kernel import Native
@@ -728,3 +732,95 @@ async def test_the_world_says_nothing_of_a_door_of_no_act_so_an_ear_of_the_outsi
     engine.read(f"{over}/stdout", on=root)
   with pytest.raises(Refused, match="nothing that takes a word"):
     engine.write(Text(f"{over}/stdin", "late"), on=root)
+
+
+@pytest.fixture
+def monty(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
+  """The World and this module on the engine of monty, which dumps a life and restores one."""
+  monkeypatch.setattr(furb.world, "engine", furb_monty.engine)
+  swapped(furb_monty.engine)
+  yield
+  swapped(furb.python)
+
+
+@pytest.mark.usefixtures("monty")
+async def test_a_world_of_monty_leaves_a_dump_that_the_next_world_restores_while_it_matches_the_record(
+  yard: Path,
+) -> None:
+  """A World on the engine of monty leaves a dump beside its record when its life stands still at its end, and the
+  next World restores the life from it while it matches the record, and boots on the record once it does not."""
+  record = yard / "record.jsonl"
+  first = world(yard, record=record)
+  root = first.open()
+  await engine.rung("k = len(read('a.txt').lines)", on=root)
+  first.dispose()
+  dumped = first.dumped
+  assert dumped is not None and dumped.is_file() and not first.restored
+  older = dumped.read_bytes()
+  second = world(yard, record=record)
+  assert second.open(kept(record)) == root and second.restored
+  assert engine.modules[root]["k"] == 3
+  assert [one[0] for one in second.calls] == ["stand"]
+  await engine.rung("k += 1", on=root)
+  second.dispose()
+  dumped.write_bytes(older)
+  third = world(yard, record=record)
+  assert third.open(kept(record)) == root and not third.restored
+  assert engine.modules[root]["k"] == 4
+
+
+@pytest.mark.usefixtures("monty")
+async def test_a_world_of_monty_that_owes_its_life_work_leaves_no_dump_and_a_restore_holds_what_a_boot_holds(
+  yard: Path,
+) -> None:
+  """A World on the engine of monty that owes its life work at its end leaves no dump, so the next World boots and
+  holds that work pending; a World that restores the dump that one leaves holds the same work pending, and starts
+  it at a wake as a World that boots does."""
+  record = yard / "record.jsonl"
+  first = world(yard, record=record)
+  root = first.open()
+  engine.bash("[ -e done ] || exec sleep 30; echo ok", on=root)
+  for _ in range(2000):
+    await asyncio.sleep(0.001)
+    if runs():
+      break
+  assert first.owed == {"bash1"}
+  first.dispose()
+  dumped = first.dumped
+  assert dumped is not None and not dumped.exists()
+  up = runs()
+  for one in up:
+    one.cancel()
+  await asyncio.gather(*up, return_exceptions=True)
+  (yard / "done").write_text("", encoding="utf-8")
+  second = world(yard, record=record)
+  second.open(kept(record))
+  assert not second.restored and second.owed == set()
+  second.dispose()
+  assert dumped.is_file()
+  lives: list[tuple[Live, Exit, list[tuple]]] = []
+  for restores in (True, False):
+    copy = yard / str(restores) / "record.jsonl"
+    copy.parent.mkdir()
+    copy.write_bytes(record.read_bytes())
+    if restores:
+      copy.with_name("record.jsonl.dump").write_bytes(dumped.read_bytes())
+    live = world(yard, record=copy)
+    live.open(kept(copy))
+    assert live.restored is restores
+    await settle()
+    assert [one for one in live.calls if one[0] == "start"] == []
+    engine.wake(root)
+    for _ in range(2000):
+      await asyncio.sleep(0.001)
+      if "bash1" in engine.outcomes:
+        break
+    came = engine.outcomes["bash1"]
+    assert isinstance(came, Exit)
+    await settle()
+    lives.append((live, came, kept(copy)))
+  (restored, came, restored_record), (booted, went, booted_record) = lives
+  assert [one[1] for one in restored.calls if one[0] == "start"] == ["bash1"]
+  assert [one for one in restored.calls if one[0] == "start"] == [one for one in booted.calls if one[0] == "start"]
+  assert (came.code, came.stdout.content) == (went.code, went.stdout.content) == (0, "ok\n")
+  assert restored_record == booted_record

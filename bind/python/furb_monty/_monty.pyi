@@ -18,6 +18,16 @@ class Life:
     record a World kept. The ears are one object with `hears(name, fact)`, `answered(name, value)`,
     `called(name, args, kwargs)`, `ear(generator)` and `callable(function)`."""
 
+  @staticmethod
+  def restored(ears: object, names: Sequence[str], dump: bytes, record: object) -> Life:
+    """A life restored from a dump of one that stood still, on the ears of the host under the names it was
+    dumped with, and on the record a World kept. It raises Refused for a dump whose stamp does not match: another
+    engine, another build of the crate, or another record, each part that differs said."""
+
+  def dump(self) -> bytes:
+    """The life as bytes, where it stands still, stamped with the engine, the build of the crate and the record,
+    for a later life to go on from. It raises Refused for a life that does not stand still."""
+
   @property
   def root(self) -> str:
     """The root chain of the life, which is the first act of any record."""

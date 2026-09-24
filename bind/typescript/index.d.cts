@@ -21,6 +21,18 @@ export type JsAct = Act
 export declare class Life {
   /** Open on JavaScript ears, using the same call and reply protocol as the Python binding. */
   static boot(callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null): Life
+  /**
+   * Open on JavaScript ears from a dump of a life that stood still, under the names it was dumped with, on the
+   * record the World holds. A dump that another engine or another build made, or that another record stands
+   * under, is refused with each part that differs, and the host boots on the record instead. An ear hears from
+   * the next fact on: what it said at its birth, it said in the life the dump came from.
+   */
+  static restore(callback: (request: unknown[]) => unknown, names: string[], dump: Uint8Array, record?: unknown[] | null): Life
+  /**
+   * The life as bytes, where it stands still, stamped with the engine, the build and the record, for a later life
+   * to restore without the record replayed. A life that does not stand still is refused.
+   */
+  dump(): Buffer
   get root(): string
   /** What boot raised, and nothing when it raised nothing. After a drift the life goes on, with nothing kept. */
   get raised(): { is: string; args: unknown[] } | null
