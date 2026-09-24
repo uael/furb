@@ -35,5 +35,5 @@ async def test_it_tells_nothing_and_answers_nothing() -> None:
   assert await act is None
   assert [one for one in said(log, "tell") if one[1] == act] == []
   assert [one for one in paragraphs(engine.turns(on=root)) if act in one] == []
-  assert engine.read(f"{act}/stdout", on=root) is None
+  assert engine.ask("look", root, act)[1] is None
   assert engine.peek(act, on=root) is None

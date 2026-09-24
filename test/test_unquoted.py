@@ -61,7 +61,7 @@ async def test_an_open_mark_that_has_no_close_mark_stays_as_it_is() -> None:
 
 
 async def test_the_engine_unquotes_a_word_before_the_gate_reads_it_and_before_the_kernel_runs_it() -> None:
-  """The engine unquotes a word before the gate reads it and before the Kernel runs it, and the door of a ladder and the turns keep the quotes as the word wrote them."""
+  """The engine unquotes a word before the gate reads it and before the Kernel runs it, and a ladder and the turns keep the quotes as the word wrote them."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   word = "<S1>\nhi\n</S1>\nclose(len(S1))"
@@ -70,5 +70,5 @@ async def test_the_engine_unquotes_a_word_before_the_gate_reads_it_and_before_th
   assert await asking == 3
   assert ran(log)[-1] == "S1 = 'hi\\n'\n\n\nclose(len(S1))"
   assert [a[3] for a in said(log, "ready") if a[1] == "rung1"] == [word]
-  assert engine.read(asking, on=root).content == word
+  assert engine.ask("ladder", root, asking)[1] == word
   assert engine.turns(on=root)[1][1] == word
