@@ -39,10 +39,11 @@ module, and each answer of the model is a program that runs in it.
 pip install furb                     # The engine and the furb command. It needs Python 3.14 or later.
 ```
 
-The TUI runs from a clone of this repository, with Bun 1.4.2 or later:
+The TUI runs from a clone of this repository. It needs uv, the Rust toolchain, and Bun 1.4.2 or later:
 
 ```sh
-bun install && bun run build
+uv sync                              # The Python environment, which the build reads.
+bun install && bun run build         # The TUI, and the engine that it runs through the crate.
 bun run demo                         # A scripted life on a sample project. It asks no model.
 bun run tui                          # A real life, through the claude command line.
 ```

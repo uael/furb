@@ -7,9 +7,8 @@ that an agent reads. When the two differ, `CLAUDE.md` is right, and this guide m
 ## The idea in two minutes
 
 furb gives a model a Python module. Each answer of the model is a short program, which furb calls a word. The
-engine runs the word in the module of a chain, and the effects of the word, such as a read, a command, a question
-to a model, or a wait, are acts. The engine tells the model what each act did, as Python that the model reads in
-its next turn.
+engine runs the word in the module of a chain. The effects of the word are acts: a read, a command, a question to
+a model, or a wait. The engine tells the model what each act did, as Python that the model reads in its next turn.
 
 The whole engine is one file, `src/furb/engine.py`. Minified, it is the system prompt of the model, so each word of
 it has a cost. The contract, `src/furb/engine.pyi`, says what the engine must do, one sentence per line, and the
@@ -57,11 +56,11 @@ bun install && bun run build     # The TypeScript workspace and the N-API packag
    reason in its next turn.
 4. The Kernel runs the word in the module of its chain. Each call such as `read`, `bash`, `prompt`, or `wait`
    makes an act, which the World serves: the disk, the machine, the models, and the record.
-5. Each act says what it did as a fact. The chain folds its facts into turns, which is the Python that the model
+5. Each act says what it did as a fact. The chain folds its facts into turns, which are the Python that the model
    reads next.
 
-The TUI shows the same life in three views: the feed, which reads the facts as cards, the transcript, which is
-the exact text of the turns, and the changes, which are the files that the life wrote.
+The TUI shows the same life in three views. The feed shows the facts as cards. The transcript is the exact text of
+the turns. The changes are the files that the life wrote.
 
 ## Everyday tasks
 

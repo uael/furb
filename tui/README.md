@@ -38,18 +38,21 @@ The sidebar at the right holds the chains of the session, the context and the co
 workspaces. Each workspace is a project folder with many sessions, and its list scrolls on its own. Click a
 workspace to fold its sessions, and click a session to open it. Open sessions keep running when you switch. A dot
 shows the state of each session and workspace: blue for work, yellow for input needed or paused work, green for an
-unread completion, and red for an error. An open grey dot means ready or saved. Hover a session for its state.
-Selecting a completed session clears its unread marker. `/workspace path` adds a folder, and `/new` starts a
-session in the current workspace. `/delete` moves a chosen session and its companions to `.furb/trash`. The trash
-holds a `restore.json` with the original paths, and its record can be opened with `--resume`. Quit saves and closes
-all open sessions, and SIGINT, SIGTERM, SIGHUP, and SIGQUIT quit the same way. On Windows, a console that closes
-and Ctrl+Break quit the same way. `⌃\` or `/sidebar` shows or hides the sidebar, and a drag of its edge
-changes its width. On a terminal narrower than 100 columns the sidebar is hidden, and `/workspace` keeps all
-sessions available from the keyboard.
+unread completion, and red for an error. An open grey dot means ready or saved. Hover the dot for its state. The
+pointer on a row shows `✎` and `×` at its end. `✎` renames the session or the workspace in its row. `×` archives a
+session or moves it to the trash, and it takes a workspace off the list. A right click on a row opens the same
+actions in a menu. The chains list holds the root chain, the chain on screen, and each chain that is not at rest.
+The other chains fold under Finished. Selecting a completed session clears its unread marker. `/workspace path`
+adds a folder, and `/new` starts a session in the current workspace. `/delete` moves a chosen session and its
+companions to `.furb/trash`. The trash holds a `restore.json` with the original paths, and its record can be opened
+with `--resume`. Quit saves and closes all open sessions, and SIGINT, SIGTERM, SIGHUP, and SIGQUIT quit the same
+way. On Windows, a console that closes and Ctrl+Break quit the same way. `⌃\` or `/sidebar` shows or hides the
+sidebar, and `sidebarWidth` in the preferences file sets its width, from 26 to 48 columns. On a terminal narrower
+than 100 columns the sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
 
 Python words have offline Tree-sitter colors and line numbers. Hover over a name for its current value; ⌃click
-or ⌃G opens its fields and definition. GitHub Dark is the default. Theme preferences are shared by sessions and
-saved in `$XDG_CONFIG_HOME/furb/ui.json` (or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows).
+or ⌃G opens its fields and definition. GitHub Dark is the default. Sessions share the theme, and the TUI saves
+it in `$XDG_CONFIG_HOME/furb/ui.json` (or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows).
 `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated
 preferences; the CLI shares the user's choice across sessions, including demos.
 
@@ -59,9 +62,10 @@ comes under the name of the model that gave it. A question that a model asks you
 bar, and your answer follows it. One mark means one state in every view, dialog, and sidebar: a spinner for work
 that runs, `◉` for a chain or a session at work, `◆` for a question that waits for you, `◌` for paused work, `✓`
 for a done act, `✗` for a failure, `●` for a chain you started or a session that finished while you were away, and
-`○` for rest. F1 lists them. A rung opens while it runs. Click its heading or use ⌥D to fold it to its mark, its
-name, and its first line. Its fold stays the same across views and after reopening. `/autocollapse` opts into
-automatic collapse when a rung completes. Right-click an act to inspect it, edit its program, or branch after it.
+`○` for rest. F1 lists them. A rung opens while it runs, and folds to its mark, its name, and its first line when it
+completes. Click its heading or use ⌥D to open or fold it. Its fold stays the same across views and after
+reopening. `/autocollapse` turns the automatic fold off, and on again. Right-click an act to inspect it, edit its
+program, or branch after it.
 
 The composer grows as you type, and its bar and the line under it name the mode: Prompt, Python, Answer, or Edit
 program. Each part of that line is a button: the mode, the chain, the model, the effort, and the type of the

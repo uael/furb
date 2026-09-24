@@ -202,6 +202,38 @@ paths of the project, the chains, and the acts. Enter on a value runs the comman
 
 ![Value suggestions](screenshots/46-value-suggestions.png)
 
+## Retried words
+
+A word of a model can fail: the gate refuses it, or it raises. When the next word of the same prompt takes its
+place, the failed word folds and reads as retried, in a quiet color. A failure that nothing replaced stays open, in
+red.
+
+![Retried word](screenshots/47-retried-word.png)
+
+## Archived sessions
+
+The pointer on a session row shows two buttons at its end. `✎` renames the session, and `×` asks whether to archive
+the session or move it to the trash. An archived session keeps its record, and folds under an Archived row of its
+workspace. A click on an archived session opens it and puts it back in the list. The state of a session shows in a
+tip only while the pointer is on its dot.
+
+![Archived session](screenshots/48-archive-session.png)
+
+## The menu of a row
+
+A right click on a session row or a workspace row opens its menu at the pointer. The row stays lit while its menu
+is open. A session offers Open, Rename, Archive or Restore, and Move to trash. A workspace offers a new session, a
+new name, a fold, and removal from the list, which keeps its folder.
+
+![Session menu](screenshots/49-session-menu.png)
+
+## Rename in place
+
+Rename puts an input in the row, in place of the name. Enter keeps the new name, and Escape keeps the old one. A
+session keeps its name in its saved view, and a workspace in the list of workspaces.
+
+![Rename a session](screenshots/50-rename-session.png)
+
 ## Extensions
 
 An extension adds commands to the palette and to the suggestions.
