@@ -33,6 +33,7 @@ import { chords, keys } from "./keys.ts";
 import { loadParsers } from "./parsers.ts";
 import {
   type ActRow,
+  cancelled,
   failed,
   type Scroll,
   type Session,
@@ -68,6 +69,8 @@ const viewLabels: Record<View, string> = { feed: "Feed", transcript: "Transcript
 /** Whether an act is a question to the operator: a prompt whose actor is the operator. */
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const asksOperator = (act: ActRow) => act.kind === "prompt" && act.words[2] === "operator";
+/** A span of seconds as a wait says it: 1 second, 0.2 seconds. */
+const seconds = (value: number) => `${value} ${value === 1 ? "second" : "seconds"}`;
 /** A border that draws nothing, which a part of a border replaces. */
 const noBorder = {
   topLeft: " ",
@@ -1525,13 +1528,30 @@ export class App {
         )
           writing.push([act.id, { chain: w.selected, text: "", thinking: "" }]);
       const waiting = new Set(writing.map(([id]) => id));
-      for (const act of w.activity)
-        if (!told.has(act.id) && !waiting.has(act.id) && this.isPoint(act))
-          listed.push(
-            w.isUserPrompt(act) || asksOperator(act)
-              ? { type: "prompt", key: act.id, act }
-              : { type: "act", key: act.id, act },
-          );
+      // An act that no turn tells yet stands where it came in time, among the items that the turns tell, so the
+      // feed never moves a card once it shows it.
+      const position = new Map(w.activity.map((act, index) => [act.id, index]));
+      const untold = w.activity
+        .filter((act) => !told.has(act.id) && !waiting.has(act.id) && this.isPoint(act))
+        .map((act) => ({
+          at: position.get(act.id) ?? Number.POSITIVE_INFINITY,
+          item: (w.isUserPrompt(act) || asksOperator(act)
+            ? { type: "prompt", key: act.id, act }
+            : { type: "act", key: act.id, act }) as (typeof listed)[number],
+        }));
+      if (untold.length) {
+        const merged: typeof listed = [];
+        let next = 0;
+        for (const item of listed) {
+          const id = item.type === "python" ? item.rung?.id : item.act?.id;
+          const at = id === undefined ? undefined : position.get(id);
+          while (at !== undefined && next < untold.length && (untold[next]?.at ?? 0) < at)
+            merged.push(untold[next++]?.item as (typeof listed)[number]);
+          merged.push(item);
+        }
+        while (next < untold.length) merged.push(untold[next++]?.item as (typeof listed)[number]);
+        listed.splice(0, listed.length, ...merged);
+      }
       for (const item of listed) {
         if (item.type === "python") {
           const { code, rung } = item;
@@ -1576,7 +1596,7 @@ export class App {
           add(
             id,
             `${code}\n${rung?.run?.reason ?? ""}`,
-            rung ? this.actLabel(rung, closed) : [["Python", c.muted, bold]],
+            rung ? this.actLabel(rung, closed, 0, code) : [["Python", c.muted, bold]],
             (box) => this.word(box, code, rung?.run?.reason),
             { collapsible: true, act: rung, title: moving(rung) },
           );
@@ -1626,9 +1646,10 @@ export class App {
           const sent = user ? "" : this.sender(act);
           const line =
             !message.includes("\n") && Bun.stringWidth(message) + Bun.stringWidth(sent) < this.feedWidth - 8;
+          const state = user ? this.promptState(act) : [];
           add(
             item.key,
-            `${message}\n${line}\n${sent}`,
+            `${message}\n${line}\n${sent}\n${plain(state)}`,
             user
               ? [["You", c.muted]]
               : [
@@ -1638,8 +1659,16 @@ export class App {
                 ],
             (box) => {
               // A message shows as the operator typed it, with each image it attached named by a mark that opens it.
-              if (user) this.panel(box, c.accent).add(this.message(message));
-              else if (!line) {
+              // Its first line says at its right the type of the answer that it asks for, and where it stands.
+              if (user) {
+                const row = this.box({ flexDirection: "row" });
+                const text = this.message(message);
+                text.flexGrow = 1;
+                text.flexShrink = 1;
+                row.add(text);
+                row.add(this.text(state, c.faint, { flexShrink: 0, marginLeft: space.between }));
+                this.panel(box, c.accent).add(row);
+              } else if (!line) {
                 const note = this.box({ paddingLeft: space.between });
                 note.add(this.markdown(message, c.muted));
                 box.add(note);
@@ -2111,7 +2140,9 @@ export class App {
   }
   private actPreview(act: ActRow): BlockOptions["preview"] {
     if (act.run)
-      return act.run.reason ? (box) => this.excerpt(box, act.run?.reason ?? "", false, c.danger) : undefined;
+      return act.run.reason && !cancelled(act)
+        ? (box) => this.excerpt(box, act.run?.reason ?? "", false, c.danger)
+        : undefined;
     if (failed(act)) {
       const fault = act.value as { is: string; args: unknown[] };
       return (box) =>
@@ -2138,8 +2169,6 @@ export class App {
    * nothing, since its glyph says it. */
   private actState(act: ActRow): { word: string; mark: string; color: RGBA } {
     const w = this.session;
-    const cancelled =
-      act.value && typeof act.value === "object" && "is" in act.value && act.value.is === "CancelledError";
     const running = () => ({ word: `running ${this.progress(act.id)}`, mark: spin(), color: c.accent });
     if (act.kind === "grant")
       return act.done
@@ -2147,17 +2176,19 @@ export class App {
         : { word: "", mark: glyph.dot, color: c.accent };
     // A rung that a pause holds waits for the wake, and says so, where it would otherwise seem to run.
     if (act.kind === "rung")
-      return act.run?.status === "failed"
-        ? { word: "failed", mark: glyph.failed, color: c.danger }
-        : act.run?.status === "done"
-          ? { word: "", mark: glyph.done, color: c.success }
-          : act.paused
-            ? { word: "waits for resume", mark: glyph.held, color: c.warning }
-            : running();
+      return cancelled(act)
+        ? { word: "cancelled", mark: glyph.cancelled, color: c.faint }
+        : act.run?.status === "failed"
+          ? { word: "failed", mark: glyph.failed, color: c.danger }
+          : act.run?.status === "done"
+            ? { word: "", mark: glyph.done, color: c.success }
+            : act.paused
+              ? { word: "waits for resume", mark: glyph.held, color: c.warning }
+              : running();
     if (act.done)
       return failed(act)
         ? { word: "failed", mark: glyph.failed, color: c.danger }
-        : cancelled
+        : cancelled(act)
           ? { word: "cancelled", mark: glyph.cancelled, color: c.faint }
           : { word: "", mark: glyph.done, color: c.success };
     if (w.world.pending.has(act.id)) return { word: "pending", mark: glyph.ring, color: c.faint };
@@ -2168,7 +2199,7 @@ export class App {
   }
   /** The heading of an act: its state, its kind, what it is about, and the word of its state. A rung is named by its
    * id, and says its first line while it is folded. */
-  private actLabel(act: ActRow, closed = false, indent = 0): Part[] {
+  private actLabel(act: ActRow, closed = false, indent = 0, code?: string): Part[] {
     const { word, mark, color } = this.actState(act);
     const observation = act.kind === "prompt" && !this.session.isUserPrompt(act);
     const subject =
@@ -2182,10 +2213,10 @@ export class App {
               .filter(Boolean)
               .join("  ")
           : act.kind === "wait"
-            ? `${act.words[0]}s`
+            ? seconds(Number(act.words[0]))
             : act.kind === "rung"
               ? closed
-                ? (String(this.session.program[act.id] || act.words[0] || "").split("\n")[0] ?? "")
+                ? (String(code || this.session.program[act.id] || act.words[0] || "").split("\n")[0] ?? "")
                 : ""
               : String(act.words[0] || "");
     const name = act.kind === "rung" ? act.id : observation ? (subject.split("\n")[0] ?? "") : act.kind;
@@ -2205,6 +2236,21 @@ export class App {
       [author, c.faint],
       [tail, color],
     ];
+  }
+  /** Where a message of the operator stands, which its panel says at its right: the type of the answer that it asks
+   * for, and a mark and a word while it is not answered, or when a cancel or a failure ended it. */
+  private promptState(act: ActRow): Part[] {
+    const shape: Part = [String(act.words[0] ?? ""), c.faint];
+    const { word, mark, color } = act.done
+      ? failed(act)
+        ? { word: "failed", mark: glyph.failed, color: c.danger }
+        : cancelled(act)
+          ? { word: "cancelled", mark: glyph.cancelled, color: c.faint }
+          : { word: "", mark: glyph.done, color: c.success }
+      : act.paused || this.session.world.pending.has(act.id)
+        ? { word: "waits for resume", mark: glyph.held, color: c.warning }
+        : { word: "answering", mark: glyph.running, color: c.accent };
+    return [shape, [`   ${mark}`, color], [word ? ` ${word}` : "", color]];
   }
   /** The model of an actor by its name alone, with no provider, and its effort. */
   private model(actor: string): { name: string; effort: string } {
@@ -4299,7 +4345,7 @@ export class App {
         : act.kind === "prompt"
           ? String(act.words[1] ?? "")
           : act.kind === "wait"
-            ? `${act.words[0]}s`
+            ? seconds(Number(act.words[0]))
             : String(act.words[0] ?? "");
     const observation = act.kind === "prompt" && !asksOperator(act) && !w.isUserPrompt(act);
     const name = asksOperator(act) ? "question" : act.kind === "rung" ? act.id : act.kind;

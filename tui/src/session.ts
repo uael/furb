@@ -58,11 +58,19 @@ export const working = (act: ActRow): boolean =>
 /** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
  * than a cancel. */
 export function failed(act: ActRow): boolean {
-  if (act.run) return act.run.status === "failed";
+  if (act.run) return act.run.status === "failed" && !cancelled(act);
   const value = act.value;
   return Boolean(
     value && typeof value === "object" && "is" in value && "args" in value && value.is !== "CancelledError",
   );
+}
+
+/** Whether an act was cancelled: a rung whose run ended with a cancel, or an act done with a cancel. A cancel is what
+ * the operator asked for, so it is no failure. */
+export function cancelled(act: ActRow): boolean {
+  if (act.run) return act.run.status === "failed" && /^CancelledError\b/.test(act.run.reason ?? "");
+  const value = act.value;
+  return Boolean(value && typeof value === "object" && "is" in value && value.is === "CancelledError");
 }
 
 export interface FollowUp {

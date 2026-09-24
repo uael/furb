@@ -491,3 +491,26 @@ test("a notice cut to the room of the footer shows whole in a tip while the poin
     await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("A notice") + 2, row);
     expect(await frame()).toContain("to its very end");
   }));
+
+test("a cancelled message keeps its place in the feed, and its cancel reads as a cancel, not as a failure", () =>
+  composing(async ({ session, app, frame }) => {
+    app.composer.setText("show live progress");
+    await app.submit();
+    await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+    await session.submit("/cancel");
+    await until(
+      session,
+      () => !session.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)),
+    );
+    app.composer.setText("A second message.");
+    await app.submit();
+    await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
+    await session.refresh();
+    const shown = await frame();
+    expect(shown).toContain("cancelled");
+    expect(shown).not.toContain("failed");
+    expect(shown).not.toContain("CancelledError");
+    // The first message and what it made stand above the second message.
+    expect(shown.indexOf("show live progress")).toBeLessThan(shown.indexOf("cancelled"));
+    expect(shown.indexOf("cancelled")).toBeLessThan(shown.indexOf("A second message."));
+  }));
