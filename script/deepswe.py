@@ -27,14 +27,16 @@ import base64
 import json
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
 import tomllib
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from email import message_from_string
+from http.client import HTTPResponse
 from pathlib import Path
 from tempfile import gettempdir, mkdtemp
 from urllib.error import HTTPError
@@ -57,7 +59,11 @@ CACHE = Path(os.environ.get("DEEPSWE_DIR") or Path(gettempdir()) / "deep-swe")
 WORK = Path(os.environ.get("DEEPSWE_WORK") or Path(gettempdir()) / "furb-deepswe")
 """WORK is where the checkout of every task stands."""
 HOMES = Path.home() / ".cache/furb-deepswe"
-"""HOMES is where a reporter lives when the path its frame names is not this host's to write."""
+"""HOMES is what outlives a workroot: a reporter whose path this host does not let the rig write, and the layers.
+
+A layer of an image is read once, and what it holds of python is kept under `layers`. The layers of the base image
+stand in every task image, so a later task reads only its own.
+"""
 REPORTERS = {
   "/opt/ctrf": ("mocha-ctrf-json-reporter@0.0.11",),
   "/opt/jest-ctrf": ("jest-ctrf-json-reporter@0.0.11", "jest-environment-node@29.7.0"),
@@ -74,12 +80,6 @@ ROOTS = re.compile(r"(?<![\w./}$])(/opt/jest-ctrf|/opt/ctrf|/opt/nextest|/app|/t
 The lookbehind carries the rule: a relative `./tests/x.js` of the frame, and any `<dir>/tests` it makes, must
 stand untouched, or the suite looks for its modules under the rewritten root and finds none.
 """
-VCS = {
-  "SETUPTOOLS_SCM_PRETEND_VERSION": "0.0.0",
-  "HATCH_VCS_PRETEND_VERSION": "0.0.0",
-  "PDM_BUILD_SCM_VERSION": "0.0.0",
-}
-"""VCS is what a build backend that reads a version off git is told instead, since the base holds one commit."""
 CONTAINER = ("apt-get", "apt", "apk", "yum", "dnf")
 """CONTAINER is every step of a Dockerfile that only a container can take, which this rig steps over."""
 MANIFEST = "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"
@@ -265,15 +265,14 @@ def image(task: Path) -> str:
   return named
 
 
-def registry(named: str, path: str, accept: str) -> bytes:
-  """One read of the registry that holds an image, with the anonymous token that the registry asks for."""
+def registry(named: str, path: str, accept: str) -> HTTPResponse:
+  """One read of the registry that holds an image, open for its caller, with the anonymous token it asks for."""
   host, _, rest = named.partition("/")
   repo = rest.rpartition(":")[0]
   url = f"https://{host}/v2/{repo}/{path}"
   heard = {"Accept": accept}
   try:
-    with urlopen(Request(url, headers=heard), timeout=60) as got:
-      return got.read()
+    return urlopen(Request(url, headers=heard), timeout=60)
   except HTTPError as no:
     if no.code != 401:  # noqa: PLR2004
       raise
@@ -281,26 +280,96 @@ def registry(named: str, path: str, accept: str) -> bytes:
   asked = urlencode({"service": told["service"], "scope": f"repository:{repo}:pull"})
   with urlopen(f"{told['realm']}?{asked}", timeout=60) as got:  # noqa: S310
     heard["Authorization"] = f"Bearer {json.load(got)['token']}"
-  with urlopen(Request(url, headers=heard), timeout=60) as got:
-    return got.read()
+  return urlopen(Request(url, headers=heard), timeout=60)
 
 
-def python_of(named: str) -> str:
-  """The version of python that the image of a task runs, which is the python its verifier runs.
+def layer(named: str, digest: str) -> tuple[dict[str, dict[str, str | bool]], list[str]]:
+  """What one layer of an image does to the python of the image, read once and kept.
 
-  The config of the image names it in PYTHON_VERSION, as the official python image sets it. The config is read from
-  the registry, because a pull of the image costs gigabytes for one line.
+  It is every distribution the layer writes, by the path of its dist-info, with its name, its version, the URL it
+  was installed from and whether it was installed editable; and every path the layer takes away, where a path that
+  ends with a slash takes the whole of its directory.
   """
-  manifest = json.loads(registry(named, f"manifests/{named.rpartition(':')[2]}", MANIFEST))
+  kept_at = HOMES / "layers" / f"{digest.replace(':', '-')}.json"
+  if kept_at.is_file():
+    said = json.loads(kept_at.read_text(encoding="utf-8"))
+    return said["dists"], said["gone"]
+  dists: dict[str, dict[str, str | bool]] = {}
+  gone: list[str] = []
+  with registry(named, f"blobs/{digest}", "*/*") as got, tarfile.open(fileobj=got, mode="r|*") as tar:
+    for member in tar:
+      parent, _, leaf = member.name.removeprefix("./").rpartition("/")
+      if leaf == ".wh..wh..opq":
+        gone.append(f"{parent}/")
+      elif leaf.startswith(".wh."):
+        gone.append(f"{parent}/{leaf.removeprefix('.wh.')}")
+      elif parent.endswith(".dist-info") and leaf in ("METADATA", "direct_url.json") and member.isfile():
+        read = tar.extractfile(member)
+        text = read.read().decode(errors="replace") if read else ""
+        one = dists.setdefault(parent, {"url": "", "editable": False})
+        if leaf == "METADATA":
+          headers = message_from_string(text)
+          one |= {"name": str(headers["Name"]), "version": str(headers["Version"])}
+        else:
+          came = json.loads(text)
+          one |= {"url": came.get("url", ""), "editable": bool(came.get("dir_info", {}).get("editable"))}
+  kept_at.parent.mkdir(parents=True, exist_ok=True)
+  kept_at.write_text(json.dumps({"dists": dists, "gone": gone}), encoding="utf-8")
+  return dists, gone
+
+
+def interpreter(named: str) -> tuple[str, dict[str, tuple[str, str, bool]]]:
+  """The python that the image of a task runs, which is the python its verifier runs.
+
+  It is the version of that python, and every distribution its site holds, by name, with its version, the URL it
+  was installed from, which is empty for a distribution of an index, and whether it was installed editable. The config of the image names the version
+  in PYTHON_VERSION, as the official python image sets it, and the venv in VIRTUAL_ENV when the image makes one.
+  The layers say what the site holds, each in order over the ones before it. All of it is read from the registry,
+  with no pull and no docker.
+  """
+  with registry(named, f"manifests/{named.rpartition(':')[2]}", MANIFEST) as got:
+    manifest = json.load(got)
   if "config" not in manifest:
     say(f"[deepswe] {named} is an index of images, and the rig reads the python of one image only")
     raise SystemExit(1)
-  config = json.loads(registry(named, f"blobs/{manifest['config']['digest']}", "*/*"))
-  for one in config.get("config", {}).get("Env") or []:
-    if one.startswith("PYTHON_VERSION="):
-      return one.partition("=")[2]
-  say(f"[deepswe] {named} names no PYTHON_VERSION, so the rig cannot run the python that its verifier runs")
-  raise SystemExit(1)
+  with registry(named, f"blobs/{manifest['config']['digest']}", "*/*") as got:
+    env = dict(one.partition("=")[::2] for one in json.load(got).get("config", {}).get("Env") or [])
+  version = env.get("PYTHON_VERSION", "")
+  if not version:
+    say(f"[deepswe] {named} names no PYTHON_VERSION, so the rig cannot run the python that its verifier runs")
+    raise SystemExit(1)
+  prefix = (env.get("VIRTUAL_ENV") or "/usr/local").strip("/")
+  site = f"{prefix}/lib/python{'.'.join(version.split('.')[:2])}/site-packages/"
+  held: dict[str, dict[str, str | bool]] = {}
+  for one in manifest["layers"]:
+    dists, gone = layer(named, one["digest"])
+    for path in gone:
+      held = {at: dist for at, dist in held.items() if at != path and not at.startswith(path.rstrip("/") + "/")}
+    held |= dists
+  return version, {
+    str(dist["name"]): (str(dist["version"]), str(dist["url"]), bool(dist["editable"]))
+    for at, dist in held.items()
+    if at.startswith(site) and "/" not in at.removeprefix(site) and "name" in dist
+  }
+
+
+def rebuilt(repo: Path, dists: Mapping[str, tuple[str, str, bool]]) -> None:
+  """Install again each distribution that the image built from its tree, from the tree, at the version it holds.
+
+  The base holds one commit and no tag, so a step builds the tree at a version that git makes up, and a release
+  that wants a newer one goes over the editable install of the tree: the tree then imports the release. The
+  version is told to every build backend in this one install, and in no step, since a version told to a step also
+  reaches the build of an sdist that the step fetches, and the build of setuptools-scm itself then fails.
+  """
+  python = str(repo / ".venv" / "bin" / "python")
+  for name, (version, url, editable) in dists.items():
+    if url == "file:///app" or url.startswith("file:///app/"):
+      where = str(repo / url.removeprefix("file:///app").lstrip("/"))
+      told = {"SETUPTOOLS_SCM_PRETEND_VERSION": version, "PDM_BUILD_SCM_VERSION": version}
+      say(f"[deepswe] {name} {version} from the tree, as the image holds it")
+      if ran([python, "-m", "pip", "install", "-q", "--no-deps", *(["-e"] if editable else []), where], env=told):
+        say(f"[deepswe] {name} could not be installed from {where}")
+        raise SystemExit(1)
 
 
 def steps(task: Path) -> list[str]:
@@ -326,7 +395,7 @@ def venved(repo: Path) -> str:
   return f'export PATH="{first}:$PATH"; ' if first.is_dir() else ""
 
 
-def generic(repo: Path, lang: str) -> None:
+def generic(repo: Path, lang: str, env: Mapping[str, str]) -> None:
   """What is installed for a task whose Dockerfile says nothing this host can take."""
   words = {
     "typescript": "npm ci --include=dev --no-audit --no-fund || npm install --no-audit --no-fund",
@@ -338,13 +407,15 @@ def generic(repo: Path, lang: str) -> None:
   if words is None:
     say(f"[deepswe] unknown language {lang!r}; nothing installed")
     return
-  ran(["bash", "-lc", venved(repo) + words], where=repo, env={**VCS, "npm_config_confirm_modules_purge": "false"})
+  ran(["bash", "-lc", venved(repo) + words], where=repo, env=env)
 
 
 def installed(task: Path, repo: Path, lang: str) -> None:
   """Take the steps of the task's own Dockerfile in the checkout, so the tree is the one its verifier wants."""
-  if lang == "python" and not (repo / ".venv").is_dir():
-    version = python_of(image(task))
+  env = {"npm_config_confirm_modules_purge": "false"}
+  dists: Mapping[str, tuple[str, str, bool]] = {}
+  if lang == "python":
+    version, dists = interpreter(image(task))
     say(f"[deepswe] making the interpreter of the checkout: python {version}, as the image of the task runs")
     if ran([tool("uv"), "venv", "--no-project", "--seed", "--python", version, str(repo / ".venv")]):
       say(f"[deepswe] uv could not make an interpreter of python {version}")
@@ -352,7 +423,7 @@ def installed(task: Path, repo: Path, lang: str) -> None:
   told = steps(task)
   if not told:
     say(f"[deepswe] {task.name}: the Dockerfile says no step; installing by language instead")
-    return generic(repo, lang)
+    generic(repo, lang, env)
   for step in told:
     if step.split(" ", 1)[0] in CONTAINER:
       say(f"[deepswe] over (a container alone takes it): {step[:80]}")
@@ -362,11 +433,11 @@ def installed(task: Path, repo: Path, lang: str) -> None:
       named = named.replace(was, now)
     cmd = re.sub(r"(?<![\w./])/app\b", str(repo), named)
     say(f"[deepswe] RUN {cmd[:90]}")
-    if ran(["bash", "-lc", venved(repo) + cmd], where=repo, env={**VCS, "npm_config_confirm_modules_purge": "false"}):
+    if ran(["bash", "-lc", venved(repo) + cmd], where=repo, env=env):
       say("[deepswe]   the step failed; the rig goes on with what did land")
-  if lang in ("typescript", "javascript") and not (repo / "node_modules").is_dir():
-    generic(repo, lang)
-  return None
+  if told and lang in ("typescript", "javascript") and not (repo / "node_modules").is_dir():
+    generic(repo, lang, env)
+  rebuilt(repo, dists)
 
 
 def submodules(slug: str, base: str, into: Path) -> None:
@@ -517,11 +588,6 @@ def graded(task: Path, base: Path, syn: str, patch: Path, out: Path) -> Mapping[
   else:
     app = vroot / "app"
     pristine(base, syn, app)
-    if (app / "pyproject.toml").is_file() or (app / "setup.py").is_file():
-      # A step of the Dockerfile can put a release of the package over its editable install: the base holds one
-      # commit, so the build takes the version 0.0.0 from VCS, and a dependency that wants a newer one pulls in a
-      # release. The grade then imports the release, and no test that must turn from fail to pass can pass.
-      ran(["bash", "-lc", venved(app) + f"python3 -m pip install -e {shlex.quote(str(app))} --no-deps"], env=VCS)
     rewritten(tests, app, logs, syn)
     node = os.environ.get("DEEPSWE_NODE_HOME", "")
     first = [p for p in (str(app / ".venv" / "bin") if (app / ".venv").is_dir() else "", node) if p]

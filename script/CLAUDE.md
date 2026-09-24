@@ -52,6 +52,10 @@ once, before you spend money on it.
   runs, which is the python of its verifier. The rig reads `PYTHON_VERSION` from the config of the image in its
   registry, and `uv` makes the interpreter. So code that runs under one version and fails under the other fails in
   the checkout too, before the grade.
+- The rig also reads, from the layers of the image, every distribution that the python of the image holds. The base
+  holds one commit and no tag, so a step builds the tree at a version that git makes up. After the steps, a seed
+  installs again, from the tree, each distribution that the image built from it, at the version the image holds.
+  What a layer holds is kept under `~/.cache/furb-deepswe/layers`, so each layer is read once.
 - `app`, and the tree that a grade outside docker makes, are copies of the base, and the venv of each copy is its
   own. The rig writes the path of the copy where the venv names the path of the base. So its scripts run the python
   of the copy, an editable package imports the code of the copy, and an install lands in the copy and not in the
