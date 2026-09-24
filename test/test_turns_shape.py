@@ -1,6 +1,6 @@
 """Turns, the question of the turns of a chain."""
 
-from conftest import STANDS, Sand, heads, life, said
+from conftest import STANDS, Sand, heads, life, rows, said
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -16,4 +16,4 @@ async def test_a_turns_is_the_question_of_the_turns_of_a_chain() -> None:
   assert said(held, "turns") == [("turns", "turns@operator.3", OPERATOR, root)]
   assert engine.outcomes["turns@operator.3"] == got
   assert [role for role, *_ in got] == ["user"]
-  assert heads(got) == ["#chain1 root", f"#chain1 stands {STANDS!r}", "#rung1"]
+  assert heads(got) == ["#chain1 root", rows("chain1")[0], "#rung1"]

@@ -167,6 +167,33 @@ test("a relative path that the operator types is read from the directory of the 
   }
 }, 30000);
 
+test("the standing of a chain is no card of the conversation, though its turns hold its three rows", async () => {
+  const session = await demoSession(true);
+  const screen = await createTestRenderer({ width: 120, height: 30 });
+  const app = new App(screen.renderer, session, { quit() {} });
+  try {
+    session.show("conversation");
+    await session.refresh();
+    app.render();
+    await screen.flush();
+    const root = session.life.root;
+    const told = session.turns.flatMap(([role, python]) => (role === "user" ? python.split("\n") : []));
+    const at = told.findIndex((line) => line.startsWith(`#${root} roster `));
+    expect(told.slice(at, at + 3).map((line) => line.split(" ", 2))).toEqual([
+      [`#${root}`, "roster"],
+      [`#${root}`, "cwd"],
+      [`#${root}`, "actor"],
+    ]);
+    const headings = app.scroll.getChildren().map((card) => (texts(card)[0] ?? "").replace(/^[▸▾] /, ""));
+    expect(headings).toContain("You");
+    expect(headings.filter((heading) => /^(roster|cwd|actor) · /.test(heading))).toEqual([]);
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await session.dispose();
+  }
+});
+
 test("a card that the view goes to, or that Details expands, is in view once the view has laid it out", async () => {
   const session = await demoSession(true);
   const screen = await createTestRenderer({ width: 120, height: 24 });

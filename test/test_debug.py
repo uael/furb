@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Sand, heads, life, paragraphs, said, settle
+from conftest import STANDS, Sand, heads, life, paragraphs, rows, said, settle
 from furb import engine
 from furb.engine import Refused
 
@@ -131,12 +131,7 @@ async def test_it_is_no_act_and_it_enters_no_record() -> None:
   await settle()
   assert set(engine.acts) - made == {act}
   assert [fact for fact, *_ in sand.record if fact[0] == "tell"] == []
-  assert heads(engine.turns(on=root)) == [
-    f"#{root} root",
-    f"#{root} stands {STANDS!r}",
-    f"#{act}",
-    f"#{act} debugged n = 1",
-  ]
+  assert heads(engine.turns(on=root)) == [f"#{root} root", rows(root)[0], f"#{act}", f"#{act} debugged n = 1"]
 
 
 async def test_outside_an_act_there_is_nothing_to_tell_of_so_it_is_refused() -> None:
@@ -155,7 +150,7 @@ async def test_the_engine_refuses_debug_outside_an_act() -> None:
   with pytest.raises(Refused):
     engine.debug(t"{1}")
   assert log[mark:] == []
-  assert heads(engine.turns(on=root)) == [f"#{root} root", f"#{root} stands {STANDS!r}"]
+  assert heads(engine.turns(on=root)) == [f"#{root} root", rows(root)[0]]
 
 
 async def test_a_tell_is_on_the_scope_of_the_act_it_is_of_so_debug_takes_no_chain_of_its_own() -> None:
@@ -172,4 +167,4 @@ async def test_a_tell_is_on_the_scope_of_the_act_it_is_of_so_debug_takes_no_chai
   ]
   assert engine.scope(step) == two
   assert paragraphs(engine.turns(on=two))[-1] == f"#{step} debugged 1 = 1"
-  assert heads(engine.turns(on=root)) == [f"#{root} root", f"#{root} stands {STANDS!r}"]
+  assert heads(engine.turns(on=root)) == [f"#{root} root", rows(root)[0]]

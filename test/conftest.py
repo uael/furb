@@ -472,6 +472,18 @@ def named(got: Sequence[tuple]) -> list[str]:
   return [one[1:].split(" ", 1)[0] for one in heads(got)]
 
 
+def rows(id: str, standing: list = STANDS) -> list[str]:
+  """The three headers a chain tells a standing it takes under, in one paragraph: the roster, the directory and the
+  actor."""
+  roster, directory, actor = standing
+  return [f"#{id} roster {roster!r}", f"#{id} cwd {directory}", f"#{id} actor {actor}"]
+
+
+def stood(id: str, standing: list = STANDS) -> str:
+  """The paragraph a chain tells of a standing it takes, whose header is the row of its roster."""
+  return "\n".join(rows(id, standing))
+
+
 def of(got: Sequence[tuple], name: str) -> list[str]:
   """Every paragraph of the user turns of a fold whose header names that act, or that kind of query, in order."""
   return [one for one in paragraphs(got) if one.split("\n", 1)[0].split(" ", 1)[0] == f"#{name}"]

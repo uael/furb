@@ -630,9 +630,9 @@ type Note = str | Showing
 """One thing a tell says: python as it stands, or a text and its show, which the fold shows as comments by the lines the model has not seen.
 A paragraph is what one fact that tells stands as in a turn: its notes, one after the other, and a blank line between two paragraphs.
 The first line of a paragraph is its header: # and, with no space, the id of the act it is of, or the kind of the query it is of, then its words, as #bash1 exited 0 or #read a.txt.
-Every other comment of a paragraph begins with # and a space, so no line of a message or of a text reads as a header.
+A paragraph may hold more headers of what it is of, each on a line of its own right under the first, and every other comment of it begins with # and a space, so no line of a message or of a text reads as a header.
 The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a query stands at the place in the run where the query was asked.
-The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, stands, advance, paused, woke, cancelled, and one for each query that tells: read, write and cd.
+The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, roster, cwd, actor, advance, paused, woke, cancelled, and one for each query that tells: read, write and cd.
 A statement that a paragraph shows binds the name of an act in the chain, and a comment binds nothing.
 """
 type Showing = tuple[Text, Show]
@@ -805,12 +805,12 @@ The World answers it while the chain waits, since what a chain stands on is aske
 A chain asks what it stands on at its open, and the journal keeps that stand with its answer beside, so a later life opens the chain on what it stood on and replays it there.
 At its tip, once the record is said again whole, the journal asks the World what it stands on, and says it as a stood to every chain that stands on something else, so a change of the World reaches every chain after what it replayed.
 Each standing binds the default actor of the chain, under the name actor.
-The chain tells each standing it takes under the header stands, as python shows it: the roster, the directory and the actor.
+The chain tells each standing it takes in one paragraph of three headers, one for each part: the roster under the header roster as python shows it, then the directory under the header cwd and the actor under the header actor, each as it is.
 The chain holds no stand, since the standing it tells is what its transcript holds of it.
 """
 type Stood = tuple[Literal["stood"], str, str, Standing]
 """A stood says what a chain stands on from its place in the record on, and the journal keeps it, so a later life says it again at that place.
-A chain that hears a stood binds that standing and its default actor, and tells it there under the header stands, so the transcript grows at one end.
+A chain that hears a stood binds that standing and its default actor, and tells it there under the headers roster, cwd and actor, so the transcript grows at one end.
 """
 type Holds = tuple[Literal["holds"], str, str, str, str]
 """A holds is the question of what the record kept of an act.

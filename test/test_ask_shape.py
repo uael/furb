@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from functools import partial
 
-from conftest import STANDS, Sand, World, heads, life, paragraphs, plain, relived, said, settle, sown
+from conftest import STANDS, Sand, World, heads, life, paragraphs, plain, relived, rows, said, settle, sown, stood
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Refused
 
@@ -54,7 +54,7 @@ async def test_the_request_of_an_ask_is_the_transcript_of_the_chain_as_turns() -
     == [
       (
         "user",
-        f"#{root} root\n{root}: Act[object] = Act({root!r})\n\n#{root} stands {STANDS!r}\n\n"
+        f"#{root} root\n{root}: Act[object] = Act({root!r})\n\n{stood(root)}\n\n"
         f"#{act} count\n{act}: Act[int] = Act({act!r})\n\n#{step} advance on {act}",
         None,
         None,
@@ -229,7 +229,7 @@ async def test_a_new_prompt_reads_the_whole_transcript_of_the_chain_the_cancelle
   (step,) = [a[1] for a in said(log, "rung") if a[2] == second]
   assert heads(said(log, "ask")[0][5]) == [
     f"#{root} root",
-    f"#{root} stands {STANDS!r}",
+    rows(root)[0],
     f"#{first} one",
     f"#{first} cancelled",
     f"#{second} two",

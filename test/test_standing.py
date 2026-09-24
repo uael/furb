@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Sand, life, paragraphs, plain, said, settle
+from conftest import STANDS, Sand, life, paragraphs, plain, rows, said, settle, stood
 from furb import engine
 from furb.engine import Drift
 
@@ -28,15 +28,17 @@ async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
-  told = f"#{root} stands {STANDS!r}"
+  told = stood(root)
   assert told == (
-    "#chain1 stands [[['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]], '/w', 'm/low']"
+    "#chain1 roster [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "#chain1 cwd /w\n"
+    "#chain1 actor m/low"
   )
   assert [paragraphs(a[5])[1] for a in said(log, "ask")] == [told]
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
-  assert [a for a in held if a[0] == "tell" and a[3][0].startswith(f"#{root} stands ")] == [
-    ("tell", root, root, [told])
+  assert [a for a in held if a[0] == "tell" and a[3][0].startswith(f"#{root} roster ")] == [
+    ("tell", root, root, rows(root))
   ]
 
 
