@@ -1,6 +1,7 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { saveFile } from "@furb/engine";
 import { defaultTheme, palettes, type ThemeName } from "./theme.ts";
 
 export class Preferences {
@@ -52,8 +53,7 @@ export class Preferences {
     const data = this.serialize(theme);
     if (data === this.saved) return;
     mkdirSync(dirname(this.path), { recursive: true });
-    writeFileSync(`${this.path}.tmp`, data, { mode: 0o600 });
-    renameSync(`${this.path}.tmp`, this.path);
+    saveFile(this.path, data);
     this.theme = theme;
     this.saved = data;
     this.notice = "";

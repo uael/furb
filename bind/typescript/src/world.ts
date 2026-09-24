@@ -1,7 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
   type Api,
@@ -20,7 +20,7 @@ import { Activity, type RunState } from "./activity.js";
 import { FileChanges } from "./changes.js";
 import { type Ears, WorldAdapter, type WorldHandler, type WorldRequest } from "./ears.js";
 import { attachImage, type ImageAttachment, ImageCache, turnImages } from "./images.js";
-import { furbDirectory } from "./project.js";
+import { furbDirectory, saveFile } from "./project.js";
 import { RecordFile } from "./record.js";
 import { shell } from "./shell.js";
 import {
@@ -555,8 +555,7 @@ export class World extends EventEmitter {
       deadlines: [...this.deadlines],
       streams: [...this.streams],
     };
-    writeFileSync(`${path}.tmp`, JSON.stringify(saved), { mode: 0o600 });
-    renameSync(`${path}.tmp`, path);
+    saveFile(path, JSON.stringify(saved));
   }
 
   /** Start the pending work: a wake of each chain that holds some, which the engine answers by starting each

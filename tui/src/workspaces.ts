@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { mkdir, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { furbDirectory, RecordLock } from "@furb/engine";
+import { furbDirectory, RecordLock, saveFile } from "@furb/engine";
 import { openEngine } from "./bridge.ts";
 import { expandHome } from "./files.ts";
 import type { EngineOptions } from "./models.ts";
@@ -132,8 +132,7 @@ export class Workspaces extends EventEmitter {
     if (change.add && !group.records.includes(change.add)) group.records.unshift(change.add);
     if (change.remove) group.records = group.records.filter((record) => record !== change.remove);
     mkdirSync(dirname(this.path), { recursive: true });
-    writeFileSync(`${this.path}.tmp`, JSON.stringify({ workspaces: list }), { mode: 0o600 });
-    renameSync(`${this.path}.tmp`, this.path);
+    saveFile(this.path, JSON.stringify({ workspaces: list }));
     if (this.damaged) {
       this.damaged = false;
       this.notice = "";
