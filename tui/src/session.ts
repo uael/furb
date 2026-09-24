@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import type { Fact, ImageAttachment, LiveAct, Turn, Usage } from "@furb/engine";
+import type { Fact, ImageAttachment, LiveAct, Turn } from "@furb/engine";
 import {
   actorParts,
   decodeRecord,
@@ -365,11 +365,33 @@ export class Session extends EventEmitter {
   get activity(): ActRow[] {
     return this.acts.filter((act) => act.on === this.selected && act.kind !== "chain");
   }
-  get usage(): Usage {
-    return this.turns.reduce<Usage>(
-      (sum, turn) => (turn[2] ? (sum.map((value, index) => value + (turn[2]?.[index] ?? 0)) as Usage) : sum),
-      [0, 0, 0, 0, 0],
-    );
+  /** What the answers of the chain cost, each token counted once. The first number of the usage of a turn is the
+   * whole prompt of that call, which holds the reads and the writes of the cache, so the fresh input of a turn is
+   * what is left of its prompt after them. */
+  get spend(): { input: number; output: number; cacheRead: number; cacheWrite: number; dollars: number } {
+    const sum = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, dollars: 0 };
+    for (const [, , usage] of this.turns) {
+      if (!usage) continue;
+      const [prompt, output, read, write, dollars] = usage;
+      sum.input += Math.max(0, prompt - read - write);
+      sum.output += output;
+      sum.cacheRead += read;
+      sum.cacheWrite += write;
+      sum.dollars += dollars;
+    }
+    return sum;
+  }
+  /** The share of the window that the last answer of the chain filled, as the ledger of a grant says it: the whole
+   * prompt of that answer over the window of the model that the last prompt went to, or the window of the engine for
+   * a model that the roster does not name. Nothing before the first answer. */
+  get filled(): number | undefined {
+    const usage = this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2];
+    if (!usage) return undefined;
+    const asked = this.activity.findLast((act) => act.kind === "prompt" && act.words[2] !== "operator");
+    const names = this.roster.map(([name]) => name);
+    const { model } = actorParts(String(asked?.words[2] || this.actor), names);
+    const window = Number(this.roster.find(([name]) => name === model)?.[2]) || 200_000;
+    return usage[0] / window;
   }
   get label(): string {
     return this.labelOf(this.selected);

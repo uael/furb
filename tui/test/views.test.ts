@@ -116,8 +116,14 @@ test("the views say each quantity one way, read a page of changes once, and set 
     app.render();
     await screen.flush();
     let frame = screen.captureCharFrame();
-    expect(frame).toContain("30% context");
+    const lines = frame.split("\n");
+    const meter = lines.findIndex((line) => line.includes("━"));
+    await screen.mockMouse.moveTo((lines[meter] ?? "").indexOf("━") + 2, meter);
+    await screen.flush();
+    frame = screen.captureCharFrame();
+    expect(frame).toContain("pauses at 30%");
     expect(frame).not.toContain("30.000000000000004");
+    await screen.mockMouse.moveTo(0, 0);
     await session.submit("/grant 1.5");
     await session.refresh();
     app.render();

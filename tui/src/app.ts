@@ -24,7 +24,7 @@ import {
 } from "@opentui/core";
 import { clipboardImage } from "./clipboard.ts";
 import { commands } from "./commands.ts";
-import { conversation, filled } from "./conversation.ts";
+import { conversation } from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import type { Extensions } from "./extensions.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
@@ -2444,14 +2444,14 @@ export class App {
   /** The session in the sidebar: its name and directory, its chains, and what its context and its model cost. */
   private renderRailSession(): void {
     const w = this.session;
-    const window = filled(w.turns);
+    const window = w.filled;
     const grant = w.activity.find((act) => act.kind === "grant" && !act.done);
     const width = w.preferences.sidebarWidth;
     if (
       !this.paneChanged(this.railSession, [
         this.theme,
         w.selected,
-        w.usage,
+        w.spend,
         window,
         width,
         w.chains.map((chain) => [chain.id, w.labelOf(chain.id), this.chainStatus(chain.id)]),
@@ -2528,11 +2528,12 @@ export class App {
         { onMouseUp: this.click(() => this.chains()) },
       );
     target = this.railUsage;
-    const usage = w.usage;
+    const spend = w.spend;
     const ceiling =
       grant?.words[1] === null || grant?.words[1] === undefined ? undefined : Number(grant.words[1]);
     const known = window !== undefined && Number.isFinite(window);
-    this.railUsage.visible = usage.some((amount) => amount > 0) || Boolean(grant);
+    const tokens = spend.input + spend.output + spend.cacheRead + spend.cacheWrite;
+    this.railUsage.visible = tokens > 0 || spend.dollars > 0 || Boolean(grant);
     if (this.railUsage.visible) {
       section(
         "Context",
@@ -2542,24 +2543,36 @@ export class App {
       // The rule above the usage stands in for the space above a section.
       const head = this.railUsage.getChildren()[0];
       if (head) head.marginTop = 0;
-      if (known) {
-        // The meter fills with the share of the window that the last answer used, and marks the ceiling of a grant.
-        const used = Math.min(inner, Math.max((window ?? 0) > 0 ? 1 : 0, Math.round((window ?? 0) * inner)));
-        const mark = ceiling === undefined ? -1 : Math.min(inner - 1, Math.round(ceiling * inner));
-        const tone = (window ?? 0) >= 0.9 ? c.danger : (window ?? 0) >= 0.7 ? c.warning : c.accent;
-        const cells: Part[] = [];
-        for (let at = 0; at < inner; at++)
-          cells.push(at === mark ? ["╋", c.warning] : [glyph.meter, at < used ? tone : c.border]);
-        add(cells);
+      // The meter fills with the share of the window that the last answer used, and marks the ceiling of a grant. It
+      // stands empty until an answer tells the share, and a hover over it says the share and where the chain pauses.
+      const part = known ? (window ?? 0) : 0;
+      const used = Math.min(inner, Math.max(part > 0 ? 1 : 0, Math.round(part * inner)));
+      const mark = ceiling === undefined ? -1 : Math.min(inner - 1, Math.round(ceiling * inner));
+      const tone = part >= 0.9 ? c.danger : part >= 0.7 ? c.warning : c.accent;
+      const cells: Part[] = [];
+      for (let at = 0; at < inner; at++)
+        cells.push(at === mark ? ["╋", c.warning] : [glyph.meter, at < used ? tone : c.border]);
+      const tip: Part[] = [
+        [known ? `${Number((part * 100).toFixed(1))}%` : "No answer yet", c.text, bold],
+        [known ? " of the context window" : "", c.muted],
+        [ceiling === undefined ? "" : `, pauses at ${Number((ceiling * 100).toFixed(1))}%`, c.warning],
+      ];
+      add(cells, {
+        onMouseOver: (event) => this.tip(tip, event.x, event.y),
+        onMouseOut: () => {
+          this.hover?.destroyRecursively();
+          this.hover = undefined;
+        },
+      });
+      // Each row counts its own tokens: the fresh input, what the cache gave and took, and the output.
+      if (tokens > 0) {
+        row("Input", count(spend.input));
+        if (spend.cacheRead) row("Cache read", count(spend.cacheRead));
+        if (spend.cacheWrite) row("Cache write", count(spend.cacheWrite));
+        row("Output", count(spend.output));
       }
-      if (usage.some((amount) => amount > 0)) {
-        row("Input", count(usage[0]));
-        row("Output", count(usage[1]));
-        if (usage[2]) row("Cached", count(usage[2]));
-      }
-      row("Spent", dollars(usage[4]));
+      row("Spent", dollars(spend.dollars));
       if (grant && grant.words[0] !== null) row("Ceiling", dollars(Number(grant.words[0])), c.muted);
-      if (ceiling !== undefined) row("Pause at", share(ceiling), c.warning);
     }
   }
   /** The composer holds a text in place of the draft that the session shows, and an undo gives the draft back. */
@@ -2693,21 +2706,7 @@ export class App {
             [`  ${entry.name}`, c.muted],
             [entry.error ? `  ${entry.error}` : "", c.danger],
           ];
-          const size = Math.min(
-            this.renderer.width - 2,
-            Math.max(25, Bun.stringWidth(plain(hint)) + space.between),
-          );
-          this.hover = this.box({
-            position: "absolute",
-            left: Math.max(1, Math.min(event.x - size, this.renderer.width - size - 1)),
-            top: Math.min(event.y + 1, this.renderer.height - 2),
-            width: size,
-            paddingX: space.inset,
-            backgroundColor: c.raised,
-            zIndex: 30,
-          });
-          this.hover.add(this.text(hint));
-          this.root.add(this.hover);
+          this.tip(hint, event.x, event.y);
         };
         row.onMouseOut = (event) => {
           out?.call(row, event);
@@ -2722,6 +2721,25 @@ export class App {
     line([[" "], ["+ ", c.faint], ["Add a workspace", c.faint]], () => this.insert("/workspace "), {
       marginTop: space.section,
     });
+  }
+  /** A tip that stands under the pointer and ends at its left, or above it on the last rows, inside the screen. */
+  private tip(parts: Part[], x: number, y: number): void {
+    this.hover?.destroyRecursively();
+    const size = Math.min(
+      this.renderer.width - 2,
+      Math.max(25, Bun.stringWidth(plain(parts)) + space.between),
+    );
+    this.hover = this.box({
+      position: "absolute",
+      left: Math.max(1, Math.min(x - size, this.renderer.width - size - 1)),
+      top: y + 1 < this.renderer.height - 1 ? y + 1 : y - 1,
+      width: size,
+      paddingX: space.inset,
+      backgroundColor: c.raised,
+      zIndex: 30,
+    });
+    this.hover.add(this.text(parts));
+    this.root.add(this.hover);
   }
   /** The workspaces and their sessions in a palette, which opens once the workspaces are read again. */
   workspacePicker = (): Promise<void> => {

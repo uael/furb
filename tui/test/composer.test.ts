@@ -412,3 +412,46 @@ test("the switch of the input shows Prompt and Python, ⌃R names it, and a clic
     await screen.mockMouse.click((after[again] ?? "").indexOf("Prompt") + 1, again);
     await until(session, () => session.mode === "prompt");
   }));
+
+test("the meter of the context says its share and where the chain pauses when the pointer is over it", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      await session.submit("/context 0.8");
+      await until(session, () =>
+        session.activity.some((act) => act.kind === "grant" && act.words[1] === 0.8),
+      );
+      const lines = (await frame()).split("\n");
+      expect(lines.some((line) => line.includes("Pause at"))).toBe(false);
+      const row = lines.findIndex((line) => line.includes("━"));
+      expect(row).toBeGreaterThan(0);
+      await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("━") + 2, row);
+      const tip = await frame();
+      expect(tip).toContain("of the context window");
+      expect(tip).toContain("pauses at 80%");
+    },
+    { width: 120, height: 44 },
+    true,
+  ));
+
+test("the usage counts each token once, and the context share shows from the first answer with no grant", () =>
+  composing(async ({ session, frame }) => {
+    // Each answer of the demo reads a prompt of 3240 tokens, 2800 of them from the cache, and writes 184.
+    await session.submit("Explore this project.");
+    await until(session, () => session.turns.filter((turn) => turn[0] === "assistant").length >= 2);
+    await session.refresh();
+    const answers = session.turns.filter((turn) => turn[0] === "assistant").length;
+    expect(session.spend).toEqual({
+      input: 440 * answers,
+      output: 184 * answers,
+      cacheRead: 2800 * answers,
+      cacheWrite: 0,
+      dollars: expect.closeTo(0.0024 * answers, 6),
+    });
+    expect(session.activity.some((act) => act.kind === "grant")).toBe(false);
+    expect(session.filled).toBe(3240 / 1_000_000);
+    const shown = await frame();
+    expect(shown).toContain("0.3%");
+    expect(shown).toContain("Cache read");
+    expect(shown).not.toContain("Cached");
+    expect(shown).toContain("━");
+  }));
