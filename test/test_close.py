@@ -6,7 +6,7 @@ import pytest
 
 from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
-from furb.engine import OPERATOR, Exit, Refused, Text
+from furb.engine import OPERATOR, WORLD, Exit, Refused, Text
 
 
 async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
@@ -189,13 +189,23 @@ async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the
 
 async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
   """A close on an act that is over reaches nothing."""
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  sand = Sand(stands=STANDS, auto=False)
+  log, root = life(sand)
   act = engine.bash("echo hi", on=root)
-  await act
-  engine.close(21, act)
+  engine.send("exited", act, 0, by=WORLD)
+  sand.script[root] = ["y = bash('slow')\nclose(7)"]
+  answered = engine.prompt(int, "go", on=root)
+  assert await answered == 7
   await settle()
-  assert (await act).code == 0
+  running = said(log, "bash")[1][1]
+  closes, was = said(log, "close"), engine.turns(on=root)
+  engine.close(21, act)
+  engine.close(9, answered)
+  await settle()
+  assert (await act).code == 0 and await answered == 7
+  assert engine.peek(running, on=root) == Exit(None, Text(f"{running}/stdout"), Text(f"{running}/stderr"))
+  assert said(log, "close") == closes
+  assert engine.turns(on=root) == was
 
 
 async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_that_made_the_rung_of_the_word() -> None:

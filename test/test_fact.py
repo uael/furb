@@ -66,15 +66,16 @@ async def test_a_fact_is_on_the_scope_of_the_act_it_is_about() -> None:
 
 async def test_a_control_is_about_the_act_it_is_over() -> None:
   """A control is about the act it is over, a done, a tell and the facts of the World about the act they settle, tell of or come from, and a question about itself."""
-  sand = Sand(stands=STANDS)
+  sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
-  act = engine.bash("echo hi", on=root)
-  await act
+  act = engine.bash("slow", on=root)
+  engine.send("out", act, "half\n", "stdout", by=WORLD)
   engine.cancel(act)
+  await settle()
   assert [one[1] for one in said(log, "cancel")] == [act]
   assert {one[0] for one in log if one[1] == act} == {"bash", "start", "out", "exited", "tell", "done", "cancel"}
   told = [one for one in said(log, "tell") if one[1] == act]
-  assert [one[3][0] for one in told] == ["#bash1 echo hi", "#bash1 exited 0"]
+  assert [one[3][0] for one in told] == ["#bash1 slow"]
 
 
 async def test_a_verb_takes_a_chain_and_the_act_it_makes_is_on_that_chain() -> None:

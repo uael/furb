@@ -39,6 +39,15 @@ async def test_a_cancel_is_over_the_act_it_names_and_everything_that_act_made() 
   assert isinstance(engine.peek(one), CancelledError)
   assert isinstance(engine.peek(step), CancelledError)
   assert isinstance(engine.peek(command), CancelledError)
+  sand.script[root] = ["y = bash('slow')\nclose(7)"]
+  over = engine.prompt(int, "go on", on=root)
+  assert await over == 7
+  running = said(log, "bash")[1][1]
+  engine.cancel(over)
+  await settle()
+  assert engine.peek(over) == 7
+  assert isinstance(engine.peek(running), CancelledError)
+  assert [a[1] for a in said(log, "cancel")] == [one, over]
 
 
 async def test_cancel_is_given_the_id_of_an_act_and_says_a_cancel_over_it() -> None:

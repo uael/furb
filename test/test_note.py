@@ -94,21 +94,13 @@ async def test_every_other_comment_of_a_paragraph_begins_with_a_space() -> None:
 
 async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> None:
   """The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a query stands at the place in the run where the query was asked."""
-  sand = Sand(files={"/w/n.txt": "one\n"}, stands=STANDS)
+  sand = Sand(files={"/w/n.txt": "one\n"}, stands=STANDS, auto=False)
   _, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nread('n.txt')\nclose(1)"]
   assert await engine.prompt(int, "read it", on=root) == 1
   await settle()
   engine.pause("bash1")
-  assert heads(engine.turns(on=root))[4:] == [
-    "#bash1 echo hi",
-    "#read n.txt",
-    "#prompt1 closed 1",
-    "#bash1 exited 0",
-    "#prompt2 bash1 done",
-    "#rung3 advance on prompt2",
-    "#bash1 paused",
-  ]
+  assert heads(engine.turns(on=root))[4:] == ["#bash1 echo hi", "#read n.txt", "#prompt1 closed 1", "#bash1 paused"]
 
 
 async def test_the_headers_of_the_file() -> None:
