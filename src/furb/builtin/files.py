@@ -1,4 +1,7 @@
+import re
 from dataclasses import dataclass
+
+from furb.engine import Refused, Show, ask, commented, question, scope, site, tell
 
 
 def span(lo: int, hi: int) -> Show:
@@ -60,8 +63,10 @@ def cd(path: str, on: str = "") -> str:
 
 def cwd(on: str = "") -> str:
   here = on or scope(site.get())
-  heard = ask("transcript", here, here)[1] or []
-  return next((a[4] for a in reversed(heard) if a[0] == "cd"), ask("stand", here)[1][1])
+  match ask("transcript", here, here)[1], ask("stand", here)[1]:
+    case list(heard), [_, str(where), _]:
+      return next((a[4] for a in reversed(heard) if a[0] == "cd"), where)
+  raise Refused(f"no chain {here}")
 
 
 @dataclass

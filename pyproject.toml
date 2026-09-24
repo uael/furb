@@ -81,6 +81,10 @@ ignore = ["S101"]
 # The surface speaks the engine's own vocabulary: its verbs shadow builtins on purpose, take the parameters the
 # contract names, and its exceptions are named as the contract names them.
 "src/furb/engine.pyi" = ["N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "E501", "PLR0904"]
+# A builtin extension is a word of the engine's own vocabulary: the contract gives its verbs their signatures, and
+# its word types its verbs and nothing else, as the engine does, since a model reads it.
+"src/furb/builtin/*.pyi" = ["N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "E501"]
+"src/furb/builtin/*.py" = ["A002", "ANN", "FBT001", "FBT002", "FBT003", "PLR0913", "PLR0917", "EM102", "TRY003"]
 "src/furb/engine.py" = ["S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "ANN", "PLR0904", "EM101", "EM102", "TRY003", "PLR0917", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "SIM105", "C901", "SLF001"]
 
 [tool.ruff.lint.pycodestyle]
@@ -119,6 +123,15 @@ unresolved-attribute = "ignore"
 unsupported-operator = "ignore"
 invalid-argument-type = "ignore"
 
+# A builtin extension reads what the bus answers, which the contract types as object, after the check its
+# sentences make, as the engine does, and a verb gives the act of its kind, which the bus types as an act of any.
+[[tool.ty.overrides]]
+include = ["src/furb/builtin/*.py"]
+
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+invalid-return-type = "ignore"
+
 # The engine of monty reads the engine of this interpreter as the module the switch keeps, whose names ty does not
 # see through a module object, and the extension it stands on is built and not read.
 [[tool.ty.overrides]]
@@ -140,6 +153,11 @@ timeout_method = "thread"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["error"]
+
+[tool.coverage.run]
+# A builtin extension runs as the word of a rung in the module of a chain, where no tracer reads it by its file; its
+# suite in test/<name>/ proves every sentence of it on both engines.
+omit = ["*/furb/builtin/*"]
 
 [tool.coverage.report]
 # The suite runs every line of engine.py. The lines it cannot reach are the bodies of send, ask, act and drive
