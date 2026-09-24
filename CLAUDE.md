@@ -21,6 +21,18 @@ API of its own:
 The suite runs on both engines. `test/outside/test_monty.py` proves what the door carries that no sentence of the
 contract says.
 
+The TypeScript side is a bun workspace at the root, with two packages:
+
+- `bind/typescript` is the crate through N-API. Its queries and controls are synchronous, and its acts can be
+  awaited. It includes a World with pi-ai models, files, commands, and records. `bind/typescript/README.md` says
+  how to use it. The TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
+- `tui` is the OpenTUI application on that package. The engine and its World run in a worker, `tui/src/worker.ts`,
+  which also holds the demo World and its scripted answers. `tui/README.md` says what the TUI does, and
+  `docs/tui.md` shows each screen. The gallery and the animation come from `tui/script/`.
+
+`docs/developer-guide.md` is the guide for a person who changes the repository. It says the same things as this
+file, in the order in which a person needs them.
+
 ## The contract
 
 `src/furb/engine.pyi` is the source of truth. It gives the typed surface of the engine, and the docstring of each
@@ -112,6 +124,19 @@ Run every command from the root of the repository.
 - `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/CLAUDE.md` says how to run.
+- `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
+- `bun run check`, `bun run lint` and `bun test bind/typescript/test tui/test`: the type check, the lint, and the
+  tests of the TypeScript side. As root, the test of a folder that cannot be read fails, since root reads every
+  folder.
+- `bun run demo` and `bun run tui`: the TUI on the demo World, which asks no model, or on a real life.
+- `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
+  `tui/src/commands.ts`.
+- `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
+  real renderer. Run both after a change that a screen shows, and read each capture.
+
+Every pull request and every push to `main` runs the gates in `.github/workflows/gates.yml`: the hooks, which
+include the gates of the crate, and the type check. The suite runs on Linux and on macOS. The gates of the
+TypeScript side run on Linux, on macOS, and on Windows.
 
 ## Prose
 
