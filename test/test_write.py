@@ -10,7 +10,7 @@ KEPT = (
   "def kept(id):\n"
   "  while True:\n"
   "    match (yield):\n"
-  "      case ('write', qid, _, _, Text(path=path)) if path.startswith('nums://'):\n"
+  "      case ('write', qid, _, _, path, _) if path.startswith('nums://'):\n"
   "        yield 'done', qid, 7\n"
   "\n"
   "act('nums', '', kept)\n"
@@ -30,10 +30,10 @@ class Hoard(Sand):
         case ("stand", qid, *_):
           yield "done", qid, self.stands or [[], "", ""]
         case ("read", qid, _, _, path):
-          yield "done", qid, Text(path, self.files.get(path, ""))
-        case ("write", qid, _, _, Text(path=path, content=content)):
+          yield "done", qid, {"path": path, "content": self.files.get(path, "")}
+        case ("write", qid, _, _, path, content):
           self.files[path] = self.files.get(path, "") + content
-          yield "done", qid, Text(path, self.files[path])
+          yield "done", qid, {"path": path, "content": self.files[path]}
 
 
 class Firm(Sand):
@@ -47,10 +47,10 @@ class Firm(Sand):
         case ("stand", qid, *_):
           self.calls.append(a)
           yield "done", qid, self.stands or [[], "", ""]
-        case ("write", qid, _, _, Text(path=path, content=content)):
+        case ("write", qid, _, _, path, content):
           self.calls.append(a)
           self.files[path] = content + "END\n"
-          yield "done", qid, Text(path, self.files[path])
+          yield "done", qid, {"path": path, "content": self.files[path]}
 
 
 async def test_a_write_whoever_serves_the_path_of_the_text_takes_its_content() -> None:
@@ -78,8 +78,8 @@ async def test_write_is_given_a_text_and_gives_the_text_as_it_is_on_disk_after_t
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
   asked = said(held, "write")[0]
-  assert asked[4] == Text("b.txt", "one\n")
-  assert [a[3] for a in said(held, "done") if a[1] == asked[1]] == [Text("/w/b.txt", "one\n")]
+  assert asked[4:] == ("b.txt", "one\n")
+  assert [a[3] for a in said(held, "done") if a[1] == asked[1]] == [{"path": "/w/b.txt", "content": "one\n"}]
 
 
 async def test_a_write_that_the_world_refuses_raises_refused_in_the_caller() -> None:
@@ -114,7 +114,7 @@ async def test_a_write_takes_no_show() -> None:
   assert of(engine.turns(on=root), "write") == []
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
-  assert said(held, "write")[0][4:] == (Text("b.txt", "one\ntwo\n"),)
+  assert said(held, "write")[0][4:] == ("b.txt", "one\ntwo\n")
 
 
 async def test_a_door_that_answers_a_write_with_more_than_it_was_asked_for() -> None:
@@ -137,7 +137,7 @@ async def test_a_write_to_the_door_of_a_prompt_edits_the_program_of_its_ladder()
   assert got == Text(act, "k = 21")
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
-  assert said(held, "write") == [("write", "write@operator.3", OPERATOR, root, Text(act, "k = 21"))]
+  assert said(held, "write") == [("write", "write@operator.3", OPERATOR, root, act, "k = 21")]
   assert [(a[2], a[4], a[5]) for a in said(log, "rung")] == [(act, "k = 21", "")]
   engine.write(Text(act, "k = 21\nk = 22"), on=root)
   await settle()

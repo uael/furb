@@ -15,7 +15,7 @@ async def test_a_fact_that_takes_a_name_of_its_own_when_it_is_said_and_is_answer
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
   asked = said(log, "read")[0]
   assert engine.asked[asked[1]] == asked and asked[1] not in engine.acts
-  assert engine.outcomes[asked[1]] == Text("/w/a.txt", "one\ntwo\n")
+  assert engine.outcomes[asked[1]] == {"path": "/w/a.txt", "content": "one\ntwo\n"}
 
 
 async def test_a_question_is_a_fact_whose_about_is_its_own_name_and_whose_first_word_is_the_chain() -> None:

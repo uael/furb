@@ -44,9 +44,10 @@ class Life:
   def watch(self, act: str, then: Callable[[object], object]) -> None:
     """What to call when an act is done, with what it came to: at once for one done already, and once otherwise."""
 
-def gate(sheet: str) -> list[tuple[int, str]]:
+def gate(sheet: str, engine: str | None = None) -> list[tuple[int, str]]:
   """The gate of the crate, for the Kernel of this interpreter to read a sheet with: what the checker found on the
-  sheet, each error by its line, and no warning. It raises when the checker could not read the sheet."""
+  sheet, read against the engine the Kernel runs, which is the engine of the crate unless it is given, each error by
+  its line, and no warning. It raises when the checker could not read the sheet."""
 
 @final
 class Extension:
@@ -89,9 +90,14 @@ def builtin_extensions() -> list[Extension]:
   """The builtin extensions, files, bash and grant, in the order a host plays them."""
 
 def word_of(source: str) -> str:
-  """The word of the python part of an extension, which a host plays as a rung: the file with its line ends made LF
-  and less every top-level import from `furb`, which leaves no line of its own, and nothing else changed. A file python cannot parse
-  raises Refused."""
+  """The word of the python part of an extension, which the module of the engine runs after the engine: the file with
+  its line ends made LF and less every top-level import from `furb`, which leaves no line of its own, and nothing else
+  changed. A file python cannot parse raises Refused."""
 
-def missing_words(program: list[str], words: list[str]) -> list[str]:
-  """The words that a program lacks, in their order, which is the rule a host plays the words by."""
+def system_prompt(engine: str, taken: list[str], words: list[str]) -> str:
+  """The system prompt of a life: the engine as the host minified it, less the definitions of each builtin that
+  `taken` does not name, then the words of the extensions, in their order. An engine python cannot parse raises
+  Refused."""
+
+def engine_source(words: list[str]) -> str:
+  """The source of the engine that a life runs and that the gate reads a word on: the engine, then the words."""

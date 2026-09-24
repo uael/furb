@@ -58,14 +58,14 @@ def take(*ids: str, inside: bool = True) -> Filter:
 
 
 def read(path: str, show: Show = HEAD, on: str = "") -> Text:
-  _, got = ask("read", on, path)
+  got = landed(ask("read", on, path)[1])
   if show is not HIDDEN:
     tell("read", path, *showing(got, show))
   return got
 
 
 def write(text: Text, on: str = "") -> Text:
-  _, got = ask("write", on, text)
+  got = landed(ask("write", on, text.path, text.content)[1])
   if not isinstance(got, Text) or got.lines != text.lines:
     tell("write", text.path, *showing(got, differs(text.lines)))
   return got
@@ -211,10 +211,10 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 
     def answers():
       match a:
-        case ("read", _, by, _, path) | ("write", _, by, _, Text(path)) if path in mine and question(("prompt", path)):
+        case ("read", _, by, _, path) | ("write", _, by, _, path, _) if path in mine and question(("prompt", path)):
           if a[0] == "write":
-            replay(path, a[4].content, by)
-            return a[4]
+            replay(path, a[5], by)
+            return Text(path, a[5])
           return Text(
             path, "\n".join(said for one, said in rungs.items() if one != by and under(acts[one][5] or one, path))
           )
@@ -366,12 +366,12 @@ def bash(
           yield "done", qid, show_err is None
         case ("read", qid, _, _, path) if path in streams:
           yield "done", qid, streams[path]
-        case ("write", qid, _, _, Text(path, text) as took) if path == f"{id}/stdin":
+        case ("write", qid, _, _, path, text) if path == f"{id}/stdin":
           if mute:
             took = Refused(mute)
           else:
             yield "feed", id, text or None
-            mute = "" if text else "closed"
+            mute, took = "" if text else "closed", Text(path, text)
           yield "done", qid, took
         case _ if mute == "ended":
           continue
@@ -517,6 +517,13 @@ def commented(text):
 
 def bound(id, of="object"):
   return f"{id}: Act[{of}] = Act({id!r})"
+
+
+def landed(got):
+  match got:
+    case {"path": str(path), "content": str(content)}:
+      return Text(path, content)
+  return got
 
 
 def showing(got, show):

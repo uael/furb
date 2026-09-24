@@ -7,7 +7,7 @@ GROWS = (
   "def kept(id):\n"
   "  while True:\n"
   "    match (yield):\n"
-  "      case ('write', qid, _, _, Text(path=path, content=content)) if path.startswith('note://'):\n"
+  "      case ('write', qid, _, _, path, content) if path.startswith('note://'):\n"
   "        yield 'done', qid, Text(path, 'one\\n' + content)\n"
   "\n"
   "act('note', '', kept)\n"

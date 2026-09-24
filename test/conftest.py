@@ -176,12 +176,10 @@ class Sand:
         case ("stand", qid, *_):
           yield "done", qid, self.stands or [[], "", ""]
         case ("read", qid, _, on, path) if (full := resolved(engine.cwd(on=on), path)) in self.files:
-          yield "done", qid, Text(full, self.files[full])
-        case ("write", qid, _, on, Text(path=path, content=content)) if (
-          "://" not in path and path.split("/")[0] not in engine.acts
-        ):
+          yield "done", qid, {"path": full, "content": self.files[full]}
+        case ("write", qid, _, on, path, content) if "://" not in path and path.split("/")[0] not in engine.acts:
           self.files[full := resolved(engine.cwd(on=on), path)] = content
-          yield "done", qid, Text(full, content)
+          yield "done", qid, {"path": full, "content": content}
         case ("ask", rung, _, on, _, _):
           running[rung] = on
           if self.script.get(on):
@@ -244,10 +242,10 @@ class Where(Sand):
           yield "done", qid, self.stands or [[], "", ""]
         case ("read", qid, _, on, path):
           full = f"{engine.cwd(on=on)}/{path}"
-          yield "done", qid, Text(full, self.files.get(full, ""))
-        case ("write", qid, _, on, Text(path=path, content=content)):
+          yield "done", qid, {"path": full, "content": self.files.get(full, "")}
+        case ("write", qid, _, on, path, content):
           self.files[full := f"{engine.cwd(on=on)}/{path}"] = content
-          yield "done", qid, Text(full, content)
+          yield "done", qid, {"path": full, "content": content}
         case ("start", about, _):
           self.where.append(engine.cwd(on=about and engine.scope(about)))
           yield "exited", about, 0

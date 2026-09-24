@@ -19,7 +19,8 @@ async def test_outcomes_holds_what_every_question_of_the_life_came_to_under_its_
   assert isinstance(engine.outcomes[act], Exit)
   got = engine.read("a.txt", on=root)
   word = next(one for one in sand.calls if one[0] == "read")
-  assert engine.outcomes[word[1]] == got == Text("/w/a.txt", "one\n")
+  assert got == Text("/w/a.txt", "one\n")
+  assert engine.outcomes[word[1]] == {"path": "/w/a.txt", "content": "one\n"}
   with pytest.raises(ValueError, match="boom"):
     await engine.rung("raise ValueError('boom')", on=root)
   step = said(log, "rung")[0][1]

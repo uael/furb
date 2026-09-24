@@ -20,7 +20,7 @@ from conftest import (
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Exit, Text
 
-MINE = "def read(path, **kw):\n  return ask('read', __name__, 'mine.txt')[1]"
+MINE = "def read(path, **kw):\n  return landed(ask('read', __name__, 'mine.txt')[1])"
 
 
 async def test_the_one_way_to_speak_of_an_act() -> None:
@@ -110,7 +110,7 @@ async def test_the_bus_makes_every_fact_whole_from_what_it_is_given() -> None:
   assert (made[0], made[1], made[2]) == ("tell", "chain1", OPERATOR)
   asking, got = engine.ask("read", root, "a.txt")
   assert asking == ("read", "read@operator.2", OPERATOR, "chain1", "a.txt")
-  assert got == Text("/w/a.txt", "one\ntwo\n")
+  assert got == {"path": "/w/a.txt", "content": "one\ntwo\n"}
   act = engine.bash("echo hi", on=root)
   assert said(log, "bash")[0] == ("bash", act, OPERATOR, root, "echo hi", False, 600.0)
   assert all(len(a) >= 3 and a[2] for a in log)

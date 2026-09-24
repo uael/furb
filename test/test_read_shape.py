@@ -16,4 +16,7 @@ async def test_a_read_is_the_question_of_the_text_at_a_path() -> None:
     ("read", "read@operator.2", OPERATOR, root, "a.txt"),
     ("read", "read@operator.3", OPERATOR, root, "b.txt"),
   ]
-  assert [engine.outcomes[a[1]] for a in asked] == [Text("/w/a.txt", "one\ntwo\n"), Text("/w/b.txt", "three\n")]
+  assert [engine.outcomes[a[1]] for a in asked] == [
+    {"path": "/w/a.txt", "content": "one\ntwo\n"},
+    {"path": "/w/b.txt", "content": "three\n"},
+  ]

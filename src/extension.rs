@@ -59,6 +59,7 @@ const BUILTINS: [(&str, &[&str], &[&str]); 3] = [
       "cd",
       "cwd",
       "Text",
+      "landed",
       "showing",
     ],
   ),

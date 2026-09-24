@@ -47,7 +47,6 @@ from python_minifier import minify
 from furb import engine, python
 from furb.engine import WORLD, Drift, Refused
 from furb.provider.claude import ACTOR, Claude, Settings, actors
-from furb_monty import missing_words
 
 type World = Generator[tuple | None, tuple]
 """The World, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
@@ -266,11 +265,8 @@ class Live:
     return str(standing[1])
 
   def plays(self, chain: str) -> None:
-    """The extensions, played on a chain as rungs by whoever speaks: each word its program lacks, in order, and then
-    each life word."""
-    _, program = engine.ask("program", chain)
-    held = [str(one) for one in program.values()] if isinstance(program, dict) else []
-    for word in [*missing_words(held, self.words), *self.lives]:
+    """The life words of the extensions, played on a chain as rungs by whoever speaks, in order."""
+    for word in self.lives:
       engine.rung(word, on=chain)
 
   def play(self) -> None:
