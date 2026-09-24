@@ -397,6 +397,9 @@ test("the toggle, the keys of the footer, and the palette answer the mouse, and 
     await screen.mockMouse.click(x, y);
     expect(session.view).toBe("transcript");
     session.show("feed");
+    // The screen draws the feed, with the palette gone, before the pointer acts on it again.
+    app.render();
+    await screen.flush();
     // A drag over the heading of a card selects its text and leaves the card as it was.
     const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
     const heading = card?.getChildren()[0];

@@ -579,8 +579,6 @@ export class Session extends EventEmitter {
     for (const path of await fileReferences(text, directory))
       await this.life.result(await this.life.rung(`read(${JSON.stringify(path)})`, { on: chain }));
   }
-  /** A new chain that retells the selected chain without some of its acts, and that the session selects. A rung of
-   * the operator makes it, so that a later life makes it again. */
   /** The name of a new branch of this chain: its name and the first number that no chain takes, as Main 2. */
   private branchLabel(): string {
     const base = this.label.replace(/ \d+$/, "");
@@ -589,6 +587,8 @@ export class Session extends EventEmitter {
     while (taken.has(`${base} ${count}`)) count++;
     return `${base} ${count}`;
   }
+  /** A new chain that retells the selected chain without some of its acts, and that the session selects. A rung of
+   * the operator makes it, so that a later life makes it again. */
   async branch(label: string, omitted: string[]): Promise<string> {
     const source = this.selected;
     const filter = `take(${[...omitted.map((id) => JSON.stringify(id)), "inside=False"].join(", ")})`;
@@ -613,12 +613,13 @@ export class Session extends EventEmitter {
     const chain = this.acts.find((act) => act.id === id)?.on;
     if (!chain) throw new Error(`There is no act ${id} to rewind to.`);
     if (chain !== this.selected) await this.select(chain);
-    const acts = this.activity.filter((act) => !["chain", "grant"].includes(act.kind));
-    const at = acts.findIndex((act) => act.id === id);
-    const act = acts[at];
-    if (!act) throw new Error(`There is no act ${id} to rewind to.`);
+    const at = this.activity.findIndex((act) => act.id === id);
+    const act = this.activity[at];
+    if (!act || ["chain", "grant"].includes(act.kind)) throw new Error(`There is no act ${id} to rewind to.`);
     const message = this.isUserPrompt(act);
-    const omitted = acts.slice(message ? at : at + 1).map((later) => later.id);
+    // Every act after the point leaves the branch, a grant or a chain among them, so that the branch reads no ceiling
+    // and no branch that came later.
+    const omitted = this.activity.slice(message ? at : at + 1).map((later) => later.id);
     const branch = await this.branch(label ?? this.branchLabel(), omitted);
     if (message) await this.restore(String(act.words[1] ?? ""));
     this.notice = message

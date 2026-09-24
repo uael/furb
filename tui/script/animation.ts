@@ -11,7 +11,7 @@ import { Session } from "../src/session.ts";
 import { palettes } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
-import { gif, type Still } from "./gif.ts";
+import { gif, pack, type Still } from "./gif.ts";
 import { pixels } from "./raster.ts";
 
 // The model of the demo writes its words as a stream in the animation, as a real model does.
@@ -73,7 +73,7 @@ async function still(delay: number): Promise<void> {
   await test.flush();
   const image = pixels(test.captureSpans(), palettes[session.theme], "furb", zoom);
   size = { width: image.width, height: image.height };
-  stills.push({ pixels: image.pixels, delay });
+  stills.push(pack(image.pixels, delay));
 }
 /** Text typed a few characters at a time, each step a picture. */
 async function type(text: string, step = 3, delay = 5): Promise<void> {
@@ -96,6 +96,7 @@ async function working(delay = 8): Promise<void> {
 async function click(text: string): Promise<void> {
   const lines = test.captureCharFrame().split("\n");
   const row = lines.findIndex((line) => line.includes(text));
+  if (row < 0) throw new Error(`The screen shows no ${text} to click.`);
   await test.mockMouse.click((lines[row] ?? "").indexOf(text) + 1, row);
 }
 
@@ -129,11 +130,12 @@ try {
   await still(140);
   test.mockInput.pressEscape();
   await still(30);
-  // Escape twice opens the rewind tree in the feed.
+  // Escape twice opens the rewind tree in the feed. A picture takes longer to draw than the time between the two
+  // presses, so the picture comes after both.
   test.mockInput.pressEscape();
-  await still(50);
   test.mockInput.pressEscape();
   await still(160);
+  if (!test.captureCharFrame().includes("Rewind")) throw new Error("The rewind tree did not open.");
   test.mockInput.pressArrow("down");
   await still(60);
   test.mockInput.pressArrow("down");

@@ -236,7 +236,7 @@ export function pixels(
   palette: Window,
   title: string,
   zoom: number,
-): { width: number; height: number; pixels: Uint8Array } {
+): { width: number; height: number; pixels: Uint8Array<ArrayBuffer> } {
   const inner = { width: frame.cols * cell, height: frame.rows * row };
   const window = { width: inner.width + inset * 2, height: inner.height + bar + inset };
   const width = window.width + margin * 2,

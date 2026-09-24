@@ -629,3 +629,59 @@ test("a workspace row renames its workspace in place, and its remove button take
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("a rename in a row ends when a dialog opens or another row is clicked, and the dialog and the click still work", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-rename-end-"));
+  await mkdir(join(directory, "project"));
+  const library = new Workspaces(new Preferences(join(directory, "ui.json")), { demo: true });
+  const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true });
+  let app: App | undefined;
+  try {
+    const group = await library.add(join(directory, "project"));
+    const first = await library.create(group, "foo");
+    const second = await library.create(group, "bar");
+    if (!first.session || !second.session) throw new Error("The session did not open.");
+    const options = { quit() {}, workspaces: library };
+    app = new App(screen.renderer, second.session, options);
+    library.on("select", (session) => {
+      app?.dispose();
+      app = new App(screen.renderer, session, options);
+    });
+    const left = 152 - library.preferences.sidebarWidth;
+    const frame = async () => {
+      app?.render();
+      await screen.flush();
+      return screen.captureCharFrame().split("\n");
+    };
+    const rename = async (name: string) => {
+      const lines = await frame();
+      const row = lines.findIndex((line) => new RegExp(` ${name}\\b`).test(line.slice(left)));
+      await screen.mockMouse.moveTo(left + 8, row);
+      await screen.mockMouse.click((lines[row] ?? "").lastIndexOf("✎"), row);
+      await frame();
+    };
+    // A dialog that opens during a rename keeps the name typed so far, and takes the keys.
+    await rename("bar");
+    await screen.mockInput.typeText("2");
+    app.palette();
+    await screen.mockInput.typeText("them");
+    await frame();
+    expect(second.name).toBe("bar2");
+    expect(app.composer.plainText).toBe("");
+    expect(screen.captureCharFrame()).toContain("them");
+    app.closeOverlay();
+    // One click on another row keeps the name and opens that row.
+    await rename("bar2");
+    await screen.mockInput.typeText("x");
+    const lines = await frame();
+    const fooRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    await screen.mockMouse.click(left + 8, fooRow);
+    await until(library, () => library.current === first);
+    expect(second.name).toBe("bar2x");
+  } finally {
+    app?.dispose();
+    screen.renderer.destroy();
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

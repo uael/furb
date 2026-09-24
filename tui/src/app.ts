@@ -213,7 +213,12 @@ export class App {
   /** Whether the sidebar lists the finished chains, which fold under a row of their own. */
   private showResting = false;
   /** The session or the workspace that the operator renames in its row, and the name typed so far. */
-  private renaming?: { item: SessionEntry | Workspace; value: string; input?: InputRenderable };
+  private renaming?: {
+    item: SessionEntry | Workspace;
+    value: string;
+    cursor?: number;
+    input?: InputRenderable;
+  };
   /** The session or the workspace whose menu is open, whose row stays lit under it. */
   private menuItem?: SessionEntry | Workspace;
   /** The switch of the mode of the input, which the layout places. */
@@ -253,6 +258,9 @@ export class App {
   private readonly paneKeys = new WeakMap<Renderable, string>();
   /** The node that the last press of a button reached. */
   private pressed: Renderable | null = null;
+  /** Where the last press was, so that a click still counts when the view drew its node again between the press and
+   * the release. */
+  private pressedAt?: { x: number; y: number };
   private readonly cards = new Map<
     string,
     {
@@ -327,6 +335,7 @@ export class App {
       // Every press reaches the root, which keeps what it pressed for the release that makes it a click.
       onMouseDown: (event) => {
         this.pressed = event.target;
+        this.pressedAt = { x: event.x, y: event.y };
       },
     });
     renderer.root.add(this.root);
@@ -615,12 +624,15 @@ export class App {
   }
   /** A handler of the release of the left button that runs only for a click: a press and a release on one node that
    * selected no text between them. A drag over a button selects its text and does nothing else, and the release of
-   * a press that opened a dialog does not close it. */
+   * a press that opened a dialog does not close it. A node that the view drew again between the press and the
+   * release is the same node when the pointer did not move. */
   private click(run: (event: MouseEvent) => void): (event: MouseEvent) => void {
     return (event) => {
+      const redrawn =
+        Boolean(this.pressed?.isDestroyed) && event.x === this.pressedAt?.x && event.y === this.pressedAt?.y;
       if (
         event.button !== 0 ||
-        event.target !== this.pressed ||
+        (event.target !== this.pressed && !redrawn) ||
         this.renderer.getSelection()?.getSelectedText()
       )
         return;
@@ -2897,6 +2909,13 @@ export class App {
         input.on(InputRenderableEvents.INPUT, (value: string) => {
           renaming.value = value;
         });
+        // A row that the sidebar draws again keeps the cursor where it was.
+        if (renaming.cursor !== undefined) input.cursorOffset = renaming.cursor;
+        input.onKeyDown = () => {
+          queueMicrotask(() => {
+            if (!input.isDestroyed) renaming.cursor = input.cursorOffset;
+          });
+        };
         input.on(InputRenderableEvents.ENTER, () => this.endRename(true));
         // The name is kept when the input loses its focus to another part of the screen, and not when the sidebar
         // draws the row again, which focuses its new input at once.
@@ -3134,7 +3153,9 @@ export class App {
     const name = renaming.value.trim();
     if (keep && name && name !== renaming.item.name) this.options.workspaces?.rename(renaming.item, name);
     if (this.session.notice.startsWith("Enter keeps the new name")) this.session.notice = "";
-    this.composer.focus();
+    // The input gives its focus back to the composer, and a part that took the focus from it keeps it.
+    const focused = this.renderer.currentFocusedRenderable;
+    if (!focused || focused === renaming.input || focused.isDestroyed) this.composer.focus();
     this.render();
   }
   /** Ask how to remove a session, or whether a workspace leaves the list. */
@@ -4896,6 +4917,8 @@ export class App {
     rich = false,
     at?: { x: number; y: number },
   ): void {
+    // A dialog or a menu takes the keys, so a name that a row takes ends first, and is kept.
+    this.endRename(true);
     this.closeOverlay();
     this.rich = rich;
     this.paletteStart = 0;
@@ -5329,6 +5352,10 @@ export class App {
       if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         key.preventDefault();
         this.endRename(false);
+      } else if (key.ctrl && key.name === "q") {
+        key.preventDefault();
+        this.endRename(true);
+        void this.options.quit();
       }
       return;
     }

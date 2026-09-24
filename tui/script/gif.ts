@@ -1,7 +1,16 @@
-/** One picture of an animation: four bytes for each pixel, and how long it stays, in hundredths of a second. */
+/** One picture of an animation: its pixels packed with deflate, four bytes for each, and how long it stays, in
+ * hundredths of a second. A picture stays packed until the encoder reads it, so that a long animation fits in
+ * memory. */
 export interface Still {
-  pixels: Uint8Array;
+  packed: Uint8Array<ArrayBuffer>;
   delay: number;
+}
+/** A picture of an animation, packed. */
+export function pack(pixels: Uint8Array<ArrayBuffer>, delay: number): Still {
+  return { packed: Bun.deflateSync(pixels, { level: 1 }), delay };
+}
+function unpack(still: Still): Uint8Array {
+  return Bun.inflateSync(still.packed);
 }
 
 /** The bits of an index, the colors of the palette, and the index that marks a pixel as the same as the picture
@@ -32,8 +41,9 @@ export function gif(stills: Still[], width: number, height: number, kept: number
   out.push(0x21, 0xff, 0x0b, ...Buffer.from("NETSCAPE2.0"), 0x03, 0x01, 0x00, 0x00, 0x00);
   let before: Uint8Array | undefined;
   for (const [position, still] of stills.entries()) {
+    const pixels = unpack(still);
     const now = new Uint8Array(width * height);
-    for (let pixel = 0; pixel < now.length; pixel++) now[pixel] = index(color(still.pixels, pixel));
+    for (let pixel = 0; pixel < now.length; pixel++) now[pixel] = index(color(pixels, pixel));
     // The rectangle where this picture differs from the one before it, and the whole picture for the first.
     let left = 0,
       top = 0,
@@ -98,7 +108,8 @@ function color(pixels: Uint8Array, pixel: number): number {
 function colors(stills: Still[], width: number, height: number, kept: number[]): number[] {
   const counts = new Map<number, number>();
   let before: Uint8Array | undefined;
-  for (const { pixels } of stills) {
+  for (const still of stills) {
+    const pixels = unpack(still);
     for (let pixel = 0; pixel < width * height; pixel++) {
       const value = color(pixels, pixel);
       if (before && color(before, pixel) === value) continue;

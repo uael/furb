@@ -123,7 +123,7 @@ function highlighting(node: Renderable): Promise<void>[] {
 }
 
 /** The shots whose notice tells what the step did, which keep it. The others show no notice of an earlier step. */
-const notices = /^(34|36|37|43|44|45)-/;
+const notices = /^(34|36|37|43|44|45|50)-/;
 /** The work of the chain completes, and the queue sends what waits in it, until nothing is left to do. */
 async function settle(): Promise<void> {
   await session.refresh();
@@ -154,7 +154,9 @@ async function capture(name: string): Promise<void> {
   await test.flush();
   if (only && !only.test(name)) return;
   await writeFile(`${output}/${name}.png`, rasterize(test.captureSpans(), palettes[session.theme], "furb"));
-  await writeFile(join(tmpdir(), `furb-${name}.txt`), test.captureCharFrame());
+  // The text of each shot goes to a folder that FURB_GALLERY_TEXT names, to read the gallery without its pictures.
+  const texts = process.env.FURB_GALLERY_TEXT;
+  if (texts) await writeFile(join(texts, `${name}.txt`), test.captureCharFrame());
 }
 
 try {
@@ -465,6 +467,38 @@ try {
   app.composer.setText("");
   await test.mockInput.typeText("/effort ");
   await capture("46-value-suggestions");
+  // A word of the model that the gate refused, and that its next word replaced, folds and reads as retried.
+  app.composer.setText("");
+  await session.submit("Give me an answer in a fence.");
+  await settle();
+  await capture("47-retried-word");
+  // An archived session folds under Archived, and the pointer on a session row shows its remove button.
+  const stale = library.groups[1]?.sessions.find((entry) => entry.name === "Archive");
+  if (!stale) throw new Error("The gallery has no Archive session.");
+  await library.archive(stale);
+  app.render();
+  await test.flush();
+  /** The column and the row of the first place of the screen that shows a text, at or after a column. */
+  const find = (text: string, from = 0): [number, number] => {
+    const rows = test.captureCharFrame().split("\n");
+    const row = rows.findIndex((line) => line.indexOf(text, from) >= 0);
+    if (row < 0) throw new Error(`The screen shows no ${text}.`);
+    return [(rows[row] ?? "").indexOf(text, from), row];
+  };
+  const [, changelogRow] = find("Changelog");
+  const removeAt = (test.captureCharFrame().split("\n")[changelogRow] ?? "").lastIndexOf("×");
+  await test.mockMouse.moveTo(removeAt, changelogRow);
+  await capture("48-archive-session");
+  // A right click on a session row opens its menu at the pointer, and Rename takes the new name in the row.
+  const [researchAt, researchRow] = find("Research");
+  await test.mockMouse.click(researchAt + 2, researchRow, 2);
+  await capture("49-session-menu");
+  const [renameAt, renameRow] = find("Rename", researchAt);
+  await test.mockMouse.click(renameAt + 1, renameRow);
+  await test.flush();
+  await test.mockInput.typeText(" notes");
+  await rest();
+  await capture("50-rename-session");
 } finally {
   app.dispose();
   test.renderer.destroy();

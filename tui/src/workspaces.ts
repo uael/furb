@@ -328,10 +328,13 @@ export class Workspaces extends EventEmitter {
     if (entry.archived) this.restore(entry);
     const selection = ++this.selection;
     await this.load(entry, group);
+    // An archive, a delete or a removal of the workspace that came while the session opened closed it again, and the
+    // selection gives way to it.
     if (selection !== this.selection || this.closed) return;
+    if (!entry.session || entry.archived || this.groupOf(entry) !== group) return;
     this.current = entry;
     entry.unread = false;
-    entry.status = (entry.session as Session).status();
+    entry.status = entry.session.status();
     group.collapsed = false;
     this.save({ directory: group.directory, collapsed: false });
     this.emit("select", entry.session);
@@ -423,6 +426,7 @@ export class Workspaces extends EventEmitter {
   /** Take a workspace off the list. Its folder and its records stay, and /workspace adds it back. The current
    * session moves to a session of another workspace first, and the open sessions of the workspace close. */
   async remove(group: Workspace): Promise<void> {
+    if (!this.groups.includes(group)) return;
     if (group === this.groupOf()) {
       const other = this.groups.find((one) => one !== group);
       if (!other) throw new Error("This is the only workspace. Add another one before you remove it.");
@@ -433,7 +437,10 @@ export class Workspaces extends EventEmitter {
       await this.opening.get(entry.path)?.catch(() => {});
       await this.release(entry);
     }
-    this.groups.splice(this.groups.indexOf(group), 1);
+    // A second removal of the same workspace that ran meanwhile took it off already.
+    const index = this.groups.indexOf(group);
+    if (index < 0) return;
+    this.groups.splice(index, 1);
     this.save({ directory: group.directory, drop: true });
     this.emit("change");
   }
