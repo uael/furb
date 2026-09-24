@@ -23,7 +23,12 @@ async function skill(root: string, folder: string, text: string): Promise<string
 }
 
 test("the roots are the project first, then the project for claude, then the config of the user", () => {
-  expect(roots("/p", "/c")).toEqual(["/p/.furb/skills", "/p/.claude/skills", "/c/skills"]);
+  // Each system spells a path with its own separator.
+  expect(roots("/p", "/c").map((one) => one.replaceAll("\\", "/"))).toEqual([
+    "/p/.furb/skills",
+    "/p/.claude/skills",
+    "/c/skills",
+  ]);
 });
 
 test("the frontmatter gives a name and a description as they stand, quoted, folded or kept line by line", () => {

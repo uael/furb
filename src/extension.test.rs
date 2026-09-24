@@ -80,6 +80,18 @@ fn worded(source: &str) -> String {
   word(source).unwrap()
 }
 
+/// The path that the url of a git remote or the package of npm names, with nothing else set, which a test compares
+/// as a path, since each machine spells a path with its own separator.
+fn spelled(setting: &Setting) -> &Path {
+  match setting {
+    Setting::From(
+      Source::Git { url: one, reference: None, path: None }
+      | Source::Npm { package: one, version: None },
+    ) => Path::new(one),
+    other => panic!("no url or package of a path: {other:?}"),
+  }
+}
+
 #[test]
 fn a_word_without_an_import_of_furb_is_itself() {
   let plain = "import re\nfrom dataclasses import dataclass\n\nx = 1\n";
@@ -294,14 +306,8 @@ fn a_path_resolves_against_the_directory_of_its_config_file() {
   let text = r#"{"extensions": {"a": "../p", "b": {"git": "./r.git"}, "c": {"npm": "../n.tgz"}, "d": {"npm": "name"}}}"#;
   let got = settings(text, &file, None).unwrap();
   assert_eq!(got[0].1, Setting::From(Source::Path("/c/p".into())));
-  assert_eq!(
-    got[1].1,
-    Setting::From(Source::Git { url: "/c/d/r.git".to_owned(), reference: None, path: None })
-  );
-  assert_eq!(
-    got[2].1,
-    Setting::From(Source::Npm { package: "/c/n.tgz".to_owned(), version: None })
-  );
+  assert_eq!(spelled(&got[1].1), Path::new("/c/d/r.git"));
+  assert_eq!(spelled(&got[2].1), Path::new("/c/n.tgz"));
   assert_eq!(got[3].1, Setting::From(Source::Npm { package: "name".to_owned(), version: None }));
 }
 
@@ -319,10 +325,7 @@ fn a_tilde_expands_to_the_home() {
   let got = settings(text, &file, Some(Path::new("/h"))).unwrap();
   assert_eq!(got[0].1, Setting::From(Source::Path("/h".into())));
   assert_eq!(got[1].1, Setting::From(Source::Path("/h/x".into())));
-  assert_eq!(
-    got[2].1,
-    Setting::From(Source::Git { url: "/h/r.git".to_owned(), reference: None, path: None })
-  );
+  assert_eq!(spelled(&got[2].1), Path::new("/h/r.git"));
   assert_eq!(got[3].1, Setting::From(Source::Path("/c/~user/x".into())));
 }
 
@@ -330,23 +333,21 @@ fn a_tilde_expands_to_the_home() {
 fn the_local_config_overrides_the_home_config_by_name() {
   let at = yard("local-over-home");
   let places = places(&at);
+  let (one, two, three) = (at.join("p/one"), at.join("p/two"), at.join("q/two"));
   wrote(
     &places.config.join("config.json"),
-    r#"{"extensions": {"one": "/p/one", "two": "/p/two"}}"#,
+    &serde_json::json!({"extensions": {"one": one, "two": two}}).to_string(),
   );
   wrote(
     &at.join("project/.furb/config.json"),
-    r#"{"extensions": {"one": false, "two": "/q/two"}}"#,
+    &serde_json::json!({"extensions": {"one": false, "two": three}}).to_string(),
   );
   let got = config(&places, &at.join("project")).unwrap();
   let picked: Vec<_> =
     got.iter().skip(3).map(|one| (one.name.as_str(), one.on, one.source.clone())).collect();
   assert_eq!(
     picked,
-    [
-      ("one", false, Some(Source::Path("/p/one".into()))),
-      ("two", true, Some(Source::Path("/q/two".into())))
-    ]
+    [("one", false, Some(Source::Path(one))), ("two", true, Some(Source::Path(three)))]
   );
   assert_eq!(got[4].file, Some(at.join("project/.furb/config.json")));
 }
