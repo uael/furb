@@ -522,9 +522,16 @@ async def settle(n: int = 80) -> None:
     await asyncio.sleep(0)
 
 
-def sown() -> Sand:
-  """A World with one file and the roster of the suite."""
-  return Sand(files={"/w/a.txt": "one\ntwo\n"}, stands=STANDS)
+def sown(words: Sequence[str] = ()) -> Sand:
+  """A World with one file and the roster of the suite, which plays the words it is given."""
+  return Sand(files={"/w/a.txt": "one\ntwo\n"}, stands=STANDS, words=list(words))
+
+
+async def worded(word: str, words: Sequence[str] = FILES) -> object:
+  """What a word gives, which it closes its rung with, run on the root of a life whose World plays the words of the
+  builtins it is given, so a test reads a class of a builtin the way the model reads it, on each engine."""
+  _, root = life(sown(words))
+  return await engine.rung(word, on=root)
 
 
 async def lived(sand: Sand) -> tuple[list[tuple], str]:

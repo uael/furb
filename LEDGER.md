@@ -56,6 +56,23 @@ external extension. Tell the owner if the pypi package `furb` (and npm `@furb/sk
    expose it. Only what is truly per language stays in TS and Python: the World parts, the TUI parts, and the dynamic
    import of their code.
 
+7. Later answered by the owner (PLAN.md part 1, decision 13): a manifest may name a `life` word beside `python`,
+   as `{"python": "skills.py", "life": "skills()"}`. The module is played once per chain by the play rule. The life
+   word is played as the World in every life: after boot on each live chain without a source, and at the birth of
+   each such chain right after the module words, never during replay. The crate carries it with the play rule
+   (Opening takes the life words beside the words, and the preamble plays them). `skills.py` defines names only,
+   and `skills()` tells only the skills that are new, changed or gone against the transcript of its chain. The TUI
+   part gives `/reload-skills`.
+8. Later answered by the owner (decision 16): Text, read and write keep their signatures and meanings. A record of
+   0.1.0 must still open: every record reader (`unwire` in `src/furb/world.py`, `again` in `src/preamble.py`, the
+   TypeScript reader) keeps the mark of a class it does not know, `{"is": "Text", ...}`, as its plain fields, and
+   `landed()` makes the Text. A test opens a real record of 0.1.0 on each host.
+9. Later answered by the owner (decision 17): a requirement that is off refuses the extension that needs it, with a
+   message that says to turn that one off too. An upgraded word is played as one more rung, and it binds last.
+
+PLAN.md (by the lead) holds the plan of the remaining steps and more decisions of the lead (part 1, binding). Read it
+with this ledger.
+
 ## Design (planned, write it in docs/extensions.md)
 
 - Config: `{"extensions": {"<name>": false | true | "<path>" | {"path"} | {"git", "ref"?, "path"?} | {"npm", "version"?}}}`.

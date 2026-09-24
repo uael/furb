@@ -1,19 +1,18 @@
 """find, the numbers of the lines that a pattern matches."""
 
-from furb.engine import Text, grep
+from conftest import worded
 
-ONE = Text("/w/n.txt", "one\ntwo\nthree\n")
+ONE = "one = Text('/w/n.txt', 'one\\ntwo\\nthree\\n')\n"
+"""The start of a word that binds a text of three lines."""
 
 
-def test_find_pattern_gives_the_numbers_of_the_lines_that_the_pattern_matches() -> None:
+async def test_find_pattern_gives_the_numbers_of_the_lines_that_the_pattern_matches() -> None:
   """find(pattern) gives the numbers of the lines that the pattern matches."""
-  assert ONE.find("^t") == [2, 3]
-  assert ONE.find("one") == [1]
-  assert ONE.find("four") == []
-  assert Text("/w/n.txt").find("one") == []
+  word = ONE + "close([one.find('^t'), one.find('one'), one.find('four'), Text('/w/n.txt').find('one')])"
+  assert await worded(word) == [[2, 3], [1], [], []]
 
 
-def test_the_numbers_of_the_lines_the_pattern_matches_which_is_what_grep_picks_of_them() -> None:
+async def test_the_numbers_of_the_lines_the_pattern_matches_which_is_what_grep_picks_of_them() -> None:
   """The numbers of the lines the pattern matches, which is what grep picks of them."""
-  assert ONE.find("^t") == grep("^t")(ONE.lines) == [2, 3]
-  assert ONE.find("e$") == grep("e$")(ONE.lines) == [1, 3]
+  word = ONE + "close([[one.find(x), grep(x)(one.lines)] for x in ('^t', 'e$')])"
+  assert await worded(word) == [[[2, 3], [2, 3]], [[1, 3], [1, 3]]]
