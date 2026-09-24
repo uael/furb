@@ -56,6 +56,11 @@ once, before you spend money on it.
   holds one commit and no tag, so a step builds the tree at a version that git makes up. After the steps, a seed
   installs again, from the tree, each distribution that the image built from it, at the version the image holds.
   What a layer holds is kept under `~/.cache/furb-deepswe/layers`, so each layer is read once.
+- The pip of the interpreter is the pip of the image. Each `pip install` of a seed takes `-c constraints.txt`, a
+  file in the workroot that pins every distribution that the image took from an index to the version that the
+  image holds. So the checkout runs the pytest and the libraries that the verifier runs, and not the newest
+  releases. The pins are on the command line and not in `PIP_CONSTRAINT`, since pip gives its environment to the
+  builds that it isolates, and the builds of the image were free.
 - `app`, and the tree that a grade outside docker makes, are copies of the base, and the venv of each copy is its
   own. The rig writes the path of the copy where the venv names the path of the base. So its scripts run the python
   of the copy, an editable package imports the code of the copy, and an install lands in the copy and not in the

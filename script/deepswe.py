@@ -27,6 +27,7 @@ import base64
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -372,6 +373,18 @@ def rebuilt(repo: Path, dists: Mapping[str, tuple[str, str, bool]]) -> None:
         raise SystemExit(1)
 
 
+def constrained(dists: Mapping[str, tuple[str, str, bool]], into: Path) -> Path:
+  """A file of constraints that holds pip to the version the image holds of each distribution it took from an index.
+
+  A step resolves its requirements now, and the image resolved them when it was built, so a step that is free takes
+  newer releases than the verifier runs. A newer pytest refused to collect the suite of dateutil. A distribution
+  that the image built from the tree or took from a URL is left free, since the step names where it comes from.
+  """
+  pinned = sorted(f"{name}=={version}" for name, (version, url, _) in dists.items() if not url)
+  into.write_text("\n".join(pinned) + "\n", encoding="utf-8")
+  return into
+
+
 def steps(task: Path) -> list[str]:
   """The steps of dependency the Dockerfile of a task takes, without the clone the tarball already stands for."""
   df = task / "environment" / "Dockerfile"
@@ -395,7 +408,14 @@ def venved(repo: Path) -> str:
   return f'export PATH="{first}:$PATH"; ' if first.is_dir() else ""
 
 
-def generic(repo: Path, lang: str, env: Mapping[str, str]) -> None:
+def hosted(command: str, swaps: Sequence[tuple[str, str]]) -> str:
+  """A command of a Dockerfile, as this host says it."""
+  for was, now in swaps:
+    command = command.replace(was, now)
+  return command
+
+
+def generic(repo: Path, lang: str, env: Mapping[str, str], swaps: Sequence[tuple[str, str]]) -> None:
   """What is installed for a task whose Dockerfile says nothing this host can take."""
   words = {
     "typescript": "npm ci --include=dev --no-audit --no-fund || npm install --no-audit --no-fund",
@@ -407,36 +427,43 @@ def generic(repo: Path, lang: str, env: Mapping[str, str]) -> None:
   if words is None:
     say(f"[deepswe] unknown language {lang!r}; nothing installed")
     return
-  ran(["bash", "-lc", venved(repo) + words], where=repo, env=env)
+  ran(["bash", "-lc", venved(repo) + hosted(words, swaps)], where=repo, env=env)
 
 
 def installed(task: Path, repo: Path, lang: str) -> None:
   """Take the steps of the task's own Dockerfile in the checkout, so the tree is the one its verifier wants."""
   env = {"npm_config_confirm_modules_purge": "false"}
+  swaps = SAID
   dists: Mapping[str, tuple[str, str, bool]] = {}
   if lang == "python":
     version, dists = interpreter(image(task))
     say(f"[deepswe] making the interpreter of the checkout: python {version}, as the image of the task runs")
+    python = repo / ".venv" / "bin" / "python"
     if ran([tool("uv"), "venv", "--no-project", "--seed", "--python", version, str(repo / ".venv")]):
       say(f"[deepswe] uv could not make an interpreter of python {version}")
       raise SystemExit(1)
+    # The pip of a step is the pip of the image: pip 26.2 could not build an sdist that a step of dateutil fetches.
+    if "pip" in dists and ran([tool("uv"), "pip", "install", "-q", "--python", str(python), f"pip=={dists['pip'][0]}"]):
+      say(f"[deepswe] uv could not install the pip {dists['pip'][0]} of the image")
+      raise SystemExit(1)
+    # A constraint in the environment of pip reaches the builds that pip isolates, where the image had none, so it
+    # is told on the command line of each install.
+    pins = shlex.quote(str(constrained(dists, repo.parent / "constraints.txt")))
+    swaps = (*swaps, ("python3 -m pip install ", f"python3 -m pip install -c {pins} "))
   told = steps(task)
   if not told:
     say(f"[deepswe] {task.name}: the Dockerfile says no step; installing by language instead")
-    generic(repo, lang, env)
+    generic(repo, lang, env, swaps)
   for step in told:
     if step.split(" ", 1)[0] in CONTAINER:
       say(f"[deepswe] over (a container alone takes it): {step[:80]}")
       continue
-    named = step
-    for was, now in SAID:
-      named = named.replace(was, now)
-    cmd = re.sub(r"(?<![\w./])/app\b", str(repo), named)
+    cmd = re.sub(r"(?<![\w./])/app\b", str(repo), hosted(step, swaps))
     say(f"[deepswe] RUN {cmd[:90]}")
     if ran(["bash", "-lc", venved(repo) + cmd], where=repo, env=env):
       say("[deepswe]   the step failed; the rig goes on with what did land")
   if told and lang in ("typescript", "javascript") and not (repo / "node_modules").is_dir():
-    generic(repo, lang, env)
+    generic(repo, lang, env, swaps)
   rebuilt(repo, dists)
 
 
