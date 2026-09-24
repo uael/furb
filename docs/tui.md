@@ -197,6 +197,11 @@ the trash of its workspace.
 
 ![Command suggestions](screenshots/41-slash-suggestions.png)
 
+A space after a command whose values are known lists them: the models, the efforts, the shapes, the themes, the
+paths of the project, the chains, and the acts. Enter on a value runs the command.
+
+![Value suggestions](screenshots/46-value-suggestions.png)
+
 ## Extensions
 
 An extension adds commands to the palette and to the suggestions.

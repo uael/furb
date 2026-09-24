@@ -458,6 +458,13 @@ try {
   app.stash();
   app.composer.setText("A quick question first");
   await capture("45-stash");
+  // The stash comes back into the empty input and leaves, and a space after a command whose values are known lists
+  // them.
+  app.composer.setText("");
+  test.mockInput.pressKey("s", { ctrl: true });
+  app.composer.setText("");
+  await test.mockInput.typeText("/effort ");
+  await capture("46-value-suggestions");
 } finally {
   app.dispose();
   test.renderer.destroy();

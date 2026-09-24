@@ -211,8 +211,6 @@ export class App {
   /** Where the operator is, at the left of the top line, and the toggle of the views at its right. */
   private readonly headline: BoxRenderable;
   private readonly toggle: BoxRenderable;
-  /** The segment of each switch that the pointer is over, by the name of the switch. */
-  private switchHover = new Map<string, number>();
   private readonly status: TextRenderable;
   /** The keys that the footer offers for what the operator can do now, each a button. */
   private readonly hints: BoxRenderable;
@@ -878,46 +876,43 @@ export class App {
 
   /** A switch between a few choices, which the views and the mode of the input share. A track in a color of its own
    * holds a segment for each choice. The chosen segment is filled with the color of its choice and stands out by half
-   * a cell at each side, the segment under the pointer lights, and a click chooses a segment. The chord that moves
-   * the switch stands after the track. */
+   * a cell at each side, the segment under the pointer lights in place, and a click chooses a segment. The chord that
+   * moves the switch stands after the track. */
   private switcher(
     box: BoxRenderable,
-    id: string,
     choices: { label: string; badge?: string; color: RGBA; run?: () => void }[],
     chosen: number,
     chord: string,
     ground: RGBA,
     track: RGBA,
   ): void {
-    const hovered = this.switchHover.get(id);
-    const light = (index: number | undefined) => {
-      if (this.switchHover.get(id) === index) return;
-      if (index === undefined) this.switchHover.delete(id);
-      else this.switchHover.set(id, index);
-      this.render();
-    };
     box.add(this.text([[glyph.halfRight, track, 0, ground]], track, { height: space.bar }));
     for (const [index, choice] of choices.entries()) {
       const active = index === chosen;
-      const lit = index === hovered && !active && Boolean(choice.run);
       const fill = active ? choice.color : track;
-      box.add(
-        this.text(
-          [
-            [active ? glyph.halfRight : " ", choice.color, 0, track],
-            [choice.label, active ? c.background : lit ? c.text : c.muted, active ? bold : 0, fill],
-            [choice.badge ? ` ${choice.badge}` : "", active ? c.background : lit ? c.text : c.faint, 0, fill],
-            [active ? glyph.halfLeft : " ", choice.color, 0, track],
-          ],
-          c.text,
-          {
-            height: space.bar,
-            ...(choice.run ? { onMouseUp: this.click(choice.run) } : {}),
-            onMouseOver: () => light(index),
-            onMouseOut: () => light(undefined),
-          },
-        ),
-      );
+      const parts = (lit: boolean): Part[] => [
+        [active ? glyph.halfRight : " ", choice.color, 0, track],
+        [choice.label, active ? c.background : lit ? c.text : c.muted, active ? bold : 0, fill],
+        [choice.badge ? ` ${choice.badge}` : "", active ? c.background : lit ? c.text : c.faint, 0, fill],
+        [active ? glyph.halfLeft : " ", choice.color, 0, track],
+      ];
+      // The pointer recolors the segment that it is over, and builds no node, so that a press and its release land on
+      // the same segment.
+      const segment: TextRenderable = this.text(parts(false), c.text, {
+        height: space.bar,
+        ...(choice.run ? { onMouseUp: this.click(choice.run) } : {}),
+        ...(choice.run && !active
+          ? {
+              onMouseOver: () => {
+                segment.content = styled(parts(true));
+              },
+              onMouseOut: () => {
+                segment.content = styled(parts(false));
+              },
+            }
+          : {}),
+      });
+      box.add(segment);
     }
     box.add(this.text([[glyph.halfLeft, track, 0, ground]], track, { height: space.bar }));
     if (chord) box.add(this.text(` ${chord}`, c.faint, { height: space.bar }));
@@ -928,20 +923,29 @@ export class App {
     const changes = w.world.changes;
     const shown = this.tree ? "feed" : w.view;
     const kitty = this.renderer.capabilities?.kitty_keyboard === true;
-    if (
-      this.paneChanged(this.toggle, [
-        shown,
-        this.switchHover.get("views"),
-        changes,
-        kitty,
-        this.feedWidth >= 70,
-        this.theme,
-      ])
-    ) {
+    const directory = shortenHome(w.workingDirectory);
+    // The top line spends its room in this order: the session and the chain, the switch of the views, the key of the
+    // switch, then the directory. A part that finds no room is left out, and a session name that is still too long is
+    // cut at its end.
+    const chord = `${kitty ? "⌃" : "⌥"}1-3`;
+    const toggle =
+      views.reduce(
+        (sum, view) =>
+          sum +
+          viewLabels[view].length +
+          2 +
+          (view === "changes" && changes ? String(changes).length + 1 : 0),
+        0,
+      ) + 2;
+    const head = Bun.stringWidth(w.sessionName) + 3 + Bun.stringWidth(w.label);
+    const room = this.feedWidth - space.between;
+    const hint = head + toggle + chord.length + 1 <= room;
+    const folder = head + 3 + Bun.stringWidth(directory) + toggle + (hint ? chord.length + 1 : 0) <= room;
+    const name = clip(w.sessionName, Math.max(8, room - toggle - 3 - Bun.stringWidth(w.label)));
+    if (this.paneChanged(this.toggle, [shown, changes, kitty, hint, this.theme])) {
       this.clear(this.toggle);
       this.switcher(
         this.toggle,
-        "views",
         views.map((view) => ({
           label: viewLabels[view],
           badge: view === "changes" && changes ? String(changes) : "",
@@ -949,38 +953,39 @@ export class App {
           run: () => this.showView(view),
         })),
         views.indexOf(shown),
-        // A narrow top line keeps its room for the headline, and F1 still lists the chord.
-        this.feedWidth >= 70 ? `${kitty ? "⌃" : "⌥"}1-3` : "",
+        // F1 lists the chord where the top line has no room for it.
+        hint ? chord : "",
         c.background,
         c.panel,
       );
     }
-    const directory = shortenHome(w.workingDirectory);
-    if (this.paneChanged(this.headline, [w.sessionName, w.label, directory, this.theme])) {
+    if (this.paneChanged(this.headline, [name, w.label, folder && directory, this.theme])) {
       this.clear(this.headline);
       const button = (parts: Part[], run: () => void) =>
         this.text(parts, c.text, {
           height: space.bar,
-          truncate: true,
-          flexShrink: 1,
+          flexShrink: 0,
           onMouseUp: this.click(run),
         });
       this.headline.add(
-        button([[w.sessionName, c.text, bold]], () => {
+        button([[name, c.text, bold]], () => {
           if (this.options.workspaces) void this.workspacePicker();
           else this.openSessions();
         }),
       );
-      this.headline.add(this.text([[` ${glyph.crumb} `, c.faint]], c.faint, { height: space.bar }));
-      this.headline.add(button([[w.label, c.muted]], () => this.chains()));
       this.headline.add(
-        this.text([[`   ${directory}`, c.faint]], c.faint, {
-          height: space.bar,
-          truncate: true,
-          flexShrink: 2,
-          onMouseUp: this.click(() => this.showValue("Directory", w.workingDirectory)),
-        }),
+        this.text([[` ${glyph.crumb} `, c.faint]], c.faint, { height: space.bar, flexShrink: 0 }),
       );
+      this.headline.add(button([[w.label, c.muted]], () => this.chains()));
+      if (folder)
+        this.headline.add(
+          this.text([[`   ${directory}`, c.faint]], c.faint, {
+            height: space.bar,
+            truncate: true,
+            flexShrink: 1,
+            onMouseUp: this.click(() => this.showValue("Directory", w.workingDirectory)),
+          }),
+        );
     }
   }
   /** Where the input goes, under it: its mode, its chain, and for a prompt the model, the effort, and the type of its
@@ -1007,7 +1012,6 @@ export class App {
         stash,
         prompt,
         room,
-        this.switchHover.get("mode"),
         this.theme,
       ])
     )
@@ -1028,7 +1032,8 @@ export class App {
       (shown.provider ? provider.length + 1 : 0) +
       (shown.effort ? gaps + Bun.stringWidth(`${effort} effort`) : 0) +
       (shown.shape ? gaps + Bun.stringWidth(`returns ${w.shape}`) : 0) +
-      (stash ? gaps + "stashed ⌃S".length + 8 : 0);
+      // The stash takes a gap, its word, its quotes and their space, and its key, and its preview takes the rest.
+      (stash ? gaps + "stashed “”  ⌃S".length : 0);
     for (const part of ["provider", "shape", "effort", "chord"] as const)
       if (width() > room) shown[part] = false;
     const gap = () => this.meta.add(this.text("   ", c.faint));
@@ -1044,12 +1049,10 @@ export class App {
     // is a switch of one segment, which only its key leaves.
     this.clear(this.modeBox);
     const [ground, track] = [c.panel, c.raised];
-    if (edited)
-      this.switcher(this.modeBox, "mode", [{ label: mode, color: modeColor }], 0, "", ground, track);
+    if (edited) this.switcher(this.modeBox, [{ label: mode, color: modeColor }], 0, "", ground, track);
     else
       this.switcher(
         this.modeBox,
-        "mode",
         [
           { label: "Prompt", color: c.accent, run: () => w.mode === "prompt" || this.toggleMode() },
           { label: "Python", color: c.secondary, run: () => w.mode === "python" || this.toggleMode() },
@@ -1107,7 +1110,7 @@ export class App {
       // The stash shows the start of what waits in it, as much as the line has room for, and the key that brings it
       // back.
       const first = stash.split("\n")[0] ?? "";
-      const preview = Math.min(28, room - width() + 8);
+      const preview = Math.min(28, room - width());
       const more = first.length < stash.length && Bun.stringWidth(first) <= preview ? " …" : "";
       button(
         [

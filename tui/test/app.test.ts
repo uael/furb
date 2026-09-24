@@ -76,7 +76,10 @@ test("the real native life drives the feed, the transcript, the palette, and res
     test.resize(80, 30);
     app.render();
     await test.flush();
-    expect(test.captureCharFrame()).toContain("furb");
+    // A narrow top line keeps the session, the chain, and the switch of the views, and the sidebar is hidden.
+    const top = test.captureCharFrame().split("\n")[0] ?? "";
+    expect(top).toContain(`${session.sessionName} › Main`);
+    expect(top).toContain("Transcript");
     expect(test.captureCharFrame()).not.toContain("Chains");
   } finally {
     app.dispose();

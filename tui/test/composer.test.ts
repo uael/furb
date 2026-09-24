@@ -376,6 +376,7 @@ test("⌃Tab rolls to the next chain and ⇧⌃Tab to the one before it, round f
       const first = session.selected;
       screen.mockInput.pressKey("TAB", { ctrl: true });
       await until(session, () => session.selected === chains[1]);
+      await until(session, () => session.notice.endsWith(`chain 2 of ${chains.length}`));
       expect(await frame()).toContain(`chain 2 of ${chains.length}`);
       screen.mockInput.pressKey("TAB", { ctrl: true, shift: true });
       await until(session, () => session.selected === first);
