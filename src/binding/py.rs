@@ -3,10 +3,10 @@
 //! This is the door between the two interpreters, and it is the crate itself, behind the `python` feature. A host
 //! of python hands over its ears as one object, asked under the name of each ear, and drives the life by saying
 //! verbs, each by its name with its words. What crosses is what monty carries, made python here: a value of the
-//! engine comes out as the instance of `furb.python` it is, a `Text` as a `Text`, an exception as the one object
-//! that exception is for the life, and goes in as its name and its fields. A name of the engine crosses as its
-//! name, a callable the engine made as one that calls it back, and a callable of python as one the ears call back
-//! by name. Nothing of the crossing is python's to do.
+//! engine comes out as the instance of `furb.python` it is, an instance of a class a word defined as a type of
+//! this interpreter, an exception as the one object that exception is for the life, and goes in as its name and its
+//! fields. A name of the engine crosses as its name, a callable the engine made as one that calls it back, and a
+//! callable of python as one the ears call back by name. Nothing of the crossing is python's to do.
 
 use pyo3::{
   Bound, Py, PyAny, PyResult, Python,

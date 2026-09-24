@@ -2,10 +2,15 @@
 
 The engine takes the World, and any other generator of the outside, as an ear under the name it hears by. A host
 written in another language is no generator, so a generator here stands in its place. The World is the one ear
-every life has, and what the engine asks of it is known, so its stand-in asks the World of the host by method,
-`world.read(here, path)`, and says the answer back: it is the World's law, the same for every host, and it reads
-the engine itself for what a World reads, which is where a path resolves and whether a command is merged. Any
-other ear is heard by name through the ears of the host, which hear every fact and say what they will.
+every life has, and what the engine asks of every World is known, so its stand-in asks the World of the host by
+method, `world.clock()`, and says the answer back: it is the World's law, the same for every host. Every other fact
+the World hears as an ear does, `world.hears(fact)`, since what an extension asks of it the stand-in does not know,
+and the stand-in closes with a refusal the start of an act of a kind the World does not do. Any other ear is heard
+by name through the ears of the host, which hear every fact and say what they will.
+
+The stand-in plays the extensions too, as the World: the words of their python parts once on each chain without a
+source whose program lacks them, and their life words on each such chain in every life, once boot stands on its
+record, and at the birth of each such chain after.
 
 The Kernel is here too, since the word of a rung runs where the engine runs, in the module of its chain, and so
 is the gate, an ear of its own, which reads a word with the checker of the host on the sheet of the engine.
@@ -45,18 +50,16 @@ if TYPE_CHECKING:
   class World(Protocol):
     """The World of the host, as its stand-in asks it: what the engine asks of the machine, by method."""
 
+    def kinds(self) -> object: ...
     def stand(self) -> object: ...
     def clock(self) -> float: ...
     def chance(self) -> float: ...
-    def read(self, here: str, path: str) -> object: ...
-    def write(self, here: str, path: str, content: str) -> object: ...
     def ask(self, rung: str, on: str, actor: str, turns: list) -> None: ...
-    def run(self, about: str, here: str, command: str, fed: bool, timeout: float | None, merged: bool) -> None: ...
     def wait(self, about: str, seconds: float) -> None: ...
     def prompt(self, about: str, shape: str, message: str) -> None: ...
-    def feed(self, about: str, text: str | None) -> None: ...
-    def slay(self, about: str) -> None: ...
     def keep(self, entry: object) -> None: ...
+    def hears(self, fact: object) -> object: ...
+    def answered(self, got: object) -> object: ...
 
   class Ears(Protocol):
     """The ears of the host, by name: every ear that is no World, and the World too when the host has none."""
@@ -88,6 +91,11 @@ MADE: dict[int, object] = {}
 """MADE holds every callable the engine made and every class a word defined that crossed to the host, by its
 handle, which is its identity, for as long as the host holds the handle: the host says when it forgot one, and it
 is dropped then."""
+WORDS: list[str] = []
+"""WORDS are the words of the python parts of the extensions the host plays, which stand empty while boot says the
+record again."""
+LIVES: list[str] = []
+"""LIVES are the life words of the extensions the host plays, which stand empty while boot says the record again."""
 
 
 def verb(names: Names, which: str) -> Callable[..., object]:
@@ -216,55 +224,62 @@ def again(x: object, names: Names, ears: Ears) -> object:
 def worldly(world: World, names: Names, ears: Ears) -> Ear:
   """The World as the engine hears it, over the World as a host has it.
 
-  It answers where it can: what a chain stands on, the clock, a chance, a read and a write, each after asking the
-  chain where its paths resolve. It starts what takes time, a model's turn, a command, a wait, a prompt of the
-  operator, and the host says the result into the life later, as the fact the engine waits for. It feeds a command
-  and ends every command a control is over, and it keeps what the journal says to keep.
+  It answers what the engine asks of every World: what a chain stands on, the clock and a chance. It starts what
+  takes time, a model's turn, a wait and a prompt of the operator, and the host says the result into the life later,
+  as the fact the engine waits for. It keeps what the journal says to keep. Every other fact it hands to the World as
+  an ear hears it, and says what the World says of it, but the start of an act of a kind that the World does not do,
+  which it closes with a refusal, so no word waits for it.
   """
-  cwd, ask, acts, covers = verb(names, "cwd"), verb(names, "ask"), names["acts"], verb(names, "covers")
+  acts = names["acts"]
   assert isinstance(acts, dict)
-  running: set[str] = set()
-
-  def at(on: str) -> str:
-    here = cwd(on=on)
-    assert isinstance(here, str)
-    return here
-
+  kinds = world.kinds()
+  assert isinstance(kinds, list)
   while True:
-    match (yield):
+    a = yield
+    said = None
+    match a:
       case ("stand", qid, *_):
-        yield "done", qid, again(world.stand(), names, ears)
+        said = ("done", qid, again(world.stand(), names, ears))
       case ("clock", qid, *_):
-        yield "done", qid, world.clock()
+        said = ("done", qid, world.clock())
       case ("chance", qid, *_):
-        yield "done", qid, world.chance()
-      case ("read", qid, _, on, path):
-        yield "done", qid, again(world.read(at(on), path), names, ears)
-      case ("write", qid, _, on, text):
-        yield "done", qid, again(world.write(at(on), text.path, text.content), names, ears)
+        said = ("done", qid, world.chance())
       case ("ask", rung, _, on, actor, turns):
         world.ask(rung, on, actor, turns)
-      case ("start", about, _):
-        match acts[about]:
-          case ("bash", _, _, on, command, fed, timeout):
-            running.add(about)
-            merged = ask("merged", on, about)
-            assert isinstance(merged, tuple)
-            world.run(about, at(on), command, fed, timeout, bool(merged[1]))
-          case ("wait", _, _, _, seconds):
-            world.wait(about, seconds)
-          case ("prompt", _, _, _, shape, message, _):
-            world.prompt(about, shape, message)
-      case ("feed", about, _, text) if about in running:
-        world.feed(about, text)
-      case ("exited", about, *_):
-        running.discard(about)
-      case ("cancel" | "close", *_) as fact:
-        for one in [x for x in running if covers(fact, x)]:
-          running.discard(one)
-          world.slay(one)
+      case ("start", about, _) if acts[about][0] == "wait":
+        world.wait(about, acts[about][4])
+      case ("start", about, _) if acts[about][0] == "prompt":
+        world.prompt(about, acts[about][4], acts[about][5])
+      case ("start", about, _) if acts[about][0] not in kinds:
+        refused = verb(names, "Refused")(f"the World does no {acts[about][0]}")
+        verb(names, "close")(refused, about)
       case ("keep", _, _, entry):
         world.keep(entry)
+      case _:
+        # A method of the host is called by the sandbox and never held as a value, so the lambda calls it.
+        match settled(world.hears(a), lambda got: world.answered(got), names, ears):  # noqa: PLW0108
+          case ("say", tuple(saying)):
+            said = again(saying, names, ears)
+    if said is not None:
+      yield said
+
+
+def settled(reply: object, answered: Callable[[object], object], names: Names, ears: Ears) -> object:
+  """What an ear of the host said of a fact, once every verb it said is answered: each verb is said here by its
+  name and its value handed back, and what the ear raised is raised here."""
+  while True:
+    match reply:
+      case ("calls", str(which), list(args), dict(kwargs)):
+        # What the ear asked raised: the ear is answered with the raise, on its own thread, and never left waiting.
+        try:
+          got = ("value", outward(asked(names, ears, which, args, kwargs), names))
+        except BaseException as no:
+          got = ("raised", no)
+        reply = answered(got)
+      case ("raised", no):
+        raise fault(no, names, ears)
+      case _:
+        return reply
 
 
 def crossing(name: str, ears: Ears, names: Names) -> Ear:
@@ -278,28 +293,55 @@ def crossing(name: str, ears: Ears, names: Names) -> Ear:
   """
   a = None
   while True:
-    reply = ears.hears(name, outward(a, names))
-    while True:
-      match reply:
-        case ("calls", str(which), list(args), dict(kwargs)):
-          # What the ear asked raised: the ear is answered with the raise, on its own thread, and never left waiting.
-          try:
-            got = ("value", outward(asked(names, ears, which, args, kwargs), names))
-          except BaseException as no:
-            got = ("raised", no)
-          reply = ears.answered(name, got)
-        case ("raised", no):
-          raise fault(no, names, ears)
-        case ("say", tuple(saying)):
-          made = again(saying, names, ears)
-          assert isinstance(made, tuple)
-          a = yield made
-          break
-        case ("over",):
-          return
-        case _:
-          a = yield
-          break
+    match settled(ears.hears(name, outward(a, names)), lambda got: ears.answered(name, got), names, ears):
+      case ("say", tuple(saying)):
+        made = again(saying, names, ears)
+        assert isinstance(made, tuple)
+        a = yield made
+      case ("over",):
+        return
+      case _:
+        a = yield
+
+
+def plays(engine: Names, chain: str) -> None:
+  """The extensions, played on a chain as rungs by whoever speaks: each word its program lacks, in order, and then
+  each life word."""
+  _, program = verb(engine, "ask")("program", chain)
+  held = list(program.values()) if isinstance(program, dict) else []
+  for word in [*[one for one in WORDS if one not in held], *LIVES]:
+    verb(engine, "rung")(word, on=chain)
+
+
+def playing(world: Ear, engine: Names) -> Ear:
+  """The World, which plays the extensions on each chain born without a source once the life stands on its record,
+  and hands every fact to the World it wraps and every saying of that World to the bus."""
+  a = None
+  while True:
+    match a:
+      case ("chain", str(id), _, _, _, "") if WORDS or LIVES:
+        plays(engine, id)
+    try:
+      said = world.send(a)
+    except StopIteration:
+      return
+    a = yield said
+
+
+def played(engine: Names, words: list[str], lives: list[str]) -> None:
+  """The extensions, played as the World on every chain without a source once boot stands on the record, and on each
+  such chain at its birth from then on."""
+  WORDS[:] = words
+  LIVES[:] = lives
+  site, acts = engine["site"], engine["acts"]
+  assert isinstance(site, ContextVar)
+  assert isinstance(acts, dict)
+  token = site.set(str(engine["WORLD"]))
+  try:
+    for one in [a[1] for a in list(acts.values()) if a[0] == "chain" and not a[5]]:
+      plays(engine, one)
+  finally:
+    site.reset(token)
 
 
 def fault(no: object, names: Names, ears: Ears) -> BaseException:
@@ -444,6 +486,8 @@ def opened(
   of a run what it was answered.
   """
   MADE.clear()
+  WORDS.clear()
+  LIVES.clear()
   kept = again(record, engine, ears)
   assert isinstance(kept, list)
   entries = [(tuple(e[0]), *e[1:]) for e in kept]
@@ -451,6 +495,8 @@ def opened(
     name: worldly(world, engine, ears) if name == "world" and world is not None else crossing(name, ears, engine)
     for name in names
   }
+  if "world" in outside:
+    outside["world"] = playing(outside["world"], engine)
   try:
     root = verb(engine, "boot")(entries, kernel=kernel(engine), gate=gating(gate, sheet, engine), **outside)
   except BaseException as no:

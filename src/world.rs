@@ -3,12 +3,13 @@
 //! The contract makes the World one generator that hears every fact. A host that is Rust does not write a
 //! generator; it writes this trait, and the crate stands in the generator's place inside the sandbox and turns
 //! each question of the engine into one call here. What the World answers at once it answers by returning; what
-//! takes time, a model's turn, a command, a wait, a prompt of the operator, it gives back as a future, which the
-//! life drives and whose value it says into the engine as the fact the engine waits for.
+//! takes time, a model's turn, a wait, a prompt of the operator, it gives back as a future, which the life drives
+//! and whose value it says into the engine as the fact the engine waits for.
 //!
-//! A command is the one thing that speaks while it runs: it says what it wrote as it writes it, and its code when
-//! it ends. So a World is given a [`Voice`] once, when the life opens, and a command speaks through it from
-//! wherever it runs.
+//! What the engine asks of every World is a method here. Every other fact reaches [`World::hears`]: a question of an
+//! extension, the start of an act of a kind the World says it does, a control, and what the World answers it answers
+//! as an ear does. An act of an extension may speak while it runs, as a command writes what it writes, so a World is
+//! given a [`Voice`] once, when the life opens, and it speaks through it from wherever the work runs.
 
 use std::{
   collections::VecDeque,
@@ -19,8 +20,9 @@ use std::{
 };
 
 use crate::{
+  ear::Reply,
   fact::Fact,
-  value::{Fault, Object, ObjectRef, Text},
+  value::{Fault, Object, ObjectRef},
 };
 
 /// What a World gives back for work that takes time: a future the life drives, on the thread of the life.
@@ -60,35 +62,10 @@ impl Standing {
   }
 }
 
-/// One command the engine started, as the World is given it.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Command {
-  /// The act, which is what the command's facts are about.
-  pub about: String,
-  /// The directory the command runs in, which the chain said.
-  pub here: String,
-  /// The command line.
-  pub command: String,
-  /// Whether the engine will feed its stdin.
-  pub fed: bool,
-  /// The seconds it may run.
-  pub timeout: f64,
-  /// Whether its stderr goes with its stdout.
-  pub merged: bool,
-}
-
-/// A command that runs: what the engine may do to it while it does.
-pub trait Running {
-  /// One text into its stdin, and nothing to close it.
-  fn feed(&mut self, text: Option<String>);
-  /// The command ended before its time, which is a cancel.
-  fn slay(&mut self);
-}
-
 /// One thing a World said while nothing asked it to.
 #[derive(Debug, Clone)]
 pub enum Said {
-  /// One fact, said as the World: what a command wrote, or its code when it ended.
+  /// One fact, said as the World: what an act of an extension says as it runs, or how it ended.
   Fact(Fact),
   /// One act closed with a value, which is how a prompt of the operator is answered.
   Closed { id: String, value: Object },
@@ -118,7 +95,7 @@ struct Waiting {
 
 /// What a World speaks into a life with, for what it says unasked.
 ///
-/// It is cheap to clone and may be carried to any thread, so a command speaks from where it runs. What is said
+/// It is cheap to clone and may be carried to any thread, so work speaks from where it runs. What is said
 /// is heard in the order it was said, the next time the life is driven, and saying it wakes whoever drives.
 #[derive(Clone, Default)]
 pub struct Voice {
@@ -129,16 +106,6 @@ impl Voice {
   /// One fact, said as the World.
   pub fn say(&self, fact: Fact) {
     self.holds(Said::Fact(fact));
-  }
-
-  /// What a command wrote on one of its streams.
-  pub fn out(&self, about: &str, text: &str, stream: &str) {
-    self.say(Fact::says("out", about, [Object::string(text), Object::string(stream)]));
-  }
-
-  /// The code a command ended with, or nothing for one ended at its timeout.
-  pub fn exited(&self, about: &str, code: Option<i64>) {
-    self.say(Fact::says("exited", about, [code.map_or_else(Object::none, Object::int)]));
   }
 
   /// One act, closed with a value.
@@ -178,24 +145,24 @@ impl std::fmt::Debug for Voice {
 
 /// The World: the machine a life runs on, as the engine asks of it.
 ///
-/// Everything the engine asks of a World is here, and nothing else: what a chain stands on, a reading of the
-/// clock, a number drawn, a read or a write of a path, the turn of a model, a command, a wait, a prompt put to the
-/// operator, and what the journal says to keep. Where a path resolves is the chain's to say, so a read and a
-/// write are given the directory the chain stands in.
+/// What the engine asks of every World is a method here: what a chain stands on, a reading of the clock, a number
+/// drawn, the turn of a model, a wait, a prompt put to the operator, and what the journal says to keep. Every other
+/// fact of the life reaches [`World::hears`], which answers it as an ear answers: a question of an extension with
+/// plain data, a start of an act of a kind in [`World::kinds`] by doing it. A start of a kind no World does is
+/// closed with a refusal, so no word waits for it.
 pub trait World {
   /// The life opened, and the Voice this World speaks with when nothing asked it to.
   fn opened(&mut self, voice: Voice) {
     let _ = voice;
   }
 
+  /// The kinds of act this World does beside a wait and a prompt, which it hears the start of.
+  fn kinds(&self) -> Vec<String> {
+    Vec::new()
+  }
+
   /// What a chain stands on.
   fn stand(&mut self) -> Standing;
-
-  /// The text at a path, resolved from where the chain stands, or the refusal.
-  fn read(&mut self, here: &str, path: &str) -> Result<Text, Fault>;
-
-  /// The content onto the path, resolved from where the chain stands, and the text as it stands after.
-  fn write(&mut self, here: &str, path: &str, content: &str) -> Result<Text, Fault>;
 
   /// A reading of the clock.
   fn clock(&mut self) -> f64;
@@ -209,12 +176,23 @@ pub trait World {
   /// The turn of a model asked on a chain, given what it reads: the answer, as the engine reads a turn.
   fn ask(&mut self, rung: &str, on: &str, actor: &str, turns: ObjectRef<'_>) -> Later<Object>;
 
-  /// A command started: it speaks through the Voice as it runs, and this is what the engine may do to it.
-  fn run(&mut self, command: Command) -> Box<dyn Running>;
-
   /// A wait of this many seconds.
   fn wait(&mut self, seconds: f64) -> Later<()>;
 
   /// A prompt put to the operator: what the operator answered, or the refusal of a shape the World cannot ask.
   fn prompt(&mut self, about: &str, shape: &str, message: &str) -> Later<Result<Object, Fault>>;
+
+  /// Every other fact of the life, as the engine said it: a question of an extension, the start of an act of one
+  /// of its kinds, a control, and whatever an act says. It is answered as an ear answers, and a verb it says
+  /// comes back through [`World::answered`].
+  fn hears(&mut self, fact: &Fact) -> Reply {
+    let _ = fact;
+    Reply::Nothing
+  }
+
+  /// The value of the verb the World said, as `("value", v)` or `("raised", fault)`, and what it says now.
+  fn answered(&mut self, got: ObjectRef<'_>) -> Reply {
+    let _ = got;
+    Reply::Nothing
+  }
 }

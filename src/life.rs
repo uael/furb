@@ -27,8 +27,8 @@ use crate::{
   fact::Fact,
   gate::checked,
   sand::{Sand, id, object},
-  value::{Exit, Fault, Object, ObjectRef, Text, entry, inward},
-  world::{Command, Later, Running, Said, Voice, World},
+  value::{Fault, Object, ObjectRef, entry, inward},
+  world::{Later, Said, Voice, World},
 };
 
 /// The name the engine hears the World by, which is the name whose facts the journal keeps.
@@ -76,7 +76,6 @@ struct Hosting {
   ears: Option<Box<dyn Ears>>,
   voice: Voice,
   later: Vec<Work>,
-  running: HashMap<String, Box<dyn Running>>,
   calls: Vec<Callable>,
 }
 
@@ -130,22 +129,21 @@ impl Hosting {
       return Ok(replied(reply));
     }
     if on == id(objects::WORLD) {
-      let Hosting { world, later, running, .. } = self;
+      let Hosting { world, later, .. } = self;
       let Worldly::Typed(world) = world else {
         return Err(Fault::refused("the World of the host is heard among its ears"));
       };
-      return worldly(world.as_mut(), later, running, name, args);
+      return worldly(world.as_mut(), later, name, args);
     }
     Err(Fault::refused(format!("{on} is no object of the host")))
   }
 }
 
-/// One method of the World, as the stand-in calls it: what takes time joins the work in flight, and a command
-/// joins the ones running.
+/// One method of the World, as the stand-in calls it: what takes time joins the work in flight, and every other
+/// fact goes to the World as an ear hears it.
 fn worldly(
   world: &mut dyn World,
   later: &mut Vec<Work>,
-  running: &mut HashMap<String, Box<dyn Running>>,
   name: &str,
   args: Vec<Object>,
 ) -> Result<Object, Fault> {
@@ -155,8 +153,15 @@ fn worldly(
     "stand" => world.stand().object(),
     "clock" => Object::float(world.clock()),
     "chance" => Object::float(world.chance()),
-    "read" => answered(world.read(&word(0), &word(1))),
-    "write" => answered(world.write(&word(0), &word(1), &word(2))),
+    "kinds" => Object::list(world.kinds().into_iter().map(Object::string)),
+    "hears" => match at(0).and_then(Fact::of) {
+      Some(fact) => replied(world.hears(&fact)),
+      None => Object::none(),
+    },
+    "answered" => {
+      let none = Object::none();
+      replied(world.answered(at(0).unwrap_or(none.as_ref())))
+    }
     "keep" => {
       if let Some(entry) = at(0) {
         world.keep(entry);
@@ -169,20 +174,6 @@ fn worldly(
       later.push(Work::Answer { rung: word(0), later: answer });
       Object::none()
     }
-    "run" => {
-      let command = Command {
-        about: word(0),
-        here: word(1),
-        command: word(2),
-        fed: at(3).and_then(|one| one.as_bool()).unwrap_or_default(),
-        timeout: at(4).and_then(number).unwrap_or_default(),
-        merged: at(5).and_then(|one| one.as_bool()).unwrap_or_default(),
-      };
-      let about = command.about.clone();
-      let run = world.run(command);
-      running.insert(about, run);
-      Object::none()
-    }
     "wait" => {
       let done = world.wait(at(1).and_then(number).unwrap_or_default());
       later.push(Work::Wait { about: word(0), later: done });
@@ -193,28 +184,8 @@ fn worldly(
       later.push(Work::Prompt { about: word(0), later: closed });
       Object::none()
     }
-    "feed" => {
-      if let Some(run) = running.get_mut(&word(0)) {
-        run.feed(at(1).and_then(|one| one.as_str().map(str::to_owned)));
-      }
-      Object::none()
-    }
-    "slay" => {
-      if let Some(mut run) = running.remove(&word(0)) {
-        run.slay();
-      }
-      Object::none()
-    }
     _ => return Err(Fault::refused(format!("the World of the host has no {name}"))),
   })
-}
-
-/// What the World answered, as the engine reads it: the text, or the refusal.
-fn answered(got: Result<Text, Fault>) -> Object {
-  match got {
-    Ok(text) => text.object(),
-    Err(fault) => fault.object(),
-  }
 }
 
 /// A reply, as the stand-in reads it.
@@ -349,6 +320,8 @@ pub struct Opening {
   ears: Option<Box<dyn Ears>>,
   names: Vec<String>,
   limits: ResourceLimits,
+  words: Vec<String>,
+  lives: Vec<String>,
 }
 
 impl Opening {
@@ -372,21 +345,36 @@ impl Opening {
     self
   }
 
+  /// The words of the extensions, which the life plays as the World on every chain without a source: once boot
+  /// stands on its record, on each chain whose program lacks one, and at the birth of each such chain after.
+  #[must_use]
+  pub fn words(mut self, words: impl IntoIterator<Item = impl Into<String>>) -> Self {
+    self.words.extend(words.into_iter().map(Into::into));
+    self
+  }
+
+  /// The life words of the extensions, which the life plays as the World in every life on every chain without a
+  /// source, after the words: once boot stands on its record, and at the birth of each such chain after.
+  #[must_use]
+  pub fn lives(mut self, lives: impl IntoIterator<Item = impl Into<String>>) -> Self {
+    self.lives.extend(lives.into_iter().map(Into::into));
+    self
+  }
+
   /// The life, opened from what a World kept of the life before it.
   ///
   /// The record is the entries the World kept, each the fact, and for a query of a run what it was
   /// answered. The stand-in runs first in a module of its own, then the engine, and
   /// `boot` is given the Kernel of the crate and one generator for the World and for each ear.
   pub fn boot(self, record: impl IntoIterator<Item = Object>) -> Result<Life, Fault> {
-    let Opening { mut world, ears, mut names, limits } = self;
+    let Opening { mut world, ears, mut names, limits, words, lives } = self;
     let voice = Voice::default();
     if let Worldly::Typed(world) = &mut world {
       world.opened(voice.clone());
       names.insert(0, WORLD.to_owned());
     }
     let typed = matches!(world, Worldly::Typed(_));
-    let host =
-      Hosting { world, ears, voice, later: Vec::new(), running: HashMap::new(), calls: Vec::new() };
+    let host = Hosting { world, ears, voice, later: Vec::new(), calls: Vec::new() };
     let mut inner = Inner { sand: Sand::new(limits), host, watchers: HashMap::new() };
     inner.ran(PREAMBLE, vec![])?;
     // The three objects of the host and the two modules are bound as names of the session, which every later
@@ -413,6 +401,15 @@ impl Opening {
     let got = got.as_ref();
     let root = entry(&got, 0).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
     let raised = entry(&got, 1).and_then(Fault::of);
+    if raised.is_none() && !(words.is_empty() && lives.is_empty()) {
+      inner.run(
+        "played(__engine, __words, __lives)",
+        vec![
+          ("__words", Object::list(words.into_iter().map(Object::string))),
+          ("__lives", Object::list(lives.into_iter().map(Object::string))),
+        ],
+      )?;
+    }
     Ok(Life { held: inner, root, raised })
   }
 }
@@ -436,6 +433,8 @@ impl Life {
       ears: None,
       names: Vec::new(),
       limits: ResourceLimits::default(),
+      words: Vec::new(),
+      lives: Vec::new(),
     }
   }
 
@@ -449,6 +448,8 @@ impl Life {
       ears: None,
       names: Vec::new(),
       limits: ResourceLimits::default(),
+      words: Vec::new(),
+      lives: Vec::new(),
     }
     .ears(ears, names)
   }
@@ -572,6 +573,12 @@ impl Life {
     std::future::poll_fn(|cx| Poll::Ready(self.held.pump(cx))).await
   }
 
+  /// One act of the life by its name, to await: an act a verb of an extension made, which a host says by `verb`
+  /// and holds by its name.
+  pub fn awaited(&mut self, id: &str) -> Act<'_, Object> {
+    Act { life: self, id: id.to_owned(), came: PhantomData }
+  }
+
   /// One act the operator made, to await.
   fn act<T>(&mut self, got: Object) -> Result<Act<'_, T>, Fault> {
     let id = got
@@ -585,20 +592,6 @@ impl Life {
   /// The chain a verb is on, as its keyword: none for the operator's own.
   fn on(on: &str) -> Vec<(&str, Object)> {
     if on.is_empty() { vec![] } else { vec![("on", Object::string(on))] }
-  }
-
-  /// The text at a path, or what the door answered, told with this show.
-  pub fn read(&mut self, path: &str, show: Option<Object>, on: &str) -> Result<Object, Fault> {
-    let mut kwargs = Life::on(on);
-    if let Some(show) = show {
-      kwargs.push(("show", show));
-    }
-    self.verb("read", vec![Object::string(path)], kwargs)
-  }
-
-  /// The text onto its path, and the text as it stands after.
-  pub fn write(&mut self, text: &Text, on: &str) -> Result<Object, Fault> {
-    self.verb("write", vec![text.object()], Life::on(on))
   }
 
   /// What an act came to, or nothing while it lives.
@@ -624,16 +617,6 @@ impl Life {
   /// What the gate finds against a word on a chain.
   pub fn gate(&mut self, word: &str, on: &str) -> Result<Object, Fault> {
     self.verb("gate", vec![Object::string(word)], Life::on(on))
-  }
-
-  /// The working directory of a chain, changed.
-  pub fn cd(&mut self, path: &str, on: &str) -> Result<Object, Fault> {
-    self.verb("cd", vec![Object::string(path)], Life::on(on))
-  }
-
-  /// The working directory of a chain.
-  pub fn cwd(&mut self, on: &str) -> Result<Object, Fault> {
-    self.verb("cwd", vec![], Life::on(on))
   }
 
   /// The fact of an act, by its name.
@@ -716,40 +699,6 @@ impl Life {
     self.act(got)
   }
 
-  /// A grant on a chain: a ceiling in dollars, or a share of the window, or both.
-  pub fn grant(
-    &mut self,
-    usd: Option<f64>,
-    share: Option<f64>,
-    on: &str,
-  ) -> Result<Act<'_, ()>, Fault> {
-    let mut kwargs = Life::on(on);
-    if let Some(usd) = usd {
-      kwargs.push(("usd", Object::float(usd)));
-    }
-    if let Some(share) = share {
-      kwargs.push(("share", Object::float(share)));
-    }
-    let got = self.verb("grant", vec![], kwargs)?;
-    self.act(got)
-  }
-
-  /// A command on a chain, which is awaited for its exit.
-  pub fn bash(
-    &mut self,
-    command: &str,
-    fed: bool,
-    timeout: Option<f64>,
-    on: &str,
-  ) -> Result<Act<'_, Exit>, Fault> {
-    let mut kwargs = Life::on(on);
-    kwargs.push(("fed", Object::bool(fed)));
-    if let Some(timeout) = timeout {
-      kwargs.push(("timeout", Object::float(timeout)));
-    }
-    let got = self.verb("bash", vec![Object::string(command)], kwargs)?;
-    self.act(got)
-  }
 }
 
 impl std::fmt::Debug for Life {
@@ -776,20 +725,6 @@ impl Came for Object {
 impl Came for () {
   fn came(got: ObjectRef<'_>) -> Result<Self, Fault> {
     Object::came(got).map(|_| ())
-  }
-}
-
-impl Came for Exit {
-  fn came(got: ObjectRef<'_>) -> Result<Self, Fault> {
-    let held = Object::came(got)?;
-    Exit::of(held.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no exit", held.py_repr())))
-  }
-}
-
-impl Came for Text {
-  fn came(got: ObjectRef<'_>) -> Result<Self, Fault> {
-    let held = Object::came(got)?;
-    Text::of(held.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no text", held.py_repr())))
   }
 }
 
