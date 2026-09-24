@@ -72,33 +72,23 @@ def write(text: Text, on: str = "") -> Text:
 
 
 def peek(at: str, on: str = "") -> object:
-  _, got = ask("peek", on, at)
-  tell("peek", f"{at} {got!r}")
-  return got
+  return ask("peek", on, at)[1]
 
 
 def turns(on: str = "") -> list[tuple]:
-  _, got = ask("turns", on)
-  tell("turns", len(got or ()))
-  return got
+  return ask("turns", on)[1]
 
 
 def clock(on: str = "") -> float:
-  _, got = ask("clock", on)
-  tell("clock", got)
-  return got
+  return ask("clock", on)[1]
 
 
 def chance(on: str = "") -> float:
-  _, got = ask("chance", on)
-  tell("chance", got)
-  return got
+  return ask("chance", on)[1]
 
 
 def gate(word: str, on: str = "") -> list[str]:
-  _, got = ask("gate", on, unquoted(word), ask("program", on)[1] or {})
-  tell("gate", "", *[commented(x) for x in got or ()])
-  return got
+  return ask("gate", on, unquoted(word), ask("program", on)[1] or {})[1]
 
 
 def cd(path: str, on: str = "") -> str:
@@ -108,9 +98,7 @@ def cd(path: str, on: str = "") -> str:
 
 
 def cwd(on: str = "") -> str:
-  _, got = ask("cwd", on)
-  tell("cwd", got)
-  return got
+  return ask("cwd", on)[1]
 
 
 def get(about: str) -> tuple:

@@ -99,15 +99,3 @@ async def test_the_word_of_a_rung_is_gated_again_in_every_life_that_runs_it() ->
   assert [fact for fact, *_ in sand.record if fact[0] == "gate"] == []
   again, over = await relived(Sand(stands=STANDS), list(sand.record))
   assert over == root and gated(again) == ["close(1)"] and findings(again) == [[]]
-
-
-async def test_gate_tells_the_findings_one_comment_for_each() -> None:
-  """gate tells the findings, one comment for each."""
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
-  sand.script[root] = ["found = gate('k = BAD\\nj = WORSE')\nclose(len(found))"]
-  assert await engine.prompt(int, "ask the gate", on=root) == 2
-  await settle()
-  worse = "line 2: error[unresolved-reference] Name `WORSE` used when not defined"
-  assert engine.modules[root]["found"] == [BAD, worse]
-  assert engine.turns(on=root)[-1][1] == f"#gate\n# {BAD}\n# {worse}\n\n#prompt1 closed 2"

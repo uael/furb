@@ -58,7 +58,7 @@ MESSAGE = f"""You have the engine and a directory of your own. Use them, in this
 
 
 def heads(root: str, name: str) -> list[str]:
-  """Every header in the turns of a chain whose kind or whose event is that name, as #peek bash1 or #rung3 debugged."""
+  """Every header in the turns of a chain whose kind or whose event is that name, as #cd /x or #rung3 debugged."""
   return [
     line
     for _, py, _, _ in engine.turns(on=root)
@@ -161,8 +161,8 @@ async def first(yard: Path, record: Path) -> list[object]:
   assert got[0].strip(), got[0]
   assert isinstance(got[2], int), got[2]
   assert heads(root, "debugged"), "no debug of the model stands in the turns"
-  assert heads(root, "peek"), "no peek of the model stands in the turns"
-  assert got[4] in {one[1] for one in said if engine.question(one)}, got[4]
+  peeked = [one[4] for one in said if one[0] == "peek" and one[2] != OPERATOR]
+  assert got[4] in peeked, (got[4], peeked)
 
   assert got[5] != str(yard), f"the working directory of the chain did not move from {yard}"
   assert engine.cwd(on=root) == got[5], (engine.cwd(on=root), got[5])
