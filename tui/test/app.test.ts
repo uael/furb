@@ -100,7 +100,8 @@ test("model and effort change independently, a model is named by its id alone, a
     expect(first.actor).toBe("claude-cli:fable/high");
     await first.submit("/model opus");
     expect(first.actor).toBe("claude-cli:opus/high");
-    // The rejects of bun 1.3 hangs on a rejection that a message of the worker brings, so the test catches it.
+    // On bun 1.3.14 and 1.4.2, rejects hangs on a rejection that a message of the worker brings, so the test
+    // catches it.
     expect(String(await first.submit("/model nothing").catch((error: unknown) => error))).toContain(
       "Choose one of",
     );
