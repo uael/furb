@@ -39,6 +39,11 @@ const state = () => {
 /** What the demo thinks and answers on a later turn, by what the turn says. */
 const replies: [cue: string, thinking: string, answer: string][] = [
   [
+    "refused",
+    "The gate refused the fence, so the word is Python alone.",
+    "Here it is again as plain Python, with no fence around it.",
+  ],
+  [
     "show live progress",
     "The index is ready, so the answer says what it holds.",
     "The index is built, and three notes are ready to search. Each word streamed into the feed as it ran.",
@@ -100,9 +105,14 @@ function createDemoWorld(options: WorldOptions): World {
       const [thinking, answer] = first
         ? ["I read the README and run the checks before I answer.", ""]
         : reply(JSON.stringify(turns.at(-1)));
-      const code = first
-        ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
-        : `close(${JSON.stringify(answer)})`;
+      // A message that asks for an answer in a fence gets one, as a model sometimes writes it, which the gate refuses,
+      // and the model answers again once it reads the refusal.
+      const fenced = !first && JSON.stringify(turns.at(-1)).includes("an answer in a fence");
+      const code = fenced
+        ? '```python\nclose("Here is the answer, in a fence.")\n```'
+        : first
+          ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
+          : `close(${JSON.stringify(answer)})`;
       if (slow) {
         write({ thinking });
         await pause(200);

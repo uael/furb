@@ -449,6 +449,7 @@ test("the usage counts each token once, and the context share shows from the fir
     });
     expect(session.activity.some((act) => act.kind === "grant")).toBe(false);
     expect(session.filled).toBe(3240 / 1_000_000);
+    expect(session.context).toBe(3240);
     const shown = await frame();
     expect(shown).toContain("0.3%");
     expect(shown).toContain("Cache read");
@@ -519,3 +520,24 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     // A message that its answer closed says no state, only the type of its answer.
     expect(lines.find((line) => line.includes("A second message."))).not.toContain("✓");
   }));
+
+test("a word that the gate refused and that a later word of the same prompt replaced folds, and reads as retried", () =>
+  composing(
+    async ({ session, frame }) => {
+      await session.submit("Give me an answer in a fence.");
+      await until(session, () =>
+        session.turns.some((turn) => turn[0] === "assistant" && turn[1].includes("plain Python")),
+      );
+      await until(
+        session,
+        () => !session.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)),
+      );
+      await session.refresh();
+      const shown = await frame();
+      expect(shown).toMatch(/▸ ✗ rung\d+ .*retried as rung\d+/);
+      expect(shown).not.toContain("failed");
+      expect(shown).not.toContain("Got unexpected token");
+    },
+    { width: 140, height: 44 },
+    true,
+  ));

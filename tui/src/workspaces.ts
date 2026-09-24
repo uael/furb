@@ -21,6 +21,8 @@ export interface SessionEntry {
   modified?: number;
   size?: number;
   cost?: number;
+  /** Whether the operator archived the session, which the sidebar folds under a row of its own. */
+  archived?: boolean;
 }
 export interface Workspace {
   directory: string;
@@ -34,6 +36,8 @@ interface SavedWorkspace {
   name: string;
   collapsed: boolean;
   records: string[];
+  /** The records of the sessions that the operator archived. */
+  archived: string[];
 }
 /** One change of the saved list: a workspace it names, made when the list has none, and what changes in it. */
 interface ListChange {
@@ -41,6 +45,8 @@ interface ListChange {
   collapsed?: boolean;
   add?: string;
   remove?: string;
+  archive?: string;
+  restore?: string;
 }
 
 /** The workspaces that the file at a path lists, and none when there is no file. A file that holds no list is
@@ -62,6 +68,9 @@ function readList(path: string): SavedWorkspace[] {
       collapsed: item.collapsed === true,
       records: Array.isArray(item.records)
         ? item.records.filter((path: unknown): path is string => typeof path === "string")
+        : [],
+      archived: Array.isArray(item.archived)
+        ? item.archived.filter((path: unknown): path is string => typeof path === "string")
         : [],
     }));
 }
@@ -98,6 +107,7 @@ export class Workspaces extends EventEmitter {
             name: basename(record, ".jsonl"),
             status: "saved",
             unread: false,
+            archived: item.archived.includes(record),
           })),
         });
     } catch (error) {
@@ -125,12 +135,18 @@ export class Workspaces extends EventEmitter {
         name: basename(change.directory),
         collapsed: false,
         records: [],
+        archived: [],
       };
       list.push(group);
     }
     if (change.collapsed !== undefined) group.collapsed = change.collapsed;
     if (change.add && !group.records.includes(change.add)) group.records.unshift(change.add);
-    if (change.remove) group.records = group.records.filter((record) => record !== change.remove);
+    if (change.remove) {
+      group.records = group.records.filter((record) => record !== change.remove);
+      group.archived = group.archived.filter((record) => record !== change.remove);
+    }
+    if (change.archive && !group.archived.includes(change.archive)) group.archived.push(change.archive);
+    if (change.restore) group.archived = group.archived.filter((record) => record !== change.restore);
     mkdirSync(dirname(this.path), { recursive: true });
     saveFile(this.path, JSON.stringify({ workspaces: list }));
     if (this.damaged) {
@@ -302,6 +318,7 @@ export class Workspaces extends EventEmitter {
   async select(entry: SessionEntry): Promise<void> {
     const group = this.groupOf(entry);
     if (!group) throw new Error("This session has no workspace.");
+    if (entry.archived) this.restore(entry);
     const selection = ++this.selection;
     await this.load(entry, group);
     if (selection !== this.selection || this.closed) return;
@@ -356,13 +373,45 @@ export class Workspaces extends EventEmitter {
     }
     this.emit("change");
   }
+  /** Archive a session: it leaves the list of its workspace for a row of its own, which the sidebar folds, and its
+   * record stays. The current session moves to another session first, as it does for a delete, and an open session
+   * closes. */
+  async archive(entry: SessionEntry): Promise<void> {
+    await this.opening.get(entry.path);
+    const group = this.groupOf(entry);
+    if (!group) throw new Error("This session has no workspace.");
+    for (const next of group.sessions.filter((other) => other !== entry && !other.archived)) {
+      if (this.current !== entry) break;
+      await this.select(next).catch(() => {});
+    }
+    if (this.current === entry) await this.create(group);
+    if (entry.session) {
+      const listener = this.subscriptions.get(entry.session);
+      if (listener) entry.session.off("change", listener);
+      this.subscriptions.delete(entry.session);
+      await entry.session.dispose();
+      entry.session = undefined;
+      entry.status = "saved";
+    }
+    entry.archived = true;
+    this.save({ directory: group.directory, add: entry.path, archive: entry.path });
+    this.emit("change");
+  }
+  /** Bring an archived session back to the list of its workspace. */
+  restore(entry: SessionEntry): void {
+    const group = this.groupOf(entry);
+    if (!group) throw new Error("This session has no workspace.");
+    entry.archived = false;
+    this.save({ directory: group.directory, restore: entry.path });
+    this.emit("change");
+  }
   async delete(entry: SessionEntry): Promise<string> {
     await this.opening.get(entry.path);
     const group = this.groupOf(entry);
     if (!group) throw new Error("This session has no workspace.");
     // The current session moves to the first other session that opens, and to a new one when none does. A session
     // that does not open keeps its error on its row.
-    for (const next of group.sessions.filter((other) => other !== entry)) {
+    for (const next of group.sessions.filter((other) => other !== entry && !other.archived)) {
       if (this.current !== entry) break;
       await this.select(next).catch(() => {});
     }

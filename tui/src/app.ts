@@ -58,7 +58,7 @@ import {
   themeLabels,
 } from "./theme.ts";
 import { bold, italic, lineCounts, logo, mix, type Part, plain, styled } from "./ui.ts";
-import type { Workspaces } from "./workspaces.ts";
+import type { SessionEntry, Workspaces } from "./workspaces.ts";
 
 const exitNotice = "Press ⌃D again to exit.";
 const rewindNotice = "Press Escape again to rewind.";
@@ -208,6 +208,8 @@ export class App {
   private readonly railHeading: BoxRenderable;
   private readonly railSpaces: ScrollBoxRenderable;
   private readonly railUsage: BoxRenderable;
+  /** The workspaces whose archived sessions the sidebar lists, by their folder. */
+  private readonly showArchived = new Set<string>();
   /** Whether the sidebar lists the finished chains, which fold under a row of their own. */
   private showResting = false;
   /** The switch of the mode of the input, which the layout places. */
@@ -1405,12 +1407,14 @@ export class App {
     });
   }
 
-  /** Whether a card is folded: by the operator's click, or else as its kind starts. A rung that runs or failed stands
-   * open, and any other rung starts folded when the preference says so. */
+  /** Whether a card is folded: by the operator's click, or else as its kind starts. A rung that runs, or that failed
+   * with no rung that took its place, stands open, and any other rung starts folded when the preference says so. */
   private folded(state: string, rung?: ActRow, compact = false): boolean {
     return (
       this.folds.get(state) ??
-      (rung ? this.session.preferences.foldRungs && !working(rung) && !failed(rung) : compact)
+      (rung
+        ? this.session.preferences.foldRungs && !working(rung) && (!failed(rung) || Boolean(this.retry(rung)))
+        : compact)
     );
   }
   renderContent(): void {
@@ -2186,7 +2190,9 @@ export class App {
       return cancelled(act)
         ? { word: "cancelled", mark: glyph.cancelled, color: c.faint }
         : act.run?.status === "failed"
-          ? { word: "failed", mark: glyph.failed, color: c.danger }
+          ? this.retry(act)
+            ? { word: `retried as ${this.retry(act)?.id}`, mark: glyph.failed, color: c.faint }
+            : { word: "failed", mark: glyph.failed, color: c.danger }
           : act.run?.status === "done"
             ? { word: "", mark: glyph.done, color: c.success }
             : act.paused
@@ -2203,6 +2209,13 @@ export class App {
     if (act.paused && act.kind !== "bash")
       return { word: "waits for resume", mark: glyph.held, color: c.warning };
     return running();
+  }
+  /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
+   * wrote once it read the failure, so the failure no longer stands. */
+  private retry(act: ActRow): ActRow | undefined {
+    if (act.kind !== "rung" || act.by === "operator" || !failed(act)) return undefined;
+    const acts = this.session.acts;
+    return acts.slice(acts.indexOf(act) + 1).find((other) => other.kind === "rung" && other.by === act.by);
   }
   /** The heading of an act: its state, its kind, what it is about, and the word of its state. A rung is named by its
    * id, and says its first line while it is folded. */
@@ -2609,7 +2622,7 @@ export class App {
     // A row of a table: its name at the left, and its value at the right.
     const row = (name: string, value: string, color = c.text, note = "") => {
       const room = Math.max(1, inner - Bun.stringWidth(name + note + value));
-      add([[name, c.muted], [note, c.faint], [" ".repeat(room)], [value, color]]);
+      return add([[name, c.muted], [note, c.faint], [" ".repeat(room)], [value, color]]);
     };
     const section = (name: string, value = "", note = "", run?: () => void) => {
       const room = Math.max(1, inner - Bun.stringWidth(name + note + value));
@@ -2740,12 +2753,29 @@ export class App {
           this.hover = undefined;
         },
       });
-      // Each row counts its own tokens: the fresh input, what the cache gave and took, and the output.
+      // The input is the whole prompt of the last answer, its system prompt included, which the share of the window
+      // measures. The output and the cache are what every answer of the chain wrote and read, each counted once.
       if (tokens > 0) {
-        row("Input", count(spend.input));
+        const input = w.context;
+        if (input !== undefined) {
+          const shown = row("Input", count(input));
+          shown.onMouseOver = (event) =>
+            this.tip(
+              [
+                ["The whole prompt of the last answer, system prompt included. ", c.text],
+                [`${count(spend.input)} of the input of the chain was fresh.`, c.muted],
+              ],
+              event.x,
+              event.y,
+            );
+          shown.onMouseOut = () => {
+            this.hover?.destroyRecursively();
+            this.hover = undefined;
+          };
+        }
+        row("Output", count(spend.output));
         if (spend.cacheRead) row("Cache read", count(spend.cacheRead));
         if (spend.cacheWrite) row("Cache write", count(spend.cacheWrite));
-        row("Output", count(spend.output));
       }
       row("Spent", dollars(spend.dollars));
       if (grant && grant.words[0] !== null) row("Ceiling", dollars(Number(grant.words[0])), c.muted);
@@ -2800,8 +2830,9 @@ export class App {
           group.name,
           group.directory,
           group.collapsed,
-          group.sessions.map((entry) => [entry.path, entry.name, entry.status, entry.error]),
+          group.sessions.map((entry) => [entry.path, entry.name, entry.status, entry.error, entry.archived]),
         ]),
+        [...this.showArchived],
       ])
     )
       return;
@@ -2867,14 +2898,17 @@ export class App {
           ),
         ),
       );
-      for (const entry of group.sessions) {
+      // A session row shows at its end, while the pointer is on it, a button that removes it, which asks first. The
+      // button is drawn in the color of the row until then, so the row keeps its layout.
+      const sessionRow = (entry: SessionEntry) => {
         const selected = library.current === entry;
+        const ground = selected ? c.selected : c.panel;
         const row = line(
           [
             [selected ? glyph.mark : " ", c.accent],
             ["  "],
             [`${this.statusDot(entry.status)} `, this.statusColor(entry.status)],
-            [entry.name, selected ? c.text : c.muted, selected ? bold : 0],
+            [entry.name, selected ? c.text : entry.archived ? c.faint : c.muted, selected ? bold : 0],
           ],
           () => {
             void library.select(entry).catch(this.report);
@@ -2882,10 +2916,24 @@ export class App {
           {},
           selected,
         );
+        const remove = this.text("×", ground, {
+          height: space.bar,
+          marginLeft: space.inset,
+          onMouseUp: this.click((event) => {
+            event.stopPropagation();
+            this.removeSession(entry);
+          }),
+        });
+        row.add(remove);
         const out = row.onMouseOut;
         row.onMouseOver = (event) => {
           row.backgroundColor = selected ? c.selected : c.raised;
+          remove.fg = event.target === remove ? c.danger : c.muted;
           this.hover?.destroyRecursively();
+          if (event.target === remove) {
+            this.tip([["Archive or remove this session", c.text]], event.x, event.y);
+            return;
+          }
           const hint: Part[] = [
             [`${this.statusDot(entry.status)} `, this.statusColor(entry.status)],
             [statusLabels[entry.status], c.text, bold],
@@ -2896,13 +2944,34 @@ export class App {
         };
         row.onMouseOut = (event) => {
           out?.call(row, event);
+          remove.fg = ground;
           this.hover?.destroyRecursively();
           this.hover = undefined;
         };
-      }
+      };
+      for (const entry of group.sessions.filter((entry) => !entry.archived)) sessionRow(entry);
       line([["   "], ["+ ", c.faint], ["New session", c.faint]], () => {
         void library.create(group).catch(this.report);
       });
+      // The archived sessions fold under a row of their own, as the finished chains do, which a click opens.
+      const archived = group.sessions.filter((entry) => entry.archived);
+      if (archived.length) {
+        const open = this.showArchived.has(group.directory);
+        line(
+          [
+            [open ? glyph.open : glyph.closed, c.faint],
+            ["  "],
+            ["Archived", c.faint],
+            [`  ${archived.length}`, c.faint],
+          ],
+          () => {
+            if (open) this.showArchived.delete(group.directory);
+            else this.showArchived.add(group.directory);
+            this.render();
+          },
+        );
+        if (open) for (const entry of archived) sessionRow(entry);
+      }
     }
     line([[" "], ["+ ", c.faint], ["Add a workspace", c.faint]], () => this.insert("/workspace "), {
       marginTop: space.section,
@@ -2928,6 +2997,41 @@ export class App {
     });
     this.hover.add(this.text(parts));
     this.root.add(this.hover);
+  }
+  /** Ask how to remove a session: archive it, which keeps its record under a row of its own, or move it to the trash.
+   * An archived session offers to come back instead. */
+  private removeSession(entry: SessionEntry): void {
+    const library = this.options.workspaces;
+    const group = library?.groupOf(entry);
+    if (!library || !group) return;
+    this.openPalette(
+      `Remove the session “${entry.name}”?`,
+      [
+        entry.archived
+          ? {
+              label: "Restore",
+              detail: "Bring it back to the list of its workspace",
+              run: () => library.restore(entry),
+            }
+          : {
+              label: "Archive",
+              detail: "Fold it under Archived. Its record stays, and a click opens it again.",
+              run: () => void library.archive(entry).catch(this.report),
+            },
+        {
+          label: "Move to trash",
+          color: c.danger,
+          detail: "Stop this session and move its saved record to the trash",
+          run: async () => {
+            await library.delete(entry);
+          },
+        },
+        { label: "Keep", detail: "Return without changes", run() {} },
+      ],
+      0,
+      "",
+      `The trash is ${shortenHome(join(group.directory, ".furb", "trash"))}, where you can get it back.`,
+    );
   }
   /** The workspaces and their sessions in a palette, which opens once the workspaces are read again. */
   workspacePicker = (): Promise<void> => {

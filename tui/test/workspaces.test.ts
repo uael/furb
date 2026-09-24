@@ -368,3 +368,61 @@ test("the .furb that the TUI makes in a project keeps itself out of version cont
     await rm(directory, { recursive: true, force: true });
   }
 }, 30000);
+
+test("a session row archives a session through its remove button, which folds it under Archived until a click brings it back", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-archive-"));
+  await mkdir(join(directory, "project"));
+  const library = new Workspaces(new Preferences(join(directory, "ui.json")), { demo: true });
+  const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true });
+  let app: App | undefined;
+  try {
+    const group = await library.add(join(directory, "project"));
+    const first = await library.create(group, "foo");
+    const second = await library.create(group, "bar");
+    if (!first.session || !second.session) throw new Error("The session did not open.");
+    const options = { quit() {}, workspaces: library };
+    app = new App(screen.renderer, second.session, options);
+    library.on("select", (session) => {
+      app?.dispose();
+      app = new App(screen.renderer, session, options);
+    });
+    const left = 152 - library.preferences.sidebarWidth;
+    const frame = async () => {
+      app?.render();
+      await screen.flush();
+      return screen.captureCharFrame().split("\n");
+    };
+    let lines = await frame();
+    const fooRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    const remove = (lines[fooRow] ?? "").lastIndexOf("×");
+    expect(remove).toBeGreaterThan(left);
+    await screen.mockMouse.moveTo(remove, fooRow);
+    await screen.mockMouse.click(remove, fooRow);
+    lines = await frame();
+    expect(lines.join("\n")).toContain("Remove the session “foo”?");
+    const archive = lines.findIndex((line) => line.includes("Archive") && line.includes("Fold it under"));
+    await screen.mockMouse.click((lines[archive] ?? "").indexOf("Archive") + 1, archive);
+    await until(library, () => first.archived === true);
+    expect(library.current).toBe(second);
+    lines = await frame();
+    expect(lines.some((line) => / foo\b/.test(line.slice(left)))).toBe(false);
+    const folded = lines.findIndex((line) => /▸ +Archived +1/.test(line.slice(left)));
+    expect(folded).toBeGreaterThan(0);
+    const saved = JSON.parse(await readFile(library.path, "utf8")) as {
+      workspaces: { archived: string[] }[];
+    };
+    expect(saved.workspaces[0]?.archived).toEqual([first.path]);
+    await screen.mockMouse.click(left + 4, folded);
+    lines = await frame();
+    const archivedRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    expect(archivedRow).toBeGreaterThan(folded);
+    await screen.mockMouse.click(left + 8, archivedRow);
+    await until(library, () => library.current === first);
+    expect(first.archived).toBe(false);
+  } finally {
+    app?.dispose();
+    screen.renderer.destroy();
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
