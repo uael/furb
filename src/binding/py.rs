@@ -19,6 +19,7 @@ use pyo3::{
 
 use crate::{
   ear::{Ears, Reply},
+  extension,
   fact::Fact,
   life,
   value::{Fault, IS, Object, ObjectRef, entry, marked},
@@ -363,11 +364,55 @@ fn gate(py: Python<'_>, sheet: &str) -> PyResult<Vec<(usize, String)>> {
   }
 }
 
-/// The word of the python part of an extension, which a host plays as a rung: the file less its imports of the
-/// engine and of the extensions, as the crate makes it for every host.
+/// One extension as a host plays it, which the crate reads for every host: its name, the directory it stands in,
+/// the word of its python part, the names it requires, and the files of its parts for a World and for a TUI.
+#[pyclass(module = "furb_monty._monty", name = "Extension", frozen, get_all)]
+struct PyExtension {
+  name: String,
+  root: Option<String>,
+  word: String,
+  requires: Vec<String>,
+  world_ts: Option<String>,
+  world_py: Option<String>,
+  tui: Option<String>,
+}
+
+impl From<extension::Extension> for PyExtension {
+  fn from(one: extension::Extension) -> Self {
+    let shown = |path: Option<std::path::PathBuf>| path.map(|one| one.display().to_string());
+    PyExtension {
+      name: one.name,
+      root: shown(one.root),
+      word: one.word,
+      requires: one.requires,
+      world_ts: shown(one.world.ts),
+      world_py: shown(one.world.py),
+      tui: shown(one.tui),
+    }
+  }
+}
+
+/// The builtin extensions, files, bash and grant, in the order a host plays them.
 #[pyfunction]
-fn word(source: &str) -> String {
-  crate::extension::word(source)
+fn builtin_extensions() -> Vec<PyExtension> {
+  extension::builtins().into_iter().map(PyExtension::from).collect()
+}
+
+/// The word of the python part of an extension, which a host plays as a rung: the file less its imports of the
+/// engine and of the extensions, as the crate makes it for every host. A file python cannot parse raises Refused.
+#[pyfunction]
+fn word_of(py: Python<'_>, source: &str) -> PyResult<String> {
+  match extension::word(source) {
+    Ok(word) => Ok(word),
+    Err(error) => Err(raised(py, &Made::new(py)?, &Fault::from(error))),
+  }
+}
+
+/// The words that a program lacks, in their order, which is the rule a host plays the words by.
+#[pyfunction]
+fn missing_words(program: Vec<String>, words: Vec<String>) -> Vec<String> {
+  let held: Vec<&str> = program.iter().map(String::as_str).collect();
+  extension::missing(&held, &words).into_iter().map(str::to_owned).collect()
 }
 
 /// What the engine raised, raised here as the exception it is.
@@ -662,6 +707,9 @@ fn bare(shown: &str) -> String {
 fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<Life>()?;
   module.add_function(wrap_pyfunction!(gate, module)?)?;
-  module.add_function(wrap_pyfunction!(word, module)?)?;
+  module.add_class::<PyExtension>()?;
+  module.add_function(wrap_pyfunction!(builtin_extensions, module)?)?;
+  module.add_function(wrap_pyfunction!(word_of, module)?)?;
+  module.add_function(wrap_pyfunction!(missing_words, module)?)?;
   Ok(())
 }

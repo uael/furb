@@ -48,6 +48,39 @@ def gate(sheet: str) -> list[tuple[int, str]]:
   """The gate of the crate, for the Kernel of this interpreter to read a sheet with: what the checker found on the
   sheet, each error by its line, and no warning. It raises when the checker could not read the sheet."""
 
-def word(source: str) -> str:
+@final
+class Extension:
+  """One extension as a host plays it, which the crate reads for every host."""
+
+  @property
+  def name(self) -> str:
+    """The name of the extension, which is its key in a config."""
+  @property
+  def root(self) -> str | None:
+    """The directory the extension stands in, and nothing for a builtin."""
+  @property
+  def word(self) -> str:
+    """The word of its python part, which a host plays as a rung."""
+  @property
+  def requires(self) -> list[str]:
+    """The names of the extensions it requires, which a host plays before it."""
+  @property
+  def world_ts(self) -> str | None:
+    """The file of its part for a World in TypeScript, if it has one."""
+  @property
+  def world_py(self) -> str | None:
+    """The file of its part for a World in python, if it has one."""
+  @property
+  def tui(self) -> str | None:
+    """The file of its part for the TUI, if it has one."""
+
+def builtin_extensions() -> list[Extension]:
+  """The builtin extensions, files, bash and grant, in the order a host plays them."""
+
+def word_of(source: str) -> str:
   """The word of the python part of an extension, which a host plays as a rung: the file with its line ends made LF
-  and every top-level import from `furb` made empty lines, and nothing else changed."""
+  and every top-level import from `furb` made empty lines, and nothing else changed. A file python cannot parse
+  raises Refused."""
+
+def missing_words(program: list[str], words: list[str]) -> list[str]:
+  """The words that a program lacks, in their order, which is the rule a host plays the words by."""

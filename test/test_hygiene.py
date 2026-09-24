@@ -20,6 +20,7 @@ import tiktoken
 from python_minifier import minify
 
 from furb import engine
+from furb_monty import word_of
 
 PY = Path(engine.__file__)
 PYI = PY.with_suffix(".pyi")
@@ -221,35 +222,53 @@ def reaching(tree: ast.Module) -> tuple[dict[int, tuple[ast.AST, ...]], dict[int
   return chain, {i: binds(s) for i, s in held.items()}
 
 
-def shadows(path: Path, outer: set[str]) -> list[str]:
+def shadows(name: str, text: str, outer: set[str], same: frozenset[str] = frozenset()) -> list[str]:
   """Every binding of a file that a scope enclosing it binds already, the names of the outer set bound around the
-  whole file, its module among the scopes they enclose."""
-  tree = ast.parse(path.read_text(encoding="utf-8"))
+  whole file, its module among the scopes they enclose; a name of the same set its module binds as the outer set
+  binds it is one meaning, and no binding again."""
+  tree = ast.parse(text)
   chain, bound = reaching(tree)
   dark: list[str] = []
   for at in {id(c[-1]): c for c in chain.values()}.values():
     if isinstance(at[-1], ast.ClassDef):
       continue
     over = set().union(outer, *(bound[id(s)] for s in at[:-1] if not isinstance(s, ast.ClassDef)))
+    kept = same if isinstance(at[-1], ast.Module) else frozenset()
     dark.extend(
-      f"{path.name}:{getattr(at[-1], 'lineno', 0)} {name}" for name in sorted(bound[id(at[-1])] & over - {"_"})
+      f"{name}:{getattr(at[-1], 'lineno', 0)} {one}" for one in sorted(bound[id(at[-1])] & over - {"_"} - kept)
     )
   return dark
 
 
+def imports(text: str) -> set[tuple[str, str]]:
+  """What each import at the top of a module binds: the name, and the name of what it imports under it."""
+  out: set[tuple[str, str]] = set()
+  for node in ast.parse(text).body:
+    if isinstance(node, ast.Import):
+      out.update(
+        ((al.asname or al.name).split(".")[0], al.name if al.asname else al.name.split(".")[0]) for al in node.names
+      )
+    elif isinstance(node, ast.ImportFrom):
+      out.update((al.asname or al.name, f"{node.module}.{al.name}") for al in node.names)
+  return out
+
+
 def test_no_name_is_bound_again_beneath_itself() -> None:
   """A name bound where an enclosing scope already binds it says two things at once; every word keeps one meaning."""
-  assert shadows(PY, set()) == [], "these bindings shadow an enclosing one"
+  assert shadows(PY.name, PY.read_text(encoding="utf-8"), set()) == [], "these bindings shadow an enclosing one"
 
 
 def test_no_word_of_a_builtin_binds_a_name_again_beneath_itself() -> None:
   """The word of a builtin runs in the module of a chain, which binds every name of the engine and of the words
-  played before it, so a name bound in a scope of the word is bound again beneath the names of the engine too."""
-  words = {one: binds(ast.parse(one.read_text(encoding="utf-8"))) for one in sorted(BUILTIN.glob("*.py"))}
-  engine = binds(ast.parse(PY.read_text(encoding="utf-8")))
-  dark = [
-    name
-    for one in words
-    for name in shadows(one, engine.union(*(names for other, names in words.items() if other != one)))
-  ]
+  played before it, so a name bound in a scope of the word is bound again beneath the names of the engine too. The
+  word is what the crate makes of the module, less its imports of furb, and an import that binds a name the way the
+  engine or another word binds it keeps the one meaning of that name."""
+  engine = PY.read_text(encoding="utf-8")
+  words = {one.name: word_of(one.read_text(encoding="utf-8")) for one in sorted(BUILTIN.glob("*.py"))}
+  dark = []
+  for one, text in words.items():
+    others = [engine, *(other for name, other in words.items() if name != one)]
+    outer = set().union(*(binds(ast.parse(other)) for other in others))
+    theirs = set().union(*(imports(other) for other in others))
+    dark.extend(shadows(one, text, outer, frozenset(name for name, what in imports(text) if (name, what) in theirs)))
   assert dark == []

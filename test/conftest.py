@@ -31,11 +31,9 @@ ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
-BUILTIN = {
-  name: (Path(furb.python.__file__).parent / "builtin" / f"{name}.py").read_text(encoding="utf-8")
-  for name in ("files", "bash", "grant")
-}
-"""BUILTIN holds the word of each builtin extension by its name, which a host plays as a rung on every chain it opens without a source."""
+BUILTIN = {one.name: one.word for one in furb_monty.builtin_extensions()}
+"""BUILTIN holds the word of each builtin extension by its name, as the crate makes it for every host, which a host
+plays as a rung on every chain it opens without a source."""
 FILES, BASH, GRANT = ([BUILTIN["files"]], [BUILTIN["files"], BUILTIN["bash"]], [BUILTIN["grant"]])
 """The words a World of the suite plays for one builtin extension, each after the words it needs."""
 MONTY_SKIPS: dict[str, str] = {
@@ -637,9 +635,11 @@ def swapped(to: object) -> None:
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-  """Every test of the suite runs once on each engine; the hygiene laws read the file and run once."""
+  """Every test of the suite and of the suites of the builtins runs once on each engine; the hygiene laws read the
+  files and run once, and the tests of the outside run on the engine they name."""
   path = metafunc.definition.path
-  if "engine_of" in metafunc.fixturenames and path.parent == HERE and path.name != "test_hygiene.py":
+  suites = (HERE, *(one for one in HERE.iterdir() if one.is_dir() and one.name not in ("outside", "__pycache__")))
+  if "engine_of" in metafunc.fixturenames and path.parent in suites and path.name != "test_hygiene.py":
     metafunc.parametrize("engine_of", list(ENGINES), indirect=True)
 
 

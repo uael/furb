@@ -21,7 +21,10 @@ fn a_top_level_import_from_furb_becomes_an_empty_line_so_every_line_keeps_its_nu
 
 #[test]
 fn a_parenthesized_import_over_several_lines_becomes_as_many_empty_lines() {
-  assert_eq!(worded("from furb.engine import (\n  ask,\n  tell,\n)\nx = ask\n"), "\n\n\n\nx = ask\n");
+  assert_eq!(
+    worded("from furb.engine import (\n  ask,\n  tell,\n)\nx = ask\n"),
+    "\n\n\n\nx = ask\n"
+  );
 }
 
 #[test]
@@ -37,7 +40,8 @@ fn an_import_of_another_package_a_relative_import_and_import_furb_stay() {
 
 #[test]
 fn an_import_of_furb_inside_a_function_or_a_block_stays() {
-  let module = "def f():\n  from furb.engine import ask\n  return ask\nif True:\n  from furb import engine\n";
+  let module =
+    "def f():\n  from furb.engine import ask\n  return ask\nif True:\n  from furb import engine\n";
   assert_eq!(worded(module), module);
 }
 
@@ -64,16 +68,29 @@ fn every_other_byte_stays_as_it_is() {
 #[test]
 fn a_module_that_does_not_parse_is_refused_with_its_line() {
   let refused = word("from furb.engine import ask\nx = 1\ny = (\n").unwrap_err();
-  assert!(matches!(&refused, Error::Word { name, line: 3 | 4, .. } if name.is_empty()), "{refused:?}");
+  assert!(
+    matches!(&refused, Error::Word { name, line: 3 | 4, .. } if name.is_empty()),
+    "{refused:?}"
+  );
   assert!(Fault::from(refused).name == "Refused");
 }
 
 #[test]
 fn the_builtins_are_files_bash_and_grant_and_bash_requires_files() {
   let held = builtins();
-  assert_eq!(held.iter().map(|one| one.name.as_str()).collect::<Vec<_>>(), ["files", "bash", "grant"]);
-  assert_eq!(held.iter().map(|one| one.requires.clone()).collect::<Vec<_>>(), [vec![], vec!["files".to_owned()], vec![]]);
-  assert!(held.iter().all(|one| one.root.is_none() && one.world == Worlds::default() && one.tui.is_none()));
+  assert_eq!(
+    held.iter().map(|one| one.name.as_str()).collect::<Vec<_>>(),
+    ["files", "bash", "grant"]
+  );
+  assert_eq!(
+    held.iter().map(|one| one.requires.clone()).collect::<Vec<_>>(),
+    [vec![], vec!["files".to_owned()], vec![]]
+  );
+  assert!(
+    held
+      .iter()
+      .all(|one| one.root.is_none() && one.world == Worlds::default() && one.tui.is_none())
+  );
 }
 
 #[test]
