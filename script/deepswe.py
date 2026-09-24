@@ -413,10 +413,7 @@ def seeded(task: str, *, keep_app: bool = False) -> tuple[Path, Path, Mapping[st
     say(f"[deepswe] keeping the checkout as it stands ({spoke([*gits(app), 'rev-parse', '--short', 'HEAD'])})")
   else:
     say("[deepswe] seeding the checkout from the base")
-    shutil.rmtree(app, ignore_errors=True)
-    ran(["cp", "-a", str(base), str(app)])
-    git("reset", "-q", "--hard", syn, where=app)
-    git("clean", "-qfd", *(a for k in KEEP for a in ("-e", k)), where=app)
+    pristine(base, syn, app)
   return work, where, meta, syn
 
 
@@ -442,10 +439,32 @@ def mode() -> str:
 
 
 def pristine(base: Path, syn: str, into: Path) -> None:
-  """A fresh copy of the base for the grade: the patch lands on the base and never on the tree of a run."""
+  """A fresh copy of the base at its commit, whose environment is its own and not the base's.
+
+  The checkout of a run is one, and the grade applies the patch on another, never on the tree of a run. A venv
+  writes its own path into the scripts it installs and into the hook of an editable package, so a plain copy runs
+  the python of the base, imports the code of the base, and installs into the base. Every name of the base in the
+  venv of the copy therefore moves to the copy. A compiled module that holds the name is dropped, and python
+  compiles it again.
+  """
+  shutil.rmtree(into, ignore_errors=True)
   ran(["cp", "-a", str(base), str(into)])
   git("reset", "-q", "--hard", syn, where=into)
   git("clean", "-qfd", *(a for k in KEEP for a in ("-e", k)), where=into)
+  was, now = re.compile(re.escape(str(base).encode()) + rb"(?![\w.-])"), str(into).encode()
+  for path in (into / ".venv").rglob("*"):
+    if path.is_symlink():
+      if was.search(to := os.fsencode(path.readlink())):
+        path.unlink()
+        path.symlink_to(os.fsdecode(was.sub(now, to)))
+    elif path.is_file() and was.search(said := path.read_bytes()):
+      if path.suffix == ".pyc":
+        path.unlink()
+      elif b"\0" in said:
+        say(f"[deepswe] {path} is a binary that names the base, and the rig cannot move it to {into}")
+        raise SystemExit(1)
+      else:
+        path.write_bytes(was.sub(now, said))
 
 
 def rewritten(tests: Path, app: Path, logs: Path, syn: str) -> None:
@@ -487,8 +506,9 @@ def graded(task: Path, base: Path, syn: str, patch: Path, out: Path) -> Mapping[
     app = vroot / "app"
     pristine(base, syn, app)
     if (app / "pyproject.toml").is_file() or (app / "setup.py").is_file():
-      # A package of src layout resolves through the newest editable hook, which points at the base: without this
-      # the grade imports the pristine code and every test that must turn from fail to pass dies as it is collected.
+      # A step of the Dockerfile can put a release of the package over its editable install: the base holds one
+      # commit, so the build takes the version 0.0.0 from VCS, and a dependency that wants a newer one pulls in a
+      # release. The grade then imports the release, and no test that must turn from fail to pass can pass.
       ran(["bash", "-lc", venved(app) + f"python3 -m pip install -e {shlex.quote(str(app))} --no-deps"], env=VCS)
     rewritten(tests, app, logs, syn)
     node = os.environ.get("DEEPSWE_NODE_HOME", "")
