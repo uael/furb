@@ -48,6 +48,9 @@ once, before you spend money on it.
 - Each task works under `$DEEPSWE_WORK/<task>`, or under the temporary directory as `furb-deepswe/<task>`. `base`
   is the pristine checkout with the dependencies of the task, `app` is the checkout the life works in, and `.run`
   holds the record, the numbers, the frozen submission and the reward.
+- The reaper of the host, which cleans its temporary directory, takes the files of an old workroot and leaves its
+  directories. So a seed writes `.seeded` last, with the commit of the base, and a later seed keeps the base only
+  when `.seeded` names the commit and no file of the commit is gone. Otherwise it fetches and installs it again.
 - The reporters stand under `~/.cache/furb-deepswe` when the path a task names is not this host's to write.
 - Every graded run is archived in `traces/`, as the record it kept and a result beside it. The archive is ignored
   by git.

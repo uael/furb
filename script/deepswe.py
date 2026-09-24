@@ -134,9 +134,18 @@ def bytes_of(args: Sequence[str]) -> bytes:
   return subprocess.run(list(args), capture_output=True, check=False).stdout  # noqa: S603
 
 
+def gits(tree: Path) -> list[str]:
+  """Git, told which tree it speaks about and that the repo of that tree is the one it holds.
+
+  Git told only a directory climbs to the repo above it when the .git there is empty, so a reset or a commit would
+  land in a tree that is not the rig's.
+  """
+  return ["git", "-C", str(tree), "--git-dir", ".git"]
+
+
 def git(*args: str, where: Path) -> int:
-  """Git, always told which tree it speaks about."""
-  return ran(["git", "-C", str(where), *args])
+  """One step of git on one tree of the rig."""
+  return ran([*gits(where), *args])
 
 
 def tool(name: str) -> str:
@@ -318,25 +327,35 @@ def submodules(slug: str, base: str, into: Path) -> None:
       path = ""
 
 
+def whole(base: Path, seal: Path, sha: str) -> bool:
+  """Whether the base stands as its seed left it: the seal names its commit, and no file of that commit is gone.
+
+  The reaper of this host takes the files of an old checkout and leaves its directories. The seal is written last,
+  so a seed that stopped halfway leaves none, and the reaper takes it with the rest.
+  """
+  said = seal.read_text(encoding="utf-8") if seal.is_file() else ""
+  return said == sha and quiet([*gits(base), "diff", "--quiet", "--diff-filter=D", "HEAD", "--"]) == 0
+
+
 def seeded(task: str, *, keep_app: bool = False) -> tuple[Path, Path, Mapping[str, str], str]:
   """Everything one run wants before a model is asked anything: the base, its dependencies, and the checkout."""
   where, meta = read_task(task)
   work = WORK / task
-  base, app = work / "base", work / "app"
+  base, app, seal = work / "base", work / "app", work / ".seeded"
   work.mkdir(parents=True, exist_ok=True)
-  if not (base / ".git").is_dir():
+  if not whole(base, seal, meta["base_commit_hash"]):
+    seal.unlink(missing_ok=True)
     based(meta["repository_url"], meta["base_commit_hash"], base)
     say(f"[deepswe] installing dependencies ({meta['language']}, from the Dockerfile of the task)")
     installed(where, base, meta["language"])
+    seal.write_text(meta["base_commit_hash"], encoding="utf-8")
   submodules(
     meta["repository_url"].removeprefix("https://github.com/").removesuffix(".git"), meta["base_commit_hash"], base
   )
-  syn = spoke(["git", "-C", str(base), "rev-parse", "HEAD"])
+  syn = spoke([*gits(base), "rev-parse", "HEAD"])
   say(f"[deepswe] base {syn[:10]}, whose tree is upstream {meta['base_commit_hash'][:10]}")
-  if keep_app and (app / ".git").is_dir():
-    say(
-      f"[deepswe] keeping the checkout as it stands ({spoke(['git', '-C', str(app), 'rev-parse', '--short', 'HEAD'])})"
-    )
+  if keep_app and quiet([*gits(app), "rev-parse", "--verify", "-q", "HEAD"]) == 0:
+    say(f"[deepswe] keeping the checkout as it stands ({spoke([*gits(app), 'rev-parse', '--short', 'HEAD'])})")
   else:
     say("[deepswe] seeding the checkout from the base")
     shutil.rmtree(app, ignore_errors=True)
@@ -348,11 +367,11 @@ def seeded(task: str, *, keep_app: bool = False) -> tuple[Path, Path, Mapping[st
 
 def frozen(app: Path, syn: str, into: Path) -> None:
   """The submission, taken the moment the tree is final: everything the life left, as one diff against the base."""
-  if spoke(["git", "-C", str(app), "status", "--porcelain"]):
+  if spoke([*gits(app), "status", "--porcelain"]):
     git("add", "-A", where=app)
     named = ["-c", "user.email=deepswe@local", "-c", "user.name=deepswe"]
     git(*named, "commit", "-q", "-m", "submission", "--no-verify", where=app)
-  said = bytes_of(["git", "-C", str(app), "diff", "--binary", syn, "HEAD"])
+  said = bytes_of([*gits(app), "diff", "--binary", syn, "HEAD"])
   into.write_bytes(said)
   say(f"[deepswe] submission frozen: {len(said)} bytes into {into}")
 
@@ -656,7 +675,7 @@ def turns(args: argparse.Namespace) -> int:
 def freeze(args: argparse.Namespace) -> int:
   """Take the submission from the checkout as it stands, before anything else moves."""
   work = WORK / args.task
-  frozen(work / "app", spoke(["git", "-C", str(work / "base"), "rev-parse", "HEAD"]), work / ".run" / "model.patch")
+  frozen(work / "app", spoke([*gits(work / "base"), "rev-parse", "HEAD"]), work / ".run" / "model.patch")
   return 0
 
 
