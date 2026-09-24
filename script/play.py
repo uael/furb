@@ -20,7 +20,7 @@ from furb import engine
 from furb.cli import lived, say
 from furb.engine import OPERATOR
 from furb.provider.claude import BIN, cool
-from furb.world import kept, verb
+from furb.world import kept
 
 TO = "opus/low"
 """TO is the actor the play asks, which is opus at the least effort it takes."""
@@ -127,7 +127,7 @@ async def first(yard: Path, record: Path) -> list[object]:
   """The life that does the work, and everything the play holds it to when the work is done."""
   _world, root, held = lived(record, yard, TO, keeps=True)
   assert held == [], "the first life is opened on no record"
-  verb(root, "grant")(usd=CEILING)
+  engine.grant(usd=CEILING, on=root)
   waits = engine.prompt(list, MESSAGE, TO, on=root)
   watched = asyncio.ensure_future(watching(root, record, waits))
   try:
@@ -165,7 +165,7 @@ async def first(yard: Path, record: Path) -> list[object]:
   assert got[4] in peeked, (got[4], peeked)
 
   assert got[5] != str(yard), f"the working directory of the chain did not move from {yard}"
-  assert verb(root, "cwd")() == got[5], (verb(root, "cwd")(), got[5])
+  assert engine.cwd(on=root) == got[5], (engine.cwd(on=root), got[5])
 
   say(f"the model wrote {made} into its directory")
   say(f"the chain it opened is {got[6]}, with a source of {root}, of {len(forks)} it opened")

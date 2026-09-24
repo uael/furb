@@ -42,6 +42,10 @@ HELD = ("modules", "acts", "asked", "outcomes")
 """HELD are the maps of the life, which stand in the sandbox and are read there."""
 ACTS = frozenset({"wait", "rung", "prompt", "chain", "grant", "bash", "act"})
 """ACTS are the verbs that give an act, whose name comes back as the act it names."""
+WORDS: list[str] = []
+"""WORDS are the words of the extensions that the next life runs after the engine, which a host says before boot."""
+LIVES: list[str] = []
+"""LIVES are the life words of the extensions that the next life plays, which a host says before boot."""
 END = object()
 """END is what a thread of a generator is given when the life it was heard in is over."""
 LOCAL = threading.local()
@@ -356,7 +360,7 @@ def boot(record: Iterable[object] = (), **outside: Generator[tuple | None, tuple
   if LIFE is not None:
     LIFE.end()
   LIFE = Living(outside)
-  LIFE.life = _monty.Life(LIFE, list(outside), list(record))
+  LIFE.life = _monty.Life(LIFE, list(outside), list(record), list(WORDS), list(LIVES))
   if (no := LIFE.life.raised) is not None:
     raise no
   return Act(LIFE.life.root)

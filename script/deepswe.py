@@ -47,7 +47,7 @@ from urllib.request import Request, urlopen
 from furb import engine
 from furb.cli import lived, say
 from furb.provider.claude import BIN, cool
-from furb.world import kept, verb
+from furb.world import kept
 
 ROOT = Path(__file__).resolve().parent.parent
 """ROOT is the root of this repository, which the archive of a run stands under."""
@@ -757,7 +757,7 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
   del world
   say(f"[deepswe] life on {app}, root {root}, {len(held)} facts kept")
   if args.ceiling:
-    verb(root, "grant")(usd=args.ceiling)
+    engine.grant(usd=args.ceiling, on=root)
   stopped, got, looks, message = "", None, 0, told + ASKED
   mark = {"did": 0, "asks": 0}
   began = time.monotonic()

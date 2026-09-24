@@ -387,12 +387,13 @@ impl Opening {
     inner.ran(PREAMBLE, vec![])?;
     // The three objects of the host and the two modules are bound as names of the session, which every later
     // piece of code of the stand-in reads.
-    let opening = "__engine = module(__source, {**MODULE})\n__sheet = module(__sheet_source, {})\n__world, __gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __record, __world, __gate, __ears, __names)\n(__root, __raised)";
+    let opening = "__engine = extended(module(__source, {**MODULE}), __words)\n__sheet = module(__sheet_source, {})\n__world, __gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __record, __world, __gate, __ears, __names)\n(__root, __raised)";
     let world = if typed { object("World", id(objects::WORLD)) } else { Object::none() };
     let got = inner.ran(
       opening,
       vec![
-        ("__source", Object::string(source)),
+        ("__source", Object::string(crate::ENGINE)),
+        ("__words", Object::list(words.iter().map(Object::string))),
         ("__sheet_source", Object::string(SHEET)),
         ("__record", Object::list(record)),
         (

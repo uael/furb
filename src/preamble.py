@@ -91,6 +91,9 @@ MADE: dict[int, object] = {}
 """MADE holds every callable the engine made and every class a word defined that crossed to the host, by its
 handle, which is its identity, for as long as the host holds the handle: the host says when it forgot one, and it
 is dropped then."""
+CORE: set[str] = set()
+"""CORE are the names the module of the engine binds before the words of its extensions: the names every host knows,
+which a value of the engine crosses by, and a class of the engine crosses as."""
 LIVES: list[str] = []
 """LIVES are the life words of the extensions the host plays, which stand empty while boot says the record again."""
 
@@ -103,8 +106,12 @@ def verb(names: Names, which: str) -> Callable[..., object]:
 
 
 def named(x: object, names: Names) -> str | None:
-  """The name of the engine a value is bound to, when it is one, by identity."""
-  return next((name for name, held in names.items() if held is x and not name.startswith("_")), None)
+  """The name of the engine a value is bound to, when it is one, by identity: a name the engine binds before the
+  words of its extensions, which every host knows."""
+  return next(
+    (name for name, held in names.items() if held is x and not name.startswith("_") and (not CORE or name in CORE)),
+    None,
+  )
 
 
 def worded(cls: type, names: Names) -> bool:
@@ -471,6 +478,16 @@ def module(source: str, held: dict[str, object]) -> dict[str, object]:
   """One module of its own, from its source, run in what it holds before: a namespace nothing else shares."""
   exec(source, held)  # noqa: S102
   return held
+
+
+def extended(engine: Names, words: list[str]) -> Names:
+  """The module of the engine with the words of its extensions run in it after the engine, and the names it bound
+  before them held as CORE, since a host knows those and no name a word bound."""
+  CORE.clear()
+  CORE.update(engine)
+  for word in words:
+    exec(word, engine)  # noqa: S102
+  return engine
 
 
 def opened(

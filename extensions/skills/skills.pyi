@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from furb.builtin.files import HEAD, Text
-from furb.engine import Show
+from furb.engine import HEAD, Show, Text
 
 def skills(on: str = "") -> list[Skill]:
   """The skills that the World finds for a chain, each with its name, its description and the path of its SKILL.md file, which a model reads before it chooses one.

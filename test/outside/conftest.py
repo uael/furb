@@ -7,12 +7,11 @@ answers from one, and a Kernel that runs words for a World under test.
 
 import os
 import sys
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import pytest
 
-import furb
 from furb.provider.claude import CLI, cool
 
 
@@ -22,18 +21,6 @@ def placed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
   extensions are directories of the test, empty."""
   monkeypatch.setenv("FURB_CONFIG_DIR", str(tmp_path / "config"))
   monkeypatch.setenv("FURB_CACHE_DIR", str(tmp_path / "cache"))
-
-
-@pytest.fixture(autouse=True)
-def pristine() -> Generator[None]:
-  """No word of an extension that a test ran in the module of the engine outlives the test: the module holds again
-  what it held before the test."""
-  held = dict(vars(furb.python))
-  yield
-  now = vars(furb.python)
-  for name in [one for one in now if one not in held]:
-    del now[name]
-  now.update(held)
 
 
 @pytest.fixture(autouse=True)

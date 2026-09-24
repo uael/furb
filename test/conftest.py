@@ -12,7 +12,7 @@ import json
 import re
 import sys
 from asyncio import CancelledError
-from collections.abc import Coroutine, Generator, Sequence
+from collections.abc import Callable, Coroutine, Generator, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass
 from functools import partial
 from pathlib import Path
@@ -27,6 +27,9 @@ from furb.kernel import ENGINE
 
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
+SUITES = (HERE, *sorted((HERE.parent / "extensions").glob("*/test")))
+"""SUITES are the directories whose tests run on each engine: the suite of the engine and the suite of each extension
+of the repository, whose modules bind the names of the engine under test too."""
 ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
@@ -123,7 +126,10 @@ class Sand:
   ask, `record` what it keeps of the keep facts of the journal, `fed` what was fed to its commands, and `calls`
   every fact it answered or performed, in order. `stands` is what a chain stands on, `cost` the usage of one
   answer, and `auto` says whether a command tells a line and exits at once. `tick` counts the readings of its
-  clock and the chances it drew, so a later life reads what the life before it read.
+  clock and the chances it drew, so a later life reads what the life before it read. `words` are the words of the
+  extensions the life runs after the engine, `lives` their life words, which it plays on each chain without a source
+  once the life stands on its record, which `booted` says, and `answers` answers a question of an extension by its
+  kind.
   """
 
   files: dict[str, str] = field(default_factory=dict)
@@ -135,6 +141,10 @@ class Sand:
   stands: list | None = None
   cost: tuple | None = None
   tick: int = 0
+  words: list[str] = field(default_factory=list)
+  lives: list[str] = field(default_factory=list)
+  answers: dict[str, Callable[[tuple], object]] = field(default_factory=dict)
+  booted: bool = False
 
   def hears(self) -> World:  # noqa: PLR0915
     """The World as one generator for one life: it does the act a start names, answers the questions that are its
@@ -157,9 +167,14 @@ class Sand:
       a = yield
       if a[0] in ("start", "stand", "read", "write", "ask", "feed", "clock", "chance"):
         self.calls.append(a)
+      # The engine of monty plays the life words itself, at the birth of each chain, as every host does.
+      if self.booted and engine is furb.python and a[0] == "chain" and engine.question(a) and not a[5]:
+        plays(self.lives, a[1])
       match a:
         case (_, id, *_) if engine.question(a) and id in engine.acts:
           acts[id] = a
+        case (kind, qid, *_) if kind in self.answers and engine.question(a):
+          yield "done", qid, self.answers[kind](a)
         case ("start", about, _):
           match acts[about]:
             case ("bash", _, _, on, command, _, timeout):
@@ -286,9 +301,13 @@ class Py:
   sheet of the engine with the gate of the crate.
   """
 
+  def __init__(self, source: str | None = None) -> None:
+    self.source = source
+
   def gate(self, word: str, program: list[str]) -> list[str]:
-    """What the gate finds against a word: the sheet of the engine, read by the gate of the crate."""
-    return sheet.gate(ENGINE, program, word, furb_monty.gate)
+    """What the gate finds against a word: the sheet of the engine, read by the gate of the crate against the source
+    of the engine, which holds the words of the extensions after the engine when it is given."""
+    return sheet.gate(ENGINE, program, word, lambda text: furb_monty.gate(text, self.source))
 
   def gating(self) -> Kernel:
     """The gate as the ear of a life, which answers each gate with what it finds against the word."""
@@ -382,18 +401,61 @@ def watched(log: list[tuple]) -> Kernel:
       log.append(a)
 
 
-def kernel() -> dict[str, Kernel]:
+def kernel(words: Sequence[str] = ()) -> dict[str, Kernel]:
   """The Kernel and the gate a life of the suite is given: the ones that are python for the engine of this
-  interpreter, and none for the engine of monty, which holds its own."""
-  return {} if engine is not furb.python else {"kernel": Py().kernel(), "gate": Py().gating()}
+  interpreter, whose gate reads against the engine with these words after it, and none for the engine of monty, which
+  holds its own."""
+  source = furb_monty.engine_source(list(words)) if words else None
+  return {} if engine is not furb.python else {"kernel": Py().kernel(), "gate": Py(source).gating()}
+
+
+def plays(lives: Sequence[str], chain: str) -> None:
+  """The life words, played on a chain as rungs, as the World."""
+  token = site.set(WORLD)
+  try:
+    for word in lives:
+      engine.rung(word, on=chain)
+  finally:
+    site.reset(token)
 
 
 def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   """A life: the engine opened from a record, with the Kernel it takes, a World in memory and a generator that keeps
   every fact said in it; it gives what was said and the id of the root.
+
+  The module of the engine runs the words of the World after the engine, or the words the record pins, as every host
+  runs them; a life with words pins them when its record pins none, and the World plays its life words on every chain
+  without a source once the life stands on its record, and at the birth of each such chain after.
   """
   log: list[tuple] = []
-  return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears())
+  pinned = furb_monty.pinned_words(list(record))
+  words = world.words if pinned is None else pinned
+  if engine is furb.python:
+    for word in words:
+      exec(compile(word, "<extension>", "exec"), ENGINE)  # noqa: S102
+  else:
+    furb_monty.engine.WORDS[:], furb_monty.engine.LIVES[:] = words, world.lives
+  root = engine.boot(record, **kernel(words), probe=watched(log), world=world.hears())
+  if engine is furb.python:
+    if pinned is None and words:
+      engine.send("extensions", root, words, by=WORLD)
+    for one in [a[1] for a in list(engine.acts.values()) if a[0] == "chain" and not a[5]]:
+      plays(world.lives, one)
+  world.booted = True
+  return log, root
+
+
+def texted(got: object) -> tuple[object, object]:
+  """The path and the content of a text, which is how a test reads a Text on each engine."""
+  return getattr(got, "path", None), getattr(got, "content", None)
+
+
+def extension(name: str) -> tuple[list[str], list[str]]:
+  """The words and the life words of an extension of the repository, as the crate makes them from its manifest."""
+  root = HERE.parent / "extensions" / name
+  manifest = json.loads((root / "package.json").read_text(encoding="utf-8"))["furb"]
+  words = [furb_monty.word_of((root / manifest["python"]).read_text(encoding="utf-8"))] if "python" in manifest else []
+  return words, [manifest["life"]] if "life" in manifest else []
 
 
 def outside(label: str = "outside") -> str:
@@ -513,7 +575,7 @@ def swapped(to: object) -> None:
   seen: set[int] = set()
   for mod in list(sys.modules.values()):
     file = getattr(mod, "__file__", None)
-    if not file or id(mod) in seen or not str(file).startswith(str(HERE)):
+    if not file or id(mod) in seen or not any(Path(file).is_relative_to(one) for one in SUITES):
       continue
     seen.add(id(mod))
     for key, value in list(vars(mod).items()):
@@ -524,10 +586,25 @@ def swapped(to: object) -> None:
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-  """Every test of the suite runs once on each engine; the hygiene laws read the file and run once."""
+  """Every test of the suite and of the suite of each extension runs once on each engine; the hygiene laws read the
+  files and run once."""
   path = metafunc.definition.path
-  if "engine_of" in metafunc.fixturenames and path.parent == HERE and path.name != "test_hygiene.py":
+  if "engine_of" in metafunc.fixturenames and path.parent in SUITES and path.name != "test_hygiene.py":
     metafunc.parametrize("engine_of", list(ENGINES), indirect=True)
+
+
+@pytest.fixture(autouse=True)
+def pristine() -> Generator[None]:
+  """No word of an extension that a test ran in the module of the engine outlives the test: the module holds again
+  what it held before the test, and the next life of monty runs no word it was not given."""
+  held = dict(vars(furb.python))
+  yield
+  now = vars(furb.python)
+  for name in [one for one in now if one not in held]:
+    del now[name]
+  now.update(held)
+  furb_monty.engine.WORDS.clear()
+  furb_monty.engine.LIVES.clear()
 
 
 @pytest.fixture(autouse=True)
