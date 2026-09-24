@@ -73,7 +73,7 @@ def write(text: Text, on: str = "") -> Text:
 
 def peek(at: str, on: str = "") -> object:
   _, got = ask("peek", on, at)
-  tell("peek", at)
+  tell("peek", f"{at} {got!r}")
   return got
 
 
@@ -217,9 +217,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     def paused(name):
       return [x[0] for x in controls if covers(x, name)][-1:] == ["pause"]
 
-    def takes(given):
-      nonlocal standing
-      modules[id]["actor"] = (standing := given)[2]
+    def takes():
+      modules[id]["actor"] = standing[2]
       hold(id, f"stands {standing!r}")
 
     def answers():
@@ -273,7 +272,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     hold(id, f"{label} from {source}".strip() if source else label, bound(id))
     standing = ask("stand", source or id)[1]
     replay()
-    source or takes(standing)
+    source or takes()
     while True:
       a = yield
       if (a[3] if question(a) else scope(a[1])) != id:
@@ -309,8 +308,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             modules[id]["raised"] = value
           if not isinstance(value, CancelledError) and about in acts and acts[about][2] in rungs:
             unseen = about
-        case ("stood", _, _, now):
-          takes(now)
+        case ("stood", _, _, standing):
+          takes()
         case ("wants" | "ran", *_):
           running = ""
         case ("pause" | "wake", *_):
@@ -347,7 +346,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
       yield "done", id, Refused(f"{usd}/{share} no ceiling")
       return
     spent = 0.0
-    for old in [x for x in acts if x != id and question(("grant", x)) and scope(x) == here and x not in outcomes]:
+    for old in [x for x in acts if x != id and question(("grant", x)) and scope(x) == here]:
       close(None, old)
     told(id, f"usd={usd} share={share}", bound(id, "None"))
     while True:
@@ -466,14 +465,16 @@ class Act[T = object](str):
     def waits():
       while self not in outcomes:
         yield
-      (f.set_exception if isinstance(got := outcomes[self], BaseException) else f.set_result)(got)
-      f.exception()
+      f.set_result(outcomes[self])
 
     drive(g := waits(), f"{self} waits {id(current_task())}")
     try:
-      return (yield from f)
+      got = yield from f
     finally:
       g.close()
+    if isinstance(got, BaseException):
+      raise got
+    return got
 
 
 class Refused(Exception): ...
@@ -513,7 +514,9 @@ def told(id, text="", *notes):
 
 
 def control(kind, name, id, *words):
-  return send(kind, id, *words, [headed(id, " ".join([name, *[repr(x) for x in words]]))])
+  return any(x not in outcomes and covers((kind, id), x) for x in acts) and send(
+    kind, id, *words, [headed(id, " ".join([name, *[repr(x) for x in words]]))]
+  )
 
 
 def headed(name, text=""):
@@ -595,11 +598,9 @@ def pausing(ear):
   def lived(id):
     g, held, paused = ear(id), [None], False
     while True:
-      if not paused:
-        for b in held:
-          if not lives(g, b):
-            return
-        held = []
+      while held and not paused:
+        if not lives(g, held.pop(0)):
+          return
       match a := (yield):
         case ("pause" | "wake", *_) if covers(a, id):
           paused = a[0] == "pause"

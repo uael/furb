@@ -31,17 +31,22 @@ async def test_the_name_of_an_act() -> None:
 async def test_an_act_is_over_when_its_done_stands_and_lives_until_then() -> None:
   """An act is over when its done stands and lives until then; there is no other state, and a control over an act that is over reaches nothing."""
   sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  log, root = life(sand)
   one = engine.prompt(None, "hi", to=OPERATOR, on=root)
   await settle()
   assert engine.peek(one) is None
   engine.close(21, one)
   await settle()
   assert (await one) == 21
+  was = engine.turns(on=root)
   engine.close(99, one)
   engine.cancel(one)
+  engine.pause(one)
+  engine.wake(one)
   await settle()
   assert engine.peek(one) == 21 and (await one) == 21
+  assert [(a[0], a[1]) for a in log if a[0] in ("pause", "wake", "cancel", "close")] == [("close", one)]
+  assert engine.turns(on=root) == was
 
 
 async def test_the_outcome_of_a_cancelled_act_is_the_cancellederror_it_completed_with() -> None:

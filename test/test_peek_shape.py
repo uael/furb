@@ -17,5 +17,5 @@ async def test_a_peek_is_at_an_act_and_gives_what_the_act_came_to_as_the_record_
   sand.script[root] = [f"seen = peek({command!r})\nassert isinstance(seen, Exit)\nclose(seen.code)"]
   assert await engine.prompt(int, "look", on=root) == 0
   await settle()
-  assert engine.turns(on=root)[-1][1] == f"#peek {command}\n\n#prompt1 closed 0"
-  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#peek ")] == [f"#peek {command}"]
+  assert engine.turns(on=root)[-1][1] == f"#peek {command} {got!r}\n\n#prompt1 closed 0"
+  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#peek ")] == [f"#peek {command} {got!r}"]

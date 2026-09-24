@@ -34,16 +34,17 @@ async def test_a_fact_that_carries_notes_is_what_the_turns_are_folded_from() -> 
   log, root = life(sand)
   act = engine.rung("k = 1", on=root)
   assert await act is None
+  held = engine.wait(9, on=root)
   engine.pause(root)
   engine.wake(root)
-  engine.cancel(act)
+  engine.cancel(held)
   engine.close(None, root)
   carrying = [a for a in log if a[0] in ("tell", "pause", "wake", "cancel", "close")]
   assert [a[0] for a in carrying if a[0] != "tell"] == ["pause", "wake", "cancel", "close"]
   assert [(a[4] if a[0] == "close" else a[3]) for a in carrying if a[0] != "tell"] == [
     [f"#{root} paused"],
     [f"#{root} woke"],
-    [f"#{act} cancelled"],
+    [f"#{held} cancelled"],
     [f"#{root} closed None"],
   ]
   assert paragraphs(engine.turns(on=root)) == ["\n".join(a[4] if a[0] == "close" else a[3]) for a in carrying]
