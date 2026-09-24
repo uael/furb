@@ -536,9 +536,15 @@ def graded(task: Path, base: Path, syn: str, patch: Path, out: Path) -> Mapping[
   said = logs / "verifier" / "reward.json"
   reward: Mapping[str, object] = json.loads(said.read_text(encoding="utf-8")) if said.is_file() else {"reward": None}
   out.write_text(json.dumps(reward, indent=2) + "\n", encoding="utf-8")
+  # The log and the reports beside a reward are the ones of that grade, so those of an earlier grade go first: a
+  # move onto a directory that stands puts the new one inside it, and the move after that fails.
   for held in ("run.log", "reports"):
+    beside = out.parent / held
+    if beside.is_dir():
+      shutil.rmtree(beside)
+    beside.unlink(missing_ok=True)
     if (logs / "verifier" / held).exists():
-      shutil.move(str(logs / "verifier" / held), str(out.parent / held))
+      shutil.move(str(logs / "verifier" / held), str(beside))
   shutil.rmtree(vroot, ignore_errors=True)
   say(f"[deepswe] reward {reward.get('reward')}: {json.dumps(reward)}")
   return reward
