@@ -40,7 +40,7 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   assert usage == COST and len(usage) == 5
   _, then = engine.ask("stand", root, step)
   assert isinstance(then, list) and engine.acts[step][6] == "m/low"
-  assert usage[0] / (engine.offered(then, engine.acts[step][6]) or 0) == 0.2
+  assert usage[0] / (engine.offered(then, str(engine.acts[step][6])) or 0) == 0.2
   assert engine.modules[root]["actor"] == "n/low" and engine.offered(STANDS, "n/low") == 200000
   first = Sand(stands=STANDS)
   _, root = life(first)
@@ -52,4 +52,4 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   assert born[6] == "m/low" and [a[1] for a in said(heard, "stood")] == [root]
   assert engine.offered(gone, "m/low") is None
   _, then = engine.ask("stand", root, born[1])
-  assert then == STANDS and engine.offered(then, born[6]) == 400000
+  assert isinstance(then, list) and then == STANDS and engine.offered(then, born[6]) == 400000

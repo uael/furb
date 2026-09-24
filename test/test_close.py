@@ -6,7 +6,7 @@ import pytest
 
 from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Refused
+from furb.engine import OPERATOR, Refused
 
 
 async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:

@@ -57,10 +57,7 @@ async def test_a_fact_reaches_the_world_the_kernel_and_the_record_only_through_t
   assert await engine.prompt(float, "read the clock", on=root) == 1001.0
   assert [a[0] for a in sand.calls] == ["stand", "ask", "clock"]
   assert findings(log) == [[]]
-  assert ran(log) == [
-    "chain1: Act[object] = Act('chain1')\nprompt1: Act[float] = Act('prompt1')",
-    "close(clock())",
-  ]
+  assert ran(log) == ["chain1: Act[object] = Act('chain1')\nprompt1: Act[float] = Act('prompt1')", "close(clock())"]
   assert [entry[1] for entry in sand.record if entry[0][0] == "clock"] == [1001.0]
 
 

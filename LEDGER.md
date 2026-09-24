@@ -108,6 +108,14 @@ external extension. Tell the owner if the pypi package `furb` (and npm `@furb/sk
 - `test/test_hygiene.py`: CONTRACTS = engine.pyi → test/, builtin/<x>.pyi → test/<x>/; no-shadow law also for the
   builtin words (engine names + other words as the outer scope).
 - Builtin test files moved (git mv) to `test/files/`, `test/bash/`, `test/grant/` but NOT yet rewritten.
+- Step 1 of the old plan is done: the whole core suite is rewritten on core means alone and green on both engines
+  (1180 passed, 4 skipped), with a new `test/test_ladder.py`; every sentence of engine.pyi has its one test. ruff
+  and ty are clean on `test/test_*.py` and `test/conftest.py`. The four red hygiene tests are the builtin suites
+  (step 2 below). Patterns used: a command became `wait(n)` or `job(root)` with a `finished` fact, a read became
+  `clock()`, a door read or write became `engine.ask("ladder", chain, prompt[, word])`, an act that tells its open
+  and its close became a prompt `to='operator'` that the operator closes, a showing is told from a rung with
+  `tell('seen', 'x', (path, content, show))`, and the directory of a chain is read with `where(on)` (its standing
+  while no cwd is bound). Monty has no `__call__` on an instance of a word's class, so a show is a def or a lambda.
 - Core test files rewritten and green on both engines: ask, ask_shape, act, act_await, acts, act_shape, asked,
   actor_shape (window test moved to test/grant/test_window.py), boot, bound, cancel, cancel_shape, close,
   close_shape, control, covers, done, drift, drive, ear, ended, entry, fact, filter, gate_shape, get, headed, holds,
@@ -116,21 +124,12 @@ external extension. Tell the owner if the pypi package `furb` (and npm `@furb/sk
 
 ## Next steps, in order
 
-1. Finish the core suite: rung (next; see grep of bash/read/Text there), run, saying, scope, sent, site, stand,
-   standing, start, started, stood, take, tell, told, transcript, turns, turns_of, under, unquoted, usage, wait,
-   wants, world, show, showing, shown, chain (78 tests), and a new `test/test_ladder.py` for the Ladder sentences.
-   Patterns: a command → `wait(n)` (World done: `engine.send("done", id, v, by=WORLD)`), a paused act the World
-   finishes → `job(root)` + `("finished", id, v)`, a read → `clock()` (a World query the record keeps), a door read →
-   `engine.ask("ladder", chain, prompt[, word])`, a telling act → a prompt `to=OPERATOR` closed by `engine.close`,
-   a tell of a showing → `tell('seen', 'x', ('/p', 'content', lambda lines: [1]))` inside a rung. An ear that calls
-   the bus must not do so before its first yield (monty primes it on the main thread: "Already borrowed").
-   Then list mismatches with the script used before (hygiene check of MISSING/STRAY per contract).
-2. Rewrite test/files, test/bash, test/grant with `Sand(words=BASH|FILES|GRANT)`, `Bound(root)` for verbs, fix ids
+1. Rewrite test/files, test/bash, test/grant with `Sand(words=BASH|FILES|GRANT)`, `Bound(root)` for verbs, fix ids
    (extension rungs take rung1.. and their words stand in the turns), one test per sentence of each .pyi.
    Make the builtins modules of form (b) (decision 5): they import from `furb.engine` and `furb.builtin.files`, ruff
    and ty check them with no per-file ignore; exclude them from coverage only (they run as words in a chain). The
    word rule lands in the crate first (a function of `furb_monty`), and `conftest.BUILTIN` makes the words with it.
-3. Crate and Python host (decision 6). (a) Crate: a module `src/extension.rs` with `src/extension.test.rs`: the
+2. Crate and Python host (decision 6). (a) Crate: a module `src/extension.rs` with `src/extension.test.rs`: the
    config (home `$XDG_CONFIG_HOME/furb` or `FURB_CONFIG_DIR`, and local `<project>/.furb/config.json`, merged by
    name, paths resolved against the directory of their file, `~` expanded), the cache (`$XDG_CACHE_HOME/furb`), the
    fetch (path; git by the `git` command; npm by `npm pack` and `tar`), the manifest (`package.json` field `furb`),
@@ -146,18 +145,27 @@ external extension. Tell the owner if the pypi package `furb` (and npm `@furb/sk
    ... from PURE and bash/grant from ACTS. (c) Python host: world.py and cli.py use the extension API of furb_monty
    for the config, the fetch, the manifests, the order and the words, keep python world parts for files and bash,
    and load no external world part yet (decision 4: later). test/outside follows.
-4. TypeScript: napi exposes the extension API of the crate (config, cache, fetch, manifest, order, word), and the
+3. TypeScript: napi exposes the extension API of the crate (config, cache, fetch, manifest, order, word), and the
    `Life` of napi plays the words itself; TS keeps the World parts (generic World, the builtin parts of files and
    bash), the TUI parts, and the dynamic import of their code. README; then TUI parts and app.ts/session.ts
    (bash/grant/read/cd specifics), docs, screenshots (bun must be >= 1.4.2 for the TUI; host has 1.3.11).
-5. `extensions/skills/`: package.json manifest, skills.py + skills.pyi + tests, world.ts (finds SKILL.md under
+4. `extensions/skills/`: package.json manifest, skills.py + skills.pyi + tests, world.ts (finds SKILL.md under
    `.furb/skills`, the config dir `skills/`, and `.claude/skills`), tui.ts (`/skills`, `/skill <name>`); prove path,
    git (local bare repo) and npm (local tarball) loading in tests.
-6. docs/extensions.md, CLAUDE.md, src/furb/CLAUDE.md (technical names: door, text, command, merged, show, grant,
+5. docs/extensions.md, CLAUDE.md, src/furb/CLAUDE.md (technical names: door, text, command, merged, show, grant,
    ledger move to the extensions; add ladder, extension), developer guide, READMEs; every gate green
    (`uv run pytest -q`, hygiene, ruff format/check, `uv run ty check --error-on-warning`, cargo fmt/clippy/test,
    `uv run pre-commit run --all-files`, bun check/lint/test). Delete this ledger. Tell the owner a release of `furb`
    (pypi, tag `v*`) and a publish of `@furb/skills` (npm) are theirs to do.
+
+## Questions for the owner
+
+- engine.pyi, `Show`: "A show is no word of a fact" holds for the acts (no show is a word of a `bash` or of a verb's
+  act), but a `tell` carries its notes as a word, and a `Showing` note holds its show. The record keeps no tell, so
+  no record holds a show, which is the point of the sentence. Should it say "no word of an act" instead?
+- engine.pyi, `turns`: "a text stands by the lines it has not seen" keeps the word text, whose technical name moved
+  to the files extension; the core says showing. Should it say "a showing stands by the lines the model has not
+  seen"? The test proves it with a showing.
 
 ## Environment notes
 

@@ -64,7 +64,9 @@ async def test_the_world_closes_with_a_refusal_an_act_it_is_started_with_that_it
   one = engine.act("ping", root, engine.started(engine.ending(engine.idle)))
   with pytest.raises(Refused, match="the World does no ping"):
     await one
-  sand.script[root] = ["x = act('ping', '', started(ending(idle)))\ntry:\n  await x\nexcept Refused as no:\n  close(str(no))"]
+  sand.script[root] = [
+    "x = act('ping', '', started(ending(idle)))\ntry:\n  await x\nexcept Refused as no:\n  close(str(no))"
+  ]
   assert await engine.prompt(str, "ping", on=root) == "the World does no ping"
 
 

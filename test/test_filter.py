@@ -2,7 +2,6 @@
 
 from conftest import STANDS, Sand, life, lived, named, paragraphs, plain, relived, said, seen, settle, sown
 from furb import engine
-from furb.engine import OPERATOR
 
 
 async def test_a_filter_is_given_the_acts_of_the_transcript_up_to_the_source() -> None:

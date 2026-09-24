@@ -1,6 +1,6 @@
 """Peek, the question of what an act came to."""
 
-from conftest import STANDS, Sand, life, said, settle
+from conftest import STANDS, Sand, life, settle
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -8,7 +8,7 @@ from furb.engine import OPERATOR
 async def test_a_peek_is_at_an_act_and_gives_what_the_act_came_to_as_the_record_stands() -> None:
   """A peek is at an act, and gives what the act came to as the record stands."""
   sand = Sand(stands=STANDS)
-  log, root = life(sand)
+  _, root = life(sand)
   one = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
   engine.close(21, one)

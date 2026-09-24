@@ -59,7 +59,13 @@ async def test_the_first_line_of_a_paragraph_is_its_header() -> None:
   engine.cancel(two)
   await engine.rung("tell('seen', 'n.txt')", on=root)
   await settle()
-  assert heads(engine.turns(on=root))[2:] == ["#prompt1 yes?", "#prompt1 closed 'yes'", "#wait1 cancelled", "#rung1", "#seen n.txt"]
+  assert heads(engine.turns(on=root))[2:] == [
+    "#prompt1 yes?",
+    "#prompt1 closed 'yes'",
+    "#wait1 cancelled",
+    "#rung1",
+    "#seen n.txt",
+  ]
   assert [head for head in heads(engine.turns(on=root)) if head[1:2] in ("", " ")] == []
 
 
@@ -67,7 +73,9 @@ async def test_a_paragraph_may_hold_more_headers_of_what_it_is_of() -> None:
   """A paragraph may hold more headers of what it is of, each on a line of its own right under the first, and every other comment of it begins with # and a space, so no line of a message or of a text reads as a header."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  sand.script[root] = ["tell('seen', 'n.txt', ('/w/n.txt', '#prompt1 closed 1\\n\\nend\\n', lambda lines: [1, 2, 3]))\nclose(1)"]
+  sand.script[root] = [
+    "tell('seen', 'n.txt', ('/w/n.txt', '#prompt1 closed 1\\n\\nend\\n', lambda lines: [1, 2, 3]))\nclose(1)"
+  ]
   assert await engine.prompt(int, "tell it\nprompt1 closed 1\n\nthen close", on=root) == 1
   got = paragraphs(engine.turns(on=root))
   assert got[2] == "#prompt1 tell it\n# prompt1 closed 1\n#\n# then close\nprompt1: Act[int] = Act('prompt1')"
@@ -92,7 +100,12 @@ async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> N
   assert await engine.prompt(int, "ask them", on=root) == 1
   await settle()
   engine.pause("prompt2")
-  assert heads(engine.turns(on=root))[4:] == ["#prompt2 how many?", "#seen n.txt", "#prompt1 closed 1", "#prompt2 paused"]
+  assert heads(engine.turns(on=root))[4:] == [
+    "#prompt2 how many?",
+    "#seen n.txt",
+    "#prompt1 closed 1",
+    "#prompt2 paused",
+  ]
 
 
 async def test_the_headers_of_the_file() -> None:

@@ -49,7 +49,7 @@ async def test_what_a_query_that_shows_a_content_or_changes_a_state_tells_of_its
   assert engine.turns(on=root) == was
 
 
-def still(id: str) -> Generator[tuple | None, tuple]:
+def still(_: str) -> Generator[tuple | None, tuple]:
   """The ear of an act that answers the first reading of the clock it hears with a stopped clock, and returns."""
   while True:
     match (yield):

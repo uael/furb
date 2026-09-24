@@ -4,7 +4,6 @@ from collections.abc import Generator
 
 from conftest import STANDS, Sand, heads, life, paragraphs, rows, said, settle
 from furb import engine
-from furb.engine import OPERATOR
 
 
 def noting(id: str) -> Generator[tuple | None, tuple]:
@@ -70,7 +69,12 @@ async def test_the_turns_are_folded_whole_at_each_ask() -> None:
   ]
   assert [one[: len(asks[1])] for one in asks[1:]] == [asks[1]] * 2
   first, second, third = [a[1] for a in said(log, "ask")]
-  assert heads(asks[0]) == [f"#{root} root", f"#{root} roster {STANDS[0]!r}", "#prompt1 count", f"#{first} advance on prompt1"]
+  assert heads(asks[0]) == [
+    f"#{root} root",
+    f"#{root} roster {STANDS[0]!r}",
+    "#prompt1 count",
+    f"#{first} advance on prompt1",
+  ]
   assert heads(asks[1][-1:]) == [f"#{note} saw {first}", f"#{second} advance on prompt1"]
   assert heads(asks[2][-1:]) == [f"#{note} saw {second}", f"#{third} advance on prompt1"]
 

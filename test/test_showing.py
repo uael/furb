@@ -55,17 +55,17 @@ async def test_a_showing_stands_as_a_comment_of_its_path_and_of_how_many_lines_t
     "tell('seen', 'n', ('/w/n', THREE, span(2, 2)))",
     "tell('seen', 'n', ('/w/n', THREE, lambda lines: [i for i, x in enumerate(lines, 1) if x.startswith('t')]))",
   )
-  assert seen(root) == [
-    "#seen n\n# /w/n, 0 known\n# 2 two",
-    "#seen n\n# /w/n, 1 known\n# 3 three",
-  ]
+  assert seen(root) == ["#seen n\n# /w/n, 0 known\n# 2 two", "#seen n\n# /w/n, 1 known\n# 3 three"]
 
 
 async def test_the_engine_applies_a_show_before_it_writes_a_line() -> None:
   """The engine applies a show before it writes a line, so the paragraph holds the picked lines alone."""
-  root = await shows("given = []\ndef second(lines):\n  given.append(lines)\n  return [2]\n\ntell('seen', 'n', ('/w/n', THREE, second))")
+  root = await shows(
+    "given = []\ndef second(lines):\n  given.append(lines)\n  return [2]\n\ntell('seen', 'n', ('/w/n', THREE, second))"
+  )
   assert seen(root) == ["#seen n\n# /w/n, 0 known\n# 2 two"]
-  assert engine.modules[root]["given"][-1] == ["one", "two", "three"]
+  given = engine.modules[root]["given"]
+  assert isinstance(given, list) and given[-1] == ["one", "two", "three"]
   assert [one for one in paragraphs(engine.turns(on=root)) if "# 1 one" in one or "# 3 three" in one] == []
 
 
@@ -86,13 +86,9 @@ async def test_a_line_told_once_on_a_chain_is_known_there() -> None:
 async def test_a_line_is_told_again_after_its_content_changed() -> None:
   """A line is told again after its content changed."""
   root = await shows(
-    "tell('seen', 'n', ('/w/n', THREE, ALL))",
-    "tell('seen', 'n', ('/w/n', 'one\\nTWO\\nthree\\n', ALL))",
+    "tell('seen', 'n', ('/w/n', THREE, ALL))", "tell('seen', 'n', ('/w/n', 'one\\nTWO\\nthree\\n', ALL))"
   )
-  assert seen(root) == [
-    "#seen n\n# /w/n, 0 known\n# 1 one\n# 2 two\n# 3 three",
-    "#seen n\n# /w/n, 2 known\n# 2 TWO",
-  ]
+  assert seen(root) == ["#seen n\n# /w/n, 0 known\n# 1 one\n# 2 two\n# 3 three", "#seen n\n# /w/n, 2 known\n# 2 TWO"]
 
 
 async def test_a_content_costs_its_size_once_on_a_chain() -> None:

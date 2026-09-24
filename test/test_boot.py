@@ -11,7 +11,6 @@ from conftest import (
   Dead,
   Sand,
   gated,
-  heads,
   keeping,
   life,
   lived,

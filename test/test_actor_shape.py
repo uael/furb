@@ -1,6 +1,6 @@
 """Actor, an actor the World offers."""
 
-from conftest import STANDS, Sand, heads, life, paragraphs, said, settle
+from conftest import STANDS, Sand, life, paragraphs, said, settle
 from furb import engine
 from furb.engine import Refused
 

@@ -50,9 +50,6 @@ async def test_a_standing_holds_no_source() -> None:
   sand.script[root] = ["x = wait(0)\nclose(1)"]
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
-  kept = [
-    ((*fact[:4], 5), *rest) if fact[0] == "wait" else (fact, *rest)
-    for fact, *rest in plain(sand.record)
-  ]
+  kept = [((*fact[:4], 5), *rest) if fact[0] == "wait" else (fact, *rest) for fact, *rest in plain(sand.record)]
   with pytest.raises(Drift, match=r"^wait1 drifts$"):
     life(Sand(stands=STANDS), kept)

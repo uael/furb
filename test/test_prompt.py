@@ -188,7 +188,7 @@ async def test_a_model_answers_any_shape() -> None:
   await engine.rung(NOTE, on=root)
   sand.script[root] = ["close(Note('hi'))"]
   got = await engine.prompt("Note", "a note", on=root)
-  assert type(got).__name__ == "Note" and got.text == "hi"
+  assert type(got).__name__ == "Note" and getattr(got, "text", None) == "hi"
 
 
 async def test_a_model_asked_with_the_shape_none_reads_the_message_works_and_closes_with_nothing() -> None:
@@ -462,14 +462,7 @@ async def test_a_prompt_takes_any_shape_which_a_close_is_read_against_as_python_
   """A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = [
-    "close(Act('prompt9'))",
-    "close([1, 2])",
-    "close([])",
-    "close(None)",
-    "close('no')",
-    "close(2)",
-  ]
+  sand.script[root] = ["close(Act('prompt9'))", "close([1, 2])", "close([])", "close(None)", "close('no')", "close(2)"]
   assert await engine.prompt(Act, "an act", on=root) == "prompt9"
   assert await engine.prompt(list[int], "some numbers", on=root) == [1, 2]
   # The name of a shape is the word a chain would say, and the globals of a chain hold no module, so a shape that

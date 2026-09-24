@@ -14,7 +14,6 @@ import sys
 from asyncio import CancelledError
 from collections.abc import Callable, Coroutine, Generator, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass
-from types import SimpleNamespace
 from functools import partial
 from pathlib import Path
 
@@ -32,7 +31,10 @@ ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
-BUILTIN = {name: (Path(furb.python.__file__).parent / "builtin" / f"{name}.py").read_text(encoding="utf-8") for name in ("files", "bash", "grant")}
+BUILTIN = {
+  name: (Path(furb.python.__file__).parent / "builtin" / f"{name}.py").read_text(encoding="utf-8")
+  for name in ("files", "bash", "grant")
+}
 """BUILTIN holds the word of each builtin extension by its name, which a host plays as a rung on every chain it opens without a source."""
 FILES, BASH, GRANT = ([BUILTIN["files"]], [BUILTIN["files"], BUILTIN["bash"]], [BUILTIN["grant"]])
 """The words a World of the suite plays for one builtin extension, each after the words it needs."""

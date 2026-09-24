@@ -47,7 +47,10 @@ async def test_a_gate_says_the_program_of_the_chain_before_that_rung() -> None:
     ("k = 1", [bind]),
     ("x = BAD", [bind, "k = 1"]),
     ("y = 2", [bind, "k = 1"]),
-    ("p = get(acting())[2]\nask('ladder', '', p, ask('ladder', '', p)[1].replace('y = 2', 'k = 3'))", [bind, "k = 1", "y = 2"]),
+    (
+      "p = get(acting())[2]\nask('ladder', '', p, ask('ladder', '', p)[1].replace('y = 2', 'k = 3'))",
+      [bind, "k = 1", "y = 2"],
+    ),
     ("k = 3", [bind, "k = 1"]),
     ("close(k)", [bind, "k = 1", "k = 3"]),
   ]

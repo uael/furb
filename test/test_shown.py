@@ -14,7 +14,7 @@ def every(lines: list[str]) -> list[int]:
 def test_the_lines_of_a_showing_the_model_has_not_seen_and_how_many_of_the_rest_it_knows() -> None:
   """The lines of a showing the model has not seen, and how many of the rest it knows."""
   seen: dict[str, dict[int, str]] = {}
-  assert engine.shown(("/w/n.txt", THREE, lambda lines: [1, 2]), seen) == "# /w/n.txt, 0 known\n# 1 one\n# 2 two"
+  assert engine.shown(("/w/n.txt", THREE, lambda _: [1, 2]), seen) == "# /w/n.txt, 0 known\n# 1 one\n# 2 two"
   assert seen == {"/w/n.txt": {1: "one", 2: "two"}}
   assert engine.shown(("/w/n.txt", THREE, every), seen) == "# /w/n.txt, 2 known\n# 3 three"
   assert seen == {"/w/n.txt": {1: "one", 2: "two", 3: "three"}}

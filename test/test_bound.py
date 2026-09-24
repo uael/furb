@@ -2,7 +2,7 @@
 
 from conftest import STANDS, Sand, life, said
 from furb import engine
-from furb.engine import OPERATOR, Act
+from furb.engine import Act
 
 
 async def test_the_statement_that_binds_the_name_of_an_act_to_the_act() -> None:

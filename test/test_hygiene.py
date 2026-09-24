@@ -231,7 +231,9 @@ def shadows(path: Path, outer: set[str]) -> list[str]:
     if isinstance(at[-1], ast.ClassDef):
       continue
     over = set().union(outer, *(bound[id(s)] for s in at[:-1] if not isinstance(s, ast.ClassDef)))
-    dark.extend(f"{path.name}:{getattr(at[-1], 'lineno', 0)} {name}" for name in sorted(bound[id(at[-1])] & over - {"_"}))
+    dark.extend(
+      f"{path.name}:{getattr(at[-1], 'lineno', 0)} {name}" for name in sorted(bound[id(at[-1])] & over - {"_"})
+    )
   return dark
 
 

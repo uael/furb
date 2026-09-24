@@ -21,7 +21,8 @@ async def test_a_show_is_given_the_lines_of_the_content_of_a_showing() -> None:
   word = "given = []\ndef two(lines):\n  given.append(lines)\n  return [2]\n\ntell('seen', 'n', ('/w/n', 'a\\nb\\nc\\n', two))"
   await engine.rung(word, on=root)
   assert of(engine.turns(on=root), "seen") == ["#seen n\n# /w/n, 0 known\n# 2 b"]
-  assert engine.modules[root]["given"][-1] == ["a", "b", "c"]
+  given = engine.modules[root]["given"]
+  assert isinstance(given, list) and given[-1] == ["a", "b", "c"]
 
 
 async def test_a_show_is_any_callable_of_that_shape() -> None:

@@ -50,7 +50,7 @@ async def test_a_question_is_named_by_its_kind() -> None:
   made = said(log, "wait")[0]
   assert engine.question(made) and made[1] == made[0] + "1"
   assert not engine.question(said(log, "tell")[0])
-  assert not engine.question([a for a in said(log, "done") if a[1] == act][0])
+  assert not engine.question(next(a for a in said(log, "done") if a[1] == act))
 
 
 async def test_the_name_of_an_act() -> None:

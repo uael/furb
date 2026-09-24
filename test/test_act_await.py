@@ -39,7 +39,7 @@ async def test_a_rung_that_awaits_an_act_reads_the_result_of_the_act() -> None:
   sand.script[root] = ["x = prompt(int, 'how many?', to=OPERATOR)\nout = await x\nclose([out, out + 1])"]
   one = engine.prompt(list, "ask them", on=root)
   await settle()
-  engine.close(4, said(engine.acts.values(), "prompt")[-1][1])
+  engine.close(4, said(list(engine.acts.values()), "prompt")[-1][1])
   assert await one == [4, 5]
 
 
