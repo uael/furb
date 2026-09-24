@@ -321,6 +321,25 @@ class Bound:
     return said
 
 
+def finishing(id: str) -> Generator[tuple | None, tuple]:
+  """The ear of an act of an extension that the World finishes: it answers a look at itself with that it works, and
+  it is done with what a finished fact of the World about it carries."""
+  while True:
+    match (yield):
+      case ("look", qid, _, _, at) if at == id:
+        yield "done", qid, "working"
+      case ("finished", about, _, value) if about == id:
+        yield "done", id, value
+        return
+
+
+def job(on: str) -> Act:
+  """An act of an extension on a chain, which a pause stops and a control ends, and which is done when the World says
+  it finished."""
+  got = engine.act("job", on, engine.pausing(engine.ending(finishing)))
+  return Act(got)
+
+
 def plays(words: Sequence[str], chain: str) -> None:
   """Each word the program of a chain does not hold yet, played on it as a rung, in order, by whoever speaks: the World
   at the birth of the chain, and the World again once the life stands on its record."""

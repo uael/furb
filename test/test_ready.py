@@ -34,7 +34,7 @@ async def test_the_word_of_a_rung_enters_the_program_when_the_gate_accepts_it_or
   refused, first, second = [a[1] for a in said(log, "rung") if a[2] == act]
   assert engine.ask("program", root)[1] == {binding: wrote, first: "a = 1", second: "close(a + 1)"}
   assert [q[4] for q in engine.asked.values() if q[0] == "gate"] == ["a = BAD", "a = 1", "close(a + 1)"]
-  assert engine.read(act, on=root).content == "a = BAD\na = 1\nclose(a + 1)"
+  assert engine.ask("ladder", root, act)[1] == "a = BAD\na = 1\nclose(a + 1)"
   assert (engine.modules[root][root], engine.modules[root][act], engine.modules[root]["a"]) == (root, act, 1)
   assert type(engine.outcomes[refused]).__name__ == "Refused"
 
@@ -50,7 +50,7 @@ async def test_the_word_of_a_rung_that_extends_the_engine_is_part_of_the_program
   assert isinstance(program, dict)
   assert DOOR in program.values()
   _, over = await relived(Sand(stands=STANDS), plain(sand.record))
-  assert engine.read("note://a", on=over).content == "kept"
+  assert engine.ask("read", over, "note://a")[1] == "kept"
 
 
 async def test_the_old_words_stay_in_the_program_and_in_the_turns_after_a_rung_rebinds_a_name() -> None:

@@ -12,7 +12,7 @@ async def test_what_a_call_the_engine_will_not_make_raises_in_the_one_that_made_
   sand = sown()
   life(sand)
   with pytest.raises(Refused, match="no chain"):
-    engine.bash("nowhere")
+    engine.wait(1.0)
   with pytest.raises(Refused, match="no chain"):
     engine.chain("twin", source="chain://operator.9")
   with pytest.raises(Refused, match="no act"):
@@ -29,5 +29,5 @@ async def test_a_refused_call_raises_refused_in_the_caller() -> None:
   assert isinstance(engine.outcomes[act], Refused)
   dead = Dead(stands=STANDS)
   _, other = life(dead)
-  word = "try:\n  read('a.txt')\nexcept Refused as no:\n  close(str(no))"
-  assert await engine.rung(word, on=other) == "a dead World answers no read"
+  word = "try:\n  clock()\nexcept Refused as no:\n  close(str(no))"
+  assert await engine.rung(word, on=other) == "a dead World answers no clock"
