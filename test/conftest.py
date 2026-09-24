@@ -27,6 +27,15 @@ from furb.kernel import ENGINE
 
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
+SUITES = frozenset(
+  {
+    HERE,
+    *(one for one in HERE.iterdir() if one.is_dir() and one.name not in ("outside", "__pycache__")),
+    *(HERE.parent / "extensions").glob("*/test"),
+  }
+)
+"""SUITES are the folders whose tests run once on each engine: the suite of the engine, the suite of each builtin
+extension, and the suite of each extension of the repository."""
 ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
@@ -36,6 +45,19 @@ BUILTIN = {one.name: one.word or "" for one in furb_monty.builtin_extensions()}
 plays as a rung on every chain it opens without a source."""
 FILES, BASH, GRANT = ([BUILTIN["files"]], [BUILTIN["files"], BUILTIN["bash"]], [BUILTIN["grant"]])
 """The words a World of the suite plays for one builtin extension, each after the words it needs."""
+
+
+def extension(name: str) -> tuple[list[str], list[str]]:
+  """The words a World plays for an extension of the repository, as the crate makes them from its manifest: the words
+  of the builtins it requires, then its own, and its life words."""
+  root = HERE.parent / "extensions" / name
+  manifest = json.loads((root / "package.json").read_text(encoding="utf-8"))["furb"]
+  own = furb_monty.word_of((root / manifest["python"]).read_text(encoding="utf-8"))
+  return [*(BUILTIN[one] for one in manifest.get("requires", [])), own], [
+    manifest["life"]
+  ] if "life" in manifest else []
+
+
 MONTY_SKIPS: dict[str, str] = {
   "test_an_ear_is_any_generator_of_that_shape": (
     "the test boots on a Kernel of this interpreter, and the engine of monty holds its own"
@@ -129,8 +151,9 @@ class Sand:
   every fact it answered or performed, in order. `stands` is what a chain stands on, `cost` the usage of one
   answer, and `auto` says whether a command tells a line and exits at once. `tick` counts the readings of its
   clock and the chances it drew, so a later life reads what the life before it read. `words` are the words of the
-  extensions it plays as rungs on every chain without a source, and `booted` says that the life stands on its
-  record, from which point it plays them on each such chain at its birth.
+  extensions it plays as rungs on every chain without a source, `lives` their life words, which it plays on each such
+  chain in every life, and `booted` says that the life stands on its record, from which point it plays them on each
+  such chain at its birth. `answers` answers a question of an extension by its kind, with the plain data it gives.
   """
 
   files: dict[str, str] = field(default_factory=dict)
@@ -143,6 +166,8 @@ class Sand:
   cost: tuple | None = None
   tick: int = 0
   words: list[str] = field(default_factory=list)
+  lives: list[str] = field(default_factory=list)
+  answers: dict[str, Callable[[tuple], object]] = field(default_factory=dict)
   booted: bool = False
 
   def hears(self) -> World:  # noqa: PLR0915
@@ -172,7 +197,9 @@ class Sand:
         acts[a[1]] = a
       match a:
         case ("chain", id, _, _, _, "") if self.booted:
-          plays(self.words, id)
+          plays(self.words, id, self.lives)
+        case (kind, qid, *_) if kind in self.answers and engine.question(a):
+          yield "done", qid, self.answers[kind](a)
         case ("start", about, _):
           match acts[about]:
             case ("bash", _, _, on, command, _, timeout):
@@ -349,14 +376,13 @@ def job(on: str) -> Act:
   return Act(got)
 
 
-def plays(words: Sequence[str], chain: str) -> None:
-  """Each word the program of a chain does not hold yet, played on it as a rung, in order, by whoever speaks: the World
-  at the birth of the chain, and the World again once the life stands on its record."""
+def plays(words: Sequence[str], chain: str, lives: Sequence[str] = ()) -> None:
+  """Each word the program of a chain does not hold yet, played on it as a rung, in order, and then each life word, by
+  whoever speaks: the World at the birth of the chain, and the World again once the life stands on its record."""
   _, program = engine.ask("program", chain)
   assert isinstance(program, dict)
-  for word in words:
-    if word not in program.values():
-      engine.rung(word, on=chain)
+  for word in [*(one for one in words if one not in program.values()), *lives]:
+    engine.rung(word, on=chain)
 
 
 def seen(held: list[tuple]):  # noqa: ANN201
@@ -505,11 +531,11 @@ def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   """
   log: list[tuple] = []
   root = engine.boot(record, **kernel(), probe=watched(log), world=world.hears())
-  if world.words:
+  if world.words or world.lives:
     token = site.set(WORLD)
     try:
       for one in [a[1] for a in engine.acts.values() if a[0] == "chain" and not a[5]]:
-        plays(world.words, one)
+        plays(world.words, one, world.lives)
     finally:
       site.reset(token)
   world.booted = True
@@ -652,7 +678,7 @@ def swapped(to: object) -> None:
   seen: set[int] = set()
   for mod in list(sys.modules.values()):
     file = getattr(mod, "__file__", None)
-    if not file or id(mod) in seen or not str(file).startswith(str(HERE)):
+    if not file or id(mod) in seen or not any(Path(file).is_relative_to(one) for one in SUITES):
       continue
     seen.add(id(mod))
     for key, value in list(vars(mod).items()):
@@ -666,8 +692,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
   """Every test of the suite and of the suites of the builtins runs once on each engine; the hygiene laws read the
   files and run once, and the tests of the outside run on the engine they name."""
   path = metafunc.definition.path
-  suites = (HERE, *(one for one in HERE.iterdir() if one.is_dir() and one.name not in ("outside", "__pycache__")))
-  if "engine_of" in metafunc.fixturenames and path.parent in suites and path.name != "test_hygiene.py":
+  if "engine_of" in metafunc.fixturenames and path.parent in SUITES and path.name != "test_hygiene.py":
     metafunc.parametrize("engine_of", list(ENGINES), indirect=True)
 
 

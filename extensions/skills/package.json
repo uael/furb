@@ -1,0 +1,43 @@
+{
+  "name": "@furb/skills",
+  "version": "0.2.0",
+  "description": "Skills for furb: find the SKILL.md files of a project and of the user, and read one into a chain.",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uael/furb.git",
+    "directory": "extensions/skills"
+  },
+  "keywords": ["furb", "furb-extension", "skills"],
+  "exports": {
+    "./world": "./world.ts",
+    "./tui": "./tui.ts",
+    "./package.json": "./package.json"
+  },
+  "files": ["skills.py", "skills.pyi", "world.ts", "tui.ts", "README.md"],
+  "furb": {
+    "name": "skills",
+    "python": "skills.py",
+    "life": "skills()",
+    "world": { "ts": "world.ts" },
+    "tui": "tui.ts",
+    "requires": ["files"]
+  },
+  "peerDependencies": {
+    "@furb/engine": ">=0.2.0 <0.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@furb/engine": { "optional": true }
+  },
+  "devDependencies": {
+    "@furb/engine": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=22.18"
+  }
+}

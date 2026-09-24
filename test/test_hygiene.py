@@ -1,17 +1,20 @@
 """Each contract and its suite agree, sentence for sentence.
 
-A contract is engine.pyi, whose suite is test/, or the contract of a builtin extension, builtin/<name>.pyi, whose
-suite is test/<name>/. A sentence is one line of the docstring of a definition in a contract: a function, a class,
+A contract is engine.pyi, whose suite is test/, the contract of a builtin extension, builtin/<name>.pyi, whose
+suite is test/<name>/, or the contract of an extension of the repository, extensions/<name>/<name>.pyi, whose suite is
+extensions/<name>/test/. A sentence is one line of the docstring of a definition in a contract: a function, a class,
 a method, or a module-level name, whose docstring is the string literal after its assignment. A constructor and a
 property are no definitions of their own: what a constructor takes and what a property gives are the class's
 sentences. Each sentence has exactly one test, in the file of its definition in the suite of its contract, whose
 docstring is that sentence; each test carries such a sentence; each definition has a file of its own and at least
 one sentence; and the module docstring, the work queue, is empty. The engine itself fits its token budget, minified
-in layout alone, and neither the engine nor the word of a builtin binds a name again beneath a scope that already
-binds it.
+in layout alone, and neither the engine nor the word of an extension binds a name again beneath a scope that already
+binds it. Each extension of the repository has a manifest that names its python part, a contract beside it, and a
+suite.
 """
 
 import ast
+import json
 import re
 from collections import Counter
 from pathlib import Path
@@ -26,8 +29,14 @@ PY = Path(engine.__file__)
 PYI = PY.with_suffix(".pyi")
 TESTS = PYI.parents[2] / "test"
 BUILTIN = PY.parent / "builtin"
-CONTRACTS = {PYI: TESTS, **{one: TESTS / one.stem for one in sorted(BUILTIN.glob("*.pyi"))}}
-"""CONTRACTS maps each contract to the directory of its suite: the engine's, and one for each builtin extension."""
+EXTENSIONS = TESTS.parent / "extensions"
+CONTRACTS = {
+  PYI: TESTS,
+  **{one: TESTS / one.stem for one in sorted(BUILTIN.glob("*.pyi"))},
+  **{one: one.parent / "test" for one in sorted(EXTENSIONS.glob("*/*.pyi"))},
+}
+"""CONTRACTS maps each contract to the directory of its suite: the engine's, one for each builtin extension, and one
+for each extension of the repository."""
 # What the engine may cost the model that reads it: a wall, and a shape that will not fit under it is a shape not
 # found yet. Six thousand, by the owner's word.
 BUDGET = 6_000
@@ -258,13 +267,31 @@ def test_no_name_is_bound_again_beneath_itself() -> None:
   assert shadows(PY.name, PY.read_text(encoding="utf-8"), set()) == [], "these bindings shadow an enclosing one"
 
 
+def manifests() -> dict[Path, dict[str, object]]:
+  """The furb field of the manifest of each extension of the repository, by the directory of the extension."""
+  return {one.parent: json.loads(one.read_text(encoding="utf-8"))["furb"] for one in EXTENSIONS.glob("*/package.json")}
+
+
+def test_every_extension_has_a_manifest_a_contract_and_a_suite() -> None:
+  """An extension of the repository is held to the laws of a builtin: its manifest names its python part, whose
+  contract stands beside it under the same name, and its suite stands in its folder test."""
+  found = manifests()
+  assert found, "the repository holds no extension"
+  for root, manifest in found.items():
+    python = manifest.get("python")
+    assert isinstance(python, str), f"{root.name} names no python part"
+    assert (root / python).is_file() and (root / python).with_suffix(".pyi").is_file(), f"{root.name} has no contract"
+    assert (root / "test").is_dir(), f"{root.name} has no suite"
+
+
 def test_no_word_of_a_builtin_binds_a_name_again_beneath_itself() -> None:
-  """The word of a builtin runs in the module of a chain, which binds every name of the engine and of the words
-  played before it, so a name bound in a scope of the word is bound again beneath the names of the engine too. The
-  word is what the crate makes of the module, less its imports of furb, and an import that binds a name the way the
-  engine or another word binds it keeps the one meaning of that name."""
+  """The word of a builtin, or of an extension of the repository, runs in the module of a chain, which binds every
+  name of the engine and of the words played before it, so a name bound in a scope of the word is bound again beneath
+  the names of the engine too. The word is what the crate makes of the module, less its imports of furb, and an import
+  that binds a name the way the engine or another word binds it keeps the one meaning of that name."""
   engine = PY.read_text(encoding="utf-8")
-  words = {one.name: word_of(one.read_text(encoding="utf-8")) for one in sorted(BUILTIN.glob("*.py"))}
+  modules = [*sorted(BUILTIN.glob("*.py")), *(root / str(one["python"]) for root, one in manifests().items())]
+  words = {one.name: word_of(one.read_text(encoding="utf-8")) for one in modules}
   dark = []
   for one, text in words.items():
     others = [engine, *(other for name, other in words.items() if name != one)]
