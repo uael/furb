@@ -1532,7 +1532,14 @@ export class App {
       // feed never moves a card once it shows it.
       const position = new Map(w.activity.map((act, index) => [act.id, index]));
       const untold = w.activity
-        .filter((act) => !told.has(act.id) && !waiting.has(act.id) && this.isPoint(act))
+        // A rung that a cancel ended before it wrote a word shows nothing, since its message says the cancel.
+        .filter(
+          (act) =>
+            !told.has(act.id) &&
+            !waiting.has(act.id) &&
+            this.isPoint(act) &&
+            !(act.kind === "rung" && cancelled(act) && !w.program[act.id]),
+        )
         .map((act) => ({
           at: position.get(act.id) ?? Number.POSITIVE_INFINITY,
           item: (w.isUserPrompt(act) || asksOperator(act)
@@ -2238,19 +2245,19 @@ export class App {
     ];
   }
   /** Where a message of the operator stands, which its panel says at its right: the type of the answer that it asks
-   * for, and a mark and a word while it is not answered, or when a cancel or a failure ended it. */
+   * for, and a mark and a word only when a cancel or a failure ended it, or a pause holds it. */
   private promptState(act: ActRow): Part[] {
     const shape: Part = [String(act.words[0] ?? ""), c.faint];
-    const { word, mark, color } = act.done
+    const state = act.done
       ? failed(act)
         ? { word: "failed", mark: glyph.failed, color: c.danger }
         : cancelled(act)
           ? { word: "cancelled", mark: glyph.cancelled, color: c.faint }
-          : { word: "", mark: glyph.done, color: c.success }
+          : undefined
       : act.paused || this.session.world.pending.has(act.id)
         ? { word: "waits for resume", mark: glyph.held, color: c.warning }
-        : { word: "answering", mark: glyph.running, color: c.accent };
-    return [shape, [`   ${mark}`, color], [word ? ` ${word}` : "", color]];
+        : undefined;
+    return state ? [shape, [`   ${state.mark} ${state.word}`, state.color]] : [shape];
   }
   /** The model of an actor by its name alone, with no provider, and its effort. */
   private model(actor: string): { name: string; effort: string } {

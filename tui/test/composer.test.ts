@@ -507,10 +507,15 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
     await session.refresh();
     const shown = await frame();
-    expect(shown).toContain("cancelled");
     expect(shown).not.toContain("failed");
     expect(shown).not.toContain("CancelledError");
-    // The first message and what it made stand above the second message.
-    expect(shown.indexOf("show live progress")).toBeLessThan(shown.indexOf("cancelled"));
-    expect(shown.indexOf("cancelled")).toBeLessThan(shown.indexOf("A second message."));
+    // The first message says its cancel at its right, above the second message, and the rung that the cancel ended
+    // before it wrote a word shows nothing.
+    const lines = shown.split("\n");
+    const first = lines.findIndex((line) => line.includes("show live progress"));
+    expect(lines[first]).toContain("⊘ cancelled");
+    expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
+    expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);
+    // A message that its answer closed says no state, only the type of its answer.
+    expect(lines.find((line) => line.includes("A second message."))).not.toContain("✓");
   }));
