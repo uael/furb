@@ -31,3 +31,17 @@ fn a_file_python_cannot_parse_is_its_own_word() {
   let broken = "from furb.engine import ask\nx = (\n";
   assert_eq!(word(broken), broken);
 }
+
+#[test]
+fn a_line_end_is_lf_on_every_machine() {
+  assert_eq!(word("x = 1\r\ny = 2\r\n"), "x = 1\ny = 2\n");
+  assert_eq!(word("from furb.engine import ask\r\nx = ask\r\n"), "\nx = ask\n");
+}
+
+#[test]
+fn every_other_byte_stays_as_it_is() {
+  let module = "x = '''a  \nb\t'''   \nfrom furb.engine import ask\ny = 2  \n";
+  assert_eq!(word(module), "x = '''a  \nb\t'''   \n\ny = 2  \n");
+  let plain = "x = 1   \n\n\ny = 2";
+  assert_eq!(word(plain), plain);
+}

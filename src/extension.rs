@@ -12,16 +12,19 @@ use ruff_text_size::{Ranged, TextRange};
 /// The package the engine and the extensions are imported from, whose imports a word leaves out.
 const PACKAGE: &str = "furb";
 
-/// The word of a python part: the file with every top-level `from furb... import` made blank, and nothing else
-/// changed.
+/// The word of a python part: the file with its line ends made LF, and every top-level `from furb... import` made
+/// blank, and nothing else changed.
 ///
-/// Each line of such an import becomes an empty line, so every other line keeps its number and a finding of the
-/// gate points at the line of the file. An import that shares its line with another statement leaves that
-/// statement, and the semicolon between the two goes with the import. A file python cannot parse is its own word,
-/// since the gate refuses it with what it finds, and a file with no such import is a word already.
+/// A line end is LF first, so a word is the same on every machine, and a clone that writes CRLF plays no word
+/// again. Each line of such an import becomes an empty line, so every other line keeps its number and a finding of
+/// the gate points at the line of the file. An import that shares its line with another statement leaves that
+/// statement, and the semicolon between the two goes with the import. Every other byte stays as it is, the space at
+/// the end of a line among them, since a string may hold it. A file python cannot parse is its own word, since the
+/// gate refuses it with what it finds, and a file with no such import is a word already.
 pub fn word(source: &str) -> String {
-  let Ok(parsed) = ruff_python_parser::parse_module(source) else {
-    return source.to_owned();
+  let source = source.replace("\r\n", "\n");
+  let Ok(parsed) = ruff_python_parser::parse_module(&source) else {
+    return source;
   };
   let mut cuts: Vec<TextRange> = parsed
     .syntax()
@@ -41,14 +44,14 @@ pub fn word(source: &str) -> String {
     })
     .collect();
   cuts.reverse();
-  let mut out = source.to_owned();
+  let mut out = source.clone();
   for cut in cuts {
     let (start, end) = (usize::from(cut.start()), usize::from(cut.end()));
     let (start, end) = joined(&out, start, end);
     let kept: String = out[start..end].chars().filter(|&c| c == '\n').collect();
     out.replace_range(start..end, &kept);
   }
-  out.lines().map(str::trim_end).collect::<Vec<_>>().join("\n") + if source.ends_with('\n') { "\n" } else { "" }
+  out
 }
 
 /// The span of an import with the semicolon that joins it to a statement on its line: the one after it, or else

@@ -363,6 +363,13 @@ fn gate(py: Python<'_>, sheet: &str) -> PyResult<Vec<(usize, String)>> {
   }
 }
 
+/// The word of the python part of an extension, which a host plays as a rung: the file less its imports of the
+/// engine and of the extensions, as the crate makes it for every host.
+#[pyfunction]
+fn word(source: &str) -> String {
+  crate::extension::word(source)
+}
+
 /// What the engine raised, raised here as the exception it is.
 fn raised(py: Python<'_>, made: &Made, fault: &Fault) -> PyErr {
   match fault_to_python(py, made, fault) {
@@ -655,5 +662,6 @@ fn bare(shown: &str) -> String {
 fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<Life>()?;
   module.add_function(wrap_pyfunction!(gate, module)?)?;
+  module.add_function(wrap_pyfunction!(word, module)?)?;
   Ok(())
 }
