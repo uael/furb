@@ -142,7 +142,7 @@ test("pause holds a model response until wake and cancel rejects a native await"
   expect(await result).toContain("CancelledError");
 });
 
-test("text, command results, and engine callables cross N-API", async () => {
+test("text and engine callables cross N-API, and a word reads what a command came to", async () => {
   const { life } = await open();
   const text = said(life, "read", ["a"]);
   expect(text).toEqual({ is: "Text", path: "a", content: "one\ntwo\n", before: null });
@@ -153,12 +153,9 @@ test("text, command results, and engine callables cross N-API", async () => {
   const command = said<string>(life, "bash", ["fake"], { fed: true });
   await life.send("out", command, ["hello\n", "stdout"]);
   await life.send("exited", command, [0]);
-  const exit = await life.result(command);
-  expect(exit).toMatchObject({
-    is: "Exit",
-    code: 0,
-    stdout: { is: "Text", path: `${command}/stdout`, content: "hello\n" },
-  });
+  // What a command came to is the engine's own, which a word reads, and nothing of it crosses to the host.
+  const word = `exit = await ${command}\nclose([exit.code, exit.stdout.content])`;
+  expect(await life.result<unknown[]>(life.rung(word).id)).toEqual([0, "hello\n"]);
 });
 
 test("the World closes the start of an act whose kind no part does with why", async () => {

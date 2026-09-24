@@ -147,25 +147,20 @@ test("a part for a World must be the default export of its file, a function", as
   }
 });
 
-test("an instance of the engine crosses as its class and its fields, and comes back in as one", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-instance-"));
+test("the World holds what a command came to as the plain data its part made, and no class of the engine", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-exit-"));
   const world = new World({ cwd });
   try {
     const life = world.open();
     const id = verb<string>(life, "bash", ["printf out"]);
-    expect(await life.result<object>(id)).toEqual({
-      is: "Exit",
+    await life.result(id);
+    const value = world.activity.acts.get(id)?.value;
+    expect(value).toEqual({
       code: 0,
-      stdout: { is: "Text", path: `${id}/stdout`, content: "out", before: null },
-      stderr: { is: "Text", path: `${id}/stderr`, content: "", before: null },
+      stdout: { path: `${id}/stdout`, content: "out" },
+      stderr: { path: `${id}/stderr`, content: "" },
     });
-    expect(verb<object>(life, "write", [{ is: "Text", path: "made.txt", content: "made\n" }])).toEqual({
-      is: "Text",
-      path: join(cwd, "made.txt"),
-      content: "made\n",
-      before: null,
-    });
-    expect(await readFile(join(cwd, "made.txt"), "utf8")).toBe("made\n");
+    expect(JSON.stringify(value)).not.toContain('"is"');
   } finally {
     await world.dispose();
     await rm(cwd, { recursive: true, force: true });

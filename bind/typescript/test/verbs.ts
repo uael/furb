@@ -1,4 +1,4 @@
-import { type Life, unwrapped } from "../src/index.ts";
+import type { Life, World } from "../src/index.ts";
 
 /** A verb said by the operator on a chain, the root when the words name none: a verb of the engine, or one that an
  * extension bound on that chain. */
@@ -40,11 +40,11 @@ export function write(
   return life.call<[unknown, { path: string; content: string }]>("ask", ["write", on, path, content], {})[1];
 }
 
-/** The exit of a command, as its plain data. */
+/** What a command came to, as the World holds it: its code and its streams, each a path and a content. */
 export interface Exit {
   code: number | null;
-  stdout: Text;
-  stderr: Text;
+  stdout: { path: string; content: string };
+  stderr: { path: string; content: string };
 }
 
 /** A command that the bash extension runs, by the name of its act. */
@@ -57,7 +57,9 @@ export function bash(
   return life.call<string>("bash", [command], { on, ...kwargs });
 }
 
-/** What a command came to, as its plain data. */
-export async function exited(life: Life, id: string): Promise<Exit> {
-  return unwrapped<Exit>(await life.result(id));
+/** What a command came to, once it is done, as the World holds it: the part of the bash extension makes it of the
+ * facts of the World, so no value of the engine crosses for it. */
+export async function exited(world: World, life: Life, id: string): Promise<Exit> {
+  await life.result(id);
+  return world.activity.acts.get(id)?.value as Exit;
 }

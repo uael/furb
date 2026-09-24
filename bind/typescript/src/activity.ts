@@ -150,7 +150,10 @@ export class Activity {
         if (!act.done && act.by !== "world" && (act.started || act.kind === "prompt" || act.kind === "rung"))
           this.completed++;
         act.done = true;
-        act.value = fact[3];
+        // An act of a part that gives its value keeps that value, which the part made of the facts of the World, so
+        // no value of the engine crosses for it; a fault it came to stands in its place.
+        const owned = this.views.some((part) => part.kinds?.includes(act.kind) && part.live?.born);
+        if (!owned || exception(fact[3])) act.value = fact[3];
         this.mark(act);
         this.updateRun(act);
         for (const child of this.children.get(id) ?? []) {

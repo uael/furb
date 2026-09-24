@@ -98,8 +98,13 @@ export default function bash(context: WorldContext): WorldPart {
           return undefined;
         }
         const act = acts.get(id);
-        if (kind !== "out" || act?.kind !== "bash" || act.done) return undefined;
+        if (act?.kind !== "bash" || act.done) return undefined;
         const value = act.value as Streams;
+        if (kind === "exited") {
+          value.code = typeof fact[3] === "number" ? fact[3] : null;
+          return act;
+        }
+        if (kind !== "out") return undefined;
         const stream = fact[4] === "stderr" && merged.get(act) === false ? value.stderr : value.stdout;
         stream.content += String(fact[3]);
         return act;

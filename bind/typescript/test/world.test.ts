@@ -237,21 +237,22 @@ test("the default World serves files and streams commands without any TUI", asyn
   const cwd = await mkdtemp(join(tmpdir(), "furb-world-"));
   const session = await boot({ cwd });
   try {
-    const { life } = session;
+    const { life, world } = session;
+    if (!world) throw new Error("The session has no World.");
     expect(verb<string>(life, "cwd")).toBe(cwd);
     write(life, "hello.txt", "hello\n");
     expect(read(life, "hello.txt").content).toBe("hello\n");
     const command = bash(life, "printf 'snow: 雪\\n'; printf 'problem\\n' >&2", {
       show_err: life.held("modules", [life.root, "TAIL"], "at"),
     });
-    const result = await exited(life, command);
+    const result = await exited(world, life, command);
     expect(result.code).toBe(0);
     expect(result.stdout.content).toBe("snow: 雪\n");
     expect(result.stderr.content).toBe("problem\n");
     const input = bash(life, "cat", { fed: true });
     write(life, `${input}/stdin`, "fed\n");
     write(life, `${input}/stdin`, "");
-    expect((await exited(life, input)).stdout.content).toBe("fed\n");
+    expect((await exited(world, life, input)).stdout.content).toBe("fed\n");
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
@@ -451,7 +452,7 @@ test("input sent to a pending command before it starts reaches its process after
     write(life, `${command}/stdin`, "before start\n");
     write(life, `${command}/stdin`, "");
     await second.resume();
-    expect((await exited(life, command)).stdout.content).toBe("before start\n");
+    expect((await exited(second, life, command)).stdout.content).toBe("before start\n");
   } finally {
     await second.dispose();
     await rm(cwd, { recursive: true });
@@ -559,7 +560,7 @@ test("a command an earlier World started and did not end runs again once, at the
     expect(await readFile(join(cwd, "count"), "utf8")).toBe("x");
     await second.resume();
     // What the command told before the death of its process stands in its door.
-    expect(await exited(resumed, command)).toMatchObject({
+    expect(await exited(second, resumed, command)).toMatchObject({
       code: 0,
       stdout: { content: "ready" },
     });
@@ -831,7 +832,7 @@ test("the World ends a command only at a control that covers it, so a close of t
     life.cancel(cancelled.id);
     await expect(life.result("bash1")).rejects.toThrow("CancelledError");
     expect(await life.prompt<number>("int", "go")).toBe(1);
-    const late = await exited(life, "bash2");
+    const late = await exited(world, life, "bash2");
     expect([late.code, late.stdout.content]).toEqual([0, "late\n"]);
   } finally {
     await session.dispose();
@@ -848,7 +849,9 @@ test("a timeout or a wait past the longest timer runs its full time, and a comma
     const wait = life.wait(month).id;
     const long = bash(life, "sleep 1; echo finished", { timeout: month });
     const endless = bash(life, "sleep 1; echo finished", { timeout: null });
-    const exits = await Promise.all([exited(life, long), exited(life, endless)]);
+    const world = session.world;
+    if (!world) throw new Error("The session has no World.");
+    const exits = await Promise.all([exited(world, life, long), exited(world, life, endless)]);
     expect(exits.map((exit) => exit.code)).toEqual([0, 0]);
     expect(life.outcome(wait).done).toBe(false);
   } finally {
