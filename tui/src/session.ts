@@ -13,7 +13,6 @@ import {
   imageReferences,
   saveFile,
   shapes,
-  unwrapped,
 } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
 import { createTwoFilesPatch } from "diff";
@@ -230,8 +229,7 @@ export class Session extends EventEmitter {
   set theme(value: ThemeName) {
     this.preferences.save(value);
   }
-  /** Every fact of an act refreshes the views, whatever the kind an extension gave it, and a fact of a query of the
-   * moment, whose name holds an @, refreshes nothing. */
+  /** A fact refreshes the views, whatever its kind, unless it is of a query, whose name holds an @. */
   private factsChanged = (facts: Fact[]) => {
     if (facts.some(([, id]) => !id.includes("@"))) void this.refresh().catch(this.fail);
   };
@@ -421,12 +419,10 @@ export class Session extends EventEmitter {
   get played(): string[] {
     return this.world.extensions.flatMap((one) => (one.life ? [one.name] : []));
   }
-  /** What a reference holds, which the operator follows: the text at a path, as the read of the chain on screen gives
-   * it, the program of a prompt among them, which its door gives. A read of the operator outside an act tells
-   * nothing, so it takes no show. */
-  async follow(value: string): Promise<string> {
-    return unwrapped<{ content: string }>(await this.life.call("read", [value], { on: this.selected }))
-      .content;
+  /** The text at a path, as a read of the chain on screen gives it: a file, or the program of a prompt, which its door
+   * gives. A read of the operator outside an act tells nothing, so it takes no show. */
+  async read(path: string): Promise<string> {
+    return ((await this.life.call("read", [path], { on: this.selected })) as { content: string }).content;
   }
   /** The act that a name or a door names: the act whose name is the first part of the path. */
   actOf(path: string): ActRow | undefined {
@@ -534,7 +530,7 @@ export class Session extends EventEmitter {
     try {
       for (let entry = next(); entry; entry = next()) {
         passed.add(entry.id);
-        await this.attachFiles(entry.text, entry.chain);
+        await this.prompting(entry.text, entry.chain);
         if (!queued(entry)) continue;
         this.track(await this.world.sendQueued(entry));
         this.queued = this.queued.filter((item) => item.id !== entry.id);
@@ -564,37 +560,23 @@ export class Session extends EventEmitter {
     this.save();
     this.notice = "Follow-up removed.";
   }
-  /** What the parts of the extensions do before a message is sent on a chain, as the files extension reads each
-   * file that the message names with @. */
-  private async attachFiles(text: string, chain = this.selected): Promise<void> {
-    await this.world.parts.prompting(text, await this.contextOf(chain));
+  /** What the parts of the extensions do before a message is sent on a chain. */
+  private async prompting(text: string, chain = this.selected): Promise<void> {
+    // The chain answers where it stands itself, since a life that takes no files binds no cwd.
+    const [, here] = (await this.life.call("ask", ["cwd", chain], {})) as [unknown, string];
+    await this.world.parts.prompting(text, this.tuiContext(chain, resolve(this.world.directory, here)));
   }
-  /** Where the paths of a chain resolve: the directory of the World, and what the `cwd` of the chain gives, when
-   * the chain binds one. */
-  private async directoryOf(chain: string): Promise<string> {
-    if (chain === this.selected) return this.workingDirectory;
-    const here = await this.life.call("cwd", [], { on: chain }).catch(() => "");
-    return resolve(this.world.directory, String(here));
-  }
-  /** What a part of an extension is given on a chain: the life, the chain and where its paths resolve, and the ways
-   * to reach this session. */
-  async contextOf(chain = this.selected): Promise<TuiContext> {
-    return this.contextOn(chain, await this.directoryOf(chain));
-  }
-  /** What a part of an extension is given on the chain on screen, now, with the files of the project as the view has
-   * read them. */
-  here(files?: () => string[] | undefined): TuiContext {
-    return this.contextOn(this.selected, this.workingDirectory, files);
-  }
-  private contextOn(chain: string, directory: string, files?: () => string[] | undefined): TuiContext {
+  /** What a part of an extension is given on a chain whose paths resolve against a directory, with the files of the
+   * project as the view has read them. */
+  tuiContext(chain: string, directory: string, files = (): string[] | undefined => undefined): TuiContext {
     return {
       life: this.life,
       chain,
       directory,
       acts: this.acts,
       call: (verb, args = [], kwargs = {}) => this.life.call(verb, args, { on: chain, ...kwargs }),
-      path: (typed) => this.path(typed),
-      projectFiles: files ?? (() => undefined),
+      path: (typed) => resolve(directory, expandHome(typed)),
+      projectFiles: files,
       notify: (message) => {
         this.notice = message;
       },
@@ -697,8 +679,8 @@ export class Session extends EventEmitter {
     if (!text) return;
     this.error = "";
     this.notice = "";
-    // No program of Python starts with a slash, so a slash command is a command under edit too, as it is in Python.
     const prefixed = this.world.parts.prefixed(text);
+    // No program of Python starts with a slash, so a slash command is a command under edit too, as it is in Python.
     if (text.startsWith("/")) await this.command(text);
     else if (this.editing) {
       await this.life.result(
@@ -708,12 +690,12 @@ export class Session extends EventEmitter {
       );
       this.notice = "Program updated and replayed.";
       this.editing = undefined;
-    } else if (prefixed) await this.command(`/${prefixed.command} ${prefixed.argument}`);
+    } else if (prefixed) await this.command(prefixed);
     else {
       const pending = this.operatorPrompt;
       if (pending) await this.world.answer(pending.id, input);
       else {
-        await this.attachFiles(input);
+        await this.prompting(input);
         this.redo = [];
         const pending = this.world.pending.size > 0;
         const id = await this.life.prompt(this.shape, this.withImages(input), {
@@ -842,9 +824,9 @@ export class Session extends EventEmitter {
                 this.activity.some((rung) => rung.by === act.id && Object.hasOwn(this.program, rung.id)),
             )?.id;
         if (!id) throw new Error("There is no prompt program to edit.");
-        const got = unwrapped<{ content: string }>(await this.life.call("read", [id], { on: this.selected }));
+        const program = await this.read(id);
         this.editing = id;
-        this.emit("compose", this.drafts[this.draftKey] ?? got.content);
+        this.emit("compose", this.drafts[this.draftKey] ?? program);
         this.notice = "Edit the Python program, then submit to replay it.";
         break;
       }
@@ -880,7 +862,7 @@ export class Session extends EventEmitter {
       default: {
         const given = this.world.parts.commands.get(command);
         if (!given) throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
-        await given.run(argument, await this.contextOf());
+        await given.run(argument, this.tuiContext(this.selected, this.workingDirectory));
       }
     }
   }

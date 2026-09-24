@@ -171,9 +171,6 @@ const valued = new Set([
   "close",
   "extensions",
 ]);
-/** The commands of the TUI whose value is a path of the project, which the suggestions wait for. A command of an
- * extension whose value is a path joins them. */
-const pathCommands = new Set(["image"]);
 /** What each effort of a model does, which the picker of the effort says beside it. */
 const efforts: Record<string, string> = {
   off: "Answer with no thought first",
@@ -1748,7 +1745,6 @@ export class App {
             (box) => {
               const details = this.box({ paddingLeft: space.between * 2 });
               if (act) details.add(this.reference(act.id, act.id));
-              // A note whose header word names a path, as a read and a write do, makes the path a reference.
               if (!act && detail && this.session.world.parts.paths.has(label))
                 details.add(this.reference(detail, detail));
               else if (detail) details.add(this.text(detail, c.muted));
@@ -2145,9 +2141,7 @@ export class App {
       return (box) =>
         this.excerpt(box, `${fault.is}: ${fault.args.map(display).join(", ")}`, false, c.danger);
     }
-    // The part of an act shows what it likes under its heading, as a command shows the tail of what it prints while
-    // it runs and folds to its heading once it is over.
-    const shown = this.session.world.parts.view(act.kind)?.preview?.(act);
+    const shown = this.session.world.parts.views.get(act.kind)?.preview?.(act);
     if (shown) return (box) => this.excerpt(box, shown.text, shown.tail);
     // The answer of a prompt is markdown, whose marks of a heading, of emphasis, and of code the preview leaves out.
     if (act.kind === "prompt" && act.done && act.value !== null)
@@ -2165,7 +2159,7 @@ export class App {
   private actState(act: ActRow): { word: string; mark: string; color: RGBA } {
     const w = this.session;
     const running = () => ({ word: `running ${this.progress(act.id)}`, mark: spin(), color: c.accent });
-    const view = w.world.parts.view(act.kind);
+    const view = w.world.parts.views.get(act.kind);
     if (view?.standing)
       return act.done
         ? { word: "ended", mark: glyph.ring, color: c.faint }
@@ -2207,7 +2201,7 @@ export class App {
   private actLabel(act: ActRow, closed = false, indent = 0, code?: string): Part[] {
     const { word, mark, color } = this.actState(act);
     const observation = act.kind === "prompt" && !this.session.isUserPrompt(act);
-    const view = this.session.world.parts.view(act.kind);
+    const view = this.session.world.parts.views.get(act.kind);
     const subject =
       act.kind === "prompt"
         ? String(act.words[1]).replace(observation ? / done$/ : /$^/, "")
@@ -2310,12 +2304,12 @@ export class App {
     }
     const details = this.box({ paddingLeft: space.between * 2, gap: space.stack });
     box.add(details);
-    const view = this.session.world.parts.view(act.kind);
+    const view = this.session.world.parts.views.get(act.kind);
     if (view?.details) {
       this.partDetails(details, act);
       return;
     }
-    const fields: Record<string, readonly string[]> = {
+    const fields: Record<string, string[]> = {
       prompt: ["shape", "message", "actor"],
       rung: ["word", "retells", "actor", "returns"],
       wait: ["seconds"],
@@ -2338,7 +2332,7 @@ export class App {
   /** What the part of an act shows of it once its card opens: its streams of text, each named when it names one and
    * in the color of a failure when it is one, and under them its name and its notes. */
   private partDetails(details: BoxRenderable, act: ActRow): void {
-    const read = (row: ActRow) => this.session.world.parts.view(row.kind)?.details?.(row);
+    const read = (row: ActRow) => this.session.world.parts.views.get(row.kind)?.details?.(row);
     const { streams = [], notes = [] } = read(act) ?? {};
     const shown: TextRenderable[] = [];
     for (const stream of streams) {
@@ -2416,7 +2410,7 @@ export class App {
     if (value.startsWith("furb-image://")) this.imageActions(value);
     else if (act?.kind === "chain") await this.session.select(act.id);
     else if (act && act.id === value && act.on === this.session.selected) this.go("feed", act.id);
-    else this.showValue(value, await this.session.follow(value));
+    else this.showValue(value, await this.session.read(value));
   }
 
   private async referenceHover(value: string, x: number, y: number): Promise<void> {
@@ -2426,7 +2420,7 @@ export class App {
         ? "Image attachment. Click to open its actions."
         : act
           ? `${act.kind}  ${act.done ? display(act.value) : "pending"}`
-          : await this.session.follow(value);
+          : await this.session.read(value);
       if (this.closed || this.overlay) return;
       this.hover?.destroyRecursively();
       this.hover = this.box({
@@ -3383,7 +3377,8 @@ export class App {
       })),
     );
   };
-  /** The extensions that the session plays: where each stands, and the parts it has. A choice fetches them all again. */
+  /** The extensions that the session plays: where each stands, and the parts it has. The last choice fetches them all
+   * again. */
   private extensionsList(): void {
     const world = this.session.world;
     this.openPalette("Extensions", [
@@ -3716,9 +3711,10 @@ export class App {
     }
     return this.files.paths;
   }
-  /** Whether the value of a command is a path of the project, which the suggestions wait for. */
+  /** Whether the value of a command is a path of the project, which the suggestions wait for: an image, or the value
+   * of a command of an extension that says so. */
   private pathCommand(name: string): boolean {
-    return pathCommands.has(name) || Boolean(this.session.world.parts.commands.get(name)?.paths);
+    return name === "image" || Boolean(this.session.world.parts.commands.get(name)?.paths);
   }
   /** The values that the first argument of a command may take, each with what it means, or nothing for a command
    * whose argument is free text. A value of a command that takes more after it completes, and a value of any other
@@ -3790,7 +3786,9 @@ export class App {
       case "extensions":
         return [{ value: "update", detail: "Fetch every extension again; a new session plays the change" }];
       default:
-        return w.world.parts.commands.get(command)?.values?.(w.here(() => this.projectPaths()));
+        return w.world.parts.commands
+          .get(command)
+          ?.values?.(w.tuiContext(w.selected, w.workingDirectory, () => this.projectPaths()));
     }
   }
   private suggest = (): void => {
@@ -4370,7 +4368,7 @@ export class App {
         run: () => {
           if (act.kind === "chain") return this.session.select(act.id);
           void this.session
-            .follow(value)
+            .read(value)
             .then((text) => this.showValue(value, text))
             .catch(this.report);
         },

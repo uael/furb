@@ -2,7 +2,6 @@ import { afterAll, expect, test } from "bun:test";
 import { link, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, extname, join } from "node:path";
-import { unwrapped } from "@furb/engine";
 import { createTestRenderer } from "@opentui/core/testing";
 import { executable } from "../../bind/typescript/test/executable.ts";
 import { remove } from "../../bind/typescript/test/processes.ts";
@@ -292,7 +291,7 @@ test("file and shell shortcuts, an external editor, and a safe standalone share 
       (act) => act.kind === "bash" && act.words[0] === "printf shell-shortcut",
     );
     if (!shell) throw new Error("No shell shortcut act.");
-    expect(unwrapped(await session.life.result(shell.id))).toMatchObject({
+    expect(await session.life.result(shell.id)).toMatchObject({
       code: 0,
       stdout: { content: "shell-shortcut" },
     });

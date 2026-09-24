@@ -1,11 +1,7 @@
-import type { LiveAct, TuiContext, TuiPart } from "@furb/engine";
+import type { TuiContext, TuiPart } from "@furb/engine";
 import { dollars, share } from "../format.ts";
 
-/** The grant of a chain that stands: the last one that lives. */
-const standing = (acts: readonly LiveAct[], chain: string) =>
-  acts.findLast((act) => act.kind === "grant" && act.on === chain && !act.done);
-
-/** A grant on the chain on screen, which the session refuses when the grant ended at once. */
+/** A grant on the chain on screen, which throws what refused it when it ended at once. */
 async function grant(context: TuiContext, usd: number | null, part: number | null): Promise<void> {
   const id = String(await context.call("grant", [usd, part]));
   const got = await context.life.outcome(id);
@@ -67,15 +63,12 @@ export default function grants(): TuiPart {
     },
     quiet: ["ledger"],
     sidebar({ acts, chain }) {
-      const held = standing(acts, chain);
+      const held = acts.find((act) => act.kind === "grant" && act.on === chain && !act.done);
       if (!held) return undefined;
       const [usd, part] = held.words;
       return {
-        rows:
-          usd === null || usd === undefined
-            ? []
-            : [{ name: "Ceiling", value: dollars(Number(usd)), tone: "muted" }],
-        ...(part === null || part === undefined
+        rows: usd === null ? [] : [{ name: "Ceiling", value: dollars(Number(usd)), tone: "muted" }],
+        ...(part === null
           ? {}
           : {
               meter: { mark: Number(part), tip: `, pauses at ${Number((Number(part) * 100).toFixed(1))}%` },

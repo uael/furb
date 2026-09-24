@@ -78,7 +78,7 @@ export declare class RecordLock {
   dispose(): void
 }
 
-/** The builtin extensions, files, bash and grant, in the order a host plays them. */
+/** The builtin extensions, files, bash and grant, in the order a host takes them. */
 export declare function builtinExtensions(): Array<Extension>
 
 /** The cache directory of the user, as the environment of JavaScript says it. */
@@ -159,7 +159,7 @@ export declare function resolveExtensions(project: string, options?: ResolveOpti
 
 /**
  * What a resolution of the extensions of a project does beside reading: fetch each one again, and install the
- * dependencies of an extension whose part for a World is TypeScript.
+ * dependencies of an extension whose part for a World is TypeScript, which it does unless `install` is false.
  */
 export interface ResolveOptions {
   refresh?: boolean

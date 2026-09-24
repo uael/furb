@@ -3,15 +3,15 @@ import { commands } from "./commands.ts";
 
 /** The parts of the extensions for the TUI, merged: the commands, the prefixes, the views of the acts of their kinds,
  * the quiet header words, the header words whose detail is a path, and what each adds to the sidebar and does before
- * a prompt. Two parts that claim one command, one prefix or one kind of act are refused, with both names. */
+ * a prompt. A part that claims a command of the TUI, or one command, prefix or kind of act that another part claims,
+ * is refused, with the names. */
 export class Parts {
   readonly commands = new Map<string, TuiCommand>();
-  /** Each prefix of the input, and the command it says. */
-  readonly prefixes = new Map<string, string>();
+  readonly views = new Map<string, ActView>();
   readonly quiet = new Set<string>();
   readonly paths = new Set<string>();
-  private readonly views = new Map<string, ActView>();
-  constructor(readonly list: readonly { name: string; part: TuiPart }[] = []) {
+  private readonly prefixes = new Map<string, string>();
+  constructor(private readonly list: readonly { name: string; part: TuiPart }[] = []) {
     const owners = new Map<string, string>();
     const claim = (what: string, owner: string) => {
       const before = owners.get(what);
@@ -37,10 +37,6 @@ export class Parts {
       for (const word of part.paths ?? []) this.paths.add(word);
     }
   }
-  /** How the acts of a kind show, and nothing for a kind that no part shows. */
-  view(kind: string): ActView | undefined {
-    return this.views.get(kind);
-  }
   /** Whether an act is no card, no point to rewind to, and no state of its chain: a chain, or an act that its part
    * hides. */
   hidden(act: LiveAct): boolean {
@@ -52,19 +48,16 @@ export class Parts {
   }
   /** What the parts add to the sidebar for the chain on screen. */
   sidebar(view: { acts: readonly LiveAct[]; chain: string }): SidebarPart[] {
-    return this.list.flatMap(({ part }) => {
-      const got = part.sidebar?.(view);
-      return got ? [got] : [];
-    });
+    return this.list.flatMap(({ part }) => part.sidebar?.(view) ?? []);
   }
   /** What each part does before a message of the operator is sent, in order. */
   async prompting(message: string, context: TuiContext): Promise<void> {
     for (const { part } of this.list) await part.prompting?.(message, context);
   }
-  /** The command that a prefix of a text says, with the rest of the text as its argument. */
-  prefixed(text: string): { command: string; argument: string } | undefined {
+  /** The slash command that the prefix of a text says, with the rest of the text as its argument. */
+  prefixed(text: string): string | undefined {
     for (const [prefix, command] of this.prefixes)
-      if (text.startsWith(prefix)) return { command, argument: text.slice(prefix.length).trimStart() };
+      if (text.startsWith(prefix)) return `/${command} ${text.slice(prefix.length)}`;
     return undefined;
   }
   async dispose(): Promise<void> {

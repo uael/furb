@@ -105,7 +105,8 @@ export class Snapshots {
     view.program ??=
       this.life.call<[unknown, Record<string, string>]>("ask", ["program", selected], {})[1] ?? {};
     view.turns ??= this.life.turns(selected);
-    view.directory ??= String(this.life.call("cwd", [], { on: selected }));
+    // The chain answers where it stands itself, since a life that takes no files binds no cwd.
+    view.directory ??= this.life.call<[unknown, string]>("ask", ["cwd", selected], {})[1];
     view.actor ??= this.life.held("modules", [selected, "actor"], "at") as string;
     if (this.entries !== this.world.records.entries.length) {
       this.entries = this.world.records.entries.length;

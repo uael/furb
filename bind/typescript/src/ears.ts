@@ -292,7 +292,8 @@ export function worldContext(
     ...given,
     config: configDirectory(),
     *where(on: string): Hearing<string> {
-      return String(yield { verb: "cwd", kwargs: { on } });
+      const [, here] = (yield { verb: "ask", args: ["cwd", on] }) as [unknown, unknown];
+      return String(here);
     },
     at(here: string, path = ""): string {
       if (path.includes("://")) throw new Error(`No file at ${path}.`);

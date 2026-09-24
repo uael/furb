@@ -212,10 +212,7 @@ test("each /feed sends one line, and a /feed with no text closes the input", asy
     );
     expect((await session.life.outcome(command)).done).toBe(false);
     await session.submit(`/feed ${command}`);
-    await session.life.result(command);
-    await session.refresh();
-    // What the command came to is the World's own, which its part made of the facts of the World.
-    expect(session.acts.find((act) => act.id === command)?.value).toMatchObject({
+    expect(await session.life.result(command)).toMatchObject({
       code: 0,
       stdout: { content: "a=[yes] b=[two  words]\n" },
     });

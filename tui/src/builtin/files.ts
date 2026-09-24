@@ -1,11 +1,5 @@
-import type { TuiContext, TuiPart } from "@furb/engine";
+import type { TuiPart } from "@furb/engine";
 import { fileReferences } from "../files.ts";
-
-/** A rung of the operator on the chain on screen, which the session follows in the feed. */
-async function rung(context: TuiContext, word: string): Promise<void> {
-  context.track(String(await context.call("rung", [word])));
-  context.show("feed");
-}
 
 /** The part of the files extension for the TUI: a read and a cd of the chain on screen, the path of a note of a read
  * or a write as a reference, and a read of each file that a message names with @ before the message is sent. */
@@ -18,7 +12,10 @@ export default function files(): TuiPart {
         detail: "Show a file to this chain",
         paths: true,
         values: (context) => (context.projectFiles() ?? []).map((path) => ({ value: path, detail: "" })),
-        run: (path, context) => rung(context, `read(${JSON.stringify(path)})`),
+        async run(path, context) {
+          context.track(String(await context.call("rung", [`read(${JSON.stringify(path)})`])));
+          context.show("feed");
+        },
       },
       cd: {
         label: "Change directory",
@@ -35,7 +32,8 @@ export default function files(): TuiPart {
           ]
             .sort()
             .map((path) => ({ value: path, detail: "" })),
-        run: (path, context) => rung(context, `cd(${JSON.stringify(path)})`),
+        run: async (path, context) =>
+          context.track(String(await context.call("rung", [`cd(${JSON.stringify(path)})`]))),
       },
     },
     paths: ["read", "write"],

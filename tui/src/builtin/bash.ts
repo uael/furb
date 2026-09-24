@@ -1,4 +1,5 @@
 import type { LiveAct, TuiPart } from "@furb/engine";
+import { clip } from "../format.ts";
 
 /** The streams of a command as its act holds them, and its code once it exited. */
 interface Streams {
@@ -34,7 +35,7 @@ export default function bash(): TuiPart {
             .filter(
               (act) => act.on === context.chain && act.kind === "bash" && !act.done && act.words[1] === true,
             )
-            .map((act) => ({ value: act.id, detail: String(act.words[0] ?? "").slice(0, 48), more: true })),
+            .map((act) => ({ value: act.id, detail: clip(String(act.words[0] ?? ""), 48), more: true })),
         async run(argument, context) {
           const space = argument.indexOf(" ");
           const id = space < 0 ? argument : argument.slice(0, space);
@@ -69,13 +70,13 @@ export default function bash(): TuiPart {
                     {
                       label: "exit",
                       text: String(code ?? "timeout"),
-                      tone: code === 0 ? ("success" as const) : ("danger" as const),
-                    },
+                      tone: code === 0 ? "success" : "danger",
+                    } as const,
                   ]
                 : []),
-              ...(input === true ? [{ text: "input open", tone: "faint" as const }] : []),
+              ...(input === true ? [{ text: "input open" }] : []),
               ...(typeof timeout === "number" && timeout !== 600
-                ? [{ text: `times out after ${timeout}s`, tone: "faint" as const }]
+                ? [{ text: `times out after ${timeout}s` }]
                 : []),
             ],
           };

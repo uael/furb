@@ -1,5 +1,5 @@
 import { opens, type Paragraph, paragraphs, type Turn, uncommented } from "@furb/engine";
-import { Parts } from "./parts.ts";
+import type { Parts } from "./parts.ts";
 import { type ActRow, failed } from "./session.ts";
 
 /** One thing the conversation shows, read off the python of the turns of a chain.
@@ -10,8 +10,8 @@ import { type ActRow, failed } from "./session.ts";
  * - `result`: the close of a prompt, and whether other prompts closed in the same turn.
  * - `act`: the open or the end of any other act, which the conversation shows once.
  * - `note`: any other paragraph: what an act told of itself after its open, or a query of a run, by its header.
- *   The rungs of the life words that the World played stand as one note, `extensions`, which names the extensions
- *   whose life words the life plays, and which is `played`.
+ *   The rungs that the World played for the life words of the extensions stand as one note, `extensions`, which
+ *   names those extensions, and which is `played`.
  */
 export type Item =
   | { type: "python"; key: string; code: string; rung?: ActRow }
@@ -28,39 +28,36 @@ export type Item =
       played?: boolean;
     };
 
-/** What the conversation of a chain shows, in the order of its turns, with the parts of the extensions, which say
- * how the acts of their kinds end, which acts no card shows, and which notes are quiet, and the names of the
- * extensions whose life words the World played. */
+/** What the conversation of a chain shows, in the order of its turns. */
 export function conversation(
   turns: readonly Turn[],
   acts: readonly ActRow[],
-  parts = new Parts(),
-  played: readonly string[] = [],
+  parts: Parts,
+  played: readonly string[],
 ): Item[] {
   const rows = new Map(acts.map((act) => [act.id, act]));
   const items: Item[] = [];
   const seen = new Set<string>();
   let rung: ActRow | undefined;
-  let told = false;
+  let named = false;
   for (const [index, [role, python]] of turns.entries()) {
     if (role === "assistant") {
       if (python) items.push({ type: "python", key: `turn-${index}`, code: python, rung });
       if (rung) seen.add(rung.id);
       continue;
     }
-    const said = paragraphs(python);
-    const closes = said.filter(
+    const told = paragraphs(python);
+    const closes = told.filter(
       (paragraph) => rows.get(paragraph.name)?.kind === "prompt" && paragraph.words.startsWith("closed"),
     ).length;
-    for (const [part, paragraph] of said.entries()) {
+    for (const [part, paragraph] of told.entries()) {
       const key = `turn-${index}-${part}`;
       const act = rows.get(paragraph.name);
       const [word = "", ...rest] = paragraph.words.split(" ");
       const shown = () => items.push(note(key, paragraph, act, word, rest.join(" ")));
       if (parts.quiet.has(word)) continue;
       if (act?.kind === "rung" && act.by === "world") {
-        // The life words of the extensions are the World's, and one line names them all, the first time they are told.
-        if (!told)
+        if (!named)
           items.push({
             type: "note",
             key,
@@ -69,7 +66,7 @@ export function conversation(
             body: "",
             played: true,
           });
-        told = true;
+        named = true;
         seen.add(act.id);
       } else if (act?.kind === "rung") {
         if (word === "advance") rung = act;

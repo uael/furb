@@ -29,25 +29,21 @@ async function project(extensions: Record<string, unknown>, run: (session: Sessi
     );
     await writeFile(
       join(cwd, "probe/tui.ts"),
-      [
-        "export default function probe() {",
-        "  return {",
-        "    commands: {",
-        "      hello: {",
-        '        label: "Say hello",',
-        '        detail: "Bind a greeting on the chain",',
-        "        async run(argument, context) {",
-        '          await context.life.result(String(await context.call("rung", ["greeting = " + JSON.stringify(argument)])));',
-        '          context.notify("Hello done.");',
-        "        },",
-        "      },",
-        "    },",
-        '    prefixes: { "?": "hello" },',
-        "    acts: { note: { hidden: true } },",
-        "  };",
-        "}",
-        "",
-      ].join("\n"),
+      `export default () => ({
+  commands: {
+    hello: {
+      label: "Say hello",
+      detail: "Bind a greeting on the chain",
+      async run(argument, context) {
+        await context.life.result(String(await context.call("rung", ["greeting = " + JSON.stringify(argument)])));
+        context.notify("Hello done.");
+      },
+    },
+  },
+  prefixes: { "?": "hello" },
+  acts: { note: { hidden: true } },
+});
+`,
     );
     const { life, world } = await openEngine({ demo: true, cwd, extensions: resolveExtensions(cwd) });
     const session = new Session(life, world, true);
@@ -117,9 +113,15 @@ test("with bash off in the config of the project, ! is text of a message, /bash 
     expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
       "!ls",
     ]);
-    // The engine that runs keeps bash, so a word may still make a command, which the World refuses.
-    for (const act of session.acts.filter((one) => one.kind === "bash"))
-      expect(act.value).toEqual({ is: "Refused", args: ["the World does no bash"] });
+    // The life runs the engine less bash, so the gate refuses the word of the demo, which awaits a command.
+    expect(session.acts.some((act) => act.kind === "bash")).toBe(false);
+  });
+});
+
+test("with files off, a session opens and its chains stand in the directory of the World", async () => {
+  await project({ files: false, bash: false }, async (session) => {
+    expect([...session.world.parts.commands.keys()]).toEqual(["grant", "context"]);
+    expect(session.workingDirectory).toBe(session.world.directory);
   });
 });
 

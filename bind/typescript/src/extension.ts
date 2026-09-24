@@ -56,7 +56,7 @@ export interface WorldContext {
   readonly directory: string;
   /** The config directory of the user, which the config of the extensions stands in. */
   readonly config: string;
-  /** `yield* context.where(on)`: where the paths of a chain resolve, which the `cwd` of the engine gives. */
+  /** `yield* context.where(on)`: where the paths of a chain resolve, which the chain answers. */
   where(on: string): Hearing<string>;
   /** A path of the disk: the directory of the World, where the chain stands, then the path. It throws for a path of
    * a scheme, which names no file. */
@@ -84,17 +84,17 @@ export type Remote<T> = {
     : T[K];
 };
 
-/** What the TUI gives a part: the life, the chain on screen and where its paths resolve, and the ways to reach the
+/** What the TUI gives a part: the life, the chain it acts on and where its paths resolve, and the ways to reach the
  * session. The code of an extension reaches the TUI through this alone. */
 export interface TuiContext {
   life: Remote<Life>;
-  /** The chain on screen. */
+  /** The chain on screen, or the chain of a follow-up that the part sends. */
   chain: string;
-  /** The directory that the paths of the chain on screen resolve against. */
+  /** The directory that the paths of the chain resolve against. */
   directory: string;
   /** The acts of the session, as the views read them, with the value of each as its plain data. */
   acts: readonly LiveAct[];
-  /** A verb said on the chain on screen, unless the keywords name another chain. */
+  /** A verb said on the chain, unless the keywords name another chain. */
   call(verb: string, args?: unknown[], kwargs?: Record<string, unknown>): Promise<unknown>;
   /** A path that the operator typed, with `~` as the home, against the directory of the chain. */
   path(typed: string): string;
@@ -151,7 +151,7 @@ export interface ActView {
   fields?: string[];
 }
 /** What a part adds to the sidebar for the chain on screen: rows under the usage, and a mark on the meter of the
- * context with the words of its tip. */
+ * context with the words of its tip, which the TUI writes right after the words of the meter, as `, pauses at 80%`. */
 export interface SidebarPart {
   rows?: { name: string; value: string; tone?: "muted" | "text" }[];
   meter?: { mark: number; tip: string };
