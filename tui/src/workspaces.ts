@@ -47,6 +47,10 @@ interface ListChange {
   remove?: string;
   archive?: string;
   restore?: string;
+  /** The name that the operator gave the workspace. */
+  name?: string;
+  /** Whether the workspace leaves the list. */
+  drop?: boolean;
 }
 
 /** The workspaces that the file at a path lists, and none when there is no file. A file that holds no list is
@@ -128,25 +132,28 @@ export class Workspaces extends EventEmitter {
       this.refuseList(error);
       return;
     }
-    let group = list.find((group) => group.directory === change.directory);
-    if (!group) {
-      group = {
+    const index = list.findIndex((group) => group.directory === change.directory);
+    if (change.drop) {
+      if (index >= 0) list.splice(index, 1);
+    } else {
+      const group = list[index] ?? {
         directory: change.directory,
         name: basename(change.directory),
         collapsed: false,
         records: [],
         archived: [],
       };
-      list.push(group);
+      if (index < 0) list.push(group);
+      if (change.name !== undefined) group.name = change.name;
+      if (change.collapsed !== undefined) group.collapsed = change.collapsed;
+      if (change.add && !group.records.includes(change.add)) group.records.unshift(change.add);
+      if (change.remove) {
+        group.records = group.records.filter((record) => record !== change.remove);
+        group.archived = group.archived.filter((record) => record !== change.remove);
+      }
+      if (change.archive && !group.archived.includes(change.archive)) group.archived.push(change.archive);
+      if (change.restore) group.archived = group.archived.filter((record) => record !== change.restore);
     }
-    if (change.collapsed !== undefined) group.collapsed = change.collapsed;
-    if (change.add && !group.records.includes(change.add)) group.records.unshift(change.add);
-    if (change.remove) {
-      group.records = group.records.filter((record) => record !== change.remove);
-      group.archived = group.archived.filter((record) => record !== change.remove);
-    }
-    if (change.archive && !group.archived.includes(change.archive)) group.archived.push(change.archive);
-    if (change.restore) group.archived = group.archived.filter((record) => record !== change.restore);
     mkdirSync(dirname(this.path), { recursive: true });
     saveFile(this.path, JSON.stringify({ workspaces: list }));
     if (this.damaged) {
@@ -385,16 +392,49 @@ export class Workspaces extends EventEmitter {
       await this.select(next).catch(() => {});
     }
     if (this.current === entry) await this.create(group);
-    if (entry.session) {
-      const listener = this.subscriptions.get(entry.session);
-      if (listener) entry.session.off("change", listener);
-      this.subscriptions.delete(entry.session);
-      await entry.session.dispose();
-      entry.session = undefined;
-      entry.status = "saved";
-    }
+    if (await this.release(entry)) entry.status = "saved";
     entry.archived = true;
     this.save({ directory: group.directory, add: entry.path, archive: entry.path });
+    this.emit("change");
+  }
+  /** Close the open session of an entry, and tell whether it was open. */
+  private async release(entry: SessionEntry): Promise<boolean> {
+    const session = entry.session;
+    if (!session) return false;
+    const listener = this.subscriptions.get(session);
+    if (listener) session.off("change", listener);
+    this.subscriptions.delete(session);
+    entry.session = undefined;
+    await session.dispose();
+    return true;
+  }
+  /** Give a session or a workspace the name that the operator chose. The saved view of a session keeps its name,
+   * whether the session is open or not, and the list keeps the name of a workspace. */
+  rename(item: SessionEntry | Workspace, name: string): void {
+    item.name = name;
+    if ("sessions" in item) this.save({ directory: item.directory, name });
+    else if (item.session) {
+      item.session.sessionName = name;
+      item.session.save();
+    } else
+      saveFile(`${item.path}.ui.json`, JSON.stringify({ ...savedView(item.path).view, sessionName: name }));
+    this.emit("change");
+  }
+  /** Take a workspace off the list. Its folder and its records stay, and /workspace adds it back. The current
+   * session moves to a session of another workspace first, and the open sessions of the workspace close. */
+  async remove(group: Workspace): Promise<void> {
+    if (group === this.groupOf()) {
+      const other = this.groups.find((one) => one !== group);
+      if (!other) throw new Error("This is the only workspace. Add another one before you remove it.");
+      const next = other.sessions.find((entry) => !entry.archived);
+      await (next ? this.select(next).catch(() => this.create(other)) : this.create(other));
+    }
+    for (const entry of group.sessions) {
+      await this.opening.get(entry.path)?.catch(() => {});
+      await this.release(entry);
+    }
+    this.groups.splice(this.groups.indexOf(group), 1);
+    this.save({ directory: group.directory, drop: true });
     this.emit("change");
   }
   /** Bring an archived session back to the list of its workspace. */
@@ -416,13 +456,7 @@ export class Workspaces extends EventEmitter {
       await this.select(next).catch(() => {});
     }
     if (this.current === entry) await this.create(group);
-    if (entry.session) {
-      const listener = this.subscriptions.get(entry.session);
-      if (listener) entry.session.off("change", listener);
-      this.subscriptions.delete(entry.session);
-      await entry.session.dispose();
-      entry.session = undefined;
-    }
+    await this.release(entry);
     // The lock file moves with the record while this lease holds it, and a process that locked it meanwhile opens
     // the path again.
     const lease = new RecordLock(entry.path);

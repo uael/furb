@@ -184,7 +184,7 @@ test("the standing of a chain is no card of the conversation, though its turns h
   const screen = await createTestRenderer({ width: 120, height: 30 });
   const app = new App(screen.renderer, session, { quit() {} });
   try {
-    session.show("conversation");
+    session.show("feed");
     await session.refresh();
     app.render();
     await screen.flush();
@@ -424,6 +424,31 @@ test("the toggle, the keys of the footer, and the palette answer the mouse, and 
         .find((node) => node.id === card.id)
         ?.getChildren().length,
     ).toBeGreaterThan(1);
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await session.dispose();
+  }
+});
+
+test("the root chain stands in the list of chains when it rests, and the other resting chains fold under Finished", async () => {
+  const session = await demoSession();
+  const screen = await createTestRenderer({ width: 140, height: 30 });
+  const app = new App(screen.renderer, session, { quit() {} });
+  try {
+    const { life } = session;
+    const side = await life.chain("Side", life.root);
+    await life.chain("Notes", life.root);
+    await session.refresh();
+    await session.select(side);
+    app.render();
+    await screen.flush();
+    const left = 140 - session.preferences.sidebarWidth;
+    const rows = screen
+      .captureCharFrame()
+      .split("\n")
+      .map((line) => line.slice(left).trim());
+    expect(rows.slice(1, 4)).toEqual(["○ Main", "▎ ○ Side", "▸ Finished  1"]);
   } finally {
     app.dispose();
     screen.renderer.destroy();

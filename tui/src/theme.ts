@@ -184,6 +184,8 @@ export const glyph = {
   block: "█",
   chip: "■",
   mark: "▎",
+  rename: "✎",
+  remove: "×",
 } as const;
 const spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 /** The time between two frames of the spinner, which the view ticks at. */

@@ -58,7 +58,7 @@ import {
   themeLabels,
 } from "./theme.ts";
 import { bold, italic, lineCounts, logo, mix, type Part, plain, styled } from "./ui.ts";
-import type { SessionEntry, Workspaces } from "./workspaces.ts";
+import type { SessionEntry, Workspace, Workspaces } from "./workspaces.ts";
 
 const exitNotice = "Press ⌃D again to exit.";
 const rewindNotice = "Press Escape again to rewind.";
@@ -212,9 +212,12 @@ export class App {
   private readonly showArchived = new Set<string>();
   /** Whether the sidebar lists the finished chains, which fold under a row of their own. */
   private showResting = false;
+  /** The session or the workspace that the operator renames in its row, and the name typed so far. */
+  private renaming?: { item: SessionEntry | Workspace; value: string; input?: InputRenderable };
+  /** The session or the workspace whose menu is open, whose row stays lit under it. */
+  private menuItem?: SessionEntry | Workspace;
   /** The switch of the mode of the input, which the layout places. */
   private readonly modeBox: BoxRenderable;
-  private readonly railSplitter: BoxRenderable;
   /** Where the operator is, at the left of the top line, and the toggle of the views at its right. */
   private readonly headline: BoxRenderable;
   private readonly toggle: BoxRenderable;
@@ -531,12 +534,6 @@ export class App {
     this.hints = this.box({ height: space.bar, flexDirection: "row" });
     footer.add(this.hints);
     center.add(footer);
-    this.railSplitter = this.splitter((x) => {
-      session.preferences.sidebarWidth = Math.max(26, Math.min(48, renderer.width - x - 1));
-      session.preferences.save();
-      this.render();
-    });
-    this.root.add(this.railSplitter);
     this.rail = this.box({
       id: "sidebar",
       width: session.preferences.sidebarWidth,
@@ -616,20 +613,6 @@ export class App {
   private box(options: BoxOptions = {}): BoxRenderable {
     return new BoxRenderable(this.renderer, { flexDirection: "column", flexShrink: 0, ...options });
   }
-  /** A divider of one column that a drag moves, which shows the accent while the pointer is on it. */
-  private splitter(moved: (x: number) => void): BoxRenderable {
-    return this.box({
-      width: 1,
-      backgroundColor: c.background,
-      onMouseDrag: (event) => moved(event.x),
-      onMouseOver() {
-        this.backgroundColor = c.accent;
-      },
-      onMouseOut() {
-        this.backgroundColor = c.background;
-      },
-    });
-  }
   /** A handler of the release of the left button that runs only for a click: a press and a release on one node that
    * selected no text between them. A drag over a button selects its text and does nothing else, and the release of
    * a press that opened a dialog does not close it. */
@@ -681,32 +664,27 @@ export class App {
     return options.truncate && !options.onMouseOver ? this.whole(node) : node;
   }
   /** A text cut to its room shows the whole of it in a tip while the pointer is over it: the text that the terminal
-   * cut, or the whole that a caller gives for a text that it cut itself. */
+   * cut, or the whole that a caller gives for a text that it cut itself. The tip takes the hover handlers of the text,
+   * since OpenTUI keeps one of each and gives none back. */
   private whole(node: TextRenderable, full?: () => string): TextRenderable {
-    const over = node.onMouseOver,
-      out = node.onMouseOut;
     node.onMouseOver = (event) => {
-      over?.call(node, event);
       // A drag selects text, and no tip comes between the drag and what it selects.
       if (event.isDragging) return;
       const text = full ? full() : node.plainText;
       const cut = full ? text !== node.plainText : Bun.stringWidth(text) > node.width;
       if (cut && text) this.tip([[text, c.text]], event.x, event.y);
     };
-    node.onMouseOut = (event) => {
-      out?.call(node, event);
+    node.onMouseOut = () => {
       this.hover?.destroyRecursively();
       this.hover = undefined;
     };
     return node;
   }
-  /** The columns of the feed: the screen but the sidebar that shows, its divider, and the gutters. It is known
-   * before the feed is laid out. */
+  /** The columns of the feed: the screen but the sidebar that shows and the gutters. It is known before the feed is
+   * laid out. */
   private get feedWidth(): number {
     return (
-      this.renderer.width -
-      (this.rail.visible ? this.session.preferences.sidebarWidth + 1 : 0) -
-      space.gutter * 2
+      this.renderer.width - (this.rail.visible ? this.session.preferences.sidebarWidth : 0) - space.gutter * 2
     );
   }
   /** A node that stands a number of columns in from the left, since a text leaves its own padding out when it draws. */
@@ -803,7 +781,6 @@ export class App {
     if (this.draftKey !== w.draftKey) this.showDraft(w.draftKey);
     this.rail.visible = w.preferences.sidebar && this.renderer.width >= 100;
     this.rail.width = w.preferences.sidebarWidth;
-    this.railSplitter.visible = this.rail.visible;
     this.renderTop();
     const pending = w.operatorPrompt;
     const images = w.images[w.selected] ?? [];
@@ -2634,11 +2611,13 @@ export class App {
     section("Chains", "⌃B", "", () => this.chains());
     const first = this.railSession.getChildren()[0];
     if (first) first.marginTop = 0;
-    // A chain that is shown, or that has something to say, stands in the list, and the finished chains fold under a
-    // row of their own, which a click opens. The list takes six rows at most, and the rest wait behind a button that
-    // lists them all.
+    // The root chain, the chain that is shown, and a chain that has something to say stand in the list, and the other
+    // finished chains fold under a row of their own, which a click opens. The list takes six rows at most, and the rest
+    // wait behind a button that lists them all.
     const states = new Map(w.chains.map((chain) => [chain.id, this.chainStatus(chain.id)]));
-    const active = w.chains.filter((chain) => chain.id === w.selected || states.get(chain.id) !== "idle");
+    const active = w.chains.filter(
+      (chain) => chain.id === w.life.root || chain.id === w.selected || states.get(chain.id) !== "idle",
+    );
     const resting = w.chains.filter((chain) => !active.includes(chain));
     const chainLine = (chain: ActRow) => {
       const selected = chain.id === w.selected;
@@ -2833,6 +2812,8 @@ export class App {
           group.sessions.map((entry) => [entry.path, entry.name, entry.status, entry.error, entry.archived]),
         ]),
         [...this.showArchived],
+        this.renaming && this.itemKey(this.renaming.item),
+        this.menuItem && this.itemKey(this.menuItem),
       ])
     )
       return;
@@ -2868,17 +2849,148 @@ export class App {
       this.railSpaces.add(
         this.inset(space.between, this.text("No workspaces yet. Add a project folder below.", c.muted)),
       );
+    // A session and a workspace take one shape of row. While the pointer is on the row, it lights, and at its end a
+    // button renames it and a button removes it, which asks first. The buttons are drawn in the color of the row until
+    // then, so the row keeps its layout. The mark of the state tells the state in a tip, and a right click opens the
+    // menu of the row. A row under a new name holds an input in place of its name.
+    const itemRow = (
+      item: SessionEntry | Workspace,
+      parts: { lead: Part[]; name: Part; state?: Part; after?: boolean },
+      tip: () => Part[],
+      run: () => void,
+      options: BoxOptions = {},
+      selected = false,
+    ) => {
+      const noun = "sessions" in item ? "workspace" : "session";
+      const lit = selected ? c.selected : c.raised;
+      const ground = selected ? c.selected : this.menuItem === item ? lit : c.panel;
+      // A click in the input of a new name only moves its cursor.
+      const renaming = this.renaming?.item === item ? this.renaming : undefined;
+      const row = this.box({
+        flexDirection: "row",
+        height: space.bar,
+        paddingLeft: space.inset,
+        paddingRight: space.between,
+        backgroundColor: renaming ? lit : ground,
+        ...(renaming ? {} : { onMouseUp: this.click(run) }),
+        onMouseDown: (event) => {
+          if (event.button !== 2) return;
+          event.stopPropagation();
+          this.itemMenu(item, event.x, event.y);
+        },
+        ...options,
+      });
+      row.add(this.text(parts.lead, c.muted, { height: space.bar }));
+      const state = parts.state && this.text([parts.state], c.muted, { height: space.bar });
+      if (state && !parts.after) row.add(state);
+      if (renaming) {
+        const input = new InputRenderable(this.renderer, {
+          flexGrow: 1,
+          flexShrink: 1,
+          value: renaming.value,
+          backgroundColor: c.background,
+          focusedBackgroundColor: c.background,
+          textColor: c.text,
+          focusedTextColor: c.text,
+          cursorColor: c.accent,
+        });
+        input.on(InputRenderableEvents.INPUT, (value: string) => {
+          renaming.value = value;
+        });
+        input.on(InputRenderableEvents.ENTER, () => this.endRename(true));
+        // The name is kept when the input loses its focus to another part of the screen, and not when the sidebar
+        // draws the row again, which focuses its new input at once.
+        input.on("blurred", () =>
+          queueMicrotask(() => {
+            if (this.renaming === renaming && !renaming.input?.focused) this.endRename(true);
+          }),
+        );
+        renaming.input = input;
+        row.add(input);
+        this.railSpaces.add(row);
+        input.focus();
+        return row;
+      }
+      const name = this.text([parts.name], c.muted, {
+        height: space.bar,
+        truncate: true,
+        flexShrink: 1,
+        flexGrow: parts.after ? 0 : 1,
+      });
+      row.add(name);
+      if (state && parts.after) {
+        state.marginLeft = space.between;
+        row.add(state);
+      }
+      if (parts.after) row.add(this.box({ flexGrow: 1 }));
+      const button = (mark: string, act: () => void) =>
+        this.text(mark, ground, {
+          height: space.bar,
+          marginLeft: space.inset,
+          onMouseUp: this.click((event) => {
+            event.stopPropagation();
+            act();
+          }),
+        });
+      const rename = button(glyph.rename, () => this.startRename(item));
+      const remove = button(glyph.remove, () => this.removeItem(item));
+      row.add(rename);
+      row.add(remove);
+      row.onMouseOver = (event) => {
+        row.backgroundColor = lit;
+        rename.fg = event.target === rename ? c.accent : c.muted;
+        remove.fg = event.target === remove ? c.danger : c.muted;
+        // A name that its room cuts shows whole in a tip of its own.
+        if (event.target === name) return;
+        this.hover?.destroyRecursively();
+        this.hover = undefined;
+        if (event.isDragging) return;
+        const told: Part[] | undefined =
+          event.target === rename
+            ? [[`Rename this ${noun}`, c.text]]
+            : event.target === remove
+              ? [
+                  [
+                    "sessions" in item
+                      ? "Remove this workspace from the list"
+                      : "Archive or remove this session",
+                    c.text,
+                  ],
+                ]
+              : event.target === state
+                ? tip()
+                : undefined;
+        if (told) this.tip(told, event.x, event.y);
+      };
+      row.onMouseOut = () => {
+        row.backgroundColor = ground;
+        rename.fg = ground;
+        remove.fg = ground;
+        this.hover?.destroyRecursively();
+        this.hover = undefined;
+      };
+      this.railSpaces.add(row);
+      return row;
+    };
     for (const [index, group] of library.groups.entries()) {
       const status = library.groupStatus(group);
       const current = group === library.groupOf();
-      line(
-        [
-          [" "],
-          [`${group.collapsed ? glyph.closed : glyph.open} `, c.faint],
-          [group.name, current ? c.text : c.muted, bold],
+      const quiet = status === "saved" || status === "idle";
+      const count = group.sessions.filter((entry) => entry.status === status).length;
+      itemRow(
+        group,
+        {
+          lead: [[" "], [`${group.collapsed ? glyph.closed : glyph.open} `, c.faint]],
+          name: [group.name, current ? c.text : c.muted, bold],
+          state: quiet ? undefined : [this.statusDot(status), this.statusColor(status)],
+          after: true,
+        },
+        () => [
+          [`${this.statusDot(status)} `, this.statusColor(status)],
+          [statusLabels[status], c.text, bold],
           [
-            status === "saved" || status === "idle" ? "" : `  ${this.statusDot(status)}`,
-            this.statusColor(status),
+            `  ${count} of ${group.sessions.length} ${group.sessions.length === 1 ? "session" : "sessions"}`,
+            c.muted,
           ],
         ],
         () => library.toggle(group),
@@ -2898,17 +3010,19 @@ export class App {
           ),
         ),
       );
-      // A session row shows at its end, while the pointer is on it, a button that removes it, which asks first. The
-      // button is drawn in the color of the row until then, so the row keeps its layout.
       const sessionRow = (entry: SessionEntry) => {
         const selected = library.current === entry;
-        const ground = selected ? c.selected : c.panel;
-        const row = line(
-          [
-            [selected ? glyph.mark : " ", c.accent],
-            ["  "],
+        itemRow(
+          entry,
+          {
+            lead: [[selected ? glyph.mark : " ", c.accent], ["  "]],
+            state: [`${this.statusDot(entry.status)} `, this.statusColor(entry.status)],
+            name: [entry.name, selected ? c.text : entry.archived ? c.faint : c.muted, selected ? bold : 0],
+          },
+          () => [
             [`${this.statusDot(entry.status)} `, this.statusColor(entry.status)],
-            [entry.name, selected ? c.text : entry.archived ? c.faint : c.muted, selected ? bold : 0],
+            [statusLabels[entry.status], c.text, bold],
+            [entry.error ? `  ${entry.error}` : "", c.danger],
           ],
           () => {
             void library.select(entry).catch(this.report);
@@ -2916,38 +3030,6 @@ export class App {
           {},
           selected,
         );
-        const remove = this.text("×", ground, {
-          height: space.bar,
-          marginLeft: space.inset,
-          onMouseUp: this.click((event) => {
-            event.stopPropagation();
-            this.removeSession(entry);
-          }),
-        });
-        row.add(remove);
-        const out = row.onMouseOut;
-        row.onMouseOver = (event) => {
-          row.backgroundColor = selected ? c.selected : c.raised;
-          remove.fg = event.target === remove ? c.danger : c.muted;
-          this.hover?.destroyRecursively();
-          if (event.target === remove) {
-            this.tip([["Archive or remove this session", c.text]], event.x, event.y);
-            return;
-          }
-          const hint: Part[] = [
-            [`${this.statusDot(entry.status)} `, this.statusColor(entry.status)],
-            [statusLabels[entry.status], c.text, bold],
-            [`  ${entry.name}`, c.muted],
-            [entry.error ? `  ${entry.error}` : "", c.danger],
-          ];
-          this.tip(hint, event.x, event.y);
-        };
-        row.onMouseOut = (event) => {
-          out?.call(row, event);
-          remove.fg = ground;
-          this.hover?.destroyRecursively();
-          this.hover = undefined;
-        };
       };
       for (const entry of group.sessions.filter((entry) => !entry.archived)) sessionRow(entry);
       line([["   "], ["+ ", c.faint], ["New session", c.faint]], () => {
@@ -3032,6 +3114,83 @@ export class App {
       "",
       `The trash is ${shortenHome(join(group.directory, ".furb", "trash"))}, where you can get it back.`,
     );
+  }
+  /** What names a session or a workspace for as long as it lives: the path of its record, or its folder. */
+  private itemKey(item: SessionEntry | Workspace): string {
+    return "sessions" in item ? item.directory : item.path;
+  }
+  /** Rename a session or a workspace in its row: an input takes the place of its name, Enter keeps what it holds,
+   * and Escape leaves the name as it was. */
+  private startRename(item: SessionEntry | Workspace): void {
+    this.closeOverlay();
+    this.renaming = { item, value: item.name };
+    this.session.notice = "Enter keeps the new name, and Esc leaves it as it was.";
+    this.render();
+  }
+  private endRename(keep: boolean): void {
+    const renaming = this.renaming;
+    if (!renaming) return;
+    this.renaming = undefined;
+    const name = renaming.value.trim();
+    if (keep && name && name !== renaming.item.name) this.options.workspaces?.rename(renaming.item, name);
+    if (this.session.notice.startsWith("Enter keeps the new name")) this.session.notice = "";
+    this.composer.focus();
+    this.render();
+  }
+  /** Ask how to remove a session, or whether a workspace leaves the list. */
+  private removeItem(item: SessionEntry | Workspace): void {
+    if (!("sessions" in item)) {
+      this.removeSession(item);
+      return;
+    }
+    const library = this.options.workspaces;
+    if (!library) return;
+    this.openPalette(
+      `Remove the workspace “${item.name}” from the list?`,
+      [
+        {
+          label: "Remove from the list",
+          detail: "Its folder and its sessions stay on disk, and /workspace adds it back",
+          run: () => library.remove(item),
+        },
+        { label: "Keep", detail: "Return without changes", run() {} },
+      ],
+      0,
+      "",
+      `The folder is ${shortenHome(item.directory)}.`,
+    );
+  }
+  /** The menu that a right click on the row of a session or a workspace opens, at the pointer. */
+  private itemMenu(item: SessionEntry | Workspace, x: number, y: number): void {
+    const library = this.options.workspaces;
+    if (!library) return;
+    const rename = { label: "Rename", detail: "", run: () => this.startRename(item) };
+    const choices: Choice[] =
+      "sessions" in item
+        ? [
+            { label: "New session", detail: "", run: () => library.create(item).then(() => {}) },
+            rename,
+            { label: item.collapsed ? "Unfold" : "Fold", detail: "", run: () => library.toggle(item) },
+            { label: "Remove from the list", detail: "", run: () => library.remove(item) },
+          ]
+        : [
+            ...(library.current === item
+              ? []
+              : [{ label: "Open", detail: "", run: () => library.select(item) }]),
+            rename,
+            item.archived
+              ? { label: "Restore", detail: "", run: () => library.restore(item) }
+              : { label: "Archive", detail: "", run: () => library.archive(item) },
+            {
+              label: "Move to trash",
+              detail: "",
+              color: c.danger,
+              run: () => library.delete(item).then(() => {}),
+            },
+          ];
+    this.openPalette(item.name, choices, 0, "", "", false, { x, y });
+    this.menuItem = item;
+    this.render();
   }
   /** The workspaces and their sessions in a palette, which opens once the workspaces are read again. */
   workspacePicker = (): Promise<void> => {
@@ -4726,7 +4885,17 @@ export class App {
       "Each chain has its own transcript and module. /tree shows the branches.",
     );
   }
-  openPalette(label: string, choices: Choice[], selected = 0, query = "", note = "", rich = false): void {
+  /** A dialog of choices, which a filter narrows. At a point, it is a menu as wide as its labels need, which stands
+   * under the point, or over it where the rows under it cannot hold it, and leaves the screen behind it as it is. */
+  openPalette(
+    label: string,
+    choices: Choice[],
+    selected = 0,
+    query = "",
+    note = "",
+    rich = false,
+    at?: { x: number; y: number },
+  ): void {
     this.closeOverlay();
     this.rich = rich;
     this.paletteStart = 0;
@@ -4744,25 +4913,46 @@ export class App {
     );
     const column = this.feedWidth + space.gutter * 2;
     const stage = column - 4 >= wanted ? column : this.renderer.width;
-    this.paletteWidth = Math.min(stage - 4, wanted);
+    // A menu holds its title with the key that closes it, and each label after the pointer of the list.
+    const menu = Math.min(
+      this.renderer.width - 2,
+      space.inset * 2 +
+        Math.max(
+          Bun.stringWidth(label) + space.between * 2 + 3,
+          widest((choice) => choice.label) + 2 + space.between,
+        ),
+    );
+    this.paletteWidth = at ? menu : Math.min(stage - 4, wanted);
     const width = this.paletteWidth;
-    // A veil dims the screen behind the dialog, and a click on it closes the dialog.
+    // The rows of a menu: its inset, its title with the space under it, and its choices.
+    const rows = space.inset * 2 + space.bar + space.section + choices.length;
+    // A veil dims the screen behind the dialog, and a click on it closes the dialog. The veil of a menu is clear, and a
+    // right click on it closes the menu too.
     this.backdrop = this.box({
       position: "absolute",
       left: 0,
       top: 0,
       width: "100%",
       height: "100%",
-      backgroundColor: c.backdrop,
+      backgroundColor: at ? "transparent" : c.backdrop,
       zIndex: 19,
+      onMouseDown: (event) => {
+        if (event.button === 2) this.closeOverlay();
+      },
       onMouseUp: this.click(() => this.closeOverlay()),
     });
     this.root.add(this.backdrop);
     this.overlay = this.box({
       id: "palette",
       position: "absolute",
-      left: Math.floor((stage - width) / 2),
-      top: Math.max(1, Math.min(4, Math.floor(this.renderer.height / 8))),
+      left: at
+        ? Math.max(1, Math.min(at.x, this.renderer.width - width - 1))
+        : Math.floor((stage - width) / 2),
+      top: at
+        ? at.y + 1 + rows <= this.renderer.height
+          ? at.y + 1
+          : Math.max(0, at.y - rows)
+        : Math.max(1, Math.min(4, Math.floor(this.renderer.height / 8))),
       width,
       maxHeight: this.paletteHeight,
       paddingX: space.inset,
@@ -5069,6 +5259,10 @@ export class App {
       .catch(this.report);
   }
   closeOverlay(): void {
+    if (this.menuItem) {
+      this.menuItem = undefined;
+      this.schedule();
+    }
     this.overlay?.destroyRecursively();
     this.backdrop?.destroyRecursively();
     this.overlay = undefined;
@@ -5130,6 +5324,14 @@ export class App {
     );
   }
   private key = (key: KeyEvent): void => {
+    // While a row takes a new name, its input takes the keys, and Escape or Ctrl+C leaves the name as it was.
+    if (this.renaming?.input?.focused) {
+      if (key.name === "escape" || (key.ctrl && key.name === "c")) {
+        key.preventDefault();
+        this.endRename(false);
+      }
+      return;
+    }
     const plainKey = !key.ctrl && !key.meta && !key.shift;
     if (!this.overlay && this.tree && plainKey) {
       const row = this.treeRow();
