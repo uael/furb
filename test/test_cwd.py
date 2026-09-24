@@ -64,13 +64,3 @@ async def test_the_chain_answers_for_where_its_paths_resolve() -> None:
   assert asked == [("cwd", "cwd@operator.2", OPERATOR, root), ("cwd", "cwd@operator.4", OPERATOR, root)]
   answered = [a for a in said(log, "done") if a[1].startswith("cwd@")]
   assert answered == [("done", "cwd@operator.2", root, "/w"), ("done", "cwd@operator.4", root, "/deep")]
-
-
-async def test_cwd_tells_the_path_it_was_answered() -> None:
-  """cwd tells the path it was answered."""
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
-  sand.script[root] = ["cwd()\ncd('/x')\ncwd()\nclose(1)"]
-  assert await engine.prompt(int, "where am i", on=root) == 1
-  await settle()
-  assert engine.turns(on=root)[-1][1] == "#cwd /w\n\n#cd /x\n\n#cwd /x\n\n#prompt1 closed 1"

@@ -32,15 +32,6 @@ async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
   ]
 
 
-async def test_a_turns_asked_from_a_run_tells_how_many_turns_there_are() -> None:
-  """A turns asked from a run tells how many turns there are, and never the turns."""
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
-  sand.script[root] = ["close(len(turns()))"]
-  assert await engine.prompt(int, "count them", on=root) == 3
-  assert engine.turns(on=root)[-1][1] == "#turns 3\n\n#prompt1 closed 3"
-
-
 async def test_the_turns_of_what_a_chain_has_heard() -> None:
   """The turns of what a chain has heard: every fact that carries notes stands as a paragraph of them, and nothing else stands at all."""
   sand = Sand(stands=STANDS)

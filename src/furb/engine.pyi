@@ -192,7 +192,6 @@ def peek(at: str, on: str = "") -> object:
 
 def turns(on: str = "") -> list[Turn]:
   """The turns of a chain, folded from what it has heard.
-  A turns asked from a run tells how many turns there are, and never the turns.
   The turns of what a chain has heard: every fact that carries notes stands as a paragraph of them, and nothing else stands at all.
   The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines it has not seen, which the one that tells it says the show of.
   The chain answers for its turns, folded from what it has heard.
@@ -201,14 +200,12 @@ def turns(on: str = "") -> list[Turn]:
 def clock(on: str = "") -> float:
   """clock gives one reading of the wall clock of the World.
   The driver sends clock to the World for a reading of the wall clock.
-  clock tells the reading it was answered, since the word that asked holds it and the turns after it would not.
   """
 
 def chance(on: str = "") -> float:
   """chance gives a number that is at least zero and under one.
   A number the World draws, at least zero and under one.
   chance is a question the World answers, and it enters the record as any question of a run does.
-  chance tells the number it drew.
   """
 
 def gate(word: str, on: str = "") -> list[str]:
@@ -218,7 +215,6 @@ def gate(word: str, on: str = "") -> list[str]:
   A response that is not python is a finding like any other.
   The gate gives no finding when the gate accepts the rung.
   The word of a rung is gated again in every life that runs it, since the gate is of the moment and its findings are kept by nobody.
-  gate tells the findings, one comment for each.
   """
 
 def cd(path: str, on: str = "") -> str:
@@ -235,7 +231,6 @@ def cwd(on: str = "") -> str:
   The World resolves the path of a read, a write and a command against the working directory it asks the chain for.
   cwd gives the working directory that the paths of the chain resolve against.
   The chain answers for where its paths resolve, which is the closest cd back in what it heard.
-  cwd tells the path it was answered.
   """
 
 def get(about: str) -> Question:
@@ -353,7 +348,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
   It says its word may run as soon as it holds one, whichever way that word came, and what the chain makes of the word is the chain's.
   The chain has the Kernel begin it in the module of that chain, and the run carries it forward at the done of every act the word waits for, so that the engine owns the order of it.
   It is done with what the word gave, nothing for a word that ran to its end and the exception for a raise, which it tells with its type and its message, which its close then holds none of.
-  Of the queries its word asked it tells nothing, since they tell themselves.
+  Of the queries its word asked it tells nothing, since a query tells of itself or not at all.
   An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the model is asked again.
   A replay makes a rung of its own retelling each rung of the donor it keeps.
   What a rung that retells asks is named under the one it retells, so the life answers it with what it answered then and the World is asked nothing twice.
@@ -637,7 +632,7 @@ A paragraph is what one fact that tells stands as in a turn: its notes, one afte
 The first line of a paragraph is its header: # and, with no space, the id of the act it is of, or the kind of the query it is of, then its words, as #bash1 exited 0 or #read a.txt.
 Every other comment of a paragraph begins with # and a space, so no line of a message or of a text reads as a header.
 The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a query stands at the place in the run where the query was asked.
-The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, stands, advance, paused, woke, cancelled, and one for each query the model may say: read, write, peek, turns, clock, chance, gate, cd and cwd.
+The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, stands, advance, paused, woke, cancelled, and one for each query that tells: read, write and cd.
 A statement that a paragraph shows binds the name of an act in the chain, and a comment binds nothing.
 """
 type Showing = tuple[Text, Show]
@@ -871,7 +866,7 @@ def scope(name: str) -> str:
   """The scope of a question, from its name: the chain it is on, and itself for a chain, and nothing for a name of no question of the life."""
 
 def tell(name: str, text: object = "", *notes: Note) -> None:
-  """What a query tells of itself: a paragraph headed with its kind, its words and what it was answered, said on the run that asked it, and nothing at all outside a run.
+  """What a query that shows a text or changes a state tells of itself: a paragraph headed with its kind, its words and what it was answered, said on the run that asked it, and nothing at all outside a run; a query that only reads a value tells nothing, since the word that asked it holds the value, which it debugs to see.
   A query is put to the living generators in turn, the acts first and the outside last, and it stops at the first answer, so the World is asked for nothing that the engine knows.
   """
 

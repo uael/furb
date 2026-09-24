@@ -387,10 +387,10 @@ async def test_it_is_done_with_what_the_word_gave() -> None:
 
 
 async def test_of_the_queries_its_word_asked_it_tells_nothing() -> None:
-  """Of the queries its word asked it tells nothing, since they tell themselves."""
+  """Of the queries its word asked it tells nothing, since a query tells of itself or not at all."""
   sand = Sand(files={"/w/a.txt": "one\n"}, stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["t = read('a.txt')\nclose(len(t.lines))"]
+  sand.script[root] = ["t = read('a.txt')\nclock()\nclose(len(t.lines))"]
   act = engine.prompt(int, "read it", on=root)
   assert await act == 1
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
