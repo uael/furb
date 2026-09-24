@@ -4,8 +4,8 @@ The suite proves the contract on both engines, sentence for sentence. What is pr
 ear of this interpreter that says a verb from its thread and is answered with what the verb raised, a show the
 engine made that an ear calls back from its thread, a class a word defined held as a type of this interpreter
 and its instances as objects of it, both ways, a map of the life read where it stands, the Kernel of this
-interpreter refused, since the engine of monty holds its own, and a gate that accepts a builtin exactly when the
-sandbox runs it.
+interpreter refused, since the engine of monty holds its own, and a gate that accepts a builtin or a name of a module
+exactly when the sandbox runs it.
 """
 
 import builtins
@@ -159,15 +159,19 @@ async def test_boot_refuses_a_kernel_or_a_gate_of_this_interpreter() -> None:
     engine.boot((), world=Sand(stands=STANDS).hears(), gate=Py().gating())
 
 
-async def test_the_gate_accepts_a_builtin_exactly_when_a_rung_runs_it() -> None:
+async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_rung_runs_it() -> None:
   """The gate reads a word against the typeshed of the sandbox and a chain that is a module, so it accepts a name of
-  the builtins of python exactly when a rung runs a word that names it. A refused word never runs, so a refused name
-  is run as the Kernel runs a word, in the globals of the chain."""
+  the builtins of python, or a name ty gives every module, exactly when a rung runs a word that names it. A refused
+  word never runs, so a refused name is run as the Kernel runs a word, in the globals of the chain."""
   root = engine.boot((), world=Sand(stands=STANDS).hears())
-  names = sorted(vars(builtins))
-  # Each new sheet costs the checker tens of milliseconds, and a sheet for each name outlasts the timeout of a test
-  # on a slow machine. So one word holds every name, one on each line, and the line of a finding is the name it
-  # refuses.
+  # The names ty gives every module are those of module_type_implicit_global_symbol in ty_python_semantic: the names
+  # that the typeshed of the sandbox declares in the class types.ModuleType, but __dict__, __init__ and __getattr__,
+  # and __builtins__, __debug__ and __warningregistry__, which ty adds itself.
+  module = {"__name__", "__file__", "__loader__", "__package__", "__path__", "__spec__", "__doc__", "__annotations__"}
+  module |= {"__annotate__", "__builtins__", "__debug__", "__warningregistry__"}
+  names = sorted({*vars(builtins), *module})
+  # Every rung grows the program that each later sheet reads again, so a sheet and a rung for each name cost
+  # seconds. One word holds every name, one on each line, and the line of a finding is the name it refuses.
   found = engine.gate("\n".join(f"got = {name}" for name in names), on=root)
   refused = sorted({names[int(one.split(":")[0].removeprefix("line ")) - 1] for one in found})
   probe = (
