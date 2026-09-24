@@ -26,7 +26,7 @@ it; the TUI quits through it.
 ```ts
 import { boot } from "@furb/engine";
 
-const session = boot({
+const session = await boot({
   cwd: process.cwd(),
   record: ".furb/work.jsonl",
   // With no model, the World offers the operator alone, and this callback answers what is put to it.
@@ -34,7 +34,7 @@ const session = boot({
 });
 try {
   const { life } = session;
-  console.log(life.cwd()); // A synchronous query.
+  console.log(life.call("cwd", [], { on: life.root })); // A synchronous query.
   const work = life.prompt<string>("str", "What is this project?");
   console.log(work.id);
   const answer = await work;
@@ -89,30 +89,31 @@ its python, its usage and the blocks of its provider, as `life.turns(chain)` giv
 provider the python of each user turn as it is, and no user turn that holds nothing, and the `answer` callback
 receives the same turns.
 
-Pass `world` to `boot` to replace the whole World. It receives these operations:
+Pass `world` to `boot` to replace what every World does. It receives these operations, and the parts of the
+extensions do the rest, as they do in the supplied World:
 
 | Operation | Arguments | Answer |
 | --- | --- | --- |
 | Stand | none | `[roster, directory, actor]` |
-| Read | directory, path | `{path, content}` |
-| Write | directory, path, content | `{path, content}` |
 | Clock, Chance | none | number |
 | Keep | entry | nothing |
 | Ask | rung, chain, actor, turns | Promise of a turn |
-| Run | `{id, here, command, fed, timeout, merged}` | nothing; send out/exited later |
-| Feed | command id, text or null | nothing |
-| Slay | command id | nothing |
 | Wait | seconds, act id | Promise that resolves when time passes |
 | Prompt | id, shape, message | Promise of an operator answer |
 
-Stand, Read, Write, Clock, Chance, Keep, Run, Feed, and Slay answer synchronously. They must not call back
+Stand, Clock, Chance, and Keep answer synchronously. They must not call back
 into the same life. For a World that needs nested engine queries, use `Ears`: its generators yield a saying
 `[kind, id, ...words]`, a call `{verb, args, kwargs}`, or nothing. A yielded call is answered before the ear
 continues, as in the Python binding. `Ears.callable` carries a JavaScript show or filter into the engine,
 from the `Ears` the life boots on: `world.ears` for the supplied World, and `session.ears` from `boot`.
 `Life.call` reaches every public engine verb beyond the named methods.
 
-Values use the Python record form. Text and Exit carry `is` plus their fields. Faults carry `is` and `args`.
+Values use the Python record form. Text and Exit carry `is` plus their fields. Faults carry `is` and `args`. A
+value of a class that a word defined, such as the `Skill` of the skills extension, crosses out as
+`{is: "instance", class: {is: "class", id, name, base}, value}`, where `value` holds its fields. `unwrapped(value)`
+gives every instance in a value as its fields, `isInstance(value, name)` says whether a value is an instance of a
+class of that name, and `remade(instance, fields)` gives an instance with other fields, which crosses back into the
+life as its class.
 Lists and tuples cross as arrays, and maps keep their order. Every value of the engine crosses to JavaScript,
 so an ear hears every fact. A value that JSON holds only in part crosses as its type under `is` and what that
 type makes it from under `args`, and comes back in whole: an int past the safe range as
@@ -158,9 +159,43 @@ the control would change. `World.isPaused` and `World.rungState` read it.
 
 `world.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type,
 size, and `furb-image://` reference. A World with no record copies it into `.furb/images` of its directory. The
-`.furb` that it makes holds a `.gitignore` that keeps it out of version control, as `furbDirectory` makes it.
+`.furb` holds a `.gitignore` that keeps it out of version control but its `config.json`, which `furbDirectory`
+writes whenever it is missing.
 Put that reference in the prompt as a Markdown image,
 `![design](furb-image://...)`, which `imageReference(image)` writes and `imageReferences(message)` reads. The
 World hands the python of the turn as it is, and adds each image that the message of a prompt of that turn
 references as a pi-ai image block. The stored bytes are checked against their digest before use. PNG, JPEG, GIF, and WebP are
 supported, with a 20 MiB limit per image. Keep `.images` with the record when moving a session.
+
+## Extensions
+
+An extension adds verbs to the engine that a model reads, and parts to the World and to the TUI. [The guide of the
+extensions](../../docs/extensions.md) says how to write one and how a config names it. This package gives what a
+host in TypeScript needs:
+
+- `resolveExtensions(project, {refresh, install})` gives the extensions that a host takes for a project: the
+  builtins `files`, `bash` and `grant`, and what `config.json` of the config directory and `.furb/config.json` of the
+  project name, fetched once into the cache, and again on a refresh. Each `Extension` has its `name`, whether it is
+  `builtin`, its `root`, the `word` of its python part and its `life` word, what it `requires`, and the files of its
+  parts, `world.ts`, `world.py` and `tui`. It throws with what failed. `builtinExtensions()` gives the builtins
+  alone. `configDirectory()` and `cacheDirectory()` give the directories, which `process.env` names:
+  `FURB_CONFIG_DIR` and `FURB_CACHE_DIR`, then the directories of XDG, of Windows, and of the home. `wordOf(source)`
+  gives the word of a python part.
+- `Life.boot(callback, names, record, {engine, taken, words, lives})` runs the system prompt of the life: the engine,
+  less the definitions of each builtin it does not take, then the words. It plays the life words as the World on every
+  chain without a source. A record that pins these gives its own, and a life on an empty record pins them.
+  `life.system` gives that text. The supplied World and `boot` give the minified engine and the extensions, and the
+  World sends `life.system` to each model.
+- `World.load(options)` resolves the extensions of the directory when the options name none, imports the part for a
+  World of each one, and gives the World. `new World(options)` takes the `extensions` and the `parts` it is given,
+  and the builtins when it is given none. It refuses an extension whose part for a World it does not hold.
+- A part for a World is the default export of the file of the extension, a function of a `WorldContext` that gives
+  a `WorldPart`: the `kinds` of act it does, `hears(fact)`, a generator that yields a saying or a call and is given
+  back what the life made of it, `live`, which gives the value of its acts in `world.activity`, and `dispose`. The
+  World closes the start of an act of a kind that no part does with `Refused("the World does no <kind>")`. A part
+  answers a question with plain data. The context gives the directory, `where(on)`, `at(here, path)`, `speak`,
+  `close`, `change`, `spawn` and `refused`. The file imports types alone, since it runs from the cache.
+- A part for the TUI is the default export of its file, a function that gives a `TuiPart`: its `commands`, the
+  `prefixes` of the input that say one, how the `acts` of its kinds show, the `quiet` header words, the `paths`
+  header words, what it adds to the `sidebar`, and what it does in `prompting` before a message is sent.
+  `loadWorldParts` and `loadTuiParts` import the parts of a list of extensions.

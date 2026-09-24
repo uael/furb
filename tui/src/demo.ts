@@ -57,7 +57,7 @@ export async function demoSession(seed = false, preferences?: Preferences): Prom
 
 export async function seedDemo(session: Session): Promise<void> {
   const { life } = session;
-  await life.grant({ usd: 2, on: life.root });
+  await life.call("grant", [2], { on: life.root });
   const prompt = await life.prompt(
     "str",
     "Explore this project, run its checks, and suggest a useful next step.",

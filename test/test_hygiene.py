@@ -1,15 +1,20 @@
-"""The contract and the suite agree, sentence for sentence.
+"""Each contract and its suite agree, sentence for sentence.
 
-A sentence is one line of the docstring of a definition in engine.pyi: a function, a class, a method, or a
+A contract is engine.pyi, whose suite is test/, or extensions/<name>/<name>.pyi, whose suite is the folder test
+beside it.
+
+A sentence is one line of the docstring of a definition in a contract: a function, a class, a method, or a
 module-level name, whose docstring is the string literal after its assignment. A constructor and a property are no
 definitions of their own: what a constructor takes and what a property gives are the class's sentences. Each
 sentence has exactly one test, in the file of its definition, whose docstring is that sentence; each test carries
 such a sentence; each definition has a file of its own and at least one sentence; and the module docstring, the
 work queue, is empty. The engine itself fits its token budget, minified in layout alone, and binds no name again
-beneath a scope that already binds it.
+beneath a scope that already binds it, nor does the word of an extension. Each extension has a manifest that names
+its python part, a contract beside that part, and a suite.
 """
 
 import ast
+import json
 import re
 from collections import Counter
 from pathlib import Path
@@ -18,10 +23,14 @@ import tiktoken
 from python_minifier import minify
 
 from furb import engine
+from furb_monty import word_of
 
 PY = Path(engine.__file__)
 PYI = PY.with_suffix(".pyi")
 TESTS = PYI.parents[2] / "test"
+EXTENSIONS = TESTS.parent / "extensions"
+CONTRACTS = {PYI: TESTS, **{one: one.parent / "test" for one in sorted(EXTENSIONS.glob("*/*.pyi"))}}
+"""CONTRACTS maps each contract to the directory of its suite."""
 # What the engine may cost the model that reads it: a wall, and a shape that will not fit under it is a shape not
 # found yet. Six thousand, by the owner's word.
 BUDGET = 6_000
@@ -89,7 +98,7 @@ def sentences(doc: str | None) -> list[str]:
   return [normal(line) for line in (doc or "").splitlines() if line.strip()]
 
 
-def file_of(name: str, taken: set[str]) -> Path:
+def file_of(name: str, taken: set[str], tests: Path) -> Path:
   """test_<name>.py for a function, a class or a global, test_<class>_<method>.py for a method, in lower case, dunders bare.
 
   A class whose lower-case name is another definition's, Bash beside bash or Head beside HEAD, has test_<class>_shape.py.
@@ -97,7 +106,7 @@ def file_of(name: str, taken: set[str]) -> Path:
   parts = [part.strip("_").lower() for part in name.split(".")]
   if "." not in name and name[0].isupper() and not name.isupper() and parts[0] in taken:
     parts.append("shape")
-  return TESTS / ("test_" + "_".join(parts) + ".py")
+  return tests / ("test_" + "_".join(parts) + ".py")
 
 
 def taken_by_others(named: dict[str, list[str]]) -> set[str]:
@@ -114,46 +123,47 @@ def carried_by(path: Path) -> list[str]:
   ]
 
 
-def suite() -> dict[Path, list[str]]:
+def suite(tests: Path) -> dict[Path, list[str]]:
   here = Path(__file__)
-  return {p: carried_by(p) for p in sorted(TESTS.glob("test_*.py")) if p != here}
+  return {p: carried_by(p) for p in sorted(tests.glob("test_*.py")) if p != here}
 
 
 def test_every_sentence_has_one_test_in_the_file_of_its_definition() -> None:
-  tree = ast.parse(PYI.read_text(encoding="utf-8"))
-  carried = suite()
-  named = defs(tree)
-  taken = taken_by_others(named)
   missing = []
-  for name, said in named.items():
-    counts = Counter(carried.get(file_of(name, taken), []))
-    missing.extend((name, s, counts[s]) for s in said if counts[s] != 1)
+  for contract, tests in CONTRACTS.items():
+    carried = suite(tests)
+    named = defs(ast.parse(contract.read_text(encoding="utf-8")))
+    taken = taken_by_others(named)
+    for name, said in named.items():
+      counts = Counter(carried.get(file_of(name, taken, tests), []))
+      missing.extend((contract.name, name, s, counts[s]) for s in said if counts[s] != 1)
   assert missing == []
 
 
 def test_every_test_carries_a_sentence_of_the_contract() -> None:
-  tree = ast.parse(PYI.read_text(encoding="utf-8"))
-  named = defs(tree)
-  taken = taken_by_others(named)
-  said = {(file_of(name, taken), s) for name, lines in named.items() for s in lines}
-  stray = [(p.name, s) for p, docs in suite().items() for s in docs if (p, s) not in said]
+  stray = []
+  for contract, tests in CONTRACTS.items():
+    named = defs(ast.parse(contract.read_text(encoding="utf-8")))
+    taken = taken_by_others(named)
+    said = {(file_of(name, taken, tests), s) for name, lines in named.items() for s in lines}
+    stray.extend((p.name, s) for p, docs in suite(tests).items() for s in docs if (p, s) not in said)
   assert stray == []
 
 
 def test_every_definition_has_a_file_and_a_sentence() -> None:
-  tree = ast.parse(PYI.read_text(encoding="utf-8"))
-  named = defs(tree)
-  taken = taken_by_others(named)
-  files = {name: file_of(name, taken) for name in named}
-  shared = Counter(files.values())
-  assert [name for name, path in files.items() if shared[path] > 1] == []
-  assert [name for name, path in files.items() if not path.exists()] == []
-  assert [name for name, said in named.items() if not said] == []
+  for contract, tests in CONTRACTS.items():
+    named = defs(ast.parse(contract.read_text(encoding="utf-8")))
+    taken = taken_by_others(named)
+    files = {name: file_of(name, taken, tests) for name in named}
+    shared = Counter(files.values())
+    assert [name for name, path in files.items() if shared[path] > 1] == []
+    assert [name for name, path in files.items() if not path.exists()] == []
+    assert [name for name, said in named.items() if not said] == []
 
 
 def test_the_module_docstring_is_empty() -> None:
-  tree = ast.parse(PYI.read_text(encoding="utf-8"))
-  assert ast.get_docstring(tree) is None
+  for contract in CONTRACTS:
+    assert ast.get_docstring(ast.parse(contract.read_text(encoding="utf-8"))) is None
 
 
 def test_the_engine_fits_the_window_it_is_meant_to_be_read_in() -> None:
@@ -215,14 +225,64 @@ def reaching(tree: ast.Module) -> tuple[dict[int, tuple[ast.AST, ...]], dict[int
   return chain, {i: binds(s) for i, s in held.items()}
 
 
-def test_no_name_is_bound_again_beneath_itself() -> None:
-  """A name bound where an enclosing scope already binds it says two things at once; every word keeps one meaning."""
-  tree = ast.parse(PY.read_text(encoding="utf-8"))
+def shadows(name: str, text: str, outer: set[str], same: frozenset[str] = frozenset()) -> list[str]:
+  """Every binding of a text that an enclosing scope binds already, where `outer` encloses the whole text, and a
+  name of `same` that the top of the text binds keeps its one meaning."""
+  tree = ast.parse(text)
   chain, bound = reaching(tree)
   dark: list[str] = []
   for at in {id(c[-1]): c for c in chain.values()}.values():
     if isinstance(at[-1], ast.ClassDef):
       continue
-    over = set().union(*(bound[id(s)] for s in at[:-1] if not isinstance(s, ast.ClassDef)), set())
-    dark.extend(f"{PY.name}:{getattr(at[-1], 'lineno', 0)} {name}" for name in sorted(bound[id(at[-1])] & over - {"_"}))
-  assert dark == [], f"these bindings shadow an enclosing one: {dark}"
+    over = set().union(outer, *(bound[id(s)] for s in at[:-1] if not isinstance(s, ast.ClassDef)))
+    kept = same if isinstance(at[-1], ast.Module) else frozenset()
+    dark.extend(
+      f"{name}:{getattr(at[-1], 'lineno', 0)} {one}" for one in sorted(bound[id(at[-1])] & over - {"_"} - kept)
+    )
+  return dark
+
+
+def imports(text: str) -> set[tuple[str, str]]:
+  """What each import at the top of a module binds: the name, and what it imports under that name."""
+  out: set[tuple[str, str]] = set()
+  for node in ast.parse(text).body:
+    if isinstance(node, ast.Import):
+      out.update(
+        ((al.asname or al.name).split(".")[0], al.name if al.asname else al.name.split(".")[0]) for al in node.names
+      )
+    elif isinstance(node, ast.ImportFrom):
+      out.update((al.asname or al.name, f"{node.module}.{al.name}") for al in node.names)
+  return out
+
+
+def test_no_name_is_bound_again_beneath_itself() -> None:
+  """A name bound where an enclosing scope already binds it says two things at once; every word keeps one meaning."""
+  assert shadows(PY.name, PY.read_text(encoding="utf-8"), set()) == [], "these bindings shadow an enclosing one"
+
+
+def manifests() -> dict[Path, dict[str, object]]:
+  """The furb field of the manifest of each extension of the repository, by the directory of the extension."""
+  return {one.parent: json.loads(one.read_text(encoding="utf-8"))["furb"] for one in EXTENSIONS.glob("*/package.json")}
+
+
+def test_every_extension_has_a_manifest_a_contract_and_a_suite() -> None:
+  """The manifest names the python part, the contract stands beside that part, and the suite in the folder test."""
+  for root, manifest in manifests().items():
+    python = manifest.get("python")
+    assert isinstance(python, str), f"{root.name} names no python part"
+    assert (root / python).is_file() and (root / python).with_suffix(".pyi").is_file(), f"{root.name} has no contract"
+    assert (root / "test").is_dir(), f"{root.name} has no suite"
+
+
+def test_no_word_of_an_extension_binds_a_name_again_beneath_itself() -> None:
+  """A word runs in the module of the engine with the engine and the other words, so what they bind encloses it, but
+  an import that binds a name as the engine or another word binds it keeps the one meaning of that name."""
+  modules = [root / str(one["python"]) for root, one in manifests().items()]
+  words = {one.name: word_of(one.read_text(encoding="utf-8")) for one in modules}
+  dark = []
+  for one, text in words.items():
+    others = [PY.read_text(encoding="utf-8"), *(other for name, other in words.items() if name != one)]
+    outer = set().union(*(binds(ast.parse(other)) for other in others))
+    theirs = set().union(*(imports(other) for other in others))
+    dark.extend(shadows(one, text, outer, frozenset(name for name, what in imports(text) if (name, what) in theirs)))
+  assert dark == []

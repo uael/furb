@@ -26,9 +26,8 @@ import { clipboardImage } from "./clipboard.ts";
 import { commands } from "./commands.ts";
 import { conversation } from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
-import type { Extensions } from "./extensions.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
-import { clip, count, dollars, elapsed, graphemes, kibibytes, share } from "./format.ts";
+import { clip, count, dollars, elapsed, graphemes, kibibytes } from "./format.ts";
 import { chords, keys } from "./keys.ts";
 import { loadParsers } from "./parsers.ts";
 import {
@@ -154,31 +153,24 @@ export interface AppOptions {
   sessions?: () => Promise<Choice[]>;
   newSession?: () => Promise<void>;
   workspaces?: Workspaces;
-  extensions?: Extensions;
 }
 
-/** The commands whose first argument takes a value that the TUI knows, which the suggestions offer as it is typed. */
+/** The commands of the TUI whose first argument takes a value that the TUI knows, which the suggestions offer as it
+ * is typed. A command of an extension that says its values joins them. */
 const valued = new Set([
   "model",
   "effort",
   "shape",
   "theme",
-  "read",
   "image",
-  "extension",
-  "cd",
   "workspace",
   "edit",
   "pause",
   "wake",
   "cancel",
-  "feed",
   "close",
-  "grant",
-  "context",
+  "extensions",
 ]);
-/** The commands whose value is a path of the project, which the suggestions wait for. */
-const pathCommands = new Set(["read", "image", "extension", "cd"]);
 /** What each effort of a model does, which the picker of the effort says beside it. */
 const efforts: Record<string, string> = {
   off: "Answer with no thought first",
@@ -1503,7 +1495,7 @@ export class App {
     let items = 0;
     const named = new Set<string>();
     if (w.view === "feed") {
-      const listed = conversation(w.turns, w.acts);
+      const listed = conversation(w.turns, w.acts, w.world.parts, w.played);
       // An act that no turn tells yet, such as a command that the operator started, stands at the end of the feed
       // until a turn tells it.
       const told = new Set(
@@ -1734,7 +1726,9 @@ export class App {
           const { label, detail, body, act } = item;
           const text = [act?.id, label, detail, body].filter(Boolean).join("\n");
           if (!matches(text)) continue;
-          items++;
+          // The line of the words that the World played is no work of the chain, so the feed of a new chain still
+          // welcomes the operator.
+          if (!item.played) items++;
           const danger = ["raised", "refused"].includes(label);
           const indent = act ? under(act) : space.between;
           add(
@@ -1751,8 +1745,7 @@ export class App {
             (box) => {
               const details = this.box({ paddingLeft: space.between * 2 });
               if (act) details.add(this.reference(act.id, act.id));
-              // A read and a write name the path they were of, which the reference opens.
-              if (!act && detail && ["read", "write"].includes(label))
+              if (!act && detail && this.session.world.parts.paths.has(label))
                 details.add(this.reference(detail, detail));
               else if (detail) details.add(this.text(detail, c.muted));
               if (body) details.add(this.text(body, danger ? c.danger : c.text));
@@ -2148,12 +2141,8 @@ export class App {
       return (box) =>
         this.excerpt(box, `${fault.is}: ${fault.args.map(display).join(", ")}`, false, c.danger);
     }
-    // A command shows the tail of its output while it runs, and folds to its heading once it is over.
-    if (act.kind === "bash" && !act.done && act.value && typeof act.value === "object") {
-      const exit = act.value as { stdout?: { content: string }; stderr?: { content: string } };
-      const output = [exit.stdout?.content, exit.stderr?.content].filter(Boolean).join("\n");
-      if (output) return (box) => this.excerpt(box, output, true);
-    }
+    const shown = this.session.world.parts.views.get(act.kind)?.preview?.(act);
+    if (shown) return (box) => this.excerpt(box, shown.text, shown.tail);
     // The answer of a prompt is markdown, whose marks of a heading, of emphasis, and of code the preview leaves out.
     if (act.kind === "prompt" && act.done && act.value !== null)
       return (box) =>
@@ -2170,7 +2159,8 @@ export class App {
   private actState(act: ActRow): { word: string; mark: string; color: RGBA } {
     const w = this.session;
     const running = () => ({ word: `running ${this.progress(act.id)}`, mark: spin(), color: c.accent });
-    if (act.kind === "grant")
+    const view = w.world.parts.views.get(act.kind);
+    if (view?.standing)
       return act.done
         ? { word: "ended", mark: glyph.ring, color: c.faint }
         : { word: "", mark: glyph.dot, color: c.accent };
@@ -2195,7 +2185,7 @@ export class App {
           : { word: "", mark: glyph.done, color: c.success };
     if (w.world.pending.has(act.id)) return { word: "pending", mark: glyph.ring, color: c.faint };
     if (w.world.prompts.has(act.id)) return { word: "needs input", mark: glyph.asks, color: c.warning };
-    if (act.paused && act.kind !== "bash")
+    if (act.paused && !view?.runsPaused)
       return { word: "waits for resume", mark: glyph.held, color: c.warning };
     return running();
   }
@@ -2211,16 +2201,12 @@ export class App {
   private actLabel(act: ActRow, closed = false, indent = 0, code?: string): Part[] {
     const { word, mark, color } = this.actState(act);
     const observation = act.kind === "prompt" && !this.session.isUserPrompt(act);
+    const view = this.session.world.parts.views.get(act.kind);
     const subject =
       act.kind === "prompt"
         ? String(act.words[1]).replace(observation ? / done$/ : /$^/, "")
-        : act.kind === "grant"
-          ? [
-              act.words[0] === null ? "" : `${dollars(Number(act.words[0]))} ceiling`,
-              act.words[1] === null ? "" : share(Number(act.words[1])),
-            ]
-              .filter(Boolean)
-              .join("  ")
+        : view?.subject
+          ? view.subject(act)
           : act.kind === "wait"
             ? seconds(Number(act.words[0]))
             : act.kind === "rung"
@@ -2318,22 +2304,22 @@ export class App {
     }
     const details = this.box({ paddingLeft: space.between * 2, gap: space.stack });
     box.add(details);
-    if (act.kind === "bash") {
-      this.commandDetails(details, act);
+    const view = this.session.world.parts.views.get(act.kind);
+    if (view?.details) {
+      this.partDetails(details, act);
       return;
     }
     const fields: Record<string, string[]> = {
       prompt: ["shape", "message", "actor"],
       rung: ["word", "retells", "actor", "returns"],
       wait: ["seconds"],
-      grant: ["dollar ceiling", "context ceiling"],
     };
     details.add(this.reference(act.id, act.id));
     for (const [index, value] of act.words.entries()) {
       if (value === null || value === "") continue;
       details.add(
         this.text([
-          [`${fields[act.kind]?.[index] ?? `argument ${index + 1}`}: `, c.faint],
+          [`${(view?.fields ?? fields[act.kind])?.[index] ?? `argument ${index + 1}`}: `, c.faint],
           [display(value), c.muted],
         ]),
       );
@@ -2343,53 +2329,45 @@ export class App {
         this.text(display(act.value), failed(act) ? c.danger : c.text, { marginTop: space.section }),
       );
   }
-  /** What a command printed, and under it its name and how it ended. The command says its line in its heading. What it
-   * printed to stderr takes the color of a failure, and each stream is named only when the command printed to both. */
-  private commandDetails(details: BoxRenderable, act: ActRow): void {
-    type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
-    const exit = (act.value && typeof act.value === "object" ? act.value : {}) as Exit;
-    const both = Boolean(exit.stdout?.content && exit.stderr?.content);
+  /** What the part of an act shows of it once its card opens: its streams of text, each named when it names one and
+   * in the color of a failure when it is one, and under them its name and its notes. */
+  private partDetails(details: BoxRenderable, act: ActRow): void {
+    const read = (row: ActRow) => this.session.world.parts.views.get(row.kind)?.details?.(row);
+    const { streams = [], notes = [] } = read(act) ?? {};
     const shown: TextRenderable[] = [];
-    for (const [name, color] of [
-      ["stdout", c.text],
-      ["stderr", c.danger],
-    ] as const) {
-      const content = exit[name]?.content;
-      if (!content) continue;
-      if (both)
+    for (const stream of streams) {
+      if (stream.name)
         details.add(
-          this.text(name, name === "stdout" ? c.faint : c.danger, {
+          this.text(stream.name, stream.failure ? c.danger : c.faint, {
             marginTop: shown.length ? space.section : 0,
           }),
         );
-      // The line end that closes what a command printed opens no empty row.
-      const node = this.text(content.replace(/\n$/, ""), color);
+      // The line end that closes a stream opens no empty row.
+      const node = this.text(stream.content.replace(/\n$/, ""), stream.failure ? c.danger : c.text);
       details.add(node);
       shown.push(node);
     }
     const meta = this.box({ flexDirection: "row", marginTop: shown.length ? space.section : 0 });
     meta.add(this.reference(act.id, act.id));
-    const [, input, timeout] = act.words;
-    const notes: Part[] = [
-      ...(act.done
-        ? ([
-            ["   exit ", c.faint],
-            [String(exit.code ?? "timeout"), exit.code === 0 ? c.success : c.danger],
-          ] as Part[])
-        : []),
-      [input === true ? "   input open" : "", c.faint],
-      [typeof timeout === "number" && timeout !== 600 ? `   times out after ${timeout}s` : "", c.faint],
-    ];
-    meta.add(this.text(notes, c.faint));
+    const tones = { faint: c.faint, success: c.success, danger: c.danger };
+    meta.add(
+      this.text(
+        notes.flatMap((note): Part[] => [
+          [`   ${note.label ? `${note.label} ` : ""}`, c.faint],
+          [note.text, tones[note.tone ?? "faint"]],
+        ]),
+        c.faint,
+      ),
+    );
     details.add(meta);
-    // The row holds the tail of what the command printed, and the card reads the whole of it once it opens.
+    // The row holds the tail of each long text of the act, and the card reads the whole of it once it opens.
     if (act.output !== undefined)
       void this.session.world.act(act.id).then((whole) => {
-        const streams = whole?.value as Exit | undefined;
-        const contents = [streams?.stdout?.content, streams?.stderr?.content].filter(Boolean) as string[];
-        for (const [index, node] of shown.entries())
-          if (!node.isDestroyed && contents[index] !== undefined)
-            node.content = safeText(contents[index].replace(/\n$/, ""));
+        const contents = (whole && read(whole)?.streams) ?? [];
+        for (const [index, node] of shown.entries()) {
+          const content = contents[index]?.content;
+          if (!node.isDestroyed && content !== undefined) node.content = safeText(content.replace(/\n$/, ""));
+        }
       }, this.report);
   }
 
@@ -2432,15 +2410,7 @@ export class App {
     if (value.startsWith("furb-image://")) this.imageActions(value);
     else if (act?.kind === "chain") await this.session.select(act.id);
     else if (act && act.id === value && act.on === this.session.selected) this.go("feed", act.id);
-    else
-      this.showValue(
-        value,
-        (
-          (await this.session.life.read(value, { is: "name", name: "HIDDEN" }, this.session.selected)) as {
-            content: string;
-          }
-        ).content,
-      );
+    else this.showValue(value, await this.session.read(value));
   }
 
   private async referenceHover(value: string, x: number, y: number): Promise<void> {
@@ -2450,15 +2420,7 @@ export class App {
         ? "Image attachment. Click to open its actions."
         : act
           ? `${act.kind}  ${act.done ? display(act.value) : "pending"}`
-          : (
-              (await this.session.life.read(
-                value,
-                { is: "name", name: "HIDDEN" },
-                this.session.selected,
-              )) as {
-                content: string;
-              }
-            ).content;
+          : await this.session.read(value);
       if (this.closed || this.overlay) return;
       this.hover?.destroyRecursively();
       this.hover = this.box({
@@ -2553,7 +2515,7 @@ export class App {
    * its work while another chain was shown, is finished and not yet seen until the operator opens it. */
   private chainStatus(id: string): SessionStatus {
     const w = this.session;
-    const acts = w.acts.filter((act) => act.on === id && act.kind !== "chain" && act.kind !== "grant");
+    const acts = w.acts.filter((act) => act.on === id && !w.world.parts.hidden(act));
     const latest = acts.at(-1);
     const status: SessionStatus = acts.some((act) => w.world.prompts.has(act.id))
       ? "blocked"
@@ -2583,7 +2545,7 @@ export class App {
   private renderRailSession(): void {
     const w = this.session;
     const window = w.filled;
-    const grant = w.activity.find((act) => act.kind === "grant" && !act.done);
+    const added = w.world.parts.sidebar({ acts: w.acts, chain: w.selected });
     const width = w.preferences.sidebarWidth;
     if (
       !this.paneChanged(this.railSession, [
@@ -2593,7 +2555,7 @@ export class App {
         window,
         width,
         w.chains.map((chain) => [chain.id, w.labelOf(chain.id), this.chainStatus(chain.id)]),
-        grant?.words,
+        added,
         this.showResting,
       ])
     )
@@ -2709,11 +2671,10 @@ export class App {
     }
     target = this.railUsage;
     const spend = w.spend;
-    const ceiling =
-      grant?.words[1] === null || grant?.words[1] === undefined ? undefined : Number(grant.words[1]);
+    const meter = added.findLast((part) => part.meter)?.meter;
     const known = window !== undefined && Number.isFinite(window);
     const tokens = spend.input + spend.output + spend.cacheRead + spend.cacheWrite;
-    this.railUsage.visible = tokens > 0 || spend.dollars > 0 || Boolean(grant);
+    this.railUsage.visible = tokens > 0 || spend.dollars > 0 || added.length > 0;
     if (this.railUsage.visible) {
       section(
         "Context",
@@ -2723,11 +2684,12 @@ export class App {
       // The rule above the usage stands in for the space above a section.
       const head = this.railUsage.getChildren()[0];
       if (head) head.marginTop = 0;
-      // The meter fills with the share of the window that the last answer used, and marks the ceiling of a grant. It
-      // stands empty until an answer tells the share, and a hover over it says the share and where the chain pauses.
+      // The meter fills with the share of the window that the last answer used, and marks what a part marks on it, as
+      // the ceiling of a grant. It stands empty until an answer tells the share, and a hover over it says the share
+      // and what the part says of its mark.
       const part = known ? (window ?? 0) : 0;
       const used = Math.min(inner, Math.max(part > 0 ? 1 : 0, Math.round(part * inner)));
-      const mark = ceiling === undefined ? -1 : Math.min(inner - 1, Math.round(ceiling * inner));
+      const mark = meter === undefined ? -1 : Math.min(inner - 1, Math.round(meter.mark * inner));
       const tone = part >= 0.9 ? c.danger : part >= 0.7 ? c.warning : c.accent;
       const cells: Part[] = [];
       for (let at = 0; at < inner; at++)
@@ -2735,7 +2697,7 @@ export class App {
       const tip: Part[] = [
         [known ? `${Number((part * 100).toFixed(1))}%` : "No answer yet", c.text, bold],
         [known ? " of the context window" : "", c.muted],
-        [ceiling === undefined ? "" : `, pauses at ${Number((ceiling * 100).toFixed(1))}%`, c.warning],
+        [meter?.tip ?? "", c.warning],
       ];
       add(cells, {
         onMouseOver: (event) => this.tip(tip, event.x, event.y),
@@ -2769,7 +2731,8 @@ export class App {
         if (spend.cacheWrite) row("Cache write", count(spend.cacheWrite));
       }
       row("Spent", dollars(spend.dollars));
-      if (grant && grant.words[0] !== null) row("Ceiling", dollars(Number(grant.words[0])), c.muted);
+      for (const one of added.flatMap((part) => part.rows ?? []))
+        row(one.name, one.value, one.tone === "text" ? c.text : c.muted);
     }
   }
   /** The composer holds a text in place of the draft that the session shows, and an undo gives the draft back. */
@@ -3258,16 +3221,14 @@ export class App {
   };
   /** The commands that the view answers itself, by their text. */
   private async globalCommand(text: string): Promise<boolean> {
-    const extensions = this.options.extensions;
-    if (text.startsWith("/extension ") && extensions) {
-      await extensions.load(this.session.path(text.slice(11).trim()));
-      this.session.notice = "Extension loaded.";
-      return true;
-    }
     const [name, ...words] = text.startsWith("/") ? text.slice(1).split(" ") : [];
     const argument = words.join(" ").trim();
-    if (name && extensions?.commands.has(name)) {
-      await extensions.run(name, words.join(" "));
+    if (name === "extensions") {
+      if (argument === "update") {
+        const names = await this.session.world.fetchExtensions();
+        this.session.notice = `Fetched ${names.join(", ")} again. A new session plays the change.`;
+      } else if (argument) throw new Error("Use /extensions, or /extensions update.");
+      else this.extensionsList();
       return true;
     }
     // A command with no argument that opens a picker, and /inspect, which opens the value it names.
@@ -3416,6 +3377,32 @@ export class App {
       })),
     );
   };
+  /** The extensions that the session plays: where each stands, and the parts it has. The last choice fetches them all
+   * again. */
+  private extensionsList(): void {
+    const world = this.session.world;
+    this.openPalette("Extensions", [
+      ...world.extensions.map((one) => ({
+        label: one.name,
+        detail: [
+          one.builtin ? "builtin" : shortenHome(one.root ?? ""),
+          [one.word ? "python" : "", one.world.ts || one.world.py ? "World" : "", one.tui ? "TUI" : ""]
+            .filter(Boolean)
+            .join(", "),
+          one.requires.length ? `requires ${one.requires.join(", ")}` : "",
+        ]
+          .filter(Boolean)
+          .join("   "),
+        run: () => {},
+      })),
+      {
+        label: "Update extensions",
+        detail: "Fetch every extension again; a new session plays the change",
+        command: "/extensions update",
+        run: () => this.action("/extensions update"),
+      },
+    ]);
+  }
   private queuePicker = (): void => {
     const session = this.session;
     this.openPalette(
@@ -3591,7 +3578,6 @@ export class App {
       effort: "⇧Tab",
       theme: "⌃T",
       inspect: "⌃G",
-      bash: "!",
       edit: "⌃L",
     };
     const choices: Choice[] = [];
@@ -3610,12 +3596,13 @@ export class App {
         keys: `${kitty ? "⌃" : "⌥"}${index + 1}`,
         run: () => this.showView(view),
       });
-    for (const [name, command] of this.options.extensions?.commands ?? [])
+    for (const [name, command] of this.session.world.parts.commands)
       choices.push({
         label: command.label,
-        detail: command.description,
-        command: `/${name}`,
-        run: () => this.action(`/${name}`),
+        detail: command.detail,
+        command: `/${name}${command.argument ? ` ${command.argument}` : ""}`,
+        keys: command.keys,
+        run: this.command(name, command.argument ?? ""),
       });
     // The actions that have keys and no command stand beside the commands they go with.
     const beside: Record<string, Choice> = {
@@ -3640,7 +3627,7 @@ export class App {
         keys: "⌃S",
         run: () => this.stash(),
       },
-      grant: {
+      pause: {
         label: "Filter the view",
         detail: "Show only what holds a text",
         command: "",
@@ -3689,7 +3676,10 @@ export class App {
     if (slash) return { kind: "/", text: slash[1] ?? "" };
     // The first word after a command whose values are known is a value, which the suggestions complete.
     const value = before.match(/^\/([\w-]+) (\S*)$/);
-    if (value && valued.has(value[1] ?? ""))
+    if (
+      value &&
+      (valued.has(value[1] ?? "") || this.session.world.parts.commands.get(value[1] ?? "")?.values)
+    )
       return { kind: "value", text: value[2] ?? "", command: value[1] ?? "" };
     const at = before.match(/(?:^|\s)@([^\s"']*)$/);
     if (at && this.session.mode === "prompt" && !this.session.editing)
@@ -3720,6 +3710,11 @@ export class App {
       );
     }
     return this.files.paths;
+  }
+  /** Whether the value of a command is a path of the project, which the suggestions wait for: an image, or the value
+   * of a command of an extension that says so. */
+  private pathCommand(name: string): boolean {
+    return name === "image" || Boolean(this.session.world.parts.commands.get(name)?.paths);
   }
   /** The values that the first argument of a command may take, each with what it means, or nothing for a command
    * whose argument is free text. A value of a command that takes more after it completes, and a value of any other
@@ -3755,23 +3750,9 @@ export class App {
           value: name,
           detail: `${themeLabels[name].join(", ")}${current(name === this.theme)}`,
         }));
-      case "read":
-        return files().map((path) => ({ value: path, detail: "" }));
       case "image":
         return files()
           .filter((path) => /\.(png|jpe?g|gif|webp)$/i.test(path))
-          .map((path) => ({ value: path, detail: "" }));
-      case "extension":
-        return files()
-          .filter((path) => /\.(ts|js|mts|mjs)$/.test(path))
-          .map((path) => ({ value: path, detail: "" }));
-      case "cd":
-        return [
-          ...new Set(
-            files().flatMap((path) => (path.includes("/") ? [path.slice(0, path.lastIndexOf("/"))] : [])),
-          ),
-        ]
-          .sort()
           .map((path) => ({ value: path, detail: "" }));
       case "workspace":
         return (this.options.workspaces?.groups ?? []).map((group) => ({
@@ -3798,26 +3779,16 @@ export class App {
             value: act.id,
             detail: `${act.kind}  ${clip(String(act.words[act.kind === "prompt" ? 1 : 0] ?? ""), 40)}`,
           }));
-      case "feed":
-        return w.activity
-          .filter((act) => act.kind === "bash" && !act.done && act.words[1] === true)
-          .map((act) => ({ value: act.id, detail: clip(String(act.words[0] ?? ""), 48), more: true }));
       case "close":
         return w.activity
           .filter((act) => !act.done && act.kind !== "chain")
           .map((act) => ({ value: act.id, detail: act.kind, more: true }));
-      case "grant":
-        return ["1", "2", "5", "10", "20"].map((value) => ({
-          value,
-          detail: `Pause this chain at ${dollars(Number(value))}`,
-        }));
-      case "context":
-        return ["0.5", "0.7", "0.8", "0.9"].map((value) => ({
-          value,
-          detail: `Pause this chain at ${share(Number(value))}`,
-        }));
+      case "extensions":
+        return [{ value: "update", detail: "Fetch every extension again; a new session plays the change" }];
       default:
-        return undefined;
+        return w.world.parts.commands
+          .get(command)
+          ?.values?.(w.tuiContext(w.selected, w.workingDirectory, () => this.projectPaths()));
     }
   }
   private suggest = (): void => {
@@ -3836,10 +3807,10 @@ export class App {
     if (token.kind === "/") {
       const names = [
         ...Object.entries(commands).map(([name, [, argument, detail]]) => ({ name, argument, detail })),
-        ...[...(this.options.extensions?.commands ?? [])].map(([name, command]) => ({
+        ...[...this.session.world.parts.commands].map(([name, command]) => ({
           name,
-          argument: "",
-          detail: command.description,
+          argument: command.argument ?? "",
+          detail: command.detail,
         })),
       ];
       // The command that the token names whole comes first.
@@ -3899,9 +3870,9 @@ export class App {
     const shown = token ? this.suggestions : [];
     const state = !token
       ? ""
-      : (token.kind === "@" || pathCommands.has(token.command ?? "")) && this.files?.error
+      : (token.kind === "@" || this.pathCommand(token.command ?? "")) && this.files?.error
         ? this.files.error
-        : (token.kind === "@" || pathCommands.has(token.command ?? "")) && !this.files?.paths
+        : (token.kind === "@" || this.pathCommand(token.command ?? "")) && !this.files?.paths
           ? "Finding project files..."
           : shown.length
             ? ""
@@ -4396,8 +4367,8 @@ export class App {
         detail: value,
         run: () => {
           if (act.kind === "chain") return this.session.select(act.id);
-          void this.session.life
-            .read(value, undefined, this.session.selected)
+          void this.session
+            .read(value)
             .then((text) => this.showValue(value, text))
             .catch(this.report);
         },
@@ -4509,12 +4480,12 @@ export class App {
   };
   /** The tree of the session in the feed, with the pointer on the chain shown. */
   sessionTree = (): void => this.openTree(this.session.selected, "Session tree");
-  /** Whether an act is a point that a branch can start from: an act that a turn of its chain tells, which is no
-   * chain, no grant, and no rung that its chain wrote to retell its source. */
+  /** Whether an act is a point that a branch can start from: an act that a turn of its chain tells, which its part
+   * does not hide, and no rung that its chain wrote to retell its source or that the World played. */
   private isPoint(act: ActRow): boolean {
     return (
-      !["chain", "grant"].includes(act.kind) &&
-      (act.kind !== "rung" || this.session.actOf(act.by)?.kind !== "chain")
+      !this.session.world.parts.hidden(act) &&
+      (act.kind !== "rung" || (act.by !== "world" && this.session.actOf(act.by)?.kind !== "chain"))
     );
   }
   private openTree(selected: string, title: string): void {

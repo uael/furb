@@ -40,14 +40,17 @@ test("idle snapshots add no facts or sandbox calls as the act table grows, and s
     expect(world.facts.length).toBe(facts);
     expect(calls.filter((name) => ["get", "outcome", "scope", "peek"].includes(name))).toEqual([]);
 
-    const command = life.bash('printf first; read line; printf "$line"; read hold', { fed: true }).id;
+    const command = life.call<string>("bash", ['printf first; read line; printf "$line"; read hold'], {
+      fed: true,
+      on: life.root,
+    });
     const output = () =>
       (world.activity.acts.get(command)?.value as { stdout?: { content: string } })?.stdout?.content;
     await until(world, () => output() === "first");
     snapshots.take(life.root);
     await Promise.resolve();
     const streamed = [...calls];
-    life.write({ path: `${command}/stdin`, content: "second\n" });
+    life.call("ask", ["write", life.root, `${command}/stdin`, "second\n"], {});
     await until(world, () => output() === "firstsecond");
     const snapshot = snapshots.take(life.root);
     expect(snapshot.acts.find((act) => act.id === command)?.value).toMatchObject({

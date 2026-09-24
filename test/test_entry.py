@@ -2,7 +2,6 @@
 
 from conftest import STANDS, Dead, Sand, life, lived, plain, relived, said, settle, sown
 from furb import engine
-from furb.engine import Text
 
 
 async def test_one_entry_of_the_record_the_fact() -> None:
@@ -10,7 +9,7 @@ async def test_one_entry_of_the_record_the_fact() -> None:
   sand = sown()
   log, _ = await lived(sand)
   reads = [e for e in sand.record if e[0][0] == "read"]
-  assert [(len(e), e[1]) for e in reads] == [(2, Text("/w/a.txt", "one\ntwo\n"))]
+  assert [(len(e), e[1]) for e in reads] == [(2, {"path": "/w/a.txt", "content": "one\ntwo\n"})]
   assert [len(e) for e in sand.record if e[0][0] not in ("read", "stand")] == [1] * (len(sand.record) - 2)
   assert [e[0] for e in sand.record if len(e) == 1] == [one for one in log if (one,) in sand.record]
 

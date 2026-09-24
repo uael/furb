@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "bind/typescript",
-    "tui"
+    "tui",
+    "extensions/*"
   ],
   "scripts": {
     "build": "bun run bind/typescript/build.ts",
@@ -12,10 +13,10 @@
     "screenshots": "bun run tui/script/screenshots.ts",
     "animation": "bun run tui/script/animation.ts",
     "docs": "bun run tui/script/docs.ts",
-    "check": "tsc --noEmit",
-    "test": "bun test bind/typescript/test tui/test",
-    "format": "biome format --write bind/typescript tui package.json tsconfig.json biome.json",
-    "lint": "biome check bind/typescript tui package.json tsconfig.json biome.json"
+    "check": "tsc --noEmit && tsc --noEmit -p extensions/skills",
+    "test": "bun test bind/typescript/test tui/test extensions",
+    "format": "biome format --write bind/typescript tui extensions package.json tsconfig.json biome.json",
+    "lint": "biome check bind/typescript tui extensions package.json tsconfig.json biome.json"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.6",

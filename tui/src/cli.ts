@@ -7,7 +7,6 @@ import { efforts, furbDirectory, onConsoleEnd, type WorldOptions } from "@furb/e
 import { createCliRenderer } from "@opentui/core";
 import { App } from "./app.ts";
 import { demoDirectory, removeDemoDirectories } from "./demo.ts";
-import { Extensions } from "./extensions.ts";
 import { defaultModel, type EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { sessionChoices } from "./sessions.ts";
@@ -25,7 +24,6 @@ const { values } = parseArgs({
     record: { type: "string" },
     resume: { type: "string" },
     roster: { type: "string", multiple: true },
-    extension: { type: "string", multiple: true },
   },
 });
 if (values.help) {
@@ -71,25 +69,6 @@ if (record) await library.import(record, group);
 else await library.create(group);
 const initial = library.current?.session;
 if (!initial) throw new Error("The session did not open.");
-const extensions = new Extensions(() => {
-  const session = library.current?.session;
-  if (!session) throw new Error("No session is selected.");
-  return {
-    life: session.life,
-    chain: session.selected,
-    directory: session.workingDirectory,
-    notify: (message) => {
-      session.notice = message;
-    },
-    submit: (message) => session.submit(message),
-  };
-});
-try {
-  for (const path of values.extension ?? []) await extensions.load(resolve(path));
-} catch (error) {
-  await library.dispose();
-  throw error;
-}
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
   // The TUI ends on a signal by its own quit, since the view saves its draft before the renderer goes.
@@ -108,7 +87,6 @@ const quit = async () => {
   for (const step of [
     () => app.dispose(),
     () => renderer.destroy(),
-    () => extensions.dispose(),
     () => library.dispose(),
     () => removeDemoDirectories(),
   ])
@@ -128,7 +106,7 @@ const sessions = async () => {
   const group = library.groupOf();
   return sessionChoices(group, (entry) => library.select(entry), newSession);
 };
-const options = { quit, sessions, newSession, workspaces: library, extensions };
+const options = { quit, sessions, newSession, workspaces: library };
 app = new App(renderer, initial, options);
 library.on("select", (session) => {
   if (app.session === session) return;

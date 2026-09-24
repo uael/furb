@@ -1,6 +1,6 @@
 [project]
 name = "furb"
-version = "0.1.0"
+version = "0.2.0"
 description = "The core of an AI harness, in one python file."
 readme = "README.md"
 requires-python = ">=3.14"
@@ -17,7 +17,7 @@ classifiers = [
 dependencies = [
     # The Kernel gates a word through the gate of the crate, so the package stands on the extension, at its own
     # version: both carry the engine, and a release is the two together.
-    "furb-monty==0.1.0",
+    "furb-monty==0.2.0",
     "pydantic>=2.13.5",
     "pydantic-ai-slim>=2.27.1",
     "python-minifier>=3.3.0",
@@ -71,7 +71,7 @@ ignore = ["S101"]
 [tool.ruff.lint.per-file-ignores]
 # The suite pins the contract's own literals, drives doubles that answer in one sentence where they stand, and
 # names its tests by the sentence they carry.
-"test/**" = ["PLR2004", "EM101", "EM102", "TRY003", "FBT001", "FBT003", "PT018", "ARG002", "RUF012", "PLR0911", "PLR0912", "A002", "E501"]
+"{test,extensions/*/test}/**" = ["PLR2004", "EM101", "EM102", "TRY003", "FBT001", "FBT003", "PT018", "ARG002", "RUF012", "PLR0911", "PLR0912", "A002", "E501"]
 # The stand-in has one arm for each kind of value it makes again, and a life opens on everything it takes: the
 # engine, the sheet, the names, the record, and the three objects of the host. The World of the host is called by
 # position, as the interpreter hands the words of a call. The sandbox makes no class from a class of the
@@ -81,6 +81,10 @@ ignore = ["S101"]
 # The surface speaks the engine's own vocabulary: its verbs shadow builtins on purpose, take the parameters the
 # contract names, and its exceptions are named as the contract names them.
 "src/furb/engine.pyi" = ["N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "E501", "PLR0904"]
+# An extension speaks as the engine does: its contract holds one sentence to a line, and its word raises a refusal
+# where it stands.
+"extensions/*/*.pyi" = ["E501"]
+"extensions/*/*.py" = ["EM102", "TRY003"]
 "src/furb/engine.py" = ["S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "ANN", "PLR0904", "EM101", "EM102", "TRY003", "PLR0917", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "SIM105", "C901", "SLF001"]
 
 [tool.ruff.lint.pycodestyle]
@@ -107,7 +111,11 @@ docstring-code-format = true
 skip-magic-trailing-comma = true
 
 [tool.ty.src]
-include = ["src", "test", "script", "bind/python"]
+include = ["src", "test", "script", "bind/python", "extensions"]
+
+# The suite of an extension reads the harness of the suite of the engine as conftest, as pytest gives it on its path.
+[tool.ty.environment]
+extra-paths = ["test"]
 
 # The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
 # of an act, a task or a standing it reads after the check the sentence beside it makes.
@@ -130,7 +138,7 @@ unresolved-import = "ignore"
 
 [tool.pytest.ini_options]
 minversion = "9.1"
-testpaths = ["test"]
+testpaths = ["test", "extensions"]
 pythonpath = [".", "test"]
 # The suite runs on every core: a test opens a life of its own and leaves nothing behind, so the tests are independent.
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing", "--cov-fail-under=100"]

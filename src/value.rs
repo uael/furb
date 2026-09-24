@@ -1,90 +1,19 @@
-//! What crosses between the engine and a host, which is what monty carries, and the engine's own classes as a
-//! host holds them.
+//! What crosses between the engine and a host, which is what monty carries, and an exception as a host holds one.
 //!
 //! Monty carries a value of the sandbox out as itself: a number, a text, a list, a tuple, a map, an instance of
 //! a class with its fields, an exception with what it was made with. That is [`Object`], monty's own, and the
-//! crate adds no value model beside it. What it adds is the reading of three classes the engine defines, since a
-//! host wants a `Text` as a text and not as an instance named `Text`: [`Text`], [`Exit`], and [`Fault`], which is
-//! any exception by its name and what it was made with.
+//! crate adds no value model beside it. What it adds is the reading of an exception, [`Fault`], by its name and
+//! what it was made with.
 //!
 //! The way in is narrower than the way out: monty makes no instance of a class of the sandbox on a host's behalf.
-//! So an instance of a class of the engine goes in as its name and its fields, in a map marked `is`, and the
-//! stand-in in the sandbox makes the instance. That is the one rule of the crossing that is not monty's own.
+//! So an instance of a class goes in as its name and its fields, in a map marked `is`, and the stand-in in the
+//! sandbox makes the instance. That is the one rule of the crossing that is not monty's own.
 
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 pub use monty_types::{MontyObject as Object, ObjectRef};
 
 /// The key of the one mark: a map whose `is` names a class of the engine is an instance of it, by its fields.
 pub const IS: &str = "is";
-
-/// A text of the engine: the content at a path.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct Text {
-  pub path: String,
-  pub content: String,
-}
-
-impl Text {
-  pub fn new(path: impl Into<String>, content: impl Into<String>) -> Self {
-    Text { path: path.into(), content: content.into() }
-  }
-
-  /// The text an object is, when it is an instance of `Text`.
-  pub fn of(said: ObjectRef<'_>) -> Option<Text> {
-    if said.type_name() != "Text" {
-      return None;
-    }
-    Some(Text {
-      path: field(&said, "path")?.as_str()?.to_owned(),
-      content: field(&said, "content")?.as_str()?.to_owned(),
-    })
-  }
-
-  /// The text as it goes in: its name and its fields.
-  pub fn object(&self) -> Object {
-    marked(
-      "Text",
-      [
-        ("path", Object::string(self.path.clone())),
-        ("content", Object::string(self.content.clone())),
-      ],
-    )
-  }
-}
-
-/// What a command came to: its code, which is nothing for one ended at its timeout, and its two streams.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Exit {
-  pub code: Option<i64>,
-  pub stdout: Text,
-  pub stderr: Text,
-}
-
-impl Exit {
-  /// The exit an object is, when it is an instance of `Exit`.
-  pub fn of(said: ObjectRef<'_>) -> Option<Exit> {
-    if said.type_name() != "Exit" {
-      return None;
-    }
-    Some(Exit {
-      code: field(&said, "code").and_then(|one| one.as_int()),
-      stdout: Text::of(field(&said, "stdout")?)?,
-      stderr: Text::of(field(&said, "stderr")?)?,
-    })
-  }
-
-  /// The exit as it goes in: its name and its fields.
-  pub fn object(&self) -> Object {
-    marked(
-      "Exit",
-      [
-        ("code", self.code.map_or_else(Object::none, Object::int)),
-        ("stdout", self.stdout.object()),
-        ("stderr", self.stderr.object()),
-      ],
-    )
-  }
-}
 
 /// An exception, by its name and what it was made with, which is how one is read across the boundary and made
 /// again on the other side.
@@ -208,10 +137,10 @@ mod tests {
 
   #[test]
   fn an_instance_of_the_engine_goes_in_as_its_name_and_its_fields() {
-    let sent = Text::new("a.txt", "one\n").object();
+    let sent = marked("Point", [("x", Object::int(1))]);
     let sent = sent.as_ref();
-    assert_eq!(field(&sent, IS).and_then(|one| one.as_str()), Some("Text"));
-    assert_eq!(field(&sent, "content").and_then(|one| one.as_str()), Some("one\n"));
+    assert_eq!(field(&sent, IS).and_then(|one| one.as_str()), Some("Point"));
+    assert_eq!(field(&sent, "x").and_then(|one| one.as_int()), Some(1));
     let fault = Fault::refused("no").object();
     assert_eq!(field(&fault.as_ref(), IS).and_then(|one| one.as_str()), Some("Refused"));
   }

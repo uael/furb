@@ -249,7 +249,7 @@ wheels = [
 
 [[package]]
 name = "furb"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "furb-monty" },
@@ -296,7 +296,7 @@ dev = [
 
 [[package]]
 name = "furb-monty"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "bind/python" }
 dependencies = [
     { name = "furb" },

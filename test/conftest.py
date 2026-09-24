@@ -12,7 +12,7 @@ import json
 import re
 import sys
 from asyncio import CancelledError
-from collections.abc import Coroutine, Generator, Sequence
+from collections.abc import Callable, Coroutine, Generator, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass
 from functools import partial
 from pathlib import Path
@@ -23,10 +23,16 @@ import furb
 import furb_monty.engine
 from furb import engine, sheet
 from furb.engine import OPERATOR, WORLD, Act, Refused, Text, modules, outcomes, site, under
-from furb.kernel import ENGINE
+from furb.kernel import ENGINE, extended
 
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
+SUITES = (HERE, *sorted((HERE.parent / "extensions").glob("*/test")))
+"""SUITES are the suite of the engine and the suite of each extension of the repository, which run on each engine."""
+SOURCE = Path(furb.python.__file__).read_text(encoding="utf-8")
+"""SOURCE is the engine as a text, which the system prompt of a life of the suite is made of."""
+TAKEN = [one.name for one in furb_monty.builtin_extensions()]
+"""TAKEN are the builtins a life of the suite takes: every builtin."""
 ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
@@ -123,7 +129,9 @@ class Sand:
   ask, `record` what it keeps of the keep facts of the journal, `fed` what was fed to its commands, and `calls`
   every fact it answered or performed, in order. `stands` is what a chain stands on, `cost` the usage of one
   answer, and `auto` says whether a command tells a line and exits at once. `tick` counts the readings of its
-  clock and the chances it drew, so a later life reads what the life before it read.
+  clock and the chances it drew, so a later life reads what the life before it read. `words` and `lives` are the
+  words and the life words of its extensions, `answers` answers a question of an extension by its kind, and
+  `booted` says that the life stands on its record.
   """
 
   files: dict[str, str] = field(default_factory=dict)
@@ -135,6 +143,10 @@ class Sand:
   stands: list | None = None
   cost: tuple | None = None
   tick: int = 0
+  words: list[str] = field(default_factory=list)
+  lives: list[str] = field(default_factory=list)
+  answers: dict[str, Callable[[tuple], object]] = field(default_factory=dict)
+  booted: bool = False
 
   def hears(self) -> World:  # noqa: PLR0915
     """The World as one generator for one life: it does the act a start names, answers the questions that are its
@@ -157,9 +169,14 @@ class Sand:
       a = yield
       if a[0] in ("start", "stand", "read", "write", "ask", "feed", "clock", "chance"):
         self.calls.append(a)
+      # The crate plays the life words of a life of monty itself.
+      if self.booted and engine is furb.python and a[0] == "chain" and not a[5]:
+        plays(self.lives, a[1])
       match a:
         case (_, id, *_) if engine.question(a) and id in engine.acts:
           acts[id] = a
+        case (kind, qid, *_) if kind in self.answers and engine.question(a):
+          yield "done", qid, self.answers[kind](a)
         case ("start", about, _):
           match acts[about]:
             case ("bash", _, _, on, command, _, timeout):
@@ -176,12 +193,10 @@ class Sand:
         case ("stand", qid, *_):
           yield "done", qid, self.stands or [[], "", ""]
         case ("read", qid, _, on, path) if (full := resolved(engine.cwd(on=on), path)) in self.files:
-          yield "done", qid, Text(full, self.files[full])
-        case ("write", qid, _, on, Text(path=path, content=content)) if (
-          "://" not in path and path.split("/")[0] not in engine.acts
-        ):
+          yield "done", qid, {"path": full, "content": self.files[full]}
+        case ("write", qid, _, on, path, content) if "://" not in path and path.split("/")[0] not in engine.acts:
           self.files[full := resolved(engine.cwd(on=on), path)] = content
-          yield "done", qid, Text(full, content)
+          yield "done", qid, {"path": full, "content": content}
         case ("ask", rung, _, on, _, _):
           running[rung] = on
           if self.script.get(on):
@@ -244,10 +259,10 @@ class Where(Sand):
           yield "done", qid, self.stands or [[], "", ""]
         case ("read", qid, _, on, path):
           full = f"{engine.cwd(on=on)}/{path}"
-          yield "done", qid, Text(full, self.files.get(full, ""))
-        case ("write", qid, _, on, Text(path=path, content=content)):
+          yield "done", qid, {"path": full, "content": self.files.get(full, "")}
+        case ("write", qid, _, on, path, content):
           self.files[full := f"{engine.cwd(on=on)}/{path}"] = content
-          yield "done", qid, Text(full, content)
+          yield "done", qid, {"path": full, "content": content}
         case ("start", about, _):
           self.where.append(engine.cwd(on=about and engine.scope(about)))
           yield "exited", about, 0
@@ -288,9 +303,13 @@ class Py:
   sheet of the engine with the gate of the crate.
   """
 
+  def __init__(self, source: str | None = None) -> None:
+    self.source = source
+
   def gate(self, word: str, program: list[str]) -> list[str]:
-    """What the gate finds against a word: the sheet of the engine, read by the gate of the crate."""
-    return sheet.gate(ENGINE, program, word, furb_monty.gate)
+    """What the gate finds against a word: the sheet of the engine, read by the gate of the crate against `source`,
+    the system prompt of the life, when it is given."""
+    return sheet.gate(ENGINE, program, word, lambda text: furb_monty.gate(text, self.source))
 
   def gating(self) -> Kernel:
     """The gate as the ear of a life, which answers each gate with what it finds against the word."""
@@ -384,18 +403,50 @@ def watched(log: list[tuple]) -> Kernel:
       log.append(a)
 
 
-def kernel() -> dict[str, Kernel]:
+def kernel(source: str | None = None) -> dict[str, Kernel]:
   """The Kernel and the gate a life of the suite is given: the ones that are python for the engine of this
-  interpreter, and none for the engine of monty, which holds its own."""
-  return {} if engine is not furb.python else {"kernel": Py().kernel(), "gate": Py().gating()}
+  interpreter, whose gate reads against `source`, and none for the engine of monty, which holds its own."""
+  return {} if engine is not furb.python else {"kernel": Py().kernel(), "gate": Py(source).gating()}
+
+
+def plays(lives: Sequence[str], chain: str) -> None:
+  """The life words, played on a chain as rungs, as the World."""
+  token = site.set(WORLD)
+  try:
+    for word in lives:
+      engine.rung(word, on=chain)
+  finally:
+    site.reset(token)
 
 
 def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   """A life: the engine opened from a record, with the Kernel it takes, a World in memory and a generator that keeps
-  every fact said in it; it gives what was said and the id of the root.
+  every fact said in it; it gives what was said and the id of the root. As a host does, it takes every builtin, the
+  words and the life words of the World, or what the record pins.
   """
   log: list[tuple] = []
-  return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears())
+  taken, words, world.lives, pins = furb_monty.pinned(list(record), TAKEN, world.words, world.lives)
+  if engine is furb.python:
+    extended(taken, words)
+  else:
+    furb_monty.engine.WORDS[:], furb_monty.engine.LIVES[:] = world.words, world.lives
+  source = furb_monty.system_prompt(SOURCE, taken, words)
+  root = engine.boot(record, **kernel(source), probe=watched(log), world=world.hears())
+  if engine is furb.python:
+    if pins:
+      engine.send("extensions", root, taken, words, world.lives, by=WORLD)
+    for one in [a[1] for a in list(engine.acts.values()) if a[0] == "chain" and not a[5]]:
+      plays(world.lives, one)
+  world.booted = True
+  return log, root
+
+
+def extension(name: str) -> tuple[list[str], list[str]]:
+  """The words and the life words of an extension of the repository, as the crate makes them from its manifest."""
+  root = HERE.parent / "extensions" / name
+  manifest = json.loads((root / "package.json").read_text(encoding="utf-8"))["furb"]
+  words = [furb_monty.word_of((root / manifest["python"]).read_text(encoding="utf-8"))]
+  return words, [manifest["life"]] if "life" in manifest else []
 
 
 def outside(label: str = "outside") -> str:
@@ -515,7 +566,7 @@ def swapped(to: object) -> None:
   seen: set[int] = set()
   for mod in list(sys.modules.values()):
     file = getattr(mod, "__file__", None)
-    if not file or id(mod) in seen or not str(file).startswith(str(HERE)):
+    if not file or id(mod) in seen or not any(Path(file).is_relative_to(one) for one in SUITES):
       continue
     seen.add(id(mod))
     for key, value in list(vars(mod).items()):
@@ -526,10 +577,24 @@ def swapped(to: object) -> None:
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-  """Every test of the suite runs once on each engine; the hygiene laws read the file and run once."""
+  """Every test of the suites runs once on each engine; the hygiene laws read the files and run once."""
   path = metafunc.definition.path
-  if "engine_of" in metafunc.fixturenames and path.parent == HERE and path.name != "test_hygiene.py":
+  if "engine_of" in metafunc.fixturenames and path.parent in SUITES and path.name != "test_hygiene.py":
     metafunc.parametrize("engine_of", list(ENGINES), indirect=True)
+
+
+@pytest.fixture(autouse=True)
+def pristine() -> Generator[None]:
+  """No word of an extension outlives the test that ran it: the module of the engine holds again what it held before
+  the test, and the next life of monty runs no word it is not given."""
+  held = dict(vars(furb.python))
+  yield
+  now = vars(furb.python)
+  for name in [one for one in now if one not in held]:
+    del now[name]
+  now.update(held)
+  furb_monty.engine.WORDS.clear()
+  furb_monty.engine.LIVES.clear()
 
 
 @pytest.fixture(autouse=True)

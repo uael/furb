@@ -1,13 +1,13 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { builtinExtensions, type Extension } from "@furb/engine";
 import { CodeRenderable, type Renderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { removeDemoDirectories, seedDemo, seedDemoFiles } from "../src/demo.ts";
-import { Extensions } from "../src/extensions.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
@@ -51,9 +51,24 @@ async function project(name: string): Promise<string> {
   await seedDemoFiles(directory);
   return directory;
 }
+/** The example extension, which gives a command of the TUI alone, played beside the builtins. */
+const summary: Extension = {
+  name: "project-summary",
+  builtin: false,
+  root: resolve("tui/examples/project-summary"),
+  requires: [],
+  world: {},
+  tui: resolve("tui/examples/project-summary/tui.ts"),
+};
+/** What every session of the gallery plays: the builtins and the example. */
+const played = [...builtinExtensions(), summary];
 /** A new demo session in the project that the conversation of the gallery is about. */
 async function demoSession(): Promise<Session> {
-  const { life, world } = await openEngine({ demo: true, cwd: await project("fieldnotes") });
+  const { life, world } = await openEngine({
+    demo: true,
+    cwd: await project("fieldnotes"),
+    extensions: played,
+  });
   const opened = new Session(life, world, true);
   await opened.refresh();
   return opened;
@@ -68,19 +83,9 @@ let session = await demoSession();
 const test = await createTestRenderer({ width: 152, height: 46 });
 let app!: App;
 let library!: Workspaces;
-const extensions = new Extensions(() => ({
-  life: session.life,
-  chain: session.selected,
-  directory: session.directory,
-  notify(message) {
-    session.notice = message;
-  },
-  submit: (message) => session.submit(message),
-}));
 const options = () => ({
   quit() {},
   workspaces: library,
-  extensions,
   newSession: async () => {
     await library.create();
   },
@@ -105,7 +110,7 @@ const followSelection = () =>
 async function mount(next: Session): Promise<void> {
   session = next;
   if (session.sessionName === basename(session.world.directory)) await session.command("/name Session 1");
-  library = new Workspaces(session.preferences, { demo: true });
+  library = new Workspaces(session.preferences, { demo: true, extensions: played });
   const group = await library.add(session.world.directory);
   const entry = library.adopt(session, group);
   await library.select(entry);
@@ -226,9 +231,12 @@ try {
   test.resize(152, 46);
   app.toggleMode();
   app.composer.setText("");
-  const command = await session.life.bash(
-    "printf 'Building the search index...\\n'; sleep 1; printf '3 notes indexed.\\n'",
-    { on: session.selected },
+  const command = String(
+    await session.life.call(
+      "bash",
+      ["printf 'Building the search index...\\n'; sleep 1; printf '3 notes indexed.\\n'"],
+      { on: session.selected },
+    ),
   );
   await until(session.world, () =>
     session.world.facts.some((fact) => fact[0] === "out" && fact[1] === command),
@@ -307,7 +315,7 @@ try {
   await session.submit("/read missing-file.txt");
   await until(session, () => session.acts.some((act) => act.run?.status === "failed"));
   await capture("26-error");
-  await session.life.write({ path: "preview.txt", content: "A change to inspect.\n" });
+  await session.life.call("ask", ["write", session.selected, "preview.txt", "A change to inspect.\n"], {});
   const journal = `${session.world.records.path}.changes.jsonl`;
   const savedJournal = await readFile(journal);
   await writeFile(journal, "{ damaged journal }");
@@ -330,7 +338,7 @@ try {
   const archive = new Session(archived.life, archived.world, true, preferences);
   await archive.command("/name Archive");
   await archive.dispose();
-  library = new Workspaces(preferences, { demo: true });
+  library = new Workspaces(preferences, { demo: true, extensions: played });
   const first = await library.add(notes),
     second = await library.add(atlas);
   const main = await library.create(first, "Implementation");
@@ -341,7 +349,9 @@ try {
   if (!main.session || !checks.session || !review.session || !changelog.session || !research.session)
     throw new Error("The workspace fixtures did not open.");
   await seedDemo(main.session);
-  await checks.session.life.bash("printf 'Checking the project...\\n'; sleep 60");
+  await checks.session.life.call("bash", ["printf 'Checking the project...\\n'; sleep 60"], {
+    on: checks.session.life.root,
+  });
   await review.session.life.prompt("bool", "Apply the new navigation?", { to: "operator" });
   await changelog.session.life.result(
     await changelog.session.life.rung('summary = "Release notes are ready"'),
@@ -445,8 +455,6 @@ try {
   await capture("41-slash-suggestions");
   app.composer.setText("");
   app.closeOverlay();
-  app.composer.setText(`/extension ${resolve("tui/examples/project-summary.ts")}`);
-  await app.submit();
   app.palette();
   await test.mockInput.typeText("Summarize this project");
   await capture("42-extension-command");
@@ -503,6 +511,5 @@ try {
   app.dispose();
   test.renderer.destroy();
   await library.dispose();
-  await extensions.dispose();
   await removeDemoDirectories();
 }

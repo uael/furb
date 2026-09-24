@@ -3,10 +3,12 @@
 //! This is the door between the two interpreters, and it is the crate itself, behind the `python` feature. A host
 //! of python hands over its ears as one object, asked under the name of each ear, and drives the life by saying
 //! verbs, each by its name with its words. What crosses is what monty carries, made python here: a value of the
-//! engine comes out as the instance of `furb.python` it is, a `Text` as a `Text`, an exception as the one object
-//! that exception is for the life, and goes in as its name and its fields. A name of the engine crosses as its
-//! name, a callable the engine made as one that calls it back, and a callable of python as one the ears call back
-//! by name. Nothing of the crossing is python's to do.
+//! engine comes out as the instance of `furb.python` it is, an instance of a class a word defined as a type of
+//! this interpreter, an exception as the one object that exception is for the life, and goes in as its name and its
+//! fields. A name of the engine crosses as its name, a callable the engine made as one that calls it back, and a
+//! callable of python as one the ears call back by name. Nothing of the crossing is python's to do.
+
+use std::collections::HashSet;
 
 use pyo3::{
   Bound, Py, PyAny, PyResult, Python,
@@ -19,6 +21,7 @@ use pyo3::{
 
 use crate::{
   ear::{Ears, Reply},
+  extension,
   fact::Fact,
   life,
   value::{Fault, IS, Object, ObjectRef, entry, marked},
@@ -238,22 +241,41 @@ impl Life {
   /// A life, opened on the ears of the host, the names they hear by in the order the engine hears them, and the
   /// record a World kept. The ears are one object with `hears(name, fact)`, `answered(name, value)`,
   /// `ear(generator)`, which hears one more generator and gives the name it is heard by and whether it was started,
-  /// and `callable(function)`, which gives the name the function is called back by.
+  /// and `callable(function)`, which gives the name the function is called back by. `taken` and `engine` are every
+  /// builtin and the engine of the crate unless they are given.
   #[new]
+  #[pyo3(signature = (ears, names, record, words = Vec::new(), lives = Vec::new(), *, taken = None, engine = None))]
+  #[allow(clippy::too_many_arguments)]
   fn new(
     py: Python<'_>,
     ears: Py<PyAny>,
     names: Vec<String>,
     record: Bound<'_, PyAny>,
+    words: Vec<String>,
+    lives: Vec<String>,
+    taken: Option<Vec<String>>,
+    engine: Option<String>,
   ) -> PyResult<Self> {
     let made = Made::new(py)?;
     let kept = of_python(&made, &ears, &record)?;
     let kept: Vec<Object> =
       kept.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
     let hosted = Hosted { host: ears.clone_ref(py), made: made.clone_ref(py) };
-    let held =
-      life::Life::open_on(hosted, names).boot(kept).map_err(|fault| raised(py, &made, &fault))?;
+    let mut opening = life::Life::open_on(hosted, names).words(words).lives(lives);
+    if let Some(taken) = taken {
+      opening = opening.taken(taken);
+    }
+    if let Some(engine) = engine {
+      opening = opening.engine(engine);
+    }
+    let held = opening.boot(kept).map_err(|fault| raised(py, &made, &fault))?;
     Ok(Life { held, made, ears })
+  }
+
+  /// The system prompt of every model of the life, which is the text the life runs.
+  #[getter]
+  fn system(&self) -> &str {
+    self.held.system()
   }
 
   /// The root chain of the life, which is the first act of any record.
@@ -353,14 +375,112 @@ impl Life {
 }
 
 /// The gate of the crate, for the Kernel of this interpreter to read a sheet with: what the checker of this thread
-/// found on the sheet, each error by its line, and no warning. The checker is the one every life of monty on the
-/// thread gates with, so a word is judged once and the same.
+/// found on the sheet, read against the engine the Kernel runs, each error by its line, and no warning. The engine
+/// is the engine of the crate unless it is given. The checker is the one every life of monty on the thread gates
+/// with, so a word is judged once and the same.
 #[pyfunction]
-fn gate(py: Python<'_>, sheet: &str) -> PyResult<Vec<(usize, String)>> {
-  match crate::gate::checked(sheet) {
-    Ok(found) => Ok(found),
-    Err(fault) => Err(raised(py, &Made::new(py)?, &fault)),
+#[pyo3(signature = (sheet, engine = None))]
+fn gate(py: Python<'_>, sheet: &str, engine: Option<&str>) -> PyResult<Vec<(usize, String)>> {
+  given(py, crate::gate::checked(sheet, engine.unwrap_or(crate::ENGINE)))
+}
+
+/// One extension as a host plays it, as the crate reads it for every host, each path as a text.
+#[pyclass(module = "furb_monty._monty", name = "Extension", frozen, get_all)]
+struct PyExtension {
+  name: String,
+  root: Option<String>,
+  word: Option<String>,
+  life: Option<String>,
+  requires: Vec<String>,
+  world_ts: Option<String>,
+  world_py: Option<String>,
+  tui: Option<String>,
+}
+
+impl From<extension::Extension> for PyExtension {
+  fn from(one: extension::Extension) -> Self {
+    let shown = |path: Option<std::path::PathBuf>| path.map(|one| one.display().to_string());
+    PyExtension {
+      name: one.name,
+      root: shown(one.root),
+      word: one.word,
+      life: one.life,
+      requires: one.requires,
+      world_ts: shown(one.world.ts),
+      world_py: shown(one.world.py),
+      tui: shown(one.tui),
+    }
   }
+}
+
+/// The builtin extensions, files, bash and grant, in the order a host takes them.
+#[pyfunction]
+fn builtin_extensions() -> Vec<PyExtension> {
+  extension::builtins().into_iter().map(PyExtension::from).collect()
+}
+
+/// The extensions a host plays for a project: the builtins and what the config of the user and the config of the
+/// project name, fetched into the cache of the user once, and again on a refresh, and ordered by what each requires.
+/// A config, a fetch or a manifest that fails raises Refused, with what failed.
+#[pyfunction]
+#[pyo3(signature = (project, refresh = false))]
+fn extensions(py: Python<'_>, project: &str, refresh: bool) -> PyResult<Vec<PyExtension>> {
+  let got = extension::extensions(&extension::Places::here(), project.as_ref(), refresh, false);
+  given(py, got).map(|got| got.into_iter().map(PyExtension::from).collect())
+}
+
+/// The config directory and the cache directory of the user, as this process finds them.
+#[pyfunction]
+fn places() -> (String, String) {
+  let here = extension::Places::here();
+  (here.config.display().to_string(), here.cache.display().to_string())
+}
+
+/// The word of the python part of an extension, which the module of the engine runs after the engine: the file less
+/// its imports of the engine and of the extensions. A file python cannot parse raises Refused.
+#[pyfunction]
+fn word_of(py: Python<'_>, source: &str) -> PyResult<String> {
+  given(py, extension::word(source))
+}
+
+/// The system prompt of a life: the engine as the host minified it, less the definitions of each builtin that
+/// `taken` does not name, then the words of the extensions, in their order. An engine python cannot parse raises
+/// Refused.
+#[pyfunction]
+fn system_prompt(
+  py: Python<'_>,
+  engine: &str,
+  taken: Vec<String>,
+  words: Vec<String>,
+) -> PyResult<String> {
+  given(py, extension::system(engine, &taken, &words))
+}
+
+/// The top-level names of the engine that each builtin not in `taken` defines.
+#[pyfunction]
+fn cut_names(taken: Vec<String>) -> HashSet<&'static str> {
+  extension::cut_names(&taken)
+}
+
+/// What a life on a record takes and runs, as plain data a World keeps: the builtins, the words, the life words, and
+/// whether the life pins them.
+#[pyfunction]
+fn pinned(
+  py: Python<'_>,
+  record: Bound<'_, PyAny>,
+  taken: Vec<String>,
+  words: Vec<String>,
+  lives: Vec<String>,
+) -> PyResult<extension::Pinned> {
+  let held = of_python(&Made::new(py)?, &py.None(), &record)?;
+  let held: Vec<Object> =
+    held.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
+  Ok(extension::pinned(&held, &taken, &words, &lives))
+}
+
+/// What the crate gave, or its fault raised here as the exception it is.
+fn given<T>(py: Python<'_>, got: Result<T, impl Into<Fault>>) -> PyResult<T> {
+  got.or_else(|no| Err(raised(py, &Made::new(py)?, &no.into())))
 }
 
 /// What the engine raised, raised here as the exception it is.
@@ -655,5 +775,13 @@ fn bare(shown: &str) -> String {
 fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<Life>()?;
   module.add_function(wrap_pyfunction!(gate, module)?)?;
+  module.add_class::<PyExtension>()?;
+  module.add_function(wrap_pyfunction!(builtin_extensions, module)?)?;
+  module.add_function(wrap_pyfunction!(word_of, module)?)?;
+  module.add_function(wrap_pyfunction!(system_prompt, module)?)?;
+  module.add_function(wrap_pyfunction!(cut_names, module)?)?;
+  module.add_function(wrap_pyfunction!(pinned, module)?)?;
+  module.add_function(wrap_pyfunction!(extensions, module)?)?;
+  module.add_function(wrap_pyfunction!(places, module)?)?;
   Ok(())
 }

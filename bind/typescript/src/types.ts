@@ -1,6 +1,7 @@
 import { stripVTControlCharacters } from "node:util";
 import type { ModelThinkingLevel, Usage as ModelUsage } from "@earendil-works/pi-ai";
 import type { Life } from "../index.cjs";
+import { unwrapped } from "./extension.js";
 
 export const efforts = [
   "off",
@@ -36,11 +37,6 @@ export type Fact = Awaited<ReturnType<Life["send"]>>;
 /** One entry of the record: the fact, and for a query of a run what it was answered beside. */
 export type Entry = [Fact, unknown?];
 export type Usage = NonNullable<Turn[2]>;
-export interface TextValue {
-  is?: "Text";
-  path: string;
-  content: string;
-}
 export interface OperatorPrompt {
   id: string;
   shape: string;
@@ -112,9 +108,11 @@ export function marked(plain: unknown, decoded: unknown = plain): unknown {
   );
   return "is" in plain ? { is: "dict", args: [pairs] } : Object.fromEntries(pairs);
 }
+/** A value as the host shows it: a string as it stands, and any other value as the JSON of its plain data, each
+ * instance of a class a word defined as its fields. */
 export function display(value: unknown): string {
   if (typeof value === "string") return value;
-  return JSON.stringify(unmarked(value), null, 2) ?? "None";
+  return JSON.stringify(unmarked(unwrapped(value)), null, 2) ?? "None";
 }
 export function safeText(value: string): string {
   // Text from files and processes must not become terminal control sequences.

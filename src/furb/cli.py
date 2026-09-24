@@ -3,6 +3,9 @@
 One command is one life. The life is opened on a loop of its own, from the record it is given, and the operator
 waits on that loop for what it asked. A prompt the record already holds is taken up again and never asked twice,
 so a command said again on a kept record reads the answer of the life before it and asks no model for it.
+
+The life takes the extensions the configs name, or what its record pins. The World holds the part of each builtin
+it takes, and no part of another extension.
 """
 
 import argparse
@@ -11,9 +14,10 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import furb_monty
 from furb import engine
-from furb.engine import Act
-from furb.kernel import Native, gating
+from furb.engine import WORLD, Act, Refused
+from furb.kernel import Native, extended, gating
 from furb.provider.claude import ACTOR, cool
 from furb.world import Live, kept
 
@@ -36,8 +40,19 @@ def lived(record: Path | None, cwd: Path, actor: str, *, keeps: bool) -> tuple[L
   again before boot returns, so the life stands whole on its record when this gives the root.
   """
   held = kept(record) if record is not None and record.is_file() else []
-  world = Live(str(cwd.absolute()), record if keeps else None, actor)
-  root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating())
+  loaded = furb_monty.extensions(str(cwd.absolute()))
+  taken, words, lives, pins = furb_monty.pinned(
+    held,
+    [one.name for one in loaded],
+    [one.word for one in loaded if one.word],
+    [one.life for one in loaded if one.life],
+  )
+  world = Live(str(cwd.absolute()), record if keeps else None, actor, words=words, lives=lives, taken=taken)
+  extended(taken, words)
+  root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating(world.system))
+  if pins:
+    engine.send("extensions", root, taken, words, lives, by=WORLD)
+  world.play()
   return world, root, held
 
 
@@ -103,15 +118,25 @@ def parser() -> argparse.ArgumentParser:
   three.add_argument("word", help="The python of the word.")
   three.add_argument("--record", type=Path, default=None, help="The record to keep, and to resume from.")
   three.add_argument("--cwd", type=Path, default=Path(), help="The directory the chains of the life start in.")
+  four = verbs.add_parser("update", help="Fetch the extensions the configs name again, and print their names.")
+  four.add_argument("--cwd", type=Path, default=Path(), help="The directory of the project whose config is read.")
   return whole
 
 
 def main() -> None:
-  """The console script: one command of the operator, on one life, on a loop of its own."""
+  """The console script: one command of the operator, on one life, on a loop of its own, which an extension that
+  fails to load ends with what failed."""
   args = parser().parse_args()
-  if args.verb == "prompt":
-    say(repr(asyncio.run(prompted(args.record, args.cwd, SHAPES[args.shape], args.message, args.to))))
-  elif args.verb == "turns":
-    asyncio.run(turned(args.record, args.cwd))
-  else:
-    say(repr(asyncio.run(running(args.record, args.cwd, args.word))))
+  try:
+    if args.verb == "prompt":
+      say(repr(asyncio.run(prompted(args.record, args.cwd, SHAPES[args.shape], args.message, args.to))))
+    elif args.verb == "turns":
+      asyncio.run(turned(args.record, args.cwd))
+    elif args.verb == "update":
+      for one in furb_monty.extensions(str(args.cwd.absolute()), refresh=True):
+        say(one.name)
+    else:
+      say(repr(asyncio.run(running(args.record, args.cwd, args.word))))
+  except Refused as no:
+    why = f"furb: {no}"
+    raise SystemExit(why) from None

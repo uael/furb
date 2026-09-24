@@ -236,7 +236,16 @@ session keeps its name in its saved view, and a workspace in the list of workspa
 
 ## Extensions
 
-An extension adds commands to the palette and to the suggestions.
+An extension adds commands to the palette and to the suggestions. To play an extension, name it in `config.json` of
+the config directory, or in `.furb/config.json` of the project, which a project shares in version control:
+
+```json
+{ "extensions": { "project-summary": "../tui/examples/project-summary", "grant": false } }
+```
+
+A path, a git remote and an npm package each name an extension, and `false` turns one off, a builtin among them.
+The next session takes the change. `/extensions` lists the extensions of the session, and `/extensions update`
+fetches each one again. [The guide of the extensions](extensions.md) says more.
 
 ![Extension command](screenshots/42-extension-command.png)
 

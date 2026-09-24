@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { boot } from "../src/index.ts";
 
 const cwd = await mkdtemp(join(tmpdir(), "furb-ts-smoke-"));
-const session = boot({ cwd, model: "claude-cli:sonnet", effort: "low" });
+const session = await boot({ cwd, model: "claude-cli:sonnet", effort: "low" });
 session.world?.on("fault", (error) => {
   console.error(error);
   session.life.cancel(session.life.root);

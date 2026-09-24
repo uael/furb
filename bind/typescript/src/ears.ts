@@ -1,33 +1,21 @@
-import { Life } from "../index.cjs";
+import { resolve } from "node:path";
+import { configDirectory, Life, type Opening } from "../index.cjs";
+import type { FileChange } from "./changes.js";
+import type { Call, Fault, Hearing, Saying, WorldContext, WorldPart } from "./extension.js";
+import { spawnShell } from "./shell.js";
 import type { Entry, Fact } from "./types.js";
 
+/** What the World does for every life, which a host answers: the standing, the clock, chance, a keep of the record,
+ * the turn of a model for an ask, and the work of a wait and of a prompt to the operator. */
 export interface WorldRequest {
-  kind:
-    | "Stand"
-    | "Read"
-    | "Write"
-    | "Clock"
-    | "Chance"
-    | "Keep"
-    | "Ask"
-    | "Run"
-    | "Feed"
-    | "Slay"
-    | "Wait"
-    | "Prompt";
+  kind: "Stand" | "Clock" | "Chance" | "Keep" | "Ask" | "Wait" | "Prompt";
   args: unknown[];
 }
 export type WorldHandler = (request: WorldRequest) => unknown;
-export type Saying = [kind: string, about: string, ...words: unknown[]];
-export interface Call {
-  verb: string;
-  args?: unknown[];
-  kwargs?: Record<string, unknown>;
-}
 export type Ear = Generator<Saying | Call | null | undefined, void, unknown>;
-const fault = (error: unknown) =>
+const fault = (error: unknown): Fault =>
   error && typeof error === "object" && "is" in error && "args" in error
-    ? error
+    ? (error as Fault)
     : { is: "Refused", args: [error instanceof Error ? error.message : String(error)] };
 const synchronous = (value: unknown) => {
   if (value && typeof value === "object" && "then" in value && typeof value.then === "function")
@@ -76,26 +64,39 @@ export class Ears {
       return { error: fault(error) };
     }
   };
-  boot(record: Entry[] = []): Life {
-    return Life.boot(this.callback, [...this.ears.keys()], record);
+  /** The life on these ears, from the record and what it opens with. */
+  boot(record: Entry[] = [], opening?: Opening): Life {
+    return Life.boot(this.callback, [...this.ears.keys()], record, opening);
   }
 }
 
-/** A ready adapter for the crate's World operations. Async work says its result later on the same life. */
+/** What an adapter is given beside its handler. */
+export interface AdapterOptions {
+  /** Hears the facts of the life, in batches, after the ears. */
+  onFacts?: (facts: Fact[]) => void;
+  /** Hears a failure that no act can take. */
+  onFault?: (error: unknown) => void;
+  /** Hears each fact, and may ask the life while it hears through the calls it yields. */
+  onFact?: (fact: Fact) => Generator<Call, void, unknown> | undefined;
+  /** An inspection of a record: the parts hear nothing. */
+  readOnly?: boolean;
+}
+
+/** A ready adapter for the crate's World operations. It does what every World does through its handler, and hands
+ * every fact to its parts, in order. Async work says its result later on the same life. */
 export class WorldAdapter {
   life?: Life;
   stopped = false;
+  /** The parts of the extensions for this World, which hear every fact after the World. */
+  parts: WorldPart[] = [];
   /** The ears the life boots on, whose callable carries a show or a filter of the host into the life. */
   readonly ears: Ears;
-  private readonly running = new Set<string>();
   /** The actor whose last ask on each chain answered nothing, so a second such ask in a row pauses the chain. */
   private readonly mute = new Map<string, string>();
+  private delivery: Promise<unknown> = Promise.resolve();
   constructor(
     readonly handle: WorldHandler,
-    readonly onFacts?: (facts: Fact[]) => void,
-    readonly onFault?: (error: unknown) => void,
-    /** Hears each fact, and may ask the life while it hears through the calls it yields. */
-    readonly onFact?: (fact: Fact) => Generator<Call, void, unknown> | undefined,
+    readonly options: AdapterOptions = {},
   ) {
     const owner = this;
     let queued = false;
@@ -105,14 +106,14 @@ export class WorldAdapter {
         const fact = (yield null) as Fact;
         if (fact) {
           facts.push(fact);
-          const hearing = onFact?.(fact);
+          const hearing = options.onFact?.(fact);
           if (hearing) yield* hearing;
         }
         if (!queued) {
           queued = true;
           queueMicrotask(() => {
             queued = false;
-            if (!owner.stopped && facts.length) onFacts?.(facts.splice(0));
+            if (!owner.stopped && facts.length) options.onFacts?.(facts.splice(0));
           });
         }
       }
@@ -124,6 +125,11 @@ export class WorldAdapter {
     return this.stopped || this.life?.disposed === true;
   }
 
+  /** The kinds of act this World does: a wait, a prompt, and the kinds of its parts. */
+  get kinds(): Set<string> {
+    return new Set(["wait", "prompt", ...this.parts.flatMap((part) => part.kinds ?? [])]);
+  }
+
   private speak(action: () => void): void {
     if (!this.life || this.closed) return;
     const previous = this.life.site("world");
@@ -132,6 +138,24 @@ export class WorldAdapter {
     } finally {
       if (!this.life.disposed) this.life.site(previous);
     }
+  }
+
+  /** One fact said later, as the World, after every saying before it. */
+  send(kind: string, id: string, words: unknown[]): void {
+    this.delivery = this.delivery
+      .then(() => {
+        if (!this.closed) this.life?.send(kind, id, words, "world");
+      })
+      .catch((error) => this.options.onFault?.(error));
+  }
+
+  /** An act closed later, as the World, after every saying before it, unless it is done. */
+  close(value: unknown, id: string): void {
+    this.delivery = this.delivery
+      .then(() => {
+        if (!this.closed && !this.life?.outcome(id).done) this.speak(() => this.life?.close(value, id));
+      })
+      .catch((error) => this.options.onFault?.(error));
   }
 
   private later(request: WorldRequest, done: (value: unknown) => void, fail: (error: unknown) => void): void {
@@ -149,7 +173,7 @@ export class WorldAdapter {
           try {
             this.speak(() => fail(error));
           } catch (failure) {
-            this.onFault?.(failure);
+            this.options.onFault?.(failure);
           }
         });
     });
@@ -159,21 +183,14 @@ export class WorldAdapter {
       const fact = (yield null) as Fact;
       if (!fact) continue;
       const [kind, id, , ...words] = fact;
-      if (["stand", "clock", "chance", "read", "write"].includes(kind)) {
+      let act: Fact | undefined;
+      if (["stand", "clock", "chance"].includes(kind)) {
         let value: unknown;
         try {
-          const here =
-            kind === "read" || kind === "write" ? yield { verb: "cwd", kwargs: { on: words[0] } } : null;
-          const args =
-            kind === "read"
-              ? [here, words[1]]
-              : kind === "write"
-                ? [here, (words[1] as { path: string }).path, (words[1] as { content: string }).content]
-                : [];
           value = synchronous(
             this.handle({
               kind: (kind.charAt(0).toUpperCase() + kind.slice(1)) as WorldRequest["kind"],
-              args,
+              args: [],
             }),
           );
           if (
@@ -184,7 +201,6 @@ export class WorldAdapter {
           )
             throw new Error(`Invalid ${kind} from the World.`);
           if (kind === "clock" || kind === "chance") value = { is: "float", args: [String(value)] };
-          if (kind === "read" || kind === "write") value = { is: "Text", ...(value as object) };
         } catch (error) {
           value = fault(error);
         }
@@ -218,33 +234,21 @@ export class WorldAdapter {
           },
         );
       } else if (kind === "start") {
-        const act = (yield { verb: "get", args: [id] }) as Fact;
+        act = (yield { verb: "get", args: [id] }) as Fact;
         if (!act) continue;
-        if (act[0] !== "bash") this.started(act);
-        else {
-          const here = yield { verb: "cwd", kwargs: { on: act[3] } };
-          const [, merged] = (yield { verb: "ask", args: ["merged", act[3], id] }) as [unknown, boolean];
-          this.running.add(id);
-          try {
-            synchronous(
-              this.handle({
-                kind: "Run",
-                args: [{ id, here, command: act[4], fed: act[5], timeout: act[6], merged }],
-              }),
-            );
-          } catch (error) {
-            yield { verb: "close", args: [fault(error), id] };
-          }
-        }
-      } else if (kind === "feed") synchronous(this.handle({ kind: "Feed", args: [id, words[0]] }));
-      else if (kind === "exited") this.running.delete(id);
-      else if (kind === "cancel" || kind === "close") {
-        for (const running of this.running) {
-          const affected = yield { verb: "covers", args: [fact, running] };
-          if (affected) {
-            synchronous(this.handle({ kind: "Slay", args: [running] }));
-            this.running.delete(running);
-          }
+        if (act[0] === "wait" || act[0] === "prompt") this.started(act);
+        else if (!this.kinds.has(act[0]))
+          yield { verb: "close", args: [{ is: "Refused", args: [`the World does no ${act[0]}`] }, id] };
+      }
+      if (this.options.readOnly) continue;
+      for (const part of this.parts) {
+        try {
+          const hearing = part.hears?.(fact);
+          if (hearing) yield* hearing;
+        } catch (error) {
+          // Nothing else ends an act whose part failed at its start, so it closes with why.
+          if (act && part.kinds?.includes(act[0])) yield { verb: "close", args: [fault(error), id] };
+          else this.options.onFault?.(error);
         }
       }
     }
@@ -261,7 +265,7 @@ export class WorldAdapter {
         },
         (error) => this.life?.close(fault(error), id),
       );
-    else if (act[0] === "prompt")
+    else
       this.later(
         { kind: "Prompt", args: [id, act[4], act[5]] },
         (value) => {
@@ -272,8 +276,32 @@ export class WorldAdapter {
         },
       );
   }
-  boot(record: Entry[] = []): Life {
-    this.life = this.ears.boot(record);
+  /** The life on this World, from the record and what it opens with. */
+  boot(record: Entry[] = [], opening?: Opening): Life {
+    this.life = this.ears.boot(record, opening);
     return this.life;
   }
+}
+
+/** What a World gives the parts of its extensions, over the adapter it speaks through. */
+export function worldContext(
+  adapter: WorldAdapter,
+  given: { directory: string; change: (change: FileChange) => void },
+): WorldContext {
+  return {
+    ...given,
+    config: configDirectory(),
+    *where(on: string): Hearing<string> {
+      const [, here] = (yield { verb: "ask", args: ["cwd", on] }) as [unknown, unknown];
+      return String(here);
+    },
+    at(here: string, path = ""): string {
+      if (path.includes("://")) throw new Error(`No file at ${path}.`);
+      return resolve(given.directory, here, path);
+    },
+    speak: (kind, about, ...words) => adapter.send(kind, about, words),
+    close: (value, id) => adapter.close(value, id),
+    spawn: spawnShell,
+    refused: (message) => ({ is: "Refused", args: [message] }),
+  };
 }

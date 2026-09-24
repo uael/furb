@@ -7,7 +7,7 @@ import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
-import { Session } from "../src/session.ts";
+import { working as atWork, Session } from "../src/session.ts";
 import { palettes } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
@@ -87,7 +87,7 @@ async function working(delay = 8): Promise<void> {
   for (let moment = 0; moment < 120; moment++) {
     await new Promise((done) => setTimeout(done, delay * 10));
     await still(delay);
-    if (!session.activity.some((act) => !act.done && ["prompt", "rung", "bash"].includes(act.kind))) break;
+    if (!session.activity.some(atWork)) break;
   }
   await idle(session);
   await session.refresh();

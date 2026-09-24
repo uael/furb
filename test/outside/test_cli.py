@@ -6,6 +6,8 @@ them, and a word its caller wrote run on the root.
 """
 
 import asyncio
+import json
+import os
 from pathlib import Path
 
 import pytest
@@ -165,3 +167,76 @@ def test_the_console_script_prompts_the_actor_it_is_given(
   with speaking("a word\n"):
     assert main() is None
   assert capsys.readouterr().out.strip().endswith("'a word'")
+
+
+async def test_a_config_of_the_user_turns_a_builtin_off(yard: Path) -> None:
+  """A builtin that the config of the user turns off leaves the system prompt of the life, which is the text the life
+  runs."""
+  config = Path(os.environ["FURB_CONFIG_DIR"])
+  config.mkdir(parents=True)
+  (config / "config.json").write_text('{"extensions": {"grant": false}}', encoding="utf-8")
+  world, root, _ = lived(None, yard, "opus/low", keeps=False)
+  assert world.taken == ["files", "bash"]
+  assert "def grant(" not in world.system and "def bash(" in world.system
+  assert "grant" not in engine.modules[root] and "bash" in engine.modules[root]
+
+
+async def test_the_command_line_runs_the_word_of_an_extension_and_plays_its_life_word(yard: Path) -> None:
+  """The module of the engine runs the word of an extension that the config of the project names by its path, which
+  every chain binds from its birth, the system prompt reads it after the engine, and the life plays its life word in
+  every life."""
+  root_of = yard / "ext"
+  root_of.mkdir()
+  manifest = {"name": "seen", "furb": {"name": "seen", "python": "seen.py", "life": "seen = seen + 1"}}
+  (root_of / "package.json").write_text(json.dumps(manifest), encoding="utf-8")
+  (root_of / "seen.py").write_text("from furb.engine import clock\n\nseen = 0\n", encoding="utf-8")
+  (yard / ".furb").mkdir()
+  (yard / ".furb" / "config.json").write_text('{"extensions": {"seen": "../ext"}}', encoding="utf-8")
+  record = held(yard)
+  world, root, _ = lived(record, yard, "opus/low", keeps=True)
+  assert world.taken == ["files", "bash", "grant"]
+  assert world.words == ["seen = 0\n"] and world.system.endswith("\n\nseen = 0\n")
+  assert engine.modules[root]["seen"] == 1
+  assert engine.modules[engine.chain("two")]["seen"] == 1
+  await settle()
+  lived(record, yard, "opus/low", keeps=True)
+  assert engine.modules[root]["seen"] == 2
+
+
+async def test_a_command_said_again_on_a_record_runs_the_words_the_record_pins(yard: Path) -> None:
+  """A life pins the builtins it takes, the words it runs and the life words it plays in its record, and a life on
+  that record runs those whatever the configs say then."""
+  root_of = yard / "ext"
+  root_of.mkdir()
+  (root_of / "package.json").write_text(json.dumps({"furb": {"name": "mine", "python": "mine.py"}}), encoding="utf-8")
+  (root_of / "mine.py").write_text("mine = 'first'\n", encoding="utf-8")
+  (yard / ".furb").mkdir()
+  (yard / ".furb" / "config.json").write_text('{"extensions": {"mine": "../ext"}}', encoding="utf-8")
+  record = held(yard)
+  lived(record, yard, "opus/low", keeps=True)
+  await settle()
+  pins = [entry[0][3:] for entry in kept(record) if entry[0][0] == "extensions"]
+  assert pins == [(["files", "bash", "grant"], ["mine = 'first'\n"], [])]
+  (root_of / "mine.py").write_text("mine = 'second'\n", encoding="utf-8")
+  world, root, _ = lived(record, yard, "opus/low", keeps=True)
+  assert world.words == ["mine = 'first'\n"] and engine.modules[root]["mine"] == "first"
+  await settle()
+  assert len([entry for entry in kept(record) if entry[0][0] == "extensions"]) == 1
+
+
+def test_a_config_that_fails_ends_the_command_with_what_failed(yard: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+  """A config, a fetch or a manifest of an extension that fails ends the command with what failed, and runs nothing."""
+  (yard / ".furb").mkdir()
+  (yard / ".furb" / "config.json").write_text('{"extensions": {"ghost": true}}', encoding="utf-8")
+  monkeypatch.setattr("sys.argv", ["furb", "run", "close(1)", "--cwd", str(yard)])
+  with pytest.raises(SystemExit, match=r"^furb: the extension ghost in the config .*: true, and no config says where"):
+    main()
+
+
+def test_update_fetches_the_extensions_again_and_prints_their_names(
+  yard: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+  """The update command fetches every extension the configs name again, and prints the name of each."""
+  monkeypatch.setattr("sys.argv", ["furb", "update", "--cwd", str(yard)])
+  assert main() is None
+  assert capsys.readouterr().out.split() == ["files", "bash", "grant"]

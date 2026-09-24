@@ -527,7 +527,7 @@ async def test_the_engine_reads_its_own_names_through_the_globals_of_the_chain()
   sand = Sand(files={"/w/mine.txt": "mine\n"}, stands=STANDS)
   _, root = life(sand)
   assert engine.modules[root]["read"] is engine.read
-  await engine.rung("def read(path, show=HEAD, on=''):\n  return ask('read', __name__, 'mine.txt')[1]", on=root)
+  await engine.rung("def read(path, show=HEAD, on=''):\n  return landed(ask('read', __name__, 'mine.txt')[1])", on=root)
   sand.script[root] = ["close(read('any.txt').content)", "close(None)"]
   assert await engine.prompt(str, "read it", on=root) == "mine\n"
   assert [a[4] for a in sand.calls if a[0] == "read"] == ["mine.txt"]
@@ -539,7 +539,7 @@ async def test_the_engine_uses_a_rebound_name_from_the_next_use_on() -> None:
   _, root = life(sand)
   sand.script[root] = [
     "was = read('a.txt').content",
-    "def read(path, show=HEAD, on=''):\n  return ask('read', __name__, 'mine.txt')[1]",
+    "def read(path, show=HEAD, on=''):\n  return landed(ask('read', __name__, 'mine.txt')[1])",
     "close([was, read('a.txt').content])",
     "close(None)",
   ]

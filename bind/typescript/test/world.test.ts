@@ -19,6 +19,7 @@ import { RecordFile } from "../src/record.ts";
 import { executable } from "./executable.ts";
 import { alive, printPid, remove } from "./processes.ts";
 import { until } from "./until.ts";
+import { bash, exited, read, verb, write } from "./verbs.ts";
 
 // A World with no model puts every prompt to the operator, so a test that asks a model names one, and its `answer`
 // replaces the request, so no CLI runs. A later World that is given the models takes the saved model as its own.
@@ -232,26 +233,23 @@ test("a fenced reply is no python: the gate refuses it and the prompt asks again
 
 test("the default World serves files and streams commands without any TUI", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-world-"));
-  const session = boot({ cwd });
+  const session = await boot({ cwd });
   try {
-    expect(session.life.cwd()).toBe(cwd);
-    session.life.write({ path: "hello.txt", content: "hello\n" });
-    expect(session.life.read("hello.txt").content).toBe("hello\n");
-    const command = session.life.bash("printf 'snow: 雪\\n'; printf 'problem\\n' >&2", {
-      showErr: { is: "name", name: "TAIL" },
+    const { life, world } = session;
+    expect(verb<string>(life, "cwd")).toBe(cwd);
+    write(life, "hello.txt", "hello\n");
+    expect(read(life, "hello.txt").content).toBe("hello\n");
+    const command = bash(life, "printf 'snow: 雪\\n'; printf 'problem\\n' >&2", {
+      show_err: life.held("modules", [life.root, "TAIL"], "at"),
     });
-    const result = (await command) as {
-      code: number;
-      stdout: { content: string };
-      stderr: { content: string };
-    };
+    const result = await exited(world, life, command);
     expect(result.code).toBe(0);
     expect(result.stdout.content).toBe("snow: 雪\n");
     expect(result.stderr.content).toBe("problem\n");
-    const input = session.life.bash("cat", { fed: true });
-    session.life.write({ path: `${input.id}/stdin`, content: "fed\n" });
-    session.life.write({ path: `${input.id}/stdin`, content: "" });
-    expect(((await input) as { stdout: { content: string } }).stdout.content).toBe("fed\n");
+    const input = bash(life, "cat", { fed: true });
+    write(life, `${input}/stdin`, "fed\n");
+    write(life, `${input}/stdin`, "");
+    expect((await exited(world, life, input)).stdout.content).toBe("fed\n");
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
@@ -313,7 +311,7 @@ test("record ownership, a torn last line, and a damaged complete line are distin
 
 test("one failed model ask retries, while two consecutive failures pause with a reason", async () => {
   let calls = 0;
-  const session = boot({
+  const session = await boot({
     ...modeled,
     answer: async () => {
       if (++calls === 1) throw new Error("temporary outage");
@@ -328,7 +326,7 @@ test("one failed model ask retries, while two consecutive failures pause with a 
     await session.dispose();
   }
   calls = 0;
-  const broken = boot({
+  const broken = await boot({
     ...modeled,
     answer: async () => {
       calls++;
@@ -416,7 +414,7 @@ test("the World hands the provider the python of a user turn as the engine wrote
   const cli = claudeProvider({ bin: executable(join(import.meta.dir, "fake-claude.ts"), cwd, "claude") });
   const models = createModels();
   models.setProvider(cli.provider);
-  const session = boot({ cwd, models, model: "claude-cli:sonnet" });
+  const session = await boot({ cwd, models, model: "claude-cli:sonnet" });
   try {
     const { life } = session;
     const child = life.chain("child", null, null, life.root);
@@ -442,17 +440,16 @@ test("input sent to a pending command before it starts reaches its process after
   const cwd = await mkdtemp(join(tmpdir(), "furb-fed-"));
   const record = join(cwd, "life.jsonl");
   const first = new World({ cwd, record });
-  const command = first.open().bash("cat", { fed: true }).id;
+  const command = bash(first.open(), "cat", { fed: true });
   await first.dispose();
   const second = new World({ record });
   try {
     const life = second.open();
     expect(second.pending.has(command)).toBe(true);
-    life.write({ path: `${command}/stdin`, content: "before start\n" });
-    life.write({ path: `${command}/stdin`, content: "" });
+    write(life, `${command}/stdin`, "before start\n");
+    write(life, `${command}/stdin`, "");
     await second.resume();
-    const result = await life.result<{ stdout: { content: string } }>(command);
-    expect(result.stdout.content).toBe("before start\n");
+    expect((await exited(second, life, command)).stdout.content).toBe("before start\n");
   } finally {
     await second.dispose();
     await rm(cwd, { recursive: true });
@@ -465,7 +462,7 @@ test("file changes append once and reopen in pages without growing the World met
   const first = new World({ cwd, record });
   const life = first.open();
   const metadata = await readFile(`${record}.world.json`, "utf8");
-  for (let number = 0; number < 25; number++) life.write({ path: "file", content: String(number) });
+  for (let number = 0; number < 25; number++) write(life, "file", String(number));
   expect(await readFile(`${record}.world.json`, "utf8")).toBe(metadata);
   await first.dispose();
   const second = new World({ record });
@@ -525,7 +522,7 @@ test("host ears yield nested bus calls and host shows remain callable", () => {
         if (fact?.[0] === "stand") yield ["done", fact[1], [[["operator", [], 200000]], "/tmp", "operator"]];
         if (fact?.[0] === "read") {
           const cwd = yield { verb: "cwd", kwargs: { on: fact[3] } };
-          yield ["done", fact[1], { is: "Text", path: `${cwd}/file`, content: "one\ntwo\n" }];
+          yield ["done", fact[1], { path: `${cwd}/file`, content: "one\ntwo\n" }];
         }
       }
     })(),
@@ -533,7 +530,7 @@ test("host ears yield nested bus calls and host shows remain callable", () => {
   const life = ears.boot();
   try {
     const show = ears.callable((lines: string[]) => lines.map((_, index) => index + 1));
-    expect(life.read("file", show).path).toBe("/tmp/file");
+    expect(verb<{ path: string }>(life, "read", ["file", show]).path).toBe("/tmp/file");
     expect(() => life.clock()).toThrow("no number");
   } finally {
     life.dispose();
@@ -545,7 +542,7 @@ test("a command an earlier World started and did not end runs again once, at the
   const record = join(cwd, "life.jsonl");
   const first = new World({ cwd, record });
   const life = first.open();
-  const command = life.bash("printf x >> count; [ -e done ] || { printf ready; exec sleep 30; }").id;
+  const command = bash(life, "printf x >> count; [ -e done ] || { printf ready; exec sleep 30; }");
   const output = () =>
     (first.activity.acts.get(command)?.value as { stdout?: { content: string } }).stdout?.content;
   await until(first, () => output() === "ready");
@@ -559,7 +556,7 @@ test("a command an earlier World started and did not end runs again once, at the
     expect(await readFile(join(cwd, "count"), "utf8")).toBe("x");
     await second.resume();
     // What the command told before the death of its process stands in its door.
-    expect(await resumed.result<{ code: number; stdout: { content: string } }>(command)).toMatchObject({
+    expect(await exited(second, resumed, command)).toMatchObject({
       code: 0,
       stdout: { content: "ready" },
     });
@@ -615,7 +612,7 @@ test("a command a rung started runs in no later life before a wake, and once at 
   const life = first.open();
   life.rung('await bash("printf once >> count; exec sleep 30")');
   // A second command waits for the first to write, so the first stands silent in a record that holds its start.
-  await life.bash("while [ ! -s count ]; do sleep 0.01; done");
+  await life.result(bash(life, "while [ ! -s count ]; do sleep 0.01; done"));
   await first.dispose();
   const second = new World({ record });
   try {
@@ -821,7 +818,7 @@ test("a later life stands on what its host offers now, and a stood tells its cha
 test("the World ends a command only at a control that covers it, so a close of the prompt lets its command run", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-covers-"));
   const words = ["c = bash('sleep 30')\nawait wait(60)", "c = bash('sleep 0.3; echo late')\nclose(1)"];
-  const session = boot({ cwd, ...modeled, answer: async () => said(words.shift() ?? "close(0)") });
+  const session = await boot({ cwd, ...modeled, answer: async () => said(words.shift() ?? "close(0)") });
   const { life } = session;
   try {
     const world = session.world;
@@ -831,7 +828,7 @@ test("the World ends a command only at a control that covers it, so a close of t
     life.cancel(cancelled.id);
     await expect(life.result("bash1")).rejects.toThrow("CancelledError");
     expect(await life.prompt<number>("int", "go")).toBe(1);
-    const late = await life.result<{ code: number; stdout: { content: string } }>("bash2");
+    const late = await exited(world, life, "bash2");
     expect([late.code, late.stdout.content]).toEqual([0, "late\n"]);
   } finally {
     await session.dispose();
@@ -841,14 +838,14 @@ test("the World ends a command only at a control that covers it, so a close of t
 
 test("a timeout or a wait past the longest timer runs its full time, and a command with no timeout runs to its end", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-long-"));
-  const session = boot({ cwd });
+  const session = await boot({ cwd });
   const { life } = session;
   const month = 30 * 86400;
   try {
     const wait = life.wait(month).id;
-    const long = life.bash("sleep 1; echo finished", { timeout: month });
-    const endless = life.call<string>("bash", ["sleep 1; echo finished"], { timeout: null, on: life.root });
-    const exits = await Promise.all([long, life.result<{ code: number | null }>(endless)]);
+    const long = bash(life, "sleep 1; echo finished", { timeout: month });
+    const endless = bash(life, "sleep 1; echo finished", { timeout: null });
+    const exits = await Promise.all([long, endless].map((id) => exited(session.world, life, id)));
     expect(exits.map((exit) => exit.code)).toEqual([0, 0]);
     expect(life.outcome(wait).done).toBe(false);
   } finally {
@@ -862,7 +859,7 @@ test("a close of the World whose save fails still ends its life and its commands
   const record = join(cwd, "life.jsonl");
   const world = new World({ cwd, record });
   const life = world.open();
-  const command = life.bash(`${printPid}; exec sleep 30`).id;
+  const command = bash(life, `${printPid}; exec sleep 30`);
   await until(world, () => printed(world, command) !== "");
   const pid = Number(printed(world, command));
   // A directory where the save writes its file makes the save fail on every system.
@@ -887,12 +884,12 @@ test("a host that asks the life at each change hears no change of its own asking
     let calls = 0;
     world.on("change", () => {
       calls++;
-      life.cwd();
+      life.clock();
     });
-    life.cwd();
+    life.clock();
     await tick();
     expect(calls).toBe(0);
-    expect(world.facts.filter(([kind, id]) => kind === "done" && id.startsWith("cwd@"))).toEqual([]);
+    expect(world.facts.filter(([kind, id]) => kind === "done" && id.startsWith("clock@"))).toEqual([]);
   } finally {
     await world.dispose();
     await rm(cwd, { recursive: true });
@@ -905,7 +902,7 @@ test("a host that reads the life at a change of a file leaves the write whole", 
   const life = world.open();
   try {
     await tick();
-    world.on("change", () => life.cwd());
+    world.on("change", () => verb(life, "cwd"));
     expect(await life.rung('t = write(Text("note.txt", "hello\\n"))\nclose(t.content)')).toBe("hello\n");
   } finally {
     await world.dispose();
@@ -920,7 +917,7 @@ test("a told text that names a failure is no failure: only two failed asks in a 
     "Last run: claude-cli:sonnet/low answered nothing: Error: 529 overloaded\n",
   );
   let calls = 0;
-  const session = boot({
+  const session = await boot({
     cwd,
     ...modeled,
     answer: async () => {
@@ -941,7 +938,7 @@ test("a told text that names a failure is no failure: only two failed asks in a 
 
 test("a whole number from the operator answers a float prompt as a float", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-float-operator-"));
-  const session = boot({ cwd, operator: async () => 2 });
+  const session = await boot({ cwd, operator: async () => 2 });
   try {
     const question = session.life.prompt<number>("float", "A number?", { to: "operator" });
     expect(await question).toBe(2);
@@ -999,7 +996,7 @@ test("an operator answer of a list keeps its numbers exact, and a map in it that
 test("a host carries a filter of its own into the life through the ears of its World", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-host-filter-"));
   const world = new World({ cwd });
-  const session = boot({ cwd });
+  const session = await boot({ cwd });
   try {
     for (const [life, ears] of [
       [world.open(), world.ears],
@@ -1023,11 +1020,11 @@ test("a host carries a filter of its own into the life through the ears of its W
 test("a read keeps the byte order mark of a file, as a write does", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-bom-"));
   await writeFile(join(cwd, "table.csv"), "﻿name,value\n");
-  const session = boot({ cwd });
+  const session = await boot({ cwd });
   try {
-    const text = session.life.read("table.csv");
+    const text = read(session.life, "table.csv");
     expect(text.content.codePointAt(0)).toBe(0xfeff);
-    session.life.write({ path: "table.csv", content: text.content.replace("value", "amount") });
+    write(session.life, "table.csv", text.content.replace("value", "amount"));
     expect([...(await readFile(join(cwd, "table.csv"))).subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
   } finally {
     await session.dispose();
@@ -1042,7 +1039,7 @@ test("a World with no model puts to the operator every prompt that names no acto
     acknowledged = resolve;
   });
   // The first example of the README, whose callback answers for the operator.
-  const session = boot({
+  const session = await boot({
     cwd,
     record: join(cwd, "work.jsonl"),
     operator: async ({ shape, message }) => {
@@ -1059,5 +1056,29 @@ test("a World with no model puts to the operator every prompt that names no acto
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
+  }
+});
+
+test("a record of 0.1.0 opens with no drift, though it answers a read and a write with a text", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-old-record-"));
+  const record = join(cwd, "record.jsonl");
+  await writeFile(record, await readFile(join(import.meta.dir, "../../../test/outside/record-0.1.0.jsonl")));
+  await writeFile(join(cwd, "a.txt"), "one\ntwo\nthree\n");
+  const world = new World({ cwd, record });
+  try {
+    const life = world.open();
+    expect(life.raised).toBeNull();
+    expect(life.root).toBe("chain1");
+    // The word of 0.1.0 runs again, and its read and its write take the text the record answers them with.
+    expect(life.outcome("rung1")).toEqual({ done: true, value: [2, "one\ntwo\nthree\n"] });
+    expect(read(life, "a.txt")).toEqual({
+      is: "Text",
+      path: join(cwd, "a.txt"),
+      content: "one\ntwo\nthree\n",
+      before: null,
+    });
+  } finally {
+    await world.dispose();
+    await rm(cwd, { recursive: true, force: true });
   }
 });

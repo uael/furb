@@ -786,8 +786,8 @@ type Feed = tuple[Literal["feed"], str, str, str | None]
 """A write to the stdin door of a fed command hands the World a feed with the text."""
 type Read = tuple[Literal["read"], str, str, str, str]
 """A read is the question of the text at a path."""
-type Write = tuple[Literal["write"], str, str, str, Text]
-"""A write is the question of putting a text at its path."""
+type Write = tuple[Literal["write"], str, str, str, str, str]
+"""A write is the question of putting a content at a path."""
 type Peek = tuple[Literal["peek"], str, str, str, str]
 """A peek is at an act, and gives what the act came to as the record stands."""
 type Turns = tuple[Literal["turns"], str, str, str]
@@ -889,6 +889,9 @@ def commented(text: object) -> str:
 
 def bound(id: str, of: str = "object") -> str:
   """The statement that binds the name of an act to the act, with the type of what the act comes to, as bash1: Act[Exit] = Act('bash1'), so the gate knows what an await of it gives."""
+
+def landed(got: object) -> object:
+  """What a read and a write give of what they were answered: the Text of a path and a content that came as plain data, since no Text crosses to the World or back, and any other answer as it is."""
 
 def showing(got: object, show: Show) -> list[Note]:
   """What a paragraph shows of what a door answered: the text by the lines the model has not seen, and anything that is no text as a comment of how python shows it."""

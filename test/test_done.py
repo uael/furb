@@ -64,7 +64,7 @@ async def test_a_done_that_names_a_question_is_the_answer_to_the_question() -> N
   got = engine.read("a.txt", on=root)
   word = next(one for one in sand.calls if one[0] == "read")
   ends = [one for one in said(log, "done") if one[1] == word[1]]
-  assert [(one[2], one[3]) for one in ends] == [(WORLD, got)]
+  assert [(one[2], one[3]) for one in ends] == [(WORLD, {"path": got.path, "content": got.content})]
 
 
 async def test_a_kind_that_ends_when_it_is_told_to() -> None:

@@ -5,11 +5,17 @@ that boot is given, each a generator under a name: the World, the Kernel and the
 contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/CLAUDE.md` holds the technical names of
 the engine and the laws that no test can hold. `script/CLAUDE.md` says how to run the DeepSWE rig.
 
+The system prompt of a life is the text the life runs: the engine, less the definitions of each builtin extension,
+`files`, `bash` or `grant`, that a config turns off, then the word of each other extension. The official extensions
+live in `extensions/`, each with its manifest, its contract and its suite in `extensions/<name>/test/`.
+`src/extension.rs` reads the configs, fetches the extensions, orders them, and makes their words and the system
+prompt. `docs/extensions.md` is the guide of the extensions.
+
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
 
-- `src/lib.rs` says what the crate gives: `Life`, whose methods are the verbs of the contract, and `World`, the one
-  trait that a host writes.
+- `src/lib.rs` says what the crate gives: `Life`, whose methods are the verbs of the contract, `World`, the one
+  trait that a host writes, and `extension`, the extension API that every host shares, which napi and pyo3 give too.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
 - The Kernel and the gate are the crate's. The gate is the type checker of monty. It reads a word on the sheet of
   the engine, `src/furb/sheet.py`, against the typeshed of the sandbox. The gate of the python package reads
@@ -21,14 +27,17 @@ API of its own:
 The suite runs on both engines. `test/outside/test_monty.py` proves what the door carries that no sentence of the
 contract says.
 
-The TypeScript side is a bun workspace at the root, with two packages:
+The TypeScript side is a bun workspace at the root, with three packages:
 
 - `bind/typescript` is the crate through N-API. Its queries and controls are synchronous, and its acts can be
-  awaited. It includes a World with pi-ai models, files, commands, and records. `bind/typescript/README.md` says
-  how to use it. The TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
+  awaited. It includes a World with pi-ai models and records, which hands every other fact to the parts of its
+  extensions for a World, those of files and bash among them. `bind/typescript/README.md` says how to use it. The
+  TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
 - `tui` is the OpenTUI application on that package. The engine and its World run in a worker, `tui/src/worker.ts`,
-  which also holds the demo World and its scripted answers. `tui/README.md` says what the TUI does, and
+  which also holds the demo World and its scripted answers. The parts of the extensions for the TUI load in the
+  thread that draws, those of the builtins from `tui/src/builtin/`. `tui/README.md` says what the TUI does, and
   `docs/tui.md` shows each screen. The gallery and the animation come from `tui/script/`.
+- `extensions/skills` is the skills extension, the npm package `@furb/skills`.
 
 `docs/developer-guide.md` is the guide for a person who changes the repository. It says the same things as this
 file, in the order in which a person needs them.
@@ -72,9 +81,12 @@ The suite drives the engine through its public API alone, end to end, from the m
 - `test/conftest.py` is the harness. `Sand` is a World in memory: files by path, scripted words by chain id, the calls
   it performed, the entries it kept, and what it fed its commands. `Dead` refuses every question but the standing, and
   `Where` asks the chain where it stands at every path. `Py` is a Kernel that is python, with the gate of the crate,
-  which refuses a word that is not python or that names what nothing binds, such as `BAD`. `life` boots a life on them,
-  `settle` gives the loop room, `plain` sends a record through the wire and back, `said` reads the facts, and
-  `paragraphs` and `heads` read the turns, which are python.
+  which refuses a word that is not python or that names what nothing binds, such as `BAD`. A `Sand` runs the `words`
+  of extensions in the module of the engine before boot, as a host does, plays their life words, `lives`, and
+  `answers` answers the question of an extension by its kind; `extension(name)` gives the words of an extension of
+  the repository, and `pristine` gives the module of the engine back as it was after each test. `life` boots a life
+  on them, `settle` gives the loop room, `plain` sends a record through the wire and back, `said` reads the facts,
+  and `paragraphs` and `heads` read the turns, which are python.
 - One test file per definition of the contract: `test_<name>.py` for a function, a global or a type alias,
   `test_<class>_<method>.py` for a method, in lower case, with dunder underscores stripped. A capitalized definition
   whose lower-case name is another definition's, `Bash` beside `bash`, has `test_<name>_shape.py`.
@@ -87,21 +99,27 @@ The suite drives the engine through its public API alone, end to end, from the m
   `test/conftest.py`.
 - `test/outside/` holds the tests of the World, the Kernel, the command line and the provider, which stand outside
   the hygiene laws.
+- The suite of an extension of the repository is `extensions/<name>/test/`, whose `conftest.py` gives the harness of
+  `test/conftest.py`. It runs on both engines, under the same laws, against its own contract.
 
 ## The hygiene laws
 
-`test/test_hygiene.py` holds the contract and the suite to these laws, and it must stay green:
+`test/test_hygiene.py` holds each contract and its suite to these laws, and it must stay green. A contract is
+`engine.pyi` or an `extensions/<name>/<name>.pyi`:
 
 1. Every sentence of a definition has exactly one test, in the file of that definition, whose docstring is that
    sentence. A constructor and a property are no definitions of their own: their sentences are the class's.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
-4. The module docstring of `engine.pyi` is empty.
+4. The module docstring of each contract is empty.
 5. `engine.py`, minified in layout alone, costs fewer than 6000 tokens to the model that reads it.
 6. The minified `engine.py` parses to the same program as the file on disk.
 7. No name in `engine.py` is bound again beneath a scope that already binds it: a parameter, a local, a loop
    target or an import never takes the spelling of a name of an enclosing function or of the module. Every word
-   keeps one meaning.
+   keeps one meaning. The word of each extension of the repository, as the crate makes it, binds no name again
+   beneath a name of the engine or of another word, but an import that binds a name as another word binds it.
+8. Each extension of the repository has a manifest that names its python part, a contract beside that part, and a
+   suite in its folder `test`.
 
 ## Commands
 
@@ -109,15 +127,16 @@ Run every command from the root of the repository.
 
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
   `furb-monty`. After a change of the crate, `uv sync --reinstall-package furb-monty` builds it again.
-- `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
-  whole but for the four stubs of the bus that the toml excludes with their reason.
+- `uv run pytest -q`: the suite and the suites of the extensions on both engines, with the coverage of `furb` and of
+  `furb_monty`, which must be whole but for the four stubs of the bus that the toml excludes with their reason.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
-- `uv run ruff format src test script` then `uv run ruff check src test script`: format and lint. Two spaces of
-  indentation, 120 columns.
-- `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`.
+- `uv run ruff format src test script extensions` then `uv run ruff check src test script extensions`: format and
+  lint. Two spaces of indentation, 120 columns.
+- `uv run ty check --error-on-warning`: the type check. The tests are checked against the contracts.
 - `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test`: the gates of the crate. The
   tests of a module stand beside it, `src/life.test.rs` beside `src/life.rs`, and those of the life drive the real
-  engine on a World in rust.
+  engine on a World in rust. The tests of `src/extension.rs` fetch from a local git remote and pack an npm package,
+  so git and Node.js with npm must be on PATH; they reach no network.
 - `uv run pre-commit run --all-files`: every gate the commit hook runs.
 - `uv run python script/smoke.py`: one real life on opus/low through the claude command line on PATH, or the one
   `FURB_CLAUDE_BIN` names. It is no test of the suite and spends one prompt.
@@ -125,12 +144,13 @@ Run every command from the root of the repository.
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/CLAUDE.md` says how to run.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
-- `bun run check`, `bun run lint` and `bun test bind/typescript/test tui/test`: the type check, the lint, and the
-  tests of the TypeScript side. As root, the test of a folder that cannot be read fails, since root reads every
+- `bun run check`, `bun run lint` and `bun test bind/typescript/test tui/test extensions`: the type check, the lint,
+  and the tests of the TypeScript side. The root `bunfig.toml` gives each run a config directory and a cache
+  directory of its own. As root, the test of a folder that cannot be read fails, since root reads every
   folder.
 - `bun run demo` and `bun run tui`: the TUI on the demo World, which asks no model, or on a real life.
-- `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
-  `tui/src/commands.ts`.
+- `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts`,
+  `tui/src/commands.ts` and the builtin parts for the TUI, and the table of commands of each extension README.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
   real renderer. Run both after a change that a screen shows, and read each capture.
 

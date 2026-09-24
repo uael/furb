@@ -1,14 +1,36 @@
 export * from "../index.cjs";
 export { Activity, type LiveAct, type RunState } from "./activity.js";
 export {
-  type Call,
   type Ear,
   Ears,
-  type Saying,
   WorldAdapter,
   type WorldHandler,
   type WorldRequest,
 } from "./ears.js";
+export {
+  type ActView,
+  type Call,
+  type Fault,
+  type Hearing,
+  type Instance,
+  isInstance,
+  type LiveView,
+  type Remote,
+  remade,
+  type Saying,
+  type SidebarPart,
+  type Spawned,
+  type TuiCommand,
+  type TuiContext,
+  type TuiExtension,
+  type TuiPart,
+  type TuiValue,
+  unwrapped,
+  type WorldContext,
+  type WorldExtension,
+  type WorldPart,
+} from "./extension.js";
+export { loadTuiParts, loadWorldParts } from "./extensions.js";
 export {
   type ImageAttachment,
   imageContent,

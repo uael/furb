@@ -33,7 +33,9 @@ test("workspaces keep sessions alive, report background completion and input, an
     expect(beta.sessions).toHaveLength(1);
     if (!first.session || !second.session || !third.session) throw new Error("Sessions did not open.");
     const worker = first.session.life;
-    const command = await worker.bash("sleep 0.6; printf 'background finished'", { on: worker.root });
+    const command = String(
+      await worker.call("bash", ["sleep 0.6; printf 'background finished'"], { on: worker.root }),
+    );
     await until(library, () => first.status === "working");
     expect(library.groupStatus(alpha)).toBe("working");
     expect(library.current).toBe(third);
@@ -351,7 +353,7 @@ test("a save of the workspace list that fails names its file", async () => {
   }
 });
 
-test("the .furb that the TUI makes in a project keeps itself out of version control", async () => {
+test("the .furb that the TUI makes in a project keeps itself out of version control, but its config", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-ignore-"));
   const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), { demo: true });
   const git = (...args: string[]) =>
@@ -363,8 +365,10 @@ test("the .furb that the TUI makes in a project keeps itself out of version cont
     const entry = await library.create(await library.add(join(directory, "project")), "Ignored");
     await entry.session?.submit("/share");
     await library.delete(entry);
-    expect(await readFile(join(directory, "project/.furb/.gitignore"), "utf8")).toBe("*\n");
+    expect(await readFile(join(directory, "project/.furb/.gitignore"), "utf8")).toBe("*\n!config.json\n");
     expect(git("status", "--porcelain", "--untracked-files=all")).toBe("?? app.txt\n");
+    await writeFile(join(directory, "project/.furb/config.json"), '{"extensions": {}}\n');
+    expect(git("status", "--porcelain", "--untracked-files=all")).toBe("?? .furb/config.json\n?? app.txt\n");
   } finally {
     await library.dispose();
     await rm(directory, { recursive: true, force: true });

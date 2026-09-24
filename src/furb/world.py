@@ -3,6 +3,9 @@
 The engine holds the record as entries and this holds it as lines, one json array to an entry, made plain by wire
 and read back by unwire. Everything the World does runs on the loop the operator booted the life on: a command and
 an ask are tasks of that loop, and what they come to reaches the life through send, under the name of the World.
+
+The World does what the engine asks of every World itself, and hands every other fact to the part of each builtin
+the life takes, `Files` and `Bash`.
 """
 
 import asyncio
@@ -22,6 +25,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, fields, is_dataclass
 from functools import partial
 from pathlib import Path
+from typing import ClassVar
 
 from pydantic import TypeAdapter
 from pydantic_ai.direct import model_request
@@ -40,9 +44,12 @@ from python_minifier import minify
 from furb import engine, python
 from furb.engine import WORLD, Drift, Refused, Text
 from furb.provider.claude import ACTOR, Claude, Settings, actors
+from furb_monty import builtin_extensions, system_prompt
 
 type World = Generator[tuple | None, tuple]
 """The World, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
+type Said = Generator[tuple, tuple]
+"""What a part of the World says of one fact."""
 
 CAP = 524288
 """CAP is the most bytes the World reads of one file, since a text a model cannot hold is no answer."""
@@ -66,7 +73,7 @@ SYSTEM = minify(
   remove_builtin_exception_brackets=False,
   constant_folding=False,
 )
-"""SYSTEM is the system prompt of every model: the engine, minified in layout alone, and nothing else."""
+"""SYSTEM is the engine, minified in layout alone, which the system prompt of a life is made of."""
 
 
 PARTS = TypeAdapter(list[ModelResponsePart])
@@ -212,6 +219,9 @@ class Live:
   `mute` holds, for each chain, the actor whose last ask on that chain answered nothing, so a second such ask in a
   row pauses the chain, and an answer between the two ends the row.
   `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
+  `acts` holds every act it heard, by name, for its parts too. `taken` are the builtins the life takes, `words` the
+  words of its extensions and `lives` their life words, and `booted` says that the life stands on its record, so a
+  chain born after it takes the life words at its birth.
   """
 
   directory: str
@@ -224,6 +234,38 @@ class Live:
   mute: dict[str, str] = field(default_factory=dict)
   reader: asyncio.StreamReader | None = None
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
+  words: list[str] = field(default_factory=list)
+  lives: list[str] = field(default_factory=list)
+  taken: Sequence[str] = tuple(one.name for one in builtin_extensions())
+  booted: bool = False
+  acts: dict[str, tuple] = field(default_factory=dict)
+  jobs: set[Task[None]] = field(default_factory=set)
+
+  def start(self, work: Coroutine[object, object, None]) -> None:
+    """One task of the World, held while it runs, so that nothing collects it before it is done."""
+    job = asyncio.get_running_loop().create_task(work)
+    self.jobs.add(job)
+    job.add_done_callback(self.jobs.discard)
+
+  @property
+  def system(self) -> str:
+    """The system prompt of every model of the life, which is the text the life runs, as the crate makes it."""
+    return system_prompt(SYSTEM, self.taken, self.words)
+
+  def plays(self, chain: str) -> None:
+    """The life words, played on a chain as rungs by whoever speaks, which is the World."""
+    for word in self.lives:
+      engine.rung(word, on=chain)
+
+  def play(self) -> None:
+    """The life words, played as the World on every chain without a source once the life stands on its record."""
+    token = engine.site.set(WORLD)
+    try:
+      for one in [a[1] for a in list(engine.acts.values()) if a[0] == "chain" and not a[5]]:
+        self.plays(one)
+    finally:
+      engine.site.reset(token)
+    self.booted = True
 
   def buys(self, name: str) -> Model[object]:
     """The model a name asks for, bought once, or the one model the World was given for every name it hears."""
@@ -241,7 +283,7 @@ class Live:
     holds the conversation from one end. A user turn that holds nothing goes not at all.
     """
     who, effort = actor.partition("/")[::2]
-    messages: list[ModelMessage] = [ModelRequest(parts=[SystemPromptPart(content=SYSTEM)])]
+    messages: list[ModelMessage] = [ModelRequest(parts=[SystemPromptPart(content=self.system)])]
     for role, py, _, blocks in turns:
       if role == "assistant":
         held = blocks if isinstance(blocks, list) else []
@@ -282,40 +324,6 @@ class Live:
       await asyncio.get_running_loop().connect_read_pipe(lambda: made, sys.stdin)
     return (await self.reader.readline()).decode(errors="replace").strip()
 
-  def serves(self, path: str) -> bool:
-    """Whether the World answers for a path: a path of the disk, and a door of an act of the life, which it refuses
-    once nothing lives behind it. A path of a scheme is another ear's to answer, so the World says nothing of it,
-    whatever the order the ears were given in."""
-    return "://" not in path
-
-  def door(self, path: str) -> bool:
-    """Whether a path is a door: its first part names an act of the life, so `./` before it reaches the file."""
-    return path.split("/", 1)[0] in engine.acts
-
-  def read(self, here: str, path: str) -> Text | Refused:
-    """The text at a path: the file on the disk, and a refusal for the door of nothing that lives."""
-    if self.door(path):
-      return Refused(f"{path} is the door of nothing that lives")
-    at = self.at(here, path)
-    if not at.is_file():
-      return Refused(f"no file at {at}")
-    raw = at.read_bytes()
-    if len(raw) > CAP:
-      return Refused(f"{at} holds {len(raw)} bytes, over the {CAP} the World reads")
-    try:
-      return Text(str(at), raw.decode())
-    except UnicodeDecodeError:
-      return Refused(f"{at} is no text")
-
-  def write(self, here: str, path: str, content: str) -> Text | Refused:
-    """The content onto the file at a path, and the text of that file as it stands on the disk after the write."""
-    if self.door(path):
-      return Refused(f"{path} is the door of nothing that takes a word")
-    at = self.at(here, path)
-    at.parent.mkdir(parents=True, exist_ok=True)
-    at.write_text(content, encoding="utf-8")
-    return Text(str(at), at.read_text(encoding="utf-8"))
-
   def keep(self, entry: tuple) -> None:
     """One entry of the record onto its file, plain, as json, and on the disk before this gives back."""
     if self.record is None:
@@ -326,60 +334,6 @@ class Live:
       file.write(line)
       file.flush()
       os.fsync(file.fileno())
-
-  async def ran(self, one: Command, here: str) -> None:
-    """The command in a session of its own: what it says as it says it, and its code when it is over.
-
-    When the command is merged, its stderr is its stdout, so the two stand in the order the command wrote them. The
-    World ends the command at its timeout, and the code of it is nothing then.
-    """
-    hiss = subprocess.STDOUT if one.merged else subprocess.PIPE
-    mouth = subprocess.PIPE if one.fed else subprocess.DEVNULL
-    try:
-      proc = await asyncio.create_subprocess_shell(
-        one.command, stdin=mouth, stdout=subprocess.PIPE, stderr=hiss, cwd=self.at(here), start_new_session=True
-      )
-    except OSError as no:
-      # The machine would not start it, so the command never runs and whoever waits for it hears why instead.
-      engine.close(Refused(f"{one.command!r} did not start: {no}"), one.id)
-      return
-    one.stands(proc)
-    if one.over:
-      one.slay()
-
-    async def drained() -> None:
-      """Both streams to their end, and then the code of the command."""
-      await asyncio.gather(self.told(proc.stdout, one.id, "stdout"), self.told(proc.stderr, one.id, "stderr"))
-      await proc.wait()
-
-    # Every way out reads both streams to their end and reaps the process, the one ended before it stood and the
-    # one the life leaves up too, since a pipe of a command that outlives the loop is a pipe nobody closes.
-    job = asyncio.ensure_future(drained())
-    late = False
-    try:
-      async with asyncio.timeout(one.timeout):
-        await asyncio.shield(job)
-    except TimeoutError:
-      late = True
-      one.slay()
-      await job
-    except asyncio.CancelledError:
-      one.slay()
-      await job
-      raise
-    if not one.over:
-      engine.send("exited", one.id, None if late else proc.returncode, by=WORLD)
-
-  async def told(self, reader: asyncio.StreamReader | None, about: str, stream: str) -> None:
-    """One stream of a command, said as it comes, one out fact of the engine for each part that arrives."""
-    if reader is None:
-      return
-    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-    while raw := await reader.read(PIPE):
-      if text := decoder.decode(raw):
-        engine.send("out", about, text, stream, by=WORLD)
-    if text := decoder.decode(b"", final=True):
-      engine.send("out", about, text, stream, by=WORLD)
 
   async def asked(self, rung: str, on: str, actor: str, turns: Sequence[tuple]) -> None:
     """One turn of a model for one ask, and the refusal for an ask the World cannot answer, with a pause when the
@@ -427,57 +381,174 @@ class Live:
 
   def hears(self) -> World:  # noqa: PLR0912
     """The World as one generator for one life: it does the act a start names, answers the questions that are its
-    own, feeds and ends its commands, answers an ask with the turn of a model, and keeps what it is told.
+    own, answers an ask with the turn of a model, keeps what it is told, plays the life words on a chain born without
+    a source, refuses the start of a kind that nothing does, and hands every fact to its parts.
     """
-    running: dict[str, Command] = {}
-    acts: dict[str, tuple] = {}
-    jobs: set[Task[None]] = set()
     loop = asyncio.get_running_loop()
-
-    def start(work: Coroutine[object, object, None]) -> None:
-      """One task of the World, held while it runs, so that nothing collects it before it is done."""
-      job = loop.create_task(work)
-      jobs.add(job)
-      job.add_done_callback(jobs.discard)
-
+    parts = [BUILTINS[name](self) for name in self.taken if name in BUILTINS]
+    kinds = {"wait", "prompt"}.union(*(part.kinds for part in parts))
     while True:
       a = yield
       # Every fact the World answered or performed, and none that it only heard.
       if a[0] in ("start", "stand", "read", "write", "ask", "feed", "clock", "chance"):
         self.calls.append(a)
       match a:
+        case ("chain", id, _, _, _, "") if self.booted:
+          self.plays(id)
         case (_, id, *_) if engine.question(a) and id in engine.acts:
-          acts[id] = a
+          self.acts[id] = a
         case ("start", about, _):
-          match acts[about]:
-            case ("bash", _, _, on, command, fed, timeout):
-              merged = engine.ask("merged", on, about)[1]
-              running[about] = held = Command(about, command, fed, timeout, bool(merged))
-              start(self.ran(held, engine.cwd(on=on)))
+          match self.acts[about]:
             case ("wait", _, _, _, seconds):
               loop.call_later(seconds, partial(engine.send, "done", about, None, by=WORLD))
             case ("prompt", _, _, _, shape, message, _):
-              start(self.show(about, shape, message))
+              self.start(self.show(about, shape, message))
+            case (kind, *_) if kind not in kinds:
+              engine.close(Refused(f"the World does no {kind}"), about)
         case ("stand", qid, *_):
           yield "done", qid, [self.roster, self.directory, self.actor]
-        case ("read", qid, _, on, path) if self.serves(path):
-          yield "done", qid, self.read(engine.cwd(on=on), path)
-        case ("write", qid, _, on, Text(path=path, content=content)) if self.serves(path):
-          yield "done", qid, self.write(engine.cwd(on=on), path, content)
         case ("ask", rung, _, on, actor, turns):
-          start(self.asked(rung, on, actor, turns))
-        case ("feed", about, _, text) if about in running:
-          running[about].feed(text)
-        case ("cancel" | "close", *_):
-          for one in [x for x in running.values() if engine.covers(a, x.id)]:
-            one.over = True
-            one.slay()
-            yield "exited", one.id, None
-        case ("exited", about, *_):
-          running.pop(about, None)
+          self.start(self.asked(rung, on, actor, turns))
         case ("keep", _, _, entry):
           self.keep(entry)
         case ("clock", qid, *_):
           yield "done", qid, time.time()
         case ("chance", qid, *_):
           yield "done", qid, random.random()  # noqa: S311
+      for part in parts:
+        yield from part.hears(a)
+
+
+@dataclass
+class Files:
+  """The part of the files builtin: a read and a write of the disk, where the chain stands."""
+
+  live: Live
+  kinds: ClassVar[frozenset[str]] = frozenset()
+
+  def serves(self, path: str) -> bool:
+    """Whether the World answers for a path: a path of the disk, and a door of an act of the life, which it refuses
+    once nothing lives behind it. A path of a scheme is another ear's to answer, so the World says nothing of it,
+    whatever the order the ears were given in."""
+    return "://" not in path
+
+  def door(self, path: str) -> bool:
+    """Whether a path is a door: its first part names an act of the life, so `./` before it reaches the file."""
+    return path.split("/", 1)[0] in engine.acts
+
+  def read(self, here: str, path: str) -> dict[str, str] | Refused:
+    """The text at a path: the file on the disk, and a refusal for the door of nothing that lives."""
+    if self.door(path):
+      return Refused(f"{path} is the door of nothing that lives")
+    at = self.live.at(here, path)
+    if not at.is_file():
+      return Refused(f"no file at {at}")
+    raw = at.read_bytes()
+    if len(raw) > CAP:
+      return Refused(f"{at} holds {len(raw)} bytes, over the {CAP} the World reads")
+    try:
+      return {"path": str(at), "content": raw.decode()}
+    except UnicodeDecodeError:
+      return Refused(f"{at} is no text")
+
+  def write(self, here: str, path: str, content: str) -> dict[str, str] | Refused:
+    """The content onto the file at a path, and the text of that file as it stands on the disk after the write."""
+    if self.door(path):
+      return Refused(f"{path} is the door of nothing that takes a word")
+    at = self.live.at(here, path)
+    at.parent.mkdir(parents=True, exist_ok=True)
+    at.write_text(content, encoding="utf-8")
+    return {"path": str(at), "content": at.read_text(encoding="utf-8")}
+
+  def hears(self, a: tuple) -> Said:
+    """A read and a write of a path it serves, answered."""
+    match a:
+      case ("read", qid, _, on, path) if self.serves(path):
+        yield "done", qid, self.read(engine.cwd(on=on), path)
+      case ("write", qid, _, on, path, content) if self.serves(path):
+        yield "done", qid, self.write(engine.cwd(on=on), path, content)
+
+
+@dataclass
+class Bash:
+  """The part of the bash builtin: a command of the shell, started where its chain stands, fed, and ended."""
+
+  live: Live
+  kinds: ClassVar[frozenset[str]] = frozenset({"bash"})
+  running: dict[str, Command] = field(default_factory=dict)
+
+  def hears(self, a: tuple) -> Said:
+    """A command started, fed and ended, and one that exited let go."""
+    match a:
+      case ("start", about, _) if self.live.acts[about][0] == "bash":
+        _, _, _, on, command, fed, timeout = self.live.acts[about]
+        merged = engine.ask("merged", on, about)[1]
+        self.running[about] = held = Command(about, command, fed, timeout, bool(merged))
+        self.live.start(self.ran(held, engine.cwd(on=on)))
+      case ("feed", about, _, text) if about in self.running:
+        self.running[about].feed(text)
+      case ("cancel" | "close", *_):
+        for one in [x for x in self.running.values() if engine.covers(a, x.id)]:
+          one.over = True
+          one.slay()
+          yield "exited", one.id, None
+      case ("exited", about, *_):
+        self.running.pop(about, None)
+
+  async def ran(self, one: Command, here: str) -> None:
+    """The command in a session of its own: what it says as it says it, and its code when it is over.
+
+    When the command is merged, its stderr is its stdout, so the two stand in the order the command wrote them. The
+    World ends the command at its timeout, and the code of it is nothing then.
+    """
+    hiss = subprocess.STDOUT if one.merged else subprocess.PIPE
+    mouth = subprocess.PIPE if one.fed else subprocess.DEVNULL
+    try:
+      proc = await asyncio.create_subprocess_shell(
+        one.command, stdin=mouth, stdout=subprocess.PIPE, stderr=hiss, cwd=self.live.at(here), start_new_session=True
+      )
+    except OSError as no:
+      # The machine would not start it, so the command never runs and whoever waits for it hears why instead.
+      engine.close(Refused(f"{one.command!r} did not start: {no}"), one.id)
+      return
+    one.stands(proc)
+    if one.over:
+      one.slay()
+
+    async def drained() -> None:
+      """Both streams to their end, and then the code of the command."""
+      await asyncio.gather(self.told(proc.stdout, one.id, "stdout"), self.told(proc.stderr, one.id, "stderr"))
+      await proc.wait()
+
+    # Every way out reads both streams to their end and reaps the process, the one ended before it stood and the
+    # one the life leaves up too, since a pipe of a command that outlives the loop is a pipe nobody closes.
+    job = asyncio.ensure_future(drained())
+    late = False
+    try:
+      async with asyncio.timeout(one.timeout):
+        await asyncio.shield(job)
+    except TimeoutError:
+      late = True
+      one.slay()
+      await job
+    except asyncio.CancelledError:
+      one.slay()
+      await job
+      raise
+    if not one.over:
+      engine.send("exited", one.id, None if late else proc.returncode, by=WORLD)
+
+  async def told(self, reader: asyncio.StreamReader | None, about: str, stream: str) -> None:
+    """One stream of a command, said as it comes, one out fact of the engine for each part that arrives."""
+    if reader is None:
+      return
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    while raw := await reader.read(PIPE):
+      if text := decoder.decode(raw):
+        engine.send("out", about, text, stream, by=WORLD)
+    if text := decoder.decode(b"", final=True):
+      engine.send("out", about, text, stream, by=WORLD)
+
+
+BUILTINS: dict[str, type[Files | Bash]] = {"files": Files, "bash": Bash}
+"""BUILTINS are the parts of the builtins, by name; grant needs none."""

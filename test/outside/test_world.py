@@ -51,7 +51,7 @@ def runs() -> list[asyncio.Task]:
     for one in asyncio.all_tasks()
     if one is not asyncio.current_task()
     and inspect.iscoroutine(held := one.get_coro())
-    and held.__qualname__ == "Live.ran"
+    and held.__qualname__ == "Bash.ran"
   ]
 
 
@@ -345,7 +345,7 @@ def test_the_roster_offers_the_claude_family_and_a_name_is_bought_once(yard: Pat
 
 
 def test_the_engine_the_model_reads_is_the_engine_that_runs() -> None:
-  """The system prompt is the engine, minified in layout alone, and nothing else at all."""
+  """SYSTEM is the engine, minified in layout alone, and nothing else at all."""
   source = Path(engine.__file__).read_text(encoding="utf-8")
   assert ast.dump(ast.parse(SYSTEM)) == ast.dump(ast.parse(source))
   assert "def boot(" in SYSTEM
@@ -730,3 +730,56 @@ async def test_the_world_says_nothing_of_a_door_of_no_act_so_an_ear_of_the_outsi
     engine.read(f"{over}/stdout", on=root)
   with pytest.raises(Refused, match="nothing that takes a word"):
     engine.write(Text(f"{over}/stdin", "late"), on=root)
+
+
+async def test_the_world_closes_the_start_of_an_act_that_no_part_does_with_a_refusal(yard: Path) -> None:
+  """A start of an act of a kind that neither the World nor any of its parts does is closed with a refusal, so no
+  word waits for it."""
+  live = world(yard)
+  root = life(live)
+  job = await engine.rung("close(act('job', __name__, started(ending(idle))))", on=root)
+  assert isinstance(job, str)
+  with pytest.raises(Refused, match=r"^the World does no job$"):
+    await engine.Act(job)
+  assert [one for one in live.calls if one[0] == "start"] == [("start", job, job)]
+
+
+async def test_the_world_plays_its_life_words_on_a_chain_born_without_a_source_and_on_no_other(yard: Path) -> None:
+  """Once the life stands on its record, the World plays its life words as the World on every chain without a
+  source and on each such chain born after, and a chain with a source takes the rungs of its origin instead."""
+  live = Live(str(yard), lives=["seen = 1"])
+  root = life(live)
+  live.play()
+  two = engine.chain("two")
+  twin = engine.chain("twin", source=root)
+  await settle()
+  rungs = {
+    on: [engine.acts[one] for one in engine.acts if one.startswith("rung") and engine.acts[one][3] == on]
+    for on in (root, two, twin)
+  }
+  assert [(a[2], a[4]) for a in rungs[root]] == [("world", "seen = 1")]
+  assert [(a[2], a[4]) for a in rungs[two]] == [("world", "seen = 1")]
+  assert [a[2] for a in rungs[twin]] == [twin] and all(a[5] for a in rungs[twin])
+
+
+def test_the_system_prompt_of_a_life_is_the_engine_less_the_builtins_it_does_not_take_then_its_words() -> None:
+  """The system prompt of a life is the engine less the definitions of each builtin the life does not take, then the
+  words of its extensions, and the engine alone for a life that takes every builtin and no word."""
+  assert Live("/w").system == SYSTEM
+  bare = Live("/w", taken=("files",), words=["def hello():\n  return 'hi'\n"])
+  assert "def grant(" not in bare.system and "def bash(" not in bare.system and "class Exit" not in bare.system
+  assert "def read(" in bare.system and "def boot(" in bare.system
+  assert bare.system.endswith("\n\ndef hello():\n  return 'hi'\n")
+  assert ast.parse(bare.system)
+
+
+async def test_a_record_of_0_1_0_opens(yard: Path) -> None:
+  """A record of 0.1.0 answers a read and a write with a text as the mark of its class, which a read and a write give
+  as they are: the life opens on it with no drift."""
+  said = kept(Path(__file__).parent / "record-0.1.0.jsonl")
+  assert said[3][1] == Text("/w/a.txt", "one\ntwo\n")
+  root = life(world(yard), said)
+  await settle()
+  assert root == "chain1"
+  (yard / "a.txt").write_text("one\n", encoding="utf-8")
+  assert engine.read("a.txt", on=root) == Text(str(yard / "a.txt"), "one\n")

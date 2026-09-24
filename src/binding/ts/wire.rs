@@ -1,4 +1,4 @@
-use crate::{Fault, Object, ObjectRef, Text, value::marked};
+use crate::{Fault, Object, ObjectRef, value::marked};
 use serde_json::{Value, json};
 
 /// The largest integer a JavaScript number holds exactly.
@@ -57,9 +57,6 @@ fn outward_at(value: ObjectRef<'_>, depth: usize, durable: bool) -> Value {
   let mark = |name: &str, args: Value| json!({"is": name, "args": [args]});
   if depth > 64 {
     return json!(value.py_repr());
-  }
-  if let Some(text) = Text::of(value) {
-    return json!({"is": "Text", "path": text.path, "content": text.content});
   }
   if let Some(fault) = Fault::of(value) {
     let args = fault.args.iter().map(|arg| outward_at(arg.as_ref(), depth + 1, durable));

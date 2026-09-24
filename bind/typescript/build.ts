@@ -27,9 +27,9 @@ const command = [
 const child = Bun.spawn(command, { cwd: root, stdout: "inherit", stderr: "inherit" });
 if (await child.exited) process.exit(1);
 
-// Build the same system prompt as the Python World. No Python process is needed at runtime. The prompt goes out as
-// UTF-8 bytes, since a text stream on Windows writes a line end as CRLF and a character in the code page of the
-// system.
+// Build the same minified engine as the Python World, which a life makes its system prompt of. No Python process
+// is needed at runtime. The engine goes out as UTF-8 bytes, since a text stream on Windows writes a line end as CRLF
+// and a character in the code page of the system.
 const source = Bun.spawnSync(
   [
     "uv",

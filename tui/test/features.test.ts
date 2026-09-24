@@ -11,7 +11,6 @@ import { openEngine } from "../src/bridge.ts";
 import { clipboardImage } from "../src/clipboard.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import { externalEditor, opener } from "../src/editor.ts";
-import { Extensions } from "../src/extensions.ts";
 import { fileReferences, projectFiles } from "../src/files.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
@@ -271,19 +270,10 @@ test("model request failures remain act failures while the session pauses after 
   }
 }, 30000);
 
-test("file and shell shortcuts, an external editor, extensions, and a safe standalone share use the real session", async () => {
+test("file and shell shortcuts, an external editor, and a safe standalone share use the real session", async () => {
   const session = await demoSession();
   const oldEditor = process.env.EDITOR,
     oldVisual = process.env.VISUAL;
-  const extensions = new Extensions(() => ({
-    life: session.life,
-    chain: session.selected,
-    directory: session.directory,
-    notify: (message) => {
-      session.notice = message;
-    },
-    submit: (message) => session.submit(message),
-  }));
   try {
     const directory = session.world.directory;
     await writeFile(join(directory, "review notes.txt"), "Unique context for this check.");
@@ -326,15 +316,6 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
       ),
     ).toBe("edited outside the TUI");
     expect(transitions).toEqual(["suspend", "resume"]);
-    const extension = join(directory, "extension.ts");
-    await writeFile(
-      extension,
-      'export default (api) => { api.registerCommand("test-extension", { label: "Test extension", description: "Bind a value", async run(_, ctx) { await ctx.life.result(await ctx.life.rung("extension_value = 23", { on: ctx.chain })); ctx.notify("Extension finished."); } }); };',
-    );
-    await extensions.load(extension);
-    await extensions.run("test-extension", "");
-    expect(await session.life.held("modules", [session.selected, "extension_value"], "at")).toBe(23);
-    expect(session.notice).toBe("Extension finished.");
     session.sessionName = '<script>alert("name")</script>';
     await session.submit('<script>alert("message")</script> [bad link](javascript:alert(1))');
     await idle(session);
@@ -354,7 +335,6 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
     else process.env.EDITOR = oldEditor;
     if (oldVisual === undefined) delete process.env.VISUAL;
     else process.env.VISUAL = oldVisual;
-    await extensions.dispose();
     await session.dispose();
   }
 }, 30000);

@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import type { Fact, ImageAttachment, LiveAct, Turn } from "@furb/engine";
+import type { Fact, ImageAttachment, LiveAct, TuiContext, Turn } from "@furb/engine";
 import {
   actorParts,
   decodeRecord,
@@ -18,8 +18,7 @@ import type { FileChange } from "@furb/engine/world";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
-import { expandHome, fileReferences, projectFiles, shortenHome } from "./files.ts";
-import { dollars } from "./format.ts";
+import { expandHome, projectFiles, shortenHome } from "./files.ts";
 import { Preferences } from "./preferences.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { palettes, type ThemeName } from "./theme.ts";
@@ -52,9 +51,10 @@ export const statusLabels: Record<SessionStatus, string> = {
   error: "Error",
   opening: "Opening",
 };
-/** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
+/** Whether an act is at work: it lives, no pause holds it, and its work takes time: a prompt, a rung, or an act the
+ * World was started on. */
 export const working = (act: ActRow): boolean =>
-  !act.done && !act.paused && ["prompt", "rung", "bash", "wait"].includes(act.kind);
+  !act.done && !act.paused && (act.kind === "prompt" || act.kind === "rung" || act.started);
 /** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
  * than a cancel. */
 export function failed(act: ActRow): boolean {
@@ -229,30 +229,9 @@ export class Session extends EventEmitter {
   set theme(value: ThemeName) {
     this.preferences.save(value);
   }
+  /** A fact refreshes the views, whatever its kind, unless it is of a query, whose name holds an @. */
   private factsChanged = (facts: Fact[]) => {
-    if (
-      facts.some(
-        ([kind, id]) =>
-          [
-            "chain",
-            "prompt",
-            "rung",
-            "bash",
-            "wait",
-            "grant",
-            "answer",
-            "out",
-            "exited",
-            "close",
-            "cancel",
-            "pause",
-            "wake",
-            "tell",
-          ].includes(kind) ||
-          (kind === "done" && /^(prompt|rung|bash|wait|grant)\d+$/.test(id)),
-      )
-    )
-      void this.refresh().catch(this.fail);
+    if (facts.some(([, id]) => !id.includes("@"))) void this.refresh().catch(this.fail);
   };
   fail = (error: unknown) => {
     this.error = error instanceof Error ? error.message : String(error);
@@ -355,9 +334,7 @@ export class Session extends EventEmitter {
   }
   /** What the session is doing, over the acts of one chain or of every chain. */
   status(chain?: string): SessionStatus {
-    const acts = this.acts.filter(
-      (act) => act.kind !== "chain" && act.kind !== "grant" && (!chain || act.on === chain),
-    );
+    const acts = this.acts.filter((act) => !this.world.parts.hidden(act) && (!chain || act.on === chain));
     if (chain ? this.error : Object.values(this.errors).some(Boolean)) return "error";
     if (this.queueHeld && this.queued.length) return "blocked";
     if (this.world.pending.size) return "paused";
@@ -437,6 +414,15 @@ export class Session extends EventEmitter {
   }
   isUserPrompt(act: ActRow): boolean {
     return act.kind === "prompt" && act.by === "operator";
+  }
+  /** The names of the extensions whose life words the World plays on each chain. */
+  get played(): string[] {
+    return this.world.extensions.flatMap((one) => (one.life ? [one.name] : []));
+  }
+  /** The text at a path, as a read of the chain on screen gives it: a file, or the program of a prompt, which its door
+   * gives. A read of the operator outside an act tells nothing, so it takes no show. */
+  async read(path: string): Promise<string> {
+    return ((await this.life.call("read", [path], { on: this.selected })) as { content: string }).content;
   }
   /** The act that a name or a door names: the act whose name is the first part of the path. */
   actOf(path: string): ActRow | undefined {
@@ -544,7 +530,7 @@ export class Session extends EventEmitter {
     try {
       for (let entry = next(); entry; entry = next()) {
         passed.add(entry.id);
-        await this.attachFiles(entry.text, entry.chain);
+        await this.prompting(entry.text, entry.chain);
         if (!queued(entry)) continue;
         this.track(await this.world.sendQueued(entry));
         this.queued = this.queued.filter((item) => item.id !== entry.id);
@@ -574,10 +560,32 @@ export class Session extends EventEmitter {
     this.save();
     this.notice = "Follow-up removed.";
   }
-  private async attachFiles(text: string, chain = this.selected): Promise<void> {
-    const directory = resolve(this.world.directory, await this.life.cwd(chain));
-    for (const path of await fileReferences(text, directory))
-      await this.life.result(await this.life.rung(`read(${JSON.stringify(path)})`, { on: chain }));
+  /** What the parts of the extensions do before a message is sent on a chain. */
+  private async prompting(text: string, chain = this.selected): Promise<void> {
+    // The chain answers where it stands itself, since a life that takes no files binds no cwd.
+    const [, here] = (await this.life.call("ask", ["cwd", chain], {})) as [unknown, string];
+    await this.world.parts.prompting(text, this.tuiContext(chain, resolve(this.world.directory, here)));
+  }
+  /** What a part of an extension is given on a chain whose paths resolve against a directory, with the files of the
+   * project as the view has read them. */
+  tuiContext(chain: string, directory: string, files = (): string[] | undefined => undefined): TuiContext {
+    return {
+      life: this.life,
+      chain,
+      directory,
+      acts: this.acts,
+      call: (verb, args = [], kwargs = {}) => this.life.call(verb, args, { on: chain, ...kwargs }),
+      path: (typed) => resolve(directory, expandHome(typed)),
+      projectFiles: files,
+      notify: (message) => {
+        this.notice = message;
+      },
+      submit: (message) => this.submit(message),
+      track: (id) => this.track(id),
+      show: (view) => {
+        this.view = view;
+      },
+    };
   }
   /** The name of a new branch of this chain: its name and the first number that no chain takes, as Main 2. */
   private branchLabel(): string {
@@ -615,7 +623,7 @@ export class Session extends EventEmitter {
     if (chain !== this.selected) await this.select(chain);
     const at = this.activity.findIndex((act) => act.id === id);
     const act = this.activity[at];
-    if (!act || ["chain", "grant"].includes(act.kind)) throw new Error(`There is no act ${id} to rewind to.`);
+    if (!act || this.world.parts.hidden(act)) throw new Error(`There is no act ${id} to rewind to.`);
     const message = this.isUserPrompt(act);
     // Every act after the point leaves the branch, a grant or a chain among them, so that the branch reads no ceiling
     // and no branch that came later.
@@ -671,6 +679,7 @@ export class Session extends EventEmitter {
     if (!text) return;
     this.error = "";
     this.notice = "";
+    const prefixed = this.world.parts.prefixed(text);
     // No program of Python starts with a slash, so a slash command is a command under edit too, as it is in Python.
     if (text.startsWith("/")) await this.command(text);
     else if (this.editing) {
@@ -681,12 +690,12 @@ export class Session extends EventEmitter {
       );
       this.notice = "Program updated and replayed.";
       this.editing = undefined;
-    } else if (text.startsWith("!")) await this.command(`/bash ${text.slice(1).trimStart()}`);
+    } else if (prefixed) await this.command(prefixed);
     else {
       const pending = this.operatorPrompt;
       if (pending) await this.world.answer(pending.id, input);
       else {
-        await this.attachFiles(input);
+        await this.prompting(input);
         this.redo = [];
         const pending = this.world.pending.size > 0;
         const id = await this.life.prompt(this.shape, this.withImages(input), {
@@ -755,23 +764,6 @@ export class Session extends EventEmitter {
           ? "Completed rungs collapse automatically."
           : "Rungs keep their open state.";
         break;
-      case "grant": {
-        const amount = Number(argument);
-        if (!argument || !Number.isFinite(amount) || amount < 0)
-          throw new Error("Use /grant followed by a dollar amount.");
-        const id = await this.life.grant({ usd: amount, on: this.selected });
-        const got = await this.life.outcome(id);
-        if (got.done) throw new Error(JSON.stringify(got.value));
-        this.notice = `Budget set to ${dollars(amount)}. Use /wake if paused.`;
-        break;
-      }
-      case "context": {
-        const amount = Number(argument);
-        if (!argument || !Number.isFinite(amount) || amount < 0 || amount > 1)
-          throw new Error("Use /context with a number from 0 to 1.");
-        await this.life.grant({ share: amount, on: this.selected });
-        break;
-      }
       case "model": {
         if (!argument) throw new Error("Use /model followed by a model name.");
         const name = await this.world.model(argument);
@@ -820,18 +812,6 @@ export class Session extends EventEmitter {
         this.theme = argument as ThemeName;
         this.preferences.save(this.theme);
         break;
-      case "bash":
-        this.track(await this.life.bash(argument, { on: this.selected }));
-        this.view = "feed";
-        break;
-      case "read": {
-        this.track(await this.life.rung(`read(${JSON.stringify(argument)})`, { on: this.selected }));
-        this.view = "feed";
-        break;
-      }
-      case "cd":
-        this.track(await this.life.rung(`cd(${JSON.stringify(argument)})`, { on: this.selected }));
-        break;
       case "edit": {
         // The latest prompt with a program: one of its rungs holds a word the gate let run on this chain.
         const id =
@@ -844,19 +824,10 @@ export class Session extends EventEmitter {
                 this.activity.some((rung) => rung.by === act.id && Object.hasOwn(this.program, rung.id)),
             )?.id;
         if (!id) throw new Error("There is no prompt program to edit.");
-        const got = (await this.life.read(id, undefined, this.selected)) as { content: string };
+        const program = await this.read(id);
         this.editing = id;
-        this.emit("compose", this.drafts[this.draftKey] ?? got.content);
+        this.emit("compose", this.drafts[this.draftKey] ?? program);
         this.notice = "Edit the Python program, then submit to replay it.";
-        break;
-      }
-      case "feed": {
-        const space = argument.indexOf(" ");
-        const id = space < 0 ? argument : argument.slice(0, space);
-        const text = space < 0 ? "" : argument.slice(space + 1);
-        if (!id) throw new Error("Use /feed followed by an act id and text.");
-        // A fed text is one line of input, and no text closes the input.
-        await this.life.write({ path: `${id}/stdin`, content: text && `${text}\n` }, this.selected);
         break;
       }
       case "close": {
@@ -888,8 +859,11 @@ export class Session extends EventEmitter {
         this.emit("shared", path, shareMarkdown(this));
         break;
       }
-      default:
-        throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
+      default: {
+        const given = this.world.parts.commands.get(command);
+        if (!given) throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
+        await given.run(argument, this.tuiContext(this.selected, this.workingDirectory));
+      }
     }
   }
 

@@ -1,6 +1,6 @@
 [project]
 name = "furb-monty"
-version = "0.1.0"
+version = "0.2.0"
 description = "furb for python, with the engine in monty: every name of engine.pyi, over one life in the sandbox."
 readme = "README.md"
 requires-python = ">=3.14"
@@ -17,7 +17,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 # The package of the engine, at its own version: both carry the engine, and a release is the two together.
-dependencies = ["furb==0.1.0"]
+dependencies = ["furb==0.2.0"]
 
 [project.urls]
 Source = "https://github.com/uael/furb"

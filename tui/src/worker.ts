@@ -1,7 +1,15 @@
 // The worker loads no module that loads OpenTUI, whose native library belongs to the thread that draws.
 import { dirname, join } from "node:path";
 import type { Life, Turn, WorldOptions } from "@furb/engine";
-import { Act, engineSource, modelNamed, World } from "@furb/engine";
+import {
+  Act,
+  builtinExtensions,
+  engineSource,
+  modelNamed,
+  resolveExtensions,
+  unwrapped,
+  World,
+} from "@furb/engine";
 import type { WorldState } from "./bridge.ts";
 import { type EngineOptions, hostModels } from "./models.ts";
 import { queueDispatches, queueEvent, queueHash } from "./queue.ts";
@@ -74,12 +82,14 @@ function reply(turn: string): [thinking: string, answer: string] {
       ];
 }
 
-function createDemoWorld(options: WorldOptions): World {
+function createDemoWorld(options: WorldOptions): Promise<World> {
   const { record, cwd } = options;
   const directory = cwd ?? (record ? dirname(record) : undefined);
   if (!directory) throw new Error("A demo World needs a directory or a record.");
-  const world = new World({
+  return World.load({
     ...options,
+    // The demo plays the builtins alone unless it is given extensions, so it shows the same on every machine.
+    extensions: options.extensions ?? builtinExtensions(),
     cwd: directory,
     record: record ?? join(directory, "demo.jsonl"),
     answer: async (_actor, _chain, turns, signal, write): Promise<Turn> => {
@@ -128,7 +138,6 @@ function createDemoWorld(options: WorldOptions): World {
       return ["assistant", code, [3240, 184, 2800, 0, 0.0024], null];
     },
   });
-  return world;
 }
 
 /** What a request of the session comes to. */
@@ -137,7 +146,8 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     const { demo, claude, ...options } = data.args[0] as EngineOptions;
     host = hostModels(claude);
     const given = { ...options, models: host.models, roster: options.roster ?? host.roster };
-    world = demo ? createDemoWorld(given) : new World(given);
+    // A fetch of an extension blocks this worker alone, and never the thread that draws.
+    world = await (demo ? createDemoWorld(given) : World.load(given));
     life = world.open();
     snapshots = new Snapshots(life, world);
     const tail = world.records.entries.at(-1)?.[0];
@@ -152,7 +162,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
         state();
       }, 20);
     });
-    return life.root;
+    return { root: life.root, extensions: world.extensions };
   }
   if (data.target === "library" && data.method === "queue") {
     if (!life || !world) throw new Error("The session is not open.");
@@ -179,10 +189,16 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     return modelNamed(offered, String(data.args[0]))?.name ?? null;
   }
   if (data.target === "library" && data.method === "source") return engineSource();
+  if (data.target === "library" && data.method === "update") {
+    if (!world) throw new Error("The session is not open.");
+    return resolveExtensions(world.directory, { refresh: true }).map((one) => one.name);
+  }
   if (data.target === "library" && data.method === "changes")
     return world?.changes.read(Number(data.args[0]), Number(data.args[1]));
-  if (data.target === "library" && data.method === "act")
-    return world?.activity.acts.get(String(data.args[0]));
+  if (data.target === "library" && data.method === "act") {
+    const act = world?.activity.acts.get(String(data.args[0]));
+    return act && { ...act, value: unwrapped(act.value) };
+  }
   if (data.target === "library" && data.method === "snapshot") {
     if (!snapshots) throw new Error("The session is not open.");
     return snapshots.take(String(data.args[0]), Number(data.args[1]));

@@ -140,18 +140,12 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/image [path]` | Attach an image file, or paste one from the clipboard |
 | `/editor` | Edit this draft with VISUAL or EDITOR |
 | `/run <python>` | Write a rung through the gate |
-| `/bash <command>` | Stream a shell command |
-| `/read <path>` | Show a file to this chain |
-| `/cd <path>` | Change this chain's working directory |
 | `/edit [prompt id]` | Change a prompt's program and replay it |
 | `/inspect <name>` | Read a value from this chain's module |
 | `/details` | Expand or collapse an act in the current view |
-| `/grant <dollars>` | Pause at a dollar ceiling |
-| `/context <fraction>` | Pause at a share of the model window |
 | `/pause [id]` | Hold delivery while work completes |
 | `/wake [id]` | Deliver pending work |
 | `/cancel [id]` | End an act or the selected chain's work |
-| `/feed <id> [text]` | Send a line of input to a command; no text closes its input |
 | `/close <id> <json>` | Close an act with a JSON value |
 | `/name <name>` | Set a name in the session picker |
 | `/share [path]` | Export a standalone HTML conversation |
@@ -160,10 +154,25 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/sidebar` | Show or hide the chains, the usage, and the workspaces |
 | `/delete` | Move a session and its files to the workspace trash |
 | `/autocollapse` | Toggle collapse of completed rungs |
-| `/extension <path>` | Load commands from a TypeScript or JavaScript extension |
+| `/extensions [update]` | List the extensions of this session, or fetch them again |
 | `/exit` | Save every session and quit |
 
 <!-- commands:end -->
+
+The builtin extensions give these commands. A config that turns an extension off removes its commands.
+
+<!-- extensions:start -->
+
+| Command | Extension | Action |
+| --- | --- | --- |
+| `/read <path>` | files | Show a file to this chain |
+| `/cd <path>` | files | Change this chain's working directory |
+| `/bash <command>` | bash | Stream a shell command |
+| `/feed <id> [text]` | bash | Send a line of input to a command; no text closes its input |
+| `/grant <dollars>` | grant | Pause at a dollar ceiling |
+| `/context <fraction>` | grant | Pause at a share of the model window |
+
+<!-- extensions:end -->
 
 The command table comes from the same source as completion, the palette, and help. Run `bun run docs` after
 changing that source. Enter sends a message straight to the engine. The engine gives the next
@@ -199,17 +208,20 @@ tree with the pointer on the chain shown, and Enter on a chain opens it. The TUI
 permission or tool protocol to the engine.
 
 `/share` writes a standalone HTML conversation, including its images and exact transcript. `/share`, `/export`,
-`/image`, and `/extension` read a leading `~` as the home directory, and a relative path from the directory of the
-selected chain. The share dialog
+and `/image` read a leading `~` as the home directory, and a relative path from the directory of the selected
+chain. The share dialog
 can open the file, copy its path, or upload the selected conversation to an unlisted GitHub gist through
 `gh`. Upload happens only when chosen. Anyone with its link can read the shared conversation. `/export`
 keeps the structured JSON export. `/context` sets the context ceiling.
 
-Load a local command extension with `--extension <path>` or `/extension <path>`. An extension exports a setup
-function that receives `ExtensionAPI` and registers commands with a label, description, and `run` function.
-Its context gives the current chain, directory, life, message submission, and notices. Extensions are loaded
-only when named by the user. See [the example](examples/project-summary.ts); loaded commands join the palette
-and slash completion.
+A session takes the extensions that the configs name: the builtins `files`, `bash` and `grant`, and each
+extension that `config.json` of the config directory or `.furb/config.json` of the project names. The worker
+fetches and loads them when the session opens, and the TUI loads the part of each extension for the TUI. A part
+gives slash commands, prefixes of the input such as `!`, how the acts of its kinds show, lines of the sidebar, and
+what it does before a message is sent. `/extensions` lists the extensions of the session, and
+`/extensions update` fetches each one again, which a new session takes. The feed shows the rungs of the life words
+that the World plays on a chain as one line, `extensions`, which names their extensions. See [the example](examples/project-summary), whose
+`package.json` names its part for the TUI alone, and [the guide of the extensions](../docs/extensions.md).
 
 `bun run screenshots` captures the real rendered views through OpenTUI's test renderer. The screenshots use
 a scripted World, real native engine, temporary files, and real local commands. See [the gallery](../docs/tui.md).

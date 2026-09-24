@@ -1,4 +1,5 @@
 import { opens, type Paragraph, paragraphs, type Turn, uncommented } from "@furb/engine";
+import type { Parts } from "./parts.ts";
 import { type ActRow, failed } from "./session.ts";
 
 /** One thing the conversation shows, read off the python of the turns of a chain.
@@ -9,23 +10,36 @@ import { type ActRow, failed } from "./session.ts";
  * - `result`: the close of a prompt, and whether other prompts closed in the same turn.
  * - `act`: the open or the end of any other act, which the conversation shows once.
  * - `note`: any other paragraph: what an act told of itself after its open, or a query of a run, by its header.
+ *   The rungs that the World played for the life words of the extensions stand as one note, `extensions`, which
+ *   names those extensions, and which is `played`.
  */
 export type Item =
   | { type: "python"; key: string; code: string; rung?: ActRow }
   | { type: "prompt"; key: string; act: ActRow }
   | { type: "result"; key: string; act: ActRow; parallel: boolean }
   | { type: "act"; key: string; act: ActRow }
-  | { type: "note"; key: string; label: string; detail: string; body: string; act?: ActRow };
-
-/** The headers that tell how an act ended, which the card of the act shows as its state. */
-const ENDS = ["closed", "exited", "cancelled"];
+  | {
+      type: "note";
+      key: string;
+      label: string;
+      detail: string;
+      body: string;
+      act?: ActRow;
+      played?: boolean;
+    };
 
 /** What the conversation of a chain shows, in the order of its turns. */
-export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): Item[] {
+export function conversation(
+  turns: readonly Turn[],
+  acts: readonly ActRow[],
+  parts: Parts,
+  played: readonly string[],
+): Item[] {
   const rows = new Map(acts.map((act) => [act.id, act]));
   const items: Item[] = [];
   const seen = new Set<string>();
   let rung: ActRow | undefined;
+  let named = false;
   for (const [index, [role, python]] of turns.entries()) {
     if (role === "assistant") {
       if (python) items.push({ type: "python", key: `turn-${index}`, code: python, rung });
@@ -41,8 +55,20 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
       const act = rows.get(paragraph.name);
       const [word = "", ...rest] = paragraph.words.split(" ");
       const shown = () => items.push(note(key, paragraph, act, word, rest.join(" ")));
-      if (word === "ledger") continue;
-      if (act?.kind === "rung") {
+      if (parts.quiet.has(word)) continue;
+      if (act?.kind === "rung" && act.by === "world") {
+        if (!named)
+          items.push({
+            type: "note",
+            key,
+            label: "extensions",
+            detail: played.join(", "),
+            body: "",
+            played: true,
+          });
+        named = true;
+        seen.add(act.id);
+      } else if (act?.kind === "rung") {
         if (word === "advance") rung = act;
         else if (!paragraph.words) {
           // The open of a rung its caller wrote: its header, and then that word.
@@ -57,11 +83,11 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
         if (opens(paragraph)) items.push({ type: "prompt", key, act });
         else if (word === "closed") items.push({ type: "result", key, act, parallel: closes > 1 });
         else shown();
-      } else if (act && ["chain", "grant"].includes(act.kind)) {
+      } else if (act && parts.hidden(act)) {
         // The inspector shows what the chain stands on, so its standing, headed by its roster, is no card of the
         // conversation.
-        if (!opens(paragraph) && !ENDS.includes(word) && word !== "roster") shown();
-      } else if (act && (opens(paragraph) || ENDS.includes(word))) {
+        if (!opens(paragraph) && !parts.ends(act.kind).includes(word) && word !== "roster") shown();
+      } else if (act && (opens(paragraph) || parts.ends(act.kind).includes(word))) {
         if (!seen.has(act.id)) items.push({ type: "act", key: act.id, act });
         seen.add(act.id);
       } else shown();

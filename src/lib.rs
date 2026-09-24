@@ -5,22 +5,28 @@
 //! under a name, the World, the Kernel and the gate among them. This crate runs that file inside monty, a python
 //! interpreter written in rust for untrusted code, and gives a host three things.
 //!
-//! [`Life`] is one life of the engine. Its methods are the verbs of the contract, `read`, `bash`, `prompt` and
-//! the rest, with the same names and the same words, and what an act comes to is awaited as an [`Act`].
+//! [`Life`] is one life of the engine. Its methods are the verbs of the contract, `rung`, `prompt` and the rest,
+//! with the same names and the same words, and what an act comes to is awaited as an [`Act`]. A verb of an
+//! extension is said by its name, through [`Life::verb`].
 //!
-//! [`World`] is what a host writes: what the engine asks of the machine it runs on, as one trait. What the World
-//! answers at once, it returns; what takes time, it gives back as a future, which the life drives. A command
-//! speaks while it runs through a [`Voice`].
+//! [`World`] is what a host writes: what the engine asks of the machine it runs on, as one trait, and every other
+//! fact of the life, which the parts of its extensions hear. What the World answers at once, it returns; what takes
+//! time, it gives back as a future, which the life drives. An act of an extension speaks while it runs through a
+//! [`Voice`].
+//!
+//! [`extension`] reads the extensions a host plays: the config, the cache, the manifests, the order and the words,
+//! the same for every host.
 //!
 //! The Kernel is the crate's. The word of a rung is gated by the type checker of monty, reading the word on
 //! the sheet of `furb.sheet`, every name of the engine bound first, and it runs where the engine runs, in the module
 //! of its chain.
 //!
-//! What crosses is what monty carries, [`Object`], and the engine's own classes read as [`Text`], [`Exit`] and
-//! [`Fault`]. Inside the sandbox, [`PREAMBLE`] stands in for every ear of the host, in a module of its own, so the
-//! globals of a chain hold what the engine defines and nothing more.
+//! What crosses is what monty carries, [`Object`], and an exception reads as [`Fault`]. Inside the sandbox,
+//! [`PREAMBLE`] stands in for every ear of the host, in a module of its own, so the globals of a chain hold what
+//! the engine defines and nothing more.
 
 pub mod ear;
+pub mod extension;
 pub mod fact;
 pub mod gate;
 pub mod life;
@@ -32,10 +38,11 @@ pub mod binding;
 
 pub use crate::{
   ear::{Ears, Reply},
+  extension::Extension,
   fact::Fact,
   life::{Act, Came, Life, Opening},
-  value::{Exit, Fault, Object, ObjectRef, Text},
-  world::{Actor, Command, Later, Running, Said, Standing, Voice, World},
+  value::{Fault, Object, ObjectRef},
+  world::{Actor, Later, Said, Standing, Voice, World},
 };
 
 /// The engine: the one file the sandbox runs, and the whole system prompt of a model.

@@ -1,7 +1,10 @@
 import { EventEmitter } from "node:events";
-import type { Act, Fact, ImageAttachment, Life, LiveAct, World } from "@furb/engine";
+import type { Extension, Fact, ImageAttachment, Life, LiveAct, Remote, World } from "@furb/engine";
+import { loadTuiParts } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
+import { builtinTuiParts } from "./builtin/index.ts";
 import type { EngineOptions } from "./models.ts";
+import { Parts } from "./parts.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 
 export interface Snapshot {
@@ -21,13 +24,8 @@ export interface Snapshot {
   directory: string;
 }
 
-type Returned<T> = T extends Act ? string : Awaited<T>;
 /** Async calls are a choice of the TUI. The library's methods remain synchronous. */
-export type Engine = {
-  [K in keyof Life]: Life[K] extends (...args: infer A) => infer R
-    ? (...args: A) => Promise<Returned<R>>
-    : Life[K];
-};
+export type Engine = Remote<Life>;
 export interface WorldState {
   completed: number;
   cost: number;
@@ -60,6 +58,10 @@ export class HostView extends EventEmitter {
   pending = new Map<string, string>();
   /** How many file changes the World holds. */
   changes = 0;
+  /** The extensions the life plays, in order. */
+  extensions: Extension[] = [];
+  /** The parts of the extensions for the TUI. */
+  parts = new Parts();
   constructor(private request: (target: string, method: string, args: unknown[]) => Promise<unknown>) {
     super();
   }
@@ -113,8 +115,16 @@ export class HostView extends EventEmitter {
   act(id: string): Promise<LiveAct | undefined> {
     return this.request("library", "act", [id]) as Promise<LiveAct | undefined>;
   }
+  /** Fetch every extension of the directory again, and give their names; a new session plays the change. */
+  fetchExtensions(): Promise<string[]> {
+    return this.request("library", "update", []) as Promise<string[]>;
+  }
   async dispose(): Promise<void> {
-    await this.request("world", "dispose", []);
+    try {
+      await this.parts.dispose();
+    } finally {
+      await this.request("world", "dispose", []);
+    }
   }
 }
 
@@ -161,7 +171,11 @@ export async function openEngine(options: EngineOptions): Promise<{ life: Engine
   };
   let root: string;
   try {
-    root = (await request("world", "open", [options])) as string;
+    const opened = (await request("world", "open", [options])) as { root: string; extensions: Extension[] };
+    root = opened.root;
+    world.extensions = opened.extensions;
+    // The parts for the TUI load in this thread alone, which draws, and never in the worker.
+    world.parts = new Parts(await loadTuiParts(opened.extensions, builtinTuiParts));
   } catch (error) {
     // No caller holds a worker whose life did not open, so it ends here.
     closed = true;

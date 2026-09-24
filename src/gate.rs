@@ -15,7 +15,7 @@ use std::cell::RefCell;
 use monty_type_checking::{SourceFile, TypeChecker};
 use monty_types::{TypeCheckingConfig, TypeCheckingFormat};
 
-use crate::{ENGINE, value::Fault};
+use crate::value::Fault;
 
 /// The sheet, which is the one file the checker reads.
 const SHEET: &str = "sheet.py";
@@ -25,24 +25,28 @@ const MODULE: &str = "__engine__";
 
 thread_local! {
   /// The one checker of this thread, which every life of the thread and the Kernel of a python host read with,
-  /// and nothing before its first reading. It holds one reading of the typeshed and one of the engine, which cost
-  /// once, so a reading of a sheet costs the program and the word alone, in every life after the first as in the
-  /// first.
-  static CHECKER: RefCell<Option<TypeChecker>> = const { RefCell::new(None) };
+  /// and nothing before its first reading. It holds one reading of the typeshed and one of the engine, by its text,
+  /// which cost once, so a reading of a sheet costs the program and the word alone, in every life on the same engine
+  /// after the first as in the first.
+  static CHECKER: RefCell<Option<(String, TypeChecker)>> = const { RefCell::new(None) };
 }
 
-/// What the checker found on a sheet: each error by the line it stands on, in the concise form it writes, and
-/// no warning, since a warning refuses no word. A checker that could not read the sheet has said nothing of the
-/// word, which is not a finding, so it is a fault of the gate.
-pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
+/// What the checker found on a sheet, read against the engine: each error by the line it stands on, in the concise
+/// form it writes, and no warning, since a warning refuses no word. The engine is the text the life runs, its system
+/// prompt. A checker that could not read the sheet has said nothing of the word, which is not a finding, so it is a
+/// fault of the gate.
+pub fn checked(sheet: &str, engine: &str) -> Result<Vec<(usize, String)>, Fault> {
   let config = TypeCheckingConfig { format: TypeCheckingFormat::Concise, color: false };
   let path = format!("{MODULE}/__init__.py");
-  let engine = SourceFile::new(ENGINE, &path);
+  let source = SourceFile::new(engine, &path);
   CHECKER.with_borrow_mut(|held| {
-    // The checker writes again every file it is given and reads again all that hangs on it, so the engine is
-    // given to a new checker alone.
-    let given = held.is_none().then_some(&engine);
-    let checker = held.get_or_insert_with(TypeChecker::default);
+    // The checker writes again every file it is given and reads again all that hangs on it, so an engine is given
+    // to a new checker alone, and another engine takes a new checker.
+    if held.as_ref().is_some_and(|(read, _)| read != engine) {
+      *held = None;
+    }
+    let given = held.is_none().then_some(&source);
+    let (_, checker) = held.get_or_insert_with(|| (engine.to_owned(), TypeChecker::default()));
     match checker.run(&SourceFile::new(sheet, SHEET), given, config) {
       Ok(found) => Ok(
         found.map(|said| said.to_string().lines().filter_map(read).collect()).unwrap_or_default(),
@@ -76,7 +80,7 @@ mod tests {
 
   use super::*;
   use crate::{
-    PREAMBLE, SHEET as SOURCE,
+    ENGINE, PREAMBLE, SHEET as SOURCE,
     sand::Sand,
     value::{Object, entry},
   };
@@ -104,7 +108,7 @@ mod tests {
   }
 
   fn found(text: &str) -> Vec<(usize, String)> {
-    checked(text).expect("the gate reads the sheet")
+    checked(text, ENGINE).expect("the gate reads the sheet")
   }
 
   /// What the checker found below the word, each by its line in the word.

@@ -29,6 +29,9 @@ module, and each answer of the model is a program that runs in it.
   fact, and a later run replays it. Work that was interrupted starts again when you resume it.
 - **Limits that hold.** A chain pauses when it reaches a dollar ceiling or a share of the context window.
 - **The model can ask you.** A question to the operator waits in the feed until you answer it.
+- **Extensions add verbs.** Files, commands and the ceilings of a chain are extensions, which a config can turn
+  off. An extension, such as [skills](extensions/skills), adds verbs that the model calls, work in the World, and
+  commands in the TUI. A config names one by a path, a git remote or an npm package.
 - **One contract, proven twice.** `src/furb/engine.pyi` holds each law of the engine as one sentence, and the
   suite has one test for each sentence. The suite runs on CPython, and on monty, a Python interpreter written in
   Rust.
@@ -53,6 +56,7 @@ bun run tui                          # A real life, through the claude command l
 - [The TUI](tui/README.md): the views, the keys, the commands, and [a gallery of each screen](docs/tui.md).
 - [The developer guide](docs/developer-guide.md): how the repository fits together, and how to change it.
 - [The contract](src/furb/engine.pyi): every law of the engine, one sentence per line.
+- [The extensions](docs/extensions.md): what an extension is, how a config names one, and how to write one.
 
 ## License
 

@@ -1,0 +1,9 @@
+{
+  "name": "project-summary",
+  "private": true,
+  "type": "module",
+  "furb": {
+    "name": "project-summary",
+    "tui": "tui.ts"
+  }
+}
