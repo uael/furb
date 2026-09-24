@@ -187,6 +187,26 @@ with this ledger.
   chain binds, as the operator). To pass HIDDEN itself (a verb compares it by identity), use
   `getattr(Bound(root), "HIDDEN")`. `unwire` keeps the mark of a class it does not know as plain data.
 
+- Step "Crate and Python host", crate part done (commits f0ef8a5 and cbb1fc5), per PLAN.md part 4 with the
+  amendments: `src/extension.rs` has `Error` (Config, Entry, Fetch, Manifest, Requires, Cycle, Word), `Places`
+  (`here()` and `of(var, home, windows)`, with `FURB_CONFIG_DIR` and `FURB_CACHE_DIR`), `Source`, `Setting`,
+  `Entry`, `settings`, `read_settings`, `merged`, `config`, `fetched` (path; git with `-c core.autocrlf=false`;
+  npm pack then tar and flate2 in rust), `npm_dir`, `installed`, `Worlds`, `Manifest` (every part optional, one at
+  least; `life` is a word), `manifest_of`, `manifest`, `Extension` (`word` and `life` are options), `builtins`,
+  `loaded`, `ordered`, `extensions`, `words`, `lives`, `missing`, `word`. 49 tests in `src/extension.test.rs`
+  (git and npm proved offline with a local bare repo and a local folder). The World trait lost read, write, run,
+  Command, Running, Voice::out and Voice::exited, and gained `kinds`, `hears` and `answered`; the stand-in
+  `worldly` keeps the core, closes a start of an unknown kind with `Refused("the World does no <kind>")` (read off
+  `acts[about][0]`), and hands every other fact to `world.hears`. The play rule is in the preamble (`WORDS`,
+  `LIVES`, `plays`, `playing`, `played`) and `Opening::words` and `Opening::lives` feed it; `Life::awaited(id)`
+  awaits an act by name. `Life` lost the typed read, write, cd, cwd, grant and bash; value.rs lost Text and Exit;
+  ts/wire.rs lost its Text branch (ts.rs still has its typed methods, which call verbs by name; step 4 removes
+  them). furb_monty gives `extensions(project, refresh=False)`, `places()`, `builtin_extensions()`, `word_of`,
+  `missing_words`, and `Extension` with `word` and `life`. `cargo test` (89), clippy (no feature, python,
+  typescript) and fmt are green. Always run the crate tests under `timeout`: a test that awaits an act nobody
+  ends hangs (an act a World closes must be wrapped in `ending`).
+- Next in this step: the Python host (PLAN.md part 4 section 5, commit 6), then step 2 (TypeScript).
+
 ## Questions for the owner
 
 - engine.pyi, `Show`: "A show is no word of a fact" holds for the acts (no show is a word of a `bash` or of a verb's
