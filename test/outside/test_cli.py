@@ -176,7 +176,7 @@ async def test_a_config_of_the_user_turns_a_builtin_off(yard: Path) -> None:
   config.mkdir(parents=True)
   (config / "config.json").write_text('{"extensions": {"grant": false}}', encoding="utf-8")
   world, root, _ = lived(None, yard, "opus/low", keeps=False)
-  assert world.taken == ("files", "bash")
+  assert world.taken == ["files", "bash"]
   assert "def grant(" not in world.system and "def bash(" in world.system
   assert "grant" not in engine.modules[root] and "bash" in engine.modules[root]
 
@@ -194,7 +194,7 @@ async def test_the_command_line_runs_the_word_of_an_extension_and_plays_its_life
   (yard / ".furb" / "config.json").write_text('{"extensions": {"seen": "../ext"}}', encoding="utf-8")
   record = held(yard)
   world, root, _ = lived(record, yard, "opus/low", keeps=True)
-  assert world.taken == ("files", "bash", "grant")
+  assert world.taken == ["files", "bash", "grant"]
   assert world.words == ["seen = 0\n"] and world.system.endswith("\n\nseen = 0\n")
   assert engine.modules[root]["seen"] == 1
   assert engine.modules[engine.chain("two")]["seen"] == 1
@@ -213,7 +213,7 @@ async def test_a_command_said_again_on_a_record_runs_the_words_the_record_pins(y
   (yard / ".furb").mkdir()
   (yard / ".furb" / "config.json").write_text('{"extensions": {"mine": "../ext"}}', encoding="utf-8")
   record = held(yard)
-  world, root, _ = lived(record, yard, "opus/low", keeps=True)
+  lived(record, yard, "opus/low", keeps=True)
   await settle()
   pins = [entry[0][3:] for entry in kept(record) if entry[0][0] == "extensions"]
   assert pins == [(["files", "bash", "grant"], ["mine = 'first'\n"])]

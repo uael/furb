@@ -7,7 +7,7 @@ from furb import engine
 from furb.engine import Refused
 
 WORDS, LIVES = extension("skills")
-"""The words of the files extension and of the skills extension, and the life word of the skills extension."""
+"""The word and the life word of the skills extension."""
 BREW = {"name": "brew", "description": "Make tea.", "path": "/w/.furb/skills/brew/SKILL.md"}
 """A skill as the World answers it."""
 STEEP = {"name": "steep", "description": "Wait for the leaves.", "path": "/w/.claude/skills/steep/SKILL.md"}
@@ -17,17 +17,13 @@ STEEP = {"name": "steep", "description": "Wait for the leaves.", "path": "/w/.cl
 def world(*found: dict[str, str]) -> tuple[Sand, list[list[dict[str, str]]]]:
   """A World that answers each skills question with the last answer of a list, which the test adds to."""
   answers: list[list[dict[str, str]]] = [list(found)]
-
-  def answer(_: tuple) -> list[dict[str, str]]:
-    return answers[-1]
-
-  return Sand(stands=STANDS, words=WORDS, answers={"skills": answer}), answers
+  return Sand(stands=STANDS, words=WORDS, answers={"skills": lambda _: answers[-1]}), answers
 
 
 def skilled(got: object) -> list[tuple[object, object, object]]:
   """The name, the description and the path of each skill a verb gave, on each engine."""
   assert isinstance(got, list)
-  return [(getattr(one, "name", None), getattr(one, "description", None), getattr(one, "path", None)) for one in got]
+  return [(one.name, one.description, one.path) for one in got]
 
 
 async def test_the_skills_that_the_world_finds_for_a_chain() -> None:

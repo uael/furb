@@ -5,7 +5,7 @@ from furb.engine import HEAD, Refused, Show, Text, ask, asked, commented, outcom
 
 def skills(on: str = "") -> list[Skill]:
   here = on or scope(site.get())
-  was = next((outcomes[q[1]] for q in reversed(list(asked.values())) if q[:1] == ("skills",) and q[3] == here), [])
+  was = next((outcomes[q[1]] for q in reversed(list(asked.values())) if q[0] == "skills" and q[3] == here), [])
   now = ask("skills", here)[1]
   found = (
     [Skill(x["name"], x["description"], x["path"]) for x in now if isinstance(x, dict)] if isinstance(now, list) else []

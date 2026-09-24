@@ -2,32 +2,32 @@
 
 import pytest
 
-from conftest import STANDS, Sand, extension, life, of, texted
+from conftest import STANDS, Sand, extension, life, of
 from furb import engine
-from furb.engine import Refused
+from furb.engine import Refused, Text
 
 WORDS, _ = extension("skills")
-"""The words of the files extension and of the skills extension."""
+"""The word of the skills extension."""
 PATH = "/w/.furb/skills/brew/SKILL.md"
 """Where the SKILL.md file of the skill of the suite stands."""
 BODY = "---\nname: brew\ndescription: Make tea.\n---\nBoil the water.\nPour it on the leaves.\n"
 """The SKILL.md file of the skill of the suite."""
 
 
-def world(description: str = "Make tea.") -> Sand:
+def world() -> Sand:
   """A World with one skill and its SKILL.md file."""
   return Sand(
     files={PATH: BODY},
     stands=STANDS,
     words=WORDS,
-    answers={"skills": lambda _: [{"name": "brew", "description": description, "path": PATH}]},
+    answers={"skills": lambda _: [{"name": "brew", "description": "Make tea.", "path": PATH}]},
   )
 
 
 async def test_a_skill_read_into_a_chain() -> None:
   """A skill read into a chain: the text of its SKILL.md file, which the chain tells as a read of that file."""
   _, root = life(world())
-  assert texted(await engine.rung('close(skill("brew"))', on=root)) == (PATH, BODY)
+  assert await engine.rung('close(skill("brew"))', on=root) == Text(PATH, BODY)
   assert of(engine.turns(on=root), "read") == [
     f"#read {PATH}\n# {PATH}, 0 known\n# 1 ---\n# 2 name: brew\n# 3 description: Make tea.\n# 4 ---\n# 5 Boil the water.\n# 6 Pour it on the leaves."
   ]

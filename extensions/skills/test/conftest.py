@@ -1,4 +1,3 @@
-"""The harness of the suite of the skills extension, which is the harness of the suite of the engine: its hooks and its
-fixtures reach a folder through a conftest of that folder alone."""
+"""The harness of the suite of the engine, whose hooks and fixtures reach a folder only through a conftest of it."""
 
 from conftest import engine_of, pristine, py, pytest_generate_tests, sand  # noqa: F401

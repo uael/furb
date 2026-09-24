@@ -3,7 +3,7 @@
 `from furb import engine` gives the engine of this interpreter, `furb.engine`, unless `FURB_ENGINE` is `monty`, in
 which case it gives `furb_monty.engine`: the same surface, over the engine running in the sandbox of monty with
 the Kernel of the crate. `furb.python` is the engine of this interpreter whatever the switch says, since the
-system prompt a model reads is that file and nothing else.
+system prompt a model reads is made of that file.
 """
 
 import importlib

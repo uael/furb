@@ -46,7 +46,7 @@ from pydantic_ai.providers import Provider
 from pydantic_ai.settings import ModelSettings, ThinkingLevel
 from pydantic_ai.usage import RequestUsage
 
-from furb.engine import OPERATOR, Refused
+from furb.engine import OPERATOR, WINDOW, Refused
 
 API = "claude-cli"
 BIN = "FURB_CLAUDE_BIN"
@@ -94,8 +94,6 @@ EFFORT: Mapping[str, str] = {
 FAMILY = tuple(k for k in LIMITS if not k.startswith("claude-"))
 ACTOR = "opus/low"
 """ACTOR is the actor a chain stands on when the operator names none, which is a name of the family and an effort."""
-WINDOW = 200000
-"""WINDOW is the window the roster gives the operator, which reads no turn and so fills no share of it."""
 STOP: Mapping[str, FinishReason] = {
   "end_turn": "stop",
   "stop_sequence": "stop",

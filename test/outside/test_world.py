@@ -345,7 +345,7 @@ def test_the_roster_offers_the_claude_family_and_a_name_is_bought_once(yard: Pat
 
 
 def test_the_engine_the_model_reads_is_the_engine_that_runs() -> None:
-  """The system prompt is the engine, minified in layout alone, and nothing else at all."""
+  """SYSTEM is the engine, minified in layout alone, and nothing else at all."""
   source = Path(engine.__file__).read_text(encoding="utf-8")
   assert ast.dump(ast.parse(SYSTEM)) == ast.dump(ast.parse(source))
   assert "def boot(" in SYSTEM

@@ -4,7 +4,7 @@ from conftest import STANDS, Sand, extension, life
 from furb import engine
 
 WORDS, _ = extension("skills")
-"""The words of the files extension and of the skills extension."""
+"""The word of the skills extension."""
 
 
 async def test_a_skills_is_the_question_of_the_skills_of_a_chain() -> None:

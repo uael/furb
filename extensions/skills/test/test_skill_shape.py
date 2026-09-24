@@ -4,7 +4,7 @@ from conftest import STANDS, Sand, extension, life, plain, said
 from furb import engine
 
 WORDS, _ = extension("skills")
-"""The words of the files extension and of the skills extension."""
+"""The word of the skills extension."""
 BREW = {"name": "brew", "description": "Make tea.", "path": "/w/.furb/skills/brew/SKILL.md"}
 """A skill as the World answers it."""
 

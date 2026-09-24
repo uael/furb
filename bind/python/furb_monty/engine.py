@@ -360,7 +360,7 @@ def boot(record: Iterable[object] = (), **outside: Generator[tuple | None, tuple
   if LIFE is not None:
     LIFE.end()
   LIFE = Living(outside)
-  LIFE.life = _monty.Life(LIFE, list(outside), list(record), list(WORDS), list(LIVES))
+  LIFE.life = _monty.Life(LIFE, list(outside), list(record), WORDS, LIVES)
   if (no := LIFE.life.raised) is not None:
     raise no
   return Act(LIFE.life.root)

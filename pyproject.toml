@@ -81,10 +81,10 @@ ignore = ["S101"]
 # The surface speaks the engine's own vocabulary: its verbs shadow builtins on purpose, take the parameters the
 # contract names, and its exceptions are named as the contract names them.
 "src/furb/engine.pyi" = ["N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "E501", "PLR0904"]
-# An extension is a word of the engine's own vocabulary: the contract gives its verbs their signatures, and its word
-# types its verbs and nothing else, as the engine does, since a model reads it.
-"extensions/*/*.pyi" = ["N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "E501"]
-"extensions/*/*.py" = ["A002", "ANN", "FBT001", "FBT002", "FBT003", "PLR0913", "PLR0917", "EM102", "TRY003"]
+# An extension speaks as the engine does: its contract holds one sentence to a line, and its word raises a refusal
+# where it stands.
+"extensions/*/*.pyi" = ["E501"]
+"extensions/*/*.py" = ["EM102", "TRY003"]
 "src/furb/engine.py" = ["S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "ANN", "PLR0904", "EM101", "EM102", "TRY003", "PLR0917", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "SIM105", "C901", "SLF001"]
 
 [tool.ruff.lint.pycodestyle]
@@ -126,15 +126,6 @@ include = ["src/furb/engine.py"]
 unresolved-attribute = "ignore"
 unsupported-operator = "ignore"
 invalid-argument-type = "ignore"
-
-# An extension reads what the bus answers, which the contract types as object, after the check its sentences make,
-# as the engine does, and a verb gives the act of its kind, which the bus types as an act of any.
-[[tool.ty.overrides]]
-include = ["extensions/*/*.py"]
-
-[tool.ty.overrides.rules]
-invalid-argument-type = "ignore"
-invalid-return-type = "ignore"
 
 # The engine of monty reads the engine of this interpreter as the module the switch keeps, whose names ty does not
 # see through a module object, and the extension it stands on is built and not read.

@@ -28,8 +28,7 @@ from furb.kernel import ENGINE, extended
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
 SUITES = (HERE, *sorted((HERE.parent / "extensions").glob("*/test")))
-"""SUITES are the directories whose tests run on each engine: the suite of the engine and the suite of each extension
-of the repository, whose modules bind the names of the engine under test too."""
+"""SUITES are the suite of the engine and the suite of each extension of the repository, which run on each engine."""
 SOURCE = Path(furb.python.__file__).read_text(encoding="utf-8")
 """SOURCE is the engine as a text, which the system prompt of a life of the suite is made of."""
 TAKEN = [one.name for one in furb_monty.builtin_extensions()]
@@ -130,10 +129,9 @@ class Sand:
   ask, `record` what it keeps of the keep facts of the journal, `fed` what was fed to its commands, and `calls`
   every fact it answered or performed, in order. `stands` is what a chain stands on, `cost` the usage of one
   answer, and `auto` says whether a command tells a line and exits at once. `tick` counts the readings of its
-  clock and the chances it drew, so a later life reads what the life before it read. `words` are the words of the
-  extensions the life runs after the engine, `lives` their life words, which it plays on each chain without a source
-  once the life stands on its record, which `booted` says, and `answers` answers a question of an extension by its
-  kind.
+  clock and the chances it drew, so a later life reads what the life before it read. `words` and `lives` are the
+  words and the life words of its extensions, `answers` answers a question of an extension by its kind, and
+  `booted` says that the life stands on its record.
   """
 
   files: dict[str, str] = field(default_factory=dict)
@@ -171,8 +169,8 @@ class Sand:
       a = yield
       if a[0] in ("start", "stand", "read", "write", "ask", "feed", "clock", "chance"):
         self.calls.append(a)
-      # The engine of monty plays the life words itself, at the birth of each chain, as every host does.
-      if self.booted and engine is furb.python and a[0] == "chain" and engine.question(a) and not a[5]:
+      # The crate plays the life words of a life of monty itself.
+      if self.booted and engine is furb.python and a[0] == "chain" and not a[5]:
         plays(self.lives, a[1])
       match a:
         case (_, id, *_) if engine.question(a) and id in engine.acts:
@@ -309,8 +307,8 @@ class Py:
     self.source = source
 
   def gate(self, word: str, program: list[str]) -> list[str]:
-    """What the gate finds against a word: the sheet of the engine, read by the gate of the crate against the source
-    of the engine, which holds the words of the extensions after the engine when it is given."""
+    """What the gate finds against a word: the sheet of the engine, read by the gate of the crate against `source`,
+    the system prompt of the life, when it is given."""
     return sheet.gate(ENGINE, program, word, lambda text: furb_monty.gate(text, self.source))
 
   def gating(self) -> Kernel:
@@ -407,8 +405,7 @@ def watched(log: list[tuple]) -> Kernel:
 
 def kernel(source: str | None = None) -> dict[str, Kernel]:
   """The Kernel and the gate a life of the suite is given: the ones that are python for the engine of this
-  interpreter, whose gate reads against the system prompt of the life, and none for the engine of monty, which
-  holds its own."""
+  interpreter, whose gate reads against `source`, and none for the engine of monty, which holds its own."""
   return {} if engine is not furb.python else {"kernel": Py().kernel(), "gate": Py(source).gating()}
 
 
@@ -424,11 +421,8 @@ def plays(lives: Sequence[str], chain: str) -> None:
 
 def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   """A life: the engine opened from a record, with the Kernel it takes, a World in memory and a generator that keeps
-  every fact said in it; it gives what was said and the id of the root.
-
-  The life takes every builtin and runs the words of the World, or what the record pins, as every host does; a life
-  with words pins them when its record pins nothing, and the World plays its life words on every chain without a
-  source once the life stands on its record, and at the birth of each such chain after.
+  every fact said in it; it gives what was said and the id of the root. As a host does, it takes every builtin and
+  the words of the World, or what the record pins, and plays the life words of the World.
   """
   log: list[tuple] = []
   taken, words, pins = furb_monty.pinned(list(record), TAKEN, world.words)
@@ -447,16 +441,11 @@ def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   return log, root
 
 
-def texted(got: object) -> tuple[object, object]:
-  """The path and the content of a text, which is how a test reads a Text on each engine."""
-  return getattr(got, "path", None), getattr(got, "content", None)
-
-
 def extension(name: str) -> tuple[list[str], list[str]]:
   """The words and the life words of an extension of the repository, as the crate makes them from its manifest."""
   root = HERE.parent / "extensions" / name
   manifest = json.loads((root / "package.json").read_text(encoding="utf-8"))["furb"]
-  words = [furb_monty.word_of((root / manifest["python"]).read_text(encoding="utf-8"))] if "python" in manifest else []
+  words = [furb_monty.word_of((root / manifest["python"]).read_text(encoding="utf-8"))]
   return words, [manifest["life"]] if "life" in manifest else []
 
 
@@ -588,8 +577,7 @@ def swapped(to: object) -> None:
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-  """Every test of the suite and of the suite of each extension runs once on each engine; the hygiene laws read the
-  files and run once."""
+  """Every test of the suites runs once on each engine; the hygiene laws read the files and run once."""
   path = metafunc.definition.path
   if "engine_of" in metafunc.fixturenames and path.parent in SUITES and path.name != "test_hygiene.py":
     metafunc.parametrize("engine_of", list(ENGINES), indirect=True)
@@ -597,8 +585,8 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 @pytest.fixture(autouse=True)
 def pristine() -> Generator[None]:
-  """No word of an extension that a test ran in the module of the engine outlives the test: the module holds again
-  what it held before the test, and the next life of monty runs no word it was not given."""
+  """No word of an extension outlives the test that ran it: the module of the engine holds again what it held before
+  the test, and the next life of monty runs no word it is not given."""
   held = dict(vars(furb.python))
   yield
   now = vars(furb.python)

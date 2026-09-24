@@ -17,8 +17,7 @@ from furb.provider.claude import CLI, cool
 
 @pytest.fixture(autouse=True)
 def placed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-  """No config and no cache of the developer reach a test: the config directory and the cache directory of the
-  extensions are directories of the test, empty."""
+  """No config and no cache of the extensions of the developer reach a test: each is an empty directory of the test."""
   monkeypatch.setenv("FURB_CONFIG_DIR", str(tmp_path / "config"))
   monkeypatch.setenv("FURB_CACHE_DIR", str(tmp_path / "cache"))
 

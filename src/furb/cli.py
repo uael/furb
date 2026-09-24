@@ -4,10 +4,8 @@ One command is one life. The life is opened on a loop of its own, from the recor
 waits on that loop for what it asked. A prompt the record already holds is taken up again and never asked twice,
 so a command said again on a kept record reads the answer of the life before it and asks no model for it.
 
-The life takes the extensions the configs name, as the crate reads them, or the builtins and the words its record
-pins. The module of the engine is its system prompt: the engine less what each builtin it does not take defines,
-then the word of each extension. The life plays the life words, and the command line holds the part for a World of
-each builtin it takes; it loads no part for a World of another extension.
+The life takes the extensions the configs name, or what its record pins. The World holds the part of each builtin
+it takes, and no part of another extension.
 """
 
 import argparse
@@ -43,10 +41,9 @@ def lived(record: Path | None, cwd: Path, actor: str, *, keeps: bool) -> tuple[L
   """
   held = kept(record) if record is not None and record.is_file() else []
   loaded = furb_monty.extensions(str(cwd.absolute()))
-  names, words = [one.name for one in loaded], [one.word for one in loaded if one.word]
-  taken, words, pins = furb_monty.pinned(held, names, words)
+  taken, words, pins = furb_monty.pinned(held, [one.name for one in loaded], [one.word for one in loaded if one.word])
   lives = [one.life for one in loaded if one.life]
-  world = Live(str(cwd.absolute()), record if keeps else None, actor, words=words, lives=lives, taken=tuple(taken))
+  world = Live(str(cwd.absolute()), record if keeps else None, actor, words=words, lives=lives, taken=taken)
   extended(taken, words)
   root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating(world.system))
   if pins:
@@ -123,8 +120,8 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-  """The console script: one command of the operator, on one life, on a loop of its own. A config, a fetch or a
-  manifest of an extension that fails ends the command with what failed."""
+  """The console script: one command of the operator, on one life, on a loop of its own, which an extension that
+  fails to load ends with what failed."""
   args = parser().parse_args()
   try:
     if args.verb == "prompt":

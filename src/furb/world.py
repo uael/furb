@@ -4,13 +4,8 @@ The engine holds the record as entries and this holds it as lines, one json arra
 and read back by unwire. Everything the World does runs on the loop the operator booted the life on: a command and
 an ask are tasks of that loop, and what they come to reaches the life through send, under the name of the World.
 
-The World does what the engine asks of every World itself, and hands every other fact to its parts: the part of
-each extension for a World in python, which hears the facts of that extension and answers them with plain data.
-The parts of the builtins are here, `Files` for the files extension and `Bash` for the bash extension. The system
-prompt of the life is the engine less the definitions of each builtin the life does not take, then the words of its
-extensions, which the module of the engine runs after the engine. The World plays the life words of the extensions
-as the World on every chain without a source, as every host does: once the life stands on its record, and at the
-birth of each such chain after.
+The World does what the engine asks of every World itself, and hands every other fact to the part of each builtin
+the life takes, `Files` and `Bash`.
 """
 
 import asyncio
@@ -30,7 +25,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, fields, is_dataclass
 from functools import partial
 from pathlib import Path
-from typing import ClassVar, Protocol
+from typing import ClassVar
 
 from pydantic import TypeAdapter
 from pydantic_ai.direct import model_request
@@ -49,12 +44,12 @@ from python_minifier import minify
 from furb import engine, python
 from furb.engine import WORLD, Drift, Refused, Text
 from furb.provider.claude import ACTOR, Claude, Settings, actors
-from furb_monty import system_prompt
+from furb_monty import builtin_extensions, system_prompt
 
 type World = Generator[tuple | None, tuple]
 """The World, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
 type Said = Generator[tuple, tuple]
-"""What a part of the World says of one fact: each saying, given back as the fact the bus made of it."""
+"""What a part of the World says of one fact."""
 
 CAP = 524288
 """CAP is the most bytes the World reads of one file, since a text a model cannot hold is no answer."""
@@ -224,10 +219,9 @@ class Live:
   `mute` holds, for each chain, the actor whose last ask on that chain answered nothing, so a second such ask in a
   row pauses the chain, and an answer between the two ends the row.
   `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
-  `words` are the words of the extensions the module of the engine runs after the engine, which the system prompt
-  reads after the engine, `lives` their life words, which it plays on each chain without a source in every life,
-  `taken` the builtins the life takes, whose part for a World it holds when it has one, and `booted` says that the
-  life stands on its record, from which point it plays the life words at each birth.
+  `acts` holds every act it heard, by name, for its parts too. `taken` are the builtins the life takes, `words` the
+  words of its extensions and `lives` their life words, and `booted` says that the life stands on its record, so a
+  chain born after it takes the life words at its birth.
   """
 
   directory: str
@@ -242,8 +236,9 @@ class Live:
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
   words: list[str] = field(default_factory=list)
   lives: list[str] = field(default_factory=list)
-  taken: tuple[str, ...] = ("files", "bash", "grant")
+  taken: Sequence[str] = tuple(one.name for one in builtin_extensions())
   booted: bool = False
+  acts: dict[str, tuple] = field(default_factory=dict)
   jobs: set[Task[None]] = field(default_factory=set)
 
   def start(self, work: Coroutine[object, object, None]) -> None:
@@ -254,18 +249,16 @@ class Live:
 
   @property
   def system(self) -> str:
-    """The system prompt of every model of the life, which is the text the life runs: the engine less the definitions
-    of each builtin the life does not take, then the words of its extensions, as the crate makes it for every host."""
-    return system_prompt(SYSTEM, list(self.taken), self.words)
+    """The system prompt of every model of the life, which is the text the life runs, as the crate makes it."""
+    return system_prompt(SYSTEM, self.taken, self.words)
 
   def plays(self, chain: str) -> None:
-    """The life words of the extensions, played on a chain as rungs by whoever speaks, in order."""
+    """The life words, played on a chain as rungs by whoever speaks, which is the World."""
     for word in self.lives:
       engine.rung(word, on=chain)
 
   def play(self) -> None:
-    """The life words, played as the World on every chain without a source once the life stands on its record, and
-    on each such chain at its birth from then on."""
+    """The life words, played as the World on every chain without a source once the life stands on its record."""
     token = engine.site.set(WORLD)
     try:
       for one in [a[1] for a in list(engine.acts.values()) if a[0] == "chain" and not a[5]]:
@@ -387,12 +380,10 @@ class Live:
       engine.close(Refused(f"{line!r} is no {shape}: {no}"), about)
 
   def hears(self) -> World:  # noqa: PLR0912
-    """The World as one generator for one life: it answers what the engine asks of every World, does a wait and a
-    prompt of the operator, answers an ask with the turn of a model, keeps what it is told, closes with a refusal
-    the start of an act that no part does, plays the extensions on each chain born without a source, and hands
-    every fact to each of its parts.
+    """The World as one generator for one life: it does the act a start names, answers the questions that are its
+    own, answers an ask with the turn of a model, keeps what it is told, plays the life words on a chain born without
+    a source, refuses the start of a kind that nothing does, and hands every fact to its parts.
     """
-    acts: dict[str, tuple] = {}
     loop = asyncio.get_running_loop()
     parts = [BUILTINS[name](self) for name in self.taken if name in BUILTINS]
     kinds = {"wait", "prompt"}.union(*(part.kinds for part in parts))
@@ -401,13 +392,13 @@ class Live:
       # Every fact the World answered or performed, and none that it only heard.
       if a[0] in ("start", "stand", "read", "write", "ask", "feed", "clock", "chance"):
         self.calls.append(a)
-      if engine.question(a) and a[1] in engine.acts:
-        acts[a[1]] = a
       match a:
         case ("chain", id, _, _, _, "") if self.booted:
           self.plays(id)
+        case (_, id, *_) if engine.question(a) and id in engine.acts:
+          self.acts[id] = a
         case ("start", about, _):
-          match acts[about]:
+          match self.acts[about]:
             case ("wait", _, _, _, seconds):
               loop.call_later(seconds, partial(engine.send, "done", about, None, by=WORLD))
             case ("prompt", _, _, _, shape, message, _):
@@ -428,19 +419,9 @@ class Live:
         yield from part.hears(a)
 
 
-class Part(Protocol):
-  """The part of an extension for a World in python: the kinds of act it does, and what it says of each fact the
-  World hears, as a saying the World yields; it reaches the life through the engine, as the World does."""
-
-  kinds: ClassVar[frozenset[str]]
-
-  def hears(self, a: tuple) -> Said: ...
-
-
 @dataclass
 class Files:
-  """The part of the files extension: a read and a write of the disk, each resolved where its chain stands, answered
-  with the plain data of the path and the content, or with a refusal."""
+  """The part of the files builtin: a read and a write of the disk, where the chain stands."""
 
   live: Live
   kinds: ClassVar[frozenset[str]] = frozenset()
@@ -456,8 +437,7 @@ class Files:
     return path.split("/", 1)[0] in engine.acts
 
   def read(self, here: str, path: str) -> dict[str, str] | Refused:
-    """The text at a path, as its path and its content: the file on the disk, and a refusal for the door of nothing
-    that lives."""
+    """The text at a path: the file on the disk, and a refusal for the door of nothing that lives."""
     if self.door(path):
       return Refused(f"{path} is the door of nothing that lives")
     at = self.live.at(here, path)
@@ -472,8 +452,7 @@ class Files:
       return Refused(f"{at} is no text")
 
   def write(self, here: str, path: str, content: str) -> dict[str, str] | Refused:
-    """The content onto the file at a path, and the path and the content of that file as it stands on the disk after
-    the write."""
+    """The content onto the file at a path, and the text of that file as it stands on the disk after the write."""
     if self.door(path):
       return Refused(f"{path} is the door of nothing that takes a word")
     at = self.live.at(here, path)
@@ -484,29 +463,25 @@ class Files:
   def hears(self, a: tuple) -> Said:
     """A read and a write of a path it serves, answered."""
     match a:
-      case ("read", qid, _, on, str(path)) if self.serves(path):
+      case ("read", qid, _, on, path) if self.serves(path):
         yield "done", qid, self.read(engine.cwd(on=on), path)
-      case ("write", qid, _, on, str(path), str(content)) if self.serves(path):
+      case ("write", qid, _, on, path, content) if self.serves(path):
         yield "done", qid, self.write(engine.cwd(on=on), path, content)
 
 
 @dataclass
 class Bash:
-  """The part of the bash extension: a command of the shell, started in the directory its chain stands in, its
-  streams said as they come, fed while it runs, and ended at its timeout and at a control over it."""
+  """The part of the bash builtin: a command of the shell, started where its chain stands, fed, and ended."""
 
   live: Live
   kinds: ClassVar[frozenset[str]] = frozenset({"bash"})
   running: dict[str, Command] = field(default_factory=dict)
-  made: dict[str, tuple] = field(default_factory=dict)
 
   def hears(self, a: tuple) -> Said:
     """A command started, fed and ended, and one that exited let go."""
     match a:
-      case ("bash", id, _, _, *_) if engine.question(a):
-        self.made[id] = a
-      case ("start", about, _) if about in self.made:
-        _, _, _, on, command, fed, timeout = self.made[about]
+      case ("start", about, _) if self.live.acts[about][0] == "bash":
+        _, _, _, on, command, fed, timeout = self.live.acts[about]
         merged = engine.ask("merged", on, about)[1]
         self.running[about] = held = Command(about, command, fed, timeout, bool(merged))
         self.live.start(self.ran(held, engine.cwd(on=on)))
@@ -575,5 +550,5 @@ class Bash:
       engine.send("out", about, text, stream, by=WORLD)
 
 
-BUILTINS: dict[str, Callable[[Live], Part]] = {"files": Files, "bash": Bash}
-"""BUILTINS are the parts for a World in python of the builtin extensions, by the name of their extension."""
+BUILTINS: dict[str, type[Files | Bash]] = {"files": Files, "bash": Bash}
+"""BUILTINS are the parts of the builtins, by name; grant needs none."""

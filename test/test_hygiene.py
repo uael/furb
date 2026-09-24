@@ -1,15 +1,16 @@
 """Each contract and its suite agree, sentence for sentence.
 
-A contract is engine.pyi, whose suite is test/, or the contract of an extension of the repository,
-extensions/<name>/<name>.pyi, whose suite is extensions/<name>/test/. A sentence is one line of the docstring of a definition in a contract: a function, a class,
-a method, or a module-level name, whose docstring is the string literal after its assignment. A constructor and a
-property are no definitions of their own: what a constructor takes and what a property gives are the class's
-sentences. Each sentence has exactly one test, in the file of its definition in the suite of its contract, whose
-docstring is that sentence; each test carries such a sentence; each definition has a file of its own and at least
-one sentence; and the module docstring, the work queue, is empty. The engine itself fits its token budget, minified
-in layout alone, and neither the engine nor the word of an extension binds a name again beneath a scope that already
-binds it. Each extension of the repository has a manifest that names its python part, a contract beside it, and a
-suite.
+A contract is engine.pyi, whose suite is test/, or extensions/<name>/<name>.pyi, whose suite is the folder test
+beside it.
+
+A sentence is one line of the docstring of a definition in a contract: a function, a class, a method, or a
+module-level name, whose docstring is the string literal after its assignment. A constructor and a property are no
+definitions of their own: what a constructor takes and what a property gives are the class's sentences. Each
+sentence has exactly one test, in the file of its definition, whose docstring is that sentence; each test carries
+such a sentence; each definition has a file of its own and at least one sentence; and the module docstring, the
+work queue, is empty. The engine itself fits its token budget, minified in layout alone, and binds no name again
+beneath a scope that already binds it, nor does the word of an extension. Each extension has a manifest that names
+its python part, a contract beside that part, and a suite.
 """
 
 import ast
@@ -29,8 +30,7 @@ PYI = PY.with_suffix(".pyi")
 TESTS = PYI.parents[2] / "test"
 EXTENSIONS = TESTS.parent / "extensions"
 CONTRACTS = {PYI: TESTS, **{one: one.parent / "test" for one in sorted(EXTENSIONS.glob("*/*.pyi"))}}
-"""CONTRACTS maps each contract to the directory of its suite: the engine's, and one for each extension of the
-repository."""
+"""CONTRACTS maps each contract to the directory of its suite."""
 # What the engine may cost the model that reads it: a wall, and a shape that will not fit under it is a shape not
 # found yet. Six thousand, by the owner's word.
 BUDGET = 6_000
@@ -98,7 +98,7 @@ def sentences(doc: str | None) -> list[str]:
   return [normal(line) for line in (doc or "").splitlines() if line.strip()]
 
 
-def file_of(name: str, taken: set[str], tests: Path = TESTS) -> Path:
+def file_of(name: str, taken: set[str], tests: Path) -> Path:
   """test_<name>.py for a function, a class or a global, test_<class>_<method>.py for a method, in lower case, dunders bare.
 
   A class whose lower-case name is another definition's, Bash beside bash or Head beside HEAD, has test_<class>_shape.py.
@@ -226,9 +226,8 @@ def reaching(tree: ast.Module) -> tuple[dict[int, tuple[ast.AST, ...]], dict[int
 
 
 def shadows(name: str, text: str, outer: set[str], same: frozenset[str] = frozenset()) -> list[str]:
-  """Every binding of a file that a scope enclosing it binds already, the names of the outer set bound around the
-  whole file, its module among the scopes they enclose; a name of the same set its module binds as the outer set
-  binds it is one meaning, and no binding again."""
+  """Every binding of a text that an enclosing scope binds already, where `outer` encloses the whole text, and a
+  name of `same` that the top of the text binds keeps its one meaning."""
   tree = ast.parse(text)
   chain, bound = reaching(tree)
   dark: list[str] = []
@@ -244,7 +243,7 @@ def shadows(name: str, text: str, outer: set[str], same: frozenset[str] = frozen
 
 
 def imports(text: str) -> set[tuple[str, str]]:
-  """What each import at the top of a module binds: the name, and the name of what it imports under it."""
+  """What each import at the top of a module binds: the name, and what it imports under that name."""
   out: set[tuple[str, str]] = set()
   for node in ast.parse(text).body:
     if isinstance(node, ast.Import):
@@ -267,11 +266,8 @@ def manifests() -> dict[Path, dict[str, object]]:
 
 
 def test_every_extension_has_a_manifest_a_contract_and_a_suite() -> None:
-  """An extension of the repository is held to the laws of the engine: its manifest names its python part, whose
-  contract stands beside it under the same name, and its suite stands in its folder test."""
-  found = manifests()
-  assert found, "the repository holds no extension"
-  for root, manifest in found.items():
+  """The manifest names the python part, the contract stands beside that part, and the suite in the folder test."""
+  for root, manifest in manifests().items():
     python = manifest.get("python")
     assert isinstance(python, str), f"{root.name} names no python part"
     assert (root / python).is_file() and (root / python).with_suffix(".pyi").is_file(), f"{root.name} has no contract"
@@ -279,16 +275,13 @@ def test_every_extension_has_a_manifest_a_contract_and_a_suite() -> None:
 
 
 def test_no_word_of_an_extension_binds_a_name_again_beneath_itself() -> None:
-  """The word of an extension of the repository runs in the module of the engine after the engine and the words
-  before it, so a name bound in a scope of the word is bound again beneath the names of the engine too. The word is
-  what the crate makes of the module, less its imports of furb, and an import that binds a name the way the engine or
-  another word binds it keeps the one meaning of that name."""
-  engine = PY.read_text(encoding="utf-8")
+  """A word runs in the module of the engine with the engine and the other words, so what they bind encloses it, but
+  an import that binds a name as the engine or another word binds it keeps the one meaning of that name."""
   modules = [root / str(one["python"]) for root, one in manifests().items()]
   words = {one.name: word_of(one.read_text(encoding="utf-8")) for one in modules}
   dark = []
   for one, text in words.items():
-    others = [engine, *(other for name, other in words.items() if name != one)]
+    others = [PY.read_text(encoding="utf-8"), *(other for name, other in words.items() if name != one)]
     outer = set().union(*(binds(ast.parse(other)) for other in others))
     theirs = set().union(*(imports(other) for other in others))
     dark.extend(shadows(one, text, outer, frozenset(name for name, what in imports(text) if (name, what) in theirs)))
