@@ -18,8 +18,8 @@ It gives the extension API of the crate too, the same for every host:
 - `builtin_extensions()` gives the builtins `files`, `bash` and `grant`, and `places()` gives the config directory
   and the cache directory.
 - `word_of(source)` gives the word of a python part, `system_prompt(engine, taken, words)` the system prompt of a life,
-  which is the text the life runs, `cut_names(taken)` the names it cuts, and `pinned(record, taken, words)` what a
-  life on a record takes and runs, and whether it pins them.
+  which is the text the life runs, `cut_names(taken)` the names it cuts, and `pinned(record, taken, words, lives)`
+  what a life on a record takes and runs, and whether it pins them.
 - `Life(ears, names, record, words, lives, taken=None, engine=None)` runs its system prompt, pins, and plays the life
   words, and `life.system` gives that text. `gate(sheet, engine)` reads a sheet against a system prompt.
 

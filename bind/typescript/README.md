@@ -182,10 +182,10 @@ host in TypeScript needs:
   `FURB_CONFIG_DIR` and `FURB_CACHE_DIR`, then the directories of XDG, of Windows, and of the home. `wordOf(source)`
   gives the word of a python part.
 - `Life.boot(callback, names, record, {engine, taken, words, lives})` runs the system prompt of the life: the engine,
-  less the definitions of each builtin it does not take, then the words, or what the record pins, which it pins on an
-  empty record. `life.system` gives that text. The life plays the life words as the World on every chain without a
-  source. The supplied World and `boot` give the minified engine and the extensions, and the World sends
-  `life.system` to each model.
+  less the definitions of each builtin it does not take, then the words. It plays the life words as the World on every
+  chain without a source. A record that pins these gives its own, and a life on an empty record pins them.
+  `life.system` gives that text. The supplied World and `boot` give the minified engine and the extensions, and the
+  World sends `life.system` to each model.
 - `World.load(options)` resolves the extensions of the directory when the options name none, imports the part for a
   World of each one, and gives the World. `new World(options)` takes the `extensions` and the `parts` it is given,
   and the builtins when it is given none. It refuses an extension whose part for a World it does not hold.

@@ -421,11 +421,11 @@ def plays(lives: Sequence[str], chain: str) -> None:
 
 def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   """A life: the engine opened from a record, with the Kernel it takes, a World in memory and a generator that keeps
-  every fact said in it; it gives what was said and the id of the root. As a host does, it takes every builtin and
-  the words of the World, or what the record pins, and plays the life words of the World.
+  every fact said in it; it gives what was said and the id of the root. As a host does, it takes every builtin, the
+  words and the life words of the World, or what the record pins.
   """
   log: list[tuple] = []
-  taken, words, pins = furb_monty.pinned(list(record), TAKEN, world.words)
+  taken, words, world.lives, pins = furb_monty.pinned(list(record), TAKEN, world.words, world.lives)
   if engine is furb.python:
     extended(taken, words)
   else:
@@ -434,7 +434,7 @@ def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   root = engine.boot(record, **kernel(source), probe=watched(log), world=world.hears())
   if engine is furb.python:
     if pins:
-      engine.send("extensions", root, taken, words, by=WORLD)
+      engine.send("extensions", root, taken, words, world.lives, by=WORLD)
     for one in [a[1] for a in list(engine.acts.values()) if a[0] == "chain" and not a[5]]:
       plays(world.lives, one)
   world.booted = True

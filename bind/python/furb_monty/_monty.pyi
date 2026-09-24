@@ -116,7 +116,9 @@ def system_prompt(engine: str, taken: Sequence[str], words: Sequence[str]) -> st
 def cut_names(taken: Sequence[str]) -> set[str]:
   """The top-level names of the engine that each builtin that `taken` does not name defines."""
 
-def pinned(record: object, taken: Sequence[str], words: Sequence[str]) -> tuple[list[str], list[str], bool]:
-  """What a life on a record takes and runs, the builtins and the words, and whether the life pins them: what the
-  record pins, or every builtin and no word when it pins nothing; on an empty record, what it is given, pinned unless
-  it is every builtin and no word."""
+def pinned(
+  record: object, taken: Sequence[str], words: Sequence[str], lives: Sequence[str]
+) -> tuple[list[str], list[str], list[str], bool]:
+  """What a life on a record takes and runs, the builtins, the words and the life words, and whether the life pins
+  them: what the record pins, or every builtin and nothing else when it pins nothing; on an empty record, what it is
+  given, pinned unless it is every builtin and nothing else."""

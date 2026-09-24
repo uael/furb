@@ -41,13 +41,17 @@ def lived(record: Path | None, cwd: Path, actor: str, *, keeps: bool) -> tuple[L
   """
   held = kept(record) if record is not None and record.is_file() else []
   loaded = furb_monty.extensions(str(cwd.absolute()))
-  taken, words, pins = furb_monty.pinned(held, [one.name for one in loaded], [one.word for one in loaded if one.word])
-  lives = [one.life for one in loaded if one.life]
+  taken, words, lives, pins = furb_monty.pinned(
+    held,
+    [one.name for one in loaded],
+    [one.word for one in loaded if one.word],
+    [one.life for one in loaded if one.life],
+  )
   world = Live(str(cwd.absolute()), record if keeps else None, actor, words=words, lives=lives, taken=taken)
   extended(taken, words)
   root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating(world.system))
   if pins:
-    engine.send("extensions", root, taken, words, by=WORLD)
+    engine.send("extensions", root, taken, words, lives, by=WORLD)
   world.play()
   return world, root, held
 

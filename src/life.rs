@@ -386,15 +386,15 @@ impl Opening {
   /// answered. The stand-in runs first in a module of its own, then the system prompt, and
   /// `boot` is given the Kernel of the crate and one generator for the World and for each ear.
   ///
-  /// The life takes the builtins and runs the words its record pins, or every builtin and no word when its record
-  /// pins nothing; a life on an empty record takes what it is opened with, and pins it as the World, about the root,
-  /// unless it is every builtin and no word.
+  /// The life takes the builtins, runs the words and plays the life words its record pins, or takes every builtin and
+  /// nothing else when its record pins nothing; a life on an empty record takes what it is opened with, and pins it as
+  /// the World, about the root, unless it is every builtin and nothing else.
   pub fn boot(self, record: impl IntoIterator<Item = Object>) -> Result<Life, Fault> {
     let Opening { mut world, ears, mut names, limits, engine, taken, words, lives } = self;
     let record: Vec<Object> = record.into_iter().collect();
     let taken =
       taken.unwrap_or_else(|| extension::builtins().into_iter().map(|one| one.name).collect());
-    let (taken, words, pins) = extension::pinned(&record, &taken, &words);
+    let (taken, words, lives, pins) = extension::pinned(&record, &taken, &words, &lives);
     let engine = extension::system(engine.as_deref().unwrap_or(crate::ENGINE), &taken, &[])?;
     let system = extension::appended(&engine, &words);
     let voice = Voice::default();
@@ -434,8 +434,8 @@ impl Opening {
     let raised = entry(&got, 1).and_then(Fault::of);
     if raised.is_none() && pins {
       inner.run(
-        "pinning(__engine, __root, __taken, __words)",
-        vec![("__taken", texts(&taken)), ("__words", texts(&words))],
+        "pinning(__engine, __root, __taken, __words, __lives)",
+        vec![("__taken", texts(&taken)), ("__words", texts(&words)), ("__lives", texts(&lives))],
       )?;
     }
     if raised.is_none() && !lives.is_empty() {

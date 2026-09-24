@@ -133,11 +133,11 @@ since no life lives while it runs.
 `tell` for notes. The World answers a question of an extension with plain data, and the verb makes its own values of
 it.
 
-**The pin.** A life says once, as the World, the builtins it takes and the words it runs, in a fact of the kind
-`extensions` about the root, which the record keeps. A later life on that record runs the same system prompt,
+**The pin.** A life says once, as the World, the builtins it takes, the words it runs and the life words it plays,
+in a fact of the kind `extensions` about the root, which the record keeps. A later life on that record runs the same,
 whatever the configs say then, since a record is made again by running its words. A life that takes every builtin
-and runs no word pins nothing, and a life on a record that pins nothing takes every builtin and runs no word. The
-crate holds this rule, so every host runs the same text.
+and nothing else pins nothing, and a life on a record that pins nothing takes every builtin and nothing else. The
+crate holds this rule, so every host runs the same.
 
 **The life word.** The host plays each life word as a rung, as the World, on every chain without a source, once
 the life stands on its record, and at the birth of each such chain after. A chain with a source runs the rungs of

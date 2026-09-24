@@ -595,25 +595,28 @@ fn the_words_follow_the_engine_after_an_empty_line_in_their_order() {
 }
 
 #[test]
-fn a_life_runs_what_the_first_pin_of_the_world_says_or_every_builtin_and_no_word() {
+fn a_life_runs_what_the_first_pin_of_the_world_says_or_every_builtin_and_nothing_else() {
+  let list = |all: &[&str]| Object::list(all.iter().map(|&one| Object::string(one)));
   let fact = |by: &str, taken: &[&str], words: &[&str]| {
     Object::list([Object::tuple([
       Object::string(PINNED),
       Object::string("chain1"),
       Object::string(by),
-      Object::list(taken.iter().map(|&one| Object::string(one))),
-      Object::list(words.iter().map(|&one| Object::string(one))),
+      list(taken),
+      list(words),
+      list(&["seen()"]),
     ])])
   };
   let other = Object::list([Object::tuple([Object::string("stood"), Object::string("chain1")])]);
   let (every, given) = (texts(&["files", "bash", "grant"]), texts(&["grant", "skills"]));
-  let words = texts(&["a = 1\n"]);
-  assert_eq!(pinned(&[], &given, &words), (texts(&["grant"]), words.clone(), true));
-  assert_eq!(pinned(&[], &every, &[]), (every.clone(), vec![], false));
+  let (words, lives) = (texts(&["a = 1\n"]), texts(&["seen()"]));
+  assert_eq!(pinned(&[], &given, &words, &[]), (texts(&["grant"]), words.clone(), vec![], true));
+  assert_eq!(pinned(&[], &every, &[], &lives), (every.clone(), vec![], lives.clone(), true));
+  assert_eq!(pinned(&[], &every, &[], &[]), (every.clone(), vec![], vec![], false));
   let unpinned = [other.clone(), fact("operator", &[], &["x = 1"])];
-  assert_eq!(pinned(&unpinned, &given, &words), (every.clone(), vec![], false));
+  assert_eq!(pinned(&unpinned, &given, &words, &lives), (every.clone(), vec![], vec![], false));
   let pins = [other, fact("world", &["files"], &["a = 1\n"]), fact("world", &[], &["b = 2\n"])];
-  assert_eq!(pinned(&pins, &every, &[]), (texts(&["files"]), words, false));
+  assert_eq!(pinned(&pins, &every, &[], &[]), (texts(&["files"]), words, lives, false));
 }
 
 #[test]

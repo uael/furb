@@ -117,8 +117,8 @@ Each name has one meaning, which the contract's sentences use as given here.
   binds its names from its birth, and that the system prompt reads after the engine; the word of a module is the
   module less each top-level import from furb.
 - life word: a word that a host plays as a rung, as the World, in every life on each chain without a source.
-- pin: the fact of the World that says the builtins a life takes and the words of the extensions it runs, which the
-  record keeps, so a later life on that record runs the same system prompt.
+- pin: the fact of the World that says the builtins a life takes, the words of the extensions it runs and the life
+  words it plays, which the record keeps, so a later life on that record runs the same.
 - journal: the ear of the life that hears everything and says a keep for each entry of the record.
 - record: the entries the journal keeps, in the order they were said.
 - entry: one line of the record: the fact, and for a query of a run its answer beside.
@@ -159,8 +159,8 @@ Each name has one meaning, which the contract's sentences use as given here.
   annotation but what ty and a dataclass need.
 - engine.py has no private names, and a name one thing alone uses lives inside it.
 - Each technical name has one meaning.
-- A life runs the builtins and the words its record pins, and pins its own on an empty record, since a record is made
-  again by running its words.
+- A life runs what its record pins, and pins its own on an empty record, since a record is made again by running its
+  words.
 - ty check passes on engine.py.
 - There is one root per record, and one process at a time owns a record.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a

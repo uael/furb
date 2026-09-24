@@ -612,7 +612,7 @@ fn a_life_pins_its_words_and_a_later_life_runs_the_words_its_record_pins() {
   let kept = first.kept.borrow().clone();
   assert_eq!(
     pins(&kept),
-    [format!("(('extensions', '{root}', 'world', ['files', 'bash', 'grant'], [{HELLO:?}]))")]
+    [format!("(('extensions', '{root}', 'world', ['files', 'bash', 'grant'], [{HELLO:?}], []))")]
   );
   let mut second = Lived::new("pins", &[], kept.clone()).unwrap();
   assert!(second.life.raised().is_none(), "{:?}", second.life.raised());
@@ -641,7 +641,10 @@ fn a_builtin_the_life_does_not_take_leaves_the_text_it_runs_and_the_gate_refuses
   assert!(first.read.borrow()[1].contains("refused"), "{}", first.read.borrow()[1]);
   assert!(first.life.verb("grant", vec![], vec![]).is_err());
   let kept = first.kept.borrow().clone();
-  assert_eq!(pins(&kept), [format!("(('extensions', '{root}', 'world', ['files', 'bash'], []))")]);
+  assert_eq!(
+    pins(&kept),
+    [format!("(('extensions', '{root}', 'world', ['files', 'bash'], [], []))")]
+  );
   let second = Lived::new("off", &[], kept).unwrap();
   assert_eq!(second.life.system(), first.life.system());
 }
@@ -657,13 +660,14 @@ fn a_life_opened_with_no_word_and_no_life_word_plays_nothing_and_pins_nothing() 
 }
 
 #[test]
-fn the_life_plays_the_life_words_as_the_world_in_every_life_on_each_chain_without_a_source() {
+fn the_life_plays_the_life_words_its_record_pins_as_the_world_in_every_life_on_each_chain_without_a_source()
+ {
   let mut first = Lived::opened("lives", &[], vec![], |one| one.lives(["seen = 1"])).unwrap();
   let root = first.root();
   assert_eq!(first.program(&root), ["seen = 1"]);
   assert_eq!(first.rungs(&root), vec![("world".to_owned(), String::new())]);
   let kept = first.kept.borrow().clone();
-  let mut second = Lived::opened("lives", &[], kept, |one| one.lives(["seen = 1"])).unwrap();
+  let mut second = Lived::opened("lives", &[], kept, |one| one.lives(["other = 1"])).unwrap();
   assert_eq!(second.program(&root), ["seen = 1", "seen = 1"]);
   let two = second.life.chain("two", "", None, "").unwrap().id().to_owned();
   assert_eq!(second.program(&two), ["seen = 1"]);

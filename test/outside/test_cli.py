@@ -204,8 +204,8 @@ async def test_the_command_line_runs_the_word_of_an_extension_and_plays_its_life
 
 
 async def test_a_command_said_again_on_a_record_runs_the_words_the_record_pins(yard: Path) -> None:
-  """A life pins the builtins it takes and the words it runs in its record, and a life on that record runs those
-  whatever the configs say then."""
+  """A life pins the builtins it takes, the words it runs and the life words it plays in its record, and a life on
+  that record runs those whatever the configs say then."""
   root_of = yard / "ext"
   root_of.mkdir()
   (root_of / "package.json").write_text(json.dumps({"furb": {"name": "mine", "python": "mine.py"}}), encoding="utf-8")
@@ -216,7 +216,7 @@ async def test_a_command_said_again_on_a_record_runs_the_words_the_record_pins(y
   lived(record, yard, "opus/low", keeps=True)
   await settle()
   pins = [entry[0][3:] for entry in kept(record) if entry[0][0] == "extensions"]
-  assert pins == [(["files", "bash", "grant"], ["mine = 'first'\n"])]
+  assert pins == [(["files", "bash", "grant"], ["mine = 'first'\n"], [])]
   (root_of / "mine.py").write_text("mine = 'second'\n", encoding="utf-8")
   world, root, _ = lived(record, yard, "opus/low", keeps=True)
   assert world.words == ["mine = 'first'\n"] and engine.modules[root]["mine"] == "first"

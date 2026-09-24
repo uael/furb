@@ -462,19 +462,20 @@ fn cut_names(taken: Vec<String>) -> HashSet<&'static str> {
   extension::cut_names(&taken)
 }
 
-/// What a life on a record takes and runs, as plain data a World keeps: the builtins, the words, and whether the life
-/// pins them.
+/// What a life on a record takes and runs, as plain data a World keeps: the builtins, the words, the life words, and
+/// whether the life pins them.
 #[pyfunction]
 fn pinned(
   py: Python<'_>,
   record: Bound<'_, PyAny>,
   taken: Vec<String>,
   words: Vec<String>,
-) -> PyResult<(Vec<String>, Vec<String>, bool)> {
+  lives: Vec<String>,
+) -> PyResult<extension::Pinned> {
   let held = of_python(&Made::new(py)?, &py.None(), &record)?;
   let held: Vec<Object> =
     held.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
-  Ok(extension::pinned(&held, &taken, &words))
+  Ok(extension::pinned(&held, &taken, &words, &lives))
 }
 
 /// What the crate gave, or its fault raised here as the exception it is.

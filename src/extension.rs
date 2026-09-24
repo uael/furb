@@ -750,31 +750,31 @@ pub(crate) fn appended(text: &str, words: &[String]) -> String {
   out
 }
 
-/// The kind of the fact by which the World pins what a life runs: the builtins it takes and the words.
+/// The kind of the fact by which the World pins what a life runs: the builtins it takes, the words and the life
+/// words.
 pub const PINNED: &str = "extensions";
 
-/// What a life on a record runs, the builtins it takes and the words, and whether it pins them: what the record pins,
-/// or every builtin and no word for a record that pins nothing; a life on an empty record runs what it is given, and
-/// pins it unless it is every builtin and no word.
-pub fn pinned(
-  record: &[Object],
-  taken: &[String],
-  words: &[String],
-) -> (Vec<String>, Vec<String>, bool) {
+/// What a life takes and runs: the builtins, the words and the life words, and whether it pins them.
+pub type Pinned = (Vec<String>, Vec<String>, Vec<String>, bool);
+
+/// What a life on a record takes and runs: what the record pins, or every builtin and nothing else for a record that
+/// pins nothing; a life on an empty record runs what it is given, and pins it unless it is every builtin and nothing
+/// else.
+pub fn pinned(record: &[Object], taken: &[String], words: &[String], lives: &[String]) -> Pinned {
   let every: Vec<String> = BUILTINS.iter().map(|&(name, ..)| name.to_owned()).collect();
-  if let Some((taken, words)) = record.iter().find_map(pin) {
-    return (taken, words, false);
+  if let Some((taken, words, lives)) = record.iter().find_map(pin) {
+    return (taken, words, lives, false);
   }
   if !record.is_empty() {
-    return (every, Vec::new(), false);
+    return (every, Vec::new(), Vec::new(), false);
   }
   let taken: Vec<String> = every.iter().filter(|one| taken.contains(one)).cloned().collect();
-  let pins = taken != every || !words.is_empty();
-  (taken, words.to_vec(), pins)
+  let pins = taken != every || !words.is_empty() || !lives.is_empty();
+  (taken, words.to_vec(), lives.to_vec(), pins)
 }
 
-/// The builtins and the words of an entry that is a pin of the World.
-fn pin(entry: &Object) -> Option<(Vec<String>, Vec<String>)> {
+/// The builtins, the words and the life words of an entry that is a pin of the World.
+fn pin(entry: &Object) -> Option<(Vec<String>, Vec<String>, Vec<String>)> {
   let entry = entry.as_ref();
   let fact = crate::value::entry(&entry, 0)?.items()?;
   if fact.first()?.as_str()? != PINNED || fact.get(2)?.as_str()? != WORLD {
@@ -783,7 +783,7 @@ fn pin(entry: &Object) -> Option<(Vec<String>, Vec<String>)> {
   let texts = |at: usize| -> Option<Vec<String>> {
     Some(fact.get(at)?.items()?.iter().filter_map(|one| one.as_str().map(str::to_owned)).collect())
   };
-  Some((texts(3)?, texts(4)?))
+  Some((texts(3)?, texts(4)?, texts(5)?))
 }
 
 /// The system prompt of a life, which is the text the life runs: the engine less the top-level statements that
