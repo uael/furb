@@ -1,5 +1,7 @@
-import { dollars, kibibytes } from "./format.ts";
+import { ago, dollars, kibibytes } from "./format.ts";
 import { statusLabels } from "./session.ts";
+import { theme } from "./theme.ts";
+import type { Part } from "./ui.ts";
 import type { SessionEntry, Workspace } from "./workspaces.ts";
 
 /** All pickers read the same inventory as the workspace tree. */
@@ -9,17 +11,23 @@ export function sessionChoices(
   create: () => Promise<void>,
 ) {
   const saved = (group?.sessions ?? []).map((entry) => {
-    const date = entry.modified ? new Date(entry.modified) : undefined;
-    const at = date
-      ? `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}`
-      : "";
+    const at = entry.modified ? ago(entry.modified) : "";
     return {
       label: entry.name,
+      status: entry.status,
       detail: [statusLabels[entry.status], at, dollars(entry.cost ?? 0), kibibytes(entry.size ?? 0)]
         .filter(Boolean)
-        .join(" · "),
+        .join("   "),
       run: () => open(entry),
     };
   });
-  return [{ label: "+ New session", detail: "Start a fresh life in this project", run: create }, ...saved];
+  return [
+    {
+      label: "New session",
+      detail: "Start a fresh life in this project",
+      mark: ["+ ", theme.faint] as Part,
+      run: create,
+    },
+    ...saved,
+  ];
 }

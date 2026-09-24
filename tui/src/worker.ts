@@ -36,6 +36,39 @@ const state = () => {
   sentFacts = owner.facts.length;
   self.postMessage({ state: snapshot });
 };
+/** What the demo thinks and answers on a later turn, by what the turn says. */
+const replies: [cue: string, thinking: string, answer: string][] = [
+  [
+    "show live progress",
+    "The index is ready, so the answer says what it holds.",
+    "The index is built, and three notes are ready to search. Each word streamed into the feed as it ran.",
+  ],
+  [
+    "keyboard navigation",
+    "The keys work, so the answer lists them.",
+    "Keyboard navigation works: Ctrl+K opens the search, and the arrows move between notes.",
+  ],
+  [
+    "layout",
+    "The image shows the welcome, so the answer reads its layout.",
+    "The layout reads well. The logo leads, the starters sit under it, and the keys close the column.",
+  ],
+  [
+    " done",
+    "The command is done, so the answer says what it found.",
+    "The checks finished and all three passed, so the project is ready for the search shortcut.",
+  ],
+];
+function reply(turn: string): [thinking: string, answer: string] {
+  const found = replies.find(([cue]) => turn.includes(cue));
+  return found
+    ? [found[1], found[2]]
+    : [
+        "The change is small, so the answer says where it is.",
+        "Done. The change is small, its checks pass, and the result is in the feed.",
+      ];
+}
+
 function createDemoWorld(options: WorldOptions): World {
   const { record, cwd } = options;
   const directory = cwd ?? (record ? dirname(record) : undefined);
@@ -44,26 +77,44 @@ function createDemoWorld(options: WorldOptions): World {
     ...options,
     cwd: directory,
     record: record ?? join(directory, "demo.jsonl"),
-    answer: async (_actor, _chain, turns, signal): Promise<Turn> => {
-      await new Promise<void>((resolve, reject) => {
-        // Only the turn that asks for live progress is slow, and not every later turn of its chain.
-        const timer = setTimeout(
-          resolve,
-          JSON.stringify(turns.at(-1)).includes("show live progress") ? 1800 : 180,
-        );
-        signal.addEventListener(
-          "abort",
-          () => {
-            clearTimeout(timer);
-            reject(new Error("cancelled"));
-          },
-          { once: true },
-        );
-      });
-      const code =
-        turns.filter((turn) => turn[0] === "assistant").length === 0
-          ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
-          : 'close("The next step is ready. Keep the change small, run its checks, and inspect the result here.")';
+    answer: async (_actor, _chain, turns, signal, write): Promise<Turn> => {
+      const pause = (milliseconds: number) =>
+        new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, milliseconds);
+          signal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer);
+              reject(new Error("cancelled"));
+            },
+            { once: true },
+          );
+        });
+      // Only the turn that asks for live progress is slow, and not every later turn of its chain: it thinks, then
+      // writes its word a few words at a time, as a model streams it. FURB_DEMO_STREAM=1 makes every turn so, for a
+      // recording of the demo.
+      const slow =
+        process.env.FURB_DEMO_STREAM === "1" || JSON.stringify(turns.at(-1)).includes("show live progress");
+      await pause(slow ? 300 : 180);
+      const first = turns.filter((turn) => turn[0] === "assistant").length === 0;
+      const [thinking, answer] = first
+        ? ["I read the README and run the checks before I answer.", ""]
+        : reply(JSON.stringify(turns.at(-1)));
+      const code = first
+        ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
+        : `close(${JSON.stringify(answer)})`;
+      if (slow) {
+        write({ thinking });
+        await pause(200);
+        // FURB_DEMO_PACE sets the time between two pieces, in milliseconds, which a capture of work in progress
+        // lengthens.
+        const pace = Number(process.env.FURB_DEMO_PACE) || 30;
+        for (const piece of code.match(/.{1,10}/gs) ?? []) {
+          write({ text: piece });
+          await pause(pace);
+        }
+        await pause(200);
+      }
       return ["assistant", code, [3240, 184, 2800, 0, 0.0024], null];
     },
   });

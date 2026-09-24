@@ -41,15 +41,13 @@ test("a terminal with no kitty keyboard protocol reaches each action by a chord 
   composing(
     async ({ session, app, screen, frame }) => {
       screen.mockInput.pressKey("3", { meta: true });
-      expect(session.view).toBe("activity");
+      expect(session.view).toBe("changes");
+      screen.mockInput.pressKey("1", { meta: true });
+      expect(session.view).toBe("feed");
       screen.mockInput.pressKey("m", { meta: true });
-      expect(await frame()).toContain("· selected");
+      expect(await frame()).toContain("The chain sends its next prompt to this model.");
       app.closeOverlay();
-      const prompt = session.activity.find((act) => act.kind === "prompt");
-      if (!prompt) throw new Error("No prompt in the fixture.");
-      screen.mockInput.pressKey("n", { meta: true });
-      expect(session.ladder).toBe(prompt.id);
-      session.ladder = undefined;
+      screen.mockInput.pressKey("r", { ctrl: true });
       expect(session.mode).toBe("python");
       await frame();
       await screen.mockInput.typeText('x = "你好"');
@@ -59,14 +57,14 @@ test("a terminal with no kitty keyboard protocol reaches each action by a chord 
       expect(app.composer.plainText).toBe('x = "你好"\nif x:\n  ');
       screen.mockInput.pressKey("F1");
       let help = await frame();
-      expect(help).toContain("Alt+1 through Alt+6");
-      expect(help).not.toContain("Ctrl+1 through Ctrl+6");
+      expect(help).toContain("Alt+1 through Alt+3");
+      expect(help).not.toContain("Ctrl+1 through Ctrl+3");
       expect(help).toContain("Alt+M");
       app.closeOverlay();
       setRendererCapabilities(screen.renderer, { kitty_keyboard: true });
       app.help();
       help = await frame();
-      expect(help).toContain("Ctrl+1 through Ctrl+6 or Alt+1 through Alt+6");
+      expect(help).toContain("Ctrl+1 through Ctrl+3 or Alt+1 through Alt+3");
       expect(help).toContain("Shift+Enter or Ctrl+J");
     },
     undefined,
@@ -239,12 +237,12 @@ test("a command that opens a picker opens it in the view, and the session refuse
   composing(async ({ session, app, frame }) => {
     app.composer.setText("/model");
     await app.submit();
-    expect(await frame()).toContain("· selected");
+    expect(await frame()).toContain("The chain sends its next prompt to this model.");
     app.closeOverlay();
     expect(String(await session.submit("/model").catch((error: unknown) => error))).toContain(
       "Use /model followed by a model name.",
     );
-    expect(await frame()).toContain("Ready · model");
+    expect((await frame()).split("\n").findLast((line) => line.trim())).toContain("Ready");
   }));
 
 test("a slash command typed under edit runs as the command it names, and the program stays as its door holds it", () =>
@@ -264,5 +262,89 @@ test("a slash command typed under edit runs as the command it names, and the pro
       expect(door.content).toBe(program);
     },
     undefined,
+    true,
+  ));
+
+test("Up and Down walk the history from the edges of the input, and Up on an empty input takes back a queued message", () =>
+  composing(
+    async ({ session, app, screen }) => {
+      for (const name of ["first", "second"]) {
+        app.composer.setText(`/name ${name}`);
+        await app.submit();
+      }
+      app.composer.setText("a draft");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("/name second");
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("/name first");
+      screen.mockInput.pressArrow("down");
+      expect(app.composer.plainText).toBe("/name second");
+      screen.mockInput.pressArrow("down");
+      expect(app.composer.plainText).toBe("a draft");
+      app.composer.setText("");
+      session.queueHeld = true;
+      session.enqueue("a queued message");
+      expect(session.queued).toHaveLength(1);
+      screen.mockInput.pressArrow("up");
+      expect(app.composer.plainText).toBe("a queued message");
+      expect(session.queued).toEqual([]);
+    },
+    { width: 120, height: 44, kittyKeyboard: true },
+  ));
+
+test("Ctrl+S puts the input aside, the line under the input shows it, and Ctrl+S brings it back", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    await screen.mockInput.typeText("a long draft");
+    screen.mockInput.pressKey("s", { ctrl: true });
+    expect(app.composer.plainText).toBe("");
+    expect(session.stashes[session.draftKey]).toBe("a long draft");
+    expect(await frame()).toContain("stashed");
+    await screen.mockInput.typeText("a quick question");
+    screen.mockInput.pressKey("s", { ctrl: true });
+    expect(app.composer.plainText).toBe("a long draft");
+    expect(session.stashes[session.draftKey]).toBe("a quick question");
+    app.composer.setText("");
+    screen.mockInput.pressKey("s", { ctrl: true });
+    expect(app.composer.plainText).toBe("a quick question");
+    expect(session.stashes[session.draftKey]).toBeUndefined();
+    expect(await frame()).not.toContain("stashed");
+  }));
+
+test("Escape twice opens the rewind tree in the feed, which keys move, fold, and close", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      await until(
+        session,
+        () => !session.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)),
+      );
+      await frame();
+      screen.mockInput.pressEscape();
+      expect(await frame()).toContain("Press Escape again to rewind.");
+      screen.mockInput.pressEscape();
+      const tree = await frame();
+      expect(tree).toContain("Rewind");
+      const rows = () => app.scroll.getChildren().map((node) => node.id);
+      expect(rows().every((id) => id.startsWith("tree-"))).toBe(true);
+      const last = session.activity.findLast((act) => session.isUserPrompt(act));
+      // The pointer starts on the last message, and Enter would give it back on a new branch.
+      expect(tree).toContain("edit it on a new branch");
+      const before = rows().length;
+      screen.mockInput.pressArrow("up");
+      screen.mockInput.pressArrow("up");
+      expect(await frame()).not.toContain("edit it on a new branch");
+      // Home goes to the chain at the top, and Left folds it.
+      screen.mockInput.pressKey("home");
+      screen.mockInput.pressArrow("left");
+      await frame();
+      expect(rows().length).toBeLessThan(before);
+      screen.mockInput.pressArrow("right");
+      await frame();
+      expect(rows().length).toBe(before);
+      screen.mockInput.pressEscape();
+      await frame();
+      expect(rows().some((id) => id.startsWith("tree-"))).toBe(false);
+      expect(session.selected).toBe(last?.on ?? "");
+    },
+    { width: 120, height: 44, kittyKeyboard: true },
     true,
   ));

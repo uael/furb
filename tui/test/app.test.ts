@@ -15,7 +15,7 @@ import { transcriptOf } from "./transcript.ts";
 
 afterAll(removeDemoDirectories);
 
-test("the real native life drives conversation, program, activity, search, and responsive views", async () => {
+test("the real native life drives the feed, the transcript, the palette, and responsive views", async () => {
   const session = await demoSession();
   const test = await createTestRenderer({ width: 145, height: 45, useMouse: true });
   const app = new App(test.renderer, session, { quit() {} });
@@ -23,7 +23,7 @@ test("the real native life drives conversation, program, activity, search, and r
     await test.flush();
     expect(test.captureCharFrame()).toContain("Explore a codebase");
     expect(session.theme).toBe("github");
-    expect(app.scroll.x).toBe(1);
+    expect(app.scroll.x).toBe(2);
     expect(app.scroll.height).toBeGreaterThanOrEqual(36);
     expect(app.scroll.height).toBeLessThanOrEqual(38);
     app.composer.setText("first line\nsecond line");
@@ -36,7 +36,8 @@ test("the real native life drives conversation, program, activity, search, and r
     await seedDemo(session);
     app.render();
     await test.flush();
-    expect(test.captureCharFrame()).toContain("Result");
+    // The answer of a prompt stands under the name of the model that gave it.
+    expect(test.captureCharFrame()).toContain("● sonnet");
     const conversation = test.captureCharFrame();
     expect(conversation.indexOf("Explore this project")).toBeLessThan(
       conversation.indexOf("A clear starting point"),
@@ -47,7 +48,7 @@ test("the real native life drives conversation, program, activity, search, and r
     if (!heading) throw new Error("No command heading.");
     await test.mockMouse.click(heading.x, heading.y);
     await test.flush();
-    expect(test.captureCharFrame()).toContain("command:");
+    expect(test.captureCharFrame()).toContain("exit 0");
     const expanded = app.scroll
       .getChildren()
       .find((node) => node.id === command?.id)
@@ -55,16 +56,14 @@ test("the real native life drives conversation, program, activity, search, and r
     expect(expanded?.visible).toBe(true);
     if (expanded) await test.mockMouse.click(expanded.x, expanded.y);
     await test.flush();
-    expect(test.captureCharFrame()).not.toContain("command:");
-    session.show("program");
+    expect(test.captureCharFrame()).not.toContain("exit 0");
+    expect(app.scroll.getChildren().some((child) => /^bash\d+$/.test(child.id))).toBe(true);
+    expect(test.captureCharFrame()).not.toContain("failed");
+    session.show("transcript");
     app.render();
     await test.flush();
     expect(test.captureCharFrame()).toContain('notes = read("README.md")');
-    session.show("activity");
-    app.render();
-    await test.flush();
-    expect(app.scroll.getChildren().some((child) => /^bash\d+$/.test(child.id))).toBe(true);
-    expect(test.captureCharFrame()).not.toContain("failed");
+    session.show("feed");
     app.palette();
     await test.flush();
     expect(test.captureCharFrame()).toContain("Commands");
@@ -203,13 +202,13 @@ test("every view shows an empty result, loading, and an error in its feed", asyn
   const screen = await createTestRenderer({ width: 120, height: 42 });
   const app = new App(screen.renderer, session, { quit() {} });
   try {
-    for (const view of ["conversation", "program", "activity", "facts", "transcript", "changes"] as const) {
+    for (const view of ["feed", "transcript", "changes"] as const) {
       session.show(view);
       await session.refresh();
       session.search = "nothing matches this";
       app.render();
       await screen.flush();
-      expect(screen.captureCharFrame()).toContain(`No matching ${view}`);
+      expect(screen.captureCharFrame()).toContain("Nothing matches “nothing matches this”");
       const snapshot = session.world.snapshot.bind(session.world);
       let release = () => {};
       const gate = new Promise<void>((resolve) => {
@@ -222,7 +221,7 @@ test("every view shows an empty result, loading, and an error in its feed", asyn
       const loading = session.refresh();
       app.render();
       await screen.flush();
-      expect(screen.captureCharFrame()).toContain(`Loading ${view}`);
+      expect(screen.captureCharFrame()).toContain(`Loading the ${view}`);
       release();
       await loading;
       session.world.snapshot = snapshot;
@@ -287,7 +286,7 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
   await first.select(fork.id);
   first.mode = "python";
   first.theme = "paper";
-  first.view = "program";
+  first.view = "transcript";
   app.render();
   app.composer.setText('draft = "keep this"');
   const pending = await first.life.wait(10, fork.id);
@@ -356,9 +355,12 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
   let transcript: string[] = [];
   const record = session.world.records.path;
   try {
+    const message = session.activity.findLast((act) => session.isUserPrompt(act));
     app.rewind();
     await screen.flush();
-    expect(screen.captureCharFrame()).toContain("Rewind transcript");
+    // The tree opens in the feed with the pointer on the last message, which Enter gives back on a new branch.
+    expect(screen.captureCharFrame()).toContain("Rewind");
+    expect(app.scroll.getChildren().some((node) => node.id === `tree-${message?.id}`)).toBe(true);
     const selected = new Promise<void>((resolve, reject) => {
       const changed = () => {
         if (session.selected === source && !session.error) return;
@@ -372,6 +374,9 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
     await selected;
     await session.refresh();
     expect(session.selected).not.toBe(source);
+    // The message returns to the input once the branch is made.
+    await until(session, () => app.composer.plainText !== "");
+    expect(app.composer.plainText).toBe(String(message?.words[1] ?? ""));
     const continued = await transcriptOf(session.life, source);
     expect(continued.join("\n")).toContain(original.join("\n"));
     expect(session.turns.length).toBeGreaterThan(0);
@@ -399,7 +404,6 @@ test("a progress tick keeps an in-flight act's card and body in place", async ()
   try {
     const id = await session.life.wait(60);
     await session.refresh();
-    session.show("activity");
     app.render();
     await screen.flush();
     const card = app.scroll.getChildren().find((node) => node.id === id);
@@ -411,8 +415,7 @@ test("a progress tick keeps an in-flight act's card and body in place", async ()
     await screen.flush();
     expect(app.scroll.getChildren().find((node) => node.id === id)).toBe(card);
     expect(card.getChildren().at(-1)).toBe(body);
-    expect(screen.captureCharFrame()).toContain("1s since start");
-    expect(screen.captureCharFrame()).toContain("since start");
+    expect(screen.captureCharFrame()).toContain("running 1s");
   } finally {
     setSystemTime();
     app.dispose();
@@ -436,7 +439,7 @@ test("a name inside a transcript tag opens the same live inspector as Python cod
     expect(row).toBeGreaterThanOrEqual(0);
     const column = lines[row]?.indexOf("answer") ?? -1;
     await screen.mockMouse.click(column + 1, row, 0, { modifiers: { ctrl: true } });
-    await screen.waitForFrame((frame) => frame.includes("answer · int"), { maxPasses: 200 });
+    await screen.waitForFrame((frame) => frame.includes("answer: int"), { maxPasses: 200 });
     expect(screen.captureCharFrame()).toContain("17");
   } finally {
     app.dispose();
@@ -546,7 +549,7 @@ test("slash commands and project files are suggested above the input as they are
     screen.mockInput.pressArrow("down");
     await screen.mockInput.typeText("e");
     screen.mockInput.pressTab();
-    expect(app.composer.plainText).toBe("/exit ");
+    expect(app.composer.plainText).toBe("/effort ");
 
     app.composer.setText("");
     await screen.mockInput.typeText("Read @READ");

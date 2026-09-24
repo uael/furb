@@ -26,14 +26,13 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
   let app = new App(screen.renderer, session, { quit() {} });
   try {
     const rung = await session.life.rung("await wait(60)");
-    session.show("program");
     await session.refresh();
     app.render();
     await screen.flush();
     let card = app.scroll.getChildren().find((card) => card.id === rung);
     let heading = card?.getChildren()[0];
     if (!heading) throw new Error("No rung header.");
-    expect(screen.captureCharFrame()).toContain(`rung · ${rung} · running`);
+    expect(screen.captureCharFrame()).toContain(`${rung}  by you  running`);
     expect(card?.getChildren().length).toBeGreaterThan(1);
     await screen.mockMouse.click(heading.x + 1, heading.y);
     app.render();
@@ -51,14 +50,19 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
     await session.refresh();
     app.render();
     await screen.flush();
-    expect(screen.captureCharFrame()).toContain(`rung · ${rung} · done`);
+    expect(screen.captureCharFrame()).toContain(`✓ ${rung}`);
+    expect(screen.captureCharFrame()).not.toContain(`${rung}  by you  running`);
     expect(
       app.scroll
         .getChildren()
         .find((card) => card.id === rung)
         ?.getChildren(),
     ).toHaveLength(1);
-    session.show("activity");
+    session.show("transcript");
+    await session.refresh();
+    app.render();
+    await screen.flush();
+    session.show("feed");
     await session.refresh();
     app.render();
     await screen.flush();
@@ -79,7 +83,6 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
       (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
     );
     expect(refused?.run?.status).toBe("failed");
-    session.show("conversation");
     await session.refresh();
     app.render();
     await screen.flush();
@@ -92,7 +95,6 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
     const reopened = await openEngine({ record, demo: true });
     session = new Session(reopened.life, reopened.world, true);
     await session.refresh();
-    session.show("program");
     app = new App(screen.renderer, session, { quit() {} });
     await screen.flush();
     expect(session.folds[rung]).toBe(false);

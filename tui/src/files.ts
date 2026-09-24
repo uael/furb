@@ -9,6 +9,18 @@ export function expandHome(path: string): string {
     : path;
 }
 
+/** A path as the view shows it: under the home directory, with `~` in place of the home directory. */
+export function shortenHome(path: string): string {
+  const home = homedir();
+  return path === home ? "~" : path.startsWith(`${home}${sep}`) ? `~${path.slice(home.length)}` : path;
+}
+
+/** A text as the view shows it, with `~` in place of the home directory in each path under it. */
+export function shortenHomes(text: string): string {
+  const home = homedir();
+  return home.length > 1 ? text.replaceAll(`${home}${sep}`, `~${sep}`) : text;
+}
+
 /** Match project files through rg, with a directory walk when it is not installed. A folder that cannot be read
  * holds no file to offer. A file is named by its path from the directory with `/` between its parts, which every
  * system reads, so a reference to it is the same text on every system. */

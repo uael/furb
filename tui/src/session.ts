@@ -18,13 +18,15 @@ import type { FileChange } from "@furb/engine/world";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
-import { expandHome, fileReferences, projectFiles } from "./files.ts";
+import { expandHome, fileReferences, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
 import { Preferences } from "./preferences.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { palettes, type ThemeName } from "./theme.ts";
 
-export type View = "conversation" | "program" | "activity" | "facts" | "transcript" | "changes";
+/** The views of a chain: the feed of what it did, the transcript that the model reads, and the files it changed. */
+export const views = ["feed", "transcript", "changes"] as const;
+export type View = (typeof views)[number];
 /** An act as the views read it. A command that printed more than a row carries holds the tail of each stream, and
  * the length of all it printed; the view reads the whole act when it shows the output. */
 export type ActRow = LiveAct & { output?: number };
@@ -85,16 +87,14 @@ const kept = [
   "shape",
   "editing",
   "histories",
+  "stashes",
   "started",
-  "ladder",
-  "repls",
   "queued",
   "queueError",
   "images",
   "redo",
   "drafts",
   "scrolls",
-  "panes",
   "folds",
 ] as const;
 /** What `<record>.ui.json` holds: the kept fields of a session, and what the session had cost. */
@@ -120,7 +120,7 @@ export function savedView(record: string): { view: SavedView; damage?: string } 
 
 export class Session extends EventEmitter {
   selected: string;
-  view: View = "conversation";
+  view: View = "feed";
   actor: string;
   sessionName: string;
   acts: ActRow[] = [];
@@ -136,20 +136,19 @@ export class Session extends EventEmitter {
   loading = false;
   paused = false;
   editing?: string;
-  ladder?: string;
   readonly preferences: Preferences;
   mode: "prompt" | "python" = "prompt";
   shape = "str";
   drafts: Record<string, string> = {};
   /** Where each view was left, by its key. */
   scrolls: Record<string, Scroll> = {};
-  panes = { inspector: 28 };
+  /** The text that Ctrl+S put aside, by the key of its draft. */
+  stashes: Record<string, string> = {};
   folds: Record<string, boolean> = {};
   roster: [string, string[], number][] = [];
   findings: string[] = [];
   rejectedWord = "";
   rejectedAct = "";
-  repls: Record<string, string[]> = {};
   queued: FollowUp[] = [];
   dispatched: string[] = [];
   images: Record<string, ImageAttachment[]> = {};
@@ -168,10 +167,6 @@ export class Session extends EventEmitter {
   private closed = false;
   /** The page of changes and the count of changes that `changes` was read at. */
   private changesRead = "";
-  /** The lower-case text of each fact that a search of the facts view has read, which it reads once. */
-  private readonly factTexts = new WeakMap<Fact, string>();
-  /** The facts that hold the search, with the count of facts they were read from. */
-  private factRows = { search: "", seen: 0, rows: [] as Fact[] };
   /** The actor the operator chose for each chain, which the session shows until the rung that sets it has run. */
   private readonly choices = new Map<string, { actor: string; rung?: string }>();
   constructor(
@@ -195,6 +190,8 @@ export class Session extends EventEmitter {
       this.queueHeld = this.queued.length > 0;
       if (damage) this.notice = damage;
     }
+    // A view that an older release saved, and that this release has no more, opens as the feed.
+    if (!views.includes(this.view)) this.view = "feed";
     world.on("change", this.changed);
     world.on("facts", this.factsChanged);
     world.on("fault", this.fail);
@@ -343,10 +340,10 @@ export class Session extends EventEmitter {
   path(typed: string): string {
     return resolve(this.workingDirectory, expandHome(typed));
   }
-  /** The key of the draft that the composer shows: the selected chain, and the program it edits, the ladder it
-   * reads, or its mode of input. */
+  /** The key of the draft that the composer shows: the selected chain, and the program it edits or its mode of
+   * input. */
   get draftKey(): string {
-    return `${this.selected}:${this.editing ?? this.ladder ?? this.mode}`;
+    return `${this.selected}:${this.editing ?? this.mode}`;
   }
   /** What the session is doing, over the acts of one chain or of every chain. */
   status(chain?: string): SessionStatus {
@@ -396,10 +393,6 @@ export class Session extends EventEmitter {
     const [name] = path.split("/");
     return this.acts.find((act) => act.id === name);
   }
-  /** Whether an act is a rung of a ladder: the prompt of that ladder made it. */
-  madeBy(id: string, ladder: string): boolean {
-    return this.acts.find((act) => act.id === id)?.by === ladder;
-  }
   /** How many acts made an act, one under the other, up to the operator or the outside. */
   depth(act: ActRow): number {
     let depth = 0;
@@ -430,9 +423,11 @@ export class Session extends EventEmitter {
       : String(this.chains.find((chain) => chain.id === id)?.words[0] || "Chain");
   }
   async select(id: string): Promise<void> {
+    // The turns and the program of the chain left are not the chain selected, which shows them once it has read them.
     if (id !== this.selected) {
-      this.ladder = undefined;
       this.editing = undefined;
+      this.turns = [];
+      this.program = {};
     }
     this.selected = id;
     this.search = "";
@@ -536,6 +531,14 @@ export class Session extends EventEmitter {
   }
   /** A new chain that retells the selected chain without some of its acts, and that the session selects. A rung of
    * the operator makes it, so that a later life makes it again. */
+  /** The name of a new branch of this chain: its name and the first number that no chain takes, as Main 2. */
+  private branchLabel(): string {
+    const base = this.label.replace(/ \d+$/, "");
+    const taken = new Set(this.chains.map((chain) => this.labelOf(chain.id)));
+    let count = 2;
+    while (taken.has(`${base} ${count}`)) count++;
+    return `${base} ${count}`;
+  }
   async branch(label: string, omitted: string[]): Promise<string> {
     const source = this.selected;
     const filter = `take(${[...omitted.map((id) => JSON.stringify(id)), "inside=False"].join(", ")})`;
@@ -552,16 +555,30 @@ export class Session extends EventEmitter {
     await this.select(chain.id);
     return chain.id;
   }
-  async undo(): Promise<void> {
-    if (this.paused || this.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)))
-      throw new Error("Let the current prompt finish, or cancel and wake it before undo.");
-    const index = this.activity.findLastIndex((act) => this.isUserPrompt(act));
-    const prompt = this.activity[index];
-    if (!prompt) throw new Error("There is no user message to undo.");
-    const source = this.selected;
-    const omitted = this.activity.slice(index).map((act) => act.id);
-    this.redo.push({ from: source, to: await this.branch(`${this.label} undo`, omitted) });
-    let message = String(prompt.words[1] ?? "");
+  /** A new branch of the chain of an act, which the session selects. The branch reads the transcript of that chain
+   * through the act, or up to a message of the operator, whose text returns to the composer to be sent again. The
+   * module and the files keep the state they have. */
+  async rewind(id: string, label?: string): Promise<string> {
+    if (this.paused) throw new Error("Resume this chain before rewinding.");
+    const chain = this.acts.find((act) => act.id === id)?.on;
+    if (!chain) throw new Error(`There is no act ${id} to rewind to.`);
+    if (chain !== this.selected) await this.select(chain);
+    const acts = this.activity.filter((act) => !["chain", "grant"].includes(act.kind));
+    const at = acts.findIndex((act) => act.id === id);
+    const act = acts[at];
+    if (!act) throw new Error(`There is no act ${id} to rewind to.`);
+    const message = this.isUserPrompt(act);
+    const omitted = acts.slice(message ? at : at + 1).map((later) => later.id);
+    const branch = await this.branch(label ?? this.branchLabel(), omitted);
+    if (message) await this.restore(String(act.words[1] ?? ""));
+    this.notice = message
+      ? "The message is back in the input on a new branch. The module and the files keep their state."
+      : `The new branch reads the transcript through ${id}. The module and the files keep their state.`;
+    return branch;
+  }
+  /** A message sent before as the draft of the composer, with the images it referred to attached again. */
+  private async restore(text: string): Promise<void> {
+    let message = text;
     for (const reference of imageReferences(message)) {
       const image = await this.world.attachImage(imagePath(this.world.imageDirectory, reference.uri).path);
       image.name = reference.name || image.name;
@@ -570,6 +587,14 @@ export class Session extends EventEmitter {
       message = message.replace(reference.text, "");
     }
     this.emit("compose", message.trimEnd());
+  }
+  async undo(): Promise<void> {
+    if (this.paused || this.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)))
+      throw new Error("Let the current prompt finish, or cancel and wake it before undo.");
+    const prompt = this.activity.findLast((act) => this.isUserPrompt(act));
+    if (!prompt) throw new Error("There is no user message to undo.");
+    const source = this.selected;
+    this.redo.push({ from: source, to: await this.rewind(prompt.id) });
     this.notice = "Message removed from this branch. Module and files keep their current state.";
     this.save();
   }
@@ -724,11 +749,7 @@ export class Session extends EventEmitter {
       case "run": {
         this.findings = [];
         const id = await this.life.rung(argument, { on: this.selected });
-        if (this.ladder) {
-          this.repls[this.ladder] ??= [];
-          this.repls[this.ladder]?.push(id);
-        }
-        this.view = "program";
+        this.view = "feed";
         if ((await this.life.outcome(id)).done) {
           try {
             await this.life.result(id);
@@ -750,11 +771,11 @@ export class Session extends EventEmitter {
         break;
       case "bash":
         this.track(await this.life.bash(argument, { on: this.selected }));
-        this.view = "activity";
+        this.view = "feed";
         break;
       case "read": {
         this.track(await this.life.rung(`read(${JSON.stringify(argument)})`, { on: this.selected }));
-        this.view = "conversation";
+        this.view = "feed";
         break;
       }
       case "cd":
@@ -803,7 +824,7 @@ export class Session extends EventEmitter {
           JSON.stringify({ chain: this.selected, turns: this.turns, program: this.program }, null, 2),
           { flag: "wx" },
         );
-        this.notice = `Exported to ${path}.`;
+        this.notice = `Exported to ${shortenHome(path)}.`;
         break;
       }
       case "share": {
@@ -812,7 +833,7 @@ export class Session extends EventEmitter {
           : join(furbDirectory(this.world.directory, "shares"), `${Date.now()}.html`);
         await mkdir(dirname(path), { recursive: true });
         await writeFile(path, shareHtml(this), { flag: "wx", mode: 0o600 });
-        this.notice = `Conversation saved to ${path}`;
+        this.notice = `Conversation saved to ${shortenHome(path)}.`;
         this.emit("shared", path, shareMarkdown(this));
         break;
       }
@@ -821,19 +842,6 @@ export class Session extends EventEmitter {
     }
   }
 
-  filteredFacts(): Fact[] {
-    const search = this.search.toLowerCase();
-    if (!search) return this.world.facts;
-    if (this.factRows.search !== search) this.factRows = { search, seen: 0, rows: [] };
-    const facts = this.world.facts;
-    for (; this.factRows.seen < facts.length; this.factRows.seen++) {
-      const fact = facts[this.factRows.seen] as Fact;
-      const text = this.factTexts.get(fact) ?? JSON.stringify(fact).toLowerCase();
-      this.factTexts.set(fact, text);
-      if (text.includes(search)) this.factRows.rows.push(fact);
-    }
-    return this.factRows.rows;
-  }
   get cost(): number {
     return Math.max(this.savedCost, this.world.cost);
   }

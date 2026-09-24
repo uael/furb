@@ -7,7 +7,7 @@ import { defaultTheme, palettes, type ThemeName } from "./theme.ts";
 export class Preferences {
   theme: ThemeName = defaultTheme;
   sidebar = true;
-  sidebarWidth = 28;
+  sidebarWidth = 32;
   autoCollapseRungs = false;
   notice = "";
   private saved = "";
@@ -34,7 +34,7 @@ export class Preferences {
       if (typeof saved?.sidebar === "boolean") this.sidebar = saved.sidebar;
       if (typeof saved?.autoCollapseRungs === "boolean") this.autoCollapseRungs = saved.autoCollapseRungs;
       if (typeof saved?.sidebarWidth === "number")
-        this.sidebarWidth = Math.max(22, Math.min(42, saved.sidebarWidth));
+        this.sidebarWidth = Math.max(26, Math.min(48, saved.sidebarWidth));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT")
         this.notice = `Could not read preferences at ${path}. Using GitHub Dark for this run. The file is unchanged. Click to dismiss.`;

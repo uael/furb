@@ -127,7 +127,7 @@ test("deleting a session moves its record and state to trash, keeps other sessio
   }
 }, 30000);
 
-test("the left tree groups sessions, switches by mouse, collapses and toggles without losing a draft", async () => {
+test("the sidebar tree groups sessions, switches by mouse, collapses and toggles without losing a draft", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-tree-"));
   await mkdir(join(directory, "project"));
   const library = new Workspaces(new Preferences(join(directory, "ui.json")), { demo: true });
@@ -152,20 +152,22 @@ test("the left tree groups sessions, switches by mouse, collapses and toggles wi
     });
     app.composer.setText("keep this draft");
     await screen.flush();
+    // The sidebar is the last columns of the screen.
+    const left = 152 - library.preferences.sidebarWidth;
     const lines = screen.captureCharFrame().split("\n");
-    const projectRow = lines.findIndex((line) => line.includes("▾") && line.includes("project"));
-    const fooRow = lines.findIndex((line) => /[○●◌] foo\b/.test(line.slice(0, 28)));
-    const barRow = lines.findIndex((line) => /[○●◌] bar\b/.test(line.slice(0, 28)));
+    const projectRow = lines.findIndex((line) => /▾ project/.test(line.slice(left)));
+    const fooRow = lines.findIndex((line) => /[○●◌] foo\b/.test(line.slice(left)));
+    const barRow = lines.findIndex((line) => /[○●◌] bar\b/.test(line.slice(left)));
     expect(fooRow).toBeGreaterThan(projectRow);
     expect(barRow).toBeGreaterThan(projectRow);
-    await screen.mockMouse.click(5, fooRow);
+    await screen.mockMouse.click(left + 6, fooRow);
     await until(library, () => library.current === first);
     await screen.flush();
     expect(app.session).toBe(first.session);
     await library.select(second);
     await screen.flush();
     expect(app.composer.plainText).toBe("keep this draft");
-    await screen.mockMouse.click(2, projectRow);
+    await screen.mockMouse.click(left + 3, projectRow);
     app.render();
     await screen.flush();
     expect(group.collapsed).toBe(true);
@@ -173,14 +175,14 @@ test("the left tree groups sessions, switches by mouse, collapses and toggles wi
       screen
         .captureCharFrame()
         .split("\n")
-        .some((line) => line.slice(0, 28).includes("foo")),
+        .some((line) => line.slice(left).includes("foo")),
     ).toBe(false);
     screen.mockInput.pressKey("\\", { ctrl: true });
     await screen.flush();
     app.render();
     await screen.flush();
     expect(library.preferences.sidebar).toBe(false);
-    expect(app.scroll.x).toBe(1);
+    expect(app.scroll.x).toBe(2);
     expect(app.composer.plainText).toBe("keep this draft");
     // The picker reads the workspaces again before it opens: the test awaits the picker the key opened.
     const picker = app.workspacePicker;
@@ -192,13 +194,13 @@ test("the left tree groups sessions, switches by mouse, collapses and toggles wi
     screen.mockInput.pressKey("w", { ctrl: true });
     await opened;
     await screen.flush();
-    expect(screen.captureCharFrame()).toContain("Workspaces & sessions");
+    expect(screen.captureCharFrame()).toContain("Workspaces and sessions");
     app.closeOverlay();
     library.toggle();
     screen.resize(82, 32);
     app.render();
     await screen.flush();
-    expect(app.scroll.x).toBe(1);
+    expect(app.scroll.x).toBe(2);
     expect(app.composer.plainText).toBe("keep this draft");
   } finally {
     app?.dispose();

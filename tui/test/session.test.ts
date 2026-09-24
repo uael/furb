@@ -257,7 +257,7 @@ test("the answers to the questions of the snapshots stay out of the facts of the
   try {
     await session.submit("A question.");
     await idle(session);
-    for (const view of ["program", "transcript", "facts"] as const) {
+    for (const view of ["feed", "transcript", "changes"] as const) {
       session.show(view);
       await session.refresh();
     }
