@@ -355,17 +355,20 @@ def boot(record: Iterable[object] = (), **outside: Generator[tuple | None, tuple
   return Act(living.life.root)
 
 
-def restore(dump: bytes, **outside: Generator[tuple | None, tuple]) -> Act:
+def restore(dump: bytes, record: Iterable[object] = (), **outside: Generator[tuple | None, tuple]) -> Act:
   """A life of the engine in the sandbox, restored from a dump of one that stood still, on ears under the names
-  it was dumped with, which gives the root. An ear hears from the next fact on: what it says at its birth was
-  said in the life the dump came from."""
+  it was dumped with and on the record the World holds, which gives the root. A dump whose stamp does not match,
+  another engine, another build of the crate or another record, is refused with each part that differs, and the
+  host boots on the record instead. An ear hears from the next fact on: what it says at its birth was said in the
+  life the dump came from."""
   living = opened(outside, born=True)
-  living.life = _monty.Life.restored(living, list(outside), dump)
+  living.life = _monty.Life.restored(living, list(outside), dump, list(record))
   return Act(living.life.root)
 
 
 def dump() -> bytes:
-  """The life as bytes, where it stands still, for `restore` to go on from without the record replayed."""
+  """The life as bytes, where it stands still, stamped with what makes it valid, for `restore` to go on from
+  without the record replayed."""
   return living().life.dump()
 
 

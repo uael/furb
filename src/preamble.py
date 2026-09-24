@@ -87,6 +87,9 @@ MADE: dict[int, object] = {}
 """MADE holds every callable the engine made and every class a word defined that crossed to the host, by its
 handle, which is its identity, for as long as the host holds the handle: the host says when it forgot one, and it
 is dropped then."""
+BORN: set[str] = set()
+"""BORN holds the name of every ear of the host that crossed in after the boot and lives. A restored life is given
+the ears the host names and no other, so a life that holds one of these is no life to dump."""
 
 
 def verb(names: Names, which: str) -> Callable[..., object]:
@@ -174,6 +177,7 @@ def again(x: object, names: Names, ears: Ears) -> object:
       return instance(cls, {str(k): again(v, names, ears) for k, v in fields.items()})
     case {"is": "ear", "name": str(name), "started": bool(started)}:
       ear = crossing(name, ears, names)
+      BORN.add(name)
       # A generator that was started already stands at a yield, and so must its stand-in.
       if started:
         ear.send(None)
@@ -267,29 +271,33 @@ def crossing(name: str, ears: Ears, names: Names) -> Ear:
   this raises.
   """
   a = None
-  while True:
-    reply = ears.hears(name, outward(a, names))
+  try:
     while True:
-      match reply:
-        case ("calls", str(which), list(args), dict(kwargs)):
-          # What the ear asked raised: the ear is answered with the raise, on its own thread, and never left waiting.
-          try:
-            got = ("value", outward(asked(names, ears, which, args, kwargs), names))
-          except BaseException as no:
-            got = ("raised", no)
-          reply = ears.answered(name, got)
-        case ("raised", no):
-          raise fault(no, names, ears)
-        case ("say", tuple(saying)):
-          made = again(saying, names, ears)
-          assert isinstance(made, tuple)
-          a = yield made
-          break
-        case ("over",):
-          return
-        case _:
-          a = yield
-          break
+      reply = ears.hears(name, outward(a, names))
+      while True:
+        match reply:
+          case ("calls", str(which), list(args), dict(kwargs)):
+            # What the ear asked raised: the ear is answered with the raise, on its own thread, and never left
+            # waiting.
+            try:
+              got = ("value", outward(asked(names, ears, which, args, kwargs), names))
+            except BaseException as no:
+              got = ("raised", no)
+            reply = ears.answered(name, got)
+          case ("raised", no):
+            raise fault(no, names, ears)
+          case ("say", tuple(saying)):
+            made = again(saying, names, ears)
+            assert isinstance(made, tuple)
+            a = yield made
+            break
+          case ("over",):
+            return
+          case _:
+            a = yield
+            break
+  finally:
+    BORN.discard(name)
 
 
 def fault(no: object, names: Names, ears: Ears) -> BaseException:
@@ -450,6 +458,32 @@ def opened(
     assert isinstance(acts, dict)
     return ("chain1" if "chain1" in acts else "", no)
   return (str(root), None)
+
+
+def restored(engine: Names) -> None:
+  """A life restored from a dump, where it begins on a host of its own.
+
+  What the host of the life before held is none of this host's, so the handles it held are dropped. The dump holds
+  a life whose tip is past, so what the journal says at the tip of a later life is said here, as the journal: the
+  World is asked what it stands on, and every chain that stands on something else hears a stood, which the journal
+  keeps.
+  """
+  MADE.clear()
+  site, modules = engine["site"], engine["modules"]
+  assert isinstance(site, ContextVar)
+  assert isinstance(modules, dict)
+  ask, send = verb(engine, "ask"), verb(engine, "send")
+  token = site.set("journal")
+  try:
+    got = ask("stand", "")
+    assert isinstance(got, tuple)
+    for on in list(modules):
+      held = ask("stand", on)
+      assert isinstance(held, tuple)
+      if held[1] != got[1]:
+        send("stood", on, got[1])
+  finally:
+    site.reset(token)
 
 
 def called(engine: Names, ears: Ears, name: str, args: list, kwargs: dict) -> object:

@@ -141,7 +141,6 @@ class Sand:
     own, feeds and ends its commands, answers an ask with the next word of its script, and keeps what it is told.
     """
     running: dict[str, str] = {}
-    acts: dict[str, tuple] = {}
     loop = asyncio.get_running_loop()
 
     def ends(about: str) -> None:
@@ -158,10 +157,11 @@ class Sand:
       if a[0] in ("start", "stand", "read", "write", "ask", "feed", "clock", "chance"):
         self.calls.append(a)
       match a:
-        case (_, id, *_) if engine.question(a) and id in engine.acts:
-          acts[id] = a
+        # The act a start names is read of the life, which holds every act, since a World of a restored life
+        # never heard the acts of the life the dump came from.
         case ("start", about, _):
-          match acts[about]:
+          act: tuple = engine.acts[about]
+          match act:
             case ("bash", _, _, on, command, _, timeout):
               running[about] = on
               engine.ask("merged", on, about)

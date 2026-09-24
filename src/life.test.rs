@@ -35,6 +35,8 @@ struct Yard {
   kept: Rc<RefCell<Vec<Object>>>,
   /// Every command it was told to end before its time, shared with the test.
   slain: Rc<RefCell<Vec<String>>>,
+  /// Every prompt it showed the operator, shared with the test.
+  shown: Rc<RefCell<Vec<String>>>,
   voice: Option<Voice>,
 }
 
@@ -46,6 +48,7 @@ impl Yard {
       read: Rc::default(),
       kept: Rc::default(),
       slain: Rc::default(),
+      shown: Rc::default(),
       voice: None,
     }
   }
@@ -148,7 +151,8 @@ impl World for Yard {
     Box::pin(async {})
   }
 
-  fn prompt(&mut self, _about: &str, shape: &str, _message: &str) -> Later<Result<Object, Fault>> {
+  fn prompt(&mut self, about: &str, shape: &str, _message: &str) -> Later<Result<Object, Fault>> {
+    self.shown.borrow_mut().push(about.to_owned());
     let answer = if shape == "int" {
       Ok(Object::int(3))
     } else {
@@ -187,6 +191,7 @@ struct Lived {
   read: Rc<RefCell<Vec<String>>>,
   kept: Rc<RefCell<Vec<Object>>>,
   slain: Rc<RefCell<Vec<String>>>,
+  shown: Rc<RefCell<Vec<String>>>,
 }
 
 impl Lived {
@@ -196,21 +201,30 @@ impl Lived {
       let _ = fs::remove_dir_all(&at);
     }
     fs::create_dir_all(&at).expect("a yard of the test");
-    let world = Yard::new(at.clone(), words);
-    let (read, kept, slain) =
-      (Rc::clone(&world.read), Rc::clone(&world.kept), Rc::clone(&world.slain));
-    let life = Life::boot(world, record)?;
-    Ok(Lived { life, at, read, kept, slain })
+    Lived::on(at, words, |world| Life::boot(world, record))
   }
 
-  /// A life restored from a dump, on a yard of the same name.
-  fn restored(yard: &str, words: &[&str], dump: &[u8]) -> Result<Self, Fault> {
+  /// A life restored from a dump, on a yard of the same name and the record its World holds.
+  fn restored(yard: &str, words: &[&str], dump: &[u8], record: Vec<Object>) -> Result<Self, Fault> {
     let at = std::env::temp_dir().join(format!("furb-life-{yard}"));
+    Lived::on(at, words, |world| Life::open(world).restore(dump, record))
+  }
+
+  /// A life on a yard at this path, opened as the test says.
+  fn on(
+    at: PathBuf,
+    words: &[&str],
+    open: impl FnOnce(Yard) -> Result<Life, Fault>,
+  ) -> Result<Self, Fault> {
     let world = Yard::new(at.clone(), words);
-    let (read, kept, slain) =
-      (Rc::clone(&world.read), Rc::clone(&world.kept), Rc::clone(&world.slain));
-    let life = Life::open(world).restore(dump)?;
-    Ok(Lived { life, at, read, kept, slain })
+    let (read, kept, slain, shown) = (
+      Rc::clone(&world.read),
+      Rc::clone(&world.kept),
+      Rc::clone(&world.slain),
+      Rc::clone(&world.shown),
+    );
+    let life = open(world)?;
+    Ok(Lived { life, at, read, kept, slain, shown })
   }
 
   fn root(&self) -> String {
@@ -411,7 +425,8 @@ fn a_life_dumped_where_it_stands_still_is_restored_and_goes_on() {
   let exit: Exit = block_on(first.life.awaiting(&id)).unwrap();
   assert_eq!(exit.stdout.content, "still\n");
   let dump = first.life.dump().unwrap();
-  let mut second = Lived::restored("dumped", &[], &dump).unwrap();
+  let record = first.kept.borrow().clone();
+  let mut second = Lived::restored("dumped", &[], &dump, record).unwrap();
   assert_eq!(second.root(), root);
   assert!(second.life.raised().is_none());
   let k =
@@ -420,4 +435,119 @@ fn a_life_dumped_where_it_stands_still_is_restored_and_goes_on() {
   assert_eq!(second.read.borrow().len(), 0, "a restored life replays nothing and asks no model");
   let got = block_on(second.life.rung("close(k + 1)", "", "", &root).unwrap()).unwrap();
   assert_eq!(got.as_ref().as_int(), Some(3));
+}
+
+/// A record whose prompt of the operator was shown and whose prompt of a model asked, and neither was answered,
+/// since the life that made it ended first.
+fn unfinished(yard: &str) -> Vec<Object> {
+  let mut first = Lived::new(yard, &[], vec![]).unwrap();
+  let root = first.root();
+  first.life.prompt("int", "how many?", "operator", &root).unwrap();
+  first.life.prompt("int", "count", "", &root).unwrap();
+  assert_eq!(first.shown.borrow().len(), 1);
+  assert_eq!(first.read.borrow().len(), 1);
+  first.kept.borrow().clone()
+}
+
+/// What a restore of this dump on this record was refused with.
+fn refusal(yard: &str, dump: &[u8], record: Vec<Object>) -> String {
+  match Lived::restored(yard, &[], dump, record) {
+    Ok(_) => panic!("the dump was restored"),
+    Err(no) => no.message(),
+  }
+}
+
+/// A dump whose stamp says another value on the line of this name.
+fn restamped(dump: &[u8], name: &str) -> Vec<u8> {
+  let end = dump.windows(2).position(|two| two == b"\n\n").unwrap();
+  let head = std::str::from_utf8(&dump[..end]).unwrap();
+  let head: Vec<String> = head
+    .split('\n')
+    .map(|line| match line.strip_prefix(name) {
+      Some(rest) if rest.starts_with(' ') => format!("{name} {}", "0".repeat(rest.len() - 1)),
+      _ => line.to_owned(),
+    })
+    .collect();
+  let mut bytes = head.join("\n").into_bytes();
+  bytes.extend_from_slice(&dump[end..]);
+  bytes
+}
+
+#[test]
+fn a_restored_life_holds_its_pending_work_unstarted_until_a_wake_as_a_booted_life_does() {
+  let record = unfinished("pending");
+  let mut dumped = Lived::new("pending", &[], record.clone()).unwrap();
+  assert!(dumped.shown.borrow().is_empty() && dumped.read.borrow().is_empty());
+  let dump = dumped.life.dump().unwrap();
+  let words = ["close(4)"];
+  let booted = Lived::new("pending", &words, record.clone()).unwrap();
+  let restored = Lived::restored("pending", &words, &dump, record.clone()).unwrap();
+  let mut lives = [booted, restored];
+  for lived in &mut lives {
+    let root = lived.root();
+    block_on(lived.life.drive()).unwrap();
+    assert!(lived.shown.borrow().is_empty(), "no pending prompt is shown before the wake");
+    assert!(lived.read.borrow().is_empty(), "no pending rung is asked for before the wake");
+    lived.life.wake(&root).unwrap();
+    assert_eq!(lived.settled("prompt1").as_ref().as_int(), Some(3));
+    assert_eq!(lived.settled("prompt2").as_ref().as_int(), Some(4));
+  }
+  let [booted, restored] = &lives;
+  assert_eq!(*booted.shown.borrow(), ["prompt1"]);
+  assert_eq!(*restored.shown.borrow(), *booted.shown.borrow());
+  assert_eq!(booted.read.borrow().len(), 1);
+  assert_eq!(*restored.read.borrow(), *booted.read.borrow(), "both ask with the same turns");
+  let kept = |lived: &Lived| lived.kept.borrow().iter().map(Object::py_repr).collect::<Vec<_>>();
+  assert_eq!(kept(restored), kept(booted), "both keep the same entries after the wake");
+}
+
+#[test]
+fn a_dump_of_another_record_is_refused_and_says_so() {
+  let record = unfinished("stale");
+  let mut dumped = Lived::new("stale", &["close(4)"], record.clone()).unwrap();
+  let dump = dumped.life.dump().unwrap();
+  let root = dumped.root();
+  dumped.life.wake(&root).unwrap();
+  dumped.settled("prompt1");
+  let grown = [record.clone(), dumped.kept.borrow().clone()].concat();
+  assert!(grown.len() > record.len());
+  let said = refusal("stale", &dump, grown.clone());
+  assert!(said.contains("the dump does not match: it is of a record of"), "{said}");
+  assert!(said.contains(&format!("and the record holds {} entries", grown.len())), "{said}");
+  assert!(!said.contains("engine") && !said.contains("build"), "{said}");
+  let cut = record[..record.len() - 1].to_vec();
+  assert!(refusal("stale", &dump, cut).contains("record of"));
+  assert!(Lived::restored("stale", &[], &dump, record).is_ok());
+}
+
+#[test]
+fn a_dump_another_engine_or_another_build_made_is_refused_and_says_so() {
+  let record = unfinished("builds");
+  let dump = Lived::new("builds", &[], record.clone()).unwrap().life.dump().unwrap();
+  let engine = refusal("builds", &restamped(&dump, "engine"), record.clone());
+  assert_eq!(engine, "the dump does not match: it holds another engine");
+  let build = refusal("builds", &restamped(&dump, "build"), record.clone());
+  assert_eq!(build, "the dump does not match: another build of the crate made it");
+  let both = refusal("builds", &restamped(&restamped(&dump, "engine"), "build"), record.clone());
+  assert_eq!(
+    both,
+    "the dump does not match: it holds another engine; another build of the crate made it"
+  );
+  let no = refusal("builds", b"not a dump", record);
+  assert!(no.starts_with("no dump of a life"), "{no}");
+}
+
+#[test]
+fn a_restored_life_on_a_world_that_stands_elsewhere_hears_a_stood_as_a_booted_life_does() {
+  let record = unfinished("stands");
+  let dump = Lived::new("stands", &[], record.clone()).unwrap().life.dump().unwrap();
+  let mut booted = Lived::new("elsewhere", &[], record.clone()).unwrap();
+  let mut restored = Lived::restored("elsewhere", &[], &dump, record).unwrap();
+  let kept = |lived: &Lived| lived.kept.borrow().iter().map(Object::py_repr).collect::<Vec<_>>();
+  assert_eq!(kept(&booted).len(), 1);
+  assert!(kept(&booted)[0].starts_with("(('stood', 'chain1', 'journal', "), "{:?}", kept(&booted));
+  assert_eq!(kept(&restored), kept(&booted));
+  let root = booted.root();
+  let turns = |lived: &mut Lived| lived.life.turns(&root).unwrap().py_repr();
+  assert_eq!(turns(&mut restored), turns(&mut booted));
 }

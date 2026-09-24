@@ -27,6 +27,7 @@ use crate::{
   fact::Fact,
   gate::checked,
   sand::{Sand, id, object},
+  stamp::{Stamp, Tally},
   value::{Exit, Fault, Object, ObjectRef, Text, entry, inward},
   world::{Command, Later, Running, Said, Voice, World},
 };
@@ -78,6 +79,8 @@ struct Hosting {
   later: Vec<Work>,
   running: HashMap<String, Box<dyn Running>>,
   calls: Vec<Callable>,
+  /// Where the record of the World stands: the one it was given, and every entry the journal told it to keep since.
+  record: Tally,
 }
 
 impl Hosting {
@@ -110,7 +113,16 @@ impl Hosting {
       };
       let ear = text(args.first().map(Object::as_ref));
       let reply = match name {
-        "hears" => ears.hears(&ear, args.get(1).and_then(|one| Fact::of(one.as_ref())).as_ref()),
+        "hears" => {
+          let fact = args.get(1).and_then(|one| Fact::of(one.as_ref()));
+          // A World the host hands over among its ears keeps what it hears the journal say to keep.
+          if let Some(kept) = fact.as_ref().filter(|one| ear == WORLD && one.kind() == "keep")
+            && let Some(entry) = kept.word(0)
+          {
+            self.record.kept(entry);
+          }
+          ears.hears(&ear, fact.as_ref())
+        }
         "answered" => ears.answered(
           &ear,
           args.get(1).map_or_else(|| Object::none().as_ref().to_owned(), Clone::clone).as_ref(),
@@ -130,10 +142,15 @@ impl Hosting {
       return Ok(replied(reply));
     }
     if on == id(objects::WORLD) {
-      let Hosting { world, later, running, .. } = self;
+      let Hosting { world, later, running, record, .. } = self;
       let Worldly::Typed(world) = world else {
         return Err(Fault::refused("the World of the host is heard among its ears"));
       };
+      if name == "keep"
+        && let Some(entry) = args.first()
+      {
+        record.kept(entry.as_ref());
+      }
       return worldly(world.as_mut(), later, running, name, args);
     }
     Err(Fault::refused(format!("{on} is no object of the host")))
@@ -387,21 +404,47 @@ impl Opening {
       world.opened(voice.clone());
       names.insert(0, WORLD.to_owned());
     }
-    let host =
-      Hosting { world, ears, voice, later: Vec::new(), running: HashMap::new(), calls: Vec::new() };
+    let host = Hosting {
+      world,
+      ears,
+      voice,
+      later: Vec::new(),
+      running: HashMap::new(),
+      calls: Vec::new(),
+      record: Tally::default(),
+    };
     (host, names, limits)
   }
 
-  /// The life, restored from a dump of one that stood still, on this host.
+  /// The life, restored from a dump of one that stood still, on this host and on the record its World holds.
+  ///
+  /// A dump is valid only for the engine and the build of the crate that made it, and for the record it was made
+  /// on: as many entries, and the same last one. A dump whose stamp differs in any part is refused, and the refusal
+  /// says each part that differs; the host then boots on the record.
   ///
   /// The session goes on where it stood, and the host is given as it was to the life that was dumped: the same
   /// World, typed or heard, and ears under the same names, which are refused otherwise. What the host held of
   /// its own starts over: no command runs, no work is owed, nobody watches an act, and a callable the host
   /// handed the life before is no callable of this host. The limits are the dump's. A restored life raised
-  /// nothing, since its boot is the one the dump came from.
-  pub fn restore(self, dump: &[u8]) -> Result<Life, Fault> {
-    let (host, names, _) = self.hosting();
-    let mut inner = Inner { sand: Sand::restore(dump)?, host, watchers: HashMap::new() };
+  /// nothing, since its boot is the one the dump came from. It begins where a later life goes on past its tip: the
+  /// World is asked what it stands on, and every chain that stands on something else hears it, as a boot says it.
+  pub fn restore(
+    self,
+    dump: &[u8],
+    record: impl IntoIterator<Item = Object>,
+  ) -> Result<Life, Fault> {
+    let mut tally = Tally::default();
+    for one in record {
+      tally.kept(one.as_ref());
+    }
+    let (stamp, session) = Stamp::read(dump)?;
+    let parts = stamp.differs(&Stamp::now(tally.clone()));
+    if !parts.is_empty() {
+      return Err(Fault::refused(format!("the dump does not match: {}", parts.join("; "))));
+    }
+    let (mut host, names, _) = self.hosting();
+    host.record = tally;
+    let mut inner = Inner { sand: Sand::restore(session)?, host, watchers: HashMap::new() };
     let got = inner.ran("(__root, __names)", vec![])?;
     let got = got.as_ref();
     let heard: Vec<String> = entry(&got, 1)
@@ -416,6 +459,7 @@ impl Opening {
       )));
     }
     let root = entry(&got, 0).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
+    inner.ran("restored(__engine)", vec![])?;
     Ok(Life { held: inner, root, raised: None })
   }
 
@@ -426,7 +470,11 @@ impl Opening {
   /// `boot` is given the Kernel of the crate and one generator for the World and for each ear.
   pub fn boot(self, record: impl IntoIterator<Item = Object>) -> Result<Life, Fault> {
     let typed = matches!(self.world, Worldly::Typed(_));
-    let (host, names, limits) = self.hosting();
+    let (mut host, names, limits) = self.hosting();
+    let record: Vec<Object> = record.into_iter().collect();
+    for one in &record {
+      host.record.kept(one.as_ref());
+    }
     let mut inner = Inner { sand: Sand::new(limits), host, watchers: HashMap::new() };
     inner.ran(PREAMBLE, vec![])?;
     // The three objects of the host and the two modules are bound as names of the session, which every later
@@ -508,11 +556,25 @@ impl Life {
 
   /// The life as bytes, where it stands still, for a later life to go on from without the record replayed.
   ///
-  /// A life stands still when no command runs, the World owes it no work, and nothing the World said waits to
-  /// be heard; a dump taken elsewhere is refused, since what a restored life could not find again would be
-  /// lost without a word. What the host holds of its own, a watcher of an act or a callable it handed over, is
-  /// not in the dump.
-  pub fn dump(&self) -> Result<Vec<u8>, Fault> {
+  /// A life stands still when no command runs, the World owes it no work, nothing the World said waits to be
+  /// heard, and no ear the host gave it after its boot lives; a dump taken elsewhere is refused, since what a
+  /// restored life could not find again would be lost without a word. A life whose boot raised is refused too,
+  /// since a restore raises nothing. What the host holds of its own, a watcher of an act or a callable it handed
+  /// over, is not in the dump. The dump is stamped with the engine, the build of the crate and the record it
+  /// stands on, which a restore reads back.
+  pub fn dump(&mut self) -> Result<Vec<u8>, Fault> {
+    if let Some(raised) = &self.raised {
+      return Err(Fault::refused(format!(
+        "a life is dumped where it stands still, and its boot raised {raised}"
+      )));
+    }
+    let born = self.held.ran("sorted(BORN)", vec![])?;
+    if let Some(one) = born.as_ref().items().and_then(|held| held.into_iter().next()) {
+      return Err(Fault::refused(format!(
+        "a life is dumped where it stands still, and an ear the host gave it lives: {}",
+        one.as_str().unwrap_or_default()
+      )));
+    }
     let host = &self.held.host;
     if !host.running.is_empty() {
       return Err(Fault::refused("a life is dumped where it stands still, and a command runs"));
@@ -527,7 +589,7 @@ impl Life {
         "a life is dumped where it stands still, and the World said something",
       ));
     }
-    self.held.sand.dump()
+    Stamp::now(host.record.clone()).stamped(&self.held.sand.dump()?)
   }
 
   /// What boot raised, if it raised: a drift, which breaks the journal while the life goes on with nothing kept,

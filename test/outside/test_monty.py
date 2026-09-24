@@ -15,9 +15,9 @@ import pytest
 
 import furb
 import furb_monty.engine
-from conftest import OPERATOR, STANDS, Dead, Py, Sand, settle, swapped
+from conftest import OPERATOR, STANDS, Dead, Py, Sand, plain, said, settle, swapped
 from furb import engine, kernel
-from furb.engine import Refused
+from furb.engine import Drift, Refused
 
 
 def asking() -> Generator[tuple | None, tuple | None]:
@@ -158,26 +158,124 @@ async def test_a_map_of_the_life_refuses_a_key_it_does_not_hold() -> None:
 
 
 async def test_a_life_dumped_where_it_stands_still_is_restored_and_goes_on() -> None:
-  """A life dumped where it stands still is restored on ears under the names it was dumped with, and goes on from
-  there: nothing of the record is replayed, no model is asked, and an ear hears from the next fact on."""
+  """A life dumped where it stands still is restored on ears under the names it was dumped with and on the record
+  the World holds, and goes on from there: nothing of the record is replayed, no model is asked, the World is asked
+  what it stands on, as at the tip of a later life, and an ear hears from the next fact on."""
   sand = Sand(files={"/w/a.txt": "one\ntwo\n"}, stands=STANDS)
   root = engine.boot((), world=sand.hears())
   await engine.rung("k = len(read('a.txt').lines)", on=root)
   await settle()
   dump = furb_monty.engine.dump()
+  record = plain(sand.record)
   later = Sand(stands=STANDS)
-  assert furb_monty.engine.restore(dump, world=later.hears()) == root
+  assert furb_monty.engine.restore(dump, record, world=later.hears()) == root
   assert engine.modules[root]["k"] == 2
   assert await engine.rung("close(k + 1)", on=root) == 3
-  assert later.calls == []
+  assert [a[0] for a in later.calls] == ["stand"]
   with pytest.raises(Refused, match="names it was dumped with"):
-    furb_monty.engine.restore(dump, world=Sand(stands=STANDS).hears(), probe=asking())
+    furb_monty.engine.restore(dump, record, world=Sand(stands=STANDS).hears(), probe=asking())
 
 
 async def test_a_dump_is_no_dump_of_a_life_when_it_is_not_one() -> None:
   """What is not a dump of a life is refused as one."""
   with pytest.raises(Refused, match="no dump of a life"):
     furb_monty.engine.restore(b"not a dump", world=Sand(stands=STANDS).hears())
+
+
+def restamped(dump: bytes, name: bytes) -> bytes:
+  """A dump whose stamp says another value on the line of this name."""
+  head, _, session = dump.partition(b"\n\n")
+  lines = [
+    line.split(b" ")[0] + b" " + b"0" * len(line.split(b" ")[1]) if line.split(b" ")[0] == name else line
+    for line in head.split(b"\n")
+  ]
+  return b"\n".join(lines) + b"\n\n" + session
+
+
+async def test_a_dump_that_does_not_match_its_record_its_engine_or_its_build_is_refused() -> None:
+  """A dump is restored only on the record it was dumped on, by the engine and the build of the crate that made it,
+  and a restore refuses any other with each part that differs, so the host boots instead."""
+  sand = Sand(stands=STANDS)
+  root = engine.boot((), world=sand.hears())
+  engine.rung("k = 1", on=root)
+  await settle()
+  record = plain(sand.record)
+  dump = furb_monty.engine.dump()
+  with pytest.raises(Refused, match=r"^the dump does not match: it is of a record of \d+ entries that end with "):
+    furb_monty.engine.restore(dump, record[:-1], world=Sand(stands=STANDS).hears())
+  with pytest.raises(Refused, match=r"^the dump does not match: it holds another engine$"):
+    furb_monty.engine.restore(restamped(dump, b"engine"), record, world=Sand(stands=STANDS).hears())
+  with pytest.raises(Refused, match=r"^the dump does not match: another build of the crate made it$"):
+    furb_monty.engine.restore(restamped(dump, b"build"), record, world=Sand(stands=STANDS).hears())
+  assert furb_monty.engine.restore(dump, record, world=Sand(stands=STANDS).hears()) == root
+
+
+async def test_a_restored_life_holds_its_pending_work_unstarted_until_a_wake_as_a_booted_life_does() -> None:
+  """A life restored from a dump of a life that boot left with pending work holds that work unstarted until a wake
+  this life says, as a life booted on the same record does, and at the wake both start the same work and ask the
+  same model with the same turns."""
+  first = Sand(stands=STANDS, auto=False)
+  root = engine.boot((), world=first.hears())
+  engine.bash("sleep 9", on=root)
+  engine.wait(100.0, on=root)
+  engine.prompt(str, "why?", to=OPERATOR, on=root)
+  engine.prompt(int, "count", on=root)
+  await settle()
+  record = plain(first.record)
+  engine.boot(record, world=Sand(stands=STANDS).hears())
+  await settle()
+  dump = furb_monty.engine.dump()
+  lives: list[tuple[Sand, list]] = []
+  for restored in (False, True):
+    sand = Sand(stands=STANDS, script={root: ["close(4)"]})
+    if restored:
+      furb_monty.engine.restore(dump, record, world=sand.hears())
+    else:
+      engine.boot(record, world=sand.hears())
+    await settle()
+    assert said(sand.calls, "start") == [] and said(sand.calls, "ask") == []
+    engine.wake(root)
+    await settle()
+    lives.append((sand, engine.turns(on=root)))
+  (booted, turns), (again, returns) = lives
+  assert [a[1] for a in said(booted.calls, "start")] == ["bash1", "wait1", "prompt1"]
+  assert said(again.calls, "start") == said(booted.calls, "start")
+  assert len(said(booted.calls, "ask")) == 1
+  assert said(again.calls, "ask") == said(booted.calls, "ask")
+  assert again.record == booted.record
+  assert returns == turns
+
+
+async def test_a_life_whose_boot_raised_is_dumped_never() -> None:
+  """A life whose boot raised a drift keeps nothing more, and a restore raises nothing, so it is refused its dump."""
+  sand = Sand(stands=STANDS)
+  root = engine.boot((), world=sand.hears())
+  await engine.rung("bash('echo a')", on=root)
+  await settle()
+  record: list = [((*e[0][:4], "echo b", *e[0][5:]),) if e[0][0] == "bash" else e for e in plain(sand.record)]
+  with pytest.raises(Drift, match="bash1 drifts"):
+    engine.boot(record, world=Sand(stands=STANDS).hears())
+  with pytest.raises(
+    Refused, match=r"^a life is dumped where it stands still, and its boot raised Drift: bash1 drifts$"
+  ):
+    furb_monty.engine.dump()
+
+
+async def test_a_life_that_holds_an_ear_the_host_gave_it_after_its_boot_is_dumped_never() -> None:
+  """An ear of the host that crossed in after the boot is no ear a restored life is given, so a life that holds one
+  alive is refused its dump, and one whose ear is over is dumped."""
+
+  def watching() -> Generator[tuple | None, tuple | None]:
+    while (a := (yield)) is None or a[0] != "poke":
+      pass
+
+  root = engine.boot((), world=Sand(stands=STANDS).hears())
+  engine.drive(watching(), "watching")
+  with pytest.raises(Refused, match=r"an ear the host gave it lives: ear:\d+$"):
+    furb_monty.engine.dump()
+  engine.send("poke", root)
+  await settle()
+  assert furb_monty.engine.dump().startswith(b"furb dump\n")
 
 
 async def test_boot_refuses_a_kernel_or_a_gate_of_this_interpreter() -> None:
