@@ -331,6 +331,22 @@ test("the workspace list keeps what each instance saves, and a list that cannot 
   }
 }, 30000);
 
+test("a save of the workspace list that fails names its file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-list-save-"));
+  const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), { demo: true });
+  try {
+    await mkdir(join(directory, "project"));
+    // A directory where the save writes its file makes the save fail on every system.
+    await mkdir(join(directory, "config/workspaces.json.tmp"), { recursive: true });
+    expect(String(await library.add(join(directory, "project")).catch((error: unknown) => error))).toContain(
+      "workspaces.json.tmp",
+    );
+  } finally {
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("the .furb that the TUI makes in a project keeps itself out of version control", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-ignore-"));
   const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), { demo: true });

@@ -146,7 +146,9 @@ chain that holds some. Work that a pause of the operator holds is not in `world.
 wake of the operator. A command that an earlier World started and did not end runs again at that wake, once,
 and what it told before stands in its door. Wait deadlines and partial streams live in the record's
 `.world.json` companion. File snapshots append to `.changes.jsonl`; `world.changes.read` loads a page of them.
-Keep both companions with the JSONL record.
+Keep both companions with the JSONL record. The World saves `.world.json` whole with `saveFile(path, text)`,
+which writes `<path>.tmp` and gives it the name of the file. A save that fails throws an error that names the file,
+with the error of the system as its cause. The TUI saves its own files with it.
 
 `inspectRecord(path, models)` reads pending work through the same native replay without taking a record lock,
 writing files, or starting a model or command. The TUI runs this inspection in its own worker. `World.activity` holds

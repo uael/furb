@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Fact, ImageAttachment, LiveAct, Turn, Usage } from "@furb/engine";
@@ -11,6 +11,7 @@ import {
   imagePath,
   imageReference,
   imageReferences,
+  saveFile,
   shapes,
 } from "@furb/engine";
 import type { FileChange } from "@furb/engine/world";
@@ -846,8 +847,7 @@ export class Session extends EventEmitter {
       ...Object.fromEntries(kept.map((key) => [key, this[key]])),
       cost: this.savedCost,
     };
-    writeFileSync(`${path}.tmp`, JSON.stringify(view), { mode: 0o600 });
-    renameSync(`${path}.tmp`, path);
+    saveFile(path, JSON.stringify(view));
   }
   /** Save the view, then end the World whatever the save came to. */
   async dispose(): Promise<void> {

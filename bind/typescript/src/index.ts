@@ -17,7 +17,7 @@ export {
   imageReferences,
   imageType,
 } from "./images.js";
-export { furbDirectory } from "./project.js";
+export { furbDirectory, saveFile } from "./project.js";
 export { shell } from "./shell.js";
 export type { Entry, Fact, OperatorPrompt, Paragraph, Turn, Usage } from "./types.js";
 export {
