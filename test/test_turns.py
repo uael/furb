@@ -2,7 +2,6 @@
 
 from conftest import STANDS, Sand, heads, life, paragraphs, rows, said, settle, stood
 from furb import engine
-from furb.engine import span
 
 CARRY = ("tell", "pause", "wake", "cancel", "close")
 """The kinds of fact that carry notes, of which the turns are folded."""
@@ -55,27 +54,26 @@ async def test_the_turns_of_what_a_chain_has_heard() -> None:
 
 async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operator() -> None:
   """The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines it has not seen, which the one that tells it says the show of."""
-  sand = Sand(files={"/w/n.txt": "one\ntwo\n"}, stands=STANDS)
+  sand = Sand(stands=STANDS)
   log, root = life(sand)
-  word = "read('n.txt', span(2, 2))\nclose(1)"
+  word = "tell('seen', 'n', ('/w/n', 'one\\ntwo\\n', lambda lines: [2]))\nclose(1)"
   sand.script[root] = [word]
   assert await engine.prompt(int, "read it", on=root) == 1
   got = engine.turns(on=root)
   assert [role for role, *_ in got] == ["user", "assistant", "user"]
   assert heads(got[:1])[-1] == f"#{said(log, 'rung')[0][1]} advance on prompt1"
   assert got[1] == said(log, "answer")[0][3] == ("assistant", word, (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
-  assert got[2][1] == "#read n.txt\n# /w/n.txt, 0 known\n# 2 two\n\n#prompt1 closed 1"
-  assert span(2, 2)(["one", "two"]) == [2]
+  assert got[2][1] == "#seen n\n# /w/n, 0 known\n# 2 two\n\n#prompt1 closed 1"
 
 
 async def test_the_chain_answers_for_its_turns() -> None:
   """The chain answers for its turns, folded from what it has heard."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  await engine.rung("cd('/x')", on=root)
+  await engine.rung("tell('seen', 'x')", on=root)
   got = engine.turns(on=root)
   assert [role for role, *_ in got] == ["user"]
-  assert heads(got) == [f"#{root} root", rows(root)[0], "#rung1", "#cd /x"]
+  assert heads(got) == [f"#{root} root", rows(root)[0], "#rung1", "#seen x"]
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
   asking = said(held, "turns")[-1]
