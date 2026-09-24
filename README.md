@@ -27,7 +27,8 @@ and records. `uv sync`, `bun install`, and `bun run build` build it from a clone
 
 `bun run tui` opens the [OpenTUI application](tui/README.md). `bun run demo` opens a local scripted life that
 asks no model. The TUI has one view per chain, Python programs, act output, an exact transcript, file diffs,
-live value inspection, themes, and saved sessions. See [the screenshot gallery](docs/tui.md).
+live value inspection, themes, and saved sessions. See [the screenshot gallery](docs/tui.md). The TUI needs Bun
+1.4.2 or later.
 
 Every pull request, and every push to `main`, runs the gates in `.github/workflows/gates.yml`: the hooks, which
 include the gates of the crate, and the type check. On linux and on macos, they run the suite. On linux, on macos
