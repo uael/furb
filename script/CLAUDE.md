@@ -48,6 +48,10 @@ once, before you spend money on it.
 - Each task works under `$DEEPSWE_WORK/<task>`, or under the temporary directory as `furb-deepswe/<task>`. `base`
   is the pristine checkout with the dependencies of the task, `app` is the checkout the life works in, and `.run`
   holds the record, the numbers, the frozen submission and the reward.
+- The interpreter of a python task is `.venv` in the checkout, at the version of python that the image of the task
+  runs, which is the python of its verifier. The rig reads `PYTHON_VERSION` from the config of the image in its
+  registry, and `uv` makes the interpreter. So code that runs under one version and fails under the other fails in
+  the checkout too, before the grade.
 - The reaper of the host, which cleans its temporary directory, takes the files of an old workroot and leaves its
   directories. So a seed writes `.seeded` last, with the commit of the base, and a later seed keeps the base only
   when `.seeded` names the commit and no file of the commit is gone. Otherwise it fetches and installs it again.

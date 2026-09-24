@@ -30,13 +30,15 @@ import re
 import shlex
 import shutil
 import subprocess
-import sys
 import time
 import tomllib
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import gettempdir, mkdtemp
+from urllib.error import HTTPError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 from furb import engine
 from furb.cli import lived, say
@@ -79,6 +81,8 @@ VCS = {
 """VCS is what a build backend that reads a version off git is told instead, since the base holds one commit."""
 CONTAINER = ("apt-get", "apt", "apk", "yum", "dnf")
 """CONTAINER is every step of a Dockerfile that only a container can take, which this rig steps over."""
+MANIFEST = "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"
+"""MANIFEST is the two forms of the manifest of one image that a registry is asked for."""
 PIP = (("python3 -m pip ", "pip "), ("python -m pip ", "pip "), ("pip3 ", "pip "), ("pip ", "python3 -m pip "))
 """PIP is how a step that installs is said on this host, in the order the swaps apply."""
 TICK = 2.0
@@ -239,6 +243,54 @@ def read_task(task: str) -> tuple[Path, Mapping[str, str]]:
   return where, meta
 
 
+def image(task: Path) -> str:
+  """The image a task names, which holds the environment of the task and runs its verifier."""
+  with (task / "task.toml").open("rb") as fh:
+    named = tomllib.load(fh).get("environment", {}).get("docker_image", "")
+  if not named:
+    say(f"[deepswe] {task.name}: task.toml names no docker_image")
+    raise SystemExit(1)
+  return named
+
+
+def registry(named: str, path: str, accept: str) -> bytes:
+  """One read of the registry that holds an image, with the anonymous token that the registry asks for."""
+  host, _, rest = named.partition("/")
+  repo = rest.rpartition(":")[0]
+  url = f"https://{host}/v2/{repo}/{path}"
+  heard = {"Accept": accept}
+  try:
+    with urlopen(Request(url, headers=heard), timeout=60) as got:
+      return got.read()
+  except HTTPError as no:
+    if no.code != 401:  # noqa: PLR2004
+      raise
+    told = dict(re.findall(r'(\w+)="([^"]*)"', no.headers.get("WWW-Authenticate", "")))
+  asked = urlencode({"service": told["service"], "scope": f"repository:{repo}:pull"})
+  with urlopen(f"{told['realm']}?{asked}", timeout=60) as got:  # noqa: S310
+    heard["Authorization"] = f"Bearer {json.load(got)['token']}"
+  with urlopen(Request(url, headers=heard), timeout=60) as got:
+    return got.read()
+
+
+def python_of(named: str) -> str:
+  """The version of python that the image of a task runs, which is the python its verifier runs.
+
+  The config of the image names it in PYTHON_VERSION, as the official python image sets it. The config is read from
+  the registry, because a pull of the image costs gigabytes for one line.
+  """
+  manifest = json.loads(registry(named, f"manifests/{named.rpartition(':')[2]}", MANIFEST))
+  if "config" not in manifest:
+    say(f"[deepswe] {named} is an index of images, and the rig reads the python of one image only")
+    raise SystemExit(1)
+  config = json.loads(registry(named, f"blobs/{manifest['config']['digest']}", "*/*"))
+  for one in config.get("config", {}).get("Env") or []:
+    if one.startswith("PYTHON_VERSION="):
+      return one.partition("=")[2]
+  say(f"[deepswe] {named} names no PYTHON_VERSION, so the rig cannot run the python that its verifier runs")
+  raise SystemExit(1)
+
+
 def steps(task: Path) -> list[str]:
   """The steps of dependency the Dockerfile of a task takes, without the clone the tarball already stands for."""
   df = task / "environment" / "Dockerfile"
@@ -255,8 +307,8 @@ def steps(task: Path) -> list[str]:
 def venved(repo: Path) -> str:
   """What puts the interpreter of the checkout first, once one stands there.
 
-  A python task gets an interpreter of its own inside the checkout, made from this one, so its dependencies land
-  neither in the python of the system nor in the one of this repository.
+  A python task gets an interpreter of its own inside the checkout, at the version its image runs, so its
+  dependencies land neither in the python of the system nor in the one of this repository.
   """
   first = repo / ".venv" / "bin"
   return f'export PATH="{first}:$PATH"; ' if first.is_dir() else ""
@@ -280,8 +332,11 @@ def generic(repo: Path, lang: str) -> None:
 def installed(task: Path, repo: Path, lang: str) -> None:
   """Take the steps of the task's own Dockerfile in the checkout, so the tree is the one its verifier wants."""
   if lang == "python" and not (repo / ".venv").is_dir():
-    say("[deepswe] making the interpreter of the checkout")
-    ran([sys.executable, "-m", "venv", str(repo / ".venv")])
+    version = python_of(image(task))
+    say(f"[deepswe] making the interpreter of the checkout: python {version}, as the image of the task runs")
+    if ran([tool("uv"), "venv", "--no-project", "--seed", "--python", version, str(repo / ".venv")]):
+      say(f"[deepswe] uv could not make an interpreter of python {version}")
+      raise SystemExit(1)
   told = steps(task)
   if not told:
     say(f"[deepswe] {task.name}: the Dockerfile says no step; installing by language instead")
@@ -426,12 +481,8 @@ def graded(task: Path, base: Path, syn: str, patch: Path, out: Path) -> Mapping[
   shutil.copytree(task / "tests", tests)
   if how == "docker":
     # The image the task pins is the pristine verifier: the tests and the logs alone are mounted into it.
-    with (task / "task.toml").open("rb") as fh:
-      image = tomllib.load(fh).get("environment", {}).get("docker_image", "")
-    if not image:
-      say(f"[deepswe] {task.name}: task.toml names no docker_image")
-      raise SystemExit(1)
-    ran(["docker", "run", "--rm", "-v", f"{tests}:/tests:ro", "-v", f"{logs}:/logs", image, "bash", "/tests/test.sh"])
+    pinned = image(task)
+    ran(["docker", "run", "--rm", "-v", f"{tests}:/tests:ro", "-v", f"{logs}:/logs", pinned, "bash", "/tests/test.sh"])
   else:
     app = vroot / "app"
     pristine(base, syn, app)
