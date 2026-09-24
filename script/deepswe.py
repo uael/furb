@@ -84,8 +84,19 @@ CONTAINER = ("apt-get", "apt", "apk", "yum", "dnf")
 """CONTAINER is every step of a Dockerfile that only a container can take, which this rig steps over."""
 MANIFEST = "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"
 """MANIFEST is the two forms of the manifest of one image that a registry is asked for."""
-PIP = (("python3 -m pip ", "pip "), ("python -m pip ", "pip "), ("pip3 ", "pip "), ("pip ", "python3 -m pip "))
-"""PIP is how a step that installs is said on this host, in the order the swaps apply."""
+SAID = (
+  ("bash -lc ", "bash -c "),
+  ("python3 -m pip ", "pip "),
+  ("python -m pip ", "pip "),
+  ("pip3 ", "pip "),
+  ("pip ", "python3 -m pip "),
+)
+"""SAID is how a step of a Dockerfile is said on this host, in the order the swaps apply.
+
+A login shell of this host puts the paths of the system first, so its python is the one of the host and not the
+interpreter of the checkout. In the image, a login shell and a plain shell find the same python and the same pip,
+so a step takes a plain shell here.
+"""
 TICK = 2.0
 """TICK is the seconds between two looks at a life that is working."""
 STEP = 1800.0
@@ -347,7 +358,7 @@ def installed(task: Path, repo: Path, lang: str) -> None:
       say(f"[deepswe] over (a container alone takes it): {step[:80]}")
       continue
     named = step
-    for was, now in PIP:
+    for was, now in SAID:
       named = named.replace(was, now)
     cmd = re.sub(r"(?<![\w./])/app\b", str(repo), named)
     say(f"[deepswe] RUN {cmd[:90]}")
