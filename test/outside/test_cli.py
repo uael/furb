@@ -215,3 +215,14 @@ def test_update_fetches_the_extensions_again_and_prints_their_names(
   monkeypatch.setattr("sys.argv", ["furb", "update", "--cwd", str(yard)])
   assert main() is None
   assert capsys.readouterr().out.split() == ["files", "bash", "grant"]
+
+
+async def test_the_command_line_plays_the_skills_extension_and_finds_no_skill_with_no_part_for_a_world(
+  yard: Path,
+) -> None:
+  """The python host plays the word of the skills extension that a config names by its path, and holds no part of it
+  for a World, so no one answers a skills question and a chain finds no skill."""
+  (yard / ".furb").mkdir()
+  skills = Path(__file__).parents[2] / "extensions" / "skills"
+  (yard / ".furb" / "config.json").write_text(json.dumps({"extensions": {"skills": str(skills)}}), encoding="utf-8")
+  assert await running(None, yard, "close([callable(skills), callable(skill), skills()])") == [True, True, []]

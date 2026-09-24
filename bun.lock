@@ -16,7 +16,7 @@
     },
     "bind/typescript": {
       "name": "@furb/engine",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@earendil-works/pi-ai": "0.87.0",
       },

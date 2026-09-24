@@ -156,7 +156,8 @@ jobs:
       - run: bun run build
       - run: bun run docs
       - run: git diff --exit-code -- bind/typescript/index.cjs bind/typescript/index.d.cts
-      - run: git diff --exit-code -- tui/README.md
+      - run: git diff --exit-code -- tui/README.md extensions/*/README.md
       - run: bun run check
       - run: bun run lint
-      - run: bun test bind/typescript/test tui/test
+      # The tests of the extensions fetch from a local git remote and pack with the npm of the runner image.
+      - run: bun test bind/typescript/test tui/test extensions

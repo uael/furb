@@ -1,6 +1,6 @@
 [package]
 name = "furb"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.95"
 description = "The core of an AI harness: the engine in a sandbox, behind an async API, with a World of your own."
