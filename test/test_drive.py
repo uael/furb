@@ -29,7 +29,7 @@ async def test_the_other_way_to_speak_a_generator_is_brought_to_life_under_a_nam
   heard: list[tuple] = []
   at = len(log)
   engine.drive(keeping(heard, ("done", "none://one", None)), "keeper")
-  engine.bash("echo hi", on=root)
+  engine.wait(0, on=root)
   assert said(log, "done")[-1][1] == "none://one" or heard
   assert heard == log[at:]
 
@@ -40,9 +40,9 @@ async def test_one_that_returns_is_over_and_lives_no_more() -> None:
   log, root = life(sand)
   mark: list[tuple] = []
   engine.drive(ends(mark), "once")
-  engine.bash("echo hi", on=root)
-  engine.bash("echo again", on=root)
-  assert len(mark) == 1 and len(said(log, "bash")) == 2
+  engine.wait(0, on=root)
+  engine.wait(0, on=root)
+  assert len(mark) == 1 and len(said(log, "wait")) == 2
 
 
 async def test_one_that_raises_while_it_hears_is_broken_the_same_way() -> None:
@@ -53,13 +53,13 @@ async def test_one_that_raises_while_it_hears_is_broken_the_same_way() -> None:
   engine.drive(keeping(heard), "before")
   engine.drive(breaks(), "broken")
   with pytest.raises(ValueError, match="boom"):
-    engine.bash("echo hi", on=root)
+    engine.wait(0, on=root)
   after: list[tuple] = []
   engine.drive(keeping(after), "broken")
-  engine.bash("echo again", on=root)
-  assert len(said(log, "bash")) == 2
-  assert said(heard, "bash") == said(log, "bash") and said(after, "bash") == said(log, "bash")[1:]
-  assert [e[0] for e in sand.record if e[0][0] == "bash"] == said(log, "bash")
+  engine.wait(0, on=root)
+  assert len(said(log, "wait")) == 2
+  assert said(heard, "wait") == said(log, "wait") and said(after, "wait") == said(log, "wait")[1:]
+  assert [e[0] for e in sand.record if e[0][0] == "wait"] == said(log, "wait")
 
 
 async def test_a_generator_brought_to_life_under_a_name_and_nothing_more() -> None:
@@ -75,12 +75,12 @@ async def test_a_generator_brought_to_life_under_a_name_and_nothing_more() -> No
   def bearing() -> Generator[tuple | None, tuple | None]:
     """An ear that brings another to life while a fact goes round, so the newborn hears from the next fact on."""
     while (heard := (yield)) is not None:
-      if heard[0] == "bash":
+      if heard[0] == "wait":
         engine.drive(keeping(later), "later")
 
   engine.drive(bearing(), "bearing")
-  engine.bash("echo hi", on=root)
-  command = said(log, "bash")[0]
+  engine.wait(0, on=root)
+  command = said(log, "wait")[0]
   assert fresh == log[at:] and command in fresh
   assert later and command not in later and later == log[log.index(command) + 1 :]
 
@@ -116,6 +116,6 @@ async def test_a_generator_that_yields_a_saying_is_given_the_fact_as_the_bus_sai
   at = len(log)
   engine.drive(asking(), "asker")
   assert got[0] == ("tell", root, "asker", [("noted", [], None)]) == log[at]
-  engine.bash("echo hi", on=root)
+  engine.wait(0, on=root)
   await settle()
   assert got[1:] == log[at:]

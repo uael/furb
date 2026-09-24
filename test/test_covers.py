@@ -6,13 +6,13 @@ from furb import engine
 
 async def test_whether_a_control_is_over_an_act() -> None:
   """Whether a control is over an act: over the act it names and everything under it, and over every act on the chain it names; a close is over the act it names and the words running under it, where a cancel is over everything under it."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
+  sand.script[root] = ["x = wait(100)\nclose(await x)"]
   act = engine.prompt(int, "go", on=root)
   await settle()
-  step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
-  mine = engine.bash("mine", on=root)
+  step, command = said(log, "rung")[0][1], said(log, "wait")[0][1]
+  mine = engine.wait(300, on=root)
   engine.close(21, act)
   engine.cancel(act)
   engine.cancel(root)

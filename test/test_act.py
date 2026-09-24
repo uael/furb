@@ -6,7 +6,7 @@ import pytest
 
 from conftest import STANDS, Sand, life, paragraphs, said, settle
 from furb import engine
-from furb.engine import HIDDEN, OPERATOR, TIMEOUT, Act, Exit, Refused, take
+from furb.engine import OPERATOR, Act, Refused, take
 
 
 def noting(heard: list[object], how: str = ""):  # noqa: ANN201
@@ -42,38 +42,38 @@ async def test_an_act_said_it_is_begun_and_what_the_call_gives_is_its_name() -> 
   """An act said: it is begun, and what the call gives is its name, which is awaited for what the act comes to."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  one = engine.bash("echo hi", on=root)
-  got = engine.peek(one)
-  assert isinstance(one, Act) and isinstance(got, Exit) and got.code is None
-  assert paragraphs(engine.turns(on=root))[-1] == "#bash1 echo hi\nbash1: Act[Exit] = Act('bash1')"
-  assert (await one).code == 0
+  one = engine.prompt(str, "hi", to=OPERATOR, on=root)
+  await settle()
+  assert isinstance(one, Act) and engine.peek(one) is None
+  assert paragraphs(engine.turns(on=root))[-1] == "#prompt1 hi\nprompt1: Act[str] = Act('prompt1')"
+  engine.close("yes", one)
+  assert (await one) == "yes"
 
 
 async def test_an_act_said_twice_under_one_name_is_one_act() -> None:
   """An act said twice under one name is one act, and the second saying brings no second ear and gives the name back."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  first = engine.rung("close(bash('echo hi'))", on=root)
-  again = engine.rung("close(bash('echo hi'))", retells=first, on=root)
-  assert (await first) == "bash1" and (await again) is None
-  assert len(said(log, "bash")) == 1
-  assert [a[1] for a in sand.calls if a[0] == "start"] == ["bash1"]
+  first = engine.rung("close(wait(0))", on=root)
+  again = engine.rung("close(wait(0))", retells=first, on=root)
+  assert (await first) == "wait1" and (await again) is None
+  assert len(said(log, "wait")) == 1
+  assert [a[1] for a in sand.calls if a[0] == "start"] == ["wait1"]
 
 
 async def test_two_acts_that_say_the_same_words_under_one_name_are_one_act() -> None:
   """Two acts that say the same words under one name are one act."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  first = engine.rung("close(bash('echo hi'))", on=root)
-  again = engine.rung("close(bash('echo hi'))", retells=first, on=root)
+  first = engine.rung("close(wait(0))", on=root)
+  again = engine.rung("close(wait(0))", retells=first, on=root)
   one = await first
   assert isinstance(one, str)
   assert (await again) is None
-  assert engine.get(one) == ("bash", one, first, root, "echo hi", False, TIMEOUT)
+  assert engine.get(one) == ("wait", one, first, root, 0)
   await settle()
-  got = engine.peek(one)
-  assert got == engine.peek(one) and isinstance(got, Exit) and got.code == 0
-  assert [e[0][1] for e in sand.record if e[0][0] == "bash"] == [one]
+  assert one in engine.outcomes and engine.peek(one) is None
+  assert [e[0][1] for e in sand.record if e[0][0] == "wait"] == [one]
 
 
 async def test_the_engine_refuses_an_act_said_from_outside_a_run_that_names_no_chain() -> None:
@@ -95,7 +95,7 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
   heard: list[object] = []
   named = engine.act("note", two, noting(heard), "one")
   assert engine.get(named)[3] == two
-  sand.script[root] = ["close(bash('echo hi'))"]
+  sand.script[root] = ["close(wait(0))"]
   unsaid = await engine.prompt(str, "start one", on=root)
   assert engine.get(unsaid)[3] == root
 
@@ -106,14 +106,13 @@ async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fa
   _, root = life(sand)
   heard: list[object] = []
   one = engine.act("note", root, noting(heard, "spoke"), "one")
-  two = engine.bash("echo hi", on=root)
+  two = engine.prompt(str, "hi", to=OPERATOR, on=root)
   await settle()
-  assert heard[0] == one and ("bash", two, OPERATOR, root, "echo hi", False, TIMEOUT) in heard[1:]
+  assert heard[0] == one and ("prompt", two, OPERATOR, root, "str", "hi", OPERATOR) in heard[1:]
   assert paragraphs(engine.turns(on=root))[2:] == [
     "#note1 spoke by yield",
     "#note1 spoke by the bus",
-    "#bash1 echo hi\nbash1: Act[Exit] = Act('bash1')",
-    "#bash1 exited 0\n# bash1/stdout, 0 known\n# 1 ran echo hi",
+    "#prompt1 hi\nprompt1: Act[str] = Act('prompt1')",
   ]
 
 
@@ -121,7 +120,7 @@ async def test_an_act_carries_the_words_of_its_kind() -> None:
   """An act carries the words of its kind, which are the plain arguments the verb was given, in the order of the verb, and a show or a filter is none of them."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  one = engine.bash("echo hi", True, 5.0, HIDDEN, HIDDEN, on=root)
-  assert engine.get(one) == ("bash", one, OPERATOR, root, "echo hi", True, 5.0)
+  one = engine.wait(5.0, on=root)
+  assert engine.get(one) == ("wait", one, OPERATOR, root, 5.0)
   two = engine.chain("two", source=root, filter=take(root))
   assert engine.get(two) == ("chain", two, OPERATOR, "", "two", root)

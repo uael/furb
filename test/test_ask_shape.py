@@ -206,8 +206,8 @@ async def test_a_later_life_asks_no_model_and_does_no_act_whose_close_the_record
   """A later life asks no model, and does no act, whose close the record already holds."""
   sand = sown()
   _, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\nclose((await x).code)", "close(None)"]
-  assert await engine.prompt(int, "run it", on=root) == 0
+  sand.script[root] = ["x = wait(0)\nawait x\nclose(1)", "close(None)"]
+  assert await engine.prompt(int, "wait", on=root) == 1
   await settle()
   later = Sand(stands=STANDS)
   again, _ = await relived(later, plain(sand.record))

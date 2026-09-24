@@ -26,6 +26,7 @@ of a word or of a host as a mark.
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
 from collections.abc import Callable, Coroutine, Generator
 from contextvars import ContextVar
+from dataclasses import fields, is_dataclass
 from typing import TYPE_CHECKING
 
 from monty import instance
@@ -141,10 +142,19 @@ def outward(x: object, names: Names) -> object:
       return x
     return {IS: "class", "id": handled(x), "name": x.__name__, "base": outward(x.__bases__[0], names)}
   if worded(type(x), names):
-    return {IS: "instance", "class": outward(type(x), names), "value": x}
+    return {IS: "instance", "class": outward(type(x), names), "value": fielded(x, names)}
   if not callable(x):
     return x
   return {IS: "made", "id": handled(x)}
+
+
+def fielded(x: object, names: Names) -> object:
+  """The fields of an instance of a class a word defined, as they go out: each field of a dataclass by its name, as it
+  goes out, so an instance it holds goes out as one too; and the instance itself for any other class, whose fields
+  the interpreter carries out as they are."""
+  if not is_dataclass(x):
+    return x
+  return {one.name: outward(getattr(x, one.name), names) for one in fields(x)}
 
 
 def known(names: Names, name: str) -> object:
@@ -453,11 +463,16 @@ def opened(
 
 
 def called(engine: Names, ears: Ears, name: str, args: list, kwargs: dict) -> object:
-  """One verb of the engine, called by the operator with values of the host, and what it gave, as it goes out."""
+  """One verb, called by the operator with values of the host, and what it gave, as it goes out: the verb of the
+  chain it is said on, when that chain binds the name, since an extension binds its verbs there, and the verb of the
+  engine otherwise."""
   words, held = again(args, engine, ears), again(kwargs, engine, ears)
   assert isinstance(words, list)
   assert isinstance(held, dict)
-  return outward(verb(engine, name)(*words, **held), engine)
+  modules = engine["modules"]
+  assert isinstance(modules, dict)
+  chain = modules.get(held.get("on"), engine)
+  return outward(verb(chain if name in chain else engine, name)(*words, **held), engine)
 
 
 def made_called(engine: Names, ears: Ears, n: int, args: list, kwargs: dict) -> object:

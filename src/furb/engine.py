@@ -3,14 +3,11 @@ from asyncio import CancelledError, current_task, get_running_loop
 from collections import Counter
 from collections.abc import Callable, Generator
 from contextvars import ContextVar
-from dataclasses import dataclass
 from string.templatelib import Template
 from typing import Any
 
-WINDOW = 200000
 OPERATOR = "operator"
 WORLD = "world"
-TIMEOUT = 600.0
 site = ContextVar("site", default=OPERATOR)
 modules, acts, asked, outcomes = {}, {}, {}, {}
 raised = None
@@ -34,41 +31,8 @@ def drive(g, name):
   raise RuntimeError("no life")
 
 
-def span(lo: int, hi: int) -> Show:
-  def picks(lines):
-    i, j = (x + len(lines) + 1 if x < 0 else x for x in (lo, hi))
-    return list(range(max(i, 1), min(j, len(lines)) + 1))
-
-  return picks
-
-
-def grep(pattern: str) -> Show:
-  return lambda lines: [i for i, line in enumerate(lines, 1) if re.search(pattern, line)]
-
-
-def differs(old: list[str]) -> Show:
-  return lambda lines: [i for i, line in enumerate(lines, 1) if old[i - 1 : i] != [line]]
-
-
-HEAD, TAIL, HIDDEN = span(1, 2000), span(-250, -1), span(0, 0)
-
-
 def take(*ids: str, inside: bool = True) -> Filter:
   return lambda facts: [a for a in facts if any(under(a[1], one) for one in ids) == inside]
-
-
-def read(path: str, show: Show = HEAD, on: str = "") -> Text:
-  _, got = ask("read", on, path)
-  if show is not HIDDEN:
-    tell("read", path, *showing(got, show))
-  return got
-
-
-def write(text: Text, on: str = "") -> Text:
-  _, got = ask("write", on, text)
-  if not isinstance(got, Text) or got.lines != text.lines:
-    tell("write", text.path, *showing(got, differs(text.lines)))
-  return got
 
 
 def peek(at: str, on: str = "") -> object:
@@ -89,16 +53,6 @@ def chance(on: str = "") -> float:
 
 def gate(word: str, on: str = "") -> list[str]:
   return ask("gate", on, unquoted(word), ask("program", on)[1] or {})[1]
-
-
-def cd(path: str, on: str = "") -> str:
-  _, got = ask("cd", on, path)
-  tell("cd", path)
-  return got
-
-
-def cwd(on: str = "") -> str:
-  return ask("cwd", on)[1]
 
 
 def get(about: str) -> tuple:
@@ -211,13 +165,11 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 
     def answers():
       match a:
-        case ("read", _, by, _, path) | ("write", _, by, _, Text(path)) if path in mine and question(("prompt", path)):
-          if a[0] == "write":
-            replay(path, a[4].content, by)
-            return a[4]
-          return Text(
-            path, "\n".join(said for one, said in rungs.items() if one != by and under(acts[one][5] or one, path))
-          )
+        case ("ladder", _, by, _, path, *word) if path in mine and question(("prompt", path)):
+          if word:
+            replay(path, word[0], by)
+            return word[0]
+          return "\n".join(said for one, said in rungs.items() if one != by and under(acts[one][5] or one, path))
         case ("transcript", *_, at) if at in mine:
           return transcript[: mine[at][0]]
       match a[0]:
@@ -225,10 +177,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           return {**program}
         case "stand":
           return mine.get(a[-1], (0, standing))[1] or standing
-        case "cd":
-          return a[4]
-        case "cwd":
-          return next((x[4] for x in reversed(transcript) if x[0] == "cd"), standing[1])
         case "turns":
           return turns_of(transcript)
 
@@ -327,121 +275,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   return act("chain", on, ear, label, source)
 
 
-def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
-  def ear(id):
-    here = scope(id)
-    if not (usd or share) or (usd or 0) < 0 or not 0 <= (share or 0) <= 1:
-      yield "done", id, Refused(f"{usd}/{share} no ceiling")
-      return
-    spent = 0.0
-    for old in [x for x in acts if x != id and question(("grant", x)) and scope(x) == here]:
-      close(None, old)
-    told(id, f"usd={usd} share={share}", bound(id, "None"))
-    while True:
-      match (yield):
-        case ("answer", about, _, (_, _, (tokens, *_, dollars), _)) if scope(about) == here:
-          spent += dollars
-          filled = tokens / (offered(ask("stand", here, about)[1], acts[about][6]) or WINDOW)
-          told(about, f"ledger spent={spent} filled={filled}")
-          if (usd is not None and spent >= usd) or (share is not None and filled >= share):
-            pause(here)
-
-  return act("grant", on, ending(ear), usd, share)
-
-
-def bash(
-  command: str,
-  fed: bool = False,
-  timeout: float = TIMEOUT,
-  show: Show = TAIL,
-  show_err: Show | None = None,
-  on: str = "",
-) -> Act[Exit]:
-  def ear(id):
-    streams, mute = {x: Text(x) for x in (f"{id}/stdout", f"{id}/stderr")}, "" if fed else "not fed"
-    told(id, "" if show is HIDDEN else command, bound(id, "Exit"))
-    while True:
-      match (yield):
-        case ("merged", qid, _, _, about) if about == id:
-          yield "done", qid, show_err is None
-        case ("read", qid, _, _, path) if path in streams:
-          yield "done", qid, streams[path]
-        case ("write", qid, _, _, Text(path, text) as took) if path == f"{id}/stdin":
-          if mute:
-            took = Refused(mute)
-          else:
-            yield "feed", id, text or None
-            mute = "" if text else "closed"
-          yield "done", qid, took
-        case _ if mute == "ended":
-          continue
-        case ("peek", qid, _, _, at) if at == id:
-          yield "done", qid, Exit(None, *streams.values())
-        case ("out", about, _, text, stream) if about == id:
-          into = f"{id}/{stream if show_err else 'stdout'}"
-          streams[into] = streams[into].grow(text)
-        case ("exited", about, _, code) if about == id:
-          mute = "ended"
-          if show is not HIDDEN:
-            told(
-              id,
-              f"exited {code}",
-              *[x for x in zip(streams.values(), (show, show_err), strict=True) if x[1] not in (None, HIDDEN)],
-            )
-          yield "done", id, Exit(code, *streams.values())
-        case ("cancel" | "close", *_) as a if covers(a, id):
-          mute = "ended"
-          yield "done", id, ended(a, id)
-
-  return act("bash", on, started(pausing(ear)), command, fed, timeout)
-
-
-@dataclass
-class Text:
-  path: str
-  content: str = ""
-  before: Text | None = None
-
-  @property
-  def lines(self) -> list[str]:
-    return self.content.splitlines()
-
-  def grow(self, text: str) -> Text:
-    return Text(self.path, self.content + text)
-
-  def edit(self, lo: int, hi: int, lines: list[str]) -> Text:
-    now = self.content.splitlines(True)
-    if not 1 <= lo <= hi + 1 <= len(now) + 1:
-      raise Refused(f"{self.path} no lines {lo}:{hi}")
-    now[lo - 1 : hi] = [x.removesuffix("\n") + "\n" for x in lines]
-    return Text(self.path, "".join(now), self)
-
-  def replace(self, old: str, new: str, once: bool = False) -> Text:
-    return Text(self.path, self.content.replace(old, new, 1 if once else -1), self)
-
-  def undo(self, n: int = 1) -> Text:
-    return self.before.undo(n - 1) if n > 0 and self.before else self
-
-  def append(self, text: str) -> Text:
-    return self.insert(len(self.lines) + 1, text)
-
-  def insert(self, line: int, text: str) -> Text:
-    return self.edit(line, line - 1, text.splitlines(True))
-
-  def delete(self, lo: int, hi: int) -> Text:
-    return self.edit(lo, hi, [])
-
-  def find(self, pattern: str) -> list[int]:
-    return grep(pattern)(self.lines)
-
-
-@dataclass
-class Exit:
-  code: int | None
-  stdout: Text
-  stderr: Text
-
-
 class Act[T = object](str):
   def __await__(self) -> Generator[object, Any, T]:
     if acting():
@@ -519,21 +352,15 @@ def bound(id, of="object"):
   return f"{id}: Act[{of}] = Act({id!r})"
 
 
-def showing(got, show):
-  return [(got, show) if isinstance(got, Text) else commented(repr(got))]
-
-
-def shown(pair, seen):
-  match pair:
-    case (Text() as text, show):
-      old, lines = seen.setdefault(text.path, {}), text.lines
+def shown(note, seen):
+  match note:
+    case (str(path), str(content), show):
+      old, lines = seen.setdefault(path, {}), content.splitlines()
       picked = show(lines)
       new = {i: line for i in picked if old.get(i) != (line := lines[i - 1])}
       old.update(new)
-      return commented(
-        f"{text.path}, {len(picked) - len(new)} known" + "".join(f"\n{i} {line}" for i, line in new.items())
-      )
-  return pair
+      return commented(f"{path}, {len(picked) - len(new)} known" + "".join(f"\n{i} {line}" for i, line in new.items()))
+  return note
 
 
 def turns_of(heard):

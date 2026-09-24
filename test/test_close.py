@@ -6,22 +6,22 @@ import pytest
 
 from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Exit, Refused, Text
+from furb.engine import OPERATOR, WORLD, Refused
 
 
 async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
   """An act ended from outside, by its name, with a value: it is done with it, and it ends what it made, since a close is a cancel that carries what the act it names is done with."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
+  sand.script[root] = ["x = wait(100)\nclose(await x)"]
   act = engine.prompt(int, "go", on=root)
   await settle()
-  step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
+  step, command = said(log, "rung")[0][1], said(log, "wait")[0][1]
   engine.close(21, act)
   await settle()
   assert (await act) == 21
   assert isinstance(engine.peek(step, on=root), CancelledError)
-  assert engine.peek(command, on=root) == Exit(None, Text(f"{command}/stdout"), Text(f"{command}/stderr"))
+  assert engine.peek(command, on=root) is None and command not in engine.outcomes
 
 
 async def test_the_close_of_the_operator_enters_the_record_as_a_fact_of_its_own() -> None:
@@ -38,9 +38,9 @@ async def test_the_close_of_the_operator_enters_the_record_as_a_fact_of_its_own(
 
 async def test_a_close_ends_the_rung_of_a_prompt_at_its_next_await() -> None:
   """A close ends the rung of a prompt at its next await."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
+  sand.script[root] = ["x = wait(100)\nclose(await x)"]
   act = engine.prompt(int, "go", on=root)
   await settle()
   step = said(log, "rung")[0][1]
@@ -101,9 +101,9 @@ async def test_a_rung_closes_a_pending_prompt_of_any_actor() -> None:
 
 async def test_close_is_given_the_result_of_a_pending_act_and_the_id_of_that_act() -> None:
   """close is given the result of a pending act, and the id of that act when it is not the prompt of the running word."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(stands=STANDS)
   _, root = life(sand)
-  act = engine.bash("slow", on=root)
+  act = engine.wait(100, on=root)
   await settle()
   engine.close("done with it", act)
   await settle()
@@ -150,9 +150,9 @@ async def test_a_prompt_completes_with_the_exception_that_the_word_of_the_prompt
 
 async def test_close_is_given_the_value_first() -> None:
   """close is given the value first, since a word that answers its own prompt names no act at all."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(stands=STANDS)
   log, root = life(sand)
-  act = engine.bash("slow", on=root)
+  act = engine.wait(100, on=root)
   engine.close(21, act)
   word = said(log, "close")[0]
   assert (word[0], word[1], word[2], word[3]) == ("close", act, OPERATOR, 21)
@@ -189,21 +189,21 @@ async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the
 
 async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
   """A close on an act that is over reaches nothing."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(stands=STANDS)
   log, root = life(sand)
-  act = engine.bash("echo hi", on=root)
-  engine.send("exited", act, 0, by=WORLD)
-  sand.script[root] = ["y = bash('slow')\nclose(7)"]
+  act = engine.wait(0, on=root)
+  await settle()
+  sand.script[root] = ["y = wait(100)\nclose(7)"]
   answered = engine.prompt(int, "go", on=root)
   assert await answered == 7
   await settle()
-  running = said(log, "bash")[1][1]
+  running = said(log, "wait")[1][1]
   closes, was = said(log, "close"), engine.turns(on=root)
   engine.close(21, act)
   engine.close(9, answered)
   await settle()
-  assert (await act).code == 0 and await answered == 7
-  assert engine.peek(running, on=root) == Exit(None, Text(f"{running}/stdout"), Text(f"{running}/stderr"))
+  assert (await act) is None and await answered == 7
+  assert engine.peek(running, on=root) is None and running not in engine.outcomes
   assert said(log, "close") == closes
   assert engine.turns(on=root) == was
 
@@ -228,13 +228,13 @@ async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_tha
 
 async def test_a_close_said_from_a_word_that_retells_reaches_nothing_and_says_nothing() -> None:
   """A close said from a word that retells reaches nothing and says nothing: it stops the word where it stands, so the rung is done with nothing and answers no prompt."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["x = bash('slow')\nk = 1\nclose(7, x)\nclose(21)\nj = 2"]
+  sand.script[root] = ["x = wait(100)\nk = 1\nclose(7, x)\nclose(21)\nj = 2"]
   act = engine.prompt(int, "count", on=root)
   assert await act == 21
   await settle()
-  command = said(log, "bash")[0][1]
+  command = said(log, "wait")[0][1]
   twin = engine.chain("twin", source=root)
   await settle(300)
   copy = next(a[1] for a in said(log, "rung") if a[3] == twin)

@@ -8,22 +8,22 @@ async def test_a_holds_is_the_question_of_what_the_record_kept_of_an_act() -> No
   """A holds is the question of what the record kept of an act."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  await engine.bash("echo hi", on=root)
+  await engine.wait(0, on=root)
   await settle()
-  command = said(log, "bash")[0][1]
-  assert engine.ask("holds", root, command)[1] == []
+  waited = said(log, "wait")[0][1]
+  assert engine.ask("holds", root, waited)[1] == []
   _, over = await relived(Sand(stands=STANDS), list(sand.record))
-  held = engine.ask("holds", over, command)[1]
+  held = engine.ask("holds", over, waited)[1]
   assert isinstance(held, list)
-  assert [one[0] for one in held] == ["bash", "out", "exited"]
-  assert engine.ask("holds", over, "bash9")[1] == []
+  assert [one[0] for one in held] == ["wait", "done"]
+  assert engine.ask("holds", over, "wait9")[1] == []
 
 
 async def test_the_chain_holds_its_holds_in_the_transcript() -> None:
   """The chain holds its holds in the transcript, where the ask stands in a life that asks, so the fold cuts a user turn there in every life."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["x = bash('slow')", "y = 2", "close(3)"]
+  sand.script[root] = ["x = wait(100)", "y = 2", "close(3)"]
   act = engine.prompt(int, "count", on=root)
   assert await act == 3
   await settle()

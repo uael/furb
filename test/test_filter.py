@@ -2,6 +2,7 @@
 
 from conftest import STANDS, Sand, life, lived, named, paragraphs, plain, relived, said, seen, settle, sown
 from furb import engine
+from furb.engine import OPERATOR
 
 
 async def test_a_filter_is_given_the_acts_of_the_transcript_up_to_the_source() -> None:
@@ -15,20 +16,26 @@ async def test_a_filter_is_given_the_acts_of_the_transcript_up_to_the_source() -
   assert isinstance(theirs, list)
   facts = [one[1] for one in theirs if engine.question(one)]
   assert [one[1] for one in held] == facts[: len(held)]
-  made = {said(log, "prompt")[0][1], said(log, "rung")[0][1], said(log, "bash")[0][1]}
+  made = {said(log, "prompt")[0][1], said(log, "rung")[0][1], said(log, "wait")[0][1]}
   assert made <= {one[1] for one in held}
 
 
 async def test_a_filter_says_which_acts_the_turns_of_that_chain_keep_each_with_its_entries() -> None:
   """A filter says which acts the turns of that chain keep, each with its entries."""
-  sand = sown()
-  log, root = await lived(sand)
-  (one, ack), command = [a[1] for a in said(log, "prompt")], said(log, "bash")[0][1]
-  step, answered = [a[1] for a in said(log, "rung") if a[2] in (one, ack)]
-  narrow = engine.chain("narrow", source=root, filter=engine.take(command, inside=False))
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
+  sand.script[root] = ["x = prompt(int, 'how many?', to=OPERATOR)\nclose(1)", "close(None)"]
+  one = engine.prompt(int, "ask them", on=root)
+  assert await one == 1
+  theirs = said(log, "prompt")[1][1]
+  engine.close(5, theirs)
   await settle()
-  assert named(engine.turns(on=root)) == [root, root, one, step, "read", command, command, one, ack, answered, ack]
-  assert named(engine.turns(on=narrow)) == [root, root, one, step, "read", one, ack, answered, ack, narrow]
+  (ack,) = [a[1] for a in said(log, "prompt")][2:]
+  step, answered = [a[1] for a in said(log, "rung") if a[2] in (one, ack)]
+  narrow = engine.chain("narrow", source=root, filter=engine.take(theirs, inside=False))
+  await settle()
+  assert named(engine.turns(on=root)) == [root, root, one, step, theirs, one, theirs, ack, answered, ack]
+  assert named(engine.turns(on=narrow)) == [root, root, one, step, one, ack, answered, ack, narrow]
   kept = [part for part in paragraphs(engine.turns(on=narrow)) if part.startswith(f"#{step} ")]
   assert kept == [f"#{step} advance on {one}"]
 
@@ -38,14 +45,14 @@ async def test_a_filter_is_any_callable_of_that_shape() -> None:
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = [
-    "x = bash('echo one')\nn = (await x).code",
+    "x = prompt(int, 'how many?', to=OPERATOR)\nn = 3",
     "def bare(facts):\n  return [a for a in facts if not under(a[1], x)]\n\nclose(chain('side', source=__name__, filter=bare))",
   ]
   side = await engine.prompt(str, "fork", on=root)
   await settle(200)
-  command = said(log, "bash")[0][1]
+  command = said(log, "prompt")[1][1]
   assert command in named(engine.turns(on=root)) and command not in named(engine.turns(on=side))
-  assert engine.modules[side]["n"] == 0
+  assert engine.modules[side]["n"] == 3
   assert engine.take(command, inside=False)([engine.get(command)]) == []
 
 
@@ -54,12 +61,12 @@ async def test_a_later_life_runs_the_filter_again_and_keeps_the_same_acts() -> N
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = [
-    "x = bash('echo hi')\nn = (await x).code",
+    "x = prompt(int, 'how many?', to=OPERATOR)\nn = 3",
     "close(chain('side', source=__name__, filter=take(x, inside=False)))",
   ]
   side = await engine.prompt(str, "fork", on=root)
   await settle(200)
-  command = said(log, "bash")[0][1]
+  command = said(log, "prompt")[1][1]
   was = [(role, py) for role, py, *_ in engine.turns(on=side)]
   assert command in named(engine.turns(on=root)) and command not in named(engine.turns(on=side))
   _, over = await relived(Sand(stands=STANDS), plain(sand.record))

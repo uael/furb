@@ -2,16 +2,15 @@
 
 from conftest import STANDS, Dead, Sand, life, lived, plain, relived, said, settle, sown
 from furb import engine
-from furb.engine import Text
 
 
 async def test_one_entry_of_the_record_the_fact() -> None:
   """One entry of the record: the fact; for a query of a run, the query and what it was answered beside, since a query is answered at once and its answer travels with it."""
   sand = sown()
   log, _ = await lived(sand)
-  reads = [e for e in sand.record if e[0][0] == "read"]
-  assert [(len(e), e[1]) for e in reads] == [(2, Text("/w/a.txt", "one\ntwo\n"))]
-  assert [len(e) for e in sand.record if e[0][0] not in ("read", "stand")] == [1] * (len(sand.record) - 2)
+  clocks = [e for e in sand.record if e[0][0] == "clock"]
+  assert [(len(e), e[1]) for e in clocks] == [(2, 1001.0)]
+  assert [len(e) for e in sand.record if e[0][0] not in ("clock", "stand")] == [1] * (len(sand.record) - 2)
   assert [e[0] for e in sand.record if len(e) == 1] == [one for one in log if (one,) in sand.record]
 
 
@@ -47,5 +46,5 @@ async def test_the_record_is_a_sequence_of_entries_about_acts() -> None:
   await lived(sand)
   assert all(isinstance(e, tuple) for e in sand.record)
   assert all(e[0][1] in engine.acts or e[0][1] in engine.asked for e in sand.record)
-  kinds = ["chain", "stand", "prompt", "rung", "answer", "read", "bash", "out", "exited", "rung", "answer"]
+  kinds = ["chain", "stand", "prompt", "rung", "answer", "clock", "wait", "done", "rung", "answer"]
   assert [e[0][0] for e in sand.record] == kinds

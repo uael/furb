@@ -8,9 +8,9 @@ from furb import engine
 
 async def test_what_an_act_a_control_is_over_is_done_with() -> None:
   """What an act a control is over is done with: the value a close carries for the act it names, and a CancelledError for every other."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
+  sand.script[root] = ["x = wait(100)\nclose(await x)"]
   act = engine.prompt(int, "go", on=root)
   await settle()
   step = said(log, "rung")[0][1]

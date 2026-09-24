@@ -12,8 +12,9 @@ import json
 import re
 import sys
 from asyncio import CancelledError
-from collections.abc import Coroutine, Generator, Sequence
+from collections.abc import Callable, Coroutine, Generator, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass
+from types import SimpleNamespace
 from functools import partial
 from pathlib import Path
 
@@ -22,7 +23,7 @@ import pytest
 import furb
 import furb_monty.engine
 from furb import engine, sheet
-from furb.engine import OPERATOR, WORLD, Act, Refused, Text, modules, outcomes, site, under
+from furb.engine import OPERATOR, WORLD, Act, Refused, modules, outcomes, site, under
 from furb.kernel import ENGINE
 
 HERE = Path(__file__).resolve().parent
@@ -31,6 +32,10 @@ ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
+BUILTIN = {name: (Path(furb.python.__file__).parent / "builtin" / f"{name}.py").read_text(encoding="utf-8") for name in ("files", "bash", "grant")}
+"""BUILTIN holds the word of each builtin extension by its name, which a host plays as a rung on every chain it opens without a source."""
+FILES, BASH, GRANT = ([BUILTIN["files"]], [BUILTIN["files"], BUILTIN["bash"]], [BUILTIN["grant"]])
+"""The words a World of the suite plays for one builtin extension, each after the words it needs."""
 MONTY_SKIPS: dict[str, str] = {
   "test_an_ear_is_any_generator_of_that_shape": (
     "the test boots on a Kernel of this interpreter, and the engine of monty holds its own"
@@ -56,8 +61,9 @@ type Kernel = Generator[tuple | None, tuple]
 STANDS: list = [[[OPERATOR, [], 200000], ["m", ["low", "high"], 400000], ["n", ["low"], 200000]], "/w", "m/low"]
 """A standing of three actors, a directory and a default actor, which a test takes when it needs a roster."""
 
-WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nclose((await x).code)"
-"""A word of a rung that reads a file, starts a command and gives back what the command came to."""
+WORD = "t = clock()\nx = wait(0)\nk = len(str(t))\nawait x\nclose(k)"
+"""A word of a rung that reads the clock, starts a wait, waits for it and gives back how long the reading is as python
+shows it, which no entry of the record holds."""
 
 BAD = "line 1: error[unresolved-reference] Name `BAD` used when not defined"
 """BAD is what the gate finds against a word whose first line names BAD, which nothing binds."""
@@ -70,7 +76,7 @@ DOOR = (
   "  while True:\n"
   "    match (yield):\n"
   "      case ('read', qid, _, _, path) if path.startswith('note://'):\n"
-  "        yield 'done', qid, Text(path, 'kept')\n"
+  "        yield 'done', qid, 'kept'\n"
   "\n"
   "act('note', '', note)\n"
   "close(1)\n"
@@ -83,8 +89,6 @@ def wire(x: object) -> object:
   match x:
     case BaseException():
       return {"is": type(x).__name__, "args": wire(x.args)}
-    case Text():
-      return {"is": "Text", "path": x.path, "content": x.content}
     case dict():
       return {k: wire(v) for k, v in x.items()}
     case list() | tuple():
@@ -109,7 +113,7 @@ def unwire(x: object) -> object:
 
 
 def plain(record: Sequence[object]) -> list:
-  """A record as a later life is given it: through the wire and back, so every tuple is a list and every text a Text."""
+  """A record as a later life is given it: through the wire and back, so every tuple is a list."""
   got = unwire(json.loads(json.dumps(wire(list(record)))))
   assert isinstance(got, list)
   return [(tuple(e[0]), *e[1:]) for e in got]
@@ -123,7 +127,9 @@ class Sand:
   ask, `record` what it keeps of the keep facts of the journal, `fed` what was fed to its commands, and `calls`
   every fact it answered or performed, in order. `stands` is what a chain stands on, `cost` the usage of one
   answer, and `auto` says whether a command tells a line and exits at once. `tick` counts the readings of its
-  clock and the chances it drew, so a later life reads what the life before it read.
+  clock and the chances it drew, so a later life reads what the life before it read. `words` are the words of the
+  extensions it plays as rungs on every chain without a source, and `booted` says that the life stands on its
+  record, from which point it plays them on each such chain at its birth.
   """
 
   files: dict[str, str] = field(default_factory=dict)
@@ -135,10 +141,13 @@ class Sand:
   stands: list | None = None
   cost: tuple | None = None
   tick: int = 0
+  words: list[str] = field(default_factory=list)
+  booted: bool = False
 
   def hears(self) -> World:  # noqa: PLR0915
     """The World as one generator for one life: it does the act a start names, answers the questions that are its
-    own, feeds and ends its commands, answers an ask with the next word of its script, and keeps what it is told.
+    own, feeds and ends its commands, answers an ask with the next word of its script, plays its words on each chain
+    born without a source, and keeps what it is told.
     """
     running: dict[str, str] = {}
     acts: dict[str, tuple] = {}
@@ -149,17 +158,20 @@ class Sand:
       if about in running:
         engine.send("exited", about, None, by=WORLD)
 
-    def resolved(here: str, path: str) -> str:
-      """A path against a working directory: a path of its own stands as it is, and any other hangs off it."""
-      return path if path.startswith("/") or "://" in path else f"{here}/{path}"
+    def resolved(on: str, path: str) -> str:
+      """A path against the working directory of a chain: a path of its own stands as it is, and any other hangs
+      off it."""
+      return path if path.startswith("/") or "://" in path else f"{where(on)}/{path}"
 
     while True:
       a = yield
       if a[0] in ("start", "stand", "read", "write", "ask", "feed", "clock", "chance"):
         self.calls.append(a)
+      if engine.question(a) and a[1] in engine.acts:
+        acts[a[1]] = a
       match a:
-        case (_, id, *_) if engine.question(a) and id in engine.acts:
-          acts[id] = a
+        case ("chain", id, _, _, _, "") if self.booted:
+          plays(self.words, id)
         case ("start", about, _):
           match acts[about]:
             case ("bash", _, _, on, command, _, timeout):
@@ -171,17 +183,18 @@ class Sand:
                 loop.call_soon(partial(engine.send, "exited", about, 0, by=WORLD))
             case ("wait", _, _, _, seconds):
               loop.call_later(seconds, partial(engine.send, "done", about, None, by=WORLD))
-            case ("prompt", _, _, _, shape, _, _) if shape not in ("None", "bool", "int", "float", "str"):
-              engine.close(Refused(f"the operator answers no {shape}"), about)
+            case ("prompt", _, _, _, shape, _, _):
+              if shape not in ("None", "bool", "int", "float", "str"):
+                engine.close(Refused(f"the operator answers no {shape}"), about)
+            case (kind, *_):
+              engine.close(Refused(f"the World does no {kind}"), about)
         case ("stand", qid, *_):
           yield "done", qid, self.stands or [[], "", ""]
-        case ("read", qid, _, on, path) if (full := resolved(engine.cwd(on=on), path)) in self.files:
-          yield "done", qid, Text(full, self.files[full])
-        case ("write", qid, _, on, Text(path=path, content=content)) if (
-          "://" not in path and path.split("/")[0] not in engine.acts
-        ):
-          self.files[full := resolved(engine.cwd(on=on), path)] = content
-          yield "done", qid, Text(full, content)
+        case ("read", qid, _, on, path) if (full := resolved(on, path)) in self.files:
+          yield "done", qid, {"path": full, "content": self.files[full]}
+        case ("write", qid, _, on, path, content) if "://" not in path and path.split("/")[0] not in engine.acts:
+          self.files[full := resolved(on, path)] = content
+          yield "done", qid, {"path": full, "content": content}
         case ("ask", rung, _, on, _, _):
           running[rung] = on
           if self.script.get(on):
@@ -240,17 +253,82 @@ class Where(Sand):
     while True:
       a = yield
       match a:
+        case ("chain", id, _, _, _, "") if self.booted:
+          plays(self.words, id)
         case ("stand", qid, *_):
           yield "done", qid, self.stands or [[], "", ""]
         case ("read", qid, _, on, path):
-          full = f"{engine.cwd(on=on)}/{path}"
-          yield "done", qid, Text(full, self.files.get(full, ""))
-        case ("write", qid, _, on, Text(path=path, content=content)):
-          self.files[full := f"{engine.cwd(on=on)}/{path}"] = content
-          yield "done", qid, Text(full, content)
+          full = f"{where(on)}/{path}"
+          yield "done", qid, {"path": full, "content": self.files.get(full, "")}
+        case ("write", qid, _, on, path, content):
+          self.files[full := f"{where(on)}/{path}"] = content
+          yield "done", qid, {"path": full, "content": content}
         case ("start", about, _):
-          self.where.append(engine.cwd(on=about and engine.scope(about)))
+          self.where.append(where(engine.scope(about)))
           yield "exited", about, 0
+
+
+def where(on: str) -> str:
+  """The working directory a World resolves the paths of a chain against: what cwd gives on the chain, and the
+  directory the chain stands on when its module binds no cwd."""
+  if not on:
+    return ""
+  if "cwd" in engine.modules[on]:
+    return str(verb("cwd", on)())
+  _, standing = engine.ask("stand", on)
+  assert isinstance(standing, list)
+  return str(standing[1])
+
+
+def verb(name: str, on: str) -> Callable[..., object]:
+  """A verb the module of a chain binds, said by its name on that chain as the operator or a World says it: what an
+  extension played on the chain bound there, and the act it gives as the act it names."""
+
+  def said(*args: object, **kwargs: object) -> object:
+    words = {"on": on, **kwargs}
+    if engine is furb.python:
+      held = engine.modules[on][name]
+      assert callable(held)
+      got = held(*args, **words)
+    else:
+      got = furb_monty.engine.call(name, args, words)
+    return Act(got) if type(got) is str and got in engine.acts else got
+
+  return said
+
+
+class Bound:
+  """What the module of a chain binds, by name, as the operator reads it where it stands: a class and a value as
+  they are, and a function said as the operator says it, the act it gives as the act it names. A callable that goes
+  back into the life goes as itself, so a show keeps the identity a verb compares it by."""
+
+  def __init__(self, on: str) -> None:
+    self.on = on
+
+  def __getattr__(self, name: str) -> object:
+    held = engine.modules[self.on][name]
+    if isinstance(held, type) or not callable(held):
+      return held
+
+    def said(*args: object, **kwargs: object) -> object:
+      got = held(*args, **kwargs)
+      return Act(got) if type(got) is str and got in engine.acts else got
+
+    if (handle := getattr(held, "__monty__", None)) is not None:
+      vars(said)["__monty__"] = handle
+    elif engine is furb.python:
+      return held
+    return said
+
+
+def plays(words: Sequence[str], chain: str) -> None:
+  """Each word the program of a chain does not hold yet, played on it as a rung, in order, by whoever speaks: the World
+  at the birth of the chain, and the World again once the life stands on its record."""
+  _, program = engine.ask("program", chain)
+  assert isinstance(program, dict)
+  for word in words:
+    if word not in program.values():
+      engine.rung(word, on=chain)
 
 
 def seen(held: list[tuple]):  # noqa: ANN201
@@ -393,9 +471,21 @@ def kernel() -> dict[str, Kernel]:
 def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   """A life: the engine opened from a record, with the Kernel it takes, a World in memory and a generator that keeps
   every fact said in it; it gives what was said and the id of the root.
+
+  Once the life stands on its record, the World plays its words on every chain without a source whose program does
+  not hold them, as a host does, and plays them from then on on each such chain at its birth.
   """
   log: list[tuple] = []
-  return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears())
+  root = engine.boot(record, **kernel(), probe=watched(log), world=world.hears())
+  if world.words:
+    token = site.set(WORLD)
+    try:
+      for one in [a[1] for a in engine.acts.values() if a[0] == "chain" and not a[5]]:
+        plays(world.words, one)
+    finally:
+      site.reset(token)
+  world.booted = True
+  return log, root
 
 
 def outside(label: str = "outside") -> str:
@@ -419,10 +509,10 @@ def sown() -> Sand:
 
 
 async def lived(sand: Sand) -> tuple[list[tuple], str]:
-  """A life that reads a file, runs a command and returns what it came to."""
+  """A life that reads the clock, waits and returns how long the reading is as python shows it."""
   log, root = life(sand)
   sand.script[root] = [WORD, "close(None)"]
-  assert await engine.prompt(int, "read and run", on=root) == 0
+  assert await engine.prompt(int, "read and wait", on=root) == 6
   await settle()
   return log, root
 
