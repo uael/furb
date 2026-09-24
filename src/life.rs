@@ -349,7 +349,7 @@ impl Opening {
 
   /// The words of the extensions, which the module of the engine runs after the engine, so every chain binds their
   /// names from its birth, and the gate reads a word after them. A record that pins words gives its own instead, and
-  /// a life whose record pins none pins these, as the World, about the root.
+  /// a life whose record pins none pins these, when there are some, as the World, about the root.
   #[must_use]
   pub fn words(mut self, words: impl IntoIterator<Item = impl Into<String>>) -> Self {
     self.words.extend(words.into_iter().map(Into::into));
@@ -409,7 +409,7 @@ impl Opening {
     let got = got.as_ref();
     let root = entry(&got, 0).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
     let raised = entry(&got, 1).and_then(Fault::of);
-    if raised.is_none() && pin.is_none() {
+    if raised.is_none() && pin.is_none() && !words.is_empty() {
       inner.run(
         "pinning(__engine, __root, __words)",
         vec![("__words", Object::list(words.iter().map(Object::string)))],

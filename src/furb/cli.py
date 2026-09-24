@@ -4,9 +4,10 @@ One command is one life. The life is opened on a loop of its own, from the recor
 waits on that loop for what it asked. A prompt the record already holds is taken up again and never asked twice,
 so a command said again on a kept record reads the answer of the life before it and asks no model for it.
 
-The life plays the extensions the configs name, as the crate reads them: the builtins and what the config of the
-user and the config of the project add. The command line plays the python part of each and holds the part for a
-World of each builtin; it loads no part for a World of another extension.
+The life takes the extensions the configs name, as the crate reads them: the builtins and what the config of the
+user and the config of the project add. The module of the engine runs the word of each after the engine, or the
+words the record pins, the life plays their life words, and the command line holds the part for a World of each
+builtin; it loads no part for a World of another extension.
 """
 
 import argparse
@@ -17,8 +18,8 @@ from pathlib import Path
 
 import furb_monty
 from furb import engine
-from furb.engine import Act, Refused
-from furb.kernel import Native, gating
+from furb.engine import WORLD, Act, Refused
+from furb.kernel import Native, extended, gating
 from furb.provider.claude import ACTOR, cool
 from furb.world import Live, kept
 
@@ -42,10 +43,15 @@ def lived(record: Path | None, cwd: Path, actor: str, *, keeps: bool) -> tuple[L
   """
   held = kept(record) if record is not None and record.is_file() else []
   loaded = furb_monty.extensions(str(cwd.absolute()))
-  words, lives = [one.word for one in loaded if one.word], [one.life for one in loaded if one.life]
+  pinned = furb_monty.pinned_words(held)
+  words = [one.word for one in loaded if one.word] if pinned is None else pinned
+  lives = [one.life for one in loaded if one.life]
   parts = tuple(one.name for one in loaded)
   world = Live(str(cwd.absolute()), record if keeps else None, actor, words=words, lives=lives, parts=parts)
-  root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating())
+  source = extended(words)
+  root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating(source))
+  if pinned is None and words:
+    engine.send("extensions", root, words, by=WORLD)
   world.play()
   return world, root, held
 

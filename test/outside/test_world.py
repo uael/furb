@@ -18,7 +18,6 @@ import time
 import warnings
 from asyncio.subprocess import Process
 from collections.abc import Generator, Sequence
-from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
 
@@ -28,35 +27,16 @@ from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from furb import engine
-from furb.engine import OPERATOR, Refused
+from furb.engine import OPERATOR, TIMEOUT, Exit, Refused, Text
 from furb.kernel import Native
 from furb.provider.claude import ACTOR, FAMILY, Claude, canon, limits
 from furb.world import CAP, SYSTEM, Command, Live, kept, truth, unwire, wire, worded
-from outside.doubles import (
-  BUILTIN,
-  bash,
-  broken,
-  exited,
-  heads,
-  life,
-  mute,
-  read,
-  scripted,
-  settle,
-  speaking,
-  verb,
-  watched,
-  write,
-)
-
-TIMEOUT = 600.0
-"""TIMEOUT is the timeout of a command that says none, which the bash extension names."""
+from outside.doubles import broken, heads, life, mute, scripted, settle, speaking, watched
 
 
 def world(yard: Path, model: Model[object] | None = None, record: Path | None = None) -> Live:
-  """The World of this machine, in the directory of the test, with the model it is asked to buy from, which plays
-  the words of the builtins."""
-  return Live(str(yard), record=record, model=model, words=BUILTIN)
+  """The World of this machine, in the directory of the test, with the model it is asked to buy from."""
+  return Live(str(yard), record=record, model=model)
 
 
 def commanded(proc: Process | None = None) -> Command:
@@ -106,10 +86,12 @@ async def test_a_text_is_read_and_written_on_the_disk_it_names(yard: Path) -> No
   """A read gives the text at a path against the directory the chain stands in, and a write gives it back as it lies."""
   live = world(yard)
   root = life(live)
-  assert read(root, "a.txt") == (str(yard / "a.txt"), "one\ntwo\nthree\n")
-  assert write(root, "b/c.txt", "kept") == (str(yard / "b" / "c.txt"), "kept")
+  got = engine.read("a.txt", on=root)
+  assert got.content == "one\ntwo\nthree\n"
+  assert got.path == str(yard / "a.txt")
+  assert engine.write(Text("b/c.txt", "kept"), on=root) == Text(str(yard / "b" / "c.txt"), "kept")
   assert (yard / "b" / "c.txt").read_text(encoding="utf-8") == "kept"
-  assert read(root, str(yard / "a.txt"))[1] == "one\ntwo\nthree\n"
+  assert engine.read(str(yard / "a.txt"), on=root).content == "one\ntwo\nthree\n"
 
 
 async def test_a_reading_refuses_what_no_text_could_be(yard: Path) -> None:
@@ -118,15 +100,15 @@ async def test_a_reading_refuses_what_no_text_could_be(yard: Path) -> None:
   live = world(yard)
   root = life(live)
   with pytest.raises(Refused, match="no file at"):
-    read(root, "nowhere.txt")
-  assert verb("read", root)("mem://x") is None
-  assert write(root, "mem://x", "no") == (None, None)
+    engine.read("nowhere.txt", on=root)
+  assert engine.read("mem://x", on=root) is None
+  assert engine.write(Text("mem://x", "no"), on=root) is None
   (yard / "big.txt").write_bytes(b"x" * (CAP + 1))
   with pytest.raises(Refused, match=f"over the {CAP} the World reads"):
-    read(root, "big.txt")
+    engine.read("big.txt", on=root)
   (yard / "raw.txt").write_bytes(b"\xff\xfe\x00")
   with pytest.raises(Refused, match="is no text"):
-    read(root, "raw.txt")
+    engine.read("raw.txt", on=root)
 
 
 async def test_a_relative_directory_stands_against_the_directory_of_the_life(yard: Path) -> None:
@@ -135,8 +117,8 @@ async def test_a_relative_directory_stands_against_the_directory_of_the_life(yar
   (yard / "sub").mkdir()
   live = world(yard)
   root = life(live)
-  assert verb("cd", root)("sub") == "sub"
-  assert write(root, "b.txt", "kept") == (str(yard / "sub" / "b.txt"), "kept")
+  assert engine.cd("sub", on=root) == "sub"
+  assert engine.write(Text("b.txt", "kept"), on=root) == Text(str(yard / "sub" / "b.txt"), "kept")
   assert (yard / "sub" / "b.txt").read_text(encoding="utf-8") == "kept"
   assert live.at("sub", "b.txt") == yard / "sub" / "b.txt"
   assert live.at("/elsewhere", "b.txt") == Path("/elsewhere/b.txt")
@@ -146,9 +128,12 @@ async def test_a_command_runs_in_the_directory_it_names_and_ends_at_its_timeout(
   """A command runs where its chain stands, gives its code and its streams, and the World ends it at its timeout."""
   live = world(yard)
   root = life(live)
-  assert exited(await bash(root, "echo hi; pwd -P"))[:2] == (0, f"hi\n{yard}\n")
-  assert exited(await bash(root, "exit 3"))[0] == 3
-  assert exited(await bash(root, "echo said this; sleep 5", timeout=0.3))[:2] == (None, "said this\n")
+  got = await engine.bash("echo hi; pwd -P", on=root)
+  assert got.code == 0
+  assert got.stdout.content == f"hi\n{yard}\n"
+  assert (await engine.bash("exit 3", on=root)).code == 3
+  slow = await engine.bash("echo said this; sleep 5", timeout=0.3, on=root)
+  assert (slow.code, slow.stdout.content) == (None, "said this\n")
   assert [one[0] for one in live.calls] == ["stand", "start", "start", "start"]
 
 
@@ -156,46 +141,48 @@ async def test_a_command_the_machine_will_not_start_is_closed_with_the_refusal(y
   """A command the machine will not start never runs, so the World closes it with why, and whoever waits hears it."""
   live = world(yard)
   root = life(live)
-  verb("cd", root)(str(yard / "nowhere"))
+  engine.cd(str(yard / "nowhere"), on=root)
   with pytest.raises(Refused, match="did not start"):
-    await bash(root, "echo hi")
+    await engine.bash("echo hi", on=root)
 
 
 async def test_stderr_runs_into_stdout_unless_the_command_is_given_a_show_for_it(yard: Path) -> None:
   """Without a show of its own the stderr of a command is its stdout, in the order the command wrote them."""
   live = world(yard)
   root = life(live)
-  assert exited(await bash(root, "echo out; echo err >&2"))[1:] == ("out\nerr\n", "")
-  apart = await bash(root, "echo out; echo err >&2", show_err=engine.modules[root]["HEAD"])
-  assert exited(apart)[1:] == ("out\n", "err\n")
+  merged = await engine.bash("echo out; echo err >&2", on=root)
+  assert (merged.stdout.content, merged.stderr.content) == ("out\nerr\n", "")
+  apart = await engine.bash("echo out; echo err >&2", show_err=engine.HEAD, on=root)
+  assert (apart.stdout.content, apart.stderr.content) == ("out\n", "err\n")
 
 
 async def test_what_a_command_says_enters_the_record_while_it_runs(yard: Path) -> None:
   """Each part of a stream is an out fact of the World as it arrives, so the door of a command answers while it runs."""
   live = world(yard)
   root = life(live)
-  waits = bash(root, "echo one; sleep 0.3; echo two")
+  waits = engine.bash("echo one; sleep 0.3; echo two", on=root)
   for _ in range(2000):
     await asyncio.sleep(0.001)
-    if read(root, f"{waits}/stdout")[1]:
+    if engine.read(f"{waits}/stdout", on=root).content:
       break
-  assert read(root, f"{waits}/stdout")[1] == "one\n"
+  assert engine.read(f"{waits}/stdout", on=root).content == "one\n"
   assert waits not in engine.outcomes
-  assert exited(await waits)[1] == "one\ntwo\n"
-  assert read(root, f"{waits}/stdout")[1] == "one\ntwo\n"
+  got = await waits
+  assert got.stdout.content == "one\ntwo\n"
+  assert engine.read(f"{waits}/stdout", on=root).content == "one\ntwo\n"
 
 
 async def test_a_cancelled_command_dies_instead_of_running_on(yard: Path) -> None:
   """A cancel ends the command, and the World kills the whole group it grew rather than leave it running."""
   live = world(yard)
   root = life(live)
-  waits = bash(root, "sleep 30 & echo up; wait", timeout=60.0)
+  waits = engine.bash("sleep 30 & echo up; wait", timeout=60.0, on=root)
   # The shell grows the child before it says the word, so what the command said is the one word that the machine has
   # the whole group up, which is what the cancel must kill. A word said before the fork proves nothing: a cancel that
   # lands in that window kills the shell alone, and the child it grows after it holds the stdout of the command open.
   for _ in range(2000):
     await asyncio.sleep(0.001)
-    if read(root, f"{waits}/stdout")[1]:
+    if engine.read(f"{waits}/stdout", on=root).content:
       break
   engine.cancel(waits)
   with pytest.raises(asyncio.CancelledError):
@@ -221,7 +208,8 @@ async def test_a_command_ends_at_a_cancel_of_its_prompt_and_runs_on_after_a_clos
   with pytest.raises(asyncio.CancelledError):
     await engine.Act("bash1")
   assert await engine.prompt(int, "go", on=root) == 1
-  assert exited(await engine.Act("bash2"))[:2] == (0, "late\n")
+  got = await engine.Act[Exit]("bash2")
+  assert (got.code, got.stdout.content) == (0, "late\n")
 
 
 async def test_a_command_still_up_when_its_run_is_cancelled_is_reaped(yard: Path) -> None:
@@ -230,10 +218,10 @@ async def test_a_command_still_up_when_its_run_is_cancelled_is_reaped(yard: Path
   collection."""
   live = world(yard)
   root = life(live)
-  waits = bash(root, "sleep 30 & echo up; wait", timeout=60.0)
+  waits = engine.bash("sleep 30 & echo up; wait", timeout=60.0, on=root)
   for _ in range(2000):
     await asyncio.sleep(0.001)
-    if read(root, f"{waits}/stdout")[1]:
+    if engine.read(f"{waits}/stdout", on=root).content:
       break
   up = runs()
   assert len(up) == 1
@@ -260,7 +248,7 @@ async def test_a_later_life_runs_a_command_an_earlier_world_left_not_ended_only_
   await engine.rung("a = bash('sleep 30 & printf once >> count; wait')\nb = bash('sleep 30 & echo up; wait')", on=root)
   for _ in range(2000):
     await asyncio.sleep(0.001)
-    if (yard / "count").is_file() and read(root, "bash2/stdout")[1]:
+    if (yard / "count").is_file() and engine.read("bash2/stdout", on=root).content:
       break
   up = runs()
   for one in up:
@@ -272,7 +260,7 @@ async def test_a_later_life_runs_a_command_an_earlier_world_left_not_ended_only_
     await settle()
     assert [one for one in live.calls if one[0] == "start"] == []
     assert "bash1" not in engine.outcomes and "bash2" not in engine.outcomes
-    assert read(root, "bash2/stdout")[1] == "up\n"
+    assert engine.read("bash2/stdout", on=root).content == "up\n"
     assert (yard / "count").read_text(encoding="utf-8") == "once"
   engine.wake(root)
   for _ in range(2000):
@@ -297,7 +285,7 @@ async def test_a_command_cancelled_before_its_process_stood_dies_as_soon_as_it_s
   root = life(live)
   # The start of a command is said as the command is made, and the World grows the group in a task after it, so a
   # cancel with no turn of the loop between the two always lands first.
-  waits = bash(root, "sleep 30", timeout=60.0)
+  waits = engine.bash("sleep 30", timeout=60.0, on=root)
   engine.cancel(waits)
   with pytest.raises(asyncio.CancelledError):
     await waits
@@ -319,15 +307,16 @@ async def test_a_fed_command_takes_what_was_written_before_its_process_stood(yar
   up, so what was fed waits and goes in the order it was said once the process stands; a write of nothing closes it."""
   live = world(yard)
   root = life(live)
-  waits = bash(root, "cat", fed=True)
-  assert write(root, f"{waits}/stdin", "one\n") == (f"{waits}/stdin", "one\n")
-  assert write(root, f"{waits}/stdin") == (f"{waits}/stdin", "")
-  assert exited(await waits)[:2] == (0, "one\n")
+  waits = engine.bash("cat", fed=True, on=root)
+  assert engine.write(Text(f"{waits}/stdin", "one\n"), on=root) == Text(f"{waits}/stdin", "one\n")
+  assert engine.write(Text(f"{waits}/stdin"), on=root) == Text(f"{waits}/stdin")
+  got = await waits
+  assert (got.code, got.stdout.content) == (0, "one\n")
   with pytest.raises(Refused, match="ended"):
-    write(root, f"{waits}/stdin", "more")
-  deaf = bash(root, "echo hi")
+    engine.write(Text(f"{waits}/stdin", "more"), on=root)
+  deaf = engine.bash("echo hi", on=root)
   with pytest.raises(Refused, match="not fed"):
-    write(root, f"{deaf}/stdin", "x")
+    engine.write(Text(f"{deaf}/stdin", "x"), on=root)
   await deaf
 
 
@@ -413,7 +402,7 @@ async def test_an_ask_carries_the_system_prompt_and_the_turns_in_their_roles(yar
   assert said[0].parts[0].content == SYSTEM
   assert said[1].parts[0].part_kind == "user-prompt"
   assert str(said[1].parts[0].content).endswith(
-    "\n\n#prompt1 count\nprompt1: Act[int] = Act('prompt1')\n\n#rung4 advance on prompt1"
+    "\n\n#prompt1 count\nprompt1: Act[int] = Act('prompt1')\n\n#rung1 advance on prompt1"
   )
 
 
@@ -438,7 +427,7 @@ async def test_every_turn_an_ask_sent_stands_unchanged_at_every_later_ask(yard: 
   seen: list[list[ModelMessage]] = []
   live = world(yard, watched(seen, ["a = 1", "b = 2", "close(3)"]))
   root = life(live)
-  verb("grant", root)(usd=9.0)
+  engine.grant(usd=9.0, on=root)
   assert await engine.prompt(int, "count", on=root) == 3
   await settle()
   assert [len(one) for one in seen] == [2, 4, 6]
@@ -566,15 +555,19 @@ async def test_the_record_is_kept_as_json_and_read_back_as_the_entries_it_holds(
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   said = kept(record)
-  kinds = ["chain", "stand", "rung", "rung", "rung", "prompt", "rung", "answer"]
-  assert [fact[0] for fact, *_ in said] == kinds
-  assert [fact[2] for fact, *_ in said[2:5]] == ["world"] * 3
-  match said[7]:
+  assert [fact[0] for fact, *_ in said] == ["chain", "stand", "prompt", "rung", "answer"]
+  match said[4]:
     case (("answer", _, _, (_, py, _, _)),):
       assert py == "close(1)"
     case _:
-      pytest.fail(str(said[7]))
-  assert [json.loads(line)[0][0] for line in record.read_text(encoding="utf-8").splitlines()] == kinds
+      pytest.fail(str(said[4]))
+  assert [json.loads(line)[0][0] for line in record.read_text(encoding="utf-8").splitlines()] == [
+    "chain",
+    "stand",
+    "prompt",
+    "rung",
+    "answer",
+  ]
 
 
 def test_a_torn_last_line_is_cut_away_and_a_blank_line_stands_for_no_entry(yard: Path) -> None:
@@ -615,7 +608,8 @@ async def test_a_stream_that_ends_in_the_middle_of_a_letter_still_tells_what_it_
   live = world(yard)
   root = life(live)
   # The octal escape is the one printf of every shell reads, where \xc3 is bash's alone.
-  assert exited(await bash(root, r"printf 'a\303'"))[1] == "a�"
+  got = await engine.bash(r"printf 'a\303'", on=root)
+  assert got.stdout.content == "a�"
 
 
 async def test_a_command_takes_no_word_at_a_stdin_that_is_not_open() -> None:
@@ -658,25 +652,22 @@ async def test_a_line_that_is_no_value_of_the_shape_closes_the_prompt_with_a_ref
       await got
 
 
-@dataclass
-class Point:
-  """A shape of the suite, which a word may define as it likes."""
-
-  x: int
-  y: int | None = None
-
-
 def test_the_plain_form_of_a_value_leaves_as_json_and_comes_back_whole() -> None:
-  """An exception, a shape and plain data leave a life as json through wire, and unwire makes each again by the name
-  it is known by, of the engine or of the interpreter; the mark of a shape neither knows comes back as its plain
-  fields, as a record of 0.1.0 holds a Text, which the word of an extension makes its value of."""
-  held = ("done", "bash1", "world", Point(1), Refused("no"), ValueError("x", 1), {"k": (1, None)})
+  """An exception, a text, a shape and plain data leave a life as json through wire, and unwire makes each again by
+  the name it is known by, of the engine or of the interpreter."""
+  exit_ = Exit(0, Text("bash1/stdout", "hi\n"), Text("bash1/stderr"))
+  held = ("done", "bash1", "world", exit_, Refused("no"), ValueError("x", 1), {"k": (1, None)})
   plain = json.loads(json.dumps(wire(held)))
   assert plain == [
     "done",
     "bash1",
     "world",
-    {"is": "Point", "x": 1, "y": None},
+    {
+      "is": "Exit",
+      "code": 0,
+      "stdout": {"is": "Text", "path": "bash1/stdout", "content": "hi\n"},
+      "stderr": {"is": "Text", "path": "bash1/stderr", "content": ""},
+    },
     {"is": "Refused", "args": ["no"]},
     {"is": "ValueError", "args": ["x", 1]},
     {"k": [1, None]},
@@ -684,22 +675,21 @@ def test_the_plain_form_of_a_value_leaves_as_json_and_comes_back_whole() -> None
   back = unwire(plain)
   assert isinstance(back, list)
   assert back[:3] == ["done", "bash1", "world"]
-  assert back[3] == {"is": "Point", "x": 1, "y": None}
+  assert back[3] == Exit(0, Text("bash1/stdout", "hi\n"), Text("bash1/stderr"))
   assert isinstance(back[4], Refused) and back[4].args == ("no",)
   assert isinstance(back[5], ValueError) and back[5].args == ("x", 1)
   assert back[6] == {"k": [1, None]}
-  old = {"is": "Text", "path": "a", "content": "b", "before": None}
-  assert unwire(old) == old
+  assert wire(Text("a", "b", Text("a", "c"))) == {"is": "Text", "path": "a", "content": "b"}
 
 
 def test_a_map_that_holds_the_key_is_leaves_as_its_pairs_and_comes_back_as_the_map_it_is() -> None:
   """A map that holds the key is leaves a life as its pairs, so unwire makes the map again and never makes a value of
   the name the map holds."""
-  held = {"is": "Refused", "args": ["x"], "point": Point(1, 2)}
+  held = {"is": "Refused", "args": ["x"], "text": Text("a", "b")}
   plain = json.loads(json.dumps(wire(held)))
-  point = {"is": "Point", "x": 1, "y": 2}
-  assert plain == {"is": "dict", "args": [[["is", "Refused"], ["args", ["x"]], ["point", point]]]}
-  assert unwire(plain) == {**held, "point": point}
+  text = {"is": "Text", "path": "a", "content": "b"}
+  assert plain == {"is": "dict", "args": [[["is", "Refused"], ["args", ["x"]], ["text", text]]]}
+  assert unwire(plain) == held
 
 
 async def test_the_plain_form_of_a_whole_record_is_a_fixed_point_of_json(yard: Path) -> None:
@@ -721,7 +711,7 @@ def note(kept_: list[tuple]) -> Generator[tuple | None, tuple]:
     match a := (yield):
       case ("read", qid, _, _, path) if path.startswith("note://"):
         kept_.append(a)
-        yield "done", qid, {"path": path, "content": "kept"}
+        yield "done", qid, Text(path, "kept")
       case (_, _, _, *_):
         kept_.append(a)
 
@@ -732,15 +722,14 @@ async def test_the_world_says_nothing_of_a_door_of_no_act_so_an_ear_of_the_outsi
   live = world(yard)
   heard: list[tuple] = []
   root = engine.boot((), kernel=Native().kernel(), world=live.hears(), note=note(heard))
-  live.play()
-  assert read(root, "note://one") == ("note://one", "kept")
+  assert engine.read("note://one", on=root) == Text("note://one", "kept")
   assert [a[4] for a in heard if a[0] == "read"] == ["note://one"]
   over = engine.wait(0.0, on=root)
   await over
   with pytest.raises(Refused, match="nothing that lives"):
-    read(root, f"{over}/stdout")
+    engine.read(f"{over}/stdout", on=root)
   with pytest.raises(Refused, match="nothing that takes a word"):
-    write(root, f"{over}/stdin", "late")
+    engine.write(Text(f"{over}/stdin", "late"), on=root)
 
 
 async def test_the_world_closes_the_start_of_an_act_that_no_part_does_with_a_refusal(yard: Path) -> None:
@@ -755,40 +744,42 @@ async def test_the_world_closes_the_start_of_an_act_that_no_part_does_with_a_ref
   assert [one for one in live.calls if one[0] == "start"] == [("start", job, job)]
 
 
-async def test_the_world_plays_its_words_on_a_chain_born_without_a_source_and_on_no_other(yard: Path) -> None:
-  """Once the life stands on its record, the World plays its words as the World on each chain born without a source,
-  and a chain with a source takes the rungs of its origin instead."""
-  live = world(yard)
+async def test_the_world_plays_its_life_words_on_a_chain_born_without_a_source_and_on_no_other(yard: Path) -> None:
+  """Once the life stands on its record, the World plays its life words as the World on every chain without a
+  source and on each such chain born after, and a chain with a source takes the rungs of its origin instead."""
+  live = Live(str(yard), lives=["seen = 1"])
   root = life(live)
+  live.play()
   two = engine.chain("two")
   twin = engine.chain("twin", source=root)
   await settle()
-  words = {
+  rungs = {
     on: [engine.acts[one] for one in engine.acts if one.startswith("rung") and engine.acts[one][3] == on]
     for on in (root, two, twin)
   }
-  assert [(a[2], a[4]) for a in words[root]] == [("world", one) for one in BUILTIN]
-  assert [(a[2], a[4]) for a in words[two]] == [("world", one) for one in BUILTIN]
-  assert [a[2] for a in words[twin]] == [twin] * 3 and all(a[5] for a in words[twin])
+  assert [(a[2], a[4]) for a in rungs[root]] == [("world", "seen = 1")]
+  assert [(a[2], a[4]) for a in rungs[two]] == [("world", "seen = 1")]
+  assert [a[2] for a in rungs[twin]] == [twin] and all(a[5] for a in rungs[twin])
+
+
+def test_the_system_prompt_of_a_life_is_the_engine_less_the_builtins_it_does_not_take_then_its_words() -> None:
+  """The system prompt of a life is the engine less the definitions of each builtin the life does not take, then the
+  words of its extensions, and the engine alone for a life that takes every builtin and no word."""
+  assert Live("/w").system == SYSTEM
+  bare = Live("/w", parts=("files",), words=["def hello():\n  return 'hi'\n"])
+  assert "def grant(" not in bare.system and "def bash(" not in bare.system and "class Exit" not in bare.system
+  assert "def read(" in bare.system and "def boot(" in bare.system
+  assert bare.system.endswith("\n\ndef hello():\n  return 'hi'\n")
+  assert ast.parse(bare.system)
 
 
 async def test_a_record_of_0_1_0_opens(yard: Path) -> None:
-  """A record of 0.1.0 holds a text as the mark of its class, which the reader keeps as its plain fields: the life
-  opens on it with no drift, and the World plays its words after."""
+  """A record of 0.1.0 answers a read and a write with a text as the mark of its class, which a read and a write give
+  as they are: the life opens on it with no drift."""
   said = kept(Path(__file__).parent / "record-0.1.0.jsonl")
-  assert said[3][1] == {"is": "Text", "path": "/w/a.txt", "content": "one\ntwo\n"}
-  live = world(yard)
-  root = life(live, said)
+  assert said[3][1] == Text("/w/a.txt", "one\ntwo\n")
+  root = life(world(yard), said)
   await settle()
   assert root == "chain1"
-  assert read(root, "a.txt") == (str(yard / "a.txt"), "one\ntwo\nthree\n")
-
-
-async def test_a_path_of_a_chain_that_binds_no_cwd_resolves_in_the_directory_it_stands_on(yard: Path) -> None:
-  """The World resolves a path where cwd says the chain stands, and where the standing of the chain says when the
-  chain binds no cwd, as a chain that plays no files extension."""
-  live = Live(str(yard), words=[])
-  root = life(live)
-  assert "cwd" not in engine.modules[root]
-  _, got = engine.ask("read", root, "a.txt")
-  assert got == {"path": str(yard / "a.txt"), "content": "one\ntwo\nthree\n"}
+  (yard / "a.txt").write_text("one\n", encoding="utf-8")
+  assert engine.read("a.txt", on=root) == Text(str(yard / "a.txt"), "one\n")

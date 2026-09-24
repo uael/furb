@@ -788,8 +788,8 @@ fn appended(text: &str, words: &[String]) -> String {
   out
 }
 
-/// The kind of the fact by which the World says once the words a life runs, which the record keeps, so a later life
-/// on that record runs the same words whatever the configs say then.
+/// The kind of the fact by which the World says once the words a life runs, when it runs some, which the record
+/// keeps, so a later life on that record runs the same words whatever the configs say then.
 pub const PINNED: &str = "extensions";
 
 /// The words a record pins: the words of the first fact of the kind [`PINNED`] that the World said, and none when

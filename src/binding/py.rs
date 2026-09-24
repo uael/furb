@@ -472,6 +472,17 @@ fn engine_source(words: Vec<String>) -> String {
   extension::source(&words)
 }
 
+/// The words a record pins, which a later life on the record runs whatever the configs say then, and nothing when
+/// the record pins none. The record is plain data, as a World keeps it.
+#[pyfunction]
+fn pinned_words(py: Python<'_>, record: Bound<'_, PyAny>) -> PyResult<Option<Vec<String>>> {
+  let made = Made::new(py)?;
+  let held = of_python(&made, &py.None(), &record)?;
+  let held: Vec<Object> =
+    held.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
+  Ok(extension::pinned(&held))
+}
+
 /// What the engine raised, raised here as the exception it is.
 fn raised(py: Python<'_>, made: &Made, fault: &Fault) -> PyErr {
   match fault_to_python(py, made, fault) {
@@ -769,6 +780,7 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(word_of, module)?)?;
   module.add_function(wrap_pyfunction!(system_prompt, module)?)?;
   module.add_function(wrap_pyfunction!(engine_source, module)?)?;
+  module.add_function(wrap_pyfunction!(pinned_words, module)?)?;
   module.add_function(wrap_pyfunction!(extensions, module)?)?;
   module.add_function(wrap_pyfunction!(places, module)?)?;
   Ok(())

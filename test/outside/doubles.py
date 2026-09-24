@@ -13,7 +13,7 @@ import asyncio
 import os
 import re
 import sys
-from collections.abc import Callable, Generator, Iterator, Sequence
+from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager
 from decimal import Decimal
 from functools import partial
@@ -22,17 +22,13 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, Text
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import RequestUsage
 
-import furb_monty
 from furb import engine
-from furb.engine import WORLD, Act, Refused
+from furb.engine import WORLD, Refused
 from furb.kernel import Native, gating
 from furb.world import Live
 
 type Words = Generator[tuple | None, tuple]
 """The World, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
-
-BUILTIN = [one.word for one in furb_monty.builtin_extensions() if one.word]
-"""BUILTIN are the words of the builtin extensions, which a World of the suite plays as the command line does."""
 
 
 def scripted(words: Sequence[str], usd: float = 0.0) -> FunctionModel:
@@ -140,49 +136,9 @@ def stood(said: Words, *, gated: bool = True) -> str:
 
 def life(world: Live, record: Sequence[tuple] = (), *, gated: bool = False) -> str:
   """A life on the World under test, with the Kernel of this interpreter and its gate when it is gated, and the id
-  of its root, on which the World plays its words once the life stands on its record, as the command line does. A
-  World under test is no gate, and reading every word with ty would spend a second of the suite on each of them, so
-  it is driven by the words a model would write."""
-  root = engine.boot(record, kernel=Native().kernel(), world=world.hears(), **({"gate": gating()} if gated else {}))
-  world.play()
-  return root
-
-
-def verb(name: str, on: str) -> Callable[..., object]:
-  """A verb that the module of a chain binds, said by the operator on that chain: what an extension played there
-  bound."""
-  held = engine.modules[on][name]
-  assert callable(held)
-  return partial(held, on=on)
-
-
-def texted(got: object) -> tuple[object, object]:
-  """The path and the content of a text a verb gave."""
-  return getattr(got, "path", None), getattr(got, "content", None)
-
-
-def read(on: str, path: str) -> tuple[object, object]:
-  """A read of the operator on a chain, as the path and the content of the text it gave."""
-  return texted(verb("read", on)(path))
-
-
-def write(on: str, path: str, content: str = "") -> tuple[object, object]:
-  """A write of the operator on a chain, as the path and the content of the text it gave."""
-  made = engine.modules[on]["Text"]
-  assert callable(made)
-  return texted(verb("write", on)(made(path, content)))
-
-
-def bash(on: str, command: str, **words: object) -> Act:
-  """A command of the operator on a chain, as the act it is."""
-  got = verb("bash", on)(command, **words)
-  assert isinstance(got, str)
-  return Act(got)
-
-
-def exited(got: object) -> tuple[object, object, object]:
-  """The code of what a command came to, and the content of its stdout and of its stderr."""
-  return getattr(got, "code", None), texted(getattr(got, "stdout", None))[1], texted(getattr(got, "stderr", None))[1]
+  of its root. A World under test is no gate, and reading every word with ty would spend a second of the suite on
+  each of them, so it is driven by the words a model would write."""
+  return engine.boot(record, kernel=Native().kernel(), world=world.hears(), **({"gate": gating()} if gated else {}))
 
 
 async def settle(n: int = 2000) -> None:

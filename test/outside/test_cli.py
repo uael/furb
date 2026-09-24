@@ -129,7 +129,7 @@ async def test_the_turns_of_a_record_run_every_word_again_and_keep_nothing(
   await turned(record, elsewhere)
   assert record.read_bytes() == before
   said = capsys.readouterr().out
-  assert "#rung5 closed 4" in said
+  assert "#rung2 closed 4" in said
 
 
 def test_the_console_script_runs_one_command_of_the_operator(
@@ -170,19 +170,21 @@ def test_the_console_script_prompts_the_actor_it_is_given(
 
 
 async def test_a_config_of_the_user_turns_a_builtin_off(yard: Path) -> None:
-  """The command line plays the extensions the configs name: a builtin the config of the user turns off is played on
-  no chain, and the others are."""
+  """A builtin that the config of the user turns off leaves the system prompt of the life, and the engine that runs
+  keeps it whole."""
   config = Path(os.environ["FURB_CONFIG_DIR"])
   config.mkdir(parents=True)
   (config / "config.json").write_text('{"extensions": {"grant": false}}', encoding="utf-8")
   world, root, _ = lived(None, yard, "opus/low", keeps=False)
   assert world.parts == ("files", "bash")
-  assert "grant" not in engine.modules[root] and "read" in engine.modules[root] and "bash" in engine.modules[root]
+  assert "def grant(" not in world.system and "def bash(" in world.system
+  assert "grant" in engine.modules[root]
 
 
-async def test_the_command_line_plays_an_extension_of_the_project_with_its_life_word(yard: Path) -> None:
-  """An extension the config of the project names by its path is played on the root, its word once and its life word
-  in every life, after the words of the builtins."""
+async def test_the_command_line_runs_the_word_of_an_extension_and_plays_its_life_word(yard: Path) -> None:
+  """The module of the engine runs the word of an extension that the config of the project names by its path, which
+  every chain binds from its birth, the system prompt reads it after the engine, and the life plays its life word in
+  every life."""
   root_of = yard / "ext"
   root_of.mkdir()
   manifest = {"name": "seen", "furb": {"name": "seen", "python": "seen.py", "life": "seen = seen + 1"}}
@@ -193,10 +195,32 @@ async def test_the_command_line_plays_an_extension_of_the_project_with_its_life_
   record = held(yard)
   world, root, _ = lived(record, yard, "opus/low", keeps=True)
   assert world.parts == ("files", "bash", "grant", "seen")
+  assert world.words == ["seen = 0\n"] and world.system.endswith("\n\nseen = 0\n")
   assert engine.modules[root]["seen"] == 1
+  assert engine.modules[engine.chain("two")]["seen"] == 1
   await settle()
   lived(record, yard, "opus/low", keeps=True)
   assert engine.modules[root]["seen"] == 2
+
+
+async def test_a_command_said_again_on_a_record_runs_the_words_the_record_pins(yard: Path) -> None:
+  """A life pins the words it runs in its record, and a life on that record runs those words whatever the configs
+  say then."""
+  root_of = yard / "ext"
+  root_of.mkdir()
+  (root_of / "package.json").write_text(json.dumps({"furb": {"name": "mine", "python": "mine.py"}}), encoding="utf-8")
+  (root_of / "mine.py").write_text("mine = 'first'\n", encoding="utf-8")
+  (yard / ".furb").mkdir()
+  (yard / ".furb" / "config.json").write_text('{"extensions": {"mine": "../ext"}}', encoding="utf-8")
+  record = held(yard)
+  world, root, _ = lived(record, yard, "opus/low", keeps=True)
+  await settle()
+  assert [entry[0][3] for entry in kept(record) if entry[0][0] == "extensions"] == [["mine = 'first'\n"]]
+  (root_of / "mine.py").write_text("mine = 'second'\n", encoding="utf-8")
+  world, root, _ = lived(record, yard, "opus/low", keeps=True)
+  assert world.words == ["mine = 'first'\n"] and engine.modules[root]["mine"] == "first"
+  await settle()
+  assert len([entry for entry in kept(record) if entry[0][0] == "extensions"]) == 1
 
 
 def test_a_config_that_fails_ends_the_command_with_what_failed(yard: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -215,14 +239,3 @@ def test_update_fetches_the_extensions_again_and_prints_their_names(
   monkeypatch.setattr("sys.argv", ["furb", "update", "--cwd", str(yard)])
   assert main() is None
   assert capsys.readouterr().out.split() == ["files", "bash", "grant"]
-
-
-async def test_the_command_line_plays_the_skills_extension_and_finds_no_skill_with_no_part_for_a_world(
-  yard: Path,
-) -> None:
-  """The python host plays the word of the skills extension that a config names by its path, and holds no part of it
-  for a World, so no one answers a skills question and a chain finds no skill."""
-  (yard / ".furb").mkdir()
-  skills = Path(__file__).parents[2] / "extensions" / "skills"
-  (yard / ".furb" / "config.json").write_text(json.dumps({"extensions": {"skills": str(skills)}}), encoding="utf-8")
-  assert await running(None, yard, "close([callable(skills), callable(skill), skills()])") == [True, True, []]

@@ -664,11 +664,12 @@ fn a_life_pins_its_words_and_a_later_life_runs_the_words_its_record_pins() {
 }
 
 #[test]
-fn a_life_opened_with_no_life_word_plays_nothing() {
+fn a_life_opened_with_no_word_and_no_life_word_plays_nothing_and_pins_nothing() {
   let mut lived = Lived::new("nothing", &[], vec![]).unwrap();
   let root = lived.root();
   assert_eq!(lived.program(&root), Vec::<String>::new());
   assert_eq!(lived.rungs(&root), vec![]);
+  assert_eq!(crate::extension::pinned(&lived.kept.borrow()), None);
 }
 
 #[test]

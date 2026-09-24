@@ -110,3 +110,7 @@ def system_prompt(engine: str, taken: list[str], words: list[str]) -> str:
 
 def engine_source(words: list[str]) -> str:
   """The source of the engine that a life runs and that the gate reads a word on: the engine, then the words."""
+
+def pinned_words(record: object) -> list[str] | None:
+  """The words a record pins, which a later life on the record runs whatever the configs say then, and nothing when
+  the record pins none."""

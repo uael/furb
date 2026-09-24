@@ -46,19 +46,26 @@ Delete this file when the work is done. Commit and push at each milestone. Run e
 
 ## Done
 
-- Step 1, part: `engine.py`, `engine.pyi` and every test outside `test/outside` equal main (`git diff origin/main --
-  src/furb/engine.py src/furb/engine.pyi test/ ':!test/outside'` is empty). `src/furb/builtin/`, the builtin suites
-  and the ladder are gone. Decision: no region comment in `engine.py` (src/furb/CLAUDE.md: engine.py holds no
-  comment); the crate holds the table `BUILTINS` of the top-level names each builtin defines, and
-  `extension::system(minified, taken, words)` cuts the statements that bind only names of a builtin that is off.
-- Step 2, part: `extension::source(words)` is the engine then the words; the monty life runs it as the engine module
-  and its gate reads it (`gate::checked(sheet, engine)`); the preamble plays life words only (`LIVES`); napi gives
-  `systemPrompt(engine, taken, words)`, pyo3 gives `system_prompt` and `engine_source`, and `gate(sheet, engine=None)`.
-  `cargo test --lib extension`: the extension tests pass; two life tests wait for the Yard to answer a read with
-  `{"is": "Text", "path", "content"}` (the mark the preamble makes an engine Text from, as main's hosts did).
+- Owner, later: Text crosses no more. A write asks `("write", on, path, content)`, and the World answers a read and a
+  write with `{"path", "content"}`; `landed` (engine.py, a definition of files) makes the Text. engine.pyi changed:
+  `Write` and one sentence for `landed` (test/test_landed.py). The core suite is main's with the tests of what
+  crosses updated.
+- Step 1 done: engine, contract and suite are main's with that change; no region comment in engine.py (it holds no
+  comment); the crate table `BUILTINS` names the top-level names of each builtin; `extension::system(minified,
+  taken, words)` cuts them.
+- Step 2 done: `extension::source(words)`; the monty life runs it and its gate reads it; `extension::pinned(record)`
+  and the fact `("extensions", root, words)` by the World, said once by a life that has words and whose record pins
+  none; `Life::words()`; napi `systemPrompt`, `Life.words`; pyo3 `system_prompt`, `engine_source`, `pinned_words`,
+  `Life(..., words, lives)`, `gate(sheet, engine=None)`. cargo test: 96.
+- Step 3 done: python host: `kernel.extended(words)` runs the words in `furb.engine` and gives the source; `gating(source)`;
+  `Live.system`; the parts resolve with `engine.cwd`; `wire`/`unwire` are main's; the command line pins. test/outside
+  is main's plus the extension tests (conftest `pristine` restores the engine module after each test). `uv run pytest`:
+  1545 passed, coverage 100%, the skills suite waits for step 6.
 
 ## Next
 
-- Life tests (src/life.test.rs): Yard answers read and write with the Text mark; the bash part answers as main's
-  engine asks (merged, out, exited, feed); drop the tests of played words, keep the life words tests; a test that a
-  word of an extension is bound on every chain from birth and that the gate reads it.
+- Step 4: TypeScript host and TUI (bind/typescript, tui): builtin parts answer the plain shape (they do); the World's
+  system prompt from `systemPrompt(system.json, taken, life.words)`; `World.load`/`boot` pass the words to
+  `Life.boot`; no fold of played words in the TUI; tests.
+- Step 6: skills imports from `furb.engine`, reads `asked`/`outcomes` for what it told before; its suite on the
+  harness (a Sand with words run in the engine module, restored after).

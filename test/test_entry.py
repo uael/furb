@@ -2,7 +2,6 @@
 
 from conftest import STANDS, Dead, Sand, life, lived, plain, relived, said, settle, sown
 from furb import engine
-from furb.engine import Text
 
 
 async def test_one_entry_of_the_record_the_fact() -> None:

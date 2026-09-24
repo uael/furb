@@ -6,9 +6,11 @@ an ask are tasks of that loop, and what they come to reaches the life through se
 
 The World does what the engine asks of every World itself, and hands every other fact to its parts: the part of
 each extension for a World in python, which hears the facts of that extension and answers them with plain data.
-The parts of the builtins are here, `Files` for the files extension and `Bash` for the bash extension. The World
-plays the words of the extensions as the World on every chain without a source, as every host does: once the life
-stands on its record, and at the birth of each such chain after.
+The parts of the builtins are here, `Files` for the files extension and `Bash` for the bash extension. The system
+prompt of the life is the engine less the definitions of each builtin the life does not take, then the words of its
+extensions, which the module of the engine runs after the engine. The World plays the life words of the extensions
+as the World on every chain without a source, as every host does: once the life stands on its record, and at the
+birth of each such chain after.
 """
 
 import asyncio
@@ -45,8 +47,9 @@ from pydantic_ai.models import Model
 from python_minifier import minify
 
 from furb import engine, python
-from furb.engine import WORLD, Drift, Refused
+from furb.engine import WORLD, Drift, Refused, Text
 from furb.provider.claude import ACTOR, Claude, Settings, actors
+from furb_monty import system_prompt
 
 type World = Generator[tuple | None, tuple]
 """The World, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
@@ -75,7 +78,7 @@ SYSTEM = minify(
   remove_builtin_exception_brackets=False,
   constant_folding=False,
 )
-"""SYSTEM is the system prompt of every model: the engine, minified in layout alone, and nothing else."""
+"""SYSTEM is the engine, minified in layout alone, which the system prompt of a life is made of."""
 
 
 PARTS = TypeAdapter(list[ModelResponsePart])
@@ -84,12 +87,15 @@ PARTS = TypeAdapter(list[ModelResponsePart])
 
 def wire(x: object) -> object:
   """The plain form of a value, which is how a record leaves a life: an exception its name and what it was made
-  with, a shape its name beside its fields, a list and a tuple their entries, a map its entries, or its pairs when it
-  holds the key `is`, so that unwire reads it as the map it is, and plain data is plain.
+  with, a text its path and its content, a shape its name beside its fields, a list and a tuple their entries, a map
+  its entries, or its pairs when it holds the key `is`, so that unwire reads it as the map it is, and plain data is
+  plain.
   """
   match x:
     case BaseException():
       return {"is": type(x).__name__, "args": wire(x.args)}
+    case Text():
+      return {"is": "Text", "path": x.path, "content": x.content}
     case dict():
       plain = {k: wire(v) for k, v in x.items()}
       return {"is": "dict", "args": [[[k, v] for k, v in plain.items()]]} if "is" in plain else plain
@@ -102,27 +108,17 @@ def wire(x: object) -> object:
 
 def unwire(x: object) -> object:
   """The value again from the plain form wire gave, made by what its name is known by: a name of the engine, or of
-  the interpreter when the engine holds none. The mark of a class that neither knows stays the plain data it is, its
-  fields beside the name of its class, as a record of 0.1.0 holds a Text, which the word of an extension makes its
-  value of."""
+  the interpreter when the engine holds none."""
   match x:
     case list():
       return [unwire(i) for i in x]
-    case {"is": str(name), **rest} if name in (known := vars(builtins) | vars(engine)):
+    case {"is": str(name), **rest}:
       held = rest.pop("args", [])
       args = [unwire(i) for i in held] if isinstance(held, list) else []
-      return known[name](*args, **{str(k): unwire(v) for k, v in rest.items()})
+      return (vars(builtins) | vars(engine))[name](*args, **{str(k): unwire(v) for k, v in rest.items()})
     case dict():
       return {k: unwire(v) for k, v in x.items()}
   return x
-
-
-def verb(on: str, name: str) -> Callable[..., object]:
-  """A verb that the module of a chain binds, said by the operator on that chain: a verb of the engine, or what an
-  extension played there bound."""
-  held = engine.modules[on][name]
-  assert callable(held)
-  return partial(held, on=on)
 
 
 def worded(got: ModelResponse) -> str:
@@ -228,9 +224,10 @@ class Live:
   `mute` holds, for each chain, the actor whose last ask on that chain answered nothing, so a second such ask in a
   row pauses the chain, and an answer between the two ends the row.
   `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
-  `words` are the words of the extensions it plays once on each chain without a source, `lives` their life words,
-  which it plays on each such chain in every life, `parts` the names of the extensions whose part for a World it
-  holds, and `booted` says that the life stands on its record, from which point it plays them at each birth.
+  `words` are the words of the extensions the module of the engine runs after the engine, which the system prompt
+  reads after the engine, `lives` their life words, which it plays on each chain without a source in every life,
+  `parts` the names of the extensions the life takes, whose part for a World it holds when it has one, and `booted`
+  says that the life stands on its record, from which point it plays the life words at each birth.
   """
 
   directory: str
@@ -245,7 +242,7 @@ class Live:
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
   words: list[str] = field(default_factory=list)
   lives: list[str] = field(default_factory=list)
-  parts: tuple[str, ...] = ("files", "bash")
+  parts: tuple[str, ...] = ("files", "bash", "grant")
   booted: bool = False
   jobs: set[Task[None]] = field(default_factory=set)
 
@@ -255,14 +252,11 @@ class Live:
     self.jobs.add(job)
     job.add_done_callback(self.jobs.discard)
 
-  def where(self, on: str) -> str:
-    """Where the paths of a chain resolve: what cwd gives on the chain, when the chain binds cwd, and the directory
-    the chain stands on otherwise."""
-    if "cwd" in engine.modules[on]:
-      return str(verb(on, "cwd")())
-    _, standing = engine.ask("stand", on)
-    assert isinstance(standing, list)
-    return str(standing[1])
+  @property
+  def system(self) -> str:
+    """The system prompt of every model of the life: the engine less the definitions of each builtin the life does
+    not take, then the words of its extensions, as the crate makes it for every host."""
+    return system_prompt(SYSTEM, list(self.parts), self.words)
 
   def plays(self, chain: str) -> None:
     """The life words of the extensions, played on a chain as rungs by whoever speaks, in order."""
@@ -270,7 +264,7 @@ class Live:
       engine.rung(word, on=chain)
 
   def play(self) -> None:
-    """The extensions, played as the World on every chain without a source once the life stands on its record, and
+    """The life words, played as the World on every chain without a source once the life stands on its record, and
     on each such chain at its birth from then on."""
     token = engine.site.set(WORLD)
     try:
@@ -296,7 +290,7 @@ class Live:
     holds the conversation from one end. A user turn that holds nothing goes not at all.
     """
     who, effort = actor.partition("/")[::2]
-    messages: list[ModelMessage] = [ModelRequest(parts=[SystemPromptPart(content=SYSTEM)])]
+    messages: list[ModelMessage] = [ModelRequest(parts=[SystemPromptPart(content=self.system)])]
     for role, py, _, blocks in turns:
       if role == "assistant":
         held = blocks if isinstance(blocks, list) else []
@@ -491,9 +485,9 @@ class Files:
     """A read and a write of a path it serves, answered."""
     match a:
       case ("read", qid, _, on, str(path)) if self.serves(path):
-        yield "done", qid, self.read(self.live.where(on), path)
+        yield "done", qid, self.read(engine.cwd(on=on), path)
       case ("write", qid, _, on, str(path), str(content)) if self.serves(path):
-        yield "done", qid, self.write(self.live.where(on), path, content)
+        yield "done", qid, self.write(engine.cwd(on=on), path, content)
 
 
 @dataclass
@@ -515,7 +509,7 @@ class Bash:
         _, _, _, on, command, fed, timeout = self.made[about]
         merged = engine.ask("merged", on, about)[1]
         self.running[about] = held = Command(about, command, fed, timeout, bool(merged))
-        self.live.start(self.ran(held, self.live.where(on)))
+        self.live.start(self.ran(held, engine.cwd(on=on)))
       case ("feed", about, _, text) if about in self.running:
         self.running[about].feed(text)
       case ("cancel" | "close", *_):

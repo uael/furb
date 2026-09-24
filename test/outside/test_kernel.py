@@ -11,11 +11,11 @@ import pytest
 
 import furb_monty
 from furb import engine, sheet
-from furb.engine import OPERATOR, Refused
+from furb.engine import OPERATOR, WINDOW, Refused
 from furb.kernel import ENGINE, checked, gate
 from outside.doubles import heads, settle, stood, worlds
 
-STANDS = [[[OPERATOR, [], 200000], ["opus", ["low"], 1000]], "/w", "opus/low"]
+STANDS = [[[OPERATOR, [], WINDOW], ["opus", ["low"], 1000]], "/w", "opus/low"]
 
 
 def said(word: str, program: tuple[str, ...] = ()) -> list[str]:
@@ -31,7 +31,7 @@ def test_the_sheet_binds_every_name_of_the_engine_and_lays_each_word_in_a_try_of
   laid, above = sheet.sheet(ENGINE, ["k = 1", "j = 2"], "close(k)")
   unbound = "".join(f"  {name}: object\n" for name in sheet.UNBOUND)
   assert laid.startswith(f"import {sheet.MODULE}\nasync def __body():\n{unbound}  re = {sheet.MODULE}.re\n")
-  assert f"  clock = {sheet.MODULE}.clock\n" in laid
+  assert f"  read = {sheet.MODULE}.read\n" in laid
   assert f"= {sheet.MODULE}.__" not in laid
   assert laid.endswith(
     '  actor = ""\n  raised: BaseException | None = None\n  try:\n    acting()\n    k = 1\n  except BaseException:\n'
@@ -84,9 +84,9 @@ def test_a_finding_arrives_in_the_numbering_of_the_word_itself() -> None:
 
 def test_the_gate_reads_the_names_of_the_engine_as_a_chain_binds_them() -> None:
   """A name of the engine is a binding of the chain, so a word may read it, subclass it and rebind it."""
-  assert said("got = clock\nx: float = got()") == []
-  assert said("x: str = clock()")[0].startswith("line 1: error[invalid-assignment]")
-  assert said("old = OPERATOR\nOPERATOR = old\nx = len(OPERATOR) + 1") == []
+  assert said("got = span(1, 2)\nx: list[int] = got(['a', 'b'])") == []
+  assert said("x: str = span(1, 2)(['a'])")[0].startswith("line 1: error[invalid-assignment]")
+  assert said("old = HEAD\nHEAD = old\nx = TIMEOUT + 1") == []
   assert said("class Mine(Act): ...\nx: int = 1") == []
   assert said('x = 3\ndebug(t"{x}")') == []
 
@@ -94,26 +94,26 @@ def test_the_gate_reads_the_names_of_the_engine_as_a_chain_binds_them() -> None:
 def test_a_word_binds_a_name_of_the_engine_again_to_any_value() -> None:
   """A name of the engine is a plain binding of the chain, so a word may bind it again to a value of any type, after
   it read the name or before."""
-  assert said("clock = 1\nclose(clock)") == []
-  assert said("x = clock()\nclock = 1\nclose(x)") == []
-  assert said("def mine(on: str = '') -> float:\n  return 1.0\nclock = mine\nclose(clock())") == []
+  assert said("read = 1\nclose(read)") == []
+  assert said("x = read('a')\nread = 1\nclose(x)") == []
+  assert said("def mine(path: str) -> str:\n  return path\nread = mine\nclose(read('a'))") == []
 
 
 async def test_a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last() -> None:
   """The gate finds what the run finds: a rung that bound a name of the engine again leaves that value to the word
   after it, so a word that calls a name the program bound to a number is refused, and it raises when it runs."""
-  assert said("close(clock())", ("clock = 1",))[0].startswith("line 1: error[call-non-callable]")
+  assert said("close(read('a'))", ("read = 1",))[0].startswith("line 1: error[call-non-callable]")
   root = stood(worlds(STANDS), gated=False)
-  assert await engine.rung("clock = 1", on=root) is None
+  assert await engine.rung("read = 1", on=root) is None
   with pytest.raises(TypeError, match="not callable"):
-    await engine.rung("close(clock())", on=root)
+    await engine.rung("close(read('a'))", on=root)
 
 
 def test_a_word_that_imports_the_engine_by_its_package_is_refused() -> None:
   """The gate gives the checker the engine under a name that the sheet alone says, so a word that imports the
   engine by the name of its package is refused, as it is where the engine runs in the sandbox."""
   assert said("import furb\nclose(furb)") == ["line 1: error[unresolved-import] Cannot resolve imported module `furb`"]
-  assert said("from furb.engine import clock\nclose(clock)")[0].startswith("line 1: error[unresolved-import]")
+  assert said("from furb.engine import read\nclose(read)")[0].startswith("line 1: error[unresolved-import]")
 
 
 def test_a_word_may_use_the_async_forms_at_its_top_level() -> None:
@@ -141,8 +141,8 @@ def test_the_kernel_reads_a_sheet_through_the_gate_of_the_crate() -> None:
     ("close(1)", ()),
     ("close(nowhere())", ()),
     ("a = 1\ny: int = kept", ("kept = 'text'",)),
-    ("x: str = clock()", ()),
-    ("close(await wait(0))", ()),
+    ("x: str = span(1, 2)(['a'])", ()),
+    ("close((await bash('ls')).code)", ()),
   ]:
     assert sheet.gate(ENGINE, list(program), word, furb_monty.gate) == sheet.gate(ENGINE, list(program), word, checked)
 
