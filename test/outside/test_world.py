@@ -350,6 +350,18 @@ def test_the_engine_the_model_reads_is_the_engine_that_runs() -> None:
   assert len(SYSTEM) < len(source)
 
 
+def test_the_engine_the_model_reads_is_the_engine_of_this_interpreter_whatever_the_switch_says() -> None:
+  """A World of a process whose engine runs in monty gives the models the same system prompt, the engine file."""
+  said = subprocess.run(
+    [sys.executable, "-c", "from furb.world import SYSTEM; print(SYSTEM, end='')"],
+    env={**os.environ, "FURB_ENGINE": "monty"},
+    capture_output=True,
+    text=True,
+    check=True,
+  ).stdout
+  assert said == SYSTEM
+
+
 async def test_the_world_hands_the_provider_the_python_of_a_user_turn_as_it_is(yard: Path) -> None:
   """The engine phrases everything a model reads, so the World renders nothing: a user turn goes to the provider as
   the python the engine wrote, byte for byte, and a user turn that holds nothing goes not at all."""
@@ -366,12 +378,13 @@ async def test_the_world_hands_the_provider_the_python_of_a_user_turn_as_it_is(y
   assert '#prompt1 say "hi" <b> && \\n' in got[0][1]
 
 
-def test_the_word_of_a_rung_is_the_code_of_the_answer_or_the_whole_of_it() -> None:
-  """A model that fences its code says the block alone; one that fences nothing says everything it wrote."""
+def test_the_word_of_a_rung_is_all_the_text_the_model_wrote() -> None:
+  """A model speaks python alone, so a fence and the prose around it stay in the word for the gate to refuse."""
   assert worded(ModelResponse(parts=[TextPart("close(1)")])) == "close(1)"
-  assert worded(ModelResponse(parts=[TextPart("here:\n```python\nclose(1)\n```\n")])) == "close(1)"
-  assert worded(ModelResponse(parts=[TextPart("```\nclose(1)\n```")])) == "close(1)"
-  assert worded(ModelResponse(parts=[TextPart("```\na\n```\n```\nb\n```")])) == "```\na\n```\n```\nb\n```"
+  assert (
+    worded(ModelResponse(parts=[TextPart("here:\n```python\nclose(1)\n```\n")])) == "here:\n```python\nclose(1)\n```"
+  )
+  assert worded(ModelResponse(parts=[TextPart("```\nclose(1)\n```")])) == "```\nclose(1)\n```"
 
 
 async def test_an_ask_carries_the_system_prompt_and_the_turns_in_their_roles(yard: Path) -> None:

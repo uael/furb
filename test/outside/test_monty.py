@@ -180,3 +180,15 @@ async def test_the_gate_accepts_a_builtin_exactly_when_a_rung_runs_it() -> None:
   refused_yet_ran = await engine.rung(probe, on=root)
   accepted_yet_unbound = await engine.rung(f"unbound = []\n{tries}close(unbound)", on=root)
   assert (refused_yet_ran, accepted_yet_unbound) == ([], [])
+
+
+async def test_the_gate_of_the_sandbox_finds_what_the_run_finds_of_a_name_the_program_bound_again() -> None:
+  """A rung that bound a name of the engine again leaves that value to the word after it in the sandbox too, so the
+  word raises when it calls it, and the gate of the sandbox refuses a word that calls it where it can see it."""
+  root = engine.boot((), world=Sand(stands=STANDS).hears())
+  assert await engine.rung("read = 1", on=root) is None
+  with pytest.raises(TypeError, match="not callable"):
+    await engine.rung("f: Any = read\nclose(f('a'))", on=root)
+  assert engine.gate("close(read('a'))", on=root)[0].startswith("line 1: error[call-non-callable]")
+  with pytest.raises(Refused):
+    await engine.rung("close(read('a'))", on=root)

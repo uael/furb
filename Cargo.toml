@@ -18,6 +18,7 @@ crate-type = ["rlib", "cdylib"]
 # extension module is, so the module feature is on only where maturin builds the wheel.
 python = ["dep:pyo3"]
 extension-module = ["python", "pyo3/extension-module"]
+typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build", "dep:serde_json", "dep:indexmap", "dep:same-file", "dep:windows-sys"]
 
 [dependencies]
 # The sandbox the engine runs in, which is the reason the crate exists, and its
@@ -33,3 +34,17 @@ monty = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 monty-type-checking = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 monty-types = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 pyo3 = { version = "0.29.2", features = ["generate-import-lib"], optional = true }
+napi = { version = "3", default-features = false, features = ["napi6", "serde-json", "dyn-symbols"], optional = true }
+napi-derive = { version = "3", optional = true }
+serde_json = { version = "1", features = ["preserve_order", "raw_value"], optional = true }
+indexmap = { version = "2", features = ["serde"], optional = true }
+# The identity of a file on every system: the device and inode on Unix, and the volume serial number and file index
+# on Windows, which the standard library reads only in an unstable API.
+same-file = { version = "1", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+# The console of Windows, whose end the typescript binding hears.
+windows-sys = { version = "0.61", features = ["Win32_System_Console"], optional = true }
+
+[build-dependencies]
+napi-build = { version = "2", optional = true }
