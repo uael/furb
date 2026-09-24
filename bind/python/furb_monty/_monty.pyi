@@ -37,9 +37,6 @@ class Life:
   def verb(self, name: str, args: Sequence[object], kwargs: dict[str, object]) -> object:
     """One verb of the engine by its name, said by the operator with these words, and what it gave."""
 
-  def word(self, word: str, inputs: dict[str, object]) -> object:
-    """One word of the operator, run in the names of the engine with these values bound, and what it gave."""
-
   def made(self, n: int, args: Sequence[object], kwargs: dict[str, object]) -> object:
     """One callable the engine made, called back by its handle with these words, and what it gave."""
 

@@ -11,7 +11,6 @@ import codecs
 import json
 import os
 import random
-import re
 import signal
 import subprocess
 import sys
@@ -38,23 +37,23 @@ from pydantic_ai.messages import (
 from pydantic_ai.models import Model
 from python_minifier import minify
 
-from furb import engine
-from furb.engine import WORLD, Drift, Refused, Text, under
+from furb import engine, python
+from furb.engine import WORLD, Drift, Refused, Text
 from furb.provider.claude import ACTOR, Claude, Settings, actors
 
 type World = Generator[tuple | None, tuple]
-"""The World, as engine.pyi declares it: engine.py binds no such name, so this module says the type itself."""
+"""The World, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
 
 CAP = 524288
 """CAP is the most bytes the World reads of one file, since a text a model cannot hold is no answer."""
 PIPE = 65536
 """PIPE is the bytes the World reads of a stream at a time, which is one Out word of the command."""
 MUTE = "{} answered nothing"
-"""MUTE is how the World says an actor gave no turn, which it reads back to tell a fault of the moment from one that stands."""
+"""MUTE is how the World says an actor gave no turn."""
 
 
 SYSTEM = minify(
-  Path(engine.__file__).read_text(encoding="utf-8"),
+  Path(python.__file__).read_text(encoding="utf-8"),
   remove_annotations=False,
   remove_pass=False,
   combine_imports=False,
@@ -72,14 +71,13 @@ SYSTEM = minify(
 
 PARTS = TypeAdapter(list[ModelResponsePart])
 """PARTS reads the parts of an answer back into the shapes the provider gave, whether from a record or from the answer."""
-FENCE = re.compile(r"```(?:python|py)?\n(.*?)```", re.DOTALL)
-"""FENCE finds a block of code in what a model wrote, since the word of a rung is the code and nothing around it."""
 
 
 def wire(x: object) -> object:
   """The plain form of a value, which is how a record leaves a life: an exception its name and what it was made
   with, a text its path and its content, a shape its name beside its fields, a list and a tuple their entries, a map
-  its entries, and plain data is plain.
+  its entries, or its pairs when it holds the key `is`, so that unwire reads it as the map it is, and plain data is
+  plain.
   """
   match x:
     case BaseException():
@@ -87,7 +85,8 @@ def wire(x: object) -> object:
     case Text():
       return {"is": "Text", "path": x.path, "content": x.content}
     case dict():
-      return {k: wire(v) for k, v in x.items()}
+      plain = {k: wire(v) for k, v in x.items()}
+      return {"is": "dict", "args": [[[k, v] for k, v in plain.items()]]} if "is" in plain else plain
     case list() | tuple():
       return [wire(i) for i in x]
   if is_dataclass(x) and not isinstance(x, type):
@@ -110,42 +109,10 @@ def unwire(x: object) -> object:
   return x
 
 
-def shown(tag: tuple) -> str:
-  """One tag as the model reads it: its name, its short attributes beside the name, and everything else inside it.
-
-  A value that holds a line break or a quotation mark stands in the body and not beside the name, and nothing is
-  ever escaped, so a text crosses to the model byte for byte.
-  """
-  name, held, body = tag
-  attrs, parts = "", []
-  for key, value in held:
-    said = value if isinstance(value, str) else repr(value)
-    if "\n" in said or '"' in said:
-      parts.append(f"<{key}>\n{said}\n</{key}>")
-    else:
-      attrs += f' {key}="{said}"'
-  if isinstance(body, str):
-    parts.append(body)
-  elif isinstance(body, list):
-    # A tag says its attributes as a list, which nothing else a body holds does, a showing among it.
-    parts.extend(shown(one) if isinstance(one, tuple) and isinstance(one[1], list) else repr(one) for one in body)
-  elif body is not None:
-    # A body is any value a tag was told with, so one of a kind this World does not know stands as python shows it.
-    parts.append(repr(body))
-  inner = "\n".join(one for one in parts if one)
-  return f"<{name}{attrs}/>" if not inner else f"<{name}{attrs}>\n{inner}\n</{name}>"
-
-
-def rendered(content: Sequence[tuple | str]) -> str:
-  """What one turn holds, as one text: a tag as its block, and a text as itself."""
-  return "\n".join(shown(one) if isinstance(one, tuple) else one for one in content)
-
-
 def worded(got: ModelResponse) -> str:
-  """The word of the rung, which is what the model wrote: the one block of code it holds, or the whole of it."""
-  text = "".join(one.content for one in got.parts if isinstance(one, TextPart)).strip()
-  found = FENCE.findall(text)
-  return str(found[0]).strip() if len(found) == 1 else text
+  """The word of the rung, which is all the text the model wrote: a model speaks python and nothing else, so a
+  fence or a line of prose around the code is part of the word, which the gate refuses."""
+  return "".join(one.content for one in got.parts if isinstance(one, TextPart)).strip()
 
 
 def truth(line: str) -> bool:
@@ -182,10 +149,10 @@ def kept(record: Path) -> list[tuple]:
       if n < len(lines):
         raise
       break
-    if not (isinstance(got, list) and len(got) in (2, 3) and isinstance(got[1], list) and got[1]):
+    if not (isinstance(got, list) and len(got) in (1, 2) and isinstance(got[0], list) and got[0]):
       why = f"line {n} of {record} is no entry of the record"
       raise Drift(why)
-    said.append((got[0], tuple(got[1]), *got[2:]))
+    said.append((tuple(got[0]), *got[1:]))
   return said
 
 
@@ -198,7 +165,6 @@ class Command:
   """
 
   id: str
-  on: str
   command: str
   fed: bool
   timeout: float
@@ -243,16 +209,19 @@ class Live:
   `directory` is where the chains of the life start, `record` the file it keeps the record in and reads it back
   from, `actor` the actor a prompt goes to when it names none, and `roster` the actors it offers. `calls` holds
   every fact it answered or performed, in order, and `model` is the one model it asks, when it is given one.
+  `mute` holds, for each chain, the actor whose last ask on that chain answered nothing, so a second such ask in a
+  row pauses the chain, and an answer between the two ends the row.
   `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
   """
 
   directory: str
   record: Path | None = None
   actor: str = ACTOR
-  roster: tuple[tuple[str, tuple[str, ...], int], ...] = field(default_factory=actors)
+  roster: list[list[str | list[str] | int]] = field(default_factory=actors)
   calls: list[tuple] = field(default_factory=list)
   model: Model[object] | None = None
   bought: dict[str, Model[object]] = field(default_factory=dict)
+  mute: dict[str, str] = field(default_factory=dict)
   reader: asyncio.StreamReader | None = None
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -267,19 +236,18 @@ class Live:
   async def answer(self, actor: str, on: str, turns: Sequence[tuple]) -> tuple:
     """One turn of a model for one ask: the turns of the chain as messages, and what comes back as the turn it is.
 
-    The system prompt stands first, then each turn of the chain: a user turn as the text of its tags, an assistant
-    turn as the parts the provider gave, so that the provider reads its own answer whole and its cache holds the
-    conversation from one end. A user turn that holds nothing goes not at all.
+    The system prompt stands first, then each turn of the chain: a user turn as the python the engine wrote, an
+    assistant turn as the parts the provider gave, so that the provider reads its own answer whole and its cache
+    holds the conversation from one end. A user turn that holds nothing goes not at all.
     """
     who, effort = actor.partition("/")[::2]
     messages: list[ModelMessage] = [ModelRequest(parts=[SystemPromptPart(content=SYSTEM)])]
-    for role, content, _, blocks in turns:
+    for role, py, _, blocks in turns:
       if role == "assistant":
         held = blocks if isinstance(blocks, list) else []
-        text = "\n".join(x for x in content if isinstance(x, str))
-        messages.append(ModelResponse(parts=PARTS.validate_python(held) if held else [TextPart(text)]))
-      elif said := rendered(content):
-        messages.append(ModelRequest(parts=[UserPromptPart(content=said)]))
+        messages.append(ModelResponse(parts=PARTS.validate_python(held) if held else [TextPart(py)]))
+      elif py:
+        messages.append(ModelRequest(parts=[UserPromptPart(content=py)]))
     settings = Settings(claude_session_id=on, claude_effort=effort)
     got = await model_request(self.buys(who), messages, model_settings=settings)
     spent = got.usage
@@ -290,7 +258,7 @@ class Live:
       spent.cache_write_tokens,
       float(spent.cost or 0),
     )
-    return ("assistant", [worded(got)], usage, PARTS.dump_python(list(got.parts), mode="json"))
+    return ("assistant", worded(got), usage, PARTS.dump_python(list(got.parts), mode="json"))
 
   def at(self, here: str, path: str = "") -> Path:
     """One path of the disk: the directory of the life, where the chain stands, and then the path.
@@ -316,13 +284,17 @@ class Live:
 
   def serves(self, path: str) -> bool:
     """Whether the World answers for a path: a path of the disk, and a door of an act of the life, which it refuses
-    once nothing lives behind it. A door of no act of the life is another ear's to answer, so the World says nothing
-    of it, whatever the order the ears were given in."""
-    return "://" not in path or path.rsplit("/", 1)[0] in engine.acts
+    once nothing lives behind it. A path of a scheme is another ear's to answer, so the World says nothing of it,
+    whatever the order the ears were given in."""
+    return "://" not in path
+
+  def door(self, path: str) -> bool:
+    """Whether a path is a door: its first part names an act of the life, so `./` before it reaches the file."""
+    return path.split("/", 1)[0] in engine.acts
 
   def read(self, here: str, path: str) -> Text | Refused:
     """The text at a path: the file on the disk, and a refusal for the door of nothing that lives."""
-    if "://" in path:
+    if self.door(path):
       return Refused(f"{path} is the door of nothing that lives")
     at = self.at(here, path)
     if not at.is_file():
@@ -337,7 +309,7 @@ class Live:
 
   def write(self, here: str, path: str, content: str) -> Text | Refused:
     """The content onto the file at a path, and the text of that file as it stands on the disk after the write."""
-    if "://" in path:
+    if self.door(path):
       return Refused(f"{path} is the door of nothing that takes a word")
     at = self.at(here, path)
     at.parent.mkdir(parents=True, exist_ok=True)
@@ -409,33 +381,26 @@ class Live:
     if text := decoder.decode(b"", final=True):
       engine.send("out", about, text, stream, by=WORLD)
 
-  def twice(self, actor: str, turns: Sequence[tuple]) -> bool:
-    """Whether this actor was mute already at the turn this ask was handed, so the fault stands.
-
-    The World tells a fault of the moment from one that stands by its own last refusal: the turns of an ask end
-    with what the chain was told since the answer before it, so a refusal of the same actor there is the second
-    in a row, where one of an older turn was answered after.
-    """
-    last = turns[-1] if turns else None
-    return last is not None and any(isinstance(one, tuple) and MUTE.format(actor) in str(one[2]) for one in last[1])
-
   async def asked(self, rung: str, on: str, actor: str, turns: Sequence[tuple]) -> None:
     """One turn of a model for one ask, and the refusal for an ask the World cannot answer, with a pause when the
     fault of it stands.
 
     A fault of the moment is no pause: the rung is closed with the refusal, the prompt asks again, and the model
-    reads what was dropped. A second nothing of the same actor answers the same way twice, so the chain goes quiet
-    until the operator wakes it, and the operator is told here why it went quiet.
+    reads what was dropped. A second nothing of the same actor in a row on the chain is a fault that stands, so the
+    chain goes quiet until the operator wakes it, and the operator is told here why it went quiet. The World counts
+    the row by what it was answered, and never by a text a chain was told.
     """
     try:
       turn = await self.answer(actor, on, turns)
     except Exception as no:
       why = Refused(f"{MUTE.format(actor)}: {type(no).__name__}: {no}")
-      if self.twice(actor, turns):
+      if self.mute.get(on) == actor:
         sys.stderr.write(f"{on} is paused: {why}\n")
         engine.pause(on)
+      self.mute[on] = actor
       engine.close(why, rung)
       return
+    self.mute.pop(on, None)
     engine.send("answer", rung, turn, by=WORLD)
 
   async def show(self, about: str, shape: str, message: str) -> None:
@@ -487,14 +452,14 @@ class Live:
           match acts[about]:
             case ("bash", _, _, on, command, fed, timeout):
               merged = engine.ask("merged", on, about)[1]
-              running[about] = held = Command(about, on, command, fed, timeout, bool(merged))
+              running[about] = held = Command(about, command, fed, timeout, bool(merged))
               start(self.ran(held, engine.cwd(on=on)))
             case ("wait", _, _, _, seconds):
               loop.call_later(seconds, partial(engine.send, "done", about, None, by=WORLD))
             case ("prompt", _, _, _, shape, message, _):
               start(self.show(about, shape, message))
         case ("stand", qid, *_):
-          yield "done", qid, (self.roster, self.directory, self.actor)
+          yield "done", qid, [self.roster, self.directory, self.actor]
         case ("read", qid, _, on, path) if self.serves(path):
           yield "done", qid, self.read(engine.cwd(on=on), path)
         case ("write", qid, _, on, Text(path=path, content=content)) if self.serves(path):
@@ -503,8 +468,8 @@ class Live:
           start(self.asked(rung, on, actor, turns))
         case ("feed", about, _, text) if about in running:
           running[about].feed(text)
-        case ("cancel" | "close", about, *_):
-          for one in [x for x in running.values() if under(x.id, about) or x.on == about]:
+        case ("cancel" | "close", *_):
+          for one in [x for x in running.values() if engine.covers(a, x.id)]:
             one.over = True
             one.slay()
             yield "exited", one.id, None

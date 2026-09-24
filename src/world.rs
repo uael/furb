@@ -43,17 +43,17 @@ pub struct Standing {
 }
 
 impl Standing {
-  /// The standing as the engine reads it: a tuple of the roster, the directory and the actor.
+  /// The standing as the engine reads it: a list of the roster, the directory and the actor.
   pub fn object(&self) -> Object {
     let roster = self.roster.iter().map(|one| {
-      Object::tuple([
+      Object::list([
         Object::string(one.name.clone()),
-        Object::tuple(one.efforts.iter().map(|e| Object::string(e.clone()))),
+        Object::list(one.efforts.iter().map(|e| Object::string(e.clone()))),
         Object::int(one.window),
       ])
     });
-    Object::tuple([
-      Object::tuple(roster),
+    Object::list([
+      Object::list(roster),
       Object::string(self.directory.clone()),
       Object::string(self.actor.clone()),
     ])

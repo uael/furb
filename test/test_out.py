@@ -15,7 +15,7 @@ async def test_the_streams_of_a_command_come_as_out_facts_while_the_command_runs
   await settle()
   assert engine.read(f"{act}/stdout", on=root).content == "one\n"
   assert engine.read(f"{act}/stderr", on=root).content == "bad\n"
-  kept = [fact for _, fact, *_ in sand.record if fact[0] == "out"]
+  kept = [fact for fact, *_ in sand.record if fact[0] == "out"]
   assert [(one[4], one[3]) for one in kept] == [("stdout", "one\n"), ("stderr", "bad\n")]
 
 

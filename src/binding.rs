@@ -6,3 +6,6 @@
 
 #[cfg(feature = "python")]
 pub mod py;
+
+#[cfg(feature = "typescript")]
+pub mod ts;

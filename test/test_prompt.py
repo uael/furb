@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, attr, life, lived, plain, ran, refusals, relived, said, settle, sown, tags
+from conftest import STANDS, Sand, heads, life, lived, paragraphs, plain, ran, relived, said, settle, sown
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Act, Exit, Refused, Text
 
@@ -15,8 +15,11 @@ async def test_a_prompt_it_makes_the_rung_of_one_turn_of_its_model() -> None:
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["k = BAD", "raise ValueError('boom')", "close(7)"]
-  assert await engine.prompt(int, "try", on=root) == 7
-  assert len(said(log, "rung")) == 3 and len(said(log, "ask")) == 3
+  act = engine.prompt(int, "try", on=root)
+  assert await act == 7
+  steps = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert [a[1] for a in said(log, "ask")] == steps
+  assert [type(engine.outcomes[one]).__name__ for one in steps] == ["Refused", "ValueError", "CancelledError"]
 
 
 async def test_the_driver_gives_the_name_of_the_prompt() -> None:
@@ -34,9 +37,14 @@ async def test_the_engine_asks_the_model_again_after_a_refusal() -> None:
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["k = BAD", "close(7)"]
-  assert await engine.prompt(int, "try", on=root) == 7
-  assert len(said(log, "ask")) == 2
-  assert [tag[2] for tag in tags(engine.turns(on=root), "refused")] == refusals(log)
+  act = engine.prompt(int, "try", on=root)
+  assert await act == 7
+  first, second = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert [a[1] for a in said(log, "ask")] == [first, second]
+  assert engine.turns(on=root)[2][1] == (
+    f"#{first} refused\n# line 1: error[unresolved-reference] Name `BAD` used when not defined\n\n"
+    f"#{first} closed Refused()\n\n#{second} advance on {act}"
+  )
 
 
 async def test_the_operator_prompts_a_model_to_make_the_model_work() -> None:
@@ -93,8 +101,9 @@ async def test_nothing_but_a_prompt_asks_a_model() -> None:
   await settle()
   assert said(log, "ask") == []
   sand.script[root] = ["close(1)"]
-  assert await engine.prompt(int, "count", on=root) == 1
-  assert [one[1] for one in said(log, "ask")] == [said(log, "rung")[-1][1]]
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 1
+  assert [one[1] for one in said(log, "ask")] == [a[1] for a in said(log, "rung") if a[2] == act]
 
 
 async def test_the_value_of_a_prompt_on_another_chain_comes_back_as_the_value() -> None:
@@ -143,7 +152,7 @@ async def test_none_is_a_shape_of_its_own() -> None:
   act = engine.prompt(None, "work", on=root)
   assert await act is None
   assert said(log, "prompt")[0][4] == "None"
-  assert attr(tags(engine.turns(on=root), "opened")[2], "shape") == "None"
+  assert paragraphs(engine.turns(on=root))[2] == f"#{act} work\n{act}: Act[None] = Act({act!r})"
 
 
 async def test_without_a_message_the_actor_reads_the_transcript_alone() -> None:
@@ -151,9 +160,14 @@ async def test_without_a_message_the_actor_reads_the_transcript_alone() -> None:
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["close(7)"]
-  assert await engine.prompt(int, on=root) == 7
-  opened = [tag for tag in tags(said(log, "ask")[0][5], "opened") if str(attr(tag, "id")).startswith("prompt://")]
-  assert [attr(tag, "message") for tag in opened] == [""]
+  act = engine.prompt(int, on=root)
+  assert await act == 7
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert said(log, "prompt")[0][5] == ""
+  assert paragraphs(said(log, "ask")[0][5])[2:] == [
+    f"#{act}\n{act}: Act[int] = Act({act!r})",
+    f"#{step} advance on {act}",
+  ]
 
 
 async def test_a_model_answers_any_shape() -> None:
@@ -187,12 +201,24 @@ async def test_a_rung_need_not_wait_for_a_prompt_of_shape_none() -> None:
 
 
 async def test_the_actor_left_unsaid_is_the_default_actor_of_the_chain() -> None:
-  """The actor left unsaid is the default actor of the chain."""
+  """The actor left unsaid is the default actor of the chain when the prompt is made, which the prompt writes into the actor word of every rung it makes, so every life asks the one actor the record holds."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  sand.script[root] = ["actor = 'n/low'", "close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
-  assert [one[4] for one in said(log, "ask")] == ["m/low"] == [engine.modules[root]["actor"]]
+  assert (
+    [one[4] for one in said(log, "ask")] == ["m/low", "m/low"] == [one[6] for one in said(log, "rung") if not one[4]]
+  )
+  assert engine.modules[root]["actor"] == "n/low"
+  again, _ = await relived(Sand(stands=[STANDS[0], "/w", "n/low"]), plain(sand.record))
+  assert [one[6] for one in said(again, "rung") if not one[4]] == ["m/low", "m/low"] and said(again, "ask") == []
+  alone = Sand(stands=[[[OPERATOR, [], 200000]], "/w", OPERATOR])
+  log, root = life(alone)
+  shown = engine.prompt(str, "what now?", on=root)
+  await settle()
+  assert said(log, "ask") == [] and [a[1] for a in said(log, "start")] == [shown]
+  engine.close("go", shown)
+  assert await shown == "go"
 
 
 async def test_a_prompt_to_a_model_runs_in_steps_until_the_prompt_completes() -> None:
@@ -200,18 +226,29 @@ async def test_a_prompt_to_a_model_runs_in_steps_until_the_prompt_completes() ->
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["a = 1", "b = a + 1", "close(b + 1)"]
-  assert await engine.prompt(int, "count", on=root) == 3
-  assert len(said(log, "ask")) == 3 and len(said(log, "run")) == 3
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 3
+  steps = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert [a[1] for a in said(log, "ask")] == steps
+  assert [a[4] for a in said(log, "run") if a[1] in steps] == ["a = 1", "b = a + 1", "close(b + 1)"]
 
 
-async def test_the_opened_tag_of_a_prompt_tells_the_shape_as_python_shows_the_expression() -> None:
-  """The opened tag of a prompt tells the shape as python shows the expression."""
+async def test_the_binding_of_a_prompt_gives_the_shape_as_python_shows_the_expression() -> None:
+  """The binding of a prompt gives the shape as python shows the expression, as prompt1: Act[int] = Act('prompt1')."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   engine.prompt(int, "how many?", to=OPERATOR, on=root)
-  engine.prompt(Text, "a text", to="m/low", on=root)
-  opened = [tag for tag in tags(engine.turns(on=root), "opened") if str(attr(tag, "id")).startswith("prompt://")]
-  assert [attr(tag, "shape") for tag in opened] == ["int", "Text"]
+  engine.prompt(list[Text], "some texts?", to=OPERATOR, on=root)
+  engine.prompt(Text | None, "a text", to="m/low", on=root)
+  await settle()
+  bindings = [
+    line for one in paragraphs(engine.turns(on=root)) for line in one.split("\n") if line.startswith("prompt")
+  ]
+  assert bindings == [
+    "prompt1: Act[int] = Act('prompt1')",
+    "prompt2: Act[list[Text]] = Act('prompt2')",
+    "prompt3: Act[Text | None] = Act('prompt3')",
+  ]
 
 
 async def test_a_rung_whose_word_closes_nothing_ends_its_step() -> None:
@@ -219,9 +256,14 @@ async def test_a_rung_whose_word_closes_nothing_ends_its_step() -> None:
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(a + 1)"]
-  assert await engine.prompt(int, "count", on=root) == 2
-  assert [one[3] is None for one in said(log, "ran")] == [True, False]
-  assert len(said(log, "ask")) == 2
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 2
+  first, second = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert [(a[1], type(a[3]).__name__) for a in said(log, "ran") if a[1] in (first, second)] == [
+    (first, "NoneType"),
+    (second, "CancelledError"),
+  ]
+  assert engine.outcomes[first] is None and [a[1] for a in said(log, "ask")] == [first, second]
 
 
 async def test_the_completion_of_a_prompt_cancels_nothing_under_the_prompt() -> None:
@@ -233,7 +275,8 @@ async def test_the_completion_of_a_prompt_cancels_nothing_under_the_prompt() -> 
   await settle()
   command = said(log, "bash")[0][1]
   assert (await act) == 1
-  assert isinstance(engine.peek(said(log, "rung")[0][1], on=root), CancelledError)
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert isinstance(engine.peek(step, on=root), CancelledError)
   engine.send("exited", command, 0, by=WORLD)
   await settle()
   got = engine.peek(command, on=root)
@@ -276,13 +319,14 @@ async def test_a_prompt_to_the_operator_completes_when_the_operator_closes_the_p
 async def test_the_response_of_a_prompt_on_a_chain_with_a_source_comes_to_the_act_the_caller_holds() -> None:
   """The response of a prompt on a chain with a source comes to the act that the caller holds."""
   sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  log, root = life(sand)
   await engine.rung("k = 21", on=root)
   twin = engine.chain("twin", source=root)
   await settle()
   sand.script[twin] = ["close(k)"]
   act = engine.prompt(int, "what is k", on=twin)
-  assert await act == 21 and act.startswith("prompt://")
+  assert await act == 21 and engine.outcomes[act] == 21
+  assert said(log, "prompt") == [("prompt", act, OPERATOR, twin, "int", "what is k", "")]
 
 
 async def test_it_is_the_ladder_of_its_rungs_and_its_name_is_a_door_of_the_program() -> None:
@@ -311,23 +355,31 @@ async def test_a_word_written_to_its_door_is_a_rung_of_it() -> None:
   await settle()
   engine.write(Text(act, "a = 1\nclose(5)"), on=root)
   await settle()
-  assert (await act) == 5 and ran(log) == ["a = 1", "a = 1", "close(5)"]
+  bind = f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"
+  assert (await act) == 5 and ran(log) == [bind, "a = 1", bind, "a = 1", "close(5)"]
   assert [a[2] for a in said(log, "rung") if a[4] == "close(5)"] == [act]
 
 
 async def test_a_prompt_to_the_operator_asks_no_model() -> None:
-  """A prompt to the operator asks no model: the World is shown it, and it waits to be closed; one the record holds is shown no more, since the close it waits for stands there already."""
+  """A prompt to the operator asks no model: the World is shown it, and it waits to be closed; in a later life, one the record shows open is shown again only at a wake, and one the record shows closed is shown no more."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
   assert said(log, "ask") == [] and [one[1] for one in sand.calls if one[0] == "start"] == [act]
+  still = Sand(stands=STANDS)
+  _, over = await relived(still, plain(sand.record))
+  assert over == root and said(still.calls, "start") == []
+  engine.wake(over)
+  await settle()
+  assert [one[1] for one in said(still.calls, "start")] == [act]
   engine.close(21, act)
   await settle()
   after = Sand(stands=STANDS)
-  _, over = await relived(after, plain(sand.record))
-  assert over == root
-  assert [one for one in after.calls if one[0] == "start"] == [] and engine.outcomes[act] == 21
+  _, over = await relived(after, [*plain(sand.record), *plain(still.record)])
+  engine.wake(over)
+  await settle()
+  assert over == root and said(after.calls, "start") == [] and engine.outcomes[act] == 21
 
 
 async def test_its_close_tells_what_closed_it_from_outside() -> None:
@@ -338,12 +390,14 @@ async def test_its_close_tells_what_closed_it_from_outside() -> None:
   await settle()
   engine.close(21, act)
   await settle()
-  shut = tags(engine.turns(on=root), "closed")
-  assert [(attr(tag, "over"), tag[2]) for tag in shut] == [(act, "21")]
-  sand.script[root] = ["close(7)"]
-  assert await engine.prompt(int, "count", on=root) == 7
-  shut = tags(engine.turns(on=root), "closed")
-  assert [dict(tag[1]) for tag in shut] == [{"over": act}, {"over": said(log, "prompt")[-1][1]}]
+  sand.script[root] = ["raise ValueError('boom')", "close(7)"]
+  other = engine.prompt(int, "count", on=root)
+  assert await other == 7
+  hurt, step = [a[1] for a in said(log, "rung") if a[2] == other]
+  assert [(a[1], a[2]) for a in said(log, "close")] == [(act, OPERATOR), (other, step)]
+  told = heads(engine.turns(on=root))
+  assert [one for one in told if one.split(" ")[1:2] == ["closed"]] == [f"#{act} closed 21", f"#{other} closed 7"]
+  assert [(a[2], a[3]) for a in said(log, "tell") if a[1] == hurt][-1] == (hurt, [f"#{hurt} raised ValueError('boom')"])
 
 
 async def test_a_paused_prompt_makes_no_rung_until_the_wake() -> None:
@@ -354,17 +408,18 @@ async def test_a_paused_prompt_makes_no_rung_until_the_wake() -> None:
   act = engine.prompt(int, "count", on=root)
   engine.pause(act)
   await settle()
-  assert len(said(log, "rung")) == 1 and act not in engine.outcomes
+  assert len([a for a in said(log, "rung") if a[2] == act]) == 1 and act not in engine.outcomes
   engine.wake(act)
   await settle()
-  assert (await act) == 2 and len(said(log, "rung")) == 2
+  assert (await act) == 2 and len([a for a in said(log, "rung") if a[2] == act]) == 2
   sand.script[root] = ["await wait(9)\nclose(1)"]
   other = engine.prompt(int, "wait", on=root)
   await settle()
   engine.cancel(other)
   await settle()
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == other]
   assert isinstance(engine.outcomes[other], CancelledError)
-  assert isinstance(engine.peek(said(log, "rung")[-1][1], on=root), CancelledError)
+  assert isinstance(engine.peek(step, on=root), CancelledError)
 
 
 async def test_the_world_closes_with_a_refusal_a_prompt_it_cannot_put_to_the_operator() -> None:
@@ -395,7 +450,7 @@ async def test_the_shape_left_unsaid_is_none() -> None:
 async def test_a_prompt_takes_any_shape_which_a_close_is_read_against_as_python_reads_an_instance() -> None:
   """A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one."""
   sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  log, root = life(sand)
   sand.script[root] = [
     "close(Text('p.txt', 'hi'))",
     "close([1, 2])",
@@ -411,8 +466,9 @@ async def test_a_prompt_takes_any_shape_which_a_close_is_read_against_as_python_
   assert await engine.prompt(list[Text], "texts", on=root) == []
   assert await engine.prompt(Text | None, "a text or nothing", on=root) is None
   assert await engine.prompt(int, "a number", on=root) == 2
-  raised = tags(engine.turns(on=root), "raised")
-  assert [(attr(tag, "type"), attr(tag, "message")) for tag in raised] == [("Refused", "'no' not int")]
+  (no,) = [a[1] for a in said(log, "ready") if a[3] == "close('no')"]
+  raised = [one for one in heads(engine.turns(on=root)) if one.split(" ")[1:2] == ["raised"]]
+  assert raised == [f"#{no} raised Refused(\"'no' not int\")"]
 
 
 async def test_a_prompt_carries_the_name_of_its_shape_as_a_word() -> None:
@@ -443,9 +499,11 @@ async def test_the_turns_of_the_chain_hold_the_result_of_the_command_the_acknowl
   sand = sown()
   log, root = await lived(sand)
   command = said(log, "bash")[0][1]
+  ack = said(log, "prompt")[-1][1]
   assert said(log, "prompt")[-1][5] == f"{command} done"
-  shut = [tag for tag in tags(engine.turns(on=root), "closed") if ("id", command) in tag[1]]
-  assert [attr(tag, "code") for tag in shut] == [0]
+  told = paragraphs(engine.turns(on=root))
+  result = told.index(f"#{command} exited 0\n# {command}/stdout, 0 known\n# 1 ran echo hi")
+  assert result < told.index(f"#{ack} {command} done\n{ack}: Act[None] = Act({ack!r})")
 
 
 async def test_a_cancelled_result_is_no_orphan() -> None:
@@ -514,4 +572,26 @@ async def test_the_name_of_a_shape_is_the_word_a_chain_says_it_by() -> None:
   assert await engine.prompt(list, "work", on=root) == [[], None]
   # The chain acknowledges each act a rung made once it is done, with a prompt of no shape, which is not one of these.
   assert [one[4] for one in said(log, "prompt") if one[4] != "None"] == ["list", "list[Foo]", "Foo | None"]
-  assert tags(engine.turns(on=root), "raised") == []
+  assert [one for one in heads(engine.turns(on=root)) if one.split(" ")[1:2] in (["raised"], ["refused"])] == []
+
+
+async def test_a_prompt_tells_its_message_and_its_binding_where_it_is_made() -> None:
+  """A prompt tells its message and its binding where it is made, as every act tells its open, whether a model or the operator answers it."""
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
+  sand.script[root] = ["a = 1", "close(2)", "close(3)"]
+  first = engine.prompt(int, "count\nto three", on=root)
+  second = engine.prompt(int, "count again", on=root)
+  mine = f"#{first} count\n# to three\n{first}: Act[int] = Act({first!r})"
+  theirs = f"#{second} count again\n{second}: Act[int] = Act({second!r})"
+  assert [(a[1], a[2]) for a in said(log, "tell") if a[1] in (first, second)] == [(first, first), (second, second)]
+  told = next(a for a in said(log, "tell") if a[1] == first)
+  assert log.index(said(log, "prompt")[0]) < log.index(told) < log.index(said(log, "prompt")[1])
+  assert (await first, await second) == (3, 2)
+  users = [turn for turn in engine.turns(on=root) if turn[0] == "user"]
+  assert [[x for x in paragraphs([turn]) if x in (mine, theirs)] for turn in users] == [[mine], [theirs], [], []]
+  act = engine.prompt(int, "how many?\nsay one", to=OPERATOR, on=root)
+  await settle()
+  start = log.index(("start", act, act))
+  assert log[start + 1] == ("tell", act, act, [f"#{act} how many?\n# say one", f"{act}: Act[int] = Act({act!r})"])
+  assert [a for a in said(log, "tell") if a[1] == act] == [log[start + 1]] and len(said(log, "ask")) == 3

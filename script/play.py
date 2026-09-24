@@ -20,7 +20,7 @@ from furb import engine
 from furb.cli import lived, say
 from furb.engine import OPERATOR
 from furb.provider.claude import BIN, cool
-from furb.world import kept, rendered
+from furb.world import kept
 
 TO = "opus/low"
 """TO is the actor the play asks, which is opus at the least effort it takes."""
@@ -57,10 +57,13 @@ MESSAGE = f"""You have the engine and a directory of your own. Use them, in this
 """MESSAGE is what the model is told: what it has, what to do with it, and what to give back."""
 
 
-def tags(root: str, name: str) -> list[tuple]:
-  """Every tag of that name in the turns of a chain."""
+def heads(root: str, name: str) -> list[str]:
+  """Every header in the turns of a chain whose kind or whose event is that name, as #peek bash1 or #rung3 debugged."""
   return [
-    one for _, content, _, _ in engine.turns(on=root) for one in content if isinstance(one, tuple) and one[0] == name
+    line
+    for _, py, _, _ in engine.turns(on=root)
+    for line in py.split("\n")
+    if line[1:2].isalnum() and name in [line.split()[0][1:], *line.split()[1:2]]
   ]
 
 
@@ -80,7 +83,7 @@ async def settle(n: int = 400) -> None:
 def answered(record: Path) -> list[tuple]:
   """Every answer of a model that the record holds."""
   said = kept(record) if record.is_file() else []
-  return [entry[1] for entry in said if entry[1][0] == "answer" and entry[1][3] is not None]
+  return [entry[0] for entry in said if entry[0][0] == "answer" and entry[0][3] is not None]
 
 
 def spent(record: Path) -> float:
@@ -122,7 +125,7 @@ async def watching(root: str, record: Path, name: str) -> None:
 
 async def first(yard: Path, record: Path) -> list[object]:
   """The life that does the work, and everything the play holds it to when the work is done."""
-  _world, root, held = lived(record, yard, TO)
+  _world, root, held = lived(record, yard, TO, keeps=True)
   assert held == [], "the first life is opened on no record"
   engine.grant(usd=CEILING, on=root)
   waits = engine.prompt(list, MESSAGE, TO, on=root)
@@ -157,8 +160,8 @@ async def first(yard: Path, record: Path) -> list[object]:
   assert isinstance(got[0], str), got[0]
   assert got[0].strip(), got[0]
   assert isinstance(got[2], int), got[2]
-  assert tags(root, "debugged"), "no debug of the model stands in the turns"
-  assert tags(root, "peek"), "no peek of the model stands in the turns"
+  assert heads(root, "debugged"), "no debug of the model stands in the turns"
+  assert heads(root, "peek"), "no peek of the model stands in the turns"
   assert got[4] in {one[1] for one in said if engine.question(one)}, got[4]
 
   assert got[5] != str(yard), f"the working directory of the chain did not move from {yard}"
@@ -175,7 +178,7 @@ async def first(yard: Path, record: Path) -> list[object]:
 
 async def second(yard: Path, record: Path, got: list[object]) -> float:
   """The life on the record of the first: it asks no model for what the record holds, and takes one prompt more."""
-  world, root, held = lived(record, yard, TO)
+  world, root, held = lived(record, yard, TO, keeps=True)
   await settle()
   asks = [one for one in world.calls if one[0] == "ask"]
   assert asks == [], f"the resumed life asked a model {len(asks)} times for what its record holds"
@@ -183,7 +186,7 @@ async def second(yard: Path, record: Path, got: list[object]) -> float:
   say(f"the resumed life made {len(held)} words of its record again and asked no model")
   # A pause the World said when it could not reach a model stands in the record, so every later life of that record
   # opens paused. The World tells the operator why it went quiet, and waking it again is the operator's to do.
-  if [entry for entry in held if entry[1][0] == "pause" and entry[1][1] == root]:
+  if [entry for entry in held if entry[0][0] == "pause" and entry[0][1] == root]:
     say("the record holds a pause of the root, said by the World, so the operator wakes the chain")
     engine.wake(root)
     await settle()
@@ -201,8 +204,8 @@ def ledger(root: str, record: Path) -> float:
   """Everything the play shows: the turns as the model read them, the words it wrote, and what they cost."""
   say("")
   say("=== the turns of the root, as the model read them ===")
-  for role, content, _, _ in engine.turns(on=root):
-    say(f"[{role}] {rendered(content)}")
+  for role, py, _, _ in engine.turns(on=root):
+    say(f"[{role}] {py}")
   say("")
   say("=== the program of the root: every word the model wrote that the gate took ===")
   _, program = engine.ask("program", root)

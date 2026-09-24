@@ -31,17 +31,23 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
 import tomllib
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from email import message_from_string
+from http.client import HTTPResponse
 from pathlib import Path
 from tempfile import gettempdir, mkdtemp
+from urllib.error import HTTPError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 from furb import engine
 from furb.cli import lived, say
 from furb.provider.claude import BIN, cool
-from furb.world import Live, kept, rendered
+from furb.world import kept
 
 ROOT = Path(__file__).resolve().parent.parent
 """ROOT is the root of this repository, which the archive of a run stands under."""
@@ -54,7 +60,11 @@ CACHE = Path(os.environ.get("DEEPSWE_DIR") or Path(gettempdir()) / "deep-swe")
 WORK = Path(os.environ.get("DEEPSWE_WORK") or Path(gettempdir()) / "furb-deepswe")
 """WORK is where the checkout of every task stands."""
 HOMES = Path.home() / ".cache/furb-deepswe"
-"""HOMES is where a reporter lives when the path its frame names is not this host's to write."""
+"""HOMES is what outlives a workroot: a reporter whose path this host does not let the rig write, and the layers.
+
+A layer of an image is read once, and what it holds of python is kept under `layers`. The layers of the base image
+stand in every task image, so a later task reads only its own.
+"""
 REPORTERS = {
   "/opt/ctrf": ("mocha-ctrf-json-reporter@0.0.11",),
   "/opt/jest-ctrf": ("jest-ctrf-json-reporter@0.0.11", "jest-environment-node@29.7.0"),
@@ -71,16 +81,23 @@ ROOTS = re.compile(r"(?<![\w./}$])(/opt/jest-ctrf|/opt/ctrf|/opt/nextest|/app|/t
 The lookbehind carries the rule: a relative `./tests/x.js` of the frame, and any `<dir>/tests` it makes, must
 stand untouched, or the suite looks for its modules under the rewritten root and finds none.
 """
-VCS = {
-  "SETUPTOOLS_SCM_PRETEND_VERSION": "0.0.0",
-  "HATCH_VCS_PRETEND_VERSION": "0.0.0",
-  "PDM_BUILD_SCM_VERSION": "0.0.0",
-}
-"""VCS is what a build backend that reads a version off git is told instead, since the base holds one commit."""
 CONTAINER = ("apt-get", "apt", "apk", "yum", "dnf")
 """CONTAINER is every step of a Dockerfile that only a container can take, which this rig steps over."""
-PIP = (("python3 -m pip ", "pip "), ("python -m pip ", "pip "), ("pip3 ", "pip "), ("pip ", "python3 -m pip "))
-"""PIP is how a step that installs is said on this host, in the order the swaps apply."""
+MANIFEST = "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"
+"""MANIFEST is the two forms of the manifest of one image that a registry is asked for."""
+SAID = (
+  ("bash -lc ", "bash -c "),
+  ("python3 -m pip ", "pip "),
+  ("python -m pip ", "pip "),
+  ("pip3 ", "pip "),
+  ("pip ", "python3 -m pip "),
+)
+"""SAID is how a step of a Dockerfile is said on this host, in the order the swaps apply.
+
+A login shell of this host puts the paths of the system first, so its python is the one of the host and not the
+interpreter of the checkout. In the image, a login shell and a plain shell find the same python and the same pip,
+so a step takes a plain shell here.
+"""
 TICK = 2.0
 """TICK is the seconds between two looks at a life that is working."""
 STEP = 1800.0
@@ -134,9 +151,18 @@ def bytes_of(args: Sequence[str]) -> bytes:
   return subprocess.run(list(args), capture_output=True, check=False).stdout  # noqa: S603
 
 
+def gits(tree: Path) -> list[str]:
+  """Git, told which tree it speaks about and that the repo of that tree is the one it holds.
+
+  Git told only a directory climbs to the repo above it when the .git there is empty, so a reset or a commit would
+  land in a tree that is not the rig's.
+  """
+  return ["git", "-C", str(tree), "--git-dir", ".git"]
+
+
 def git(*args: str, where: Path) -> int:
-  """Git, always told which tree it speaks about."""
-  return ran(["git", "-C", str(where), *args])
+  """One step of git on one tree of the rig."""
+  return ran([*gits(where), *args])
 
 
 def tool(name: str) -> str:
@@ -230,6 +256,135 @@ def read_task(task: str) -> tuple[Path, Mapping[str, str]]:
   return where, meta
 
 
+def image(task: Path) -> str:
+  """The image a task names, which holds the environment of the task and runs its verifier."""
+  with (task / "task.toml").open("rb") as fh:
+    named = tomllib.load(fh).get("environment", {}).get("docker_image", "")
+  if not named:
+    say(f"[deepswe] {task.name}: task.toml names no docker_image")
+    raise SystemExit(1)
+  return named
+
+
+def registry(named: str, path: str, accept: str) -> HTTPResponse:
+  """One read of the registry that holds an image, open for its caller, with the anonymous token it asks for."""
+  host, _, rest = named.partition("/")
+  repo = rest.rpartition(":")[0]
+  url = f"https://{host}/v2/{repo}/{path}"
+  heard = {"Accept": accept}
+  try:
+    return urlopen(Request(url, headers=heard), timeout=60)
+  except HTTPError as no:
+    if no.code != 401:  # noqa: PLR2004
+      raise
+    told = dict(re.findall(r'(\w+)="([^"]*)"', no.headers.get("WWW-Authenticate", "")))
+  asked = urlencode({"service": told["service"], "scope": f"repository:{repo}:pull"})
+  with urlopen(f"{told['realm']}?{asked}", timeout=60) as got:  # noqa: S310
+    heard["Authorization"] = f"Bearer {json.load(got)['token']}"
+  return urlopen(Request(url, headers=heard), timeout=60)
+
+
+def layer(named: str, digest: str) -> tuple[dict[str, dict[str, str | bool]], list[str]]:
+  """What one layer of an image does to the python of the image, read once and kept.
+
+  It is every distribution the layer writes, by the path of its dist-info, with its name, its version, the URL it
+  was installed from and whether it was installed editable; and every path the layer takes away, where a path that
+  ends with a slash takes the whole of its directory.
+  """
+  kept_at = HOMES / "layers" / f"{digest.replace(':', '-')}.json"
+  if kept_at.is_file():
+    said = json.loads(kept_at.read_text(encoding="utf-8"))
+    return said["dists"], said["gone"]
+  dists: dict[str, dict[str, str | bool]] = {}
+  gone: list[str] = []
+  with registry(named, f"blobs/{digest}", "*/*") as got, tarfile.open(fileobj=got, mode="r|*") as tar:
+    for member in tar:
+      parent, _, leaf = member.name.removeprefix("./").rpartition("/")
+      if leaf == ".wh..wh..opq":
+        gone.append(f"{parent}/")
+      elif leaf.startswith(".wh."):
+        gone.append(f"{parent}/{leaf.removeprefix('.wh.')}")
+      elif parent.endswith(".dist-info") and leaf in ("METADATA", "direct_url.json") and member.isfile():
+        read = tar.extractfile(member)
+        text = read.read().decode(errors="replace") if read else ""
+        one = dists.setdefault(parent, {"url": "", "editable": False})
+        if leaf == "METADATA":
+          headers = message_from_string(text)
+          one |= {"name": str(headers["Name"]), "version": str(headers["Version"])}
+        else:
+          came = json.loads(text)
+          one |= {"url": came.get("url", ""), "editable": bool(came.get("dir_info", {}).get("editable"))}
+  kept_at.parent.mkdir(parents=True, exist_ok=True)
+  kept_at.write_text(json.dumps({"dists": dists, "gone": gone}), encoding="utf-8")
+  return dists, gone
+
+
+def interpreter(named: str) -> tuple[str, dict[str, tuple[str, str, bool]]]:
+  """The python that the image of a task runs, which is the python its verifier runs.
+
+  It is the version of that python, and every distribution its site holds, by name, with its version, the URL it
+  was installed from, which is empty for a distribution of an index, and whether it was installed editable. The config of the image names the version
+  in PYTHON_VERSION, as the official python image sets it, and the venv in VIRTUAL_ENV when the image makes one.
+  The layers say what the site holds, each in order over the ones before it. All of it is read from the registry,
+  with no pull and no docker.
+  """
+  with registry(named, f"manifests/{named.rpartition(':')[2]}", MANIFEST) as got:
+    manifest = json.load(got)
+  if "config" not in manifest:
+    say(f"[deepswe] {named} is an index of images, and the rig reads the python of one image only")
+    raise SystemExit(1)
+  with registry(named, f"blobs/{manifest['config']['digest']}", "*/*") as got:
+    env = dict(one.partition("=")[::2] for one in json.load(got).get("config", {}).get("Env") or [])
+  version = env.get("PYTHON_VERSION", "")
+  if not version:
+    say(f"[deepswe] {named} names no PYTHON_VERSION, so the rig cannot run the python that its verifier runs")
+    raise SystemExit(1)
+  prefix = (env.get("VIRTUAL_ENV") or "/usr/local").strip("/")
+  site = f"{prefix}/lib/python{'.'.join(version.split('.')[:2])}/site-packages/"
+  held: dict[str, dict[str, str | bool]] = {}
+  for one in manifest["layers"]:
+    dists, gone = layer(named, one["digest"])
+    for path in gone:
+      held = {at: dist for at, dist in held.items() if at != path and not at.startswith(path.rstrip("/") + "/")}
+    held |= dists
+  return version, {
+    str(dist["name"]): (str(dist["version"]), str(dist["url"]), bool(dist["editable"]))
+    for at, dist in held.items()
+    if at.startswith(site) and "/" not in at.removeprefix(site) and "name" in dist
+  }
+
+
+def rebuilt(repo: Path, dists: Mapping[str, tuple[str, str, bool]]) -> None:
+  """Install again each distribution that the image built from its tree, from the tree, at the version it holds.
+
+  The base holds one commit and no tag, so a step builds the tree at a version that git makes up, and a release
+  that wants a newer one goes over the editable install of the tree: the tree then imports the release. The
+  version is told to every build backend in this one install, and in no step, since a version told to a step also
+  reaches the build of an sdist that the step fetches, and the build of setuptools-scm itself then fails.
+  """
+  python = str(repo / ".venv" / "bin" / "python")
+  for name, (version, url, editable) in dists.items():
+    if url == "file:///app" or url.startswith("file:///app/"):
+      where = str(repo / url.removeprefix("file:///app").lstrip("/"))
+      told = {"SETUPTOOLS_SCM_PRETEND_VERSION": version, "PDM_BUILD_SCM_VERSION": version}
+      say(f"[deepswe] {name} {version} from the tree, as the image holds it")
+      if ran([python, "-m", "pip", "install", "-q", "--no-deps", *(["-e"] if editable else []), where], env=told):
+        say(f"[deepswe] {name} could not be installed from {where}")
+        raise SystemExit(1)
+
+
+def constrained(dists: Mapping[str, tuple[str, str, bool]], into: Path) -> Path:
+  """A file of constraints that holds pip to the version the image holds of each distribution it took from an index.
+
+  A step resolves its requirements now, and the image resolved them when it was built, so a step that is free takes
+  newer releases than the verifier runs. A newer pytest refused to collect the suite of dateutil. A distribution
+  that the image built from the tree or took from a URL is left free, since the step names where it comes from.
+  """
+  pinned = sorted(f"{name}=={version}" for name, (version, url, _) in dists.items() if not url)
+  into.write_text("\n".join(pinned) + "\n", encoding="utf-8")
+  return into
+
+
 def steps(task: Path) -> list[str]:
   """The steps of dependency the Dockerfile of a task takes, without the clone the tarball already stands for."""
   df = task / "environment" / "Dockerfile"
@@ -246,14 +401,21 @@ def steps(task: Path) -> list[str]:
 def venved(repo: Path) -> str:
   """What puts the interpreter of the checkout first, once one stands there.
 
-  A python task gets an interpreter of its own inside the checkout, made from this one, so its dependencies land
-  neither in the python of the system nor in the one of this repository.
+  A python task gets an interpreter of its own inside the checkout, at the version its image runs, so its
+  dependencies land neither in the python of the system nor in the one of this repository.
   """
   first = repo / ".venv" / "bin"
   return f'export PATH="{first}:$PATH"; ' if first.is_dir() else ""
 
 
-def generic(repo: Path, lang: str) -> None:
+def hosted(command: str, swaps: Sequence[tuple[str, str]]) -> str:
+  """A command of a Dockerfile, as this host says it."""
+  for was, now in swaps:
+    command = command.replace(was, now)
+  return command
+
+
+def generic(repo: Path, lang: str, env: Mapping[str, str], swaps: Sequence[tuple[str, str]]) -> None:
   """What is installed for a task whose Dockerfile says nothing this host can take."""
   words = {
     "typescript": "npm ci --include=dev --no-audit --no-fund || npm install --no-audit --no-fund",
@@ -265,32 +427,44 @@ def generic(repo: Path, lang: str) -> None:
   if words is None:
     say(f"[deepswe] unknown language {lang!r}; nothing installed")
     return
-  ran(["bash", "-lc", venved(repo) + words], where=repo, env={**VCS, "npm_config_confirm_modules_purge": "false"})
+  ran(["bash", "-lc", venved(repo) + hosted(words, swaps)], where=repo, env=env)
 
 
 def installed(task: Path, repo: Path, lang: str) -> None:
   """Take the steps of the task's own Dockerfile in the checkout, so the tree is the one its verifier wants."""
-  if lang == "python" and not (repo / ".venv").is_dir():
-    say("[deepswe] making the interpreter of the checkout")
-    ran([sys.executable, "-m", "venv", str(repo / ".venv")])
+  env = {"npm_config_confirm_modules_purge": "false"}
+  swaps = SAID
+  dists: Mapping[str, tuple[str, str, bool]] = {}
+  if lang == "python":
+    version, dists = interpreter(image(task))
+    say(f"[deepswe] making the interpreter of the checkout: python {version}, as the image of the task runs")
+    python = repo / ".venv" / "bin" / "python"
+    if ran([tool("uv"), "venv", "--no-project", "--seed", "--python", version, str(repo / ".venv")]):
+      say(f"[deepswe] uv could not make an interpreter of python {version}")
+      raise SystemExit(1)
+    # The pip of a step is the pip of the image: pip 26.2 could not build an sdist that a step of dateutil fetches.
+    if "pip" in dists and ran([tool("uv"), "pip", "install", "-q", "--python", str(python), f"pip=={dists['pip'][0]}"]):
+      say(f"[deepswe] uv could not install the pip {dists['pip'][0]} of the image")
+      raise SystemExit(1)
+    # A constraint in the environment of pip reaches the builds that pip isolates, where the image had none, so it
+    # is told on the command line of each install.
+    pins = shlex.quote(str(constrained(dists, repo.parent / "constraints.txt")))
+    swaps = (*swaps, ("python3 -m pip install ", f"python3 -m pip install -c {pins} "))
   told = steps(task)
   if not told:
     say(f"[deepswe] {task.name}: the Dockerfile says no step; installing by language instead")
-    return generic(repo, lang)
+    generic(repo, lang, env, swaps)
   for step in told:
     if step.split(" ", 1)[0] in CONTAINER:
       say(f"[deepswe] over (a container alone takes it): {step[:80]}")
       continue
-    named = step
-    for was, now in PIP:
-      named = named.replace(was, now)
-    cmd = re.sub(r"(?<![\w./])/app\b", str(repo), named)
+    cmd = re.sub(r"(?<![\w./])/app\b", str(repo), hosted(step, swaps))
     say(f"[deepswe] RUN {cmd[:90]}")
-    if ran(["bash", "-lc", venved(repo) + cmd], where=repo, env={**VCS, "npm_config_confirm_modules_purge": "false"}):
+    if ran(["bash", "-lc", venved(repo) + cmd], where=repo, env=env):
       say("[deepswe]   the step failed; the rig goes on with what did land")
-  if lang in ("typescript", "javascript") and not (repo / "node_modules").is_dir():
-    generic(repo, lang)
-  return None
+  if told and lang in ("typescript", "javascript") and not (repo / "node_modules").is_dir():
+    generic(repo, lang, env, swaps)
+  rebuilt(repo, dists)
 
 
 def submodules(slug: str, base: str, into: Path) -> None:
@@ -318,41 +492,48 @@ def submodules(slug: str, base: str, into: Path) -> None:
       path = ""
 
 
+def whole(base: Path, seal: Path, sha: str) -> bool:
+  """Whether the base stands as its seed left it: the seal names its commit, and no file of that commit is gone.
+
+  The reaper of this host takes the files of an old checkout and leaves its directories. The seal is written last,
+  so a seed that stopped halfway leaves none, and the reaper takes it with the rest.
+  """
+  said = seal.read_text(encoding="utf-8") if seal.is_file() else ""
+  return said == sha and quiet([*gits(base), "diff", "--quiet", "--diff-filter=D", "HEAD", "--"]) == 0
+
+
 def seeded(task: str, *, keep_app: bool = False) -> tuple[Path, Path, Mapping[str, str], str]:
   """Everything one run wants before a model is asked anything: the base, its dependencies, and the checkout."""
   where, meta = read_task(task)
   work = WORK / task
-  base, app = work / "base", work / "app"
+  base, app, seal = work / "base", work / "app", work / ".seeded"
   work.mkdir(parents=True, exist_ok=True)
-  if not (base / ".git").is_dir():
+  if not whole(base, seal, meta["base_commit_hash"]):
+    seal.unlink(missing_ok=True)
     based(meta["repository_url"], meta["base_commit_hash"], base)
     say(f"[deepswe] installing dependencies ({meta['language']}, from the Dockerfile of the task)")
     installed(where, base, meta["language"])
+    seal.write_text(meta["base_commit_hash"], encoding="utf-8")
   submodules(
     meta["repository_url"].removeprefix("https://github.com/").removesuffix(".git"), meta["base_commit_hash"], base
   )
-  syn = spoke(["git", "-C", str(base), "rev-parse", "HEAD"])
+  syn = spoke([*gits(base), "rev-parse", "HEAD"])
   say(f"[deepswe] base {syn[:10]}, whose tree is upstream {meta['base_commit_hash'][:10]}")
-  if keep_app and (app / ".git").is_dir():
-    say(
-      f"[deepswe] keeping the checkout as it stands ({spoke(['git', '-C', str(app), 'rev-parse', '--short', 'HEAD'])})"
-    )
+  if keep_app and quiet([*gits(app), "rev-parse", "--verify", "-q", "HEAD"]) == 0:
+    say(f"[deepswe] keeping the checkout as it stands ({spoke([*gits(app), 'rev-parse', '--short', 'HEAD'])})")
   else:
     say("[deepswe] seeding the checkout from the base")
-    shutil.rmtree(app, ignore_errors=True)
-    ran(["cp", "-a", str(base), str(app)])
-    git("reset", "-q", "--hard", syn, where=app)
-    git("clean", "-qfd", *(a for k in KEEP for a in ("-e", k)), where=app)
+    pristine(base, syn, app)
   return work, where, meta, syn
 
 
 def frozen(app: Path, syn: str, into: Path) -> None:
   """The submission, taken the moment the tree is final: everything the life left, as one diff against the base."""
-  if spoke(["git", "-C", str(app), "status", "--porcelain"]):
+  if spoke([*gits(app), "status", "--porcelain"]):
     git("add", "-A", where=app)
     named = ["-c", "user.email=deepswe@local", "-c", "user.name=deepswe"]
     git(*named, "commit", "-q", "-m", "submission", "--no-verify", where=app)
-  said = bytes_of(["git", "-C", str(app), "diff", "--binary", syn, "HEAD"])
+  said = bytes_of([*gits(app), "diff", "--binary", syn, "HEAD"])
   into.write_bytes(said)
   say(f"[deepswe] submission frozen: {len(said)} bytes into {into}")
 
@@ -368,10 +549,32 @@ def mode() -> str:
 
 
 def pristine(base: Path, syn: str, into: Path) -> None:
-  """A fresh copy of the base for the grade: the patch lands on the base and never on the tree of a run."""
+  """A fresh copy of the base at its commit, whose environment is its own and not the base's.
+
+  The checkout of a run is one, and the grade applies the patch on another, never on the tree of a run. A venv
+  writes its own path into the scripts it installs and into the hook of an editable package, so a plain copy runs
+  the python of the base, imports the code of the base, and installs into the base. Every name of the base in the
+  venv of the copy therefore moves to the copy. A compiled module that holds the name is dropped, and python
+  compiles it again.
+  """
+  shutil.rmtree(into, ignore_errors=True)
   ran(["cp", "-a", str(base), str(into)])
   git("reset", "-q", "--hard", syn, where=into)
   git("clean", "-qfd", *(a for k in KEEP for a in ("-e", k)), where=into)
+  was, now = re.compile(re.escape(str(base).encode()) + rb"(?![\w.-])"), str(into).encode()
+  for path in (into / ".venv").rglob("*"):
+    if path.is_symlink():
+      if was.search(to := os.fsencode(path.readlink())):
+        path.unlink()
+        path.symlink_to(os.fsdecode(was.sub(now, to)))
+    elif path.is_file() and was.search(said := path.read_bytes()):
+      if path.suffix == ".pyc":
+        path.unlink()
+      elif b"\0" in said:
+        say(f"[deepswe] {path} is a binary that names the base, and the rig cannot move it to {into}")
+        raise SystemExit(1)
+      else:
+        path.write_bytes(was.sub(now, said))
 
 
 def rewritten(tests: Path, app: Path, logs: Path, syn: str) -> None:
@@ -407,19 +610,11 @@ def graded(task: Path, base: Path, syn: str, patch: Path, out: Path) -> Mapping[
   shutil.copytree(task / "tests", tests)
   if how == "docker":
     # The image the task pins is the pristine verifier: the tests and the logs alone are mounted into it.
-    with (task / "task.toml").open("rb") as fh:
-      image = tomllib.load(fh).get("environment", {}).get("docker_image", "")
-    if not image:
-      say(f"[deepswe] {task.name}: task.toml names no docker_image")
-      raise SystemExit(1)
-    ran(["docker", "run", "--rm", "-v", f"{tests}:/tests:ro", "-v", f"{logs}:/logs", image, "bash", "/tests/test.sh"])
+    pinned = image(task)
+    ran(["docker", "run", "--rm", "-v", f"{tests}:/tests:ro", "-v", f"{logs}:/logs", pinned, "bash", "/tests/test.sh"])
   else:
     app = vroot / "app"
     pristine(base, syn, app)
-    if (app / "pyproject.toml").is_file() or (app / "setup.py").is_file():
-      # A package of src layout resolves through the newest editable hook, which points at the base: without this
-      # the grade imports the pristine code and every test that must turn from fail to pass dies as it is collected.
-      ran(["bash", "-lc", venved(app) + f"python3 -m pip install -e {shlex.quote(str(app))} --no-deps"], env=VCS)
     rewritten(tests, app, logs, syn)
     node = os.environ.get("DEEPSWE_NODE_HOME", "")
     first = [p for p in (str(app / ".venv" / "bin") if (app / ".venv").is_dir() else "", node) if p]
@@ -434,9 +629,15 @@ def graded(task: Path, base: Path, syn: str, patch: Path, out: Path) -> Mapping[
   said = logs / "verifier" / "reward.json"
   reward: Mapping[str, object] = json.loads(said.read_text(encoding="utf-8")) if said.is_file() else {"reward": None}
   out.write_text(json.dumps(reward, indent=2) + "\n", encoding="utf-8")
+  # The log and the reports beside a reward are the ones of that grade, so those of an earlier grade go first: a
+  # move onto a directory that stands puts the new one inside it, and the move after that fails.
   for held in ("run.log", "reports"):
+    beside = out.parent / held
+    if beside.is_dir():
+      shutil.rmtree(beside)
+    beside.unlink(missing_ok=True)
     if (logs / "verifier" / held).exists():
-      shutil.move(str(logs / "verifier" / held), str(out.parent / held))
+      shutil.move(str(logs / "verifier" / held), str(beside))
   shutil.rmtree(vroot, ignore_errors=True)
   say(f"[deepswe] reward {reward.get('reward')}: {json.dumps(reward)}")
   return reward
@@ -455,7 +656,7 @@ def dollars(numbers: Mapping[str, object]) -> float:
 
 def numbered(record: Path, root: str, began: float, got: object) -> Mapping[str, object]:
   """What the life did and what it cost, read off the record it kept."""
-  held = [entry[1] for entry in kept(record)] if record.is_file() else []
+  held = [entry[0] for entry in kept(record)] if record.is_file() else []
   kinds = [one[0] for one in held]
   usage = [one[3][2] for one in held if one[0] == "answer" and one[3] and one[3][2]]
   return {
@@ -516,7 +717,7 @@ def watched(record: Path, root: str, began: float, mark: dict[str, int]) -> str:
   """Say how the life is doing, and why it is going nowhere when it is.
 
   A chain past the ceiling of its grant is paused and buys nothing more, and nothing here wakes it, so the run is
-  over the moment the pause stands; the turns say it, since a control tells a tag of its own name. A life that
+  over the moment the pause stands; the turns say it, since a control tells a header of its own name. A life that
   buys answers and does nothing with them is wedged, which the mark of the last thing it did says.
   """
   numbers = numbered(record, root, began, None)
@@ -524,8 +725,8 @@ def watched(record: Path, root: str, began: float, mark: dict[str, int]) -> str:
     f"[deepswe] {numbers['wall_seconds']}s: asks={numbers['asks']} commands={numbers['commands']} "
     f"reads={numbers['reads']} writes={numbers['writes']} ${dollars(numbers):.4f}"
   )
-  named = [one[0] for turn in engine.turns(on=root) for one in turn[1] if isinstance(one, tuple)]
-  held = [one for one in named if one in ("paused", "woke")]
+  heads = [line.split()[1:2] for turn in engine.turns(on=root) for line in turn[1].split("\n") if line[1:2].isalnum()]
+  held = [one for (one,) in filter(None, heads) if one in ("paused", "woke")]
   if held[-1:] == ["paused"]:
     return "a pause stands over the chain, which buys nothing more"
   did = sum(counted(numbers, name) for name in ("commands", "reads", "writes"))
@@ -544,7 +745,7 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
   what it is and what it may say is the engine, which is its system prompt.
   """
   record = run_dir / "record.jsonl"
-  world, root, held = lived(record, app, args.to)
+  world, root, held = lived(record, app, args.to, keeps=True)
   del world
   say(f"[deepswe] life on {app}, root {root}, {len(held)} facts kept")
   if args.ceiling:
@@ -642,13 +843,11 @@ def turns(args: argparse.Namespace) -> int:
     raise SystemExit(1)
 
   async def folded() -> None:
-    """The life again on what the record kept, given room to say every word of it back before it is read."""
-    root = engine.boot(kept(record), world=Live(str(WORK / args.task / "app"), None, args.to).hears())
-    for _ in range(400):
-      await asyncio.sleep(0)
-    for n, (role, content, _, _) in enumerate(engine.turns(on=root)):
+    """The life again on what the record kept, booted as the run was, which stands whole when boot returns."""
+    root = lived(record, WORK / args.task / "app", args.to, keeps=False)[1]
+    for n, (role, py, _, _) in enumerate(engine.turns(on=root)):
       say(f"{'=' * 100}\n[{n} {role}]")
-      say(rendered(content))
+      say(py)
     await cool()
 
   asyncio.run(folded())
@@ -658,7 +857,7 @@ def turns(args: argparse.Namespace) -> int:
 def freeze(args: argparse.Namespace) -> int:
   """Take the submission from the checkout as it stands, before anything else moves."""
   work = WORK / args.task
-  frozen(work / "app", spoke(["git", "-C", str(work / "base"), "rev-parse", "HEAD"]), work / ".run" / "model.patch")
+  frozen(work / "app", spoke([*gits(work / "base"), "rev-parse", "HEAD"]), work / ".run" / "model.patch")
   return 0
 
 
@@ -680,8 +879,25 @@ def seed(args: argparse.Namespace) -> int:
   return 0
 
 
+def outside() -> None:
+  """Take the venv that runs the rig out of the environment that every child of the rig inherits.
+
+  `uv run` puts the venv of furb first on the PATH and names it in VIRTUAL_ENV. A command of a model, a step of a
+  seed and a grade are children of the rig, and each would find the python, the pip and the pytest of furb there.
+  A rig that runs on a python with no venv has nothing of its own to take out.
+  """
+  own = Path(sys.prefix).resolve()
+  if own == Path(sys.base_prefix).resolve():
+    return
+  path = os.environ.get("PATH", "").split(os.pathsep)
+  os.environ["PATH"] = os.pathsep.join(one for one in path if Path(one).resolve() != own / "bin")
+  if (named := os.environ.get("VIRTUAL_ENV")) and Path(named).resolve() == own:
+    del os.environ["VIRTUAL_ENV"]
+
+
 def main() -> None:
   """The door of the operator onto the whole rig."""
+  outside()
   whole = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
   verbs = whole.add_subparsers(dest="verb", required=True)
   named = argparse.ArgumentParser(add_help=False)

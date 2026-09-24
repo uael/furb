@@ -1,20 +1,24 @@
 # furb
 
-The engine is `src/furb/engine.py`, one file, which depends only on the python interpreter and on two interfaces it
-declares, World and Kernel. It is derived from the contract, `src/furb/engine.pyi`, and proved by the suite in
-`test/`. `src/furb/CLAUDE.md` holds the technical names of the engine and the laws that no test can hold, and
-`script/CLAUDE.md` says how to run the rig.
+The engine is `src/furb/engine.py`, one file. It depends only on the python interpreter and on the ears of the outside
+that boot is given, each a generator under a name: the World, the Kernel and the gate among them. It is derived from the
+contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/CLAUDE.md` holds the technical names of
+the engine and the laws that no test can hold. `script/CLAUDE.md` says how to run the DeepSWE rig.
 
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
-API of its own. `src/lib.rs` says what it gives: `Life`, whose methods are the verbs of the contract, and `World`,
-one trait a host writes. A life is dumped where it stands still and restored later on the same ears, which is
-`boot` with nothing replayed, since a run of monty replays the same; the python door has `dump` and `restore`
-beside `boot`. `src/preamble.py` runs in the sandbox and stands in for the ears of a host, and the Kernel
-and the gate are the crate's: the gate is the type checker of monty, which reads a word on the sheet of the engine
-against the typeshed of the sandbox, and which the gate of the python package reads through too. `src/binding/py.rs`, behind the `python` feature,
-is the door to python: `bind/python` is the package `furb-monty`, whose `furb_monty.engine` gives every name of the
-contract over one life in the sandbox, and `FURB_ENGINE=monty` makes `from furb import engine` give it. The suite
-runs on both engines, and `test/outside/test_monty.py` proves what the door carries that no sentence of the
+API of its own:
+
+- `src/lib.rs` says what the crate gives: `Life`, whose methods are the verbs of the contract, and `World`, the one
+  trait that a host writes.
+- `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
+- The Kernel and the gate are the crate's. The gate is the type checker of monty. It reads a word on the sheet of
+  the engine, `src/furb/sheet.py`, against the typeshed of the sandbox. The gate of the python package reads
+  through it too.
+- `src/binding/py.rs`, behind the `python` feature, is the door to python. `bind/python` is the package
+  `furb-monty`. Its module `furb_monty.engine` gives every name of the contract over one life in the sandbox, and
+  `FURB_ENGINE=monty` makes `from furb import engine` give it.
+
+The suite runs on both engines. `test/outside/test_monty.py` proves what the door carries that no sentence of the
 contract says.
 
 ## The contract
@@ -45,15 +49,20 @@ control flow in it changes the odds of a good or a bad response, so a flaw in it
 two shapes both pass every gate, the one that serves the meaning of every word is the one, and a shape that is
 green and incoherent is not done.
 
+Read the whole file and list each incoherence: a truth with two homes, a word with two meanings, a part held by the
+wrong owner. Probe each, build its reshape, and measure its size and the suite. Keep what adds coherence, then read
+the whole file again.
+
 ## The suite
 
 The suite drives the engine through its public API alone, end to end, from the module the operator gives.
 
-- `test/conftest.py` is the harness. `Sand` is a World in memory: files by path, scripted words by chain id, the
-  calls it performed, the entries it kept, and what it fed its commands. `Dead` refuses every question, and `Where`
-  asks the chain where it stands at every path. `Py` is a Kernel that is python, with a gate that refuses a word
-  that does not compile or that holds `BAD`. `life` boots a life on them, `settle` gives the loop room, `plain`
-  sends a record through the wire and back, and `tags`, `attr`, `said` and `text_of` read the facts and the turns.
+- `test/conftest.py` is the harness. `Sand` is a World in memory: files by path, scripted words by chain id, the calls
+  it performed, the entries it kept, and what it fed its commands. `Dead` refuses every question but the standing, and
+  `Where` asks the chain where it stands at every path. `Py` is a Kernel that is python, with the gate of the crate,
+  which refuses a word that is not python or that names what nothing binds, such as `BAD`. `life` boots a life on them,
+  `settle` gives the loop room, `plain` sends a record through the wire and back, `said` reads the facts, and
+  `paragraphs` and `heads` read the turns, which are python.
 - One test file per definition of the contract: `test_<name>.py` for a function, a global or a type alias,
   `test_<class>_<method>.py` for a method, in lower case, with dunder underscores stripped. A capitalized definition
   whose lower-case name is another definition's, `Bash` beside `bash`, has `test_<name>_shape.py`.
@@ -88,7 +97,7 @@ Run every command from the root of the repository.
 
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
   `furb-monty`. After a change of the crate, `uv sync --reinstall-package furb-monty` builds it again.
-- `uv run pytest -q`: the suite on both engines, with the coverage of `src/` and of `furb_monty`, which must be
+- `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole but for the four stubs of the bus that the toml excludes with their reason.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
 - `uv run ruff format src test script` then `uv run ruff check src test script`: format and lint. Two spaces of

@@ -18,7 +18,9 @@ callable the engine made goes out as a handle the host calls it back by, and a c
 name the ears of the host call it back by. A class a word defined goes out by a handle too, with the class it
 was made with, which the host holds as a type of its own derived from the type that base is there, and the class
 comes back in by; an instance of one goes out with its fields under its class and comes back in made here from
-them, with no `__init__` run. An instance of a class that inherits `str` is a string, and crosses as one.
+them, with no `__init__` run. An instance of a class that inherits `str` is a string, and crosses as one. A map
+that holds the key `is` crosses as its pairs under `is` with the name `dict`, both ways, so no side reads the map
+of a word or of a host as a mark.
 """
 
 from ast import PyCF_ALLOW_TOP_LEVEL_AWAIT
@@ -70,6 +72,17 @@ if TYPE_CHECKING:
 
 IS = "is"
 """IS marks a map that is an instance of a class of the engine, by the name of that class."""
+MODULE: dict[str, object] = {
+  "__debug__": True,
+  "__doc__": None,
+  "__package__": "furb",
+  "__spec__": None,
+  "__loader__": None,
+}
+"""MODULE is what the module of the engine holds before the engine runs: the names python gives that module, so a
+word reads them in a chain as it reads them in python, and as the gate reads them. No loader made the module here, so
+it has no spec and no loader. Python binds `__debug__` among its builtins, and the sandbox binds it in its main module
+alone."""
 MADE: dict[int, object] = {}
 """MADE holds every callable the engine made and every class a word defined that crossed to the host, by its
 handle, which is its identity, for as long as the host holds the handle: the host says when it forgot one, and it
@@ -107,9 +120,12 @@ def handled(x: object) -> int:
 def outward(x: object, names: Names) -> object:
   """A value as it goes out to the host: a callable or a class of the engine as its name, a callable the engine
   made as the handle the host holds it by, a class a word defined as that handle with the class it was made with
-  as it goes out, an instance of such a class with its fields under its class, and the entries of a container
-  each as they go out. Anything else the interpreter carries out as it is, a string of any class among it."""
+  as it goes out, an instance of such a class with its fields under its class, a map that holds the key IS as its
+  pairs, and the entries of a container each as they go out. Anything else the interpreter carries out as it is,
+  a string of any class among it."""
   match x:
+    case dict() if IS in x:
+      return {IS: "dict", "args": [[(k, outward(v, names)) for k, v in x.items()]]}
     case dict():
       return {k: outward(v, names) for k, v in x.items()}
     case list():
@@ -195,7 +211,7 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
   operator, and the host says the result into the life later, as the fact the engine waits for. It feeds a command
   and ends every command a control is over, and it keeps what the journal says to keep.
   """
-  cwd, ask, acts, under = verb(names, "cwd"), verb(names, "ask"), names["acts"], verb(names, "under")
+  cwd, ask, acts, covers = verb(names, "cwd"), verb(names, "ask"), names["acts"], verb(names, "covers")
   assert isinstance(acts, dict)
   running: set[str] = set()
 
@@ -233,8 +249,8 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
         world.feed(about, text)
       case ("exited", about, *_):
         running.discard(about)
-      case ("cancel" | "close", about, *_):
-        for one in [x for x in running if under(x, about) or acts[x][3] == about]:
+      case ("cancel" | "close", *_) as fact:
+        for one in [x for x in running if covers(fact, x)]:
           running.discard(one)
           world.slay(one)
       case ("keep", _, _, entry):
@@ -368,12 +384,11 @@ class Running:
       self.ended(one, got)
 
 
-def gating(gate: Gate, sheet: Names, source: str) -> Ear:
+def gating(gate: Gate, sheet: Names, engine: Names) -> Ear:
   """The gate as the ear of a life: it reads the word of a rung on its sheet, after the program the gate says.
 
-  The sheet is `furb.sheet`'s, written here as the python package writes it, with the engine laid first as the
-  first rung of the chain, and the reading of it is the gate of the host, given the sheet, which answers each
-  finding by its line.
+  The sheet is `furb.sheet`'s, written here as the python package writes it, from the names of the module of the
+  engine, and the reading of it is the gate of the host, given the sheet, which answers each finding by its line.
   """
 
   def checked(text: str) -> list[tuple[int, str]]:
@@ -384,7 +399,7 @@ def gating(gate: Gate, sheet: Names, source: str) -> Ear:
   while True:
     match (yield):
       case ("gate", qid, _, _, word, program):
-        yield "done", qid, verb(sheet, "gate")(source, [*program.values()], word, checked)
+        yield "done", qid, verb(sheet, "gate")(engine, [*program.values()], word, checked)
 
 
 def kernel(names: Names) -> Ear:
@@ -401,47 +416,39 @@ def kernel(names: Names) -> Ear:
         held.dropped(about)
 
 
-def module(source: str) -> dict[str, object]:
-  """One module of its own, from its source: a namespace nothing else shares."""
-  held: dict[str, object] = {}
+def module(source: str, held: dict[str, object]) -> dict[str, object]:
+  """One module of its own, from its source, run in what it holds before: a namespace nothing else shares."""
   exec(source, held)  # noqa: S102
   return held
 
 
 def opened(
-  engine: Names,
-  sheet: Names,
-  source: str,
-  record: object,
-  world: World | None,
-  gate: Gate,
-  ears: Ears,
-  names: list[str],
+  engine: Names, sheet: Names, record: object, world: World | None, gate: Gate, ears: Ears, names: list[str]
 ) -> tuple:
   """A life of that engine, opened from what a World kept of the life before it, on the ears of these names, in
   this order: the root it opened on, and what boot raised, if it raised.
 
   The World of the host stands under the name `world` when the host has one; otherwise the ears of the host hear
   that name too, as they hear every other. The Kernel and the gate are given first, so that the gate answers
-  before any ear hears it. The record is the entries as the World hands them: each the act made last before its fact, the fact as
-  a tuple, and for a query of a run what it was answered.
+  before any ear hears it. The record is the entries as the World hands them: each the fact as a tuple, and for a query
+  of a run what it was answered.
   """
   MADE.clear()
   kept = again(record, engine, ears)
   assert isinstance(kept, list)
-  entries = [(e[0], tuple(e[1]), *e[2:]) for e in kept]
+  entries = [(tuple(e[0]), *e[1:]) for e in kept]
   outside = {
     name: worldly(world, engine, ears) if name == "world" and world is not None else crossing(name, ears, engine)
     for name in names
   }
   try:
-    root = verb(engine, "boot")(entries, kernel=kernel(engine), gate=gating(gate, sheet, source), **outside)
+    root = verb(engine, "boot")(entries, kernel=kernel(engine), gate=gating(gate, sheet, engine), **outside)
   except BaseException as no:
     # What boot raised comes out of the entry the operator went in by, and the life goes on: a drift breaks the
     # journal and keeps nothing more, so the root stands when the record held it.
     acts = engine["acts"]
     assert isinstance(acts, dict)
-    return ("chain://operator.1" if "chain://operator.1" in acts else "", no)
+    return ("chain1" if "chain1" in acts else "", no)
   return (str(root), None)
 
 

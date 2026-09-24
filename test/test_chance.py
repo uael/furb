@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Dead, Sand, attr, life, relived, settle, tags
+from conftest import STANDS, Dead, Sand, life, relived, settle
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -34,8 +34,8 @@ async def test_chance_is_a_question_the_world_answers_and_it_enters_the_record()
   sand.script[root] = ["close(chance())"]
   assert await engine.prompt(float, "draw", on=root) == 1 / 7
   await settle()
-  drawn = [e for e in sand.record if e[1][0] == "chance"]
-  assert [(e[1][3], e[2]) for e in drawn] == [(root, 1 / 7)]
+  drawn = [e for e in sand.record if e[0][0] == "chance"]
+  assert [(e[0][3], e[1]) for e in drawn] == [(root, 1 / 7)]
   later = Sand(stands=STANDS)
   _, over = await relived(later, list(sand.record))
   assert over == root and [one for one in later.calls if one[0] == "chance"] == []
@@ -45,7 +45,8 @@ async def test_chance_tells_the_number_it_drew() -> None:
   """chance tells the number it drew."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  sand.script[root] = ["chance()\nclose(1)"]
+  sand.script[root] = ["drawn = chance()\nclose(1)"]
   assert await engine.prompt(int, "draw", on=root) == 1
   await settle()
-  assert [attr(tag, "drew") for tag in tags(engine.turns(on=root), "chance")] == [1 / 7]
+  assert engine.modules[root]["drawn"] == 1 / 7
+  assert engine.turns(on=root)[-1][1] == f"#chance {1 / 7!r}\n\n#prompt1 closed 1"

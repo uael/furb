@@ -2,9 +2,9 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, attr, life, said, settle, tags
+from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
-from furb.engine import OPERATOR, WORLD
+from furb.engine import OPERATOR, WORLD, Refused
 
 COST = (80000, 0, 0, 0, 1.5)
 """One answer of a model: a dollar and a half, and a fifth of the window of the actor the suite stands on."""
@@ -71,7 +71,7 @@ async def test_a_control_is_no_act_it_takes_no_name_of_its_own() -> None:
   await settle()
   assert set(engine.acts) == made
   assert [(one[0], one[1]) for one in log if one[0] in ("pause", "cancel")] == [("pause", act), ("cancel", act)]
-  kept = [fact for _, fact, *_ in sand.record if fact[0] in ("pause", "cancel")]
+  kept = [fact for fact, *_ in sand.record if fact[0] in ("pause", "cancel")]
   assert [(one[0], one[1], one[2]) for one in kept] == [("pause", act, OPERATOR), ("cancel", act, OPERATOR)]
 
 
@@ -103,21 +103,27 @@ async def test_it_reaches_by_the_chain_as_well_as_by_the_name() -> None:
   assert isinstance(engine.outcomes[act], CancelledError)
 
 
-async def test_a_control_carries_the_tag_it_tells() -> None:
-  """A control carries the tag it tells, so a model reads what was done to its work whoever did it, and nothing else builds that tag: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it."""
+async def test_a_control_carries_the_header_it_tells() -> None:
+  """A control carries the header it tells, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it."""
   sand = Sand(stands=STANDS, cost=COST)
   log, root = life(sand)
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
+  closed = f"#{ghost} closed Refused('ghost no actor')"
   shut = said(log, "close")[0]
-  assert (shut[1], shut[2]) == (ghost, root) and shut[4] == [("closed", [("over", ghost)], repr(shut[3]))]
+  assert shut[:3] == ("close", ghost, root) and shut[4] == [closed]
+  assert isinstance(shut[3], Refused) and str(shut[3]) == "ghost no actor"
   ceiling = engine.grant(usd=1.0, on=root)
   sand.script[root] = ["a = 1", "close(2)"]
   engine.prompt(int, "count", on=root)
   await settle()
-  held = said(log, "pause")[0]
-  assert (held[1], held[2], held[3]) == (root, ceiling, [("paused", [("over", root)], None)])
-  assert [attr(tag, "over") for tag in tags(engine.turns(on=root), "paused")] == [root]
+  assert said(log, "pause") == [("pause", root, ceiling, [f"#{root} paused"])]
+  assert [line for line in heads(engine.turns(on=root)) if line in (closed, f"#{root} paused")] == [
+    closed,
+    f"#{root} paused",
+  ]
+  told = [(a[0], a[-1]) for a in log if a[0] in ("tell", "pause", "wake", "cancel", "close")]
+  assert [kind for kind, notes in told if closed in notes or f"#{root} paused" in notes] == ["close", "pause"]
 
 
 async def test_a_pause_is_over_the_act_it_names_and_everything_under_it() -> None:

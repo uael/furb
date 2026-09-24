@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import STANDS, Sand, attr, life, said, settle, tags
+from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -39,6 +39,15 @@ async def test_a_cancel_is_over_the_act_it_names_and_everything_that_act_made() 
   assert isinstance(engine.peek(one), CancelledError)
   assert isinstance(engine.peek(step), CancelledError)
   assert isinstance(engine.peek(command), CancelledError)
+  sand.script[root] = ["y = bash('slow')\nclose(7)"]
+  over = engine.prompt(int, "go on", on=root)
+  assert await over == 7
+  running = said(log, "bash")[1][1]
+  engine.cancel(over)
+  await settle()
+  assert engine.peek(over) == 7
+  assert isinstance(engine.peek(running), CancelledError)
+  assert [a[1] for a in said(log, "cancel")] == [one, over]
 
 
 async def test_cancel_is_given_the_id_of_an_act_and_says_a_cancel_over_it() -> None:
@@ -47,7 +56,7 @@ async def test_cancel_is_given_the_id_of_an_act_and_says_a_cancel_over_it() -> N
   log, root = life(sand)
   one = engine.bash("slow", on=root)
   engine.cancel(one)
-  assert said(log, "cancel") == [("cancel", one, OPERATOR, [("cancelled", [("over", one)], None)])]
+  assert said(log, "cancel") == [("cancel", one, OPERATOR, [f"#{one} cancelled"])]
 
 
 async def test_a_cancelled_act_completes_with_cancellederror() -> None:
@@ -93,10 +102,10 @@ async def test_the_awaiter_of_a_cancelled_command_raises_cancellederror_in_its_s
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   one = engine.prompt(int, "go", on=root)
   await settle()
-  command = said(log, "bash")[0][1]
+  step, command = said(log, "answer")[0][1], said(log, "bash")[0][1]
   engine.cancel(command)
   await settle()
-  raised = tags(engine.turns(on=root), "raised")
-  assert [attr(tag, "type") for tag in raised] == ["CancelledError"]
+  assert isinstance(engine.outcomes[step], CancelledError)
+  assert [line for line in heads(engine.turns(on=root)) if " raised " in line] == [f"#{step} raised CancelledError()"]
   assert engine.peek(one) is None
   engine.cancel(one)

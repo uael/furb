@@ -1,7 +1,8 @@
 """Turns, the question of the turns of a chain."""
 
-from conftest import STANDS, Sand, life, said, tags
+from conftest import STANDS, Sand, heads, life, said
 from furb import engine
+from furb.engine import OPERATOR
 
 
 async def test_a_turns_is_the_question_of_the_turns_of_a_chain() -> None:
@@ -12,8 +13,7 @@ async def test_a_turns_is_the_question_of_the_turns_of_a_chain() -> None:
   got = engine.turns(on=root)
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
-  asked = said(held, "turns")[0]
-  assert (asked[1], asked[3]) == ("turns://operator.3", root)
-  assert engine.outcomes[asked[1]] == got
+  assert said(held, "turns") == [("turns", "turns@operator.3", OPERATOR, root)]
+  assert engine.outcomes["turns@operator.3"] == got
   assert [role for role, *_ in got] == ["user"]
-  assert [name for name, *_ in tags(got)] == ["opened", "opened", "opened", "closed"]
+  assert heads(got) == ["#chain1 root", f"#chain1 stands {STANDS!r}", "#rung1"]

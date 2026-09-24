@@ -1,6 +1,6 @@
 """grep, the show of the lines that a pattern matches."""
 
-from conftest import STANDS, Sand, life, settle, shown, tags
+from conftest import STANDS, Sand, life, settle
 from furb import engine
 
 
@@ -12,4 +12,4 @@ async def test_grep_pattern_is_the_show_of_the_lines_that_the_pattern_matches_ea
   sand.script[root] = ["read('m.txt', grep('^[bd]'))\nclose(1)"]
   assert await engine.prompt(int, "pick some", on=root) == 1
   await settle()
-  assert [one[2] for one in shown(tags(engine.turns(on=root), "read")[0])] == ["2 b\n4 d"]
+  assert engine.turns(on=root)[-1][1] == "#read m.txt\n# /w/m.txt, 0 known\n# 2 b\n# 4 d\n\n#prompt1 closed 1"

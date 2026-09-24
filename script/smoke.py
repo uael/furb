@@ -34,7 +34,7 @@ CEILING = 1.0
 
 def told(record: Path) -> list[list]:
   """Every answer of a model that the record holds."""
-  return [entry[1] for entry in kept(record) if entry[1][0] == "answer"]
+  return [entry[0] for entry in kept(record) if entry[0][0] == "answer"]
 
 
 def spent(record: Path) -> float:
@@ -49,7 +49,7 @@ def asks(calls: list[tuple]) -> list[tuple]:
 
 async def first(yard: Path, record: Path) -> None:
   """The first life: the model reads the file and answers with the number of the lines it holds."""
-  world, root, held = lived(record, yard, TO)
+  world, root, held = lived(record, yard, TO, keeps=True)
   assert held == [], "the first life is opened on no record"
   engine.grant(usd=CEILING, on=root)
   try:
@@ -57,23 +57,23 @@ async def first(yard: Path, record: Path) -> None:
   except TimeoutError:
     say(f"no answer in {STALL:.0f} seconds: {len(asks(world.calls))} ask(s) cost {spent(record):.4f} dollars")
     # A chain at the ceiling of its grant is paused and answers nothing more, which is why nothing came back.
-    shown = [tag for turn in engine.turns(on=root) for tag in turn[1] if isinstance(tag, tuple)]
-    if [tag for tag in shown if tag[0] == "paused"]:
+    heads = [line.split()[1:2] for turn in engine.turns(on=root) for line in turn[1].split("\n") if line[1:2].isalnum()]
+    if ["paused"] in heads:
       say(f"the chain is paused: the grant of {CEILING} dollars holds it at its ceiling")
     raise
   finally:
     await cool()
   say(f"the first life gave {got!r}, after {len(asks(world.calls))} ask(s)")
   for one in told(record):
-    _, content, usage, _ = one[3]
-    say(f"the word of the model:\n{'\n'.join(x for x in content if isinstance(x, str))}")
+    _, word, usage, _ = one[3]
+    say(f"the word of the model:\n{word}")
     say(f"the usage of the answer: {usage}")
   assert got == LINES, f"the model answered {got!r} and not {LINES}"
 
 
 async def second(yard: Path, record: Path) -> None:
   """The second life, on the record of the first: it asks no model, since the record answers the prompt."""
-  world, root, held = lived(record, yard, TO)
+  world, root, held = lived(record, yard, TO, keeps=True)
   name = again(held, root, int, MESSAGE, TO)
   assert name, "the record holds no prompt of the operator"
   try:

@@ -32,8 +32,8 @@ async def test_the_start_names_the_act_and_says_no_more_of_it() -> None:
   assert said(log, "start") == [("start", act, act)]
 
 
-async def test_it_says_nothing_when_the_record_boot_was_given_holds_the_act() -> None:
-  """It says nothing when the record boot was given holds the act, since what the World did once it does no more."""
+async def test_when_the_record_boot_was_given_holds_the_act_it_says_no_start_at_its_birth() -> None:
+  """When the record boot was given holds the act, it says no start at its birth, and it says its start at the first wake over it that this life says, if the act is not done by then."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nclose((await x).code)"]
@@ -41,5 +41,20 @@ async def test_it_says_nothing_when_the_record_boot_was_given_holds_the_act() ->
   await settle()
   later = Sand(stands=STANDS)
   again, over = await relived(later, plain(sand.record))
+  engine.wake(over)
+  await settle()
   assert over == root and said(again, "bash") != []
   assert said(again, "start") == [] and said(later.calls, "start") == []
+  quiet = Sand(stands=STANDS, auto=False)
+  log, root = life(quiet)
+  step = engine.rung("x = bash('sleep 9')", on=root)
+  await settle()
+  command = said(log, "bash")[0][1]
+  third = Sand(stands=STANDS)
+  heard, over = await relived(third, plain(quiet.record))
+  assert said(heard, "start") == []
+  engine.wake(command)
+  await settle()
+  engine.wake(over)
+  await settle()
+  assert [(a[1], a[2]) for a in said(heard, "start")] == [(command, command)] and engine.outcomes[step] is None

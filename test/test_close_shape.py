@@ -17,8 +17,8 @@ async def test_a_close_is_a_cancel_that_carries_what_the_act_it_names_is_done_wi
   engine.cancel(gone)
   await settle()
   shut, over = said(log, "close")[0], said(log, "cancel")[0]
-  assert shut == ("close", act, OPERATOR, 21, [("closed", [("over", act)], "21")])
-  assert over == ("cancel", gone, OPERATOR, [("cancelled", [("over", gone)], None)])
+  assert shut == ("close", act, OPERATOR, 21, [f"#{act} closed 21"])
+  assert over == ("cancel", gone, OPERATOR, [f"#{gone} cancelled"])
   assert (len(shut), len(over)) == (5, 4)
   assert engine.outcomes[act] == 21 and isinstance(engine.outcomes[gone], CancelledError)
 
@@ -30,7 +30,7 @@ async def test_a_close_is_over_the_act_it_names_and_the_words_running_under_it()
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   shut = engine.prompt(int, "go", on=root)
   await settle()
-  step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
+  step, command = said(log, "answer")[0][1], said(log, "bash")[0][1]
   engine.close(21, shut)
   await settle()
   assert engine.outcomes[shut] == 21

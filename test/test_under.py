@@ -2,6 +2,7 @@
 
 from conftest import STANDS, Sand, life, said
 from furb import engine
+from furb.engine import OPERATOR, WORLD
 
 
 async def made(sand: Sand) -> tuple[str, str, str, str]:
@@ -12,24 +13,27 @@ async def made(sand: Sand) -> tuple[str, str, str, str]:
   return root, said(log, "prompt")[0][1], said(log, "rung")[0][1], said(log, "bash")[0][1]
 
 
-async def test_whether_one_act_is_another_or_was_made_by_it_which_their_lineages_say() -> None:
-  """Whether one act is another or was made by it, which their lineages say, since an act is named under the one that made it."""
+async def test_whether_one_act_is_another_or_was_made_by_it_which_the_life_says() -> None:
+  """Whether one act is another or was made by it, which the life says, since every question says who made it."""
   _, asking, step, command = await made(Sand(stands=STANDS))
   assert engine.under(asking, asking)
   assert engine.under(step, asking) and engine.under(command, step)
   assert not engine.under(asking, step)
-  assert engine.lineage(step) == engine.lineage(asking) + ".1"
+  assert (engine.acts[step][2], engine.acts[command][2]) == (asking, step)
 
 
 async def test_an_act_is_under_every_ancestor_of_the_act() -> None:
-  """An act is under every ancestor of the act, and the name of the act says which acts those are."""
+  """An act is under every ancestor of the act, which the maker of each says in turn, up to the operator or an ear of the outside."""
   _, asking, step, command = await made(Sand(stands=STANDS))
-  assert (asking, step, command) == ("prompt://operator.2", "rung://operator.2.1", "bash://operator.2.1.1")
+  assert (asking, step, command) == ("prompt1", "rung1", "bash1")
   assert engine.under(command, step) and engine.under(command, asking) and engine.under(command, command)
+  assert engine.acts[asking][2] == OPERATOR and engine.under(command, OPERATOR)
+  (merged,) = [engine.asked[name] for name in engine.asked if name.startswith("merged@")]
+  assert merged[2] == WORLD and engine.under(merged[1], WORLD) and not engine.under(merged[1], OPERATOR)
 
 
 async def test_an_act_is_under_its_chain_only_when_the_chain_made_it() -> None:
-  """An act is under its chain only when the chain made it: the rung of a prompt the operator made is under that prompt, and on the chain, so a name says who made an act and never where it stands."""
+  """An act is under its chain only when the chain made it: the rung of a prompt the operator made is under that prompt, and on the chain, so the maker of an act says who made it and never where it stands."""
   where, asking, step, _ = await made(Sand(stands=STANDS))
   assert engine.under(step, asking) and not engine.under(step, where)
   _, held = engine.ask("transcript", where, where)
@@ -39,6 +43,8 @@ async def test_an_act_is_under_its_chain_only_when_the_chain_made_it() -> None:
 
 async def test_nothing_is_under_a_name_of_nothing() -> None:
   """Nothing is under a name of nothing."""
-  assert not engine.under("bash://operator.2", "")
+  _, _, _, command = await made(Sand(stands=STANDS))
+  assert not engine.under(command, "")
+  assert not engine.under("bash9", "bash9x")
   assert not engine.under("", "")
-  assert not engine.under("", "chain://operator.1")
+  assert not engine.under("", "chain1")

@@ -13,9 +13,9 @@ import furb_monty
 from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
 from furb.kernel import ENGINE, checked, gate
-from outside.doubles import settle, stood, tags, worlds
+from outside.doubles import heads, settle, stood, worlds
 
-STANDS = (((OPERATOR, (), WINDOW), ("opus", ("low",), 1000)), "/w", "opus/low")
+STANDS = [[[OPERATOR, [], WINDOW], ["opus", ["low"], 1000]], "/w", "opus/low"]
 
 
 def said(word: str, program: tuple[str, ...] = ()) -> list[str]:
@@ -23,19 +23,21 @@ def said(word: str, program: tuple[str, ...] = ()) -> list[str]:
   return gate(word, list(program))
 
 
-def test_the_sheet_lays_the_engine_as_the_first_rung() -> None:
-  """The module of a chain is the engine run as a word, so the sheet lays the engine itself first, whole and line
-  for line, then the two names the chain binds, then the program, then the word, and ty reads a word in the
-  vocabulary it will have when it runs."""
-  laid, above = sheet.sheet(ENGINE, ["k = 1"], "close(k)")
-  assert laid.startswith("async def __body():\n  import re\n")
-  assert "".join(line[2:] + "\n" if line.strip() else "\n" for line in laid.split("\n")[1:]).startswith(ENGINE)
-  assert (
-    '  actor = ""\n  raised: BaseException | None = None\n  try:\n    lineage("")\n    k = 1\n  except BaseException:\n'
-    "    pass\n  close(k)\n"
-  ) in laid
+def test_the_sheet_binds_every_name_of_the_engine_and_lays_each_word_in_a_try_of_its_own() -> None:
+  """The module of a chain holds every name of the engine, so the sheet imports the engine under a name no word
+  knows, declares each name ty gives a module that a chain in the sandbox does not hold, binds each name of the
+  engine, then the two names the chain binds, then each word of the program in a try of its own, then the word, and
+  ty reads a word in the vocabulary it will have when it runs."""
+  laid, above = sheet.sheet(ENGINE, ["k = 1", "j = 2"], "close(k)")
+  unbound = "".join(f"  {name}: object\n" for name in sheet.UNBOUND)
+  assert laid.startswith(f"import {sheet.MODULE}\nasync def __body():\n{unbound}  re = {sheet.MODULE}.re\n")
+  assert f"  read = {sheet.MODULE}.read\n" in laid
+  assert f"= {sheet.MODULE}.__" not in laid
+  assert laid.endswith(
+    '  actor = ""\n  raised: BaseException | None = None\n  try:\n    acting()\n    k = 1\n  except BaseException:\n'
+    "    pass\n  try:\n    acting()\n    j = 2\n  except BaseException:\n    pass\n  close(k)\n"
+  )
   assert above == laid.count("\n") - 1
-  assert laid.endswith("  close(k)\n")
 
 
 def test_every_name_the_engine_binds_is_a_name_a_word_may_say() -> None:
@@ -63,7 +65,7 @@ def test_a_word_is_read_against_the_names_it_will_have() -> None:
   """The gate reads a word in the names a chain holds, and a name of nobody is a finding."""
   assert said("close(1)") == []
   assert said("close(nowhere())")[0].startswith("line 1: error[unresolved-reference]")
-  assert said("close('a', 'rung://elsewhere')") == []
+  assert said("close('a', 'rung9')") == []
   assert said("k = 1") == []
 
 
@@ -87,6 +89,45 @@ def test_the_gate_reads_the_names_of_the_engine_as_a_chain_binds_them() -> None:
   assert said("old = HEAD\nHEAD = old\nx = TIMEOUT + 1") == []
   assert said("class Mine(Act): ...\nx: int = 1") == []
   assert said('x = 3\ndebug(t"{x}")') == []
+
+
+def test_a_word_binds_a_name_of_the_engine_again_to_any_value() -> None:
+  """A name of the engine is a plain binding of the chain, so a word may bind it again to a value of any type, after
+  it read the name or before."""
+  assert said("read = 1\nclose(read)") == []
+  assert said("x = read('a')\nread = 1\nclose(x)") == []
+  assert said("def mine(path: str) -> str:\n  return path\nread = mine\nclose(read('a'))") == []
+
+
+async def test_a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last() -> None:
+  """The gate finds what the run finds: a rung that bound a name of the engine again leaves that value to the word
+  after it, so a word that calls a name the program bound to a number is refused, and it raises when it runs."""
+  assert said("close(read('a'))", ("read = 1",))[0].startswith("line 1: error[call-non-callable]")
+  root = stood(worlds(STANDS), gated=False)
+  assert await engine.rung("read = 1", on=root) is None
+  with pytest.raises(TypeError, match="not callable"):
+    await engine.rung("close(read('a'))", on=root)
+
+
+def test_a_word_that_imports_the_engine_by_its_package_is_refused() -> None:
+  """The gate gives the checker the engine under a name that the sheet alone says, so a word that imports the
+  engine by the name of its package is refused, as it is where the engine runs in the sandbox."""
+  assert said("import furb\nclose(furb)") == ["line 1: error[unresolved-import] Cannot resolve imported module `furb`"]
+  assert said("from furb.engine import read\nclose(read)")[0].startswith("line 1: error[unresolved-import]")
+
+
+def test_a_word_may_use_the_async_forms_at_its_top_level() -> None:
+  """The body of the sheet is async, so a word may await, iterate and enter a context asynchronously at its top
+  level, as the interpreter runs it."""
+  word = "async def g():\n  yield 1\nasync for x in g():\n  close([y async for y in g()])"
+  assert said(word) == []
+
+
+def test_a_rung_that_raised_leaves_what_it_bound_and_the_rungs_after_it_to_the_word() -> None:
+  """Each rung of the program stands in a try of its own, so the word reads what every rung bound, the one that
+  raised and the ones after it alike."""
+  assert said("y: int = a + b", ("a = 1\nraise ValueError('x')", "b = 2")) == []
+  assert said("y: str = b", ("raise ValueError('x')", "b = 2"))[0].startswith("line 1: error[invalid-assignment]")
 
 
 def test_a_warning_of_ty_refuses_no_word() -> None:
@@ -155,7 +196,7 @@ async def test_what_a_word_raises_is_what_the_run_came_to() -> None:
   with pytest.raises(ValueError, match="boom"):
     await engine.rung("kept = 1\nraise ValueError('boom')", on=root)
   assert engine.modules[root]["kept"] == 1
-  assert [one[1][1:] for one in tags(root, "raised")] == [[("type", "ValueError"), ("message", "boom")]]
+  assert [head for head in heads(root) if " raised " in head] == ["#rung1 raised ValueError('boom')"]
 
 
 async def test_a_word_the_interpreter_cannot_compile_is_what_the_run_came_to() -> None:
@@ -184,7 +225,7 @@ async def test_the_kernel_speaks_from_the_run_it_steps() -> None:
   root = stood(worlds(STANDS), gated=False)
   waits = engine.rung('x = 3\ndebug(t"{x}")', on=root)
   await waits
-  assert [one[1] for one in tags(root, "debugged")] == [[("id", waits), ("x", 3)]]
+  assert [head for head in heads(root) if " debugged " in head] == [f"#{waits} debugged x = 3"]
 
 
 async def test_a_word_that_awaits_and_then_ends_gives_nothing() -> None:

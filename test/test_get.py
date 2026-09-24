@@ -70,4 +70,4 @@ async def test_a_name_of_no_act_of_the_life_raises_keyerror() -> None:
   assert engine.get(act)[1] == act
   with pytest.raises(KeyError):
     engine.get("bash://nobody")
-  assert all(isinstance(fact, tuple) for _, fact, *_ in sand.record)
+  assert all(isinstance(fact, tuple) for fact, *_ in sand.record)

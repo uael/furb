@@ -1,6 +1,7 @@
 """pausing, the kind that holds what an act hears while a pause over it stands."""
 
 from asyncio import CancelledError
+from collections.abc import Generator
 
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
@@ -37,7 +38,7 @@ async def test_a_pause_holds_delivery_a_result_that_arrives_enters_the_record_an
   engine.pause(root)
   engine.send("exited", command, 0, by=WORLD)
   await settle()
-  kept = [fact for _, fact, *_ in sand.record if fact[0] == "exited"]
+  kept = [fact for fact, *_ in sand.record if fact[0] == "exited"]
   assert [one[1] for one in kept] == [command] and act not in engine.outcomes
   engine.wake(root)
   await settle()
@@ -52,10 +53,15 @@ async def test_a_paused_prompt_stops_at_its_next_boundary_with_its_loop_where_it
   act = engine.prompt(int, "count", on=root)
   engine.pause(act)
   await settle()
-  assert len(said(log, "ask")) == 1 and said(log, "run") == [] and act not in engine.outcomes
+  (first,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert [a[1] for a in said(log, "ask")] == [first] and [a[1] for a in said(log, "answer")] == [first]
+  assert [a for a in said(log, "ready") if a[1] == first] == [] and act not in engine.outcomes
   engine.wake(act)
   await settle()
-  assert (await act) == 2 and len(said(log, "ask")) == 2 and len(said(log, "run")) == 2
+  assert (await act) == 2
+  steps = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert [a[1] for a in said(log, "ask")] == steps == [first, steps[1]]
+  assert [(a[1], a[4]) for a in said(log, "run") if a[1] in steps] == [(first, "a = 1"), (steps[1], "close(a + 1)")]
 
 
 async def test_the_engine_holds_the_response_of_an_ask_that_returns_on_a_paused_chain() -> None:
@@ -66,10 +72,12 @@ async def test_the_engine_holds_the_response_of_an_ask_that_returns_on_a_paused_
   act = engine.prompt(int, "count", on=root)
   engine.pause(root)
   await settle()
-  assert len(said(log, "answer")) == 1 and said(log, "run") == [] and act not in engine.outcomes
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert [a[1] for a in said(log, "answer")] == [step] and act not in engine.outcomes
+  assert [a for a in said(log, "ready") if a[1] == step] == [] and [a for a in said(log, "run") if a[1] == step] == []
   engine.wake(root)
   await settle()
-  assert (await act) == 7 and len(said(log, "run")) == 1
+  assert (await act) == 7 and [a[4] for a in said(log, "run") if a[1] == step] == ["close(7)"]
 
 
 async def test_a_rung_carries_on_only_while_its_own_chain_is_not_paused() -> None:
@@ -102,3 +110,20 @@ async def test_a_control_from_outside_reaches_a_paused_act_at_once() -> None:
   engine.cancel(act)
   await settle()
   assert isinstance(engine.outcomes[act], CancelledError)
+  heard: list[tuple] = []
+
+  def listening(_: str) -> Generator[None, tuple]:
+    while True:
+      heard.append((yield))
+
+  probe = engine.act("probe", root, engine.pausing(listening))
+  engine.pause(probe)
+  await settle()
+  before = len(heard)
+  other = engine.bash("other", on=root)
+  engine.close(0, other)
+  await settle()
+  assert heard[before:] == []
+  engine.wake(probe)
+  await settle()
+  assert [a[:2] for a in heard[before:] if a[0] in ("bash", "close")] == [("bash", other), ("close", other)]

@@ -11,8 +11,7 @@ async def test_asked_holds_every_query_the_life_has_put_under_its_name() -> None
   _, root = life(sand)
   assert [a[0] for a in engine.asked.values()] == ["stand"]
   assert engine.cwd(on=root) == "/w"
-  name = next(q for q in engine.asked if q.startswith("cwd://"))
-  assert engine.asked[name] == ("cwd", name, OPERATOR, root)
+  assert engine.asked["cwd@operator.2"] == ("cwd", "cwd@operator.2", OPERATOR, "chain1")
   life(Sand(stands=STANDS))
   assert [a[0] for a in engine.asked.values()] == ["stand"]
 
@@ -22,7 +21,7 @@ async def test_it_must_be_answered_while_the_one_that_asked_waits() -> None:
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   got = engine.cwd(on=root)
-  name = next(q for q in engine.asked if q.startswith("cwd://"))
+  name = "cwd@operator.2"
   assert engine.outcomes[name] == got == "/w"
   assert engine.cd("/x", on=root) == "/x"
   assert engine.cwd(on=root) == "/x"

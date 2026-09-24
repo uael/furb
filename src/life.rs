@@ -421,8 +421,8 @@ impl Opening {
 
   /// The life, opened from what a World kept of the life before it.
   ///
-  /// The record is the entries the World kept, each the act made last before its fact, the fact, and for a
-  /// query of a run what it was answered. The stand-in runs first in a module of its own, then the engine, and
+  /// The record is the entries the World kept, each the fact, and for a query of a run what it was
+  /// answered. The stand-in runs first in a module of its own, then the engine, and
   /// `boot` is given the Kernel of the crate and one generator for the World and for each ear.
   pub fn boot(self, record: impl IntoIterator<Item = Object>) -> Result<Life, Fault> {
     let typed = matches!(self.world, Worldly::Typed(_));
@@ -431,7 +431,7 @@ impl Opening {
     inner.ran(PREAMBLE, vec![])?;
     // The three objects of the host and the two modules are bound as names of the session, which every later
     // piece of code of the stand-in reads.
-    let opening = "__engine = module(__source)\n__sheet = module(__sheet_source)\n__world, __gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __source, __record, __world, __gate, __ears, __names)\n(__root, __raised)";
+    let opening = "__engine = module(__source, {**MODULE})\n__sheet = module(__sheet_source, {})\n__world, __gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __record, __world, __gate, __ears, __names)\n(__root, __raised)";
     let world = if typed { object("World", id(objects::WORLD)) } else { Object::none() };
     let got = inner.ran(
       opening,
@@ -750,10 +750,9 @@ impl Life {
     word: &str,
     retells: &str,
     actor: &str,
-    returns: &str,
     on: &str,
   ) -> Result<Act<'_, Object>, Fault> {
-    let args = [word, retells, actor, returns].into_iter().map(Object::string).collect();
+    let args = [word, retells, actor].into_iter().map(Object::string).collect();
     let got = self.verb("rung", args, Life::on(on))?;
     self.act(got)
   }

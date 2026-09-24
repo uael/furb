@@ -12,14 +12,17 @@ use pyo3::{
   Bound, Py, PyAny, PyResult, Python,
   exceptions::{PyBaseException, PyTypeError},
   prelude::*,
-  types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyModule, PyString, PyTuple, PyType},
+  types::{
+    PyBool, PyBytes, PyDict, PyFloat, PyFunction, PyInt, PyList, PyModule, PyString, PyTuple,
+    PyType,
+  },
 };
 
 use crate::{
   ear::{Ears, Reply},
   fact::Fact,
   life,
-  value::{Fault, IS, Object, ObjectRef, marked},
+  value::{Fault, IS, Object, ObjectRef, entry, marked},
 };
 
 /// What makes a value of the engine the python object it is: the engine of this interpreter, whose classes an
@@ -234,8 +237,9 @@ pub struct Life {
 #[pymethods]
 impl Life {
   /// A life, opened on the ears of the host, the names they hear by in the order the engine hears them, and the
-  /// record a World kept. The ears are one object with `hears(name, fact)`, `answered(name, value)`, and
-  /// `ear(generator)`, which hears one more generator and gives the mark the engine reads it by.
+  /// record a World kept. The ears are one object with `hears(name, fact)`, `answered(name, value)`,
+  /// `ear(generator)`, which hears one more generator and gives the name it is heard by and whether it was started,
+  /// and `callable(function)`, which gives the name the function is called back by.
   #[new]
   fn new(
     py: Python<'_>,
@@ -306,22 +310,6 @@ impl Life {
     }
     let named = named.iter().map(|(key, value)| (key.as_str(), value.clone())).collect();
     let got = self.held.verb(name, args, named).map_err(|fault| raised(py, &self.made, &fault))?;
-    to_python(py, &self.made, got.as_ref())
-  }
-
-  /// One word of the operator, run in the names of the engine with these values bound, and what it gave.
-  fn word<'py>(
-    &mut self,
-    py: Python<'py>,
-    word: &str,
-    inputs: Bound<'py, PyDict>,
-  ) -> PyResult<Bound<'py, PyAny>> {
-    let mut bound = Vec::new();
-    for (key, value) in inputs.iter() {
-      bound.push((key.extract::<String>()?, of_python(&self.made, &self.ears, &value)?));
-    }
-    let bound = bound.iter().map(|(key, value)| (key.as_str(), value.clone())).collect();
-    let got = self.held.word(word, bound).map_err(|fault| raised(py, &self.made, &fault))?;
     to_python(py, &self.made, got.as_ref())
   }
 
@@ -465,6 +453,21 @@ fn to_python<'py>(
       let at =
         |name: &str| pairs.iter().find(|(key, _)| key.as_str() == Some(name)).map(|(_, one)| *one);
       if let Some(mark) = at(IS).and_then(|one| one.as_str()) {
+        // A map that holds the key of the mark goes out as its pairs, and is the map it is here.
+        if mark == "dict"
+          && let Some(held) = at("args").and_then(|one| entry(&one, 0)).and_then(|one| one.items())
+        {
+          let map = PyDict::new(py);
+          for pair in held {
+            let (Some(key), Some(one)) = (entry(&pair, 0), entry(&pair, 1)) else {
+              return Err(PyTypeError::new_err(
+                "a map that goes out as its pairs holds pairs of two",
+              ));
+            };
+            map.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
+          }
+          return Ok(map.into_any());
+        }
         if mark == "name"
           && let Some(name) = at("name").and_then(|one| one.as_str())
           && let Some(held) = made.named(py, name)?
@@ -567,10 +570,10 @@ fn of_python(made: &Made, ears: &Py<PyAny>, value: &Bound<'_, PyAny>) -> PyResul
   if let Ok(held) = value.cast::<PyString>() {
     return Ok(Object::string(held.to_str()?));
   }
-  // A class a word defined goes back in by its handle, and an instance of one by the handle of its class and its
-  // fields; any other type goes in as its name, which is how a shape is said.
+  // A class a word defined and a callable the engine made go back in by their handle, and an instance of such a
+  // class by the handle of its class and its fields; any other type goes in as its name, which is how a shape is said.
   if let Ok(n) = value.getattr("__monty__").and_then(|n| n.extract::<i64>())
-    && value.is_instance_of::<PyType>()
+    && (value.is_instance_of::<PyType>() || value.is_instance_of::<PyFunction>())
   {
     return Ok(marked("made", [("id", Object::int(n))]));
   }
@@ -596,10 +599,12 @@ fn of_python(made: &Made, ears: &Py<PyAny>, value: &Bound<'_, PyAny>) -> PyResul
     return Ok(Object::string(bare(&value.repr()?.to_string())));
   }
   if kind == "generator" {
-    return of_python(made, ears, &ears.bind(py).call_method1("ear", (value,))?);
+    let (name, started): (String, bool) = ears.bind(py).call_method1("ear", (value,))?.extract()?;
+    return Ok(marked("ear", [("name", Object::string(name)), ("started", Object::bool(started))]));
   }
   if value.is_callable() {
-    return of_python(made, ears, &ears.bind(py).call_method1("callable", (value,))?);
+    let name: String = ears.bind(py).call_method1("callable", (value,))?.extract()?;
+    return Ok(marked("callable", [("name", Object::string(name))]));
   }
   if kind == "Template" {
     let mut pairs = Vec::new();
@@ -622,6 +627,11 @@ fn of_python(made: &Made, ears: &Py<PyAny>, value: &Bound<'_, PyAny>) -> PyResul
     let mut pairs = Vec::new();
     for (key, one) in held.iter() {
       pairs.push((of_python(made, ears, &key)?, of_python(made, ears, &one)?));
+    }
+    // A map that holds the key of the mark goes in as its pairs, so the stand-in never reads it as a mark.
+    if held.contains(IS)? {
+      let pairs = pairs.into_iter().map(|(key, one)| Object::tuple([key, one]));
+      return Ok(marked("dict", [("args", Object::list([Object::list(pairs)]))]));
     }
     return Ok(Object::dict(pairs));
   }
