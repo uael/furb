@@ -10,9 +10,7 @@ async def test_a_bash_carries_the_command_the_fed_flag_and_the_timeout() -> None
   sand = Sand(stands=STANDS, words=BASH)
   log, root = life(sand)
   verb("cd", root)("/deep")
-  one = verb("bash", root)(
-    "echo hi", fed=True, show=Bound(root).HEAD, show_err=made(root, "span", -9, -1), timeout=5.0
-  )
+  one = verb("bash", root)("echo hi", fed=True, show=Bound(root).HEAD, show_err=made(root, "span", -9, -1), timeout=5.0)
   assert isinstance(one, Act)
   got = exited(await one)
   assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", True, 5.0)]
