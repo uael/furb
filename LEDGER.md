@@ -30,12 +30,39 @@ external extension. Tell the owner if the pypi package `furb` (and npm `@furb/sk
    home cache. Make `furbDirectory` write `.furb/.gitignore` with `*` and `!config.json`, and write it whenever it is
    missing (not only when it makes `.furb`).
 
+4. Later added by the owner: World parts may be Python as well as TypeScript, later (not in this effort). Keep the
+   door open: the manifest `world` field names one file per language, `{"world": {"ts": "world.ts", "py":
+   "world.py"}}`, and the World part has the same shape in both languages: it hears a fact, yields calls to the
+   life, gives a saying, and speaks later as the World.
+5. Later added by the owner: the python part of an extension may be real code. Both forms hold, generically: (a) a
+   word, a python file played as it is; (b) a real python module that imports what it uses from the engine (`from
+   furb.engine import ask, act, tell, Show`) and from the extensions it requires (`from furb.builtin.files import
+   Text`), so that editors, ruff and ty check it, with its own tests and gates. The builtins become modules of form
+   (b), and lose their per-file ignores and their exclusion from ty.
+   Choice (ours, write it in docs/extensions.md): the host turns a module into the word it plays by blanking every
+   top-level `from furb...` import (`furb.engine`, `furb.builtin.*`, and `furb.extensions.*`, the package an
+   external extension names its python part under), each line of such a statement made an empty line, so every line
+   keeps its number and a finding of the gate points at the line of the file. A word of form (a) has no such import,
+   so it is played as it is: one rule serves both forms. Why not teach the gate and the Kernel the imports: the
+   module of a chain already binds every name of the engine and of each word played before it, and the engine reads
+   its own names through the globals of the chain, so a name a later rung rebinds is used from the next use on; an
+   import would pin the object of the module it names, and a rebound verb would not reach the word. The sandbox of
+   monty holds no package `furb`, the gate and the Kernel stay blind to packages, and the program a model reads holds
+   no import it cannot run.
+6. Later added by the owner: the shared machinery lives in the crate, so the TypeScript host, the Python host and a
+   future Rust host share one implementation: reading and merging config.json (XDG home and the local `.furb`), the
+   cache, fetching by path, git and npm, reading manifests, ordering by `requires`, turning a module into a word, and
+   the rule that plays the words on every chain without a source after boot and at each chain birth. napi and pyo3
+   expose it. Only what is truly per language stays in TS and Python: the World parts, the TUI parts, and the dynamic
+   import of their code.
+
 ## Design (planned, write it in docs/extensions.md)
 
 - Config: `{"extensions": {"<name>": false | true | "<path>" | {"path"} | {"git", "ref"?, "path"?} | {"npm", "version"?}}}`.
   Keys are extension names; builtins `files`, `bash`, `grant` are on unless `false`. A path resolves against the
   directory of that config file; `~` expands. The manifest name must equal the key.
-- Manifest: `package.json` with a `furb` field: `{"name", "python", "world"?, "tui"?, "requires"?: [...]}`.
+- Manifest: `package.json` with a `furb` field: `{"name", "python", "world"?: {"ts"?, "py"?}, "tui"?, "requires"?:
+  [...]}`. `python` names a file of form (a) or (b); the crate makes the word of it (decision 5).
   Builtins have their manifest in code. Order: builtins (files, bash, grant), then home config, then local; sort
   by `requires`; refuse one whose requirement is off. bash requires files.
 - Cache: git → `git clone --depth 1 [--branch ref]` into `<cache>/extensions/git/<sha256(url#ref)>/`, subfolder by
@@ -100,10 +127,28 @@ external extension. Tell the owner if the pypi package `furb` (and npm `@furb/sk
    Then list mismatches with the script used before (hygiene check of MISSING/STRAY per contract).
 2. Rewrite test/files, test/bash, test/grant with `Sand(words=BASH|FILES|GRANT)`, `Bound(root)` for verbs, fix ids
    (extension rungs take rung1.. and their words stand in the turns), one test per sentence of each .pyi.
-   Exclude `src/furb/builtin/*.py` from ty and coverage; ruff per-file-ignores F821 etc. for them.
-3. Python host (world.py, cli.py, test/outside), crate (preamble worldly, world.rs, life.rs, value.rs, wire.rs,
-   gate.rs, life.test.rs, py.rs, furb_monty engine: drop "span", "grep", ... from PURE and bash/grant from ACTS).
-4. TypeScript loader + generic World + builtin world parts, napi, README; then TUI parts and app.ts/session.ts
+   Make the builtins modules of form (b) (decision 5): they import from `furb.engine` and `furb.builtin.files`, ruff
+   and ty check them with no per-file ignore; exclude them from coverage only (they run as words in a chain). The
+   word rule lands in the crate first (a function of `furb_monty`), and `conftest.BUILTIN` makes the words with it.
+3. Crate and Python host (decision 6). (a) Crate: a module `src/extension.rs` with `src/extension.test.rs`: the
+   config (home `$XDG_CONFIG_HOME/furb` or `FURB_CONFIG_DIR`, and local `<project>/.furb/config.json`, merged by
+   name, paths resolved against the directory of their file, `~` expanded), the cache (`$XDG_CACHE_HOME/furb`), the
+   fetch (path; git by the `git` command; npm by `npm pack` and `tar`), the manifest (`package.json` field `furb`),
+   the order by `requires` with the refusal of a missing requirement, the builtins (`files`, `bash`, `grant`, their
+   words by `include_str!`), and the word of a module (decision 5; parse with ruff_python_parser, which monty already
+   pulls, or by lines). The play rule: `Life` plays the words itself, once after boot on every chain without a source
+   whose program lacks them, and at the birth of each chain without a source, as the World (site `world`). The
+   python engine host gets the same rule from the crate as a function of the program and the words (the missing
+   words, in order), which it calls at the same two moments. (b) Crate cleanup: preamble `worldly` forwards unknown
+   facts, world.rs gains a generic hears/answered, life.rs loses the typed read/write/cd/cwd/grant/bash, value.rs and
+   wire.rs lose Text/Exit, gate.rs and life.test.rs are fixed (play `include_str!("furb/builtin/*.py")` through the
+   word rule where a test needs a builtin), py.rs exposes the extension API, furb_monty engine drops "span", "grep",
+   ... from PURE and bash/grant from ACTS. (c) Python host: world.py and cli.py use the extension API of furb_monty
+   for the config, the fetch, the manifests, the order and the words, keep python world parts for files and bash,
+   and load no external world part yet (decision 4: later). test/outside follows.
+4. TypeScript: napi exposes the extension API of the crate (config, cache, fetch, manifest, order, word), and the
+   `Life` of napi plays the words itself; TS keeps the World parts (generic World, the builtin parts of files and
+   bash), the TUI parts, and the dynamic import of their code. README; then TUI parts and app.ts/session.ts
    (bash/grant/read/cd specifics), docs, screenshots (bun must be >= 1.4.2 for the TUI; host has 1.3.11).
 5. `extensions/skills/`: package.json manifest, skills.py + skills.pyi + tests, world.ts (finds SKILL.md under
    `.furb/skills`, the config dir `skills/`, and `.claude/skills`), tui.ts (`/skills`, `/skill <name>`); prove path,
