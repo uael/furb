@@ -1,8 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { type Turn, World, type WorldOptions } from "@furb/engine";
+import { join } from "node:path";
 import { openEngine } from "./bridge.ts";
 import type { Preferences } from "./preferences.ts";
 import { Session } from "./session.ts";
@@ -33,40 +32,6 @@ export async function demoDirectory(): Promise<string> {
 export async function removeDemoDirectories(): Promise<void> {
   for (const root of temporary) await rm(root, { recursive: true, force: true });
   temporary.clear();
-}
-
-export function createDemoWorld(options: WorldOptions): World {
-  const { record, cwd } = options;
-  const directory = cwd ?? (record ? dirname(record) : undefined);
-  if (!directory) throw new Error("A demo World needs a directory or a record.");
-  const world = new World({
-    ...options,
-    cwd: directory,
-    record: record ?? join(directory, "demo.jsonl"),
-    answer: async (_actor, _chain, turns, signal): Promise<Turn> => {
-      await new Promise<void>((resolve, reject) => {
-        // Only the turn that asks for live progress is slow, and not every later turn of its chain.
-        const timer = setTimeout(
-          resolve,
-          JSON.stringify(turns.at(-1)).includes("show live progress") ? 1800 : 180,
-        );
-        signal.addEventListener(
-          "abort",
-          () => {
-            clearTimeout(timer);
-            reject(new Error("cancelled"));
-          },
-          { once: true },
-        );
-      });
-      const code =
-        turns.filter((turn) => turn[0] === "assistant").length === 0
-          ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
-          : 'close("The next step is ready. Keep the change small, run its checks, and inspect the result here.")';
-      return ["assistant", code, [3240, 184, 2800, 0, 0.0024], null];
-    },
-  });
-  return world;
 }
 
 export async function demoSession(seed = false, preferences?: Preferences): Promise<Session> {
