@@ -32,8 +32,8 @@ EVENTS = {
   "cancelled",
 }
 """The words a header of an act says after its id, when it says what happened and no open of the act."""
-QUERIES = {"read", "write", "peek", "turns", "clock", "chance", "gate", "cd", "cwd"}
-"""The queries the model may say, each of which heads its paragraph with its kind."""
+QUERIES = {"read", "write", "cd"}
+"""The queries that tell, each of which heads its paragraph with its kind."""
 
 
 def spoken(head: str) -> str:
@@ -104,7 +104,7 @@ async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> N
 
 
 async def test_the_headers_of_the_file() -> None:
-  """The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, stands, advance, paused, woke, cancelled, and one for each query the model may say: read, write, peek, turns, clock, chance, gate, cd and cwd."""
+  """The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, stands, advance, paused, woke, cancelled, and one for each query that tells: read, write and cd."""
   sand = sown()
   _, root = life(sand)
   ceiling = engine.grant(usd=10.0, on=root)
