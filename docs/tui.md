@@ -1,300 +1,255 @@
 # furb terminal workspace
 
-These captures come from the real OpenTUI renderer and native engine. The demo World supplies scripted model
-answers, temporary files, and real local commands. Run `bun run screenshots` from the repository root to
-capture them again. The generator is `tui/script/screenshots.ts`.
+Keys use the marks of macOS: ⌃ is Control, ⌥ is Option or Alt, and ⇧ is Shift. These captures come from the real
+OpenTUI renderer and native engine. The demo World supplies scripted model
+answers, temporary files, and real local commands. Run `bun run screenshots` from the repository root to capture
+them again, and `bun run animation` to record the animation below. The generators are in `tui/script/`.
 
-## Workspaces and sessions
-
-One collapsible tree groups sessions under project folders. Status dots come from live work and saved
-records. Open sessions keep running while another is selected. The group dot shows the state that needs
-attention first.
-
-![Workspace tree](screenshots/31-workspace-tree.png)
-
-The other view captures below keep the left sidebar hidden. Ctrl+W opens the workspaces and sessions picker, and
-Ctrl+\\ shows the tree again.
+![The furb TUI in action](furb.gif)
 
 ## Welcome
 
-Start from a feed with space between turns and a growing input panel, with one right sidebar.
-GitHub Dark is the default.
+An empty feed shows the logo of furb, what it does, the project and the model, three ways to start, and the keys
+to know. A click on a way to start puts its prompt in the input. The top line names the session and the chain, and
+the toggle at its right switches the views. GitHub Dark is the default.
 
 ![Welcome](screenshots/01-welcome.png)
 
-## Conversation
+## Feed
 
-Markdown results, short code and output previews, expandable act details, and live usage.
+Your message stands in a panel. Each rung shows the numbered Python that the model wrote, and the acts that it
+made stand under it with a preview of their output. The answer comes under the name of the model that gave it.
+The sidebar shows the chains, the context and the cost, and the workspaces.
 
-![Conversation](screenshots/02-conversation.png)
+![Feed](screenshots/02-feed.png)
 
-## Python program
+## Transcript
 
-Accepted words with offline syntax colors, line numbers, and name inspection.
+The exact text that the built-in World sends to the model, turn by turn.
 
-![Python program](screenshots/03-program.png)
+![Transcript](screenshots/03-transcript.png)
 
-## Act activity
+## Changes
 
-Prompts, commands, results, and controls for each act.
+The lines that each write through the World added or removed. The toggle counts the changes.
 
-![Act activity](screenshots/04-activity.png)
-
-## Facts
-
-Search the facts heard by the life.
-
-![Facts](screenshots/05-facts.png)
-
-## Exact transcript
-
-The text the built-in World sends to the model.
-
-![Exact transcript](screenshots/06-transcript.png)
-
-## File changes
-
-Before and after lines from real writes through the World.
-
-![File changes](screenshots/07-changes.png)
+![Changes](screenshots/04-changes.png)
 
 ## Command palette
 
-Search actions without leaving the keyboard.
+⌃P lists every action with its slash command, its keys, and what it does. Type to filter by any of them. A
+dialog dims the screen behind it, and a click outside it closes it.
 
-![Command palette](screenshots/08-command-palette.png)
+![Command palette](screenshots/05-command-palette.png)
 
-## Models
+## Models and effort
 
-Choose a model from the chain's roster. Effort has its own picker.
+The model picker names the current model and the window of each. ⇧Tab chooses the effort of the model.
 
-![Models](screenshots/09-models.png)
+![Models](screenshots/06-models.png)
 
-## Effort
+![Effort](screenshots/07-effort.png)
 
-Choose one of the efforts that the selected model offers.
+## A question for you
 
-![Effort](screenshots/26-effort.png)
+A question that a model asks you stands in the feed with a yellow bar. The input takes its answer, or ⌃A opens
+a dialog for it.
 
-## Operator question
+![Operator question](screenshots/08-operator-question.png)
 
-A question belongs to its chain and keeps its requested shape.
-
-![Operator question](screenshots/10-operator-question.png)
+![Answer dialog](screenshots/09-operator-dialog.png)
 
 ## Python input
 
-Write and color Python, then run it through the same gate as a model.
+⌃R writes Python with the same gate as the model. The bar and the line under the input take the color of
+Python.
 
-![Python input](screenshots/11-python-input.png)
+![Python input](screenshots/10-python-input.png)
 
 ## Value inspector
 
-Read a live value and expand its fields.
+⌃G, or a ⌃click on a name, opens its value, its fields, and its definition.
 
-![Value inspector](screenshots/12-value-inspector.png)
+![Value inspector](screenshots/11-value-inspector.png)
 
-## Paper theme
+## Themes
 
-A light theme for all views and dialogs.
+Paper is light, and Midnight and Forest are dark. ⌃T opens the themes, each with a swatch of its colors.
 
-![Paper theme](screenshots/13-light-theme.png)
+![Paper theme](screenshots/12-light-theme.png)
 
-## Midnight theme
+![Midnight theme](screenshots/13-midnight-theme.png)
 
-A second dark theme with the same syntax and state colors.
+![Color themes](screenshots/14-theme-picker.png)
 
-![Midnight theme](screenshots/14-midnight-theme.png)
+## Chains
 
-## Chain navigation
+⌃B lists the chains, each with its state and the chain it branched from.
 
-Switch between the root and its branches.
+![Chains](screenshots/15-chains.png)
 
-![Chain navigation](screenshots/15-chains.png)
+## Keys, marks, and commands
 
-## Keyboard and commands
+F1 lists the chords that the terminal in use sends, what each mark means, and every slash command.
 
-Find the keys and slash commands.
-
-![Keyboard and commands](screenshots/16-help.png)
+![Help](screenshots/16-help.png)
 
 ## Narrow terminal
 
-The right sidebar makes room for the main view.
+On a narrow terminal the sidebar is hidden, and the top line keeps the session, the chain, and the views.
 
 ![Narrow terminal](screenshots/17-narrow.png)
 
-## Typed answer dialog
+## Work in progress
 
-Answer a question without losing the current draft.
+A command streams its output while it runs, and a model shows each word as it writes it. A word that the gate
+refuses shows the line and the reason.
 
-![Typed answer dialog](screenshots/18-operator-dialog.png)
+![Command streaming](screenshots/18-live-command.png)
 
-## Gate findings
+![Model progress](screenshots/19-model-progress.png)
 
-Read the findings for a refused word; it does not run.
+![Gate findings](screenshots/20-gate-findings.png)
 
-![Gate findings](screenshots/19-gate-findings.png)
+## Paused work and saved sessions
 
-## Paused resume
+A session that opens with unfinished work stays paused until you resume it. ⌃O lists the saved sessions of the
+workspace, with their state, the time since their last save, their cost, and their size.
 
-Saved work stays paused until the operator chooses to resume.
+![Paused resume](screenshots/21-paused-resume.png)
 
-![Paused resume](screenshots/20-paused-resume.png)
+![Saved sessions](screenshots/22-sessions.png)
 
-## Saved sessions
+## Rewind
 
-Choose a saved life and inspect its pending work.
+Escape twice opens the rewind tree in the feed. Each act stands under the act that made it, and each branch under
+the point it starts from. Enter on a message gives it back to the input on a new branch.
 
-![Saved sessions](screenshots/21-sessions.png)
+![Rewind tree](screenshots/23-rewind-tree.png)
 
-## Command streaming
+## Empty, loading, and failed views
 
-Read stdout while the command is still running.
+A view with nothing to show says why in its middle. An act that fails keeps its failure in the feed, and a view
+that cannot load offers to read it again.
 
-![Command streaming](screenshots/22-live-command.png)
+![Empty results](screenshots/24-empty-results.png)
 
-## Model progress
+![Loading](screenshots/25-loading.png)
 
-Keep using the workspace while a model request is in flight.
+![Act failure](screenshots/26-error.png)
 
-![Model progress](screenshots/23-model-progress.png)
+![View error](screenshots/27-view-error.png)
 
-## Rewind transcript
+## Workspaces
 
-Choose an act by lineage. An operator rung records the engine's filter, so the selected transcript comes
-back after a reopen. The module and files keep their current state.
+The sidebar groups sessions under project folders, and its list scrolls on its own. Status dots come from live work
+and saved records. Open sessions keep running while another is selected. A rung folds its program to one line and
+keeps its acts, a workspace folds to its name, and ⌃\ hides the sidebar. ⌃W opens the workspaces and sessions
+picker.
 
-![Rewind transcript](screenshots/24-rewind-transcript.png)
+![Workspace tree](screenshots/28-workspace-tree.png)
 
-## Prompt REPL
+![Collapsed rung](screenshots/29-collapsed-rung.png)
 
-Open a prompt's program with its own input draft. Run operator Python or edit the prompt's door.
+![Collapsed workspace](screenshots/30-collapsed-workspace.png)
 
-![Prompt REPL](screenshots/25-prompt-repl.png)
+![Hidden sidebar](screenshots/31-hidden-sidebar.png)
 
-## Empty results
-
-A search with no matching facts has an empty state in the feed.
-
-![Empty results](screenshots/27-empty-results.png)
-
-## Loading
-
-The view shows its pending read while the worker runs a Python word. The interface remains available.
-
-![Loading](screenshots/28-loading.png)
-
-## Act failure
-
-A failed read shows its error with the act that failed.
-
-![Act failure](screenshots/29-error.png)
-
-## View error
-
-A damaged diff journal fails to load. Repair it and refresh the view.
-
-![View error](screenshots/30-view-error.png)
-
-## Collapsed rung
-
-A folded rung shows its name and status. Its state is shared across views and saved with the session.
-
-![Collapsed rung](screenshots/32-collapsed-rung.png)
-
-## Collapsed workspace
-
-A workspace keeps its status visible while its session rows are folded.
-
-![Collapsed workspace](screenshots/33-collapsed-workspace.png)
-
-## Hidden workspace sidebar
-
-The feed takes the left sidebar's columns when it is hidden.
-
-![Hidden workspace sidebar](screenshots/34-hidden-workspace-sidebar.png)
-
-## Workspace picker
-
-Find a project or session from the keyboard, with the same live status as the tree.
-
-![Workspace picker](screenshots/35-workspace-picker.png)
+![Workspace picker](screenshots/32-workspace-picker.png)
 
 ## Session tree
 
-Follow each chain's source parent. Left and Right fold branches; Enter opens a chain.
+`/tree` opens the same tree as rewind, with the pointer on the chain shown.
 
-![Session tree](screenshots/36-session-tree.png)
+![Session tree](screenshots/33-session-tree.png)
 
-## Queued follow-up
+## Queued follow-ups
 
-A message waits until the chain's current prompt and rungs finish.
+⌥Enter queues a message until the current work completes. Up in an empty input takes the last one back to edit
+it, and `/queue` edits or removes the others.
 
-![Queued follow-up](screenshots/37-queued-follow-up.png)
+![Queued follow-up](screenshots/34-queued-follow-up.png)
 
-## Queue controls
+![Queue controls](screenshots/35-queue-editor.png)
 
-Edit or remove a message before it is sent. Saved queues wait for a resume choice.
+## Images, sharing, and sessions
 
-![Queue controls](screenshots/38-queue-editor.png)
+`/image` or ⌃V attaches an image. `/share` writes a standalone HTML conversation. `/delete` moves a session to
+the trash of its workspace.
 
-## Image attachment
+![Image attachment](screenshots/36-image-attachment.png)
 
-An image is copied beside the record. Its reference enters the prompt, and the World sends the image bytes
-through pi-ai. Click the attachment row to preview or remove a draft image.
+![Share conversation](screenshots/37-share-conversation.png)
 
-![Image attachment](screenshots/39-image-attachment.png)
-
-## Share conversation
-
-Export a standalone HTML file with images and the exact transcript. The dialog can open it, copy its path,
-or upload it and a Markdown copy to an unlisted GitHub gist when the user chooses that action.
-
-![Share conversation](screenshots/40-share-conversation.png)
-
-## Delete session
-
-Choose a session, then move its record and companion files to the workspace trash. Other sessions keep running.
-
-![Delete session](screenshots/41-delete-session.png)
+![Delete session](screenshots/38-delete-session.png)
 
 ## External editor
 
-The configured editor writes the draft file and returns it to the TUI. This capture uses a local editor
-fixture that writes Python through the same external-editor path.
+⌥E edits the draft in `VISUAL` or `EDITOR`.
 
-![External editor](screenshots/42-external-editor.png)
+![External editor](screenshots/39-external-editor.png)
 
-## File suggestions
+## Suggestions
 
-Type `@` at the start of a word to list project files above the input, which keeps the text as you type. Up and
-Down choose, Tab or Enter inserts the reference, and Escape hides the list. The file is read with the next message.
+`@` suggests project files, and `/` suggests slash commands, as you type.
 
-![File suggestions](screenshots/43-file-picker.png)
+![File suggestions](screenshots/40-file-picker.png)
 
-## Command suggestions
+![Command suggestions](screenshots/41-slash-suggestions.png)
 
-Type `/` at the start of the input to list the commands whose name starts with what follows. Tab completes the
-name, and Enter runs a command that needs no argument.
+A space after a command whose values are known lists them: the models, the efforts, the shapes, the themes, the
+paths of the project, the chains, and the acts. Enter on a value runs the command.
 
-![Command suggestions](screenshots/47-slash-suggestions.png)
+![Value suggestions](screenshots/46-value-suggestions.png)
 
-## Extension command
+## Retried words
 
-A loaded TypeScript extension adds a command to the same palette and completion list.
+A word of a model can fail: the gate refuses it, or it raises. When the next word of the same prompt takes its
+place, the failed word folds and reads as retried, in a quiet color. A failure that nothing replaced stays open, in
+red.
 
-![Extension command](screenshots/44-extension-command.png)
+![Retried word](screenshots/47-retried-word.png)
 
-## Undo message
+## Archived sessions
 
-Undo opens a durable filtered branch and restores the message draft, including image attachments. The
-module and files keep their current state.
+The pointer on a session row shows two buttons at its end. `✎` renames the session, and `×` asks whether to archive
+the session or move it to the trash. An archived session keeps its record, and folds under an Archived row of its
+workspace. A click on an archived session opens it and puts it back in the list. The state of a session shows in a
+tip only while the pointer is on its dot.
 
-![Undo message](screenshots/45-undo-message.png)
+![Archived session](screenshots/48-archive-session.png)
 
-## Redo message
+## The menu of a row
 
-Redo returns to the origin of that undo.
+A right click on a session row or a workspace row opens its menu at the pointer. The row stays lit while its menu
+is open. A session offers Open, Rename, Archive or Restore, and Move to trash. A workspace offers a new session, a
+new name, a fold, and removal from the list, which keeps its folder.
 
-![Redo message](screenshots/46-redo-message.png)
+![Session menu](screenshots/49-session-menu.png)
+
+## Rename in place
+
+Rename puts an input in the row, in place of the name. Enter keeps the new name, and Escape keeps the old one. A
+session keeps its name in its saved view, and a workspace in the list of workspaces.
+
+![Rename a session](screenshots/50-rename-session.png)
+
+## Extensions
+
+An extension adds commands to the palette and to the suggestions.
+
+![Extension command](screenshots/42-extension-command.png)
+
+## Undo and redo
+
+`/undo` removes the last message from a new branch, and `/redo` returns to the branch before it.
+
+![Undo message](screenshots/43-undo-message.png)
+
+![Redo message](screenshots/44-redo-message.png)
+
+## Stash
+
+⌃S puts the input aside, and the line under the input shows what waits. ⌃S again brings it back.
+
+![Stash](screenshots/45-stash.png)

@@ -77,8 +77,15 @@ export interface WorldOptions {
   effort?: ModelThinkingLevel;
   models?: Models;
   roster?: string[];
-  /** Replace only the model request, for a deterministic test or another host; the host still names the models. */
-  answer?: (actor: string, chain: string, turns: Turn[], signal: AbortSignal) => Promise<Turn>;
+  /** Replace only the model request, for a deterministic test or another host; the host still names the models. The
+   * answer may tell the text and the thinking that it writes as it writes them, which the World streams as a model's. */
+  answer?: (
+    actor: string,
+    chain: string,
+    turns: Turn[],
+    signal: AbortSignal,
+    write: (delta: { text?: string; thinking?: string }) => void,
+  ) => Promise<Turn>;
   operator?: (
     prompt: { id: string; shape: string; message: string },
     signal: AbortSignal,
@@ -274,7 +281,15 @@ export class World extends EventEmitter {
         return null;
       case "Read": {
         const path = this.path(String(args[0]), String(args[1]));
-        const info = statSync(path);
+        let info: ReturnType<typeof statSync>;
+        try {
+          info = statSync(path);
+        } catch (error) {
+          // A path that names nothing is said in plain words, which the model and the operator both read.
+          if ((error as NodeJS.ErrnoException).code === "ENOENT")
+            throw new Error(`There is no file at ${path}.`);
+          throw error;
+        }
         if (!info.isFile() || info.size > 524288)
           throw new Error(`Read needs a text file at most 524288 bytes: ${path}`);
         return {
@@ -398,7 +413,14 @@ export class World extends EventEmitter {
     this.streams.set(id, { chain, text: "", thinking: "" });
     this.emit("change");
     try {
-      if (this.options.answer) return await this.options.answer(actor, chain, turns, signal);
+      if (this.options.answer)
+        return await this.options.answer(actor, chain, turns, signal, ({ text = "", thinking = "" }) => {
+          const held = this.streams.get(id);
+          if (!held) return;
+          held.text += text;
+          held.thinking += thinking;
+          this.emit("change");
+        });
       const model = this.route(actor);
       // The engine phrases every turn as python, so the World renders nothing: a user turn goes as the python the
       // engine wrote, and one that holds nothing goes not at all, and an assistant turn as the blocks its provider

@@ -10,6 +10,7 @@
     "tui": "bun run tui/src/cli.ts",
     "demo": "bun run tui/src/cli.ts --demo",
     "screenshots": "bun run tui/script/screenshots.ts",
+    "animation": "bun run tui/script/animation.ts",
     "docs": "bun run tui/script/docs.ts",
     "check": "tsc --noEmit",
     "test": "bun test bind/typescript/test tui/test",
@@ -21,6 +22,8 @@
     "@napi-rs/cli": "^3.10.5",
     "@resvg/resvg-js": "^2.6.2",
     "@types/bun": "latest",
-    "typescript": "~5.9.3"
+    "@types/upng-js": "2.1.5",
+    "typescript": "~5.9.3",
+    "upng-js": "2.1.0"
   }
 }

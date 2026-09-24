@@ -29,12 +29,12 @@ test("a view opens at the offset it was left at, after a shorter view, in a new 
     await screen.flush();
   };
   try {
-    await show("facts");
+    await show("transcript");
     expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.viewport.height + 20);
     app.scroll.scrollTo(20);
     await show("changes");
     expect(app.scroll.scrollHeight).toBeLessThanOrEqual(app.scroll.viewport.height);
-    await show("facts");
+    await show("transcript");
     expect(app.scroll.scrollTop).toBe(20);
     app.dispose();
     app = new App(screen.renderer, session, { quit() {} });
@@ -53,7 +53,7 @@ test("a view opens at the offset it was left at, after a shorter view, in a new 
   try {
     await screen.flush();
     await screen.flush();
-    expect(reopened.view).toBe("facts");
+    expect(reopened.view).toBe("transcript");
     expect(app.scroll.scrollTop).toBe(20);
   } finally {
     app.dispose();
@@ -78,7 +78,6 @@ test("a command that printed more than a row holds sends the tail and its length
     expect(row?.output).toBe(printed.length);
     expect(stdout.length).toBeLessThanOrEqual(2000);
     expect(printed.endsWith(stdout)).toBe(true);
-    session.show("activity");
     app.render();
     await screen.flush();
     const card = app.scroll.getChildren().find((node) => node.id === command.id);
@@ -88,8 +87,10 @@ test("a command that printed more than a row holds sends the tail and its length
     await screen.flush();
     const opened = app.scroll.getChildren().find((node) => node.id === command.id);
     if (!opened) throw new Error("No open card for the command.");
-    await screen.waitFor(() => texts(opened).includes(printed), { maxPasses: 200 });
-    expect(texts(opened)).toContain(printed);
+    // The line end that closes the output ends its last row, and the card draws no empty row for it.
+    const shown = printed.replace(/\n$/, "");
+    await screen.waitFor(() => texts(opened).includes(shown), { maxPasses: 200 });
+    expect(texts(opened)).toContain(shown);
   } finally {
     app.dispose();
     screen.renderer.destroy();
@@ -108,19 +109,30 @@ test("the views say each quantity one way, read a page of changes once, and set 
     return readChanges(start, count);
   };
   try {
+    // The sidebar says the ceiling of the grant that holds now: a share of the context, then a sum of dollars.
     await session.submit("/context 0.3");
-    await session.submit("/grant 1.5");
-    session.show("activity");
+    await session.life.result(await session.life.rung("counted = 1"));
     await session.refresh();
     app.render();
     await screen.flush();
-    const frame = screen.captureCharFrame();
-    expect(frame).toContain("30% context");
+    let frame = screen.captureCharFrame();
+    const lines = frame.split("\n");
+    const meter = lines.findIndex((line) => line.includes("━"));
+    await screen.mockMouse.moveTo((lines[meter] ?? "").indexOf("━") + 2, meter);
+    await screen.flush();
+    frame = screen.captureCharFrame();
+    expect(frame).toContain("pauses at 30%");
     expect(frame).not.toContain("30.000000000000004");
+    await screen.mockMouse.moveTo(0, 0);
+    await session.submit("/grant 1.5");
+    await session.refresh();
+    app.render();
+    await screen.flush();
+    frame = screen.captureCharFrame();
     expect(frame).toContain("$1.50");
-    const card = app.scroll.getChildren().find((node) => /^grant\d+$/.test(node.id));
+    const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
     const heading = card?.getChildren()[0] as TextRenderable | undefined;
-    if (!heading) throw new Error("No card for the grant.");
+    if (!heading) throw new Error("No card for the rung.");
     const content = heading.content;
     app.render();
     await screen.flush();
@@ -172,7 +184,7 @@ test("the standing of a chain is no card of the conversation, though its turns h
   const screen = await createTestRenderer({ width: 120, height: 30 });
   const app = new App(screen.renderer, session, { quit() {} });
   try {
-    session.show("conversation");
+    session.show("feed");
     await session.refresh();
     app.render();
     await screen.flush();
@@ -221,21 +233,26 @@ test("a card that the view goes to, or that Details expands, is in view once the
     await until(session, () => Object.values(session.program).includes("target = 1"));
     const rung = Object.entries(session.program).find(([, word]) => word === "target = 1")?.[0];
     if (!rung) throw new Error("No rung in the program.");
-    session.show("conversation");
+    session.show("transcript");
     await session.refresh();
     await laid();
     await app.inspect("target");
     await laid();
     screen.mockInput.pressEnter();
     await laid();
-    expect(session.view).toBe("program");
+    expect(session.view).toBe("feed");
     expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.viewport.height * 2);
     expect(seen(rung)).toBe(true);
-    session.show("facts");
+    // Folded rungs take a row each, so that the heading of one stands at the foot of the view.
+    session.preferences.foldRungs = true;
+    app.scroll.scrollTo(app.scroll.scrollHeight);
     await laid();
     const view = app.scroll.viewport;
-    const last = app.scroll.getChildren().find((node) => node.y === view.y + view.height - 1);
-    if (!last) throw new Error("No card on the last line of the view.");
+    const last = app.scroll
+      .getChildren()
+      .filter((node) => /^rung\d+$/.test(node.id) && node.y >= view.y && node.y < view.y + view.height)
+      .at(-1);
+    if (!last) throw new Error("No folded rung at the foot of the view.");
     const shut = card(last.id).height;
     app.details();
     const heading = (last.getChildren()[0] as TextRenderable).plainText.replace(/^[▸▾] /, "");
@@ -251,7 +268,7 @@ test("a card that the view goes to, or that Details expands, is in view once the
   }
 });
 
-test("the palette lists as many choices as its rows hold, with the selected one among them, inside its border", async () => {
+test("the palette lists as many choices as its rows hold, with the selected one among them, inside its panel", async () => {
   const session = await demoSession();
   const screen = await createTestRenderer({ width: 120, height: 30 });
   const app = new App(screen.renderer, session, { quit() {} });
@@ -260,16 +277,34 @@ test("the palette lists as many choices as its rows hold, with the selected one 
     await screen.flush();
     return screen.captureCharFrame().split("\n");
   };
+  /** The rows of the frame that the palette takes, and the row of its selected choice. */
+  const palette = async () => {
+    const lines = await frame();
+    const found = (node: Renderable): Renderable | undefined =>
+      node.id === "palette" ? node : node.getChildren().map(found).find(Boolean);
+    const panel = found(screen.renderer.root);
+    if (!panel) throw new Error("No palette.");
+    return {
+      top: panel.y,
+      bottom: panel.y + panel.height,
+      // The selected choice has the bar of the selection at its left, inside the panel.
+      selected: lines.findIndex(
+        (line, row) =>
+          row >= panel.y &&
+          row < panel.y + panel.height &&
+          line.slice(panel.x, panel.x + panel.width).includes("▎ "),
+      ),
+    };
+  };
   try {
     app.palette();
-    let lines = await frame();
-    const bottom = lines.findIndex((line) => line.includes("╰"));
-    expect(lines[bottom]?.trim()).toMatch(/^╰─+╯$/);
-    const count = lines.filter((line) => line.includes("│   ") || line.includes("│ ▸ ")).length;
-    for (let i = 0; i < count + 4; i++) screen.mockInput.pressArrow("down");
-    lines = await frame();
-    expect(lines.find((line) => line.includes("╰"))?.trim()).toMatch(/^╰─+╯$/);
-    expect(lines.some((line) => line.includes("│ ▸ "))).toBe(true);
+    let shown = await palette();
+    expect(shown.bottom).toBeLessThanOrEqual(30);
+    for (let i = 0; i < shown.bottom - shown.top + 4; i++) screen.mockInput.pressArrow("down");
+    shown = await palette();
+    expect(shown.bottom).toBeLessThanOrEqual(30);
+    expect(shown.selected).toBeGreaterThan(shown.top);
+    expect(shown.selected).toBeLessThan(shown.bottom);
   } finally {
     app.dispose();
     screen.renderer.destroy();
@@ -287,8 +322,8 @@ test("a text that truncates keeps one line and shows where it was cut", async ()
     await screen.flush();
     const lines = screen.captureCharFrame().split("\n");
     const status = lines.findLast((line) => line.includes("A notice longer"));
-    expect(status).toContain("...");
-    expect(status).toContain("demo.jsonl");
+    expect(status).toContain("…");
+    expect(status).toContain("F1 help");
     expect(lines.filter((line) => line.includes("and longer")).length).toBe(1);
   } finally {
     app.dispose();
@@ -297,7 +332,7 @@ test("a text that truncates keeps one line and shows where it was cut", async ()
   }
 });
 
-test("the conversation left at its end opens at its end, and one left above its end opens where it was", async () => {
+test("the feed left at its end opens at its end, and one left above its end opens where it was", async () => {
   const session = await demoSession(true);
   const screen = await createTestRenderer({ width: 120, height: 30 });
   const app = new App(screen.renderer, session, { quit() {} });
@@ -310,18 +345,113 @@ test("the conversation left at its end opens at its end, and one left above its 
   };
   const end = () => Math.max(0, app.scroll.scrollHeight - app.scroll.viewport.height);
   try {
-    await show("conversation");
+    await show("feed");
     expect(app.scroll.scrollTop).toBe(end());
-    await show("facts");
+    await show("transcript");
     for (let i = 0; i < 12; i++) await session.command(`/run grown${i} = ${i}`);
     await until(session, () => Object.values(session.program).includes("grown11 = 11"));
-    await show("conversation");
+    await show("feed");
     expect(end()).toBeGreaterThan(0);
     expect(app.scroll.scrollTop).toBe(end());
     app.scroll.scrollTo(3);
-    await show("facts");
-    await show("conversation");
+    await show("transcript");
+    await show("feed");
     expect(app.scroll.scrollTop).toBe(3);
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await session.dispose();
+  }
+});
+
+test("the toggle, the keys of the footer, and the palette answer the mouse, and a drag over a heading selects and copies its text", async () => {
+  const session = await demoSession(true);
+  const screen = await createTestRenderer({ width: 140, height: 40, useMouse: true });
+  const app = new App(screen.renderer, session, { quit() {} });
+  /** The column and the row of the first place in the frame that shows a text. */
+  const at = async (text: string): Promise<[number, number]> => {
+    app.render();
+    await screen.flush();
+    const lines = screen.captureCharFrame().split("\n");
+    const row = lines.findIndex((line) => line.includes(text));
+    if (row < 0) throw new Error(`No ${text} in the frame.`);
+    return [(lines[row] ?? "").indexOf(text) + 1, row];
+  };
+  try {
+    await until(
+      session,
+      () => !session.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)),
+    );
+    await screen.mockMouse.click(...(await at("Transcript")));
+    expect(session.view).toBe("transcript");
+    await screen.mockMouse.click(...(await at("Feed ")));
+    expect(session.view).toBe("feed");
+    await screen.mockMouse.click(...(await at("F1 help")));
+    expect((await at("Keys and commands"))[1]).toBeGreaterThan(0);
+    // The wheel moves the selection of the palette, and a click on a choice runs it.
+    app.closeOverlay();
+    app.palette();
+    const [x, y] = await at("Transcript view");
+    await screen.mockMouse.scroll(x, y, "down");
+    await screen.flush();
+    await screen.mockMouse.click(x, y);
+    expect(session.view).toBe("transcript");
+    session.show("feed");
+    // The screen draws the feed, with the palette gone, before the pointer acts on it again.
+    app.render();
+    await screen.flush();
+    // A drag over the heading of a card selects its text and leaves the card as it was.
+    const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
+    const heading = card?.getChildren()[0];
+    if (!card || !heading) throw new Error("No rung in the feed.");
+    const open = card.getChildren().length;
+    await screen.mockMouse.drag(heading.x, heading.y, heading.x + 6, heading.y);
+    app.render();
+    await screen.flush();
+    expect(
+      app.scroll
+        .getChildren()
+        .find((node) => node.id === card.id)
+        ?.getChildren().length,
+    ).toBe(open);
+    expect(screen.renderer.getSelection()?.getSelectedText()).toBeTruthy();
+    expect(session.notice).toStartWith("Copied");
+    // A rung that is over starts folded to its heading, and a click on the heading opens it.
+    expect(open).toBe(1);
+    await screen.mockMouse.click(heading.x + 2, heading.y);
+    app.render();
+    await screen.flush();
+    expect(
+      app.scroll
+        .getChildren()
+        .find((node) => node.id === card.id)
+        ?.getChildren().length,
+    ).toBeGreaterThan(1);
+  } finally {
+    app.dispose();
+    screen.renderer.destroy();
+    await session.dispose();
+  }
+});
+
+test("the root chain stands in the list of chains when it rests, and the other resting chains fold under Finished", async () => {
+  const session = await demoSession();
+  const screen = await createTestRenderer({ width: 140, height: 30 });
+  const app = new App(screen.renderer, session, { quit() {} });
+  try {
+    const { life } = session;
+    const side = await life.chain("Side", life.root);
+    await life.chain("Notes", life.root);
+    await session.refresh();
+    await session.select(side);
+    app.render();
+    await screen.flush();
+    const left = 140 - session.preferences.sidebarWidth;
+    const rows = screen
+      .captureCharFrame()
+      .split("\n")
+      .map((line) => line.slice(left).trim());
+    expect(rows.slice(1, 4)).toEqual(["○ Main", "▎ ○ Side", "▸ Finished  1"]);
   } finally {
     app.dispose();
     screen.renderer.destroy();

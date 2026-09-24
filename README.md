@@ -1,40 +1,62 @@
+<div align="center">
+
 # furb
+
+**The model answers in Python. You read and steer each word it runs.**
 
 [![gates](https://github.com/uael/furb/actions/workflows/gates.yml/badge.svg)](https://github.com/uael/furb/actions/workflows/gates.yml)
 
-The core of an AI harness, in one python file, `src/furb/engine.py`. A model does everything with the python that
-it writes: the engine, minified, is its whole system prompt, and each word it answers with runs on a chain of the
-engine. The contract is `src/furb/engine.pyi`. Its docstrings hold every law, one sentence per line, and the suite
-in `test/` holds one test per sentence.
+<img src="docs/furb.gif" alt="The furb TUI: a message, the Python that the model writes, a Python word of the operator, the three views, the command palette, the rewind tree, and a change of theme" width="880">
 
-The crate at the root runs the same engine in monty, a python interpreter written in rust, behind an async API: a
-host writes one `World` trait, and a `Life` gives the verbs of the contract. Built with its `python` feature, the
-crate is the package `furb-monty`, and `FURB_ENGINE=monty` makes `from furb import engine` give the engine in the
-sandbox.
+</div>
 
-`pip install furb` installs the engine, the `furb` command and `furb-monty`, whose type checker gates every word
-that a model writes. It needs python 3.14 or later.
+## What makes furb different
 
-From a clone of this repository:
+Most harnesses give a model a menu of tools and read one JSON call at a time. furb gives the model a Python
+module, and each answer of the model is a program that runs in it.
 
-- `uv sync` installs the environment, and `uv run pytest -q` runs the suite.
-- `uv run python script/smoke.py` runs one real life on opus/low through the claude command line.
-- `uv run python script/deepswe.py run <task>` runs one DeepSWE task and grades it.
+- **One answer, one program.** In one word, the model can read files, run commands, ask other models, wait,
+  and combine the results with loops and conditions. It does not have to spend one turn on each call.
+- **The system prompt is one file that you can read.** The engine is `src/furb/engine.py`. Minified, it is the
+  whole system prompt, and it costs fewer than 6000 tokens. No text is hidden from you.
+- **Every word is checked before it runs.** A type checker reads each word first. A word that it refuses never
+  runs, so it has no effects, and the model reads why.
+- **Work runs side by side.** A command, a question to a model, and a wait are acts that a word can await
+  together. Chains work in parallel, and each chain has its own module and folder.
+- **Rewind to any point.** A new chain can start from any point of another chain. In the TUI, press Escape twice
+  to open the rewind tree.
+- **You see what the model sees.** The transcript is the exact text that the model reads. The record keeps every
+  fact, and a later run replays it. Work that was interrupted starts again when you resume it.
+- **Limits that hold.** A chain pauses when it reaches a dollar ceiling or a share of the context window.
+- **The model can ask you.** A question to the operator waits in the feed until you answer it.
+- **One contract, proven twice.** `src/furb/engine.pyi` holds each law of the engine as one sentence, and the
+  suite has one test for each sentence. The suite runs on CPython, and on monty, a Python interpreter written in
+  Rust.
 
-The [TypeScript package](bind/typescript/README.md) reaches the same crate through N-API. Its queries and
-controls are synchronous, its acts can be awaited, and it includes a World with pi-ai models, files, commands,
-and records. `uv sync`, `bun install`, and `bun run build` build it from a clone.
+## Try it
 
-`bun run tui` opens the [OpenTUI application](tui/README.md). `bun run demo` opens a local scripted life that
-asks no model. The TUI has one view per chain, Python programs, act output, an exact transcript, file diffs,
-live value inspection, themes, and saved sessions. See [the screenshot gallery](docs/tui.md). The TUI needs Bun
-1.4.2 or later.
+```sh
+pip install furb                     # The engine and the furb command. It needs Python 3.14 or later.
+```
 
-Every pull request, and every push to `main`, runs the gates in `.github/workflows/gates.yml`: the hooks, which
-include the gates of the crate, and the type check. On linux and on macos, they run the suite. On linux, on macos
-and on windows, they run the gates of the TypeScript bindings and of the TUI.
+The TUI runs from a clone of this repository. It needs uv, the Rust toolchain, and Bun 1.4.2 or later:
 
-Copyright (C) 2026 Abel Lucas. furb is free software under the GNU Affero General Public License, version 3, which
-`LICENSE` holds: you may use, study, change and share it, and anyone who ships it or runs a changed furb as a
-service must offer the source under the same terms. The engine carries no notice of its own, since its text is the
-system prompt of a model and every word of it counts.
+```sh
+uv sync                              # The Python environment, which the build reads.
+bun install && bun run build         # The TUI, and the engine that it runs through the crate.
+bun run demo                         # A scripted life on a sample project. It asks no model.
+bun run tui                          # A real life, through the claude command line.
+```
+
+## Learn more
+
+- [The TUI](tui/README.md): the views, the keys, the commands, and [a gallery of each screen](docs/tui.md).
+- [The developer guide](docs/developer-guide.md): how the repository fits together, and how to change it.
+- [The contract](src/furb/engine.pyi): every law of the engine, one sentence per line.
+
+## License
+
+> Copyright (C) 2026 Abel Lucas. furb is free software under the GNU Affero General Public License, version 3,
+> which `LICENSE` holds. You may use, study, change, and share it. Anyone who ships it, or who runs a changed furb
+> as a service, must offer the source under the same terms. The engine carries no notice of its own, because its
+> text is the system prompt of a model and every word of it counts.

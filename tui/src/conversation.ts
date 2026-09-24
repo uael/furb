@@ -83,16 +83,6 @@ function note(key: string, paragraph: Paragraph, act: ActRow | undefined, word: 
       };
 }
 
-/** What the header of a ledger says the last answer filled of the window, the last of the turns, and nothing when
- * no grant told one. */
-export function filled(turns: readonly Turn[]): number | undefined {
-  const ledger = turns
-    .flatMap(([role, python]) => (role === "user" ? paragraphs(python) : []))
-    .findLast((paragraph) => paragraph.words.startsWith("ledger "));
-  const found = ledger?.words.match(/ filled=(\S+)/)?.[1];
-  return found === undefined ? undefined : Number(found);
-}
-
 /** The findings that refused the word of a rung, one for each comment of the paragraph its chain told of it. */
 export function refusal(turns: readonly Turn[], rung: string): string[] {
   const told = turns

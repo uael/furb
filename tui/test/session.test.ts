@@ -257,7 +257,7 @@ test("the answers to the questions of the snapshots stay out of the facts of the
   try {
     await session.submit("A question.");
     await idle(session);
-    for (const view of ["program", "transcript", "facts"] as const) {
+    for (const view of ["feed", "transcript", "changes"] as const) {
       session.show(view);
       await session.refresh();
     }
@@ -324,3 +324,22 @@ try {
     await rm(home, { recursive: true, force: true });
   }
 }, 30000);
+
+test("an undo leaves out of its branch a grant that came after the message it takes back", async () => {
+  const session = await demoSession();
+  try {
+    await session.submit("Explore this project.");
+    await idle(session);
+    await session.submit("/grant 1.5");
+    await session.refresh();
+    const grant = session.activity.find((act) => act.kind === "grant");
+    if (!grant) throw new Error("The grant made no act.");
+    await session.undo();
+    await session.refresh();
+    const told = session.turns.map(([, python]) => python).join("\n");
+    expect(told).not.toContain(`#${grant.id}`);
+    expect(session.activity.some((act) => act.kind === "grant")).toBe(false);
+  } finally {
+    await session.dispose();
+  }
+});

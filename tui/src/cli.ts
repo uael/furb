@@ -32,8 +32,9 @@ if (values.help) {
   console.log(`furb-tui [--demo] [--cwd path] [--model provider:model] [--effort ${efforts.join("|")}]
          [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...]
 
-Enter sends a prompt. Ctrl+J adds a line, and so does Shift+Enter in a terminal with the kitty keyboard
-protocol. Ctrl+P opens actions. F1 shows all keys that the terminal sends.
+Enter sends a prompt. ⌃J (Control J) adds a line, and so does ⇧Enter (Shift Enter) in a terminal with the kitty
+keyboard protocol. ⌃P opens actions. F1 shows all keys that the terminal sends. ⌃ is Control, ⌥ is Option or Alt,
+and ⇧ is Shift.
 The default model is ${defaultModel}, through your Claude CLI subscription.
 Other providers use pi-ai and its environment credentials.`);
   process.exit(0);

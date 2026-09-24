@@ -5,6 +5,8 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-added-large-files
+        # The animation of the TUI in the README is sharp at the cost of its size.
+        exclude: ^docs/furb\.gif$
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml

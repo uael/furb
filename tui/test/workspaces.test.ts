@@ -1,15 +1,17 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { RecordLock } from "@furb/engine";
+import type { CapturedFrame, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { seedDemoFiles } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
-import { Session } from "../src/session.ts";
+import { Session, savedView } from "../src/session.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
 
 test("workspaces keep sessions alive, report background completion and input, and reopen saved records paused", async () => {
@@ -127,7 +129,7 @@ test("deleting a session moves its record and state to trash, keeps other sessio
   }
 }, 30000);
 
-test("the left tree groups sessions, switches by mouse, collapses and toggles without losing a draft", async () => {
+test("the sidebar tree groups sessions, switches by mouse, collapses and toggles without losing a draft", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-tree-"));
   await mkdir(join(directory, "project"));
   const library = new Workspaces(new Preferences(join(directory, "ui.json")), { demo: true });
@@ -152,20 +154,22 @@ test("the left tree groups sessions, switches by mouse, collapses and toggles wi
     });
     app.composer.setText("keep this draft");
     await screen.flush();
+    // The sidebar is the last columns of the screen.
+    const left = 152 - library.preferences.sidebarWidth;
     const lines = screen.captureCharFrame().split("\n");
-    const projectRow = lines.findIndex((line) => line.includes("▾") && line.includes("project"));
-    const fooRow = lines.findIndex((line) => /[○●◌] foo\b/.test(line.slice(0, 28)));
-    const barRow = lines.findIndex((line) => /[○●◌] bar\b/.test(line.slice(0, 28)));
+    const projectRow = lines.findIndex((line) => /▾ project/.test(line.slice(left)));
+    const fooRow = lines.findIndex((line) => /[○●◌] foo\b/.test(line.slice(left)));
+    const barRow = lines.findIndex((line) => /[○●◌] bar\b/.test(line.slice(left)));
     expect(fooRow).toBeGreaterThan(projectRow);
     expect(barRow).toBeGreaterThan(projectRow);
-    await screen.mockMouse.click(5, fooRow);
+    await screen.mockMouse.click(left + 6, fooRow);
     await until(library, () => library.current === first);
     await screen.flush();
     expect(app.session).toBe(first.session);
     await library.select(second);
     await screen.flush();
     expect(app.composer.plainText).toBe("keep this draft");
-    await screen.mockMouse.click(2, projectRow);
+    await screen.mockMouse.click(left + 3, projectRow);
     app.render();
     await screen.flush();
     expect(group.collapsed).toBe(true);
@@ -173,14 +177,14 @@ test("the left tree groups sessions, switches by mouse, collapses and toggles wi
       screen
         .captureCharFrame()
         .split("\n")
-        .some((line) => line.slice(0, 28).includes("foo")),
+        .some((line) => line.slice(left).includes("foo")),
     ).toBe(false);
     screen.mockInput.pressKey("\\", { ctrl: true });
     await screen.flush();
     app.render();
     await screen.flush();
     expect(library.preferences.sidebar).toBe(false);
-    expect(app.scroll.x).toBe(1);
+    expect(app.scroll.x).toBe(2);
     expect(app.composer.plainText).toBe("keep this draft");
     // The picker reads the workspaces again before it opens: the test awaits the picker the key opened.
     const picker = app.workspacePicker;
@@ -192,13 +196,13 @@ test("the left tree groups sessions, switches by mouse, collapses and toggles wi
     screen.mockInput.pressKey("w", { ctrl: true });
     await opened;
     await screen.flush();
-    expect(screen.captureCharFrame()).toContain("Workspaces & sessions");
+    expect(screen.captureCharFrame()).toContain("Workspaces and sessions");
     app.closeOverlay();
     library.toggle();
     screen.resize(82, 32);
     app.render();
     await screen.flush();
-    expect(app.scroll.x).toBe(1);
+    expect(app.scroll.x).toBe(2);
     expect(app.composer.plainText).toBe("keep this draft");
   } finally {
     app?.dispose();
@@ -366,3 +370,318 @@ test("the .furb that the TUI makes in a project keeps itself out of version cont
     await rm(directory, { recursive: true, force: true });
   }
 }, 30000);
+
+test("a session row archives a session through its remove button, which folds it under Archived until a click brings it back", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-archive-"));
+  await mkdir(join(directory, "project"));
+  const library = new Workspaces(new Preferences(join(directory, "ui.json")), { demo: true });
+  const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true });
+  let app: App | undefined;
+  try {
+    const group = await library.add(join(directory, "project"));
+    const first = await library.create(group, "foo");
+    const second = await library.create(group, "bar");
+    if (!first.session || !second.session) throw new Error("The session did not open.");
+    const options = { quit() {}, workspaces: library };
+    app = new App(screen.renderer, second.session, options);
+    library.on("select", (session) => {
+      app?.dispose();
+      app = new App(screen.renderer, session, options);
+    });
+    const left = 152 - library.preferences.sidebarWidth;
+    const frame = async () => {
+      app?.render();
+      await screen.flush();
+      return screen.captureCharFrame().split("\n");
+    };
+    let lines = await frame();
+    const fooRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    const remove = (lines[fooRow] ?? "").lastIndexOf("×");
+    expect(remove).toBeGreaterThan(left);
+    await screen.mockMouse.moveTo(remove, fooRow);
+    await screen.mockMouse.click(remove, fooRow);
+    lines = await frame();
+    expect(lines.join("\n")).toContain("Remove the session “foo”?");
+    const archive = lines.findIndex((line) => line.includes("Archive") && line.includes("Fold it under"));
+    await screen.mockMouse.click((lines[archive] ?? "").indexOf("Archive") + 1, archive);
+    await until(library, () => first.archived === true);
+    expect(library.current).toBe(second);
+    lines = await frame();
+    expect(lines.some((line) => / foo\b/.test(line.slice(left)))).toBe(false);
+    const folded = lines.findIndex((line) => /▸ +Archived +1/.test(line.slice(left)));
+    expect(folded).toBeGreaterThan(0);
+    const saved = JSON.parse(await readFile(library.path, "utf8")) as {
+      workspaces: { archived: string[] }[];
+    };
+    expect(saved.workspaces[0]?.archived).toEqual([first.path]);
+    await screen.mockMouse.click(left + 4, folded);
+    lines = await frame();
+    const archivedRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    expect(archivedRow).toBeGreaterThan(folded);
+    await screen.mockMouse.click(left + 8, archivedRow);
+    await until(library, () => library.current === first);
+    expect(first.archived).toBe(false);
+  } finally {
+    app?.dispose();
+    screen.renderer.destroy();
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+/** The text, the color and the ground of the cell at a column of a row of the screen. */
+function cellAt(frame: CapturedFrame, x: number, y: number): { text: string; fg?: RGBA; bg?: RGBA } {
+  let at = 0;
+  for (const span of frame.lines[y]?.spans ?? []) {
+    if (x < at + span.width) return { text: span.text, fg: span.fg, bg: span.bg };
+    at += span.width;
+  }
+  return { text: "" };
+}
+
+test("a session row lights under the pointer with its buttons, tells its state on its mark alone, and goes dark when the pointer leaves", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-rows-"));
+  await mkdir(join(directory, "project"));
+  const library = new Workspaces(new Preferences(join(directory, "ui.json")), { demo: true });
+  const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true });
+  let app: App | undefined;
+  try {
+    const group = await library.add(join(directory, "project"));
+    await library.create(group, "foo");
+    const second = await library.create(group, "bar");
+    if (!second.session) throw new Error("The session did not open.");
+    app = new App(screen.renderer, second.session, { quit() {}, workspaces: library });
+    await screen.flush();
+    const left = 152 - library.preferences.sidebarWidth;
+    const lines = screen.captureCharFrame().split("\n");
+    const fooRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    const pencil = (lines[fooRow] ?? "").lastIndexOf("✎");
+    const cross = (lines[fooRow] ?? "").lastIndexOf("×");
+    const mark = left + (lines[fooRow] ?? "").slice(left).indexOf("○");
+    const name = (lines[fooRow] ?? "").indexOf("foo");
+    const hidden = (x: number) => {
+      const cell = cellAt(screen.captureSpans(), x, fooRow);
+      return Boolean(cell.fg?.equals(cell.bg));
+    };
+    const ground = () => cellAt(screen.captureSpans(), name - 2, fooRow).bg;
+    expect(pencil).toBeGreaterThan(name);
+    expect(cross).toBe(pencil + 2);
+    expect(hidden(pencil) && hidden(cross)).toBe(true);
+    const rest = ground();
+    await screen.mockMouse.moveTo(name + 1, fooRow);
+    await screen.flush();
+    expect(hidden(pencil) || hidden(cross)).toBe(false);
+    expect(ground()?.equals(rest)).toBe(false);
+    // A tip stands on the row under the pointer.
+    const under = () => screen.captureCharFrame().split("\n")[fooRow + 1] ?? "";
+    expect(under()).not.toContain("Ready");
+    await screen.mockMouse.moveTo(mark, fooRow);
+    await screen.flush();
+    expect(under()).toContain("○ Ready");
+    await screen.mockMouse.moveTo(pencil, fooRow);
+    await screen.flush();
+    expect(screen.captureCharFrame()).toContain("Rename this session");
+    await screen.mockMouse.moveTo(cross, fooRow);
+    await screen.flush();
+    expect(screen.captureCharFrame()).toContain("Archive or remove this session");
+    await screen.mockMouse.moveTo(10, 10);
+    await screen.flush();
+    expect(ground()?.equals(rest)).toBe(true);
+    expect(hidden(pencil) && hidden(cross)).toBe(true);
+    expect(screen.captureCharFrame()).not.toContain("Archive or remove this session");
+  } finally {
+    app?.dispose();
+    screen.renderer.destroy();
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a right click on a session row opens its menu at the pointer, and Rename takes a new name in the row", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-rename-"));
+  await mkdir(join(directory, "project"));
+  const library = new Workspaces(new Preferences(join(directory, "ui.json")), { demo: true });
+  const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true });
+  let app: App | undefined;
+  try {
+    const group = await library.add(join(directory, "project"));
+    const first = await library.create(group, "foo");
+    const second = await library.create(group, "bar");
+    if (!first.session || !second.session) throw new Error("The session did not open.");
+    app = new App(screen.renderer, second.session, { quit() {}, workspaces: library });
+    const left = 152 - library.preferences.sidebarWidth;
+    const frame = async () => {
+      app?.render();
+      await screen.flush();
+      return screen.captureCharFrame().split("\n");
+    };
+    let lines = await frame();
+    const fooRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    await screen.mockMouse.click(left + 8, fooRow, 2);
+    lines = await frame();
+    const menu = lines.slice(fooRow + 1).map((line) => line.slice(left + 8).trim());
+    expect(menu.slice(0, 8)).toEqual([
+      "",
+      "foo        Esc",
+      "",
+      "❯ Open",
+      "Rename",
+      "Archive",
+      "Move to trash",
+      "",
+    ]);
+    const renameRow = lines.findIndex((line) => line.slice(left).includes("Rename"));
+    await screen.mockMouse.click((lines[renameRow] ?? "").indexOf("Rename") + 1, renameRow);
+    lines = await frame();
+    expect(lines.join("\n")).toContain("Enter keeps the new name, and Esc leaves it as it was.");
+    for (let index = 0; index < 3; index++) screen.mockInput.pressBackspace();
+    await screen.mockInput.typeText("notes");
+    screen.mockInput.pressEnter();
+    lines = await frame();
+    expect(first.name).toBe("notes");
+    expect(savedView(first.path).view.sessionName).toBe("notes");
+    expect(lines.some((line) => / notes\b/.test(line.slice(left)))).toBe(true);
+    // Escape leaves the name as it was.
+    const notesRow = lines.findIndex((line) => / notes\b/.test(line.slice(left)));
+    await screen.mockMouse.moveTo(left + 8, notesRow);
+    await screen.mockMouse.click((lines[notesRow] ?? "").lastIndexOf("✎"), notesRow);
+    await frame();
+    await screen.mockInput.typeText(" draft");
+    screen.mockInput.pressEscape();
+    // A lone Escape reaches the app once the parser knows that no sequence follows it.
+    for (let tries = 0; tries < 100 && !app.composer.focused; tries++) await Bun.sleep(10);
+    lines = await frame();
+    expect(first.name).toBe("notes");
+    expect(app.composer.focused).toBe(true);
+    // A session that is not open keeps its new name in its saved view.
+    await library.archive(first);
+    library.rename(first, "old notes");
+    expect(savedView(first.path).view.sessionName).toBe("old notes");
+  } finally {
+    app?.dispose();
+    screen.renderer.destroy();
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a workspace row renames its workspace in place, and its remove button takes it off the list and leaves its folder", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-group-"));
+  await mkdir(join(directory, "project"));
+  await mkdir(join(directory, "other"));
+  const library = new Workspaces(new Preferences(join(directory, "ui.json")), { demo: true });
+  const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true });
+  let app: App | undefined;
+  try {
+    const project = await library.add(join(directory, "project"));
+    const other = await library.add(join(directory, "other"));
+    const first = await library.create(project, "foo");
+    if (!first.session) throw new Error("The session did not open.");
+    const options = { quit() {}, workspaces: library };
+    app = new App(screen.renderer, first.session, options);
+    library.on("select", (session) => {
+      app?.dispose();
+      app = new App(screen.renderer, session, options);
+    });
+    const left = 152 - library.preferences.sidebarWidth;
+    const frame = async () => {
+      app?.render();
+      await screen.flush();
+      return screen.captureCharFrame().split("\n");
+    };
+    let lines = await frame();
+    const otherRow = lines.findIndex((line) => /▾ other/.test(line.slice(left)));
+    await screen.mockMouse.moveTo(left + 5, otherRow);
+    await screen.mockMouse.click((lines[otherRow] ?? "").lastIndexOf("✎"), otherRow);
+    await frame();
+    for (let index = 0; index < 5; index++) screen.mockInput.pressBackspace();
+    await screen.mockInput.typeText("docs");
+    screen.mockInput.pressEnter();
+    lines = await frame();
+    expect(other.name).toBe("docs");
+    expect(other.collapsed).toBe(false);
+    const listed = () =>
+      (
+        JSON.parse(readFileSync(library.path, "utf8")) as {
+          workspaces: { directory: string; name: string }[];
+        }
+      ).workspaces;
+    expect(listed().find((one) => one.directory === other.directory)?.name).toBe("docs");
+    const projectRow = lines.findIndex((line) => /▾ project/.test(line.slice(left)));
+    await screen.mockMouse.moveTo(left + 5, projectRow);
+    await screen.mockMouse.click((lines[projectRow] ?? "").lastIndexOf("×"), projectRow);
+    lines = await frame();
+    expect(lines.join("\n")).toContain("Remove the workspace “project” from the list?");
+    const remove = lines.findIndex((line) => line.includes("Remove from the list"));
+    await screen.mockMouse.click((lines[remove] ?? "").indexOf("Remove from the list") + 1, remove);
+    await until(library, () => library.groups.length === 1);
+    expect(library.groups).toEqual([other]);
+    expect(library.groupOf()).toBe(other);
+    expect(first.session).toBeUndefined();
+    expect(listed().map((one) => one.directory)).toEqual([other.directory]);
+    expect((await stat(project.directory)).isDirectory()).toBe(true);
+    // The last workspace stays, since the current session needs one.
+    await expect(library.remove(other)).rejects.toThrow("This is the only workspace.");
+  } finally {
+    app?.dispose();
+    screen.renderer.destroy();
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a rename in a row ends when a dialog opens or another row is clicked, and the dialog and the click still work", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-rename-end-"));
+  await mkdir(join(directory, "project"));
+  const library = new Workspaces(new Preferences(join(directory, "ui.json")), { demo: true });
+  const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true });
+  let app: App | undefined;
+  try {
+    const group = await library.add(join(directory, "project"));
+    const first = await library.create(group, "foo");
+    const second = await library.create(group, "bar");
+    if (!first.session || !second.session) throw new Error("The session did not open.");
+    const options = { quit() {}, workspaces: library };
+    app = new App(screen.renderer, second.session, options);
+    library.on("select", (session) => {
+      app?.dispose();
+      app = new App(screen.renderer, session, options);
+    });
+    const left = 152 - library.preferences.sidebarWidth;
+    const frame = async () => {
+      app?.render();
+      await screen.flush();
+      return screen.captureCharFrame().split("\n");
+    };
+    const rename = async (name: string) => {
+      const lines = await frame();
+      const row = lines.findIndex((line) => new RegExp(` ${name}\\b`).test(line.slice(left)));
+      await screen.mockMouse.moveTo(left + 8, row);
+      await screen.mockMouse.click((lines[row] ?? "").lastIndexOf("✎"), row);
+      await frame();
+    };
+    // A dialog that opens during a rename keeps the name typed so far, and takes the keys.
+    await rename("bar");
+    await screen.mockInput.typeText("2");
+    app.palette();
+    await screen.mockInput.typeText("them");
+    await frame();
+    expect(second.name).toBe("bar2");
+    expect(app.composer.plainText).toBe("");
+    expect(screen.captureCharFrame()).toContain("them");
+    app.closeOverlay();
+    // One click on another row keeps the name and opens that row.
+    await rename("bar2");
+    await screen.mockInput.typeText("x");
+    const lines = await frame();
+    const fooRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    await screen.mockMouse.click(left + 8, fooRow);
+    await until(library, () => library.current === first);
+    expect(second.name).toBe("bar2x");
+  } finally {
+    app?.dispose();
+    screen.renderer.destroy();
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

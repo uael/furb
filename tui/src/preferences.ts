@@ -7,8 +7,9 @@ import { defaultTheme, palettes, type ThemeName } from "./theme.ts";
 export class Preferences {
   theme: ThemeName = defaultTheme;
   sidebar = true;
-  sidebarWidth = 28;
-  autoCollapseRungs = false;
+  sidebarWidth = 32;
+  /** Whether a rung that is over starts folded in the feed. */
+  foldRungs = true;
   notice = "";
   private saved = "";
   constructor(
@@ -28,13 +29,13 @@ export class Preferences {
         theme?: string;
         sidebar?: boolean;
         sidebarWidth?: number;
-        autoCollapseRungs?: boolean;
+        foldRungs?: boolean;
       } | null;
       if (saved?.theme && Object.hasOwn(palettes, saved.theme)) this.theme = saved.theme as ThemeName;
       if (typeof saved?.sidebar === "boolean") this.sidebar = saved.sidebar;
-      if (typeof saved?.autoCollapseRungs === "boolean") this.autoCollapseRungs = saved.autoCollapseRungs;
+      if (typeof saved?.foldRungs === "boolean") this.foldRungs = saved.foldRungs;
       if (typeof saved?.sidebarWidth === "number")
-        this.sidebarWidth = Math.max(22, Math.min(42, saved.sidebarWidth));
+        this.sidebarWidth = Math.max(26, Math.min(48, saved.sidebarWidth));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT")
         this.notice = `Could not read preferences at ${path}. Using GitHub Dark for this run. The file is unchanged. Click to dismiss.`;
@@ -46,7 +47,7 @@ export class Preferences {
       theme,
       sidebar: this.sidebar,
       sidebarWidth: this.sidebarWidth,
-      autoCollapseRungs: this.autoCollapseRungs,
+      foldRungs: this.foldRungs,
     });
   }
   save(theme = this.theme): void {
