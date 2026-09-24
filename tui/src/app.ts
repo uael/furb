@@ -2672,20 +2672,35 @@ export class App {
         { onMouseUp: this.click(() => this.chains()) },
       );
     if (resting.length) {
-      add(
-        [
-          ["  "],
-          [`${this.showResting ? glyph.open : glyph.closed} `, c.faint],
-          ["Finished", c.faint],
-          [`  ${resting.length}`, c.faint],
-        ],
-        {
+      // The row of the finished chains stands as a chain row does: its fold mark in the column of the bar of the
+      // selected chain, and its name where the names of the chains start.
+      const fold = this.hoverable(
+        this.box({
+          flexDirection: "row",
+          height: space.bar,
+          marginX: -space.between,
+          paddingX: space.inset,
+          backgroundColor: c.panel,
           onMouseUp: this.click(() => {
             this.showResting = !this.showResting;
             this.render();
           }),
-        },
+        }),
+        c.raised,
       );
+      fold.add(
+        this.text(
+          [
+            [this.showResting ? glyph.open : glyph.closed, c.faint],
+            [" "],
+            ["Finished", c.faint],
+            [`  ${resting.length}`, c.faint],
+          ],
+          c.faint,
+          { truncate: true, flexShrink: 1 },
+        ),
+      );
+      this.railSession.add(fold);
       if (this.showResting) for (const chain of resting.slice(0, 12)) chainLine(chain);
     }
     target = this.railUsage;
