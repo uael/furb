@@ -19,16 +19,11 @@ export declare class Act {
 export type JsAct = Act
 
 export declare class Life {
-  /**
-   * Open on JavaScript ears, using the same call and reply protocol as the Python binding. The module of the engine
-   * runs the words of the extensions after the engine: those the record pins, or else these, which the life pins as
-   * the World. The life plays the life words as rungs, as the World, on every chain without a source, once boot
-   * stands on its record and at the birth of each such chain after.
-   */
-  static boot(callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null, words?: string[] | null, lives?: string[] | null): Life
+  /** Open on JavaScript ears, using the same call and reply protocol as the Python binding. */
+  static boot(callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null, opening?: Opening | null): Life
   get root(): string
-  /** The words of the extensions the life runs after the engine, which the system prompt reads after the engine. */
-  get words(): Array<string>
+  /** The system prompt of every model of the life, which is the text the life runs. */
+  get system(): string
   /** What boot raised, and nothing when it raised nothing. After a drift the life goes on, with nothing kept. */
   get raised(): { is: string; args: unknown[] } | null
   get disposed(): boolean
@@ -134,6 +129,17 @@ export interface Inspection {
  */
 export declare function onConsoleEnd(callback: (event: "break" | "close" | "logoff" | "shutdown") => void): void
 
+/**
+ * What a life opens with beside its record: the engine, `engineSource()` unless it is given, and the builtins it
+ * takes, every builtin unless they are given; the words and the life words of the extensions.
+ */
+export interface Opening {
+  engine?: string
+  taken?: Array<string>
+  words?: Array<string>
+  lives?: Array<string>
+}
+
 export interface Outcome {
   done: boolean
   value: unknown
@@ -165,12 +171,6 @@ export interface RungOptions {
   actor?: string
   on?: string
 }
-
-/**
- * The system prompt of a life: the engine as the build minified it, less the definitions of each builtin that
- * `taken` does not name, then the words of the extensions, in their order.
- */
-export declare function systemPrompt(engine: string, taken: Array<string>, words: Array<string>): string
 
 /**
  * The word of the python part of an extension, which the module of the engine runs after the engine: the file with

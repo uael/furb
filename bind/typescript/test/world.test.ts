@@ -6,7 +6,6 @@ import { createModels, getSupportedThinkingLevels } from "@earendil-works/pi-ai"
 import {
   actorParts,
   boot,
-  builtinExtensions,
   decodeRecord,
   type Ear,
   Ears,
@@ -530,8 +529,7 @@ test("host ears yield nested bus calls and host shows remain callable", () => {
       }
     })(),
   });
-  const words = builtinExtensions().flatMap((one) => (one.word ? [one.word] : []));
-  const life = ears.boot([], words);
+  const life = ears.boot();
   try {
     const show = ears.callable((lines: string[]) => lines.map((_, index) => index + 1));
     expect(unwrapped<{ path: string }>(verb(life, "read", ["file", show])).path).toBe("/tmp/file");

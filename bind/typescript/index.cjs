@@ -790,5 +790,4 @@ module.exports.decodeRecord = nativeBinding.decodeRecord
 module.exports.engineSource = nativeBinding.engineSource
 module.exports.onConsoleEnd = nativeBinding.onConsoleEnd
 module.exports.resolveExtensions = nativeBinding.resolveExtensions
-module.exports.systemPrompt = nativeBinding.systemPrompt
 module.exports.wordOf = nativeBinding.wordOf

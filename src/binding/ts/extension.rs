@@ -137,15 +137,3 @@ pub fn resolve_extensions(
 pub fn word_of(source: String) -> napi::Result<String> {
   extension::word(&source).map_err(refused)
 }
-
-/// The system prompt of a life: the engine as the build minified it, less the definitions of each builtin that
-/// `taken` does not name, then the words of the extensions, in their order.
-#[napi]
-pub fn system_prompt(
-  engine: String,
-  taken: Vec<String>,
-  words: Vec<String>,
-) -> napi::Result<String> {
-  let taken: Vec<&str> = taken.iter().map(String::as_str).collect();
-  extension::system(&engine, &taken, &words).map_err(refused)
-}

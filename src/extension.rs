@@ -1,9 +1,8 @@
 //! The extensions: what a host adds to the engine, and where it finds it.
 //!
-//! The builtins, files, bash and grant, are definitions of the engine itself. A host that turns one off cuts its
-//! definitions out of the system prompt, and the engine that runs stays whole. The python part of any other
-//! extension is a word that the engine module runs after the engine, so every chain binds its names from its birth
-//! and the system prompt reads it after the engine. The file is a word as it is, or a python module that imports
+//! The system prompt of a life is the text the life runs: the engine, less the definitions of each builtin, files,
+//! bash or grant, that a config turns off, then the words of the other extensions. The python part of an extension
+//! is a word that the module of the engine runs after the engine, so every chain binds its names from its birth. The file is a word as it is, or a python module that imports
 //! what it uses from the engine and from the extensions it requires, so that an editor, ruff and ty read it. The
 //! module of the engine binds every name of the engine and of each word before it already, so the host makes the
 //! word of a module by cutting those imports out. A life word is a word that a host plays as a rung, as the World,
@@ -11,7 +10,7 @@
 //!
 //! Every host shares this module: the host in TypeScript, the host in python and a host in rust read the same
 //! config, fetch into the same cache, read the same manifests, order the extensions the same, make the same word of
-//! a module, the same engine source and the same system prompt, and play a life word on a chain by the same rule.
+//! a module and the same system prompt, and play a life word on a chain by the same rule.
 //! What stays in each host is its own: the parts of an extension for a World and for a TUI, and how it loads their
 //! code.
 //!
@@ -35,11 +34,7 @@ use ruff_text_size::{Ranged, TextRange};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-use crate::{
-  Object,
-  life::WORLD,
-  value::{Fault, entry},
-};
+use crate::{Object, life::WORLD, value::Fault};
 
 /// The package the engine and the extensions are imported from, whose imports a word leaves out.
 const PACKAGE: &str = "furb";
@@ -51,19 +46,7 @@ const BUILTINS: [(&str, &[&str], &[&str]); 3] = [
     "files",
     &[],
     &[
-      "dataclass",
-      "span",
-      "grep",
-      "differs",
-      "HEAD",
-      "TAIL",
-      "HIDDEN",
-      "read",
-      "write",
-      "cd",
-      "cwd",
-      "Text",
-      "landed",
+      "span", "differs", "HEAD", "TAIL", "HIDDEN", "read", "write", "cd", "cwd", "landed",
       "showing",
     ],
   ),
@@ -664,11 +647,6 @@ pub fn builtins() -> Vec<Extension> {
     .collect()
 }
 
-/// The top-level names of the engine that a builtin defines, and none for a name that is no builtin.
-pub fn defined(name: &str) -> &'static [&'static str] {
-  BUILTINS.iter().find(|&&(one, ..)| one == name).map_or(&[], |&(_, _, names)| names)
-}
-
 /// The extension in a directory, loaded under the name its config gives it: its manifest, whose name must be that
 /// name, and the word of its python part.
 pub fn loaded(name: &str, root: &Path) -> Result<Extension, Error> {
@@ -775,8 +753,8 @@ pub fn lives(extensions: &[Extension]) -> Vec<String> {
   extensions.iter().filter_map(|one| one.life.clone()).collect()
 }
 
-/// The text, then each word after an empty line, and the text as it is when there is no word.
-fn appended(text: &str, words: &[String]) -> String {
+/// The text, then each word after an empty line.
+pub(crate) fn appended(text: &str, words: &[String]) -> String {
   let mut out = text.to_owned();
   for one in words {
     if !out.is_empty() && !out.ends_with('\n') {
@@ -788,46 +766,61 @@ fn appended(text: &str, words: &[String]) -> String {
   out
 }
 
-/// The kind of the fact by which the World says once the words a life runs, when it runs some, which the record
-/// keeps, so a later life on that record runs the same words whatever the configs say then.
+/// The kind of the fact by which the World pins what a life runs: the builtins it takes and the words.
 pub const PINNED: &str = "extensions";
 
-/// The words a record pins: the words of the first fact of the kind [`PINNED`] that the World said, and none when
-/// the record holds no such fact.
-pub fn pinned(record: &[Object]) -> Option<Vec<String>> {
-  record.iter().find_map(|one| {
-    let one = one.as_ref();
-    let fact = entry(&one, 0)?.items()?;
-    if fact.first()?.as_str()? != PINNED || fact.get(2)?.as_str()? != WORLD {
-      return None;
-    }
-    let words = fact.get(3)?.items()?;
-    Some(words.iter().filter_map(|word| word.as_str().map(str::to_owned)).collect())
-  })
+/// What a life on a record runs, the builtins it takes and the words, and whether it pins them: what the record pins,
+/// or every builtin and no word for a record that pins nothing; a life on an empty record runs what it is given, and
+/// pins it unless it is every builtin and no word.
+pub fn pinned(
+  record: &[Object],
+  taken: &[String],
+  words: &[String],
+) -> (Vec<String>, Vec<String>, bool) {
+  let every: Vec<String> = BUILTINS.iter().map(|&(name, ..)| name.to_owned()).collect();
+  if let Some((taken, words)) = record.iter().find_map(pin) {
+    return (taken, words, false);
+  }
+  if !record.is_empty() {
+    return (every, Vec::new(), false);
+  }
+  let taken: Vec<String> = every.iter().filter(|one| taken.contains(one)).cloned().collect();
+  let pins = taken != every || !words.is_empty();
+  (taken, words.to_vec(), pins)
 }
 
-/// The source of the engine that a life runs, and that the gate reads a word on: the engine, then the words of the
-/// extensions, in their order. The builtins stay in it whole, on or off.
-pub fn source(words: &[String]) -> String {
-  appended(crate::ENGINE, words)
+/// The builtins and the words of an entry that is a pin of the World.
+fn pin(entry: &Object) -> Option<(Vec<String>, Vec<String>)> {
+  let entry = entry.as_ref();
+  let fact = crate::value::entry(&entry, 0)?.items()?;
+  if fact.first()?.as_str()? != PINNED || fact.get(2)?.as_str()? != WORLD {
+    return None;
+  }
+  let texts = |at: usize| -> Option<Vec<String>> {
+    Some(fact.get(at)?.items()?.iter().filter_map(|one| one.as_str().map(str::to_owned)).collect())
+  };
+  Some((texts(3)?, texts(4)?))
 }
 
-/// The system prompt of a life: the engine as the host minified it, less the top-level statements that define only
-/// names of a builtin that `taken` does not name, then the words of the extensions, in their order. The engine that
-/// runs stays whole, so an answer of the engine to a verb that a builtin defines stays in the prompt, and does
-/// nothing while no verb asks it.
-pub fn system(engine: &str, taken: &[&str], words: &[String]) -> Result<String, Error> {
-  let off: HashSet<&str> = BUILTINS
-    .iter()
-    .filter(|&&(name, ..)| !taken.contains(&name))
-    .flat_map(|&(_, _, names)| names.iter().copied())
-    .collect();
+/// The system prompt of a life, which is the text the life runs: the engine less the top-level statements that
+/// define only names of a builtin that `taken` does not name, then the words.
+pub fn system(engine: &str, taken: &[String], words: &[String]) -> Result<String, Error> {
+  let off = cut_names(taken);
   let cut = cut(engine, |statement| {
     let names = binds(statement);
     !names.is_empty() && names.iter().all(|name| off.contains(name))
   })
   .map_err(|(line, why)| Error::Word { name: "the engine".to_owned(), line, why })?;
   Ok(appended(&cut, words))
+}
+
+/// The top-level names of the engine that the builtins `taken` does not name define.
+pub fn cut_names(taken: &[String]) -> HashSet<&'static str> {
+  BUILTINS
+    .iter()
+    .filter(|&&(name, ..)| !taken.iter().any(|one| one == name))
+    .flat_map(|&(_, _, names)| names.iter().copied())
+    .collect()
 }
 
 /// The names a top-level statement binds: a function, a class, the targets of an assignment, the names of an import

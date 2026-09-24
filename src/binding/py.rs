@@ -8,6 +8,8 @@
 //! fields. A name of the engine crosses as its name, a callable the engine made as one that calls it back, and a
 //! callable of python as one the ears call back by name. Nothing of the crossing is python's to do.
 
+use std::collections::HashSet;
+
 use pyo3::{
   Bound, Py, PyAny, PyResult, Python,
   exceptions::{PyBaseException, PyTypeError},
@@ -241,7 +243,8 @@ impl Life {
   /// `ear(generator)`, which hears one more generator and gives the name it is heard by and whether it was started,
   /// and `callable(function)`, which gives the name the function is called back by.
   #[new]
-  #[pyo3(signature = (ears, names, record, words = Vec::new(), lives = Vec::new()))]
+  #[pyo3(signature = (ears, names, record, words = Vec::new(), lives = Vec::new(), *, taken = None, engine = None))]
+  #[allow(clippy::too_many_arguments)]
   fn new(
     py: Python<'_>,
     ears: Py<PyAny>,
@@ -249,25 +252,29 @@ impl Life {
     record: Bound<'_, PyAny>,
     words: Vec<String>,
     lives: Vec<String>,
+    taken: Option<Vec<String>>,
+    engine: Option<String>,
   ) -> PyResult<Self> {
     let made = Made::new(py)?;
     let kept = of_python(&made, &ears, &record)?;
     let kept: Vec<Object> =
       kept.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
     let hosted = Hosted { host: ears.clone_ref(py), made: made.clone_ref(py) };
-    let held = life::Life::open_on(hosted, names)
-      .words(words)
-      .lives(lives)
-      .boot(kept)
-      .map_err(|fault| raised(py, &made, &fault))?;
+    let mut opening = life::Life::open_on(hosted, names).words(words).lives(lives);
+    if let Some(taken) = taken {
+      opening = opening.taken(taken);
+    }
+    if let Some(engine) = engine {
+      opening = opening.engine(engine);
+    }
+    let held = opening.boot(kept).map_err(|fault| raised(py, &made, &fault))?;
     Ok(Life { held, made, ears })
   }
 
-  /// The words of the extensions the life runs after the engine: those its record pins, or else those it was given,
-  /// which it pinned.
+  /// The system prompt of every model of the life, which is the text the life runs.
   #[getter]
-  fn words(&self) -> Vec<String> {
-    self.held.words().to_vec()
+  fn system(&self) -> &str {
+    self.held.system()
   }
 
   /// The root chain of the life, which is the first act of any record.
@@ -459,28 +466,31 @@ fn system_prompt(
   taken: Vec<String>,
   words: Vec<String>,
 ) -> PyResult<String> {
-  let taken: Vec<&str> = taken.iter().map(String::as_str).collect();
   match extension::system(engine, &taken, &words) {
     Ok(prompt) => Ok(prompt),
     Err(error) => Err(raised(py, &Made::new(py)?, &Fault::from(error))),
   }
 }
 
-/// The source of the engine that a life runs and that the gate reads a word on: the engine, then the words.
+/// The top-level names of the engine that the builtins `taken` does not name define.
 #[pyfunction]
-fn engine_source(words: Vec<String>) -> String {
-  extension::source(&words)
+fn cut_names(taken: Vec<String>) -> HashSet<&'static str> {
+  extension::cut_names(&taken)
 }
 
-/// The words a record pins, which a later life on the record runs whatever the configs say then, and nothing when
-/// the record pins none. The record is plain data, as a World keeps it.
+/// What a life on a record takes and runs, as plain data a World keeps: the builtins, the words, and whether the life
+/// pins them.
 #[pyfunction]
-fn pinned_words(py: Python<'_>, record: Bound<'_, PyAny>) -> PyResult<Option<Vec<String>>> {
-  let made = Made::new(py)?;
-  let held = of_python(&made, &py.None(), &record)?;
+fn pinned(
+  py: Python<'_>,
+  record: Bound<'_, PyAny>,
+  taken: Vec<String>,
+  words: Vec<String>,
+) -> PyResult<(Vec<String>, Vec<String>, bool)> {
+  let held = of_python(&Made::new(py)?, &py.None(), &record)?;
   let held: Vec<Object> =
     held.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
-  Ok(extension::pinned(&held))
+  Ok(extension::pinned(&held, &taken, &words))
 }
 
 /// What the engine raised, raised here as the exception it is.
@@ -779,8 +789,8 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(builtin_extensions, module)?)?;
   module.add_function(wrap_pyfunction!(word_of, module)?)?;
   module.add_function(wrap_pyfunction!(system_prompt, module)?)?;
-  module.add_function(wrap_pyfunction!(engine_source, module)?)?;
-  module.add_function(wrap_pyfunction!(pinned_words, module)?)?;
+  module.add_function(wrap_pyfunction!(cut_names, module)?)?;
+  module.add_function(wrap_pyfunction!(pinned, module)?)?;
   module.add_function(wrap_pyfunction!(extensions, module)?)?;
   module.add_function(wrap_pyfunction!(places, module)?)?;
   Ok(())

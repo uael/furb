@@ -329,10 +329,10 @@ def playing(world: Ear, engine: Names) -> Ear:
     a = yield said
 
 
-def pinning(engine: Names, root: str, words: list[str]) -> None:
-  """The words the life runs, said once as the World about the root, which the record keeps, so a later life on the
-  record runs the same words."""
-  verb(engine, "send")("extensions", root, words, by=str(engine["WORLD"]))
+def pinning(engine: Names, root: str, taken: list[str], words: list[str]) -> None:
+  """The builtins the life takes and the words it runs, said once as the World about the root, which the record
+  keeps, so a later life on the record runs the same system prompt."""
+  verb(engine, "send")("extensions", root, taken, words, by=str(engine["WORLD"]))
 
 
 def played(engine: Names, lives: list[str]) -> None:

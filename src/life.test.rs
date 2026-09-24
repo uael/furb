@@ -24,7 +24,7 @@ use std::{
 };
 
 use crate::{
-  Actor, Fact, Fault, Later, Life, Object, ObjectRef, Standing, Voice, World,
+  Actor, Fact, Fault, Later, Life, Object, ObjectRef, Opening, Standing, Voice, World,
   ear::Reply,
   value::{entry, field},
 };
@@ -308,15 +308,14 @@ struct Lived {
 
 impl Lived {
   fn new(yard: &str, words: &[&str], record: Vec<Object>) -> Result<Self, Fault> {
-    Lived::playing(yard, words, record, vec![], vec![])
+    Lived::opened(yard, words, record, |one| one)
   }
 
-  fn playing(
+  fn opened(
     yard: &str,
     words: &[&str],
     record: Vec<Object>,
-    played: Vec<String>,
-    lives: Vec<String>,
+    open: impl FnOnce(Opening) -> Opening,
   ) -> Result<Self, Fault> {
     let at = std::env::temp_dir().join(format!("furb-life-{yard}"));
     if record.is_empty() {
@@ -326,7 +325,7 @@ impl Lived {
     let world = Yard::new(at.clone(), words);
     let (read, kept, slain) =
       (Rc::clone(&world.read), Rc::clone(&world.kept), Rc::clone(&world.slain));
-    let life = Life::open(world).words(played).lives(lives).boot(record)?;
+    let life = open(Life::open(world)).boot(record)?;
     Ok(Lived { life, at, read, kept, slain })
   }
 
@@ -590,7 +589,7 @@ const HELLO: &str = "def hello(name: str) -> str:\n  return f'hi {name}'\n";
 
 #[test]
 fn the_words_of_the_extensions_run_in_the_module_of_the_engine_and_no_chain_plays_them() {
-  let mut lived = Lived::playing("words", &[], vec![], vec![HELLO.to_owned()], vec![]).unwrap();
+  let mut lived = Lived::opened("words", &[], vec![], |one| one.words([HELLO])).unwrap();
   let root = lived.root();
   assert_eq!(lived.program(&root), Vec::<String>::new());
   assert_eq!(lived.rungs(&root), vec![]);
@@ -605,11 +604,11 @@ fn the_words_of_the_extensions_run_in_the_module_of_the_engine_and_no_chain_play
 #[test]
 fn the_gate_reads_a_word_after_the_words_of_the_extensions() {
   let words = &["close(hello('m'))", "close('none')"];
-  let mut lived = Lived::playing("gated", words, vec![], vec![HELLO.to_owned()], vec![]).unwrap();
+  let mut lived = Lived::opened("gated", words, vec![], |one| one.words([HELLO])).unwrap();
   let root = lived.root();
   let got = block_on(lived.life.prompt("str", "greet", "", &root).unwrap()).unwrap();
   assert_eq!(got.as_ref().as_str(), Some("hi m"));
-  let mut bare = Lived::playing("ungated", words, vec![], vec![], vec![]).unwrap();
+  let mut bare = Lived::new("ungated", words, vec![]).unwrap();
   let root = bare.root();
   let got = block_on(bare.life.prompt("str", "greet", "", &root).unwrap()).unwrap();
   assert_eq!(got.as_ref().as_str(), Some("none"));
@@ -619,13 +618,12 @@ fn the_gate_reads_a_word_after_the_words_of_the_extensions() {
 #[test]
 fn a_later_life_with_the_same_words_makes_the_same_rungs_again() {
   let mut first =
-    Lived::playing("again", &["close(hello('m'))"], vec![], vec![HELLO.to_owned()], vec![])
-      .unwrap();
+    Lived::opened("again", &["close(hello('m'))"], vec![], |one| one.words([HELLO])).unwrap();
   let root = first.root();
   let id = first.life.prompt("str", "greet", "", &root).unwrap().id().to_owned();
   first.settled(&id);
   let kept = first.kept.borrow().clone();
-  let mut second = Lived::playing("again", &[], kept, vec![HELLO.to_owned()], vec![]).unwrap();
+  let mut second = Lived::opened("again", &[], kept, |one| one.words([HELLO])).unwrap();
   assert!(second.life.raised().is_none(), "{:?}", second.life.raised());
   assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
   assert_eq!(
@@ -634,33 +632,58 @@ fn a_later_life_with_the_same_words_makes_the_same_rungs_again() {
   );
 }
 
+/// The pins of the World among the entries of a record.
+fn pins(record: &[Object]) -> Vec<String> {
+  record
+    .iter()
+    .map(|one| one.as_ref().py_repr())
+    .filter(|one| one.starts_with(&format!("(('{}'", crate::extension::PINNED)))
+    .collect()
+}
+
 #[test]
 fn a_life_pins_its_words_and_a_later_life_runs_the_words_its_record_pins() {
   let mut first =
-    Lived::playing("pins", &["close(hello('m'))"], vec![], vec![HELLO.to_owned()], vec![]).unwrap();
-  assert_eq!(first.life.words(), [HELLO.to_owned()]);
+    Lived::opened("pins", &["close(hello('m'))"], vec![], |one| one.words([HELLO])).unwrap();
+  assert_eq!(first.life.system(), format!("{}\n{HELLO}", crate::ENGINE));
   let root = first.root();
   let id = first.life.prompt("str", "greet", "", &root).unwrap().id().to_owned();
   first.settled(&id);
   let kept = first.kept.borrow().clone();
-  assert_eq!(crate::extension::pinned(&kept), Some(vec![HELLO.to_owned()]));
-  let mut second = Lived::playing("pins", &[], kept.clone(), vec![], vec![]).unwrap();
+  assert_eq!(
+    pins(&kept),
+    [format!("(('extensions', '{root}', 'world', ['files', 'bash', 'grant'], [{HELLO:?}]))")]
+  );
+  let mut second = Lived::new("pins", &[], kept.clone()).unwrap();
   assert!(second.life.raised().is_none(), "{:?}", second.life.raised());
-  assert_eq!(second.life.words(), [HELLO.to_owned()]);
+  assert_eq!(second.life.system(), first.life.system());
   let got = second.life.verb("hello", vec![Object::string("again")], vec![]).unwrap();
   assert_eq!(got.as_ref().as_str(), Some("hi again"));
-  let third = Lived::playing("pins", &[], kept, vec!["other = 1\n".to_owned()], vec![]).unwrap();
-  assert_eq!(third.life.words(), [HELLO.to_owned()]);
+  let third = Lived::opened("pins", &[], kept, |one| one.words(["other = 1\n"])).unwrap();
+  assert_eq!(third.life.system(), first.life.system());
   assert_eq!(
-    third
-      .kept
-      .borrow()
-      .iter()
-      .filter(|one| crate::extension::pinned(&[(*one).clone()]).is_some())
-      .count(),
-    0,
-    "a life whose record pins words pins none again"
+    pins(&third.kept.borrow()),
+    Vec::<String>::new(),
+    "a life whose record pins pins none again"
   );
+}
+
+#[test]
+fn a_builtin_the_life_does_not_take_leaves_the_text_it_runs_and_the_gate_refuses_a_word_that_names_it()
+ {
+  let words = &["grant(1.0)", "close('none')"];
+  let mut first = Lived::opened("off", words, vec![], |one| one.taken(["files", "bash"])).unwrap();
+  let taken = ["files", "bash"].map(str::to_owned);
+  assert_eq!(first.life.system(), crate::extension::system(crate::ENGINE, &taken, &[]).unwrap());
+  let root = first.root();
+  let id = first.life.prompt("str", "spend", "", &root).unwrap().id().to_owned();
+  first.settled(&id);
+  assert!(first.read.borrow()[1].contains("refused"), "{}", first.read.borrow()[1]);
+  assert!(first.life.verb("grant", vec![], vec![]).is_err());
+  let kept = first.kept.borrow().clone();
+  assert_eq!(pins(&kept), [format!("(('extensions', '{root}', 'world', ['files', 'bash'], []))")]);
+  let second = Lived::new("off", &[], kept).unwrap();
+  assert_eq!(second.life.system(), first.life.system());
 }
 
 #[test]
@@ -669,18 +692,19 @@ fn a_life_opened_with_no_word_and_no_life_word_plays_nothing_and_pins_nothing() 
   let root = lived.root();
   assert_eq!(lived.program(&root), Vec::<String>::new());
   assert_eq!(lived.rungs(&root), vec![]);
-  assert_eq!(crate::extension::pinned(&lived.kept.borrow()), None);
+  assert_eq!(lived.life.system(), crate::ENGINE);
+  assert_eq!(pins(&lived.kept.borrow()), Vec::<String>::new());
 }
 
 #[test]
 fn the_life_plays_the_life_words_as_the_world_in_every_life_on_each_chain_without_a_source() {
   let lives = vec!["seen = 1".to_owned()];
-  let mut first = Lived::playing("lives", &[], vec![], vec![], lives.clone()).unwrap();
+  let mut first = Lived::opened("lives", &[], vec![], |one| one.lives(lives.clone())).unwrap();
   let root = first.root();
   assert_eq!(first.program(&root), ["seen = 1"]);
   assert_eq!(first.rungs(&root), vec![("world".to_owned(), String::new())]);
   let kept = first.kept.borrow().clone();
-  let mut second = Lived::playing("lives", &[], kept, vec![], lives).unwrap();
+  let mut second = Lived::opened("lives", &[], kept, |one| one.lives(lives)).unwrap();
   assert_eq!(second.program(&root), ["seen = 1", "seen = 1"]);
   let two = second.life.chain("two", "", None, "").unwrap().id().to_owned();
   assert_eq!(second.program(&two), ["seen = 1"]);

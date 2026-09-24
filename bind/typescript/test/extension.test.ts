@@ -100,6 +100,23 @@ test("the config of a project names its extensions over the config of the user, 
   });
 });
 
+test("a life runs its system prompt: the minified engine, less each builtin that a config turns off", async () => {
+  const minified = JSON.parse(await readFile(new URL("../system.json", import.meta.url), "utf8")) as string;
+  await project({ grant: false }, undefined, async (cwd) => {
+    const whole = new World({ cwd, extensions: builtinExtensions() });
+    const bare = await World.load({ cwd });
+    try {
+      expect(whole.open().system).toBe(minified);
+      const life = bare.open();
+      expect([life.system.includes("def grant("), life.system.includes("def bash(")]).toEqual([false, true]);
+      expect(() => verb(life, "grant", [1])).toThrow();
+    } finally {
+      await whole.dispose();
+      await bare.dispose();
+    }
+  });
+});
+
 test("an extension whose requirement is off is refused with what to turn off", async () => {
   await project({ files: false }, undefined, async (cwd) => {
     expect(() => resolveExtensions(cwd)).toThrow(

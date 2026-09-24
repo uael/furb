@@ -487,14 +487,18 @@ fn bound(source: &str) -> Vec<Vec<String>> {
     .collect()
 }
 
+/// Texts from their spellings.
+fn texts(all: &[&str]) -> Vec<String> {
+  all.iter().map(|&one| one.to_owned()).collect()
+}
+
 #[test]
 fn each_name_a_builtin_defines_is_bound_at_the_top_of_the_engine_by_statements_of_that_builtin_alone()
  {
   let statements = bound(crate::ENGINE);
   let mut seen = HashSet::new();
-  for one in builtins() {
-    let names = defined(&one.name);
-    assert!(!names.is_empty(), "{}", one.name);
+  for &(builtin, _, names) in &BUILTINS {
+    assert!(!names.is_empty(), "{builtin}");
     for name in names {
       assert!(seen.insert(*name), "{name} is defined by two builtins");
       let binding: Vec<&Vec<String>> =
@@ -502,79 +506,107 @@ fn each_name_a_builtin_defines_is_bound_at_the_top_of_the_engine_by_statements_o
       assert!(!binding.is_empty(), "the engine binds no {name}");
       assert!(
         binding.iter().all(|all| all.iter().all(|x| names.contains(&x.as_str()))),
-        "{name} is bound beside a name of no builtin {}",
-        one.name
+        "{name} is bound beside a name of no builtin {builtin}"
       );
     }
   }
-  assert!(defined("skills").is_empty());
+  assert_eq!(cut_names(&texts(&["files", "bash", "grant", "skills"])), HashSet::new());
+}
+
+/// The names that the code of a source reads.
+fn read(source: &str) -> HashSet<String> {
+  use ruff_python_ast::visitor::{Visitor, walk_expr};
+  struct Reader(HashSet<String>);
+  impl Visitor<'_> for Reader {
+    fn visit_expr(&mut self, expr: &Expr) {
+      if let Expr::Name(one) = expr {
+        self.0.insert(one.id.to_string());
+      }
+      walk_expr(self, expr);
+    }
+  }
+  let mut reader = Reader(HashSet::new());
+  reader.visit_body(&ruff_python_parser::parse_module(source).unwrap().syntax().body);
+  reader.0
+}
+
+#[test]
+fn no_statement_the_prompt_keeps_names_a_name_it_cuts_for_any_builtins_a_config_may_take() {
+  for taken in [
+    &["files", "bash", "grant"][..],
+    &["files", "bash"],
+    &["files", "grant"],
+    &["files"],
+    &["grant"],
+    &[],
+  ] {
+    let taken = texts(taken);
+    let prompt = system(crate::ENGINE, &taken, &[]).unwrap();
+    let named: Vec<&str> =
+      cut_names(&taken).into_iter().filter(|one| read(&prompt).contains(*one)).collect();
+    assert!(named.is_empty(), "{taken:?} keeps {named:?}");
+  }
 }
 
 #[test]
 fn the_prompt_with_every_builtin_taken_and_no_word_is_the_engine_it_was_given() {
-  let taken = ["files", "bash", "grant"];
+  let taken = texts(&["files", "bash", "grant"]);
   assert_eq!(system(crate::ENGINE, &taken, &[]).unwrap(), crate::ENGINE);
   assert_eq!(system("x=1", &taken, &[]).unwrap(), "x=1");
 }
 
 #[test]
 fn a_builtin_that_is_off_leaves_the_prompt_with_its_definitions_and_nothing_else() {
-  let prompt = system(crate::ENGINE, &["files", "bash"], &[]).unwrap();
+  let prompt = system(crate::ENGINE, &texts(&["files", "bash"]), &[]).unwrap();
   assert!(!prompt.contains("def grant(") && !prompt.contains("WINDOW = "));
-  assert!(
-    prompt.contains("def bash(") && prompt.contains("class Text:") && prompt.contains("def chain(")
-  );
+  assert!(prompt.contains("def bash(") && prompt.contains("def chain("));
   let bare = system(crate::ENGINE, &[], &[]).unwrap();
   for gone in
-    ["def read(", "def write(", "def cd(", "def cwd(", "def bash(", "@dataclass", "class Text:"]
+    ["def read(", "def write(", "def cd(", "def cwd(", "def bash(", "class Exit:", "TIMEOUT = "]
   {
     assert!(!bare.contains(gone), "{gone}");
   }
-  for gone in
-    ["class Exit:", "HEAD, TAIL, HIDDEN", "TIMEOUT = ", "from dataclasses import dataclass"]
-  {
-    assert!(!bare.contains(gone), "{gone}");
-  }
-  assert!(bare.contains("def shown(") && bare.contains("def take(") && bare.contains("def boot("));
+  assert!(bare.contains("class Text:") && bare.contains("def take(") && bare.contains("def boot("));
   let left: HashSet<String> = bound(&bare).into_iter().flatten().collect();
   let whole: HashSet<String> = bound(crate::ENGINE).into_iter().flatten().collect();
-  let cut: HashSet<&str> = builtins().iter().flat_map(|one| defined(&one.name)).copied().collect();
+  let cut = cut_names(&[]);
   assert_eq!(left, whole.iter().filter(|x| !cut.contains(x.as_str())).cloned().collect());
   assert!(!bare.contains("\n\n\n\n"), "no cut leaves more empty lines than stood there");
 }
 
 #[test]
 fn the_prompt_cuts_a_statement_that_shares_its_line_and_keeps_the_other() {
-  assert_eq!(system("WINDOW=1;x=2\ny=3\n", &["files", "bash"], &[]).unwrap(), "x=2\ny=3\n");
+  let files = texts(&["files", "bash"]);
+  assert_eq!(system("WINDOW=1;x=2\ny=3\n", &files, &[]).unwrap(), "x=2\ny=3\n");
   assert_eq!(system("a=1\ndef grant():\n\tpass\nb=2\n", &[], &[]).unwrap(), "a=1\nb=2\n");
 }
 
 #[test]
 fn the_words_follow_the_engine_after_an_empty_line_in_their_order() {
-  let words = ["a = 1\n".to_owned(), "b = 2\n".to_owned()];
+  let words = texts(&["a = 1\n", "b = 2\n"]);
   assert_eq!(system("x=1", &[], &words).unwrap(), "x=1\n\na = 1\n\nb = 2\n");
-  assert_eq!(source(&words), format!("{}\na = 1\n\nb = 2\n", crate::ENGINE));
-  assert_eq!(source(&[]), crate::ENGINE);
 }
 
 #[test]
-fn a_record_pins_the_words_of_the_first_fact_the_world_said_of_them() {
-  let fact = |by: &str, words: &[&str]| {
+fn a_life_runs_what_the_first_pin_of_the_world_says_or_every_builtin_and_no_word() {
+  let fact = |by: &str, taken: &[&str], words: &[&str]| {
     Object::list([Object::tuple([
       Object::string(PINNED),
       Object::string("chain1"),
       Object::string(by),
+      Object::list(taken.iter().map(|&one| Object::string(one))),
       Object::list(words.iter().map(|&one| Object::string(one))),
     ])])
   };
   let other = Object::list([Object::tuple([Object::string("stood"), Object::string("chain1")])]);
-  assert_eq!(pinned(&[]), None);
-  assert_eq!(pinned(&[other.clone(), fact("operator", &["x = 1"])]), None);
-  assert_eq!(
-    pinned(&[other, fact("world", &["a = 1\n"]), fact("world", &["b = 2\n"])]),
-    Some(vec!["a = 1\n".to_owned()])
-  );
-  assert_eq!(pinned(&[fact("world", &[])]), Some(vec![]));
+  let (every, given) = (texts(&["files", "bash", "grant"]), texts(&["grant", "skills"]));
+  let words = texts(&["a = 1\n"]);
+  assert_eq!(pinned(&[], &given, &words), (texts(&["grant"]), words.clone(), true));
+  assert_eq!(pinned(&[], &every, &[]), (every.clone(), vec![], false));
+  let unpinned = [other.clone(), fact("operator", &[], &["x = 1"])];
+  assert_eq!(pinned(&unpinned, &given, &words), (every.clone(), vec![], false));
+  let pins = [other, fact("world", &["files"], &["a = 1\n"]), fact("world", &[], &["b = 2\n"])];
+  assert_eq!(pinned(&pins, &every, &[]), (texts(&["files"]), words, false));
 }
 
 #[test]

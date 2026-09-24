@@ -226,8 +226,8 @@ class Live:
   `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
   `words` are the words of the extensions the module of the engine runs after the engine, which the system prompt
   reads after the engine, `lives` their life words, which it plays on each chain without a source in every life,
-  `parts` the names of the extensions the life takes, whose part for a World it holds when it has one, and `booted`
-  says that the life stands on its record, from which point it plays the life words at each birth.
+  `taken` the builtins the life takes, whose part for a World it holds when it has one, and `booted` says that the
+  life stands on its record, from which point it plays the life words at each birth.
   """
 
   directory: str
@@ -242,7 +242,7 @@ class Live:
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
   words: list[str] = field(default_factory=list)
   lives: list[str] = field(default_factory=list)
-  parts: tuple[str, ...] = ("files", "bash", "grant")
+  taken: tuple[str, ...] = ("files", "bash", "grant")
   booted: bool = False
   jobs: set[Task[None]] = field(default_factory=set)
 
@@ -254,9 +254,9 @@ class Live:
 
   @property
   def system(self) -> str:
-    """The system prompt of every model of the life: the engine less the definitions of each builtin the life does
-    not take, then the words of its extensions, as the crate makes it for every host."""
-    return system_prompt(SYSTEM, list(self.parts), self.words)
+    """The system prompt of every model of the life, which is the text the life runs: the engine less the definitions
+    of each builtin the life does not take, then the words of its extensions, as the crate makes it for every host."""
+    return system_prompt(SYSTEM, list(self.taken), self.words)
 
   def plays(self, chain: str) -> None:
     """The life words of the extensions, played on a chain as rungs by whoever speaks, in order."""
@@ -394,7 +394,7 @@ class Live:
     """
     acts: dict[str, tuple] = {}
     loop = asyncio.get_running_loop()
-    parts = [BUILTINS[name](self) for name in self.parts if name in BUILTINS]
+    parts = [BUILTINS[name](self) for name in self.taken if name in BUILTINS]
     kinds = {"wait", "prompt"}.union(*(part.kinds for part in parts))
     while True:
       a = yield

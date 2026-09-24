@@ -24,6 +24,7 @@ use monty_types::{MontyUuid, NamedValues, ResourceLimits};
 use crate::{
   PREAMBLE, SHEET,
   ear::{Ears, Reply},
+  extension,
   fact::Fact,
   gate::checked,
   sand::{Sand, id, object},
@@ -72,8 +73,8 @@ enum Worldly {
 
 /// The host, as the sandbox reaches it: the World, the ears, and everything in flight. The gate is the thread's.
 struct Hosting {
-  /// The source of the engine the life runs, which the gate reads a word on.
-  source: String,
+  /// The system prompt, which the gate reads a word after.
+  system: String,
   world: Worldly,
   ears: Option<Box<dyn Ears>>,
   voice: Voice,
@@ -100,7 +101,7 @@ impl Hosting {
     };
     if on == id(objects::GATE) {
       let sheet = text(args.first().map(Object::as_ref));
-      let found = checked(&sheet, &self.source)?;
+      let found = checked(&sheet, &self.system)?;
       return Ok(Object::list(found.into_iter().map(|(line, why)| {
         Object::tuple([Object::int(i64::try_from(line).unwrap_or_default()), Object::string(why)])
       })));
@@ -322,6 +323,8 @@ pub struct Opening {
   ears: Option<Box<dyn Ears>>,
   names: Vec<String>,
   limits: ResourceLimits,
+  engine: Option<String>,
+  taken: Option<Vec<String>>,
   words: Vec<String>,
   lives: Vec<String>,
 }
@@ -347,9 +350,22 @@ impl Opening {
     self
   }
 
+  /// The engine, `ENGINE` unless it is given: a host gives it minified in layout alone, as the model reads it.
+  #[must_use]
+  pub fn engine(mut self, engine: impl Into<String>) -> Self {
+    self.engine = Some(engine.into());
+    self
+  }
+
+  /// The builtins the life takes, every builtin unless they are given.
+  #[must_use]
+  pub fn taken(mut self, taken: impl IntoIterator<Item = impl Into<String>>) -> Self {
+    self.taken = Some(taken.into_iter().map(Into::into).collect());
+    self
+  }
+
   /// The words of the extensions, which the module of the engine runs after the engine, so every chain binds their
-  /// names from its birth, and the gate reads a word after them. A record that pins words gives its own instead, and
-  /// a life whose record pins none pins these, when there are some, as the World, about the root.
+  /// names from its birth.
   #[must_use]
   pub fn words(mut self, words: impl IntoIterator<Item = impl Into<String>>) -> Self {
     self.words.extend(words.into_iter().map(Into::into));
@@ -367,33 +383,40 @@ impl Opening {
   /// The life, opened from what a World kept of the life before it.
   ///
   /// The record is the entries the World kept, each the fact, and for a query of a run what it was
-  /// answered. The stand-in runs first in a module of its own, then the engine, and
+  /// answered. The stand-in runs first in a module of its own, then the system prompt, and
   /// `boot` is given the Kernel of the crate and one generator for the World and for each ear.
+  ///
+  /// The life takes the builtins and runs the words its record pins, or every builtin and no word when its record
+  /// pins nothing; a life on an empty record takes what it is opened with, and pins it as the World, about the root,
+  /// unless it is every builtin and no word.
   pub fn boot(self, record: impl IntoIterator<Item = Object>) -> Result<Life, Fault> {
-    let Opening { mut world, ears, mut names, limits, words, lives } = self;
+    let Opening { mut world, ears, mut names, limits, engine, taken, words, lives } = self;
     let record: Vec<Object> = record.into_iter().collect();
-    let pin = crate::extension::pinned(&record);
-    let words = pin.clone().unwrap_or(words);
+    let taken =
+      taken.unwrap_or_else(|| extension::builtins().into_iter().map(|one| one.name).collect());
+    let (taken, words, pins) = extension::pinned(&record, &taken, &words);
+    let engine = extension::system(engine.as_deref().unwrap_or(crate::ENGINE), &taken, &[])?;
+    let system = extension::appended(&engine, &words);
     let voice = Voice::default();
     if let Worldly::Typed(world) = &mut world {
       world.opened(voice.clone());
       names.insert(0, WORLD.to_owned());
     }
     let typed = matches!(world, Worldly::Typed(_));
-    let source = crate::extension::source(&words);
     let host =
-      Hosting { source: source.clone(), world, ears, voice, later: Vec::new(), calls: Vec::new() };
+      Hosting { system: system.clone(), world, ears, voice, later: Vec::new(), calls: Vec::new() };
     let mut inner = Inner { sand: Sand::new(limits), host, watchers: HashMap::new() };
     inner.ran(PREAMBLE, vec![])?;
     // The three objects of the host and the two modules are bound as names of the session, which every later
     // piece of code of the stand-in reads.
     let opening = "__engine = extended(module(__source, {**MODULE}), __words)\n__sheet = module(__sheet_source, {})\n__world, __gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __record, __world, __gate, __ears, __names)\n(__root, __raised)";
     let world = if typed { object("World", id(objects::WORLD)) } else { Object::none() };
+    let texts = |all: &[String]| Object::list(all.iter().map(Object::string));
     let got = inner.ran(
       opening,
       vec![
-        ("__source", Object::string(crate::ENGINE)),
-        ("__words", Object::list(words.iter().map(Object::string))),
+        ("__source", Object::string(engine)),
+        ("__words", texts(&words)),
         ("__sheet_source", Object::string(SHEET)),
         ("__record", Object::list(record)),
         (
@@ -410,19 +433,16 @@ impl Opening {
     let got = got.as_ref();
     let root = entry(&got, 0).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
     let raised = entry(&got, 1).and_then(Fault::of);
-    if raised.is_none() && pin.is_none() && !words.is_empty() {
+    if raised.is_none() && pins {
       inner.run(
-        "pinning(__engine, __root, __words)",
-        vec![("__words", Object::list(words.iter().map(Object::string)))],
+        "pinning(__engine, __root, __taken, __words)",
+        vec![("__taken", texts(&taken)), ("__words", texts(&words))],
       )?;
     }
     if raised.is_none() && !lives.is_empty() {
-      inner.run(
-        "played(__engine, __lives)",
-        vec![("__lives", Object::list(lives.into_iter().map(Object::string)))],
-      )?;
+      inner.run("played(__engine, __lives)", vec![("__lives", texts(&lives))])?;
     }
-    Ok(Life { held: inner, root, raised, words })
+    Ok(Life { held: inner, root, raised, system })
   }
 }
 
@@ -435,7 +455,7 @@ pub struct Life {
   held: Inner,
   root: String,
   raised: Option<Fault>,
-  words: Vec<String>,
+  system: String,
 }
 
 impl Life {
@@ -446,6 +466,8 @@ impl Life {
       ears: None,
       names: Vec::new(),
       limits: ResourceLimits::default(),
+      engine: None,
+      taken: None,
       words: Vec::new(),
       lives: Vec::new(),
     }
@@ -461,6 +483,8 @@ impl Life {
       ears: None,
       names: Vec::new(),
       limits: ResourceLimits::default(),
+      engine: None,
+      taken: None,
       words: Vec::new(),
       lives: Vec::new(),
     }
@@ -480,10 +504,9 @@ impl Life {
     &self.root
   }
 
-  /// The words of the extensions the life runs after the engine: those its record pins, or else those it was
-  /// opened with, which it pinned.
-  pub fn words(&self) -> &[String] {
-    &self.words
+  /// The system prompt of every model of the life, which is the text the life runs and the gate reads a word after.
+  pub fn system(&self) -> &str {
+    &self.system
   }
 
   /// What boot raised, if it raised: a drift, which breaks the journal while the life goes on with nothing kept,

@@ -31,20 +31,21 @@ so that the sheet binds each of them before the word."""
 
 
 def checked(text: str, source: str | None = None) -> list[tuple[int, str]]:
-  """What the gate of the crate finds on one sheet, read against the source of the engine the Kernel runs, which is
-  the engine alone unless it is given, each finding by its line: the errors, and none of the warnings, since a
+  """What the gate of the crate finds on one sheet, read against the system prompt of the life, which is the engine
+  alone unless it is given, each finding by its line: the errors, and none of the warnings, since a
   warning refuses no word. A gate that could not read the sheet has said nothing about the word, which is not the
   same as having found nothing, so it raises and the life ends there rather than refuse a word that nobody read."""
   return furb_monty.gate(text, source)
 
 
-def extended(words: Sequence[str]) -> str:
-  """The module of the engine with the words of the extensions run in it after the engine, as a life of monty runs
-  them, so the module of every chain binds their names from its birth; and the source of that engine, which the gate
-  reads a word on."""
+def extended(taken: Sequence[str], words: Sequence[str]) -> None:
+  """The module of the engine as the system prompt of a life makes it, which a life of monty runs: less the names
+  that each builtin not taken defines, then with the words of the extensions run in it, so the module of every chain
+  binds their names from its birth."""
+  for name in furb_monty.cut_names(list(taken)):
+    del ENGINE[name]
   for word in words:
     exec(compile(word, "<extension>", "exec"), ENGINE)  # noqa: S102
-  return furb_monty.engine_source(list(words))
 
 
 class Native:
@@ -119,12 +120,12 @@ class Native:
 
 
 def gate(word: str, program: list[str], source: str | None = None) -> list[str]:
-  """What the gate finds against a word: the sheet of the engine, read by the gate of the crate against the source
-  of the engine."""
+  """What the gate finds against a word: the sheet of the engine, read by the gate of the crate against the system
+  prompt of the life."""
   return sheet.gate(ENGINE, program, word, lambda text: checked(text, source))
 
 
 def gating(source: str | None = None) -> Kernel:
   """The gate as the ear of a life, which reads every word on the sheet of the engine with the gate of the crate,
-  against the source of the engine, which holds the words of the extensions after the engine when it is given."""
+  against the system prompt of the life."""
   return sheet.gating(ENGINE, lambda text: checked(text, source))

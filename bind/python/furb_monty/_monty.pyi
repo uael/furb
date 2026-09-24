@@ -14,22 +14,29 @@ class Life:
   """One life: the engine in the sandbox, and the host it reaches."""
 
   def __init__(
-    self, ears: object, names: Sequence[str], record: object, words: Sequence[str] = (), lives: Sequence[str] = ()
+    self,
+    ears: object,
+    names: Sequence[str],
+    record: object,
+    words: Sequence[str] = (),
+    lives: Sequence[str] = (),
+    *,
+    taken: Sequence[str] | None = None,
+    engine: str | None = None,
   ) -> None:
     """A life, opened on the ears of the host, the names they hear by in the order the engine hears them, and the
     record a World kept. The ears are one object with `hears(name, fact)`, `answered(name, value)`,
-    `called(name, args, kwargs)`, `ear(generator)` and `callable(function)`. The module of the engine runs the words
-    of the extensions after the engine: those the record pins, or else these, which the life pins as the World. The
-    life plays the life words as rungs, as the World, on every chain without a source."""
+    `called(name, args, kwargs)`, `ear(generator)` and `callable(function)`. The life takes the builtins `taken`,
+    every builtin unless they are given, runs the words of the extensions in the module of the engine, and plays the
+    life words; the engine is the crate's unless it is given."""
 
   @property
   def root(self) -> str:
     """The root chain of the life, which is the first act of any record."""
 
   @property
-  def words(self) -> list[str]:
-    """The words of the extensions the life runs after the engine: those its record pins, or else those it was
-    given, which it pinned."""
+  def system(self) -> str:
+    """The system prompt of every model of the life, which is the text the life runs."""
 
   @property
   def raised(self) -> BaseException | None:
@@ -108,9 +115,10 @@ def system_prompt(engine: str, taken: list[str], words: list[str]) -> str:
   `taken` does not name, then the words of the extensions, in their order. An engine python cannot parse raises
   Refused."""
 
-def engine_source(words: list[str]) -> str:
-  """The source of the engine that a life runs and that the gate reads a word on: the engine, then the words."""
+def cut_names(taken: list[str]) -> set[str]:
+  """The top-level names of the engine that the builtins `taken` does not name define."""
 
-def pinned_words(record: object) -> list[str] | None:
-  """The words a record pins, which a later life on the record runs whatever the configs say then, and nothing when
-  the record pins none."""
+def pinned(record: object, taken: list[str], words: list[str]) -> tuple[list[str], list[str], bool]:
+  """What a life on a record takes and runs, the builtins and the words, and whether the life pins them: what the
+  record pins, or every builtin and no word when it pins nothing; on an empty record, what it is given, pinned unless
+  it is every builtin and no word."""

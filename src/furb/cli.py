@@ -4,10 +4,10 @@ One command is one life. The life is opened on a loop of its own, from the recor
 waits on that loop for what it asked. A prompt the record already holds is taken up again and never asked twice,
 so a command said again on a kept record reads the answer of the life before it and asks no model for it.
 
-The life takes the extensions the configs name, as the crate reads them: the builtins and what the config of the
-user and the config of the project add. The module of the engine runs the word of each after the engine, or the
-words the record pins, the life plays their life words, and the command line holds the part for a World of each
-builtin; it loads no part for a World of another extension.
+The life takes the extensions the configs name, as the crate reads them, or the builtins and the words its record
+pins. The module of the engine is its system prompt: the engine less what each builtin it does not take defines,
+then the word of each extension. The life plays the life words, and the command line holds the part for a World of
+each builtin it takes; it loads no part for a World of another extension.
 """
 
 import argparse
@@ -43,15 +43,14 @@ def lived(record: Path | None, cwd: Path, actor: str, *, keeps: bool) -> tuple[L
   """
   held = kept(record) if record is not None and record.is_file() else []
   loaded = furb_monty.extensions(str(cwd.absolute()))
-  pinned = furb_monty.pinned_words(held)
-  words = [one.word for one in loaded if one.word] if pinned is None else pinned
+  names, words = [one.name for one in loaded], [one.word for one in loaded if one.word]
+  taken, words, pins = furb_monty.pinned(held, names, words)
   lives = [one.life for one in loaded if one.life]
-  parts = tuple(one.name for one in loaded)
-  world = Live(str(cwd.absolute()), record if keeps else None, actor, words=words, lives=lives, parts=parts)
-  source = extended(words)
-  root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating(source))
-  if pinned is None and words:
-    engine.send("extensions", root, words, by=WORLD)
+  world = Live(str(cwd.absolute()), record if keeps else None, actor, words=words, lives=lives, taken=tuple(taken))
+  extended(taken, words)
+  root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating(world.system))
+  if pins:
+    engine.send("extensions", root, taken, words, by=WORLD)
   world.play()
   return world, root, held
 

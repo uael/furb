@@ -19,8 +19,8 @@ import {
   decodeRecord,
   type Extension,
   type Life,
+  type Opening,
   resolveExtensions,
-  systemPrompt,
 } from "../index.cjs";
 import { Activity, type RunState } from "./activity.js";
 import { FileChanges } from "./changes.js";
@@ -46,11 +46,17 @@ import {
 export { display, opens, paragraphs, safeText, uncommented } from "./types.js";
 
 let minified: string | undefined;
-/** The engine minified in layout alone, which `bun run build` writes beside the package, read once: what the system
- * prompt of every life is made of. */
-function engine(): string {
+/** What a life opens with for these extensions, or for none of its own when none are given: the engine minified in
+ * layout alone, which `bun run build` writes beside the package, read once, and the builtins, the words and the life
+ * words of the extensions. */
+function opening(extensions?: Extension[]): Opening {
   minified ??= JSON.parse(readFileSync(new URL("../system.json", import.meta.url), "utf8")) as string;
-  return minified;
+  return {
+    engine: minified,
+    taken: extensions?.map((one) => one.name),
+    words: extensions?.flatMap((one) => (one.word ? [one.word] : [])),
+    lives: extensions?.flatMap((one) => (one.life ? [one.life] : [])),
+  };
 }
 
 /** A value the operator gives, in the shape its prompt wants: a whole number crosses as an int, so a float prompt
@@ -125,7 +131,6 @@ export class World extends EventEmitter {
   /** The ears of the life, whose callable carries a show or a filter of the host into it. */
   readonly ears: Ears;
   private life?: Life;
-  private systemText?: string;
   private readonly adapter: WorldAdapter;
   private readonly controller = new AbortController();
   private readonly asks = new Map<string, AbortController>();
@@ -250,27 +255,14 @@ export class World extends EventEmitter {
     return new World({ ...options, extensions, parts: await loadWorldParts(extensions, options.parts) });
   }
 
-  /** The system prompt of every model of the life: the engine less the definitions of each builtin the World does not
-   * take, then the words of the extensions the life runs, as the crate makes it for every host. */
-  system(): string {
-    this.systemText ??= systemPrompt(
-      engine(),
-      this.extensions.map((one) => one.name),
-      this.life?.words ?? [],
-    );
-    return this.systemText;
-  }
-
   open(): Life {
     if (this.life) throw new Error("This World already owns a life.");
     try {
-      // An inspection plays no life word and pins nothing, since it says nothing new; it runs the words its record
-      // pins, which the replay needs.
-      const played = this.options.readOnly ? [] : this.extensions;
+      // An inspection plays no life word and pins nothing, since it says nothing new; it runs what its record pins,
+      // which the replay needs.
       this.life = this.adapter.boot(
         this.records.entries,
-        played.flatMap((one) => (one.word ? [one.word] : [])),
-        played.flatMap((one) => (one.life ? [one.life] : [])),
+        opening(this.options.readOnly ? undefined : this.extensions),
       );
       // A life that drifted keeps nothing more, so this World refuses to open on it.
       const raised = this.life.raised;
@@ -445,7 +437,7 @@ export class World extends EventEmitter {
       });
       const stream = this.models.streamSimple(
         model,
-        { systemPrompt: this.system(), messages },
+        { systemPrompt: this.life?.system, messages },
         {
           signal,
           sessionId: `${this.conversations}/${chain}`,
@@ -648,11 +640,7 @@ export async function boot(
         );
       return part ? [part(context)] : [];
     });
-    const life = adapter.boot(
-      options.entries,
-      extensions.flatMap((one) => (one.word ? [one.word] : [])),
-      extensions.flatMap((one) => (one.life ? [one.life] : [])),
-    );
+    const life = adapter.boot(options.entries, opening(extensions));
     return {
       life,
       ears: adapter.ears,

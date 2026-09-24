@@ -89,7 +89,7 @@ async function open(record: unknown[] = [], answer = 'close("hello")', words: st
   };
   const adapter = new WorldAdapter(world, { onFacts: (batch) => facts.push(...batch) });
   adapter.parts = [memory(files)];
-  const life = adapter.boot(record as Entry[], words);
+  const life = adapter.boot(record as Entry[], { words });
   lives.push(life);
   const release = () => {
     for (const done of waits.splice(0)) done();
@@ -153,8 +153,7 @@ test("text and engine callables cross N-API, and a word reads what a command cam
   const command = said<string>(life, "bash", ["fake"], { fed: true });
   await life.send("out", command, ["hello\n", "stdout"]);
   await life.send("exited", command, [0]);
-  // What a command came to is the engine's own, which a word reads, and nothing of it crosses to the host.
-  const word = `exit = await ${command}\nclose([exit.code, exit.stdout.content])`;
+  const word = `exit = await Act("${command}")\nif isinstance(exit, Exit):\n  close([exit.code, exit.stdout.content])`;
   expect(await life.result<unknown[]>(life.rung(word).id)).toEqual([0, "hello\n"]);
 });
 
@@ -170,7 +169,7 @@ test("a life runs the words of its extensions in the module of the engine, and a
   const first = await open([], 'close(hello("m"))', [HELLO]);
   const program = (life: Life, chain: string) =>
     Object.values(life.call<[unknown, Record<string, string>]>("ask", ["program", chain], {})[1]);
-  expect(first.life.words).toEqual([HELLO]);
+  expect(first.life.system.endsWith(`\n\n${HELLO}`)).toBe(true);
   expect(program(first.life, first.life.root)).toEqual([]);
   expect(await first.life.result<string>(first.life.prompt("str", "Greet").id)).toBe("hi m");
   const fork = first.life.chain("fork").id;
@@ -178,7 +177,7 @@ test("a life runs the words of its extensions in the module of the engine, and a
     "hi fork",
   );
   const second = await open(first.entries, 'close("none")', ["other = 1\n"]);
-  expect(second.life.words).toEqual([HELLO]);
+  expect(second.life.system).toBe(first.life.system);
   expect(second.asks()).toBe(0);
   expect(second.entries).toHaveLength(0);
 });

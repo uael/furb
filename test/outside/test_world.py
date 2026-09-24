@@ -766,7 +766,7 @@ def test_the_system_prompt_of_a_life_is_the_engine_less_the_builtins_it_does_not
   """The system prompt of a life is the engine less the definitions of each builtin the life does not take, then the
   words of its extensions, and the engine alone for a life that takes every builtin and no word."""
   assert Live("/w").system == SYSTEM
-  bare = Live("/w", parts=("files",), words=["def hello():\n  return 'hi'\n"])
+  bare = Live("/w", taken=("files",), words=["def hello():\n  return 'hi'\n"])
   assert "def grant(" not in bare.system and "def bash(" not in bare.system and "class Exit" not in bare.system
   assert "def read(" in bare.system and "def boot(" in bare.system
   assert bare.system.endswith("\n\ndef hello():\n  return 'hi'\n")

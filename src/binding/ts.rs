@@ -19,6 +19,17 @@ use serde_json::{Value, json};
 use host::{Held, Host, invoke, on};
 use wire::{inward, outward};
 
+/// What a life opens with beside its record: the engine, `engineSource()` unless it is given, and the builtins it
+/// takes, every builtin unless they are given; the words and the life words of the extensions.
+#[napi(object)]
+#[derive(Default)]
+pub struct Opening {
+  pub engine: Option<String>,
+  pub taken: Option<Vec<String>>,
+  pub words: Option<Vec<String>>,
+  pub lives: Option<Vec<String>>,
+}
+
 #[napi(object)]
 pub struct PromptOptions {
   pub to: Option<String>,
@@ -53,7 +64,7 @@ pub struct JsLife {
   held: Rc<Held>,
   root: String,
   raised: Option<Value>,
-  words: Vec<String>,
+  system: String,
 }
 
 /// A named act. Keep its id for controls, or await the act for its outcome.
@@ -100,21 +111,17 @@ impl JsAct {
 
 #[napi]
 impl JsLife {
-  /// Open on JavaScript ears, using the same call and reply protocol as the Python binding. The module of the engine
-  /// runs the words of the extensions after the engine: those the record pins, or else these, which the life pins as
-  /// the World. The life plays the life words as rungs, as the World, on every chain without a source, once boot
-  /// stands on its record and at the birth of each such chain after.
+  /// Open on JavaScript ears, using the same call and reply protocol as the Python binding.
   #[napi(
     factory,
-    ts_args_type = "callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null, words?: string[] | null, lives?: string[] | null"
+    ts_args_type = "callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null, opening?: Opening | null"
   )]
   pub fn boot(
     env: Env,
     callback: Function<Value, Value>,
     names: Vec<String>,
     record: Option<Vec<Value>>,
-    words: Option<Vec<String>>,
-    lives: Option<Vec<String>>,
+    opening: Option<Opening>,
   ) -> napi::Result<Self> {
     let record = record
       .unwrap_or_default()
@@ -122,15 +129,21 @@ impl JsLife {
       .map(inward)
       .collect::<Result<Vec<_>, _>>()
       .map_err(error)?;
-    let life = crate::Life::open_on(Host { env, callback: callback.create_ref()? }, names)
+    let Opening { engine, taken, words, lives } = opening.unwrap_or_default();
+    let mut opening = crate::Life::open_on(Host { env, callback: callback.create_ref()? }, names)
       .words(words.unwrap_or_default())
-      .lives(lives.unwrap_or_default())
-      .boot(record)
-      .map_err(error)?;
+      .lives(lives.unwrap_or_default());
+    if let Some(taken) = taken {
+      opening = opening.taken(taken);
+    }
+    if let Some(engine) = engine {
+      opening = opening.engine(engine);
+    }
+    let life = opening.boot(record).map_err(error)?;
     let root = life.root().to_owned();
     let raised = life.raised().map(|fault| outward(fault.object().as_ref()));
-    let words = life.words().to_vec();
-    Ok(Self { held: Held::new(life), root, raised, words })
+    let system = life.system().to_owned();
+    Ok(Self { held: Held::new(life), root, raised, system })
   }
 
   #[napi(getter)]
@@ -138,10 +151,10 @@ impl JsLife {
     self.root.clone()
   }
 
-  /// The words of the extensions the life runs after the engine, which the system prompt reads after the engine.
+  /// The system prompt of every model of the life, which is the text the life runs.
   #[napi(getter)]
-  pub fn words(&self) -> Vec<String> {
-    self.words.clone()
+  pub fn system(&self) -> String {
+    self.system.clone()
   }
 
   /// What boot raised, and nothing when it raised nothing. After a drift the life goes on, with nothing kept.

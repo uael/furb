@@ -170,15 +170,15 @@ def test_the_console_script_prompts_the_actor_it_is_given(
 
 
 async def test_a_config_of_the_user_turns_a_builtin_off(yard: Path) -> None:
-  """A builtin that the config of the user turns off leaves the system prompt of the life, and the engine that runs
-  keeps it whole."""
+  """A builtin that the config of the user turns off leaves the system prompt of the life, which is the text the life
+  runs."""
   config = Path(os.environ["FURB_CONFIG_DIR"])
   config.mkdir(parents=True)
   (config / "config.json").write_text('{"extensions": {"grant": false}}', encoding="utf-8")
   world, root, _ = lived(None, yard, "opus/low", keeps=False)
-  assert world.parts == ("files", "bash")
+  assert world.taken == ("files", "bash")
   assert "def grant(" not in world.system and "def bash(" in world.system
-  assert "grant" in engine.modules[root]
+  assert "grant" not in engine.modules[root] and "bash" in engine.modules[root]
 
 
 async def test_the_command_line_runs_the_word_of_an_extension_and_plays_its_life_word(yard: Path) -> None:
@@ -194,7 +194,7 @@ async def test_the_command_line_runs_the_word_of_an_extension_and_plays_its_life
   (yard / ".furb" / "config.json").write_text('{"extensions": {"seen": "../ext"}}', encoding="utf-8")
   record = held(yard)
   world, root, _ = lived(record, yard, "opus/low", keeps=True)
-  assert world.parts == ("files", "bash", "grant", "seen")
+  assert world.taken == ("files", "bash", "grant")
   assert world.words == ["seen = 0\n"] and world.system.endswith("\n\nseen = 0\n")
   assert engine.modules[root]["seen"] == 1
   assert engine.modules[engine.chain("two")]["seen"] == 1
@@ -204,8 +204,8 @@ async def test_the_command_line_runs_the_word_of_an_extension_and_plays_its_life
 
 
 async def test_a_command_said_again_on_a_record_runs_the_words_the_record_pins(yard: Path) -> None:
-  """A life pins the words it runs in its record, and a life on that record runs those words whatever the configs
-  say then."""
+  """A life pins the builtins it takes and the words it runs in its record, and a life on that record runs those
+  whatever the configs say then."""
   root_of = yard / "ext"
   root_of.mkdir()
   (root_of / "package.json").write_text(json.dumps({"furb": {"name": "mine", "python": "mine.py"}}), encoding="utf-8")
@@ -215,7 +215,8 @@ async def test_a_command_said_again_on_a_record_runs_the_words_the_record_pins(y
   record = held(yard)
   world, root, _ = lived(record, yard, "opus/low", keeps=True)
   await settle()
-  assert [entry[0][3] for entry in kept(record) if entry[0][0] == "extensions"] == [["mine = 'first'\n"]]
+  pins = [entry[0][3:] for entry in kept(record) if entry[0][0] == "extensions"]
+  assert pins == [(["files", "bash", "grant"], ["mine = 'first'\n"])]
   (root_of / "mine.py").write_text("mine = 'second'\n", encoding="utf-8")
   world, root, _ = lived(record, yard, "opus/low", keeps=True)
   assert world.words == ["mine = 'first'\n"] and engine.modules[root]["mine"] == "first"

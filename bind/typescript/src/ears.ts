@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { configDirectory, Life } from "../index.cjs";
+import { configDirectory, Life, type Opening } from "../index.cjs";
 import type { FileChange } from "./changes.js";
 import type { Call, Fault, Hearing, Saying, WorldContext, WorldPart } from "./extension.js";
 import { spawnShell } from "./shell.js";
@@ -67,10 +67,9 @@ export class Ears {
       return { error: fault(error) };
     }
   };
-  /** The life on these ears, from the record, which runs the words of the extensions in the module of the engine, or
-   * the words the record pins, and plays their life words. */
-  boot(record: Entry[] = [], words: string[] = [], lives: string[] = []): Life {
-    return Life.boot(this.callback, [...this.ears.keys()], record, words, lives);
+  /** The life on these ears, from the record and what it opens with. */
+  boot(record: Entry[] = [], opening?: Opening): Life {
+    return Life.boot(this.callback, [...this.ears.keys()], record, opening);
   }
 }
 
@@ -280,10 +279,9 @@ export class WorldAdapter {
         },
       );
   }
-  /** The life on this World, from the record, which runs the words of the extensions in the module of the engine, or
-   * the words the record pins, and plays their life words. */
-  boot(record: Entry[] = [], words: string[] = [], lives: string[] = []): Life {
-    this.life = this.ears.boot(record, words, lives);
+  /** The life on this World, from the record and what it opens with. */
+  boot(record: Entry[] = [], opening?: Opening): Life {
+    this.life = this.ears.boot(record, opening);
     return this.life;
   }
 }

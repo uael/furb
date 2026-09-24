@@ -23,13 +23,17 @@ import furb
 import furb_monty.engine
 from furb import engine, sheet
 from furb.engine import OPERATOR, WORLD, Act, Refused, Text, modules, outcomes, site, under
-from furb.kernel import ENGINE
+from furb.kernel import ENGINE, extended
 
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
 SUITES = (HERE, *sorted((HERE.parent / "extensions").glob("*/test")))
 """SUITES are the directories whose tests run on each engine: the suite of the engine and the suite of each extension
 of the repository, whose modules bind the names of the engine under test too."""
+SOURCE = Path(furb.python.__file__).read_text(encoding="utf-8")
+"""SOURCE is the engine as a text, which the system prompt of a life of the suite is made of."""
+TAKEN = [one.name for one in furb_monty.builtin_extensions()]
+"""TAKEN are the builtins a life of the suite takes: every builtin."""
 ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
@@ -401,11 +405,10 @@ def watched(log: list[tuple]) -> Kernel:
       log.append(a)
 
 
-def kernel(words: Sequence[str] = ()) -> dict[str, Kernel]:
+def kernel(source: str | None = None) -> dict[str, Kernel]:
   """The Kernel and the gate a life of the suite is given: the ones that are python for the engine of this
-  interpreter, whose gate reads against the engine with these words after it, and none for the engine of monty, which
+  interpreter, whose gate reads against the system prompt of the life, and none for the engine of monty, which
   holds its own."""
-  source = furb_monty.engine_source(list(words)) if words else None
   return {} if engine is not furb.python else {"kernel": Py().kernel(), "gate": Py(source).gating()}
 
 
@@ -423,22 +426,21 @@ def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   """A life: the engine opened from a record, with the Kernel it takes, a World in memory and a generator that keeps
   every fact said in it; it gives what was said and the id of the root.
 
-  The module of the engine runs the words of the World after the engine, or the words the record pins, as every host
-  runs them; a life with words pins them when its record pins none, and the World plays its life words on every chain
-  without a source once the life stands on its record, and at the birth of each such chain after.
+  The life takes every builtin and runs the words of the World, or what the record pins, as every host does; a life
+  with words pins them when its record pins nothing, and the World plays its life words on every chain without a
+  source once the life stands on its record, and at the birth of each such chain after.
   """
   log: list[tuple] = []
-  pinned = furb_monty.pinned_words(list(record))
-  words = world.words if pinned is None else pinned
+  taken, words, pins = furb_monty.pinned(list(record), TAKEN, world.words)
   if engine is furb.python:
-    for word in words:
-      exec(compile(word, "<extension>", "exec"), ENGINE)  # noqa: S102
+    extended(taken, words)
   else:
-    furb_monty.engine.WORDS[:], furb_monty.engine.LIVES[:] = words, world.lives
-  root = engine.boot(record, **kernel(words), probe=watched(log), world=world.hears())
+    furb_monty.engine.WORDS[:], furb_monty.engine.LIVES[:] = world.words, world.lives
+  source = furb_monty.system_prompt(SOURCE, taken, words)
+  root = engine.boot(record, **kernel(source), probe=watched(log), world=world.hears())
   if engine is furb.python:
-    if pinned is None and words:
-      engine.send("extensions", root, words, by=WORLD)
+    if pins:
+      engine.send("extensions", root, taken, words, by=WORLD)
     for one in [a[1] for a in list(engine.acts.values()) if a[0] == "chain" and not a[5]]:
       plays(world.lives, one)
   world.booted = True
