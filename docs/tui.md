@@ -1,6 +1,7 @@
 # furb terminal workspace
 
-These captures come from the real OpenTUI renderer and native engine. The demo World supplies scripted model
+Keys use the marks of macOS: ⌃ is Control, ⌥ is Option or Alt, and ⇧ is Shift. These captures come from the real
+OpenTUI renderer and native engine. The demo World supplies scripted model
 answers, temporary files, and real local commands. Run `bun run screenshots` from the repository root to capture
 them again, and `bun run animation` to record the animation below. The generators are in `tui/script/`.
 
@@ -36,14 +37,14 @@ The lines that each write through the World added or removed. The toggle counts 
 
 ## Command palette
 
-Ctrl+P lists every action with its slash command, its keys, and what it does. Type to filter by any of them. A
+⌃P lists every action with its slash command, its keys, and what it does. Type to filter by any of them. A
 dialog dims the screen behind it, and a click outside it closes it.
 
 ![Command palette](screenshots/05-command-palette.png)
 
 ## Models and effort
 
-The model picker names the current model and the window of each. Shift+Tab chooses the effort of the model.
+The model picker names the current model and the window of each. ⇧Tab chooses the effort of the model.
 
 ![Models](screenshots/06-models.png)
 
@@ -51,7 +52,7 @@ The model picker names the current model and the window of each. Shift+Tab choos
 
 ## A question for you
 
-A question that a model asks you stands in the feed with a yellow bar. The input takes its answer, or Ctrl+A opens
+A question that a model asks you stands in the feed with a yellow bar. The input takes its answer, or ⌃A opens
 a dialog for it.
 
 ![Operator question](screenshots/08-operator-question.png)
@@ -60,20 +61,20 @@ a dialog for it.
 
 ## Python input
 
-Ctrl+R writes Python with the same gate as the model. The bar and the line under the input take the color of
+⌃R writes Python with the same gate as the model. The bar and the line under the input take the color of
 Python.
 
 ![Python input](screenshots/10-python-input.png)
 
 ## Value inspector
 
-Ctrl+G, or a Ctrl+click on a name, opens its value, its fields, and its definition.
+⌃G, or a ⌃click on a name, opens its value, its fields, and its definition.
 
 ![Value inspector](screenshots/11-value-inspector.png)
 
 ## Themes
 
-Paper is light, and Midnight and Forest are dark. Ctrl+T opens the themes, each with a swatch of its colors.
+Paper is light, and Midnight and Forest are dark. ⌃T opens the themes, each with a swatch of its colors.
 
 ![Paper theme](screenshots/12-light-theme.png)
 
@@ -83,7 +84,7 @@ Paper is light, and Midnight and Forest are dark. Ctrl+T opens the themes, each 
 
 ## Chains
 
-Ctrl+B lists the chains, each with its state and the chain it branched from.
+⌃B lists the chains, each with its state and the chain it branched from.
 
 ![Chains](screenshots/15-chains.png)
 
@@ -112,7 +113,7 @@ refuses shows the line and the reason.
 
 ## Paused work and saved sessions
 
-A session that opens with unfinished work stays paused until you resume it. Ctrl+O lists the saved sessions of the
+A session that opens with unfinished work stays paused until you resume it. ⌃O lists the saved sessions of the
 workspace, with their state, the time since their last save, their cost, and their size.
 
 ![Paused resume](screenshots/21-paused-resume.png)
@@ -143,7 +144,7 @@ that cannot load offers to read it again.
 
 The sidebar groups sessions under project folders, and its list scrolls on its own. Status dots come from live work
 and saved records. Open sessions keep running while another is selected. A rung folds its program to one line and
-keeps its acts, a workspace folds to its name, and Ctrl+\ hides the sidebar. Ctrl+W opens the workspaces and sessions
+keeps its acts, a workspace folds to its name, and ⌃\ hides the sidebar. ⌃W opens the workspaces and sessions
 picker.
 
 ![Workspace tree](screenshots/28-workspace-tree.png)
@@ -164,7 +165,7 @@ picker.
 
 ## Queued follow-ups
 
-Alt+Enter queues a message until the current work completes. Up in an empty input takes the last one back to edit
+⌥Enter queues a message until the current work completes. Up in an empty input takes the last one back to edit
 it, and `/queue` edits or removes the others.
 
 ![Queued follow-up](screenshots/34-queued-follow-up.png)
@@ -173,7 +174,7 @@ it, and `/queue` edits or removes the others.
 
 ## Images, sharing, and sessions
 
-`/image` or Ctrl+V attaches an image. `/share` writes a standalone HTML conversation. `/delete` moves a session to
+`/image` or ⌃V attaches an image. `/share` writes a standalone HTML conversation. `/delete` moves a session to
 the trash of its workspace.
 
 ![Image attachment](screenshots/36-image-attachment.png)
@@ -184,7 +185,7 @@ the trash of its workspace.
 
 ## External editor
 
-Alt+E edits the draft in `VISUAL` or `EDITOR`.
+⌥E edits the draft in `VISUAL` or `EDITOR`.
 
 ![External editor](screenshots/39-external-editor.png)
 
@@ -212,6 +213,6 @@ An extension adds commands to the palette and to the suggestions.
 
 ## Stash
 
-Ctrl+S puts the input aside, and the line under the input shows what waits. Ctrl+S again brings it back.
+⌃S puts the input aside, and the line under the input shows what waits. ⌃S again brings it back.
 
 ![Stash](screenshots/45-stash.png)

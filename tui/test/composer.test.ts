@@ -57,15 +57,15 @@ test("a terminal with no kitty keyboard protocol reaches each action by a chord 
       expect(app.composer.plainText).toBe('x = "你好"\nif x:\n  ');
       screen.mockInput.pressKey("F1");
       let help = await frame();
-      expect(help).toContain("Alt+1 through Alt+3");
-      expect(help).not.toContain("Ctrl+1 through Ctrl+3");
-      expect(help).toContain("Alt+M");
+      expect(help).toContain("⌥1-3");
+      expect(help).not.toContain("⌃1-3");
+      expect(help).toContain("⌥M");
       app.closeOverlay();
       setRendererCapabilities(screen.renderer, { kitty_keyboard: true });
       app.help();
       help = await frame();
-      expect(help).toContain("Ctrl+1 through Ctrl+3 or Alt+1 through Alt+3");
-      expect(help).toContain("Shift+Enter or Ctrl+J");
+      expect(help).toContain("⌃1-3 or ⌥1-3");
+      expect(help).toContain("⇧Enter or ⌃J");
     },
     undefined,
     true,
@@ -348,3 +348,66 @@ test("Escape twice opens the rewind tree in the feed, which keys move, fold, and
     { width: 120, height: 44, kittyKeyboard: true },
     true,
   ));
+
+test("a space after a command whose values are known lists them, and Enter on a value runs the command", () =>
+  composing(async ({ session, app, screen, frame }) => {
+    await screen.mockInput.typeText("/effort ");
+    let shown = await frame();
+    expect(shown).toContain("Quick answers to simple work");
+    expect(shown).toContain("A balance of speed and depth");
+    await screen.mockInput.typeText("hi");
+    shown = await frame();
+    expect(shown).toContain("More thought for hard work");
+    expect(shown).not.toContain("A balance of speed and depth");
+    screen.mockInput.pressEnter();
+    await until(session, () => session.actorChoice.effort === "high");
+    expect(app.composer.plainText).toBe("");
+    // A value that no known value holds is sent as it is typed.
+    await screen.mockInput.typeText("/theme nothing");
+    expect(await frame()).toContain("No known value matches. Enter sends what is typed.");
+  }));
+
+test("⌃Tab rolls to the next chain and ⇧⌃Tab to the one before it, round from the last to the first", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      await session.refresh();
+      const chains = session.chains.map((chain) => chain.id);
+      expect(chains.length).toBeGreaterThan(1);
+      const first = session.selected;
+      screen.mockInput.pressKey("TAB", { ctrl: true });
+      await until(session, () => session.selected === chains[1]);
+      expect(await frame()).toContain(`chain 2 of ${chains.length}`);
+      screen.mockInput.pressKey("TAB", { ctrl: true, shift: true });
+      await until(session, () => session.selected === first);
+      screen.mockInput.pressKey("TAB", { ctrl: true, shift: true });
+      await until(session, () => session.selected === chains.at(-1));
+    },
+    { width: 120, height: 44, kittyKeyboard: true },
+    true,
+  ));
+
+test("the switch of the views fills the view shown with the accent, names its chord, and a click on a view shows it", () =>
+  composing(async ({ session, screen, frame }) => {
+    const top = (await frame()).split("\n")[0] ?? "";
+    expect(top).toContain("Feed");
+    expect(top).toContain("⌥1-3");
+    await screen.mockMouse.click(top.indexOf("Changes") + 1, 0);
+    await until(session, () => session.view === "changes");
+    const again = (await frame()).split("\n")[0] ?? "";
+    await screen.mockMouse.click(again.indexOf("Feed") + 1, 0);
+    await until(session, () => session.view === "feed");
+  }));
+
+test("the switch of the input shows Prompt and Python, ⌃R names it, and a click on a mode chooses it", () =>
+  composing(async ({ session, screen, frame }) => {
+    const lines = (await frame()).split("\n");
+    const row = lines.findIndex((line) => line.includes("Python") && line.includes("Prompt"));
+    expect(row).toBeGreaterThanOrEqual(0);
+    expect(lines[row]).toContain("⌃R");
+    await screen.mockMouse.click((lines[row] ?? "").indexOf("Python") + 1, row);
+    await until(session, () => session.mode === "python");
+    const after = (await frame()).split("\n");
+    const again = after.findIndex((line) => line.includes("Python") && line.includes("Prompt"));
+    await screen.mockMouse.click((after[again] ?? "").indexOf("Prompt") + 1, again);
+    await until(session, () => session.mode === "prompt");
+  }));

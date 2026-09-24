@@ -15,8 +15,10 @@ const inset = 14,
   margin = 28;
 /** The scale of the image, which a screen of high density shows sharp. */
 const scale = 2;
+/** The family of the text, JetBrains Mono, which draws each mark of a key, and its files. */
+const family = "JetBrains Mono";
 const fonts = ["Regular", "Bold", "Italic"].map((weight) =>
-  join(import.meta.dir, "fonts", `GeistMono-${weight}.ttf`),
+  join(import.meta.dir, "fonts", `JetBrainsMono-${weight}.ttf`),
 );
 
 const hex = (value: RGBA) =>
@@ -161,7 +163,7 @@ function terminal(frame: CapturedFrame): string {
         if (run.trim()) {
           const width = Bun.stringWidth(run) * cell;
           parts.push(
-            `<text x="${start * cell}" y="${y + baseline}" font-family="Geist Mono" font-size="${size}" font-weight="${span.attributes & 1 ? 700 : 400}" font-style="${span.attributes & 4 ? "italic" : "normal"}" fill="${color}" textLength="${width}" lengthAdjust="spacing" xml:space="preserve">${xml(run)}</text>`,
+            `<text x="${start * cell}" y="${y + baseline}" font-family="${family}" font-size="${size}" font-weight="${span.attributes & 1 ? 700 : 400}" font-style="${span.attributes & 4 ? "italic" : "normal"}" fill="${color}" textLength="${width}" lengthAdjust="spacing" xml:space="preserve">${xml(run)}</text>`,
           );
           if (span.attributes & 8)
             parts.push(
@@ -252,14 +254,14 @@ export function pixels(
     `<rect x="${margin}" y="${margin}" width="${window.width}" height="${window.height}" rx="12" fill="${palette.background}" filter="url(#shadow)"/>`,
     `<g clip-path="url(#window)">`,
     lights,
-    `<text x="${margin + window.width / 2}" y="${margin + bar / 2 + 4.5}" text-anchor="middle" font-family="Geist Mono" font-size="13" fill="${palette.muted}">${xml(title)}</text>`,
+    `<text x="${margin + window.width / 2}" y="${margin + bar / 2 + 4.5}" text-anchor="middle" font-family="${family}" font-size="13" fill="${palette.muted}">${xml(title)}</text>`,
     `<g transform="translate(${margin + inset} ${margin + bar})">${terminal(frame)}</g>`,
     `</g>`,
     `<rect x="${margin + 0.5}" y="${margin + 0.5}" width="${window.width - 1}" height="${window.height - 1}" rx="11.5" fill="none" stroke="${palette.border}" stroke-opacity="0.9"/>`,
     `</svg>`,
   ].join("");
   const image = new Resvg(svg, {
-    font: { fontFiles: fonts, loadSystemFonts: true, defaultFontFamily: "Geist Mono" },
+    font: { fontFiles: fonts, loadSystemFonts: true, defaultFontFamily: family },
   }).render();
   return { width: image.width, height: image.height, pixels: new Uint8Array(image.pixels) };
 }

@@ -59,7 +59,7 @@ import {
 import { bold, italic, lineCounts, logo, mix, type Part, plain, styled } from "./ui.ts";
 import type { Workspaces } from "./workspaces.ts";
 
-const exitNotice = "Press Ctrl+D again to exit.";
+const exitNotice = "Press ⌃D again to exit.";
 const rewindNotice = "Press Escape again to rewind.";
 /** The time within which a second Escape rewinds. */
 const twice = 800;
@@ -154,6 +154,28 @@ export interface AppOptions {
   extensions?: Extensions;
 }
 
+/** The commands whose first argument takes a value that the TUI knows, which the suggestions offer as it is typed. */
+const valued = new Set([
+  "model",
+  "effort",
+  "shape",
+  "theme",
+  "read",
+  "image",
+  "extension",
+  "cd",
+  "workspace",
+  "edit",
+  "pause",
+  "wake",
+  "cancel",
+  "feed",
+  "close",
+  "grant",
+  "context",
+]);
+/** The commands whose value is a path of the project, which the suggestions wait for. */
+const pathCommands = new Set(["read", "image", "extension", "cd"]);
 /** What each effort of a model does, which the picker of the effort says beside it. */
 const efforts: Record<string, string> = {
   off: "Answer with no thought first",
@@ -182,12 +204,15 @@ export class App {
   private readonly railSession: BoxRenderable;
   private readonly railHeading: BoxRenderable;
   private readonly railSpaces: ScrollBoxRenderable;
+  private readonly railUsage: BoxRenderable;
+  /** The switch of the mode of the input, which the layout places. */
+  private readonly modeBox: BoxRenderable;
   private readonly railSplitter: BoxRenderable;
   /** Where the operator is, at the left of the top line, and the toggle of the views at its right. */
   private readonly headline: BoxRenderable;
   private readonly toggle: BoxRenderable;
-  /** The view that the pointer stands on in the toggle. */
-  private hoveredView?: View;
+  /** The segment of each switch that the pointer is over, by the name of the switch. */
+  private switchHover = new Map<string, number>();
   private readonly status: TextRenderable;
   /** The keys that the footer offers for what the operator can do now, each a button. */
   private readonly hints: BoxRenderable;
@@ -427,6 +452,7 @@ export class App {
       this.composeEdges.push(bar);
       return bar;
     };
+    this.modeBox = this.box({ flexDirection: "row", height: space.bar, flexShrink: 0 });
     center.add(edge("top"));
     this.composeBox = this.box({
       id: "composer-box",
@@ -475,9 +501,19 @@ export class App {
       height: space.bar,
       flexDirection: "row",
       overflow: "hidden",
-      marginTop: space.stack,
+      flexGrow: 1,
     });
-    this.composeBox.add(this.meta);
+    // The line under the text holds the switch of the mode and where the input goes, a row of space under the text.
+    const metaLine = this.box({
+      flexDirection: "row",
+      height: space.bar,
+      flexShrink: 0,
+      marginTop: space.section,
+    });
+    metaLine.add(this.modeBox);
+    metaLine.add(this.text("   ", c.faint));
+    metaLine.add(this.meta);
+    this.composeBox.add(metaLine);
     center.add(edge("bottom"));
     const footer = this.box({ height: space.bar, flexDirection: "row", gap: space.between });
     this.status = this.text("", c.muted, { height: space.bar, truncate: true, flexGrow: 1, flexShrink: 1 });
@@ -520,6 +556,17 @@ export class App {
     this.railSpaces.verticalScrollBar.visible = false;
     this.railSpaces.horizontalScrollBar.visible = false;
     this.rail.add(this.railSpaces);
+    // The usage of the chain stands at the foot of the sidebar, under a rule, where the list above it does not move it.
+    this.railUsage = this.box({
+      flexShrink: 0,
+      paddingX: space.between,
+      paddingBottom: space.inset,
+      border: ["top"],
+      borderColor: c.border,
+      customBorderChars: { ...noBorder, horizontal: glyph.rule },
+      visible: false,
+    });
+    this.rail.add(this.railUsage);
     this.root.add(this.rail);
     session.on("change", this.schedule);
     options.workspaces?.on("change", this.schedule);
@@ -811,8 +858,10 @@ export class App {
         : w.mode === "python"
           ? "Write Python. The gate reads it before it runs."
           : "Ask anything, or type / for commands";
+    // The box holds the lines of the text, up to six, a row of space, and the line under the text.
     this.composeBox.height =
       Math.min(6, Math.max(space.bar, this.composer.lineCount, this.composer.lineInfo.lineSources.length)) +
+      space.section +
       space.bar;
     this.renderMeta(mode, modeColor);
     this.renderStatus();
@@ -827,44 +876,84 @@ export class App {
     }
   };
 
+  /** A switch between a few choices, which the views and the mode of the input share. A track in a color of its own
+   * holds a segment for each choice. The chosen segment is filled with the color of its choice and stands out by half
+   * a cell at each side, the segment under the pointer lights, and a click chooses a segment. The chord that moves
+   * the switch stands after the track. */
+  private switcher(
+    box: BoxRenderable,
+    id: string,
+    choices: { label: string; badge?: string; color: RGBA; run?: () => void }[],
+    chosen: number,
+    chord: string,
+    ground: RGBA,
+    track: RGBA,
+  ): void {
+    const hovered = this.switchHover.get(id);
+    const light = (index: number | undefined) => {
+      if (this.switchHover.get(id) === index) return;
+      if (index === undefined) this.switchHover.delete(id);
+      else this.switchHover.set(id, index);
+      this.render();
+    };
+    box.add(this.text([[glyph.halfRight, track, 0, ground]], track, { height: space.bar }));
+    for (const [index, choice] of choices.entries()) {
+      const active = index === chosen;
+      const lit = index === hovered && !active && Boolean(choice.run);
+      const fill = active ? choice.color : track;
+      box.add(
+        this.text(
+          [
+            [active ? glyph.halfRight : " ", choice.color, 0, track],
+            [choice.label, active ? c.background : lit ? c.text : c.muted, active ? bold : 0, fill],
+            [choice.badge ? ` ${choice.badge}` : "", active ? c.background : lit ? c.text : c.faint, 0, fill],
+            [active ? glyph.halfLeft : " ", choice.color, 0, track],
+          ],
+          c.text,
+          {
+            height: space.bar,
+            ...(choice.run ? { onMouseUp: this.click(choice.run) } : {}),
+            onMouseOver: () => light(index),
+            onMouseOut: () => light(undefined),
+          },
+        ),
+      );
+    }
+    box.add(this.text([[glyph.halfLeft, track, 0, ground]], track, { height: space.bar }));
+    if (chord) box.add(this.text(` ${chord}`, c.faint, { height: space.bar }));
+  }
   /** The top line: the session and the chain at its left, each a button, and the toggle of the views at its right. */
   private renderTop(): void {
     const w = this.session;
     const changes = w.world.changes;
     const shown = this.tree ? "feed" : w.view;
-    if (this.paneChanged(this.toggle, [shown, this.hoveredView, changes, this.theme])) {
+    const kitty = this.renderer.capabilities?.kitty_keyboard === true;
+    if (
+      this.paneChanged(this.toggle, [
+        shown,
+        this.switchHover.get("views"),
+        changes,
+        kitty,
+        this.feedWidth >= 70,
+        this.theme,
+      ])
+    ) {
       this.clear(this.toggle);
-      // A track in the color of a panel holds a segment for each view. The segment of the view shown is raised from
-      // the track, with half a cell of its color at each side.
-      this.toggle.add(this.text([[glyph.halfRight, c.panel, 0, c.background]]));
-      for (const view of views) {
-        const active = view === shown;
-        const hovered = view === this.hoveredView && !active;
-        const surface = active ? c.selected : c.panel;
-        const segment = this.text(
-          [
-            [active ? glyph.halfRight : " ", c.selected, 0, c.panel],
-            [viewLabels[view], active || hovered ? c.text : c.muted, active ? bold : 0, surface],
-            [view === "changes" && changes ? ` ${changes}` : "", active ? c.accent : c.faint, 0, surface],
-            [active ? glyph.halfLeft : " ", c.selected, 0, c.panel],
-          ],
-          c.text,
-          {
-            height: space.bar,
-            onMouseUp: this.click(() => this.showView(view)),
-            onMouseOver: () => {
-              this.hoveredView = view;
-              this.renderTop();
-            },
-            onMouseOut: () => {
-              if (this.hoveredView === view) this.hoveredView = undefined;
-              this.renderTop();
-            },
-          },
-        );
-        this.toggle.add(segment);
-      }
-      this.toggle.add(this.text([[glyph.halfLeft, c.panel, 0, c.background]]));
+      this.switcher(
+        this.toggle,
+        "views",
+        views.map((view) => ({
+          label: viewLabels[view],
+          badge: view === "changes" && changes ? String(changes) : "",
+          color: c.accent,
+          run: () => this.showView(view),
+        })),
+        views.indexOf(shown),
+        // A narrow top line keeps its room for the headline, and F1 still lists the chord.
+        this.feedWidth >= 70 ? `${kitty ? "⌃" : "⌥"}1-3` : "",
+        c.background,
+        c.panel,
+      );
     }
     const directory = shortenHome(w.workingDirectory);
     if (this.paneChanged(this.headline, [w.sessionName, w.label, directory, this.theme])) {
@@ -904,6 +993,8 @@ export class App {
     const provider = model.includes(":") ? model.slice(0, model.indexOf(":")) : "";
     const stash = w.stashes[w.draftKey];
     const prompt = w.mode === "prompt" && !w.editing && !pending;
+    // The line spans the input but its bar and its padding.
+    const room = this.feedWidth - 3;
     if (
       !this.paneChanged(this.meta, [
         mode,
@@ -915,11 +1006,31 @@ export class App {
         pending?.shape,
         stash,
         prompt,
+        room,
+        this.switchHover.get("mode"),
         this.theme,
       ])
     )
       return;
     this.clear(this.meta);
+    // A narrow input leaves out, in this order, the provider, the type of the answer, the effort, and the chord of the
+    // switch, and the stash shows less of what waits in it.
+    const edited = Boolean(w.editing || pending);
+    const shown = { chord: !edited, provider: prompt && Boolean(provider), shape: prompt, effort: prompt };
+    const gaps = 3;
+    const width = () =>
+      (edited ? Bun.stringWidth(mode) + 4 : "Prompt".length + "Python".length + 6) +
+      gaps +
+      (shown.chord ? 3 : 0) +
+      Bun.stringWidth(`on ${w.label}`) +
+      (pending ? gaps + Bun.stringWidth(`returns ${pending.shape}`) : 0) +
+      (prompt ? gaps + Bun.stringWidth(name) : 0) +
+      (shown.provider ? provider.length + 1 : 0) +
+      (shown.effort ? gaps + Bun.stringWidth(`${effort} effort`) : 0) +
+      (shown.shape ? gaps + Bun.stringWidth(`returns ${w.shape}`) : 0) +
+      (stash ? gaps + "stashed ⌃S".length + 8 : 0);
+    for (const part of ["provider", "shape", "effort", "chord"] as const)
+      if (width() > room) shown[part] = false;
     const gap = () => this.meta.add(this.text("   ", c.faint));
     const button = (parts: Part[], run?: () => void) =>
       this.meta.add(
@@ -929,8 +1040,25 @@ export class App {
           ...(run ? { onMouseUp: this.click(run) } : {}),
         }),
       );
-    button([[mode, modeColor, bold]], w.editing || pending ? undefined : () => this.toggleMode());
-    gap();
+    // The mode of the input is a switch between a prompt and Python, and an answer or a program that the input edits
+    // is a switch of one segment, which only its key leaves.
+    this.clear(this.modeBox);
+    const [ground, track] = [c.panel, c.raised];
+    if (edited)
+      this.switcher(this.modeBox, "mode", [{ label: mode, color: modeColor }], 0, "", ground, track);
+    else
+      this.switcher(
+        this.modeBox,
+        "mode",
+        [
+          { label: "Prompt", color: c.accent, run: () => w.mode === "prompt" || this.toggleMode() },
+          { label: "Python", color: c.secondary, run: () => w.mode === "python" || this.toggleMode() },
+        ],
+        w.mode === "python" ? 1 : 0,
+        shown.chord ? "⌃R" : "",
+        ground,
+        track,
+      );
     button(
       [
         ["on ", c.faint],
@@ -949,44 +1077,49 @@ export class App {
       button(
         [
           [name, c.text],
-          [provider ? ` ${provider}` : "", c.faint],
+          [shown.provider ? ` ${provider}` : "", c.faint],
         ],
         () => this.models(),
       );
-      gap();
-      button(
-        [
-          [effort, c.muted],
-          [" effort", c.faint],
-        ],
-        () => this.effortPicker(),
-      );
-      gap();
-      button(
-        [
-          ["returns ", c.faint],
-          [w.shape, c.muted],
-        ],
-        () => this.shapes(),
-      );
+      if (shown.effort) {
+        gap();
+        button(
+          [
+            [effort, c.muted],
+            [" effort", c.faint],
+          ],
+          () => this.effortPicker(),
+        );
+      }
+      if (shown.shape) {
+        gap();
+        button(
+          [
+            ["returns ", c.faint],
+            [w.shape, c.muted],
+          ],
+          () => this.shapes(),
+        );
+      }
     }
     if (stash) {
       this.meta.add(this.box({ flexGrow: 1 }));
-      // The stash shows the start of what waits in it, and the key that brings it back.
+      // The stash shows the start of what waits in it, as much as the line has room for, and the key that brings it
+      // back.
       const first = stash.split("\n")[0] ?? "";
+      const preview = Math.min(28, room - width() + 8);
+      const more = first.length < stash.length && Bun.stringWidth(first) <= preview ? " …" : "";
       button(
         [
           ["stashed ", c.faint],
-          [
-            `“${clip(first, 28)}${first.length < stash.length && Bun.stringWidth(first) <= 28 ? " …" : ""}”  `,
-            c.muted,
-          ],
-          ["Ctrl+S", c.faint],
+          [preview >= 6 ? `“${clip(first, preview)}${more}”  ` : "", c.muted],
+          ["⌃S", c.faint],
         ],
         () => this.stash(),
       );
     }
   }
+
   /** The state of the session and the keys that act on it, in the footer. A notice stands after the state until it
    * ends, and each key is a button that does what it says. */
   private renderStatus(): void {
@@ -1033,12 +1166,12 @@ export class App {
               ["Esc", "leave the program", () => this.leaveEdit()],
             ]
           : [
-              ...(w.operatorPrompt ? ([["Ctrl+A", "answer", () => this.question()]] as const) : []),
+              ...(w.operatorPrompt ? ([["⌃A", "answer", () => this.question()]] as const) : []),
               ...(!w.paused &&
               w.activity.some((act) => act.kind === "prompt" && !act.done && !asksOperator(act))
                 ? ([["Esc", "pause", () => this.action("/pause")]] as const)
                 : []),
-              ["Ctrl+P", "commands", () => this.palette()],
+              ["⌃P", "commands", () => this.palette()],
               ["F1", "help", () => this.help()],
             ];
     const hints = keys.flatMap(([key, action], index): Part[] => [
@@ -1450,7 +1583,7 @@ export class App {
                         ["Answer in the input below", c.muted],
                         [act.words[0] === "bool" ? " with yes or no" : `, as ${act.words[0]}`, c.muted],
                         [", or press ", c.faint],
-                        ["Ctrl+A", c.muted],
+                        ["⌃A", c.muted],
                       ],
                       c.muted,
                       { onMouseUp: this.click(() => this.question()) },
@@ -1741,7 +1874,7 @@ export class App {
     }
     if (!items && !w.loading && !w.error) {
       const empty: Record<View, [string, string]> = {
-        feed: ["Nothing here yet", "Send a message, or run Python with Ctrl+R."],
+        feed: ["Nothing here yet", "Send a message, or run Python with ⌃R."],
         transcript: ["No transcript yet", "The model reads its first turn here once a prompt runs."],
         changes: ["No file changes yet", "Each file that the life writes shows here as a diff."],
       };
@@ -1869,7 +2002,7 @@ export class App {
     for (const [chord, action, run] of [
       ["/", "commands", () => this.palette()],
       ["@", "files", () => void this.filesPicker().catch(this.report)],
-      ["Ctrl+R", "Python", () => this.toggleMode()],
+      ["⌃R", "Python", () => this.toggleMode()],
       ["F1", "help", () => this.help()],
     ] as const)
       keys.add(
@@ -2324,10 +2457,13 @@ export class App {
     )
       return;
     this.clear(this.railSession);
+    this.clear(this.railUsage);
     const inner = width - space.between * 2;
+    // The chains fill the head of the sidebar, and the usage its foot.
+    let target: BoxRenderable = this.railSession;
     const add = (parts: Part[], options: ConstructorParameters<typeof TextRenderable>[1] = {}) => {
       const node = this.text(parts, c.muted, { height: space.bar, truncate: true, ...options });
-      this.railSession.add(node);
+      target.add(node);
       return node;
     };
     // A row of a table: its name at the left, and its value at the right.
@@ -2342,7 +2478,7 @@ export class App {
         ...(run ? { onMouseUp: this.click(run) } : {}),
       });
     };
-    section("Chains", "Ctrl+B", "", () => this.chains());
+    section("Chains", "⌃B", "", () => this.chains());
     const first = this.railSession.getChildren()[0];
     if (first) first.marginTop = 0;
     // The chains take six rows at most, and the rest wait behind a button that lists them all.
@@ -2388,16 +2524,21 @@ export class App {
         ],
         { onMouseUp: this.click(() => this.chains()) },
       );
+    target = this.railUsage;
     const usage = w.usage;
     const ceiling =
       grant?.words[1] === null || grant?.words[1] === undefined ? undefined : Number(grant.words[1]);
     const known = window !== undefined && Number.isFinite(window);
-    if (usage.some((amount) => amount > 0) || grant) {
+    this.railUsage.visible = usage.some((amount) => amount > 0) || Boolean(grant);
+    if (this.railUsage.visible) {
       section(
         "Context",
         known ? `${Number(((window ?? 0) * 100).toFixed(1))}%` : "",
         w.demo ? "  simulated" : "",
       );
+      // The rule above the usage stands in for the space above a section.
+      const head = this.railUsage.getChildren()[0];
+      if (head) head.marginTop = 0;
       if (known) {
         // The meter fills with the share of the window that the last answer used, and marks the ceiling of a grant.
         const used = Math.min(inner, Math.max((window ?? 0) > 0 ? 1 : 0, Math.round((window ?? 0) * inner)));
@@ -2472,7 +2613,7 @@ export class App {
     const inner = width - space.between * 2;
     this.railHeading.add(this.text("Workspaces", c.text, { attributes: bold, flexGrow: 1 }));
     this.railHeading.add(
-      this.text("Ctrl+W", c.faint, { onMouseUp: this.click(() => void this.workspacePicker()) }),
+      this.text("⌃W", c.faint, { onMouseUp: this.click(() => void this.workspacePicker()) }),
     );
     // A row of the list spans the sidebar, so that the pointer and the selection show from edge to edge.
     const line = (parts: Part[], run: () => void, options: BoxOptions = {}, selected = false) => {
@@ -2943,22 +3084,22 @@ export class App {
       changes: "The diff of each file that the life wrote",
     };
     const shortcuts: Partial<Record<keyof typeof commands, string>> = {
-      exit: "Ctrl+Q",
-      workspace: "Ctrl+W",
-      sidebar: "Ctrl+\\",
+      exit: "⌃Q",
+      workspace: "⌃W",
+      sidebar: "⌃\\",
       rewind: "Esc Esc",
-      editor: "Alt+E",
+      editor: "⌥E",
       files: "@",
-      queue: "Alt+Enter",
-      image: "Ctrl+V",
-      details: "Alt+D",
-      chain: "Ctrl+N",
-      model: kitty ? "Ctrl+M" : "Alt+M",
-      effort: "Shift+Tab",
-      theme: "Ctrl+T",
-      inspect: "Ctrl+G",
+      queue: "⌥Enter",
+      image: "⌃V",
+      details: "⌥D",
+      chain: "⌃N",
+      model: kitty ? "⌃M" : "⌥M",
+      effort: "⇧Tab",
+      theme: "⌃T",
+      inspect: "⌃G",
       bash: "!",
-      edit: "Ctrl+L",
+      edit: "⌃L",
     };
     const choices: Choice[] = [];
     if (this.options.newSession)
@@ -2973,7 +3114,7 @@ export class App {
         label: `${viewLabels[view]} view`,
         detail: views_[view],
         command: "",
-        keys: `${kitty ? "Ctrl" : "Alt"}+${index + 1}`,
+        keys: `${kitty ? "⌃" : "⌥"}${index + 1}`,
         run: () => this.showView(view),
       });
     for (const [name, command] of this.options.extensions?.commands ?? [])
@@ -2989,28 +3130,28 @@ export class App {
         label: "Switch chain",
         detail: "Go to any chain of this session",
         command: "",
-        keys: "Ctrl+B",
+        keys: "⌃B",
         run: () => this.chains(),
       },
       run: {
         label: "Python input",
         detail: "Write code with the same gate as the model",
         command: "",
-        keys: "Ctrl+R",
+        keys: "⌃R",
         run: () => this.toggleMode(),
       },
       files: {
         label: "Stash the input",
         detail: "Put the input aside, or bring it back",
         command: "",
-        keys: "Ctrl+S",
+        keys: "⌃S",
         run: () => this.stash(),
       },
       grant: {
         label: "Filter the view",
         detail: "Show only what holds a text",
         command: "",
-        keys: "Ctrl+F",
+        keys: "⌃F",
         run: () => this.openSearch(),
       },
       exit: {
@@ -3049,10 +3190,14 @@ export class App {
     this.composer.insertText(replacement);
   }
   /** The token the cursor ends: a `/command` that opens the input, or an `@path` that starts a word of a prompt. */
-  private token(): { kind: "/" | "@"; text: string } | undefined {
+  private token(): { kind: "/" | "@" | "value"; text: string; command?: string } | undefined {
     const before = this.beforeCursor();
     const slash = before.match(/^\/([\w-]*)$/);
     if (slash) return { kind: "/", text: slash[1] ?? "" };
+    // The first word after a command whose values are known is a value, which the suggestions complete.
+    const value = before.match(/^\/([\w-]+) (\S*)$/);
+    if (value && valued.has(value[1] ?? ""))
+      return { kind: "value", text: value[2] ?? "", command: value[1] ?? "" };
     const at = before.match(/(?:^|\s)@([^\s"']*)$/);
     if (at && this.session.mode === "prompt" && !this.session.editing)
       return { kind: "@", text: at[1] ?? "" };
@@ -3061,7 +3206,126 @@ export class App {
   /** The token before the cursor as it is now, replaced with the text of a suggestion. */
   private complete(suggestion: Suggestion): void {
     const token = this.token();
-    if (token) this.replaceBefore(`${token.kind}${token.text}`, suggestion.text);
+    if (token)
+      this.replaceBefore(token.kind === "value" ? token.text : `${token.kind}${token.text}`, suggestion.text);
+  }
+  /** The paths of the project, which the suggestions read: known once the first read ends, which suggests again. */
+  private projectPaths(fresh = false): string[] | undefined {
+    const read = this.session.projectFiles(fresh);
+    if (this.files?.read !== read) {
+      const files: NonNullable<typeof this.files> = { read };
+      this.files = files;
+      read.then(
+        (paths) => {
+          files.paths = paths;
+          if (this.files === files && !this.closed) this.suggest();
+        },
+        (error: unknown) => {
+          files.error = error instanceof Error ? error.message : String(error);
+          if (this.files === files && !this.closed) this.suggest();
+        },
+      );
+    }
+    return this.files.paths;
+  }
+  /** The values that the first argument of a command may take, each with what it means, or nothing for a command
+   * whose argument is free text. A value of a command that takes more after it completes, and a value of any other
+   * command runs the command when it is chosen. */
+  private argumentValues(command: string): { value: string; detail: string; more?: boolean }[] | undefined {
+    const w = this.session;
+    const current = (yes: boolean) => (yes ? "   current" : "");
+    const files = () => this.projectPaths() ?? [];
+    switch (command) {
+      case "model": {
+        const roster = w.roster.filter(([name]) => name !== "operator");
+        const short = (name: string) => (name.includes(":") ? name.slice(name.indexOf(":") + 1) : name);
+        return roster.map(([name, , window]) => ({
+          // A model goes by its name alone, unless two providers offer a model of that name.
+          value: roster.filter(([other]) => short(other) === short(name)).length > 1 ? name : short(name),
+          detail: `${count(window)} tokens of context${current(name === w.actorChoice.model)}`,
+        }));
+      }
+      case "effort": {
+        const { model, effort } = w.actorChoice;
+        return (w.roster.find(([name]) => name === model)?.[1] ?? []).map((name) => ({
+          value: name,
+          detail: `${efforts[name] ?? ""}${current(name === effort)}`,
+        }));
+      }
+      case "shape":
+        return shapes.map((shape) => ({
+          value: shape,
+          detail: `The answer is a ${shape}${current(shape === w.shape)}`,
+        }));
+      case "theme":
+        return (Object.keys(palettes) as ThemeName[]).map((name) => ({
+          value: name,
+          detail: `${themeLabels[name].join(", ")}${current(name === this.theme)}`,
+        }));
+      case "read":
+        return files().map((path) => ({ value: path, detail: "" }));
+      case "image":
+        return files()
+          .filter((path) => /\.(png|jpe?g|gif|webp)$/i.test(path))
+          .map((path) => ({ value: path, detail: "" }));
+      case "extension":
+        return files()
+          .filter((path) => /\.(ts|js|mts|mjs)$/.test(path))
+          .map((path) => ({ value: path, detail: "" }));
+      case "cd":
+        return [
+          ...new Set(
+            files().flatMap((path) => (path.includes("/") ? [path.slice(0, path.lastIndexOf("/"))] : [])),
+          ),
+        ]
+          .sort()
+          .map((path) => ({ value: path, detail: "" }));
+      case "workspace":
+        return (this.options.workspaces?.groups ?? []).map((group) => ({
+          value: shortenHome(group.directory),
+          detail: group.name,
+        }));
+      case "edit":
+        return w.activity
+          .filter((act) => w.isUserPrompt(act))
+          .map((act) => ({
+            value: act.id,
+            detail: clip(String(act.words[1] ?? "").split("\n")[0] ?? "", 48),
+          }));
+      case "pause":
+      case "wake":
+        return w.chains.map((chain) => ({
+          value: chain.id,
+          detail: `${w.labelOf(chain.id)}${current(chain.id === w.selected)}`,
+        }));
+      case "cancel":
+        return w.activity
+          .filter((act) => working(act))
+          .map((act) => ({
+            value: act.id,
+            detail: `${act.kind}  ${clip(String(act.words[act.kind === "prompt" ? 1 : 0] ?? ""), 40)}`,
+          }));
+      case "feed":
+        return w.activity
+          .filter((act) => act.kind === "bash" && !act.done && act.words[1] === true)
+          .map((act) => ({ value: act.id, detail: clip(String(act.words[0] ?? ""), 48), more: true }));
+      case "close":
+        return w.activity
+          .filter((act) => !act.done && act.kind !== "chain")
+          .map((act) => ({ value: act.id, detail: act.kind, more: true }));
+      case "grant":
+        return ["1", "2", "5", "10", "20"].map((value) => ({
+          value,
+          detail: `Pause this chain at ${dollars(Number(value))}`,
+        }));
+      case "context":
+        return ["0.5", "0.7", "0.8", "0.9"].map((value) => ({
+          value,
+          detail: `Pause this chain at ${share(Number(value))}`,
+        }));
+      default:
+        return undefined;
+    }
   }
   private suggest = (): void => {
     const token = this.token();
@@ -3098,24 +3362,34 @@ export class App {
             this.command(name, argument)();
           },
         }));
-    } else {
-      const read = this.session.projectFiles(started);
-      if (this.files?.read !== read) {
-        const files: NonNullable<typeof this.files> = { read };
-        this.files = files;
-        read.then(
-          (paths) => {
-            files.paths = paths;
-            if (this.files === files && !this.closed) this.suggest();
-          },
-          (error: unknown) => {
-            files.error = error instanceof Error ? error.message : String(error);
-            if (this.files === files && !this.closed) this.suggest();
-          },
-        );
-      }
+    } else if (token.kind === "value") {
+      const command = token.command ?? "";
       const wanted = token.text.toLowerCase();
-      this.suggestions = (this.files.paths ?? [])
+      // A value that starts with what is typed comes first, then a value that holds it.
+      this.suggestions = (this.argumentValues(command) ?? [])
+        .filter(({ value }) => value.toLowerCase().includes(wanted))
+        .sort(
+          (one, other) =>
+            Number(other.value.toLowerCase().startsWith(wanted)) -
+            Number(one.value.toLowerCase().startsWith(wanted)),
+        )
+        .slice(0, 50)
+        .map(({ value, detail, more }) => ({
+          label: value,
+          detail,
+          text: `${value} `,
+          ...(more
+            ? {}
+            : {
+                submit: () => {
+                  this.composer.setText(`/${command} ${value}`);
+                  void this.submit();
+                },
+              }),
+        }));
+    } else {
+      const wanted = token.text.toLowerCase();
+      this.suggestions = (this.projectPaths(started) ?? [])
         .filter((path) => path.toLowerCase().includes(wanted))
         .slice(0, 50)
         .map((path) => ({
@@ -3132,15 +3406,17 @@ export class App {
     const shown = token ? this.suggestions : [];
     const state = !token
       ? ""
-      : token.kind === "@" && this.files?.error
+      : (token.kind === "@" || pathCommands.has(token.command ?? "")) && this.files?.error
         ? this.files.error
-        : token.kind === "@" && !this.files?.paths
+        : (token.kind === "@" || pathCommands.has(token.command ?? "")) && !this.files?.paths
           ? "Finding project files..."
           : shown.length
             ? ""
             : token.kind === "/"
               ? "No command starts with that name."
-              : "No project file matches.";
+              : token.kind === "value"
+                ? "No known value matches. Enter sends what is typed."
+                : "No project file matches.";
     if (
       !this.paneChanged(this.suggestionBox, [
         this.theme,
@@ -3246,7 +3522,7 @@ export class App {
       })),
       offered.indexOf(effort),
       "",
-      "More effort thinks longer and costs more. Shift+Tab moves to the next.",
+      "More effort thinks longer and costs more. ⇧Tab moves to the next.",
     );
   };
   details = (): void => {
@@ -3520,7 +3796,7 @@ export class App {
         this.text([
           ["Click", c.muted],
           [" opens it   ", c.faint],
-          ["Ctrl+G", c.muted],
+          ["⌃G", c.muted],
           [" inspects a name", c.faint],
         ]),
       );
@@ -4087,6 +4363,28 @@ export class App {
     const { scrollTop, scrollHeight, viewport, stickyScroll } = this.scroll;
     return stickyScroll && scrollTop >= scrollHeight - viewport.height ? "end" : scrollTop;
   }
+  /** The chain a step away from the one shown, in the order of the chains, round from the last to the first. */
+  private rollChain(step: number): void {
+    const w = this.session;
+    const chains = w.chains;
+    if (chains.length < 2) {
+      w.notice = "This session has one chain. ⌃N makes another.";
+      this.render();
+      return;
+    }
+    const at = Math.max(
+      0,
+      chains.findIndex((chain) => chain.id === w.selected),
+    );
+    const next = chains[(at + step + chains.length) % chains.length];
+    if (!next) return;
+    void w
+      .select(next.id)
+      .then(() => {
+        w.notice = `${w.labelOf(next.id)}, chain ${chains.indexOf(next) + 1} of ${chains.length}`;
+      })
+      .catch(w.fail);
+  }
   /** The chains of the session, each with its state and the chain it branched from. */
   chains(): void {
     const w = this.session;
@@ -4555,7 +4853,7 @@ export class App {
         this.renderSuggestions();
         return;
       }
-      if (key.name === "tab" && !key.shift && chosen) {
+      if (key.name === "tab" && !key.shift && !key.ctrl && !key.super && chosen) {
         key.preventDefault();
         this.complete(chosen);
         return;
@@ -4620,6 +4918,13 @@ export class App {
       this.toggleSidebar();
       return;
     }
+    // ⌃Tab rolls to the next chain and ⇧⌃Tab to the one before it. ⌘Tab does the same where the system and the
+    // terminal pass it, which macOS does not, since it keeps ⌘Tab to switch applications.
+    if (!this.overlay && key.name === "tab" && (key.ctrl || key.super)) {
+      key.preventDefault();
+      this.rollChain(key.shift ? -1 : 1);
+      return;
+    }
     if (!this.overlay && key.name === "tab" && key.shift) {
       key.preventDefault();
       this.effortPicker();
@@ -4650,7 +4955,7 @@ export class App {
         key.preventDefault();
         this.session.removeQueued(queued.id);
         this.insert(queued.text);
-        this.session.notice = "The queued message is back in the input. Alt+Enter queues it again.";
+        this.session.notice = "The queued message is back in the input. ⌥Enter queues it again.";
         return;
       }
       const cursor = this.composer.visualCursor.visualRow;
@@ -4751,7 +5056,7 @@ export class App {
       }
       return;
     }
-    // Each chord with Ctrl needs the kitty keyboard protocol, and the same chord with Alt reaches every terminal.
+    // A chord with ⌃ needs the kitty keyboard protocol, and the same chord with ⌥ reaches every terminal.
     if ((key.ctrl || key.meta) && /^[1-3]$/.test(key.name)) {
       key.preventDefault();
       this.showView(views[Number(key.name) - 1] ?? "feed");
@@ -4847,7 +5152,7 @@ export class App {
     const text = this.composer.plainText;
     const kept = w.stashes[key] ?? "";
     if (!text && !kept) {
-      w.notice = "Ctrl+S puts the input aside. The input is empty.";
+      w.notice = "⌃S puts the input aside. The input is empty.";
       return;
     }
     if (text) w.stashes[key] = text;
@@ -4857,7 +5162,7 @@ export class App {
     w.notice = text
       ? kept
         ? "The input and the text put aside traded places."
-        : "The input is put aside. Ctrl+S brings it back."
+        : "The input is put aside. ⌃S brings it back."
       : "The text put aside is back.";
     w.save();
     this.render();

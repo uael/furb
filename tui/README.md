@@ -27,11 +27,12 @@ and each saved session shows its state when its replay ends.
 ![The furb TUI in action](../docs/furb.gif)
 
 The top line names the session and the chain at its left, with the directory of the chain. At its right, a toggle
-switches the three views of the chain: **Feed**, **Transcript**, and **Changes**. Click a view, or press Ctrl+1
-through Ctrl+3 (Alt+1 through Alt+3 in every terminal). The feed shows your messages, the Python that each model
-wrote, the acts that it made, and the answers. An act that no turn tells yet, such as a command that you started,
-stands at the end of the feed until a turn tells it. The transcript shows the exact text that the model reads, and
-the changes show the diff of each file that the life wrote. Each chain has its own feed and module.
+switches the three views of the chain: **Feed**, **Transcript**, and **Changes**. Click a view, or press ⌃1-3 (⌥1-3
+in every terminal). ⌃Tab rolls to the next chain, and ⇧⌃Tab to the one before it. The feed shows your messages, the
+Python that each model wrote, the acts that it made, and the answers. An act that no turn tells yet, such as a
+command that you started, stands at the end of the feed until a turn tells it. The transcript shows the exact text
+that the model reads, and the changes show the diff of each file that the life wrote. Each chain has its own feed
+and module.
 
 The sidebar at the right holds the chains of the session, the context and the cost that its model used, and the
 workspaces. Each workspace is a project folder with many sessions, and its list scrolls on its own. Click a
@@ -42,12 +43,12 @@ Selecting a completed session clears its unread marker. `/workspace path` adds a
 session in the current workspace. `/delete` moves a chosen session and its companions to `.furb/trash`. The trash
 holds a `restore.json` with the original paths, and its record can be opened with `--resume`. Quit saves and closes
 all open sessions, and SIGINT, SIGTERM, SIGHUP, and SIGQUIT quit the same way. On Windows, a console that closes
-and Ctrl+Break quit the same way. `Ctrl+\` or `/sidebar` shows or hides the sidebar, and a drag of its edge
+and Ctrl+Break quit the same way. `⌃\` or `/sidebar` shows or hides the sidebar, and a drag of its edge
 changes its width. On a terminal narrower than 100 columns the sidebar is hidden, and `/workspace` keeps all
 sessions available from the keyboard.
 
-Python words have offline Tree-sitter colors and line numbers. Hover over a name for its current value; Ctrl+click
-or Ctrl+G opens its fields and definition. GitHub Dark is the default. Theme preferences are shared by sessions and
+Python words have offline Tree-sitter colors and line numbers. Hover over a name for its current value; ⌃click
+or ⌃G opens its fields and definition. GitHub Dark is the default. Theme preferences are shared by sessions and
 saved in `$XDG_CONFIG_HOME/furb/ui.json` (or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows).
 `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated
 preferences; the CLI shares the user's choice across sessions, including demos.
@@ -57,21 +58,21 @@ numbered Python, and the acts that it made stand under it with a preview of thei
 comes under the name of the model that gave it. A question that a model asks you stands in a panel with a yellow
 bar, and your answer follows it. One mark means one state in every view, dialog, and sidebar: a spinner for work
 that runs, `◆` for a question that waits for you, `◌` for paused work, `✓` for a done act, `✗` for a failure, and
-`○` for rest. F1 lists them. A rung opens while it runs. Click its heading or use Alt+D to fold it to its mark, its
+`○` for rest. F1 lists them. A rung opens while it runs. Click its heading or use ⌥D to fold it to its mark, its
 name, and its first line. Its fold stays the same across views and after reopening. `/autocollapse` opts into
 automatic collapse when a rung completes. Right-click an act to inspect it, edit its program, or branch after it.
 
 The composer grows as you type, and its bar and the line under it name the mode: Prompt, Python, Answer, or Edit
 program. Each part of that line is a button: the mode, the chain, the model, the effort, and the type of the
 answer. Up and Down at the first and the last line of the input walk the history of what it sent. Up in an empty
-input takes back the last message queued on the chain, to edit it. Ctrl+S puts the input aside, and Ctrl+S again
+input takes back the last message queued on the chain, to edit it. ⌃S puts the input aside, and ⌃S again
 brings it back; the line under the input shows what waits. The footer says what the session does, and each key
-that it offers is a button. A dialog dims the screen behind it, and a click outside it closes it. Ctrl+P lists
-every action with its slash command and its keys. Ctrl+T opens the themes, each with a swatch of its colors.
+that it offers is a button. A dialog dims the screen behind it, and a click outside it closes it. ⌃P lists
+every action with its slash command and its keys. ⌃T opens the themes, each with a swatch of its colors.
 
 The mouse reaches every control: a click is a press and a release on one control, and a drag selects text instead.
 The text that a drag selects goes to the clipboard through OSC 52 when the drag ends, where the terminal supports
-it, and Ctrl+Y copies it again. The wheel scrolls the feed, the sidebar, and every list.
+it, and ⌃Y copies it again. The wheel scrolls the feed, the sidebar, and every list.
 
 A chord before "or" reaches the TUI only from a terminal with the kitty keyboard protocol. The chord after "or"
 reaches it from every terminal. F1 lists the chords that the terminal in use sends.
@@ -81,35 +82,36 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | Key | Action |
 | --- | --- |
 | Enter | Send a message, or run Python input |
-| Shift+Enter or Ctrl+J | Insert a new line |
-| Alt+Enter | Queue this message after current work |
-| Up / Down | Previous / next sent input, from the first or the last line |
-| Up in an empty input | Take the last queued message back to edit it |
-| Ctrl+S | Put the input aside, or bring it back |
-| Escape twice | Rewind: branch from an earlier point of the chain |
-| Ctrl+1 through Ctrl+3 or Alt+1 through Alt+3 | Feed / transcript / changes view |
-| Ctrl+P | Search all actions |
-| Ctrl+B / Ctrl+N | Switch / create a chain |
-| Ctrl+M or Alt+M | Choose a model |
-| Shift+Tab / Ctrl+T | Choose an effort / a theme |
-| Ctrl+O | Saved sessions |
-| Ctrl+W / Ctrl+\\ | Workspaces and sessions / show or hide the sidebar |
-| Alt+D / Alt+E | Fold or expand details / external editor |
-| Ctrl+V | Paste a clipboard image |
-| @ / ! | Find a project file / run a shell command |
-| Up, Down, Tab, Enter after / or @ | Choose a slash command or a project file as it is typed |
-| Ctrl+F / PageUp / PageDown | Filter the current view / scroll |
-| Ctrl+R / Ctrl+Space | Python input / complete a name |
-| Ctrl+L / Ctrl+A | Edit a prompt program / answer an operator question |
-| Ctrl+G / Ctrl+click a name | Inspect a value and follow its definition |
-| Drag / Ctrl+Y | Select text and copy it / copy the selected text again |
+| ⇧Enter or ⌃J | Insert a new line |
+| ⌥Enter | Queue this message after current work |
+| ↑ / ↓ | Previous / next sent input, from the first or the last line |
+| ↑ in an empty input | Take the last queued message back to edit it |
+| ⌃S | Put the input aside, or bring it back |
+| Esc twice | Rewind: branch from an earlier point of the chain |
+| ⌃1-3 or ⌥1-3 | Feed / transcript / changes view |
+| ⌃Tab / ⇧⌃Tab | Next / previous chain |
+| ⌃P | Search all actions |
+| ⌃B / ⌃N | Switch / create a chain |
+| ⌃M or ⌥M | Choose a model |
+| ⇧Tab / ⌃T | Choose an effort / a theme |
+| ⌃O | Saved sessions |
+| ⌃W / ⌃\\ | Workspaces and sessions / show or hide the sidebar |
+| ⌥D / ⌥E | Fold or expand details / external editor |
+| ⌃V | Paste a clipboard image |
+| @ or ! | Find a project file, or run a shell command |
+| ↑, ↓, Tab, Enter after / or @ | Choose a slash command, its value, or a project file as it is typed |
+| ⌃F / PageUp / PageDown | Filter the current view / scroll |
+| ⌃R / ⌃Space | Python input / complete a name |
+| ⌃L / ⌃A | Edit a prompt program / answer an operator question |
+| ⌃G / ⌃click a name | Inspect a value and follow its definition |
+| Drag / ⌃Y | Select text and copy it / copy the selected text again |
 | Click / right-click an act | Fold or expand it / inspect its value or prompt program |
-| Ctrl+Alt+Left | Return from a definition jump |
-| Alt+[ / Alt+] or Alt+P / Alt+N | Previous / next message of the feed |
-| Ctrl+PageUp / Ctrl+PageDown | Previous / next page of file changes |
-| Ctrl+C | Clear the input, close a dialog, or cancel current work |
-| Escape | Close a dialog or pause current model work |
-| F1 / Ctrl+Q / Ctrl+D twice | Help / save and quit / save and quit from an empty input |
+| ⌃⌥← | Return from a definition jump |
+| ⌥[ / ⌥] or ⌥P / ⌥N | Previous / next message of the feed |
+| ⌃PageUp / ⌃PageDown | Previous / next page of file changes |
+| ⌃C | Clear the input, close a dialog, or cancel current work |
+| Esc | Close a dialog or pause current model work |
+| F1 / ⌃Q / ⌃D twice | Help / save and quit / save and quit from an empty input |
 
 <!-- keys:end -->
 
@@ -118,7 +120,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | Command | Action |
 | --- | --- |
 | `/new` | Start a fresh life |
-| `/model [model]` | Use a model from this chain's roster |
+| `/model [model]` | Choose the model that answers on this chain |
 | `/effort [level]` | Set the reasoning effort of the selected model |
 | `/shape [type]` | Choose the result type of the next prompt |
 | `/theme [name]` | Change the palette of every surface |
@@ -160,7 +162,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 
 The command table comes from the same source as completion, the palette, and help. Run `bun run docs` after
 changing that source. Enter sends a message straight to the engine. The engine gives the next
-ask to the rung that has waited longest. Alt+Enter or `/queue text` holds a follow-up until the chain's
+ask to the rung that has waited longest. ⌥Enter or `/queue text` holds a follow-up until the chain's
 current prompt and rungs complete. `/queue` edits or removes waiting messages. Saved queues require a resume
 choice; a dispatch recorded before a crash is not sent twice. Editing a prompt's program writes its door and uses the engine's
 replay. A slash command typed while a program is under edit runs as a command, since no Python program starts with a
@@ -168,9 +170,9 @@ slash. Python input uses the same gate as a model's word and marks a refused lin
 The editor matches brackets and indents a new Python line.
 `@` opens project file search. A reference that names a file, such as `@README.md` or `@"file name.txt"`, is read
 before the message is sent; any other @word, such as `@dataclass`, stays text. A leading `!` runs a shell
-command. Alt+E or `/editor` edits the current draft with `VISUAL`, then `EDITOR`, then `vi`, through the shell
+command. ⌥E or `/editor` edits the current draft with `VISUAL`, then `EDITOR`, then `vi`, through the shell
 that runs commands; configure the editor to wait until the file is saved and closed.
-`/image path` attaches a PNG, JPEG, GIF, or WebP file. Ctrl+V or bare `/image` pastes an image through macOS
+`/image path` attaches a PNG, JPEG, GIF, or WebP file. ⌃V or bare `/image` pastes an image through macOS
 AppKit, Windows PowerShell, Wayland `wl-paste`, or X11 `xclip`. Attachments have a limit of 20 MiB each and are
 copied beside the record. The built-in World sends them as pi-ai image blocks, with their references kept in the
 prompt.

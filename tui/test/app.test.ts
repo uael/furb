@@ -529,7 +529,7 @@ test("slash commands and project files are suggested above the input as they are
     app.composer.setText("");
     screen.mockInput.pressKey("d", { ctrl: true });
     expect(quits).toBe(0);
-    expect(await frame()).toContain("Press Ctrl+D again to exit.");
+    expect(await frame()).toContain("Press ⌃D again to exit.");
     screen.mockInput.pressKey("d", { ctrl: true });
     expect(quits).toBe(1);
 
