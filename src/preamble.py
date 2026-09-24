@@ -8,9 +8,9 @@ the World hears as an ear does, `world.hears(fact)`, since what an extension ask
 and the stand-in closes with a refusal the start of an act of a kind the World does not do. Any other ear is heard
 by name through the ears of the host, which hear every fact and say what they will.
 
-The stand-in plays the extensions too, as the World: the words of their python parts once on each chain without a
-source whose program lacks them, and their life words on each such chain in every life, once boot stands on its
-record, and at the birth of each such chain after.
+The words of the extensions run in the module of the engine after the engine, and the stand-in plays their life
+words as the World on each chain without a source, in every life: once boot stands on its record, and at the birth
+of each such chain after.
 
 The Kernel is here too, since the word of a rung runs where the engine runs, in the module of its chain, and so
 is the gate, an ear of its own, which reads a word with the checker of the host on the sheet of the engine.
@@ -108,10 +108,7 @@ def verb(names: Names, which: str) -> Callable[..., object]:
 def named(x: object, names: Names) -> str | None:
   """The name of the engine a value is bound to, when it is one, by identity: a name the engine binds before the
   words of its extensions, which every host knows."""
-  return next(
-    (name for name, held in names.items() if held is x and not name.startswith("_") and (not CORE or name in CORE)),
-    None,
-  )
+  return next((name for name, held in names.items() if held is x and not name.startswith("_") and name in CORE), None)
 
 
 def worded(cls: type, names: Names) -> bool:
@@ -161,9 +158,8 @@ def outward(x: object, names: Names) -> object:
 
 
 def fielded(x: object, names: Names) -> object:
-  """The fields of an instance of a class a word defined, as they go out: each field of a dataclass by its name, as it
-  goes out, so an instance it holds goes out as one too; and the instance itself for any other class, whose fields
-  the interpreter carries out as they are."""
+  """The fields of an instance of a class a word defined, each as it goes out, when the class is a dataclass, and the
+  instance itself otherwise, whose fields the interpreter carries out as they are."""
   if not is_dataclass(x):
     return x
   return {one.name: outward(getattr(x, one.name), names) for one in fields(x)}
@@ -239,24 +235,23 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
   kinds = world.kinds()
   assert isinstance(kinds, list)
   while True:
-    a = yield
-    said = None
-    match a:
+    match a := (yield):
       case ("stand", qid, *_):
-        said = ("done", qid, again(world.stand(), names, ears))
+        yield "done", qid, again(world.stand(), names, ears)
       case ("clock", qid, *_):
-        said = ("done", qid, world.clock())
+        yield "done", qid, world.clock()
       case ("chance", qid, *_):
-        said = ("done", qid, world.chance())
+        yield "done", qid, world.chance()
       case ("ask", rung, _, on, actor, turns):
         world.ask(rung, on, actor, turns)
-      case ("start", about, _) if acts[about][0] == "wait":
-        world.wait(about, acts[about][4])
-      case ("start", about, _) if acts[about][0] == "prompt":
-        world.prompt(about, acts[about][4], acts[about][5])
       case ("start", about, _) if acts[about][0] not in kinds:
-        refused = verb(names, "Refused")(f"the World does no {acts[about][0]}")
-        verb(names, "close")(refused, about)
+        match acts[about]:
+          case ("wait", _, _, _, seconds):
+            world.wait(about, seconds)
+          case ("prompt", _, _, _, shape, message, _):
+            world.prompt(about, shape, message)
+          case (kind, *_):
+            verb(names, "close")(verb(names, "Refused")(f"the World does no {kind}"), about)
       case ("keep", _, _, entry):
         world.keep(entry)
       case _:
@@ -264,8 +259,8 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
         match settled(world.hears(a), lambda got: world.answered(got), names, ears):  # noqa: PLW0108
           case ("say", tuple(saying)):
             said = again(saying, names, ears)
-    if isinstance(said, tuple):
-      yield said
+            assert isinstance(said, tuple)
+            yield said
 
 
 def settled(reply: object, answered: Callable[[object], object], names: Names, ears: Ears) -> object:
@@ -344,7 +339,7 @@ def played(engine: Names, lives: list[str]) -> None:
   assert isinstance(acts, dict)
   token = site.set(str(engine["WORLD"]))
   try:
-    for one in [a[1] for a in list(acts.values()) if a[0] == "chain" and not a[5]]:
+    for one in [a[1] for a in acts.values() if a[0] == "chain" and not a[5]]:
       plays(engine, one)
   finally:
     site.reset(token)
@@ -483,7 +478,6 @@ def module(source: str, held: dict[str, object]) -> dict[str, object]:
 def extended(engine: Names, words: list[str]) -> Names:
   """The module of the engine with the words of its extensions run in it after the engine, and the names it bound
   before them held as CORE, since a host knows those and no name a word bound."""
-  CORE.clear()
   CORE.update(engine)
   for word in words:
     exec(word, engine)  # noqa: S102
@@ -502,7 +496,6 @@ def opened(
   of a run what it was answered.
   """
   MADE.clear()
-  LIVES.clear()
   kept = again(record, engine, ears)
   assert isinstance(kept, list)
   entries = [(tuple(e[0]), *e[1:]) for e in kept]
@@ -525,8 +518,9 @@ def opened(
 
 def called(engine: Names, ears: Ears, name: str, args: list, kwargs: dict) -> object:
   """One verb, called by the operator with values of the host, and what it gave, as it goes out: the verb of the
-  chain it is said on, when that chain binds the name, since an extension binds its verbs there, and the verb of the
-  engine otherwise. A verb said with no chain is said on the chain of who speaks, as the engine resolves it."""
+  chain it is said on, when that chain binds the name, since the word of a rung, a life word among them, binds its
+  names there, and the verb of the engine otherwise. A verb said with no chain is said on the chain of who speaks, as
+  the engine resolves it."""
   words, held = again(args, engine, ears), again(kwargs, engine, ears)
   assert isinstance(words, list)
   assert isinstance(held, dict)

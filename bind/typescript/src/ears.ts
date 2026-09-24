@@ -5,8 +5,6 @@ import type { Call, Fault, Hearing, Saying, WorldContext, WorldPart } from "./ex
 import { spawnShell } from "./shell.js";
 import type { Entry, Fact } from "./types.js";
 
-export type { Call, Saying } from "./extension.js";
-
 /** What the World does for every life, which a host answers: the standing, the clock, chance, a keep of the record,
  * the turn of a model for an ask, and the work of a wait and of a prompt to the operator. */
 export interface WorldRequest {
@@ -15,8 +13,7 @@ export interface WorldRequest {
 }
 export type WorldHandler = (request: WorldRequest) => unknown;
 export type Ear = Generator<Saying | Call | null | undefined, void, unknown>;
-/** An error as it crosses: a fault stays one, and any other error is a refusal with its message. */
-export const fault = (error: unknown): Fault =>
+const fault = (error: unknown): Fault =>
   error && typeof error === "object" && "is" in error && "args" in error
     ? (error as Fault)
     : { is: "Refused", args: [error instanceof Error ? error.message : String(error)] };
@@ -85,12 +82,12 @@ export interface AdapterOptions {
   readOnly?: boolean;
 }
 
-/** A ready adapter for the World of the crate. It does what every World does itself, through its handler, and hands
- * every fact to each of its parts, in order. Async work says its result later on the same life. */
+/** A ready adapter for the crate's World operations. It does what every World does through its handler, and hands
+ * every fact to its parts, in order. Async work says its result later on the same life. */
 export class WorldAdapter {
   life?: Life;
   stopped = false;
-  /** The parts of the extensions for this World, which hear every fact after the core. */
+  /** The parts of the extensions for this World, which hear every fact after the World. */
   parts: WorldPart[] = [];
   /** The ears the life boots on, whose callable carries a show or a filter of the host into the life. */
   readonly ears: Ears;
@@ -133,7 +130,7 @@ export class WorldAdapter {
     return new Set(["wait", "prompt", ...this.parts.flatMap((part) => part.kinds ?? [])]);
   }
 
-  private speaking(action: () => void): void {
+  private speak(action: () => void): void {
     if (!this.life || this.closed) return;
     const previous = this.life.site("world");
     try {
@@ -156,7 +153,7 @@ export class WorldAdapter {
   close(value: unknown, id: string): void {
     this.delivery = this.delivery
       .then(() => {
-        if (!this.closed && !this.life?.outcome(id).done) this.speaking(() => this.life?.close(value, id));
+        if (!this.closed && !this.life?.outcome(id).done) this.speak(() => this.life?.close(value, id));
       })
       .catch((error) => this.options.onFault?.(error));
   }
@@ -167,14 +164,14 @@ export class WorldAdapter {
       Promise.resolve()
         .then(() => this.handle(request))
         .then((value) => {
-          if (!this.closed) this.speaking(() => done(value));
+          if (!this.closed) this.speak(() => done(value));
         })
         .catch((error) => {
           if (this.closed) return;
           const id = request.kind === "Wait" ? request.args[1] : request.args[0];
           if (typeof id === "string" && this.life?.outcome(id).done) return;
           try {
-            this.speaking(() => fail(error));
+            this.speak(() => fail(error));
           } catch (failure) {
             this.options.onFault?.(failure);
           }
@@ -238,6 +235,7 @@ export class WorldAdapter {
         );
       } else if (kind === "start") {
         act = (yield { verb: "get", args: [id] }) as Fact;
+        if (!act) continue;
         if (act[0] === "wait" || act[0] === "prompt") this.started(act);
         else if (!this.kinds.has(act[0]))
           yield { verb: "close", args: [{ is: "Refused", args: [`the World does no ${act[0]}`] }, id] };
@@ -248,8 +246,7 @@ export class WorldAdapter {
           const hearing = part.hears?.(fact);
           if (hearing) yield* hearing;
         } catch (error) {
-          // A part that fails at the start of an act of its kinds closes that act with why; any other failure is
-          // the host's to hear, and the World hears on.
+          // Nothing else ends an act whose part failed at its start, so it closes with why.
           if (act && part.kinds?.includes(act[0])) yield { verb: "close", args: [fault(error), id] };
           else this.options.onFault?.(error);
         }
@@ -289,7 +286,7 @@ export class WorldAdapter {
 /** What a World gives the parts of its extensions, over the adapter it speaks through. */
 export function worldContext(
   adapter: WorldAdapter,
-  given: { directory: string; readOnly: boolean; signal: AbortSignal; change: (change: FileChange) => void },
+  given: { directory: string; change: (change: FileChange) => void },
 ): WorldContext {
   return {
     ...given,

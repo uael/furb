@@ -16,10 +16,6 @@
       "types": "./index.d.cts",
       "default": "./index.cjs"
     },
-    "./extension": {
-      "types": "./dist/extension.d.ts",
-      "import": "./dist/extension.js"
-    },
     "./world": {
       "types": "./dist/world.d.ts",
       "import": "./dist/world.js"

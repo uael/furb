@@ -7,12 +7,12 @@ import {
   type Fact,
   isQuestion,
   type Life,
-  unwrapped,
   WorldAdapter,
   type WorldPart,
   type WorldRequest,
 } from "../src/index.ts";
 import { display } from "../src/world.ts";
+import { bash, verb } from "./verbs.ts";
 
 const lives: Life[] = [];
 afterEach(async () => {
@@ -42,14 +42,6 @@ function memory(files: Map<string, string>): WorldPart {
     },
   };
 }
-
-/** One verb said by the operator on a chain, the root when none is said. */
-const said = <T = unknown>(
-  life: Life,
-  verb: string,
-  args: unknown[] = [],
-  kwargs: Record<string, unknown> = {},
-) => life.call<T>(verb, args, { on: life.root, ...kwargs });
 
 async function open(record: unknown[] = [], answer = 'close("hello")', words: string[] = []) {
   const entries: unknown[] = [];
@@ -114,9 +106,8 @@ test("a pending result leaves JavaScript and other native operations available",
   const { life, release } = await open();
   const id = life.wait(60).id;
   const pending = life.result(id);
-  expect(said<string>(life, "cwd")).toBe("/tmp");
+  expect(await verb<string>(life, "cwd")).toBe("/tmp");
   expect(await life.outcome(id)).toEqual({ done: false, value: null });
-  await Bun.sleep(1);
   release();
   expect(await pending).toBeNull();
 });
@@ -144,13 +135,13 @@ test("pause holds a model response until wake and cancel rejects a native await"
 
 test("text and engine callables cross N-API, and a word reads what a command came to", async () => {
   const { life } = await open();
-  const text = said(life, "read", ["a"]);
+  const text = verb(life, "read", ["a"]);
   expect(text).toEqual({ is: "Text", path: "a", content: "one\ntwo\n", before: null });
-  expect(() => said(life, "read", ["missing"])).toThrow("missing file");
+  expect(() => verb(life, "read", ["missing"])).toThrow("missing file");
   const show = life.call<{ is: "made"; id: number }>("span", [1, 1], {});
   expect(await life.made<number[]>(show.id, [["one", "two"]], {})).toEqual([1]);
   await life.forget(show.id);
-  const command = said<string>(life, "bash", ["fake"], { fed: true });
+  const command = bash(life, "fake", { fed: true });
   await life.send("out", command, ["hello\n", "stdout"]);
   await life.send("exited", command, [0]);
   const word = `exit = await Act("${command}")\nif isinstance(exit, Exit):\n  close([exit.code, exit.stdout.content])`;
@@ -194,7 +185,7 @@ test("a second life replays model answers and durable rung effects without askin
   expect(second.files.has("b")).toBe(false);
   expect(second.entries).toHaveLength(0);
   const fork = second.life.chain("branch", second.life.root).id;
-  expect(said<string>(second.life, "cwd", [], { on: fork })).toBe("/tmp");
+  expect(verb<string>(second.life, "cwd", [], { on: fork })).toBe("/tmp");
 });
 
 test("dispose rejects pending native results and further operations", async () => {
@@ -248,7 +239,7 @@ test("every ear hears a fact whose values have no plain form, and each value cro
       .join("\n"),
   ).toContain("debugged d = {1: 'a'}");
   // The World hears on: it serves a read, a write and a wait after that fact.
-  expect(unwrapped<{ content: string }>(said(life, "read", ["a"])).content).toBe("one\ntwo\n");
+  expect(verb<{ content: string }>(life, "read", ["a"]).content).toBe("one\ntwo\n");
   await life.rung('write(Text("c", "after"))');
   expect(files.get("c")).toBe("after");
   expect(await life.wait(0)).toBeNull();

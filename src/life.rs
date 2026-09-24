@@ -372,8 +372,8 @@ impl Opening {
     self
   }
 
-  /// The life words of the extensions, which the life plays as rungs, as the World, in every life on every chain
-  /// without a source: once boot stands on its record, and at the birth of each such chain after.
+  /// The life words of the extensions, which the life plays as rungs, as the World, on each chain without a source:
+  /// once boot stands on its record, and at the birth of each such chain after.
   #[must_use]
   pub fn lives(mut self, lives: impl IntoIterator<Item = impl Into<String>>) -> Self {
     self.lives.extend(lives.into_iter().map(Into::into));
@@ -403,8 +403,7 @@ impl Opening {
       names.insert(0, WORLD.to_owned());
     }
     let typed = matches!(world, Worldly::Typed(_));
-    let host =
-      Hosting { system: system.clone(), world, ears, voice, later: Vec::new(), calls: Vec::new() };
+    let host = Hosting { system, world, ears, voice, later: Vec::new(), calls: Vec::new() };
     let mut inner = Inner { sand: Sand::new(limits), host, watchers: HashMap::new() };
     inner.ran(PREAMBLE, vec![])?;
     // The three objects of the host and the two modules are bound as names of the session, which every later
@@ -442,7 +441,7 @@ impl Opening {
     if raised.is_none() && !lives.is_empty() {
       inner.run("played(__engine, __lives)", vec![("__lives", texts(&lives))])?;
     }
-    Ok(Life { held: inner, root, raised, system })
+    Ok(Life { held: inner, root, raised })
   }
 }
 
@@ -455,7 +454,6 @@ pub struct Life {
   held: Inner,
   root: String,
   raised: Option<Fault>,
-  system: String,
 }
 
 impl Life {
@@ -506,7 +504,7 @@ impl Life {
 
   /// The system prompt of every model of the life, which is the text the life runs and the gate reads a word after.
   pub fn system(&self) -> &str {
-    &self.system
+    &self.held.host.system
   }
 
   /// What boot raised, if it raised: a drift, which breaks the journal while the life goes on with nothing kept,

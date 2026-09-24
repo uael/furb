@@ -46,9 +46,8 @@ import {
 export { display, opens, paragraphs, safeText, uncommented } from "./types.js";
 
 let minified: string | undefined;
-/** What a life opens with for these extensions, or for none of its own when none are given: the engine minified in
- * layout alone, which `bun run build` writes beside the package, read once, and the builtins, the words and the life
- * words of the extensions. */
+/** What a life opens with: the engine minified in layout alone, which `bun run build` writes beside the package, read
+ * once, and the builtins, the words and the life words of the extensions when they are given. */
 function opening(extensions?: Extension[]): Opening {
   minified ??= JSON.parse(readFileSync(new URL("../system.json", import.meta.url), "utf8")) as string;
   return {
@@ -163,9 +162,9 @@ export class World extends EventEmitter {
     this.extensions = options.extensions ?? builtinExtensions();
     const makers = this.extensions.map((one) => {
       const made = one.builtin ? builtinWorldParts[one.name] : options.parts?.[one.name];
-      if (!made && !one.builtin && one.world.ts)
+      if (!made && one.world.ts)
         throw new Error(
-          `The extension ${one.name} has a World part in ${one.world.ts}, which this World holds not.`,
+          `The extension ${one.name} has a World part in ${one.world.ts}, which this World does not hold.`,
         );
       return made;
     });
@@ -210,15 +209,13 @@ export class World extends EventEmitter {
     });
     const context = worldContext(this.adapter, {
       directory: this.directory,
-      readOnly: Boolean(options.readOnly),
-      signal: this.controller.signal,
       change: (change) => {
         this.changes.append(change);
         // A listener may ask the life, which no ear may do while it speaks, so the host hears of it after the ear.
         queueMicrotask(() => this.emit("change"));
       },
     });
-    this.parts = this.adapter.parts = makers.flatMap((made) => (made ? [made(context)] : []));
+    this.parts = this.adapter.parts = makers.flatMap((made) => made?.(context) ?? []);
     this.activity = new Activity(this.parts);
     this.ears = this.adapter.ears;
   }
@@ -624,29 +621,15 @@ export async function boot(
     const directory = resolve(options.cwd ?? process.cwd());
     const extensions = options.extensions ?? resolveExtensions(directory);
     const made = await loadWorldParts(extensions, { ...builtinWorldParts, ...options.parts });
-    const controller = new AbortController();
     const adapter = new WorldAdapter(options.world, { onFacts: options.onFacts });
-    const context = worldContext(adapter, {
-      directory,
-      readOnly: false,
-      signal: controller.signal,
-      change: () => {},
-    });
-    adapter.parts = extensions.flatMap((one) => {
-      const part = made[one.name];
-      if (!part && one.world.ts)
-        throw new Error(
-          `The extension ${one.name} has a World part in ${one.world.ts}, which this World holds not.`,
-        );
-      return part ? [part(context)] : [];
-    });
+    const context = worldContext(adapter, { directory, change: () => {} });
+    adapter.parts = extensions.flatMap((one) => made[one.name]?.(context) ?? []);
     const life = adapter.boot(options.entries, opening(extensions));
     return {
       life,
       ears: adapter.ears,
       dispose: async () => {
         adapter.stopped = true;
-        controller.abort();
         for (const part of adapter.parts) await part.dispose?.();
         life.dispose();
       },

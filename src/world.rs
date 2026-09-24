@@ -6,10 +6,8 @@
 //! takes time, a model's turn, a wait, a prompt of the operator, it gives back as a future, which the life drives
 //! and whose value it says into the engine as the fact the engine waits for.
 //!
-//! What the engine asks of every World is a method here. Every other fact reaches [`World::hears`]: a question of an
-//! extension, the start of an act of a kind the World says it does, a control, and what the World answers it answers
-//! as an ear does. An act of an extension may speak while it runs, as a command writes what it writes, so a World is
-//! given a [`Voice`] once, when the life opens, and it speaks through it from wherever the work runs.
+//! An act of an extension may speak while it runs, as a command writes what it writes, so a World is given a
+//! [`Voice`] once, when the life opens, and it speaks through it from wherever the work runs.
 
 use std::{
   collections::VecDeque,
@@ -148,8 +146,8 @@ impl std::fmt::Debug for Voice {
 /// What the engine asks of every World is a method here: what a chain stands on, a reading of the clock, a number
 /// drawn, the turn of a model, a wait, a prompt put to the operator, and what the journal says to keep. Every other
 /// fact of the life reaches [`World::hears`], which answers it as an ear answers: a question of an extension with
-/// plain data, a start of an act of a kind in [`World::kinds`] by doing it. A start of a kind no World does is
-/// closed with a refusal, so no word waits for it.
+/// plain data, a start of an act of a kind in [`World::kinds`] by doing it. A start of a kind that this World does
+/// not do is closed with a refusal, so no word waits for it.
 pub trait World {
   /// The life opened, and the Voice this World speaks with when nothing asked it to.
   fn opened(&mut self, voice: Voice) {

@@ -1,18 +1,16 @@
 //! The extensions: what a host adds to the engine, and where it finds it.
 //!
 //! The system prompt of a life is the text the life runs: the engine, less the definitions of each builtin, files,
-//! bash or grant, that a config turns off, then the words of the other extensions. The python part of an extension
-//! is a word that the module of the engine runs after the engine, so every chain binds its names from its birth. The file is a word as it is, or a python module that imports
-//! what it uses from the engine and from the extensions it requires, so that an editor, ruff and ty read it. The
-//! module of the engine binds every name of the engine and of each word before it already, so the host makes the
-//! word of a module by cutting those imports out. A life word is a word that a host plays as a rung, as the World,
-//! in every life on each chain without a source.
+//! bash or grant, that the life does not take, then the words of the other extensions. The python part of an
+//! extension is a word that the module of the engine runs after the engine, so every chain binds its names from its
+//! birth. The file is a word as it is, or a python module that imports what it uses from the engine and from the
+//! extensions it requires, so that an editor, ruff and ty read it. The module of the engine binds every name of the
+//! engine and of each word before it already, so the host makes the word of a module by cutting those imports out.
+//! A life word is a word that a host plays as a rung, as the World, in every life on each chain without a source.
 //!
-//! Every host shares this module: the host in TypeScript, the host in python and a host in rust read the same
-//! config, fetch into the same cache, read the same manifests, order the extensions the same, make the same word of
-//! a module and the same system prompt, and play a life word on a chain by the same rule.
-//! What stays in each host is its own: the parts of an extension for a World and for a TUI, and how it loads their
-//! code.
+//! Every host shares this module, so every host reads the same config, fetches into the same cache, reads the same
+//! manifests, orders the extensions the same, and makes the same words and the same system prompt. What stays in
+//! each host is its own: the parts of an extension for a World and for a TUI, and how it loads their code.
 //!
 //! The config is a json file, `{"extensions": {name: form}}`, in the config directory of the user and in the
 //! directory `.furb` of the project, which names an extension by its key: `false` turns it off, `true` turns it on,
@@ -116,9 +114,7 @@ pub struct Places {
 impl Places {
   /// The places of this process, from its environment and its home.
   pub fn here() -> Places {
-    #[allow(deprecated)]
-    let home = std::env::home_dir();
-    Places::of(|key| std::env::var_os(key), home, cfg!(windows))
+    Places::of(|key| std::env::var_os(key), std::env::home_dir(), cfg!(windows))
   }
 
   /// The places for an environment, a home and a system: the config directory is `FURB_CONFIG_DIR`, or `furb`
@@ -143,7 +139,7 @@ impl Places {
     Places {
       config: under("FURB_CONFIG_DIR", "XDG_CONFIG_HOME", "APPDATA", ".config"),
       cache: under("FURB_CACHE_DIR", "XDG_CACHE_HOME", "LOCALAPPDATA", ".cache"),
-      home: home.clone(),
+      home,
     }
   }
 }
@@ -179,9 +175,6 @@ pub struct Entry {
   pub file: Option<PathBuf>,
 }
 
-/// The settings of one config, read from its text: each name of its extensions with what it says, in the order of
-/// the file. A path, and a git remote or an npm package that starts with `./`, `../` or `~`, resolves against the
-/// directory of the file, and a `~` expands to the home.
 /// A path with each `.` dropped and each `..` taking the name before it away, as the path reads and before the disk
 /// is asked, so the path a config names reads as the directory it is. A `..` at the root stays at the root.
 pub fn tidy(path: &Path) -> PathBuf {
@@ -199,6 +192,9 @@ pub fn tidy(path: &Path) -> PathBuf {
   out
 }
 
+/// The settings of one config, read from its text: each name of its extensions with what it says, in the order of
+/// the file. A path, and a git remote or an npm package that starts with `./`, `../` or `~`, resolves against the
+/// directory of the file, and a `~` expands to the home.
 pub fn settings(
   text: &str,
   file: &Path,
@@ -246,18 +242,15 @@ pub fn settings(
       Value::Object(fields) if fields.contains_key("path") && fields.len() == 1 => {
         Setting::From(Source::Path(local(&text(fields, "path")?.unwrap_or_default())))
       }
-      Value::Object(fields) if fields.contains_key("git") => {
-        let Some(url) = text(fields, "git")? else { unreachable!() };
-        Setting::From(Source::Git {
-          url: nearby(&url),
-          reference: text(fields, "ref")?,
-          path: text(fields, "path")?.map(PathBuf::from),
-        })
-      }
-      Value::Object(fields) if fields.contains_key("npm") => {
-        let Some(package) = text(fields, "npm")? else { unreachable!() };
-        Setting::From(Source::Npm { package: nearby(&package), version: text(fields, "version")? })
-      }
+      Value::Object(fields) if fields.contains_key("git") => Setting::From(Source::Git {
+        url: nearby(&text(fields, "git")?.unwrap_or_default()),
+        reference: text(fields, "ref")?,
+        path: text(fields, "path")?.map(PathBuf::from),
+      }),
+      Value::Object(fields) if fields.contains_key("npm") => Setting::From(Source::Npm {
+        package: nearby(&text(fields, "npm")?.unwrap_or_default()),
+        version: text(fields, "version")?,
+      }),
       _ => {
         return Err(wrong("no form of an extension: false, true, a path, {path}, {git} or {npm}"));
       }
@@ -365,10 +358,7 @@ fn npm() -> &'static str {
 fn registered(package: &str) -> bool {
   let part = |one: &str| {
     !one.is_empty()
-      && one
-        .chars()
-        .next()
-        .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '~')
+      && !one.starts_with(['.', '_'])
       && one.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "-._~".contains(c))
   };
   match package.strip_prefix('@') {
@@ -405,27 +395,21 @@ fn placed(
   let tmp = spare.join(format!("{}-{}", hashed(&dir.display().to_string()), std::process::id()));
   let _ = fs::remove_dir_all(&tmp);
   fs::create_dir_all(&tmp).map_err(refused)?;
-  let made = make(&tmp);
-  let made = match made {
-    Ok(made) => made,
-    Err(error) => {
-      let _ = fs::remove_dir_all(&tmp);
-      return Err(error);
+  let got = make(&tmp).and_then(|made| {
+    if refresh {
+      let _ = fs::remove_dir_all(dir);
     }
-  };
-  if refresh {
-    let _ = fs::remove_dir_all(dir);
-  }
-  fs::create_dir_all(dir.parent().unwrap_or(dir)).map_err(refused)?;
-  if fs::rename(&made, dir).is_err() && !dir.is_dir() {
-    let _ = fs::remove_dir_all(&tmp);
-    return Err(Error::Fetch {
-      name: name.to_owned(),
-      why: format!("no directory at {}", dir.display()),
-    });
-  }
+    fs::create_dir_all(dir.parent().unwrap_or(dir)).map_err(refused)?;
+    if fs::rename(&made, dir).is_err() && !dir.is_dir() {
+      return Err(Error::Fetch {
+        name: name.to_owned(),
+        why: format!("no directory at {}", dir.display()),
+      });
+    }
+    Ok(())
+  });
   let _ = fs::remove_dir_all(&tmp);
-  Ok(())
+  got
 }
 
 /// The directory an extension stands in, fetched into the cache once, and again on a refresh: a path stands where
@@ -446,8 +430,8 @@ pub fn fetched(
       let key = format!("{url}#{}", reference.as_deref().unwrap_or(""));
       let dir = places.cache.join("extensions").join("git").join(hashed(&key));
       placed(name, &dir, places, refresh, |tmp| {
-        let into = tmp.join("clone");
-        let into = into.display().to_string();
+        let clone = tmp.join("clone");
+        let into = clone.display().to_string();
         let mut args = vec![
           "-c",
           "core.autocrlf=false",
@@ -462,7 +446,7 @@ pub fn fetched(
         }
         args.extend([url.as_str(), into.as_str()]);
         ran(name, "git", &args, None)?;
-        Ok(tmp.join("clone"))
+        Ok(clone)
       })?;
       let root = path.as_ref().map_or(dir.clone(), |sub| dir.join(sub));
       if root.is_dir() {
@@ -806,15 +790,15 @@ fn pin(entry: &Object) -> Option<(Vec<String>, Vec<String>)> {
 /// define only names of a builtin that `taken` does not name, then the words.
 pub fn system(engine: &str, taken: &[String], words: &[String]) -> Result<String, Error> {
   let off = cut_names(taken);
-  let cut = cut(engine, |statement| {
+  let kept = cut(engine, |statement| {
     let names = binds(statement);
     !names.is_empty() && names.iter().all(|name| off.contains(name))
   })
-  .map_err(|(line, why)| Error::Word { name: "the engine".to_owned(), line, why })?;
-  Ok(appended(&cut, words))
+  .map_err(|(line, why)| Error::Word { name: String::new(), line, why })?;
+  Ok(appended(&kept, words))
 }
 
-/// The top-level names of the engine that the builtins `taken` does not name define.
+/// The top-level names of the engine that each builtin not in `taken` defines.
 pub fn cut_names(taken: &[String]) -> HashSet<&'static str> {
   BUILTINS
     .iter()
@@ -857,18 +841,10 @@ fn binds(statement: &Stmt) -> Vec<&str> {
   }
 }
 
-/// The word of a python part: the file with its line ends made LF, less every top-level `from furb... import`, and
-/// nothing else changed.
-///
-/// A line end is LF first, so a word is the same on every machine, and a clone that writes CRLF plays no word
-/// again. The word is what a model reads in the turns of every chain, so an import leaves no trace in it: its lines
-/// go, and the empty lines around the place it stood keep the most of those before it and those after it, as many as
-/// stood on either side, so two top-level statements stand apart as they did. A word that starts or ends there
-/// starts or ends with its code. An import that shares its line with another statement leaves that statement, and
-/// the semicolon between the two goes with the import. Every other byte stays as it is, the space at the end of a
-/// line among them, since a string may hold it; an empty line next to a top-level statement is in no string. A file
-/// with no such import is a word already. A file python cannot parse is refused with the line of the fault, so a host
-/// says it once when it loads the extension and no chain plays a broken word.
+/// The word of a python part: the file with its line ends made LF, so a word is the same on every machine, less every
+/// top-level `from furb... import`, which `cut` takes out with no trace, since a model reads the word. A file python
+/// cannot parse is refused with the line of the fault, so a host says it once when it loads the extension, and no
+/// life runs it.
 pub fn word(source: &str) -> Result<String, Error> {
   cut(&source.replace("\r\n", "\n"), |statement| match statement {
     Stmt::ImportFrom(import) if import.level == 0 => import.module.as_ref().is_some_and(|module| {
@@ -883,8 +859,9 @@ pub fn word(source: &str) -> Result<String, Error> {
 /// The source less each top-level statement that `which` picks, and nothing else changed: the lines of a statement
 /// go, and the empty lines around the place it stood keep the most of those before it and those after it, so two
 /// top-level statements stand apart as they did, and the text starts and ends with its code. A statement that shares
-/// its line with another leaves that statement, and the semicolon between the two goes with it. A source python
-/// cannot parse gives the line of the fault and what it is.
+/// its line with another leaves that statement, and the semicolon between the two goes with it. Every other byte
+/// stays, the space at the end of a line among them, since a string may hold it; an empty line next to a top-level
+/// statement is in no string. A source python cannot parse gives the line of the fault and what it is.
 fn cut(source: &str, which: impl Fn(&Stmt) -> bool) -> Result<String, (usize, String)> {
   let parsed = ruff_python_parser::parse_module(source).map_err(|fault| {
     (
@@ -912,7 +889,7 @@ fn cut(source: &str, which: impl Fn(&Stmt) -> bool) -> Result<String, (usize, St
 }
 
 /// The empty lines around the place a statement was cut out at, made the most of those before it and those after it,
-/// and none at the start or at the end of the word.
+/// and none at the start or at the end of the text.
 fn spaced(out: &mut String, at: usize) {
   let empty = |line: &str| line.trim().is_empty();
   let (mut from, mut before) = (at, 0);

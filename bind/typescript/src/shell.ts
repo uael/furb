@@ -20,10 +20,8 @@ export function at(time: number, action: () => void): () => void {
   return () => clearTimeout(timer);
 }
 
-/** A command of the shell in a directory, with its stderr in its stdout when it is merged, its stdin open when it is
- * fed, and ended at its timeout in seconds, or never for no timeout. It ends with every process it started: on Unix
- * its process group, which it leads, and on Windows, which has no process group that a program can signal, its tree
- * of processes. */
+/** The `spawn` of a `WorldContext`. A command ends with every process it started: on Unix its process group, which it
+ * leads, and on Windows, which has no process group that a program can signal, its tree of processes. */
 export function spawnShell(
   command: string,
   options: { cwd: string; merged: boolean; fed: boolean; timeout: number | null },

@@ -3,8 +3,7 @@
 //! Monty carries a value of the sandbox out as itself: a number, a text, a list, a tuple, a map, an instance of
 //! a class with its fields, an exception with what it was made with. That is [`Object`], monty's own, and the
 //! crate adds no value model beside it. What it adds is the reading of an exception, [`Fault`], by its name and
-//! what it was made with. A class a word defined crosses out as the stand-in sends it, a map marked `is` with its
-//! class and its fields, and a host reads it as the plain data it is.
+//! what it was made with.
 //!
 //! The way in is narrower than the way out: monty makes no instance of a class of the sandbox on a host's behalf.
 //! So an instance of a class goes in as its name and its fields, in a map marked `is`, and the stand-in in the

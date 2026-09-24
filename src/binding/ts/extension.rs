@@ -38,8 +38,9 @@ pub struct JsExtension {
 }
 
 /// What a resolution of the extensions of a project does beside reading: fetch each one again, and install the
-/// dependencies of an extension whose part for a World is TypeScript.
+/// dependencies of an extension whose part for a World is TypeScript, which it does unless `install` is false.
 #[napi(object)]
+#[derive(Default)]
 pub struct ResolveOptions {
   pub refresh: Option<bool>,
   pub install: Option<bool>,
@@ -86,9 +87,7 @@ fn places(env: &Env) -> napi::Result<extension::Places> {
       held.insert(key, OsString::from(value));
     }
   }
-  #[allow(deprecated)]
-  let home = std::env::home_dir();
-  Ok(extension::Places::of(|key| held.get(key).cloned(), home, cfg!(windows)))
+  Ok(extension::Places::of(|key| held.get(key).cloned(), std::env::home_dir(), cfg!(windows)))
 }
 
 /// The config directory of the user, as the environment of JavaScript says it.
@@ -103,7 +102,7 @@ pub fn cache_directory(env: Env) -> napi::Result<String> {
   Ok(places(&env)?.cache.display().to_string())
 }
 
-/// The builtin extensions, files, bash and grant, in the order a host plays them.
+/// The builtin extensions, files, bash and grant, in the order a host takes them.
 #[napi]
 pub fn builtin_extensions() -> Vec<JsExtension> {
   extension::builtins().into_iter().map(JsExtension::from).collect()
@@ -118,10 +117,9 @@ pub fn resolve_extensions(
   project: String,
   options: Option<ResolveOptions>,
 ) -> napi::Result<Vec<JsExtension>> {
-  let options = options.unwrap_or(ResolveOptions { refresh: None, install: None });
-  let places = places(&env)?;
+  let options = options.unwrap_or_default();
   extension::extensions(
-    &places,
+    &places(&env)?,
     Path::new(&project),
     options.refresh.unwrap_or(false),
     options.install.unwrap_or(true),

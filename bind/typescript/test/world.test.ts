@@ -12,7 +12,6 @@ import {
   type Fact,
   inspectRecord,
   type Turn,
-  unwrapped,
   World,
 } from "../src/index.ts";
 import { claudeProvider, cliModel } from "../src/providers/claude.ts";
@@ -237,7 +236,6 @@ test("the default World serves files and streams commands without any TUI", asyn
   const session = await boot({ cwd });
   try {
     const { life, world } = session;
-    if (!world) throw new Error("The session has no World.");
     expect(verb<string>(life, "cwd")).toBe(cwd);
     write(life, "hello.txt", "hello\n");
     expect(read(life, "hello.txt").content).toBe("hello\n");
@@ -532,7 +530,7 @@ test("host ears yield nested bus calls and host shows remain callable", () => {
   const life = ears.boot();
   try {
     const show = ears.callable((lines: string[]) => lines.map((_, index) => index + 1));
-    expect(unwrapped<{ path: string }>(verb(life, "read", ["file", show])).path).toBe("/tmp/file");
+    expect(verb<{ path: string }>(life, "read", ["file", show]).path).toBe("/tmp/file");
     expect(() => life.clock()).toThrow("no number");
   } finally {
     life.dispose();
@@ -847,9 +845,7 @@ test("a timeout or a wait past the longest timer runs its full time, and a comma
     const wait = life.wait(month).id;
     const long = bash(life, "sleep 1; echo finished", { timeout: month });
     const endless = bash(life, "sleep 1; echo finished", { timeout: null });
-    const world = session.world;
-    if (!world) throw new Error("The session has no World.");
-    const exits = await Promise.all([exited(world, life, long), exited(world, life, endless)]);
+    const exits = await Promise.all([long, endless].map((id) => exited(session.world, life, id)));
     expect(exits.map((exit) => exit.code)).toEqual([0, 0]);
     expect(life.outcome(wait).done).toBe(false);
   } finally {
@@ -1076,6 +1072,7 @@ test("a record of 0.1.0 opens with no drift, though it answers a read and a writ
     // The word of 0.1.0 runs again, and its read and its write take the text the record answers them with.
     expect(life.outcome("rung1")).toEqual({ done: true, value: [2, "one\ntwo\nthree\n"] });
     expect(read(life, "a.txt")).toEqual({
+      is: "Text",
       path: join(cwd, "a.txt"),
       content: "one\ntwo\nthree\n",
       before: null,

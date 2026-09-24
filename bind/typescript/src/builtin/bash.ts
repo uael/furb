@@ -2,7 +2,7 @@ import type { LiveAct } from "../activity.js";
 import type { Spawned, WorldContext, WorldPart } from "../extension.js";
 import { type Fact, isQuestion } from "../types.js";
 
-/** The streams of a command as its act shows them while it runs: the text each has said so far. */
+/** What a command came to as its act shows it: its code once it exited, and the text each stream said so far. */
 export interface Streams {
   code: number | null;
   stdout: { path: string; content: string };
@@ -27,32 +27,6 @@ export default function bash(context: WorldContext): WorldPart {
     else if (text === null) child.stdin.end();
     else child.stdin.write(text);
   }
-  function run(
-    id: string,
-    here: string,
-    command: string,
-    fed: boolean,
-    timeout: number | null,
-    mixed: boolean,
-  ): void {
-    const spawned = context.spawn(command, { cwd: context.at(here), merged: mixed, fed, timeout });
-    const { child } = spawned;
-    running.set(id, spawned);
-    for (const text of feeds.get(id) ?? []) feed(id, text);
-    feeds.delete(id);
-    for (const name of ["stdout", "stderr"] as const) {
-      child[name].setEncoding("utf8");
-      child[name].on("data", (text: string) => context.speak("out", id, text, name));
-    }
-    child.on("error", (error) => {
-      running.delete(id);
-      context.close(context.refused(`${JSON.stringify(command)} did not start: ${error.message}`), id);
-    });
-    child.on("close", (code) => {
-      running.delete(id);
-      if (!over.delete(id)) context.speak("exited", id, spawned.late() ? null : code);
-    });
-  }
   return {
     kinds: ["bash"],
     *hears(fact: Fact) {
@@ -62,14 +36,28 @@ export default function bash(context: WorldContext): WorldPart {
         const [, , , on, command, fed, timeout] = made.get(id) as Fact;
         const here = yield* context.where(String(on));
         const [, mixed] = (yield { verb: "ask", args: ["merged", on, id] }) as [unknown, unknown];
-        run(
-          id,
-          here,
-          String(command),
-          Boolean(fed),
-          typeof timeout === "number" ? timeout : null,
-          Boolean(mixed),
-        );
+        const spawned = context.spawn(String(command), {
+          cwd: context.at(here),
+          merged: Boolean(mixed),
+          fed: Boolean(fed),
+          timeout: typeof timeout === "number" ? timeout : null,
+        });
+        const { child } = spawned;
+        running.set(id, spawned);
+        for (const text of feeds.get(id) ?? []) feed(id, text);
+        feeds.delete(id);
+        for (const name of ["stdout", "stderr"] as const) {
+          child[name].setEncoding("utf8");
+          child[name].on("data", (text: string) => context.speak("out", id, text, name));
+        }
+        child.on("error", (error) => {
+          running.delete(id);
+          context.close(context.refused(`${JSON.stringify(command)} did not start: ${error.message}`), id);
+        });
+        child.on("close", (code) => {
+          running.delete(id);
+          if (!over.delete(id)) context.speak("exited", id, spawned.late() ? null : code);
+        });
       } else if (kind === "feed" && made.has(id)) feed(id, fact[3] === null ? null : String(fact[3]));
       else if (kind === "cancel" || kind === "close") {
         for (const [one, spawned] of [...running])

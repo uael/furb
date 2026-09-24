@@ -1,10 +1,9 @@
 //! One life of the real engine, driven by the crate from end to end.
 //!
 //! Every other test of the crate holds one piece against a double. This holds the whole of it against the engine
-//! itself: a life is opened, the life plays the builtin extensions, an operator says verbs, a model answers a
-//! prompt, the Kernel gates the word it wrote and runs it, a command runs on this machine and speaks through the
-//! Voice from its own thread, a wait ends, the operator answers a prompt, and the record the World kept opens a
-//! second life.
+//! itself: a life is opened, an operator says verbs, a model answers a prompt, the Kernel gates the word it wrote
+//! and runs it, a command runs on this machine and speaks through the Voice from its own thread, a wait ends, the
+//! operator answers a prompt, and the record the World kept opens a second life.
 //!
 //! The one double is [`Yard`], a World of this machine small enough to read: it does what the builtins ask of a
 //! World, a read and a write of a file and a command, through the facts it hears.
@@ -31,10 +30,8 @@ use crate::{
 
 /// What the yard waits for the value of, after it said a verb.
 enum Pending {
-  /// A read of a path, which waits for the directory of its chain.
-  Read { qid: String, path: String },
-  /// A write of a content at a path, which waits for the directory of its chain.
-  Write { qid: String, path: String, content: String },
+  /// A read of a path, or a write of a content at it, which waits for the directory of its chain.
+  File { qid: String, path: String, content: Option<String> },
   /// A command to start, which waits for the directory of its chain.
   Start { about: String, command: String },
   /// A control, and the commands it may be over, which waits for whether it is over the first of them.
@@ -83,25 +80,12 @@ impl Yard {
     }
   }
 
-  /// The verb that asks whether a control is over a command.
-  fn covers(fact: &Object, id: &str) -> Reply {
-    Reply::Calls {
-      name: "covers".to_owned(),
-      args: vec![fact.clone(), Object::string(id)],
-      kwargs: vec![],
-    }
-  }
-
-  /// The next command a control may be over, asked, or nothing when none is left.
-  fn next(&mut self, fact: Object, mut left: Vec<String>) -> Reply {
-    if left.is_empty() {
-      return Reply::Nothing;
-    }
-    let first = left[0].clone();
-    let reply = Yard::covers(&fact, &first);
-    left.remove(0);
-    self.pending = Some(Pending::Covers { fact, left: [vec![first], left].concat() });
-    reply
+  /// The verb that asks whether a control is over the next command it may be over, or nothing when none is left.
+  fn next(&mut self, fact: Object, left: Vec<String>) -> Reply {
+    let Some(first) = left.first() else { return Reply::Nothing };
+    let args = vec![fact.clone(), Object::string(first)];
+    self.pending = Some(Pending::Covers { fact, left });
+    Reply::Calls { name: "covers".to_owned(), args, kwargs: vec![] }
   }
 }
 
@@ -207,13 +191,9 @@ impl World for Yard {
         self.commands.insert(fact.about().to_owned(), (word(1), fact.on().to_owned()));
         Reply::Nothing
       }
-      "read" if fact.question() => {
-        self.pending = Some(Pending::Read { qid: fact.about().to_owned(), path: word(1) });
-        Yard::cwd(fact.on())
-      }
-      "write" if fact.question() => {
-        self.pending =
-          Some(Pending::Write { qid: fact.about().to_owned(), path: word(1), content: word(2) });
+      "read" | "write" if fact.question() => {
+        let content = (fact.kind() == "write").then(|| word(2));
+        self.pending = Some(Pending::File { qid: fact.about().to_owned(), path: word(1), content });
         Yard::cwd(fact.on())
       }
       "start" if self.commands.contains_key(fact.about()) => {
@@ -223,10 +203,7 @@ impl World for Yard {
         self.pending = Some(Pending::Start { about, command });
         Yard::cwd(&on)
       }
-      "cancel" | "close" => {
-        let left = self.running.clone();
-        self.next(fact.0.clone(), left)
-      }
+      "cancel" | "close" => self.next(fact.0.clone(), self.running.clone()),
       "exited" => {
         self.running.retain(|one| one != fact.about());
         Reply::Nothing
@@ -239,19 +216,15 @@ impl World for Yard {
     let value = entry(&got, 1).map(|one| one.to_owned()).unwrap_or_else(Object::none);
     let text = value.as_ref().as_str().unwrap_or_default().to_owned();
     match self.pending.take() {
-      Some(Pending::Read { qid, path }) => {
+      Some(Pending::File { qid, path, content }) => {
         let at = PathBuf::from(&text).join(&path);
-        let answer = fs::read_to_string(&at).map_or_else(
+        let got = match content {
+          Some(content) => fs::write(&at, &content).map(|()| content),
+          None => fs::read_to_string(&at),
+        };
+        let answer = got.map_or_else(
           |_| Fault::refused(format!("no file at {}", at.display())).object(),
           |content| plain(&at.display().to_string(), &content),
-        );
-        Reply::Say(Fact::says("done", &qid, [answer]))
-      }
-      Some(Pending::Write { qid, path, content }) => {
-        let at = PathBuf::from(&text).join(&path);
-        let answer = fs::write(&at, &content).map_or_else(
-          |no| Fault::refused(no.to_string()).object(),
-          |()| plain(&at.display().to_string(), &content),
         );
         Reply::Say(Fact::says("done", &qid, [answer]))
       }
@@ -260,11 +233,9 @@ impl World for Yard {
         spawned(voice, about, command, text);
         Reply::Nothing
       }
-      Some(Pending::Covers { fact, left }) => {
-        let over = value.as_ref().as_bool().unwrap_or_default();
-        let mut left = left;
+      Some(Pending::Covers { fact, mut left }) => {
         let first = left.remove(0);
-        if over {
+        if value.as_ref().as_bool().unwrap_or_default() {
           self.running.retain(|one| one != &first);
           self.slain.borrow_mut().push(first);
         }
@@ -384,23 +355,12 @@ impl Lived {
       .filter_map(|one| one.as_str().map(str::to_owned))
       .filter(|one| one.starts_with("rung"))
       .collect();
-    let mut out = Vec::new();
-    for name in names {
-      let fact = self.life.get(&name).unwrap();
-      if fact.on() == on {
-        out.push((
-          fact.by().to_owned(),
-          fact.word(2).and_then(|one| one.as_str()).unwrap_or_default().to_owned(),
-        ));
-      }
-    }
-    out
+    let rung = |fact: Fact| {
+      let retells = fact.word(2).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
+      (fact.on() == on).then(|| (fact.by().to_owned(), retells))
+    };
+    names.into_iter().filter_map(|name| rung(self.life.get(&name).unwrap())).collect()
   }
-}
-
-/// One field of an instance of a class of the engine, as monty carries it out: by its name.
-fn of<'a>(got: &ObjectRef<'a>, name: &str) -> Option<ObjectRef<'a>> {
-  field(got, name)
 }
 
 #[test]
@@ -422,7 +382,7 @@ fn the_world_answers_a_question_of_an_extension_through_a_verb_it_says() {
   assert_eq!(fs::read_to_string(lived.at.join("a.txt")).unwrap(), "one\ntwo\n");
   let got = lived.said("read", vec![Object::string("a.txt")], &root).unwrap();
   let got = got.as_ref();
-  assert_eq!(of(&got, "content").and_then(|one| one.as_str()), Some("one\ntwo\n"));
+  assert_eq!(field(&got, "content").and_then(|one| one.as_str()), Some("one\ntwo\n"));
   let no = lived.said("read", vec![Object::string("none.txt")], &root).unwrap_err();
   assert_eq!(no.name, "Refused");
   assert!(no.message().contains("no file at"), "{no}");
@@ -467,11 +427,11 @@ fn a_command_runs_on_this_machine_and_speaks_its_exit_from_its_own_thread() {
   let id = act.as_ref().as_str().unwrap().to_owned();
   let exit = block_on(lived.life.awaited(&id)).unwrap();
   let exit = exit.as_ref();
-  assert_eq!(of(&exit, "code").and_then(|one| one.as_int()), Some(0));
-  let stdout = of(&exit, "stdout").unwrap();
-  assert_eq!(of(&stdout, "content").and_then(|one| one.as_str()), Some("hi\n"));
-  let stderr = of(&exit, "stderr").unwrap();
-  assert_eq!(of(&stderr, "content").and_then(|one| one.as_str()), Some(""));
+  assert_eq!(field(&exit, "code").and_then(|one| one.as_int()), Some(0));
+  let stdout = field(&exit, "stdout").unwrap();
+  assert_eq!(field(&stdout, "content").and_then(|one| one.as_str()), Some("hi\n"));
+  let stderr = field(&exit, "stderr").unwrap();
+  assert_eq!(field(&stderr, "content").and_then(|one| one.as_str()), Some(""));
 }
 
 #[test]
@@ -487,9 +447,9 @@ fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it
   assert_eq!(got.as_ref().as_int(), Some(1));
   let exit = lived.settled("bash2");
   let exit = exit.as_ref();
-  let stdout = of(&exit, "stdout").unwrap();
-  assert_eq!(of(&exit, "code").and_then(|one| one.as_int()), Some(0));
-  assert_eq!(of(&stdout, "content").and_then(|one| one.as_str()), Some("late\n"));
+  let stdout = field(&exit, "stdout").unwrap();
+  assert_eq!(field(&exit, "code").and_then(|one| one.as_int()), Some(0));
+  assert_eq!(field(&stdout, "content").and_then(|one| one.as_str()), Some("late\n"));
   assert_eq!(*lived.slain.borrow(), ["bash1"]);
 }
 
@@ -567,8 +527,8 @@ fn a_second_life_on_the_record_the_world_kept_makes_the_same_acts_again() {
   let command = first.said("bash", vec![Object::string("echo again")], &root).unwrap();
   let command = command.as_ref().as_str().unwrap().to_owned();
   let exit = block_on(first.life.awaited(&command)).unwrap();
-  let stdout = of(&exit.as_ref(), "stdout").map(|one| one.to_owned()).unwrap();
-  assert_eq!(of(&stdout.as_ref(), "content").and_then(|one| one.as_str()), Some("again\n"));
+  let stdout = field(&exit.as_ref(), "stdout").map(|one| one.to_owned()).unwrap();
+  assert_eq!(field(&stdout.as_ref(), "content").and_then(|one| one.as_str()), Some("again\n"));
   let kept = first.kept.borrow().clone();
   assert!(
     kept.len() >= 4,
@@ -698,13 +658,12 @@ fn a_life_opened_with_no_word_and_no_life_word_plays_nothing_and_pins_nothing() 
 
 #[test]
 fn the_life_plays_the_life_words_as_the_world_in_every_life_on_each_chain_without_a_source() {
-  let lives = vec!["seen = 1".to_owned()];
-  let mut first = Lived::opened("lives", &[], vec![], |one| one.lives(lives.clone())).unwrap();
+  let mut first = Lived::opened("lives", &[], vec![], |one| one.lives(["seen = 1"])).unwrap();
   let root = first.root();
   assert_eq!(first.program(&root), ["seen = 1"]);
   assert_eq!(first.rungs(&root), vec![("world".to_owned(), String::new())]);
   let kept = first.kept.borrow().clone();
-  let mut second = Lived::opened("lives", &[], kept, |one| one.lives(lives)).unwrap();
+  let mut second = Lived::opened("lives", &[], kept, |one| one.lives(["seen = 1"])).unwrap();
   assert_eq!(second.program(&root), ["seen = 1", "seen = 1"]);
   let two = second.life.chain("two", "", None, "").unwrap().id().to_owned();
   assert_eq!(second.program(&two), ["seen = 1"]);
@@ -742,14 +701,11 @@ fn a_record_of_0_1_0_opens_though_it_answers_a_read_and_a_write_with_a_text() {
     .filter(|line| !line.trim().is_empty())
     .map(|line| json(&serde_json::from_str(line).unwrap()))
     .collect();
-  let at = std::env::temp_dir().join("furb-life-old");
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).unwrap();
-  fs::write(at.join("a.txt"), "one\n").unwrap();
   let mut lived = Lived::new("old", &[], record).unwrap();
   assert!(lived.life.raised().is_none(), "{:?}", lived.life.raised());
   let root = lived.root();
   assert_eq!(root, "chain1");
+  fs::write(lived.at.join("a.txt"), "one\n").unwrap();
   let got = lived.said("read", vec![Object::string("a.txt")], &root).unwrap();
-  assert_eq!(of(&got.as_ref(), "content").and_then(|one| one.as_str()), Some("one\n"));
+  assert_eq!(field(&got.as_ref(), "content").and_then(|one| one.as_str()), Some("one\n"));
 }

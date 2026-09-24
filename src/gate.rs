@@ -25,16 +25,16 @@ const MODULE: &str = "__engine__";
 
 thread_local! {
   /// The one checker of this thread, which every life of the thread and the Kernel of a python host read with,
-  /// and nothing before its first reading. It holds one reading of the typeshed and one of the engine, which cost
-  /// once, so a reading of a sheet costs the program and the word alone, in every life after the first as in the
-  /// first.
+  /// and nothing before its first reading. It holds one reading of the typeshed and one of the engine, by its text,
+  /// which cost once, so a reading of a sheet costs the program and the word alone, in every life on the same engine
+  /// after the first as in the first.
   static CHECKER: RefCell<Option<(String, TypeChecker)>> = const { RefCell::new(None) };
 }
 
 /// What the checker found on a sheet, read against the engine: each error by the line it stands on, in the concise
-/// form it writes, and no warning, since a warning refuses no word. The engine is the source the life runs, which
-/// holds the words of its extensions after the engine. A checker that could not read the sheet has said nothing of
-/// the word, which is not a finding, so it is a fault of the gate.
+/// form it writes, and no warning, since a warning refuses no word. The engine is the text the life runs, its system
+/// prompt. A checker that could not read the sheet has said nothing of the word, which is not a finding, so it is a
+/// fault of the gate.
 pub fn checked(sheet: &str, engine: &str) -> Result<Vec<(usize, String)>, Fault> {
   let config = TypeCheckingConfig { format: TypeCheckingFormat::Concise, color: false };
   let path = format!("{MODULE}/__init__.py");

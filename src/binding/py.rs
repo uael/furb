@@ -241,7 +241,8 @@ impl Life {
   /// A life, opened on the ears of the host, the names they hear by in the order the engine hears them, and the
   /// record a World kept. The ears are one object with `hears(name, fact)`, `answered(name, value)`,
   /// `ear(generator)`, which hears one more generator and gives the name it is heard by and whether it was started,
-  /// and `callable(function)`, which gives the name the function is called back by.
+  /// and `callable(function)`, which gives the name the function is called back by. `taken` and `engine` are every
+  /// builtin and the engine of the crate unless they are given.
   #[new]
   #[pyo3(signature = (ears, names, record, words = Vec::new(), lives = Vec::new(), *, taken = None, engine = None))]
   #[allow(clippy::too_many_arguments)]
@@ -380,14 +381,10 @@ impl Life {
 #[pyfunction]
 #[pyo3(signature = (sheet, engine = None))]
 fn gate(py: Python<'_>, sheet: &str, engine: Option<&str>) -> PyResult<Vec<(usize, String)>> {
-  match crate::gate::checked(sheet, engine.unwrap_or(crate::ENGINE)) {
-    Ok(found) => Ok(found),
-    Err(fault) => Err(raised(py, &Made::new(py)?, &fault)),
-  }
+  given(py, crate::gate::checked(sheet, engine.unwrap_or(crate::ENGINE)))
 }
 
-/// One extension as a host plays it, which the crate reads for every host: its name, the directory it stands in,
-/// the word of its python part, the names it requires, and the files of its parts for a World and for a TUI.
+/// One extension as a host plays it, as the crate reads it for every host, each path as a text.
 #[pyclass(module = "furb_monty._monty", name = "Extension", frozen, get_all)]
 struct PyExtension {
   name: String,
@@ -416,7 +413,7 @@ impl From<extension::Extension> for PyExtension {
   }
 }
 
-/// The builtin extensions, files, bash and grant, in the order a host plays them.
+/// The builtin extensions, files, bash and grant, in the order a host takes them.
 #[pyfunction]
 fn builtin_extensions() -> Vec<PyExtension> {
   extension::builtins().into_iter().map(PyExtension::from).collect()
@@ -428,15 +425,8 @@ fn builtin_extensions() -> Vec<PyExtension> {
 #[pyfunction]
 #[pyo3(signature = (project, refresh = false))]
 fn extensions(py: Python<'_>, project: &str, refresh: bool) -> PyResult<Vec<PyExtension>> {
-  match extension::extensions(
-    &extension::Places::here(),
-    std::path::Path::new(project),
-    refresh,
-    false,
-  ) {
-    Ok(got) => Ok(got.into_iter().map(PyExtension::from).collect()),
-    Err(error) => Err(raised(py, &Made::new(py)?, &Fault::from(error))),
-  }
+  let got = extension::extensions(&extension::Places::here(), project.as_ref(), refresh, false);
+  given(py, got).map(|got| got.into_iter().map(PyExtension::from).collect())
 }
 
 /// The config directory and the cache directory of the user, as this process finds them.
@@ -447,13 +437,10 @@ fn places() -> (String, String) {
 }
 
 /// The word of the python part of an extension, which the module of the engine runs after the engine: the file less
-/// its imports of the engine and of the extensions, as the crate makes it for every host. A file python cannot parse raises Refused.
+/// its imports of the engine and of the extensions. A file python cannot parse raises Refused.
 #[pyfunction]
 fn word_of(py: Python<'_>, source: &str) -> PyResult<String> {
-  match extension::word(source) {
-    Ok(word) => Ok(word),
-    Err(error) => Err(raised(py, &Made::new(py)?, &Fault::from(error))),
-  }
+  given(py, extension::word(source))
 }
 
 /// The system prompt of a life: the engine as the host minified it, less the definitions of each builtin that
@@ -466,13 +453,10 @@ fn system_prompt(
   taken: Vec<String>,
   words: Vec<String>,
 ) -> PyResult<String> {
-  match extension::system(engine, &taken, &words) {
-    Ok(prompt) => Ok(prompt),
-    Err(error) => Err(raised(py, &Made::new(py)?, &Fault::from(error))),
-  }
+  given(py, extension::system(engine, &taken, &words))
 }
 
-/// The top-level names of the engine that the builtins `taken` does not name define.
+/// The top-level names of the engine that each builtin not in `taken` defines.
 #[pyfunction]
 fn cut_names(taken: Vec<String>) -> HashSet<&'static str> {
   extension::cut_names(&taken)
@@ -491,6 +475,11 @@ fn pinned(
   let held: Vec<Object> =
     held.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
   Ok(extension::pinned(&held, &taken, &words))
+}
+
+/// What the crate gave, or its fault raised here as the exception it is.
+fn given<T>(py: Python<'_>, got: Result<T, impl Into<Fault>>) -> PyResult<T> {
+  got.or_else(|no| Err(raised(py, &Made::new(py)?, &no.into())))
 }
 
 /// What the engine raised, raised here as the exception it is.

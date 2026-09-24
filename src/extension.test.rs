@@ -64,22 +64,30 @@ fn git(at: &Path, args: &[&str]) {
   assert!(done.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&done.stderr));
 }
 
-/// A git remote of a test, as a file url, whose main branch holds an extension and whose tag v2 holds another
-/// word, with a second extension in the folder sub.
+/// A git remote of a test, as a file url: the folder work of the test committed, changed by `more`, and cloned bare.
+fn served(at: &Path, more: impl FnOnce(&Path)) -> String {
+  let work = at.join("work");
+  git(&work, &["init"]);
+  git(&work, &["add", "."]);
+  git(&work, &["commit", "-m", "one"]);
+  more(&work);
+  git(at, &["clone", "--bare", "work", "remote.git"]);
+  let path = at.join("remote.git").display().to_string().replace('\\', "/");
+  if path.starts_with('/') { format!("file://{path}") } else { format!("file:///{path}") }
+}
+
+/// A git remote of a test, whose main branch holds an extension and whose tag v2 holds another word, with a second
+/// extension in the folder sub.
 fn remote(at: &Path) -> String {
   let work = at.join("work");
   extension(&work, "demo", "", "x = 1\n");
   extension(&work.join("sub"), "deep", "", "y = 2\n");
-  git(&work, &["init"]);
-  git(&work, &["add", "."]);
-  git(&work, &["commit", "-m", "one"]);
-  wrote(&work.join("demo.py"), "x = 2\n");
-  git(&work, &["commit", "-am", "two"]);
-  git(&work, &["tag", "v2"]);
-  git(&work, &["reset", "--hard", "HEAD~1"]);
-  git(at, &["clone", "--bare", "work", "remote.git"]);
-  let path = at.join("remote.git").display().to_string().replace('\\', "/");
-  if path.starts_with('/') { format!("file://{path}") } else { format!("file:///{path}") }
+  served(at, |work| {
+    wrote(&work.join("demo.py"), "x = 2\n");
+    git(work, &["commit", "-am", "two"]);
+    git(work, &["tag", "v2"]);
+    git(work, &["reset", "--hard", "HEAD~1"]);
+  })
 }
 
 fn worded(source: &str) -> String {
@@ -473,7 +481,6 @@ fn the_builtins_are_files_bash_and_grant_and_bash_requires_files() {
       && one.world == Worlds::default()
       && one.tui.is_none()
   }));
-  assert!(held.iter().all(|one| one.life.is_none()));
 }
 
 /// The names that each top-level statement of a source binds, in order.
@@ -613,7 +620,7 @@ fn a_life_runs_what_the_first_pin_of_the_world_says_or_every_builtin_and_no_word
 fn an_engine_that_does_not_parse_is_refused_with_its_line() {
   let refused = system("x = 1\ny = (\n", &[], &[]).unwrap_err();
   assert!(
-    matches!(&refused, Error::Word { name, line: 2 | 3, .. } if name == "the engine"),
+    matches!(&refused, Error::Word { name, line: 2 | 3, .. } if name.is_empty()),
     "{refused:?}"
   );
 }
@@ -839,16 +846,13 @@ fn the_skills_extension_of_the_repository_loads_the_same_by_a_path_a_git_remote_
       &fs::read_to_string(skills().join(file)).unwrap(),
     );
   }
-  git(&work, &["init"]);
-  git(&work, &["add", "."]);
-  git(&work, &["commit", "-m", "skills"]);
-  git(&at, &["clone", "--bare", "work", "remote.git"]);
-  let path = at.join("remote.git").display().to_string().replace('\\', "/");
-  let url =
-    if path.starts_with('/') { format!("file://{path}") } else { format!("file:///{path}") };
   let sources = [
     Source::Path(skills()),
-    Source::Git { url, reference: None, path: Some("extensions/skills".into()) },
+    Source::Git {
+      url: served(&at, |_| {}),
+      reference: None,
+      path: Some("extensions/skills".into()),
+    },
     Source::Npm { package: skills().display().to_string(), version: None },
   ];
   let got: Vec<Extension> = sources

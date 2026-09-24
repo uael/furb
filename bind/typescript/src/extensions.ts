@@ -17,8 +17,8 @@ export async function imported<T>(extension: Extension, file: string, part: stri
   return module.default as T;
 }
 
-/** The parts for a World of the extensions, by name: the part of each builtin, the part the host gives, and the file
- * each other extension names for a World in TypeScript, imported. */
+/** The parts for a World of the extensions, by name: the parts the host gives, and for each other extension that is no
+ * builtin, the file it names for a World in TypeScript, imported. */
 export async function loadWorldParts(
   extensions: readonly Extension[],
   given: Readonly<Record<string, WorldExtension>> = {},

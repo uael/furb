@@ -56,10 +56,6 @@ export interface WorldContext {
   readonly directory: string;
   /** The config directory of the user, which the config of the extensions stands in. */
   readonly config: string;
-  /** An inspection of a record: the part hears nothing and starts nothing. */
-  readonly readOnly: boolean;
-  /** Aborts when the World is disposed. */
-  readonly signal: AbortSignal;
   /** `yield* context.where(on)`: where the paths of a chain resolve, which the `cwd` of the engine gives. */
   where(on: string): Hearing<string>;
   /** A path of the disk: the directory of the World, where the chain stands, then the path. It throws for a path of

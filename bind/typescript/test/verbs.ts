@@ -1,3 +1,4 @@
+import type { Streams } from "../src/builtin/bash.ts";
 import type { Life, World } from "../src/index.ts";
 
 /** A verb said by the operator on a chain, the root when the words name none: a verb of the engine, or one that an
@@ -11,55 +12,24 @@ export function verb<T = unknown>(
   return life.call<T>(name, args, { on: life.root, ...kwargs });
 }
 
-/** What a name that the module of a chain binds crosses as: a callable of an extension, as `{is: "made", id}`. */
-export function bound<T = unknown>(life: Life, name: string, on = life.root): T {
-  return life.held<T>("modules", [on, name], "at");
+/** The text at a path that the read of the files extension gives. */
+export function read(life: Life, path: string) {
+  return verb<{ is: "Text"; path: string; content: string; before: string | null }>(life, "read", [path]);
 }
 
-/** A text of the files extension, as its plain data. */
-export interface Text {
-  path: string;
-  content: string;
-  before: string | null;
-}
-
-/** The text at a path that the read of the files extension gives, as its plain data. */
-export function read(life: Life, path: string, on = life.root): Text {
-  const { path: at, content, before } = life.call<Text>("read", [path], { on });
-  return { path: at, content, before };
-}
-
-/** A write of a content to a path, asked of the life as the write of the files extension asks it, and what the World
- * answered. */
-export function write(
-  life: Life,
-  path: string,
-  content: string,
-  on = life.root,
-): { path: string; content: string } {
-  return life.call<[unknown, { path: string; content: string }]>("ask", ["write", on, path, content], {})[1];
-}
-
-/** What a command came to, as the World holds it: its code and its streams, each a path and a content. */
-export interface Exit {
-  code: number | null;
-  stdout: { path: string; content: string };
-  stderr: { path: string; content: string };
+/** A write of a content to a path, asked of the World as the write of the files extension asks it. */
+export function write(life: Life, path: string, content: string): void {
+  life.call("ask", ["write", life.root, path, content], {});
 }
 
 /** A command that the bash extension runs, by the name of its act. */
-export function bash(
-  life: Life,
-  command: string,
-  kwargs: Record<string, unknown> = {},
-  on = life.root,
-): string {
-  return life.call<string>("bash", [command], { on, ...kwargs });
+export function bash(life: Life, command: string, kwargs: Record<string, unknown> = {}): string {
+  return verb(life, "bash", [command], kwargs);
 }
 
-/** What a command came to, once it is done, as the World holds it: the part of the bash extension makes it of the
- * facts of the World, so no value of the engine crosses for it. */
-export async function exited(world: World, life: Life, id: string): Promise<Exit> {
+/** What a command came to, once it is done, as the part of the bash extension holds it: no value of the engine
+ * crosses for it. */
+export async function exited(world: World | undefined, life: Life, id: string): Promise<Streams> {
   await life.result(id);
-  return world.activity.acts.get(id)?.value as Exit;
+  return world?.activity.acts.get(id)?.value as Streams;
 }

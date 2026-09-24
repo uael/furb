@@ -297,9 +297,8 @@ test("a host plays the skills extension by a path, a git remote and an npm packa
         const [, found] = life.call<[unknown, unknown]>("ask", ["skills", life.root], {});
         expect(found).toEqual([{ name: "brew", description: "Make tea.", path: brew }]);
         expect(life.turns()[0]?.[1]).toContain("#skills\n# brew: Make tea.");
-        expect(
-          unwrapped<{ content: string }>(await life.rung('close(skill("brew", HIDDEN))')).content,
-        ).toContain("Boil the water.");
+        const text = (await life.rung('close(skill("brew", HIDDEN))')) as { content: string };
+        expect(text.content).toContain("Boil the water.");
       } finally {
         await world.dispose();
       }

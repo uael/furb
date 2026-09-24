@@ -32,8 +32,8 @@ const covers = (control: Fact, id: string): Call => ({ verb: "covers", args: [co
  * live act whose state it would change, and for a new act and the controls that could decide its state. */
 export class Activity {
   readonly acts = new Map<string, LiveAct>();
-  /** How many acts of work are done: a prompt, a rung, or an act the World was started on, which the World made
-   * not itself. */
+  /** How many acts of work that the World did not make are done: a prompt, a rung, or an act the World was started
+   * on. */
   completed = 0;
   cost = 0;
   /** Each kind of question and whether its verb makes acts: the acts of the engine and of the parts of the World,
@@ -59,7 +59,7 @@ export class Activity {
   private refused = new Map<string, string>();
 
   constructor(parts: readonly WorldPart[] = []) {
-    const kinds = ["chain", "prompt", "rung", "wait", ...parts.flatMap((part) => part.kinds ?? [])];
+    const kinds = ["chain", "prompt", "rung", "wait", "grant", ...parts.flatMap((part) => part.kinds ?? [])];
     this.kinds = new Map(kinds.map((kind) => [kind, true]));
     this.views = parts.filter((part) => part.live);
   }
@@ -150,8 +150,8 @@ export class Activity {
         if (!act.done && act.by !== "world" && (act.started || act.kind === "prompt" || act.kind === "rung"))
           this.completed++;
         act.done = true;
-        // An act of a part that gives its value keeps that value, which the part made of the facts of the World, so
-        // no value of the engine crosses for it; a fault it came to stands in its place.
+        // No value of the engine crosses for an act whose part gives its value, so that value stays unless a fault
+        // replaces it.
         const owned = this.views.some((part) => part.kinds?.includes(act.kind) && part.live?.born);
         if (!owned || exception(fact[3])) act.value = fact[3];
         this.mark(act);
