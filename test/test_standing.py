@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Sand, life, paragraphs, plain, rows, said, settle, stood
+from conftest import STANDS, Sand, life, paragraphs, plain, rows, said, settle, stood, where
 from furb import engine
 from furb.engine import Drift
 
@@ -17,7 +17,7 @@ async def test_what_a_chain_stands_on() -> None:
   assert await engine.prompt(int, "count", on=root) == 1
   assert (WHERE, WHO) == ("/w", "m/low")
   assert [name for name, *_ in ROSTER] == ["operator", "m", "n"]
-  assert engine.cwd(on=root) == "/w"
+  assert where(root) == "/w"
   assert [a[4] for a in said(log, "ask")] == ["m/low"]
   assert engine.modules[root]["actor"] == "m/low"
 
@@ -47,12 +47,12 @@ async def test_a_standing_holds_no_source() -> None:
   assert len(STANDS) == 3
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\nclose(1)"]
+  sand.script[root] = ["x = wait(0)\nclose(1)"]
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   kept = [
-    ((*fact[:4], "echo other", *fact[5:]), *rest) if fact[0] == "bash" else (fact, *rest)
+    ((*fact[:4], 5), *rest) if fact[0] == "wait" else (fact, *rest)
     for fact, *rest in plain(sand.record)
   ]
-  with pytest.raises(Drift, match=r"^bash1 drifts$"):
+  with pytest.raises(Drift, match=r"^wait1 drifts$"):
     life(Sand(stands=STANDS), kept)

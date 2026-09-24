@@ -1,6 +1,6 @@
 """Stood, what a chain stands on from its place in the record on."""
 
-from conftest import STANDS, Sand, life, paragraphs, plain, relived, said, settle, stood
+from conftest import STANDS, Sand, life, paragraphs, plain, relived, said, settle, stood, where
 from furb import engine
 
 LATER = [[["operator", [], 200000], ["o", ["low"], 200000]], "/z", "o/low"]
@@ -30,7 +30,7 @@ async def test_a_stood_says_what_a_chain_stands_on_from_its_place_in_the_record_
   asked = [a[6] for a in said(heard, "rung") if not a[4]]
   assert asked == ["m/low", "o/low"] and said(heard, "ask") == []
   assert heard.index(stood[0]) < heard.index([a for a in said(heard, "rung") if not a[4]][1])
-  assert engine.modules[root]["actor"] == "p/low" and engine.cwd(on=root) == "/y"
+  assert engine.modules[root]["actor"] == "p/low" and where(root) == "/y"
 
 
 async def test_a_chain_that_hears_a_stood_binds_that_standing() -> None:

@@ -42,19 +42,19 @@ async def test_take_keeps_everything_that_the_acts_with_those_ids_caused() -> No
   """take keeps everything that the acts with those ids caused."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]
+  sand.script[root] = ["x = prompt(None, 'look', to='operator')\nclose(1)", "close(None)"]
   first = engine.prompt(int, "first", on=root)
   assert await first == 1
   await settle()
   _, step, *_ = said(log, "rung")[0]
-  _, command, *_ = said(log, "bash")[0]
+  _, command, *_ = said(log, "prompt")[1]
   _, held = engine.ask("transcript", root, root)
   assert isinstance(held, list)
   made = [a for a in held if engine.question(a)]
   assert [a[1] for a in take(first)(made)] == [first, step, f"holds@{command}.1", command]
   kept = engine.chain("kept", source=root, filter=take(first))
   await settle(300)
-  assert named(engine.turns(on=kept)) == [root, root, first, step, command, first, command, kept]
+  assert named(engine.turns(on=kept)) == [root, root, first, step, command, first, kept]
 
 
 async def test_take_that_is_not_inside_keeps_every_other_act() -> None:

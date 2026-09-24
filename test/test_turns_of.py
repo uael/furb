@@ -1,7 +1,18 @@
 """turns_of, the fold of what a chain has heard."""
 
+from collections.abc import Generator
+
 from conftest import STANDS, Sand, heads, life, paragraphs, rows, said, settle
 from furb import engine
+from furb.engine import OPERATOR
+
+
+def noting(id: str) -> Generator[tuple | None, tuple]:
+  """The ear of an act that tells a paragraph each time its chain asks a model, while that ask is in flight."""
+  while True:
+    match (yield):
+      case ("ask", rung, *_):
+        yield "tell", id, [f"#{id} saw {rung}"]
 
 
 async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_last_ask() -> None:
@@ -33,7 +44,7 @@ async def test_a_turn_once_phrased_is_phrased_the_same_on_every_later_ask() -> N
   """A turn once phrased is phrased the same on every later ask."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  engine.grant(usd=10.0, on=root)
+  engine.act("note", root, noting)
   sand.script[root] = ["a = 1", "b = 2", "close(3)"]
   assert await engine.prompt(int, "count", on=root) == 3
   await settle()
@@ -47,7 +58,8 @@ async def test_the_turns_are_folded_whole_at_each_ask() -> None:
   """The turns are folded whole at each ask, and a user turn holds every paragraph told before its ask and since the ask before it, so a paragraph told while an ask is in flight goes to the turn after the answer."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["x = bash('slow')", "y = 2", "close(3)"]
+  note = engine.act("note", root, noting)
+  sand.script[root] = ["x = 1", "y = 2", "close(3)"]
   assert await engine.prompt(int, "count", on=root) == 3
   await settle()
   asks = [a[5] for a in said(log, "ask")]
@@ -57,9 +69,10 @@ async def test_the_turns_are_folded_whole_at_each_ask() -> None:
     ["user", "assistant", "user", "assistant", "user"],
   ]
   assert [one[: len(asks[1])] for one in asks[1:]] == [asks[1]] * 2
-  assert heads(asks[1][-1:]) == ["#bash1 slow", "#rung3 advance on prompt1"]
-  assert heads(asks[2][-1:]) == ["#bash1 exited 0", "#rung5 advance on prompt1"]
-  assert said(log, "bash")[0][1] == "bash1"
+  first, second, third = [a[1] for a in said(log, "ask")]
+  assert heads(asks[0]) == [f"#{root} root", f"#{root} roster {STANDS[0]!r}", "#prompt1 count", f"#{first} advance on prompt1"]
+  assert heads(asks[1][-1:]) == [f"#{note} saw {first}", f"#{second} advance on prompt1"]
+  assert heads(asks[2][-1:]) == [f"#{note} saw {second}", f"#{third} advance on prompt1"]
 
 
 async def test_an_ask_appends_the_response_as_an_assistant_turn() -> None:
@@ -99,14 +112,16 @@ async def test_the_turns_of_a_chain_show_every_act_the_model_made() -> None:
   """The turns of a chain show every act the model made, with its result, and turns is how they are read."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\nclose((await x).code)"]
-  assert await engine.prompt(int, "run it", on=root) == 0
+  sand.script[root] = ["x = prompt(int, 'how many?', to='operator')\nclose(1)", "close(None)"]
+  assert await engine.prompt(int, "run it", on=root) == 1
+  _, asking, *_ = said(log, "prompt")[1]
+  assert said(log, "prompt")[1][2] == said(log, "rung")[0][1]
+  engine.close(5, asking)
   await settle()
-  _, command, *_ = said(log, "bash")[0]
   got = engine.turns(on=root)
-  assert [one for one in paragraphs(got) if one.startswith(f"#{command} ")] == [
-    f"#{command} echo hi\n{command}: Act[Exit] = Act('{command}')",
-    f"#{command} exited 0\n# {command}/stdout, 0 known\n# 1 ran echo hi",
+  assert [one for one in paragraphs(got) if one.startswith(f"#{asking} ")] == [
+    f"#{asking} how many?\n{asking}: Act[int] = Act('{asking}')",
+    f"#{asking} closed 5",
   ]
 
 
