@@ -1,6 +1,6 @@
 """Stand, what a chain stands on."""
 
-from conftest import STANDS, Sand, heads, life, paragraphs, plain, relived, said, settle, sown
+from conftest import STANDS, Sand, life, paragraphs, plain, relived, rows, said, settle, sown, stood
 from furb import engine
 from furb.engine import WORLD
 
@@ -28,17 +28,17 @@ async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_
   _, root = life(sand)
   assert await engine.rung("k = 1", on=root) is None
   await settle()
-  assert heads(engine.turns(on=root))[1] == f"#{root} stands {STANDS!r}"
+  assert paragraphs(engine.turns(on=root))[1] == stood(root)
   _, over = await relived(Sand(stands=LATER), plain(sand.record))
-  standings = [one for one in heads(engine.turns(on=over)) if " stands " in one]
-  assert over == root and standings == [f"#{over} stands {STANDS!r}", f"#{over} stands {LATER!r}"]
+  standings = [one for one in paragraphs(engine.turns(on=over)) if one.startswith(f"#{over} roster ")]
+  assert over == root and standings == [stood(over), stood(over, LATER)]
   _, held = engine.ask("transcript", over, over)
   assert isinstance(held, list)
-  assert [a for a in held if a[0] == "tell" and a[3][0].startswith(f"#{over} stands ")][-1] == (
+  assert [a for a in held if a[0] == "tell" and a[3][0].startswith(f"#{over} roster ")][-1] == (
     "tell",
     over,
     over,
-    [f"#{over} stands {LATER!r}"],
+    rows(over, LATER),
   )
   assert engine.cwd(on=over) == "/z" and engine.modules[over]["actor"] == "o/low"
 
@@ -65,9 +65,9 @@ async def test_a_model_asked_on_any_chain_of_a_later_life_finds_the_new_roster()
   later.script[over] = ["close(1)"]
   assert await engine.prompt(int, "count", to="o/low", on=over) == 1
   asked = said(again, "ask")[-1]
-  assert [one for one in paragraphs(asked[5]) if " stands " in one] == [
-    f"#{over} stands {STANDS!r}",
-    f"#{over} stands {LATER!r}",
+  assert [one for one in paragraphs(asked[5]) if one.startswith(f"#{over} roster ")] == [
+    stood(over),
+    stood(over, LATER),
   ]
 
 
@@ -128,21 +128,21 @@ async def test_each_standing_binds_the_default_actor_of_the_chain_under_the_name
   assert engine.modules[root]["actor"] == "m/low" == said(log, "ask")[0][4]
 
 
-async def test_the_chain_tells_each_standing_it_takes_under_the_header_stands() -> None:
-  """The chain tells each standing it takes under the header stands, as python shows it: the roster, the directory and the actor."""
+async def test_the_chain_tells_each_standing_it_takes_in_one_paragraph_of_three_headers() -> None:
+  """The chain tells each standing it takes in one paragraph of three headers, one for each part: the roster under the header roster as python shows it, then the directory under the header cwd and the actor under the header actor, each as it is."""
   sand = sown()
   log, root = life(sand)
   answered = next(a[3] for a in said(log, "done") if a[1] == said(log, "stand")[0][1])
   assert answered == STANDS
-  assert (
-    paragraphs(engine.turns(on=root))[1]
-    == f"#{root} stands {answered!r}"
-    == (
-      "#chain1 stands [[['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]], '/w', 'm/low']"
-    )
+  assert paragraphs(engine.turns(on=root))[1] == (
+    "#chain1 roster [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "#chain1 cwd /w\n"
+    "#chain1 actor m/low"
   )
   await relived(Sand(stands=LATER), plain(sand.record))
-  assert [one for one in paragraphs(engine.turns(on=root)) if " stands " in one][-1] == f"#{root} stands {LATER!r}"
+  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{root} roster ")][-1] == (
+    "#chain1 roster [['operator', [], 200000], ['o', ['low'], 200000]]\n#chain1 cwd /z\n#chain1 actor o/low"
+  )
 
 
 async def test_the_chain_holds_no_stand() -> None:
@@ -154,4 +154,4 @@ async def test_the_chain_holds_no_stand() -> None:
   stood = said(log, "stand")[0][1]
   assert stood == f"stand@{root}.1"
   assert [a for a in held if a[0] == "stand" or a[1] == stood] == []
-  assert held[1] == ("tell", root, root, [f"#{root} stands {STANDS!r}"])
+  assert held[1] == ("tell", root, root, rows(root))

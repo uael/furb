@@ -207,7 +207,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 
     def takes():
       modules[id]["actor"] = standing[2]
-      hold(id, f"stands {standing!r}")
+      hold(id, f"roster {standing[0]!r}", headed(id, f"cwd {standing[1]}"), headed(id, f"actor {standing[2]}"))
 
     def answers():
       match a:

@@ -15,7 +15,9 @@ async def test_an_actor_the_world_offers() -> None:
   _, root = life(sand)
   assert paragraphs(engine.turns(on=root)) == [
     "#chain1 root\nchain1: Act[object] = Act('chain1')",
-    "#chain1 stands [[['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]], '/w', 'm/low']",
+    "#chain1 roster [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "#chain1 cwd /w\n"
+    "#chain1 actor m/low",
   ]
 
 

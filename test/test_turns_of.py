@@ -1,6 +1,6 @@
 """turns_of, the fold of what a chain has heard."""
 
-from conftest import STANDS, Sand, heads, life, paragraphs, said, settle
+from conftest import STANDS, Sand, heads, life, paragraphs, rows, said, settle
 from furb import engine
 
 
@@ -11,7 +11,7 @@ async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_las
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
   assert len(got) == 1
-  assert heads(got) == ["#chain1 root", f"#chain1 stands {STANDS!r}", "#rung1"]
+  assert heads(got) == ["#chain1 root", rows("chain1")[0], "#rung1"]
   assert got[0][1] == "\n\n".join(paragraphs(got))
 
 
