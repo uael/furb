@@ -370,7 +370,8 @@ fn gate(py: Python<'_>, sheet: &str) -> PyResult<Vec<(usize, String)>> {
 struct PyExtension {
   name: String,
   root: Option<String>,
-  word: String,
+  word: Option<String>,
+  life: Option<String>,
   requires: Vec<String>,
   world_ts: Option<String>,
   world_py: Option<String>,
@@ -384,6 +385,7 @@ impl From<extension::Extension> for PyExtension {
       name: one.name,
       root: shown(one.root),
       word: one.word,
+      life: one.life,
       requires: one.requires,
       world_ts: shown(one.world.ts),
       world_py: shown(one.world.py),
@@ -396,6 +398,30 @@ impl From<extension::Extension> for PyExtension {
 #[pyfunction]
 fn builtin_extensions() -> Vec<PyExtension> {
   extension::builtins().into_iter().map(PyExtension::from).collect()
+}
+
+/// The extensions a host plays for a project: the builtins and what the config of the user and the config of the
+/// project name, fetched into the cache of the user once, and again on a refresh, and ordered by what each requires.
+/// A config, a fetch or a manifest that fails raises Refused, with what failed.
+#[pyfunction]
+#[pyo3(signature = (project, refresh = false))]
+fn extensions(py: Python<'_>, project: &str, refresh: bool) -> PyResult<Vec<PyExtension>> {
+  match extension::extensions(
+    &extension::Places::here(),
+    std::path::Path::new(project),
+    refresh,
+    false,
+  ) {
+    Ok(got) => Ok(got.into_iter().map(PyExtension::from).collect()),
+    Err(error) => Err(raised(py, &Made::new(py)?, &Fault::from(error))),
+  }
+}
+
+/// The config directory and the cache directory of the user, as this process finds them.
+#[pyfunction]
+fn places() -> (String, String) {
+  let here = extension::Places::here();
+  (here.config.display().to_string(), here.cache.display().to_string())
 }
 
 /// The word of the python part of an extension, which a host plays as a rung: the file less its imports of the
@@ -711,5 +737,7 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(builtin_extensions, module)?)?;
   module.add_function(wrap_pyfunction!(word_of, module)?)?;
   module.add_function(wrap_pyfunction!(missing_words, module)?)?;
+  module.add_function(wrap_pyfunction!(extensions, module)?)?;
+  module.add_function(wrap_pyfunction!(places, module)?)?;
   Ok(())
 }

@@ -18,7 +18,7 @@ crate-type = ["rlib", "cdylib"]
 # extension module is, so the module feature is on only where maturin builds the wheel.
 python = ["dep:pyo3"]
 extension-module = ["python", "pyo3/extension-module"]
-typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build", "dep:serde_json", "dep:indexmap", "dep:same-file", "dep:windows-sys"]
+typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build", "dep:indexmap", "dep:same-file", "dep:windows-sys"]
 
 [dependencies]
 # The sandbox the engine runs in, which is the reason the crate exists, and its
@@ -34,14 +34,20 @@ monty = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 monty-type-checking = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 monty-types = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 # The parser of python that monty reads a word with, which the crate reads the python part of an extension with:
-# the word of a module is the module less its imports of the engine.
-ruff_python_ast = "0.0.9"
-ruff_python_parser = "0.0.9"
-ruff_text_size = "0.0.9"
+# the word of a module is the module less its imports of the engine. The versions are the ones monty pulls, so cargo
+# builds one copy; they move with every revision of monty.
+ruff_python_ast = "=0.0.9"
+ruff_python_parser = "=0.0.9"
+ruff_text_size = "=0.0.9"
+# The config of the extensions and their manifests are json, read in the order of their keys. The cache names a git
+# fetch by the hash of its url and its ref, and unpacks the tarball npm packs, on every system.
+serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
+sha2 = "0.10"
+tar = "0.4"
+flate2 = "1"
 pyo3 = { version = "0.29.2", features = ["generate-import-lib"], optional = true }
 napi = { version = "3", default-features = false, features = ["napi6", "serde-json", "dyn-symbols"], optional = true }
 napi-derive = { version = "3", optional = true }
-serde_json = { version = "1", features = ["preserve_order", "raw_value"], optional = true }
 indexmap = { version = "2", features = ["serde"], optional = true }
 # The identity of a file on every system: the device and inode on Unix, and the volume serial number and file index
 # on Windows, which the standard library reads only in an unstable API.

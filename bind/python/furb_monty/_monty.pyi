@@ -59,8 +59,11 @@ class Extension:
   def root(self) -> str | None:
     """The directory the extension stands in, and nothing for a builtin."""
   @property
-  def word(self) -> str:
-    """The word of its python part, which a host plays as a rung."""
+  def word(self) -> str | None:
+    """The word of its python part, which a host plays once as a rung on each chain without a source."""
+  @property
+  def life(self) -> str | None:
+    """The word it plays in every life on each chain without a source, after the words."""
   @property
   def requires(self) -> list[str]:
     """The names of the extensions it requires, which a host plays before it."""
@@ -73,6 +76,14 @@ class Extension:
   @property
   def tui(self) -> str | None:
     """The file of its part for the TUI, if it has one."""
+
+def extensions(project: str, refresh: bool = False) -> list[Extension]:
+  """The extensions a host plays for a project: the builtins and what the config of the user and the config of the
+  project name, fetched into the cache of the user once, and again on a refresh, and ordered by what each requires.
+  A config, a fetch or a manifest that fails raises Refused, with what failed."""
+
+def places() -> tuple[str, str]:
+  """The config directory and the cache directory of the user, as this process finds them."""
 
 def builtin_extensions() -> list[Extension]:
   """The builtin extensions, files, bash and grant, in the order a host plays them."""

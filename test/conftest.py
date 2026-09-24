@@ -31,7 +31,7 @@ ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
-BUILTIN = {one.name: one.word for one in furb_monty.builtin_extensions()}
+BUILTIN = {one.name: one.word or "" for one in furb_monty.builtin_extensions()}
 """BUILTIN holds the word of each builtin extension by its name, as the crate makes it for every host, which a host
 plays as a rung on every chain it opens without a source."""
 FILES, BASH, GRANT = ([BUILTIN["files"]], [BUILTIN["files"], BUILTIN["bash"]], [BUILTIN["grant"]])

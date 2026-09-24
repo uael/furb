@@ -1,4 +1,80 @@
+use std::{collections::HashMap, ffi::OsString, fs, path::PathBuf, process::Command};
+
 use super::*;
+
+/// A directory of one test, emptied first.
+fn yard(test: &str) -> PathBuf {
+  let at = std::env::temp_dir().join(format!("furb-extension-{test}"));
+  let _ = fs::remove_dir_all(&at);
+  fs::create_dir_all(&at).expect("a yard of the test");
+  at
+}
+
+/// The places of a test, under its directory.
+fn places(at: &Path) -> Places {
+  Places { config: at.join("config"), cache: at.join("cache"), home: Some(at.join("home")) }
+}
+
+/// A file written, with the directories it stands in.
+fn wrote(path: &Path, text: &str) {
+  fs::create_dir_all(path.parent().unwrap()).unwrap();
+  fs::write(path, text).unwrap();
+}
+
+/// An extension in a directory: its manifest and its python part.
+fn extension(root: &Path, name: &str, extra: &str, word: &str) {
+  wrote(
+    &root.join("package.json"),
+    &format!(
+      r#"{{"name": "{name}", "version": "0.1.0", "furb": {{"name": "{name}", "python": "{name}.py"{extra}}}}}"#
+    ),
+  );
+  wrote(&root.join(format!("{name}.py")), word);
+}
+
+/// An environment of the variables it is given.
+fn env(vars: &[(&str, &str)]) -> impl Fn(&str) -> Option<OsString> {
+  let held: HashMap<String, OsString> =
+    vars.iter().map(|(k, v)| ((*k).to_owned(), OsString::from(v))).collect();
+  move |key| held.get(key).cloned()
+}
+
+/// A git command in a directory, which must succeed.
+fn git(at: &Path, args: &[&str]) {
+  let done = Command::new("git")
+    .args([
+      "-c",
+      "init.defaultBranch=main",
+      "-c",
+      "user.name=furb",
+      "-c",
+      "user.email=furb@example.com",
+    ])
+    .args(["-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"])
+    .args(args)
+    .current_dir(at)
+    .output()
+    .expect("git");
+  assert!(done.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&done.stderr));
+}
+
+/// A git remote of a test, as a file url, whose main branch holds an extension and whose tag v2 holds another
+/// word, with a second extension in the folder sub.
+fn remote(at: &Path) -> String {
+  let work = at.join("work");
+  extension(&work, "demo", "", "x = 1\n");
+  extension(&work.join("sub"), "deep", "", "y = 2\n");
+  git(&work, &["init"]);
+  git(&work, &["add", "."]);
+  git(&work, &["commit", "-m", "one"]);
+  wrote(&work.join("demo.py"), "x = 2\n");
+  git(&work, &["commit", "-am", "two"]);
+  git(&work, &["tag", "v2"]);
+  git(&work, &["reset", "--hard", "HEAD~1"]);
+  git(at, &["clone", "--bare", "work", "remote.git"]);
+  let path = at.join("remote.git").display().to_string().replace('\\', "/");
+  if path.starts_with('/') { format!("file://{path}") } else { format!("file:///{path}") }
+}
 
 fn worded(source: &str) -> String {
   word(source).unwrap()
@@ -76,6 +152,279 @@ fn a_module_that_does_not_parse_is_refused_with_its_line() {
 }
 
 #[test]
+fn the_config_directory_is_furb_config_dir_when_it_is_set() {
+  let got = Places::of(
+    env(&[("FURB_CONFIG_DIR", "/c"), ("XDG_CONFIG_HOME", "/x")]),
+    Some("/h".into()),
+    false,
+  );
+  assert_eq!(got.config, PathBuf::from("/c"));
+}
+
+#[test]
+fn the_config_directory_is_under_xdg_config_home_and_then_under_the_home() {
+  assert_eq!(
+    Places::of(env(&[("XDG_CONFIG_HOME", "/x")]), Some("/h".into()), false).config,
+    PathBuf::from("/x/furb")
+  );
+  assert_eq!(
+    Places::of(env(&[]), Some("/h".into()), false).config,
+    PathBuf::from("/h/.config/furb")
+  );
+}
+
+#[test]
+fn the_config_directory_on_windows_is_under_appdata_when_xdg_is_unset() {
+  assert_eq!(
+    Places::of(env(&[("APPDATA", "/a")]), Some("/h".into()), true).config,
+    PathBuf::from("/a/furb")
+  );
+  assert_eq!(
+    Places::of(env(&[("APPDATA", "/a")]), Some("/h".into()), false).config,
+    PathBuf::from("/h/.config/furb")
+  );
+}
+
+#[test]
+fn the_cache_directory_is_furb_cache_dir_then_xdg_cache_home_then_the_home() {
+  let all = env(&[("FURB_CACHE_DIR", "/c"), ("XDG_CACHE_HOME", "/x")]);
+  assert_eq!(Places::of(all, Some("/h".into()), false).cache, PathBuf::from("/c"));
+  assert_eq!(
+    Places::of(env(&[("XDG_CACHE_HOME", "/x")]), Some("/h".into()), false).cache,
+    PathBuf::from("/x/furb")
+  );
+  assert_eq!(Places::of(env(&[]), Some("/h".into()), false).cache, PathBuf::from("/h/.cache/furb"));
+}
+
+#[test]
+fn the_cache_directory_on_windows_is_under_localappdata() {
+  assert_eq!(
+    Places::of(env(&[("LOCALAPPDATA", "/l")]), Some("/h".into()), true).cache,
+    PathBuf::from("/l/furb")
+  );
+}
+
+#[test]
+fn an_empty_variable_counts_as_unset() {
+  let got =
+    Places::of(env(&[("FURB_CONFIG_DIR", ""), ("XDG_CONFIG_HOME", "")]), Some("/h".into()), false);
+  assert_eq!(got.config, PathBuf::from("/h/.config/furb"));
+  assert_eq!(got.home, Some(PathBuf::from("/h")));
+}
+
+#[test]
+fn a_missing_config_file_holds_no_setting() {
+  let at = yard("missing-config");
+  assert_eq!(read_settings(&at.join("config.json"), None), Ok(vec![]));
+  assert_eq!(settings("{}", &at.join("config.json"), None), Ok(vec![]));
+}
+
+#[test]
+fn each_form_of_an_entry_is_read() {
+  let file = PathBuf::from("/c/config.json");
+  let text = r#"{"extensions": {"a": false, "b": true, "c": "p", "d": {"path": "q"},
+    "e": {"git": "https://x/y.git", "ref": "v1", "path": "sub"}, "f": {"npm": "@s/n", "version": "1.0.0"}}}"#;
+  assert_eq!(
+    settings(text, &file, None),
+    Ok(vec![
+      ("a".to_owned(), Setting::Off),
+      ("b".to_owned(), Setting::On),
+      ("c".to_owned(), Setting::From(Source::Path("/c/p".into()))),
+      ("d".to_owned(), Setting::From(Source::Path("/c/q".into()))),
+      (
+        "e".to_owned(),
+        Setting::From(Source::Git {
+          url: "https://x/y.git".to_owned(),
+          reference: Some("v1".to_owned()),
+          path: Some("sub".into())
+        })
+      ),
+      (
+        "f".to_owned(),
+        Setting::From(Source::Npm {
+          package: "@s/n".to_owned(),
+          version: Some("1.0.0".to_owned())
+        })
+      ),
+    ])
+  );
+}
+
+#[test]
+fn an_entry_of_no_known_form_is_refused_with_its_file_and_its_name() {
+  let file = PathBuf::from("/c/config.json");
+  for form in ["3", r#"{"url": "x"}"#, r#"{"git": 1}"#] {
+    let got =
+      settings(&format!(r#"{{"extensions": {{"odd": {form}}}}}"#), &file, None).unwrap_err();
+    assert!(
+      matches!(&got, Error::Entry { name, file: at, .. } if name == "odd" && at == &file),
+      "{got:?}"
+    );
+    assert!(got.to_string().starts_with("the extension odd in the config /c/config.json: "));
+  }
+}
+
+#[test]
+fn a_config_that_is_no_json_is_refused_with_its_file() {
+  let file = PathBuf::from("/c/config.json");
+  assert!(matches!(settings("{", &file, None), Err(Error::Config { file: at, .. }) if at == file));
+  assert!(matches!(settings(r#"{"extensions": []}"#, &file, None), Err(Error::Config { .. })));
+}
+
+#[test]
+fn a_path_resolves_against_the_directory_of_its_config_file() {
+  let file = PathBuf::from("/c/d/config.json");
+  let text = r#"{"extensions": {"a": "../p", "b": {"git": "./r.git"}, "c": {"npm": "../n.tgz"}, "d": {"npm": "name"}}}"#;
+  let got = settings(text, &file, None).unwrap();
+  assert_eq!(got[0].1, Setting::From(Source::Path("/c/d/../p".into())));
+  assert_eq!(
+    got[1].1,
+    Setting::From(Source::Git { url: "/c/d/./r.git".to_owned(), reference: None, path: None })
+  );
+  assert_eq!(
+    got[2].1,
+    Setting::From(Source::Npm { package: "/c/d/../n.tgz".to_owned(), version: None })
+  );
+  assert_eq!(got[3].1, Setting::From(Source::Npm { package: "name".to_owned(), version: None }));
+}
+
+#[test]
+fn a_tilde_expands_to_the_home() {
+  let file = PathBuf::from("/c/config.json");
+  let text = r#"{"extensions": {"a": "~", "b": "~/x", "c": {"git": "~/r.git"}, "d": "~user/x"}}"#;
+  let got = settings(text, &file, Some(Path::new("/h"))).unwrap();
+  assert_eq!(got[0].1, Setting::From(Source::Path("/h".into())));
+  assert_eq!(got[1].1, Setting::From(Source::Path("/h/x".into())));
+  assert_eq!(
+    got[2].1,
+    Setting::From(Source::Git { url: "/h/r.git".to_owned(), reference: None, path: None })
+  );
+  assert_eq!(got[3].1, Setting::From(Source::Path("/c/~user/x".into())));
+}
+
+#[test]
+fn the_local_config_overrides_the_home_config_by_name() {
+  let at = yard("local-over-home");
+  let places = places(&at);
+  wrote(
+    &places.config.join("config.json"),
+    r#"{"extensions": {"one": "/p/one", "two": "/p/two"}}"#,
+  );
+  wrote(
+    &at.join("project/.furb/config.json"),
+    r#"{"extensions": {"one": false, "two": "/q/two"}}"#,
+  );
+  let got = config(&places, &at.join("project")).unwrap();
+  let picked: Vec<_> =
+    got.iter().skip(3).map(|one| (one.name.as_str(), one.on, one.source.clone())).collect();
+  assert_eq!(
+    picked,
+    [
+      ("one", false, Some(Source::Path("/p/one".into()))),
+      ("two", true, Some(Source::Path("/q/two".into())))
+    ]
+  );
+  assert_eq!(got[4].file, Some(at.join("project/.furb/config.json")));
+}
+
+#[test]
+fn the_builtins_come_first_then_the_home_names_then_the_local_names_in_file_order() {
+  let home = (
+    PathBuf::from("/h/config.json"),
+    vec![("z".to_owned(), Setting::From(Source::Path("/z".into())))],
+  );
+  let local = (
+    PathBuf::from("/p/config.json"),
+    vec![
+      ("a".to_owned(), Setting::From(Source::Path("/a".into()))),
+      ("z".to_owned(), Setting::Off),
+    ],
+  );
+  let got = merged(&[home, local]).unwrap();
+  assert_eq!(
+    got.iter().map(|one| one.name.as_str()).collect::<Vec<_>>(),
+    ["files", "bash", "grant", "z", "a"]
+  );
+}
+
+#[test]
+fn a_builtin_is_on_unless_false() {
+  let got =
+    merged(&[(PathBuf::from("/h/config.json"), vec![("grant".to_owned(), Setting::Off)])]).unwrap();
+  assert_eq!(got.iter().map(|one| one.on).collect::<Vec<_>>(), [true, true, false]);
+  assert!(got.iter().all(|one| one.source == Some(Source::Builtin)));
+}
+
+#[test]
+fn true_keeps_the_source_an_earlier_file_gave() {
+  let home = (
+    PathBuf::from("/h/config.json"),
+    vec![("x".to_owned(), Setting::From(Source::Path("/x".into())))],
+  );
+  let local = (PathBuf::from("/p/config.json"), vec![("x".to_owned(), Setting::Off)]);
+  let again = (PathBuf::from("/q/config.json"), vec![("x".to_owned(), Setting::On)]);
+  let got = merged(&[home, local, again]).unwrap();
+  assert_eq!((got[3].on, got[3].source.clone()), (true, Some(Source::Path("/x".into()))));
+}
+
+#[test]
+fn true_for_a_name_that_no_file_sources_and_no_builtin_is_refused() {
+  let got = merged(&[(PathBuf::from("/h/config.json"), vec![("ghost".to_owned(), Setting::On)])]);
+  assert!(matches!(got, Err(Error::Entry { name, .. }) if name == "ghost"));
+}
+
+#[test]
+fn a_manifest_is_read_from_the_furb_field_of_package_json() {
+  let root = Path::new("/r");
+  let text = r#"{"name": "@s/x", "furb": {"name": "x", "python": "x.py", "life": "x()",
+    "world": {"ts": "world.ts", "py": "world.py"}, "tui": "tui.ts", "requires": ["files"]}}"#;
+  assert_eq!(
+    manifest_of(text, root),
+    Ok(Manifest {
+      name: "x".to_owned(),
+      python: Some("/r/x.py".into()),
+      life: Some("x()".to_owned()),
+      world: Worlds { ts: Some("/r/world.ts".into()), py: Some("/r/world.py".into()) },
+      tui: Some("/r/tui.ts".into()),
+      requires: vec!["files".to_owned()],
+    })
+  );
+  let tui = manifest_of(r#"{"furb": {"name": "t", "tui": "tui.ts"}}"#, root).unwrap();
+  assert_eq!((tui.python, tui.tui), (None, Some("/r/tui.ts".into())));
+}
+
+#[test]
+fn a_manifest_without_a_furb_field_or_a_part_is_refused() {
+  let root = Path::new("/r");
+  assert!(matches!(manifest_of(r#"{"name": "x"}"#, root), Err(Error::Manifest { .. })));
+  assert!(matches!(manifest_of(r#"{"furb": {"name": "x"}}"#, root), Err(Error::Manifest { .. })));
+  assert!(matches!(
+    manifest_of(r#"{"furb": {"python": "x.py"}}"#, root),
+    Err(Error::Manifest { .. })
+  ));
+  let at = yard("no-manifest");
+  assert!(matches!(manifest(&at), Err(Error::Manifest { .. })));
+}
+
+#[test]
+fn a_manifest_whose_name_is_not_its_key_is_refused() {
+  let at = yard("name-not-key");
+  extension(&at, "real", "", "x = 1\n");
+  let got = loaded("other", &at).unwrap_err();
+  assert!(got.to_string().contains("the name real is not the key other of its config"), "{got}");
+}
+
+#[test]
+fn a_manifest_path_that_leaves_its_root_is_refused() {
+  let root = Path::new("/r");
+  for path in ["../x.py", "/abs/x.py", "a/../../x.py"] {
+    let text = format!(r#"{{"furb": {{"name": "x", "python": "{path}"}}}}"#);
+    assert!(matches!(manifest_of(&text, root), Err(Error::Manifest { .. })), "{path}");
+  }
+  assert!(manifest_of(r#"{"furb": {"name": "x", "python": "a/../x.py"}}"#, root).is_ok());
+}
+
+#[test]
 fn the_builtins_are_files_bash_and_grant_and_bash_requires_files() {
   let held = builtins();
   assert_eq!(
@@ -91,17 +440,73 @@ fn the_builtins_are_files_bash_and_grant_and_bash_requires_files() {
       .iter()
       .all(|one| one.root.is_none() && one.world == Worlds::default() && one.tui.is_none())
   );
+  assert!(held.iter().all(|one| one.life.is_none()));
 }
 
 #[test]
 fn the_word_of_each_builtin_is_the_word_of_the_file_the_package_ships() {
   for one in builtins() {
     let path = format!("{}/src/furb/builtin/{}.py", env!("CARGO_MANIFEST_DIR"), one.name);
-    let shipped = std::fs::read_to_string(path).unwrap();
-    assert_eq!(one.word, worded(&shipped));
-    assert!(!one.word.contains("from furb"));
+    let shipped = fs::read_to_string(path).unwrap();
+    assert_eq!(one.word, Some(worded(&shipped)));
+    assert!(!one.word.unwrap().contains("from furb"));
   }
-  assert_eq!(words(&builtins()), builtins().into_iter().map(|one| one.word).collect::<Vec<_>>());
+  assert_eq!(
+    words(&builtins()),
+    builtins().into_iter().filter_map(|one| one.word).collect::<Vec<_>>()
+  );
+}
+
+fn named(name: &str, requires: &[&str]) -> Extension {
+  Extension {
+    name: name.to_owned(),
+    root: None,
+    word: Some(format!("{name} = 1")),
+    life: None,
+    requires: requires.iter().map(|&one| one.to_owned()).collect(),
+    world: Worlds::default(),
+    tui: None,
+  }
+}
+
+fn entry(name: &str, on: bool) -> Entry {
+  Entry { name: name.to_owned(), on, source: Some(Source::Builtin), file: None }
+}
+
+#[test]
+fn an_extension_stands_after_what_it_requires_and_otherwise_keeps_its_place() {
+  let entries = [entry("a", true), entry("b", true), entry("c", true), entry("d", true)];
+  let got =
+    ordered(&entries, vec![named("d", &[]), named("a", &["c"]), named("b", &[]), named("c", &[])])
+      .unwrap();
+  assert_eq!(got.iter().map(|one| one.name.as_str()).collect::<Vec<_>>(), ["b", "c", "a", "d"]);
+}
+
+#[test]
+fn an_extension_whose_requirement_is_off_is_refused() {
+  let entries = [entry("files", false), entry("bash", true)];
+  let got = ordered(&entries, vec![named("bash", &["files"])]).unwrap_err();
+  assert_eq!(
+    got,
+    Error::Requires { name: "bash".to_owned(), needs: "files".to_owned(), off: true }
+  );
+  assert_eq!(
+    got.to_string(),
+    "the extension bash requires files, which is off: turn bash off too, or turn files on"
+  );
+}
+
+#[test]
+fn an_extension_whose_requirement_is_missing_is_refused() {
+  let got = ordered(&[entry("x", true)], vec![named("x", &["ghost"])]).unwrap_err();
+  assert_eq!(got, Error::Requires { name: "x".to_owned(), needs: "ghost".to_owned(), off: false });
+}
+
+#[test]
+fn a_cycle_of_requirements_is_refused() {
+  let entries = [entry("a", true), entry("b", true)];
+  let got = ordered(&entries, vec![named("a", &["b"]), named("b", &["a"])]).unwrap_err();
+  assert_eq!(got, Error::Cycle { names: vec!["a".to_owned(), "b".to_owned()] });
 }
 
 #[test]
@@ -110,4 +515,156 @@ fn the_missing_words_are_the_words_the_program_lacks_in_their_order() {
   assert_eq!(missing(&[], &words), ["a = 1", "b = 2", "c = 3"]);
   assert_eq!(missing(&["x = 0", "b = 2"], &words), ["a = 1", "c = 3"]);
   assert_eq!(missing(&["c = 3", "a = 1", "b = 2"], &words), Vec::<&str>::new());
+}
+
+#[test]
+fn the_life_words_are_the_life_of_each_extension_in_order() {
+  let mut one = named("one", &[]);
+  one.life = Some("one()".to_owned());
+  assert_eq!(lives(&[named("zero", &[]), one]), ["one()"]);
+}
+
+#[test]
+fn a_path_entry_is_fetched_in_place_and_a_missing_directory_is_refused() {
+  let at = yard("fetch-path");
+  let places = places(&at);
+  assert_eq!(fetched("x", &Source::Path(at.clone()), &places, false), Ok(at.clone()));
+  let got = fetched("x", &Source::Path(at.join("ghost")), &places, false);
+  assert!(matches!(got, Err(Error::Fetch { name, .. }) if name == "x"));
+}
+
+#[test]
+fn a_git_entry_is_cloned_once_into_the_cache_under_the_hash_of_its_url_and_ref() {
+  let at = yard("fetch-git");
+  let url = remote(&at);
+  let places = places(&at);
+  let source = Source::Git { url: url.clone(), reference: None, path: None };
+  let root = fetched("demo", &source, &places, false).unwrap();
+  assert_eq!(root, places.cache.join("extensions/git").join(hashed(&format!("{url}#"))));
+  assert_eq!(fs::read_to_string(root.join("demo.py")).unwrap(), "x = 1\n");
+  fs::write(root.join("mark"), "").unwrap();
+  assert_eq!(fetched("demo", &source, &places, false).unwrap(), root);
+  assert!(root.join("mark").exists());
+}
+
+#[test]
+fn a_git_entry_takes_its_ref_and_its_path() {
+  let at = yard("fetch-git-ref");
+  let url = remote(&at);
+  let places = places(&at);
+  let tagged = fetched(
+    "demo",
+    &Source::Git { url: url.clone(), reference: Some("v2".to_owned()), path: None },
+    &places,
+    false,
+  );
+  assert_eq!(fs::read_to_string(tagged.unwrap().join("demo.py")).unwrap(), "x = 2\n");
+  let deep = fetched(
+    "deep",
+    &Source::Git { url, reference: None, path: Some("sub".into()) },
+    &places,
+    false,
+  )
+  .unwrap();
+  assert_eq!(loaded("deep", &deep).unwrap().word, Some("y = 2\n".to_owned()));
+}
+
+#[test]
+fn a_git_entry_is_cloned_again_on_a_refresh() {
+  let at = yard("fetch-git-refresh");
+  let url = remote(&at);
+  let places = places(&at);
+  let source = Source::Git { url, reference: None, path: None };
+  let root = fetched("demo", &source, &places, false).unwrap();
+  fs::write(root.join("mark"), "").unwrap();
+  assert_eq!(fetched("demo", &source, &places, true).unwrap(), root);
+  assert!(!root.join("mark").exists() && root.join("demo.py").exists());
+}
+
+#[test]
+fn a_git_fetch_that_fails_is_refused_with_what_git_said() {
+  let at = yard("fetch-git-fails");
+  let source = Source::Git {
+    url: format!("file://{}/nowhere.git", at.display()),
+    reference: None,
+    path: None,
+  };
+  let got = fetched("gone", &source, &places(&at), false).unwrap_err();
+  assert!(
+    matches!(&got, Error::Fetch { name, why } if name == "gone" && why.contains("git")),
+    "{got:?}"
+  );
+  assert!(!places(&at).cache.join("extensions/git").exists());
+}
+
+#[test]
+fn an_npm_entry_is_packed_and_unpacked_once_into_the_cache() {
+  let at = yard("fetch-npm");
+  let folder = at.join("pkg");
+  extension(&folder, "demo", "", "x = 1\n");
+  let places = places(&at);
+  let source = Source::Npm { package: folder.display().to_string(), version: None };
+  let root = fetched("demo", &source, &places, false).unwrap();
+  assert!(root.starts_with(places.cache.join("extensions/npm")));
+  assert_eq!(loaded("demo", &root).unwrap().word, Some("x = 1\n".to_owned()));
+  fs::write(root.join("mark"), "").unwrap();
+  assert_eq!(fetched("demo", &source, &places, false).unwrap(), root);
+  assert!(root.join("mark").exists());
+}
+
+#[test]
+fn an_npm_entry_of_a_registry_name_is_kept_under_its_name_and_version() {
+  let places = places(Path::new("/t"));
+  assert_eq!(
+    npm_dir(&places, "@furb/skills", Some("0.1.0")),
+    PathBuf::from("/t/cache/extensions/npm/@furb/skills@0.1.0")
+  );
+  assert_eq!(
+    npm_dir(&places, "plain", None),
+    PathBuf::from("/t/cache/extensions/npm/plain@latest")
+  );
+  assert_eq!(
+    npm_dir(&places, "./x.tgz", None),
+    places.cache.join("extensions/npm").join(hashed("./x.tgz@"))
+  );
+}
+
+#[test]
+fn extensions_gives_the_builtins_and_the_path_extensions_of_both_configs_in_order_with_their_words()
+{
+  let at = yard("extensions");
+  let places = places(&at);
+  extension(&at.join("one"), "one", r#", "requires": ["two"], "life": "one()""#, "one = 1\n");
+  extension(&at.join("two"), "two", "", "from furb.engine import ask\ntwo = ask\n");
+  wrote(&places.config.join("config.json"), r#"{"extensions": {"grant": false, "one": "../one"}}"#);
+  wrote(&at.join("project/.furb/config.json"), r#"{"extensions": {"two": "../../two"}}"#);
+  let got = extensions(&places, &at.join("project"), false, false).unwrap();
+  assert_eq!(
+    got.iter().map(|one| one.name.as_str()).collect::<Vec<_>>(),
+    ["files", "bash", "two", "one"]
+  );
+  assert_eq!(words(&got)[2..], ["\ntwo = ask\n".to_owned(), "one = 1\n".to_owned()]);
+  assert_eq!(lives(&got), ["one()"]);
+}
+
+#[test]
+fn extensions_refuses_an_extension_whose_manifest_name_is_not_its_key() {
+  let at = yard("extensions-name");
+  let places = places(&at);
+  extension(&at.join("x"), "real", "", "x = 1\n");
+  wrote(&places.config.join("config.json"), r#"{"extensions": {"other": "../x"}}"#);
+  assert!(matches!(
+    extensions(&places, &at.join("project"), false, false),
+    Err(Error::Manifest { .. })
+  ));
+}
+
+#[test]
+fn extensions_refuses_a_python_part_that_does_not_parse_with_its_name_and_its_line() {
+  let at = yard("extensions-broken");
+  let places = places(&at);
+  extension(&at.join("x"), "x", "", "a = 1\nb = (\n");
+  wrote(&places.config.join("config.json"), r#"{"extensions": {"x": "../x"}}"#);
+  let got = extensions(&places, &at.join("project"), false, false).unwrap_err();
+  assert!(matches!(&got, Error::Word { name, .. } if name == "x"), "{got:?}");
 }
