@@ -1,8 +1,7 @@
 """showing, what a paragraph shows of what a door answered."""
 
-from conftest import life, settle, sown
+from conftest import FILES, life, settle, sown
 from furb import engine
-from furb.engine import HEAD, Text
 
 NUMS = (
   "def kept(id):\n"
@@ -20,13 +19,20 @@ NUMS = (
 
 async def test_what_a_paragraph_shows_of_what_a_door_answered() -> None:
   """What a paragraph shows of what a door answered: the text by the lines the model has not seen, and anything that is no text as a comment of how python shows it."""
-  one = Text("/w/n.txt", "one\ntwo\n")
-  assert engine.showing(one, HEAD) == [(one, HEAD)]
-  assert engine.showing([1, 2], HEAD) == ["# [1, 2]"]
-  assert engine.showing(None, HEAD) == ["# None"]
-  assert engine.showing("a\n\nb", HEAD) == ["# 'a\\n\\nb'"]
-  sand = sown()
+  sand = sown(FILES)
   _, root = life(sand)
+  word = (
+    "(path, content, show), = showing(Text('/w/n.txt', 'one\\ntwo\\n'), HEAD)\n"
+    "close([path, content, show is HEAD, showing([1, 2], HEAD), showing(None, HEAD), showing('a\\n\\nb', HEAD)])"
+  )
+  assert await engine.rung(word, on=root) == [
+    "/w/n.txt",
+    "one\ntwo\n",
+    True,
+    ["# [1, 2]"],
+    ["# None"],
+    ["# 'a\\n\\nb'"],
+  ]
   sand.script[root] = [NUMS]
   assert await engine.prompt(int, "a door of my own", on=root) == 1
   await settle()

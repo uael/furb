@@ -321,6 +321,14 @@ class Bound:
     return said
 
 
+def made(on: str, name: str, *args: object) -> object:
+  """An instance of a class that the module of a chain binds, made by the operator, which goes back into the life as
+  the instance it is on each engine."""
+  kind = getattr(Bound(on), name)
+  assert callable(kind)
+  return kind(*args)
+
+
 def finishing(id: str) -> Generator[tuple | None, tuple]:
   """The ear of an act of an extension that the World finishes: it answers a look at itself with that it works, and
   it is done with what a finished fact of the World about it carries."""
@@ -525,6 +533,12 @@ async def settle(n: int = 80) -> None:
 def sown(words: Sequence[str] = ()) -> Sand:
   """A World with one file and the roster of the suite, which plays the words it is given."""
   return Sand(files={"/w/a.txt": "one\ntwo\n"}, stands=STANDS, words=list(words))
+
+
+def texted(got: object) -> tuple[object, object]:
+  """The path and the content of a text a verb gave, which is how a test reads an instance of a class of a word on
+  each engine: the engine of monty gives its fields and no method."""
+  return getattr(got, "path", None), getattr(got, "content", None)
 
 
 async def worded(word: str, words: Sequence[str] = FILES) -> object:

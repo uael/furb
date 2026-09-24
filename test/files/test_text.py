@@ -8,7 +8,10 @@ ONE = "one = Text('/w/n.txt', 'one\\ntwo\\nthree\\n')\n"
 
 async def test_a_text_its_path_what_stands_at_it_of_which_its_lines_are_the_lines() -> None:
   """A text: its path, what stands at it, of which its lines are the lines, and the text it came from."""
-  word = ONE + "after = one.delete(2, 2)\nclose([one.path, one.content, one.lines, one.before, after.lines, after.before is one])"
+  word = (
+    ONE
+    + "after = one.delete(2, 2)\nclose([one.path, one.content, one.lines, one.before, after.lines, after.before is one])"
+  )
   assert await worded(word) == ["/w/n.txt", "one\ntwo\nthree\n", ["one", "two", "three"], None, ["one", "three"], True]
 
 
