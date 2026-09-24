@@ -194,13 +194,39 @@ with this ledger.
   birth, a 0.1.0 record opens (fixture `test/outside/record-0.1.0.jsonl`, made by the code of b104b8c; the crate
   test opens it too). `uv run pytest -q`: 1565 passed, 4 skipped, coverage 100%. ruff, ty, cargo test (90), clippy
   and fmt are green.
+- TypeScript host, bind part (commit 4fcfd5c): `src/binding/ts/extension.rs` gives `configDirectory`,
+  `cacheDirectory`, `builtinExtensions`, `resolveExtensions(project, {refresh, install})`, `wordOf` and
+  `missingWords`; the places come from `process.env` of JavaScript (bun keeps it apart from the environment of the
+  system, so the preload of the tests, `bind/typescript/test/preload.ts` from the root `bunfig.toml`, reaches the
+  crate). `Life.boot(callback, names, record, words, lives)`; ts.rs lost the typed builtins. `extension.ts` has
+  the shapes (`Call`, `Saying`, `Hearing`, `Fault`, `WorldPart {kinds, hears, live, dispose}`, `WorldContext`,
+  `WorldExtension`, `Instance`, `isInstance`, `unwrapped`, `remade`); `ears.ts` has one dispatch (`WorldAdapter`
+  with `parts`, `send`, `close`, `worldContext`); `builtin/files.ts` and `builtin/bash.ts` are the builtin parts;
+  `extensions.ts` loads the parts (`builtinWorldParts`, `loadWorldParts`, `imported`); `World.load` and an async
+  `boot`; `Activity` takes the live views of the parts and marks `started`; `furbDirectory` writes its rule
+  whenever it is missing. The bind tests are green (72), with `test/extension.test.ts` and a test that opens a
+  record of 0.1.0.
+- Decisions of the lead in this step (the owner handed every decision to the lead):
+  - A part of a World has the same names in every language: `kinds` and `hears`, as the Python `Part` and the rust
+    `World` trait have them (not `acts` and `hear` as PLAN part 2 wrote), and the start of an act reaches it
+    through `hears` like any fact. Only the TypeScript host adds `live` and `dispose`.
+  - A verb called by the operator with no chain is said on the chain of who speaks (decision 4 of PLAN); a name
+    bound nowhere raises `NameError` with the chain, or with "no chain was said".
+  - An act is `started` when a start said so, or when the record showed it begun: an act that the World does asks
+    the journal at its birth whether the record holds it (`holds@<act>.N`), and a record that holds it shows it
+    begun. A later life says no start for such an act before a wake, so the start fact alone cannot say it.
+  - Engine: a chain holds none of the answers it gives (a new sentence of `chain`, tested). Before, the done of a
+    transcript query stood in the transcript it answered, so each read of the transcript held every read before it;
+    a host that facts cross to (napi, the monty engine of python) copied that nesting and hit the recursion limit
+    after ten reads of `cwd`, which the World asks at every read and write.
+  - A path of a config reads as the directory it is (`extension::tidy`), so `../x` names no `.furb/../x`.
 
 ## Next steps, in order
 
-1. TypeScript: napi exposes the extension API of the crate (config, cache, fetch, manifest, order, word), and the
-   `Life` of napi plays the words itself; TS keeps the World parts (generic World, the builtin parts of files and
-   bash), the TUI parts, and the dynamic import of their code. README; then TUI parts and app.ts/session.ts
-   (bash/grant/read/cd specifics), docs, screenshots (bun must be >= 1.4.2 for the TUI; host has 1.3.11).
+1. TypeScript, the TUI (PLAN part 2, sections 4 and 5, commits 2 to 4): the switch of the TUI to `life.call` and
+   `unwrapped`, hidden world rungs, the loader in the worker and the bridge, `tui/src/builtin/{files,bash,grant}.ts`,
+   `/extensions`, the general commands, prefixes, views and sidebar; tests; `bind/typescript/README.md`,
+   `tui/README.md`, `docs/tui.md`, screenshots and animation (bun 1.4.2 is at `~/.bun/bin`).
 2. `extensions/skills/`: package.json manifest, skills.py + skills.pyi + tests, world.ts (finds SKILL.md under
    `.furb/skills`, the config dir `skills/`, and `.claude/skills`), tui.ts (`/skills`, `/skill <name>`); prove path,
    git (local bare repo) and npm (local tarball) loading in tests.
