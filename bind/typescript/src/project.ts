@@ -16,10 +16,10 @@ export function furbDirectory(project: string, ...parts: string[]): string {
   return directory;
 }
 
-/** Save a file whole: the text goes to `<path>.tmp`, which then takes the name of the file, so no reader sees a part
- * of it. A save that fails throws an error that names its file, with the error of the system as its cause, since
- * the error of the runtime does not always name the file: bun 1.4 on Windows says only "write". */
-export function saveFile(path: string, text: string): void {
+/** Save a file whole: the text or the bytes go to `<path>.tmp`, which then takes the name of the file, so no reader
+ * sees a part of it. A save that fails throws an error that names its file, with the error of the system as its
+ * cause, since the error of the runtime does not always name the file: bun 1.4 on Windows says only "write". */
+export function saveFile(path: string, text: string | Uint8Array): void {
   const draft = `${path}.tmp`;
   try {
     writeFileSync(draft, text, { mode: 0o600 });

@@ -7,7 +7,7 @@ mod wire;
 
 use napi::{
   Env,
-  bindgen_prelude::{FnArgs, Function, JsObjectValue, Object as JsObject, Unknown},
+  bindgen_prelude::{Buffer, FnArgs, Function, JsObjectValue, Object as JsObject, Unknown},
 };
 use std::rc::Rc;
 
@@ -138,18 +138,46 @@ impl JsLife {
     names: Vec<String>,
     record: Option<Vec<Value>>,
   ) -> napi::Result<Self> {
-    let record = record
-      .unwrap_or_default()
-      .iter()
-      .map(inward)
-      .collect::<Result<Vec<_>, _>>()
-      .map_err(error)?;
+    let record = kept(record)?;
     let life = crate::Life::open_on(Host { env, callback: callback.create_ref()? }, names)
       .boot(record)
       .map_err(error)?;
+    Ok(Self::opened(life))
+  }
+
+  /// Open on JavaScript ears from a dump of a life that stood still, under the names it was dumped with, on the
+  /// record the World holds. A dump that another engine or another build made, or that another record stands
+  /// under, is refused with each part that differs, and the host boots on the record instead. An ear hears from
+  /// the next fact on: what it said at its birth, it said in the life the dump came from.
+  #[napi(
+    factory,
+    ts_args_type = "callback: (request: unknown[]) => unknown, names: string[], dump: Uint8Array, record?: unknown[] | null"
+  )]
+  pub fn restore(
+    env: Env,
+    callback: Function<Value, Value>,
+    names: Vec<String>,
+    dump: Buffer,
+    record: Option<Vec<Value>>,
+  ) -> napi::Result<Self> {
+    let record = kept(record)?;
+    let life = crate::Life::open_on(Host { env, callback: callback.create_ref()? }, names)
+      .restore(&dump, record)
+      .map_err(error)?;
+    Ok(Self::opened(life))
+  }
+
+  fn opened(life: crate::Life) -> Self {
     let root = life.root().to_owned();
     let raised = life.raised().map(|fault| outward(fault.object().as_ref()));
-    Ok(Self { held: Held::new(life), root, raised })
+    Self { held: Held::new(life), root, raised }
+  }
+
+  /// The life as bytes, where it stands still, stamped with the engine, the build and the record, for a later life
+  /// to restore without the record replayed. A life that does not stand still is refused.
+  #[napi]
+  pub fn dump(&self) -> napi::Result<Buffer> {
+    self.held.call(|life| life.dump()).map(Buffer::from)
   }
 
   #[napi(getter)]
@@ -560,6 +588,11 @@ impl JsLife {
 
 fn error(fault: Fault) -> napi::Error {
   napi::Error::from_reason(fault.to_string())
+}
+
+/// The record a World kept, as the life takes it.
+fn kept(record: Option<Vec<Value>>) -> napi::Result<Vec<crate::Object>> {
+  record.unwrap_or_default().iter().map(inward).collect::<Result<Vec<_>, _>>().map_err(error)
 }
 
 fn string(value: Value) -> napi::Result<String> {

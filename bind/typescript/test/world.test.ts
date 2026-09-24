@@ -1061,3 +1061,120 @@ test("a World with no model puts to the operator every prompt that names no acto
     await rm(cwd, { recursive: true });
   }
 });
+
+/** Whether a file stands at the path. */
+const stands = (path: string) =>
+  stat(path).then(
+    () => true,
+    () => false,
+  );
+
+test("a World that closes where its life stands still leaves a dump, which the next World restores while it matches the record", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-dump-"));
+  const record = join(cwd, "life.jsonl");
+  const first = new World({ cwd, record });
+  await first.open().rung("k = 1");
+  const facts = [...first.facts];
+  await first.dispose();
+  const dump = `${record}.dump`;
+  const older = await readFile(dump);
+  const second = new World({ record });
+  try {
+    const life = second.open();
+    expect(second.restored).toBe(true);
+    expect(second.facts.slice(0, facts.length)).toEqual(facts);
+    expect(second.activity.acts.get("rung1")).toMatchObject({ kind: "rung", done: true });
+    expect(life.inspect("k").value).toBe(1);
+    await life.rung("k += 1");
+  } finally {
+    await second.dispose();
+  }
+  // The record moved on past the older dump, which a later World refuses, and boots on the record instead.
+  await writeFile(dump, older);
+  const third = new World({ record });
+  try {
+    expect(third.open().inspect("k").value).toBe(2);
+    expect(third.restored).toBe(false);
+  } finally {
+    await third.dispose();
+  }
+  // What no World wrote is no dump, and a later World boots on the record.
+  for (const garbage of ["not a dump", "[]\nnot a dump"]) {
+    await writeFile(dump, garbage);
+    const fourth = new World({ record });
+    try {
+      expect(fourth.open().inspect("k").value).toBe(2);
+      expect(fourth.restored).toBe(false);
+    } finally {
+      await fourth.dispose();
+    }
+  }
+  await rm(cwd, { recursive: true });
+});
+
+test("a World that closes while it owes its life work leaves no dump, so the next World boots", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-no-dump-"));
+  const record = join(cwd, "life.jsonl");
+  const first = new World({ cwd, record });
+  await first.open().rung("k = 1");
+  await first.dispose();
+  const dump = `${record}.dump`;
+  expect(await stands(dump)).toBe(true);
+  const second = new World({ record });
+  const command = second.open().bash("exec sleep 30").id;
+  await until(second, () => second.activity.acts.has(command));
+  await second.dispose();
+  expect(await stands(dump)).toBe(false);
+  const third = new World({ record });
+  try {
+    third.open();
+    expect(third.restored).toBe(false);
+    expect([...third.pending.keys()]).toEqual([command]);
+  } finally {
+    await third.dispose();
+    await remove(cwd);
+  }
+});
+
+test("a restored World holds the pending work a booted World holds, and starts it at the resume", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-dump-pending-"));
+  const record = join(cwd, "life.jsonl");
+  const first = new World({ cwd, record });
+  const question = first.open().prompt("bool", "Continue?", { to: "operator" }).id;
+  await until(first, () => first.prompts.has(question));
+  await first.dispose();
+  expect(await stands(`${record}.dump`)).toBe(false);
+  // The World that boots on the record holds the question pending and owes no work, so it closes with a dump.
+  const second = new World({ record });
+  second.open();
+  expect([...second.pending.keys()]).toEqual([question]);
+  await second.dispose();
+  expect(await stands(`${record}.dump`)).toBe(true);
+  // The same record twice, once with the dump and once without it.
+  const worlds: World[] = [];
+  try {
+    for (const restores of [true, false]) {
+      const at = join(cwd, String(restores));
+      await mkdir(at);
+      for (const file of ["", ".world.json", ...(restores ? [".dump"] : [])])
+        await writeFile(join(at, `life.jsonl${file}`), await readFile(`${record}${file}`));
+      const world = new World({ record: join(at, "life.jsonl") });
+      worlds.push(world);
+      const life = world.open();
+      expect(world.restored).toBe(restores);
+      expect([...world.pending.keys()]).toEqual([question]);
+      await tick();
+      expect(world.prompts.size).toBe(0);
+      await world.resume();
+      await until(world, () => world.prompts.has(question));
+      world.answer(question, "yes");
+      expect(await life.result<boolean>(question)).toBe(true);
+    }
+    const [restored, booted] = worlds as [World, World];
+    expect([...restored.activity.acts.values()]).toEqual([...booted.activity.acts.values()]);
+    expect(restored.records.entries).toEqual(booted.records.entries);
+  } finally {
+    for (const world of worlds) await world.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});

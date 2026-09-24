@@ -380,7 +380,7 @@ export class Workspaces extends EventEmitter {
     const moved: [string, string][] = [];
     try {
       const directory = furbDirectory(group.directory, "trash", randomUUID());
-      for (const suffix of ["", ".ui.json", ".world.json", ".changes.jsonl", ".images", ".lock"]) {
+      for (const suffix of ["", ".ui.json", ".world.json", ".dump", ".changes.jsonl", ".images", ".lock"]) {
         const source = `${entry.path}${suffix}`;
         if (!existsSync(source)) continue;
         const target = join(directory, basename(source));

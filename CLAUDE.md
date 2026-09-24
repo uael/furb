@@ -17,6 +17,10 @@ API of its own:
 - `src/binding/py.rs`, behind the `python` feature, is the door to python. `bind/python` is the package
   `furb-monty`. Its module `furb_monty.engine` gives every name of the contract over one life in the sandbox, and
   `FURB_ENGINE=monty` makes `from furb import engine` give it.
+- A life is dumped where it stands still, and a later life is restored from the dump with nothing replayed.
+  `src/stamp.rs` stamps a dump with the engine, the build of the crate and the record it matches, and a restore
+  refuses a dump whose stamp differs, so the host boots. The door to python and the door to TypeScript have `dump`
+  and `restore` beside `boot`, and each World restores its life from the dump beside its record, or boots.
 
 The suite runs on both engines. `test/outside/test_monty.py` proves what the door carries that no sentence of the
 contract says.

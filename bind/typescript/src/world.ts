@@ -1,7 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
   type Api,
@@ -44,6 +44,9 @@ function system(): string {
   prompt ??= JSON.parse(readFileSync(new URL("../system.json", import.meta.url), "utf8")) as string;
   return prompt;
 }
+
+/** Whether an error is a refusal of the life, which the native door says as `Refused: why`. */
+const refusal = (error: unknown) => error instanceof Error && error.message.startsWith("Refused: ");
 
 /** The kinds of act whose work the record may show begun and not done, which waits for a wake. */
 const PENDING = ["prompt", "rung", "bash", "wait"];
@@ -132,6 +135,8 @@ export class World extends EventEmitter {
   readonly pending = new Map<string, string>();
   /** The ears of the life, whose callable carries a show or a filter of the host into it. */
   readonly ears: Ears;
+  /** Whether the life was restored from the dump beside the record, and not booted on the record. */
+  restored = false;
   private life?: Life;
   private readonly adapter: WorldAdapter;
   private readonly controller = new AbortController();
@@ -233,7 +238,7 @@ export class World extends EventEmitter {
   open(): Life {
     if (this.life) throw new Error("This World already owns a life.");
     try {
-      this.life = this.adapter.boot(this.records.entries);
+      this.life = this.opened();
       // A life that drifted keeps nothing more, so this World refuses to open on it.
       const raised = this.life.raised;
       if (raised) throw new Error(`${raised.is}: ${raised.args.map(String).join(" ")}`);
@@ -253,6 +258,58 @@ export class World extends EventEmitter {
       this.stopped = true;
       throw error;
     }
+  }
+
+  /** The dump beside the record: the facts this World heard, as one line of JSON, and after it the life, dumped where
+   * it stood still. */
+  private get dumped(): string | undefined {
+    return this.records.path ? `${this.records.path}.dump` : undefined;
+  }
+
+  /** The life on the record: restored from the dump beside it when the dump matches the record, the engine and the
+   * build, and booted on the record otherwise. A restored World holds the facts it heard in the life it dumped, so its
+   * act table is the one a boot would derive. */
+  private opened(): Life {
+    const path = this.dumped;
+    if (path && existsSync(path)) {
+      const bytes = readFileSync(path);
+      const end = bytes.indexOf(10);
+      try {
+        this.facts.push(...(JSON.parse(bytes.subarray(0, end).toString("utf8")) as Fact[]));
+        const life = this.adapter.restore(bytes.subarray(end + 1), this.records.entries);
+        this.activity.derive(this.facts, (question) =>
+          life.call(question.verb, question.args ?? [], question.kwargs ?? {}),
+        );
+        this.restored = true;
+        return life;
+      } catch (error) {
+        // A dump that the life refuses, or whose facts are no JSON, is no dump of this record, and the World boots.
+        if (!(refusal(error) || error instanceof SyntaxError)) throw error;
+        this.facts.length = 0;
+      }
+    }
+    return this.adapter.boot(this.records.entries);
+  }
+
+  /** The dump of the life beside the record, when the life stands still: the World owes it no work, and the life
+   * refuses no dump. A life that does not stand still leaves no dump, and an older one is removed, since it is of a
+   * record that stands no more. */
+  private keepDump(): void {
+    const path = this.dumped;
+    if (!path || this.options.readOnly || !this.life) return;
+    let dump: Buffer | undefined;
+    if (!this.adapter.owed.size) {
+      try {
+        dump = this.life.dump();
+      } catch (error) {
+        if (!refusal(error)) throw error;
+      }
+    }
+    if (!dump) {
+      rmSync(path, { force: true });
+      return;
+    }
+    saveFile(path, Buffer.concat([Buffer.from(`${JSON.stringify(this.facts)}\n`), dump]));
   }
 
   handle = ({ kind, args }: WorldRequest): unknown => {
@@ -641,6 +698,7 @@ export class World extends EventEmitter {
     this.stopped = true;
     try {
       this.save();
+      this.keepDump();
     } finally {
       this.adapter.stopped = true;
       this.life?.dispose();

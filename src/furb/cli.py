@@ -11,7 +11,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from furb import engine
+from furb import engine, python
 from furb.engine import Act
 from furb.kernel import Native, gating
 from furb.provider.claude import ACTOR, cool
@@ -28,17 +28,19 @@ def say(text: str) -> None:
 
 
 def lived(record: Path | None, cwd: Path, actor: str, *, keeps: bool) -> tuple[Live, str, list[tuple]]:
-  """One life on the loop that runs: its World on the record, the Kernel of this interpreter, and its root.
+  """One life on the loop that runs: its World on the record, the Kernel of the engine, and its root.
 
   The life is made again from what the record holds, and it keeps what it says to the record when it keeps. A
   life that only reads a record keeps nothing, since a World given the record it reads appends to it: a stand of a
   directory or an actor other than the one the record holds is a stood it keeps. The journal says the whole record
-  again before boot returns, so the life stands whole on its record when this gives the root.
+  again before boot returns, or the World restores the life from its dump, so the life stands whole on its record
+  when this gives the root. The engine of monty holds its own Kernel and gate, and the engine of this interpreter
+  is given the ones of this interpreter.
   """
   held = kept(record) if record is not None and record.is_file() else []
   world = Live(str(cwd.absolute()), record if keeps else None, actor)
-  root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating())
-  return world, root, held
+  ears = {"kernel": Native().kernel(), "gate": gating()} if engine is python else {}
+  return world, world.open(held, **ears), held
 
 
 def again(held: Sequence[tuple], root: str, shape: type | None, message: str, to: str) -> str:
@@ -57,32 +59,35 @@ def again(held: Sequence[tuple], root: str, shape: type | None, message: str, to
 
 async def prompted(record: Path | None, cwd: Path, shape: type | None, message: str, to: str) -> object:
   """One prompt of the operator on the root of a life, awaited for the shape it asks for."""
-  _, root, held = lived(record, cwd, ACTOR, keeps=True)
+  world, root, held = lived(record, cwd, ACTOR, keeps=True)
   try:
     if name := again(held, root, shape, message, to):
       return await Act(name)
     return await engine.prompt(shape, message, to, on=root)
   finally:
+    world.dispose()
     # Nothing the life warmed outlives the life, so every process of the provider dies with the command.
     await cool()
 
 
 async def turned(record: Path, cwd: Path) -> None:
   """The turns of the root of a life made again from its record, each as the python a model reads of it."""
-  root = lived(record, cwd, ACTOR, keeps=False)[1]
+  world, root, _ = lived(record, cwd, ACTOR, keeps=False)
   try:
     for role, py, _, _ in engine.turns(on=root):
       say(f"[{role}] {py}")
   finally:
+    world.dispose()
     await cool()
 
 
 async def running(record: Path | None, cwd: Path, word: str) -> object:
   """One word its caller wrote, run as a rung on the root of a life, awaited for what the word gave."""
-  root = lived(record, cwd, ACTOR, keeps=True)[1]
+  world, root, _ = lived(record, cwd, ACTOR, keeps=True)
   try:
     return await engine.rung(word, on=root)
   finally:
+    world.dispose()
     await cool()
 
 

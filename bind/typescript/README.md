@@ -150,7 +150,16 @@ Keep both companions with the JSONL record. The World saves `.world.json` whole 
 which writes `<path>.tmp` and gives it the name of the file. A save that fails throws an error that names the file,
 with the error of the system as its cause. The TUI saves its own files with it.
 
-`inspectRecord(path, models)` reads pending work through the same native replay without taking a record lock,
+A World that is disposed where its life stands still, when it owes the life no ask, command, wait or prompt to the
+operator, saves `<record>.dump`: the facts it heard, as one line of JSON, and then the life, as `life.dump()` gives
+it. The life stamps a dump with the engine, the build of the crate, and the record: how many entries it holds, and
+the kind and the name of the fact of its last entry. The next `World.open` restores the life from the dump with
+`Life.restore`, and replays nothing, when the stamp matches; `world.restored` says so. It boots on the record when
+the stamp does not match, and a World that owes its life work when it is disposed removes the dump. A restored life
+holds its pending work as a booted life does, and tells each chain whose standing changed with a `stood`. The record
+alone opens the same life, so a dump is safe to remove.
+
+`inspectRecord(path, models)` reads pending work through the same open as a World, without taking a record lock,
 writing files, or starting a model or command. The TUI runs this inspection in its own worker. `World.activity` holds
 the state of every act, derived once from the facts as the life hears them, so a host reads it without asking the
 sandbox. It asks the engine's `covers` which live acts a pause or a wake is over, one call for each act whose state
