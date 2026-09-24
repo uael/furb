@@ -1,6 +1,7 @@
 //! Native TypeScript bindings. N-API generates the package loader and declarations from this surface.
 //! Queries and controls are synchronous. Acts carry their name and are awaited through a native Promise.
 pub mod console;
+pub mod extension;
 mod host;
 mod lease;
 mod wire;
@@ -19,37 +20,8 @@ use host::{Held, Host, invoke, on};
 use wire::{inward, outward};
 
 #[napi(object)]
-pub struct TextValue {
-  pub path: String,
-  pub content: String,
-}
-
-#[napi(object)]
-pub struct ExitValue {
-  pub code: Option<i64>,
-  pub stdout: TextValue,
-  pub stderr: TextValue,
-}
-
-#[napi(object)]
 pub struct PromptOptions {
   pub to: Option<String>,
-  pub on: Option<String>,
-}
-
-#[napi(object)]
-pub struct BashOptions {
-  pub fed: Option<bool>,
-  pub timeout: Option<f64>,
-  pub show: Option<Value>,
-  pub show_err: Option<Value>,
-  pub on: Option<String>,
-}
-
-#[napi(object)]
-pub struct GrantOptions {
-  pub usd: Option<f64>,
-  pub share: Option<f64>,
   pub on: Option<String>,
 }
 
@@ -127,16 +99,20 @@ impl JsAct {
 
 #[napi]
 impl JsLife {
-  /// Open on JavaScript ears, using the same call and reply protocol as the Python binding.
+  /// Open on JavaScript ears, using the same call and reply protocol as the Python binding. The life plays the
+  /// words of the extensions and their life words as the World, on every chain without a source, once boot stands on
+  /// its record and at the birth of each such chain after.
   #[napi(
     factory,
-    ts_args_type = "callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null"
+    ts_args_type = "callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null, words?: string[] | null, lives?: string[] | null"
   )]
   pub fn boot(
     env: Env,
     callback: Function<Value, Value>,
     names: Vec<String>,
     record: Option<Vec<Value>>,
+    words: Option<Vec<String>>,
+    lives: Option<Vec<String>>,
   ) -> napi::Result<Self> {
     let record = record
       .unwrap_or_default()
@@ -145,6 +121,8 @@ impl JsLife {
       .collect::<Result<Vec<_>, _>>()
       .map_err(error)?;
     let life = crate::Life::open_on(Host { env, callback: callback.create_ref()? }, names)
+      .words(words.unwrap_or_default())
+      .lives(lives.unwrap_or_default())
       .boot(record)
       .map_err(error)?;
     let root = life.root().to_owned();
@@ -326,49 +304,6 @@ impl JsLife {
   }
 
   #[napi(ts_return_type = "Act & PromiseLike<null>")]
-  pub fn grant(&self, options: GrantOptions) -> napi::Result<JsAct> {
-    self
-      .held
-      .call(move |life| {
-        let named = on(life, options.on);
-        invoke(life, "grant", vec![json!(options.usd), json!(options.share)], named)
-      })
-      .and_then(string)
-      .map(|id| JsAct { id, held: self.held.clone() })
-  }
-
-  #[napi(ts_return_type = "Act & PromiseLike<ExitValue>")]
-  pub fn bash(&self, command: String, options: Option<BashOptions>) -> napi::Result<JsAct> {
-    self
-      .held
-      .call(move |life| {
-        let options = options.unwrap_or(BashOptions {
-          fed: None,
-          timeout: None,
-          show: None,
-          show_err: None,
-          on: None,
-        });
-        let mut named = on(life, options.on);
-        if let Some(fed) = options.fed {
-          named["fed"] = json!(fed);
-        }
-        if let Some(timeout) = options.timeout {
-          named["timeout"] = json!(timeout);
-        }
-        if let Some(show) = options.show {
-          named["show"] = show;
-        }
-        if let Some(show) = options.show_err {
-          named["show_err"] = show;
-        }
-        invoke(life, "bash", vec![json!(command)], named)
-      })
-      .and_then(string)
-      .map(|id| JsAct { id, held: self.held.clone() })
-  }
-
-  #[napi(ts_return_type = "Act & PromiseLike<null>")]
   pub fn wait(&self, seconds: f64, chain: Option<String>) -> napi::Result<JsAct> {
     self
       .held
@@ -378,39 +313,6 @@ impl JsLife {
       })
       .and_then(string)
       .map(|id| JsAct { id, held: self.held.clone() })
-  }
-
-  #[napi(
-    ts_generic_types = "T = TextValue",
-    ts_args_type = "path: string, show?: unknown, chain?: string | null",
-    ts_return_type = "T"
-  )]
-  pub fn read(
-    &self,
-    path: String,
-    show: Option<Value>,
-    chain: Option<String>,
-  ) -> napi::Result<Value> {
-    self.held.call(move |life| {
-      let mut named = on(life, chain);
-      if let Some(show) = show {
-        named["show"] = show;
-      }
-      invoke(life, "read", vec![json!(path)], named)
-    })
-  }
-
-  #[napi(ts_generic_types = "T = TextValue", ts_return_type = "T")]
-  pub fn write(&self, text: TextValue, chain: Option<String>) -> napi::Result<Value> {
-    self.held.call(move |life| {
-      let named = on(life, chain);
-      invoke(
-        life,
-        "write",
-        vec![json!({"is": "Text", "path": text.path, "content": text.content})],
-        named,
-      )
-    })
   }
 
   #[napi(ts_generic_types = "T = unknown", ts_return_type = "T | null")]
@@ -440,28 +342,6 @@ impl JsLife {
   #[napi]
   pub fn scope(&self, id: String) -> napi::Result<String> {
     self.held.call(move |life| invoke(life, "scope", vec![json!(id)], json!({}))).and_then(string)
-  }
-
-  #[napi]
-  pub fn cwd(&self, chain: Option<String>) -> napi::Result<String> {
-    self
-      .held
-      .call(move |life| {
-        let named = on(life, chain);
-        invoke(life, "cwd", vec![], named)
-      })
-      .and_then(string)
-  }
-
-  #[napi]
-  pub fn cd(&self, path: String, chain: Option<String>) -> napi::Result<String> {
-    self
-      .held
-      .call(move |life| {
-        let named = on(life, chain);
-        invoke(life, "cd", vec![json!(path)], named)
-      })
-      .and_then(string)
   }
 
   #[napi]
@@ -527,18 +407,6 @@ impl JsLife {
     })
   }
 
-  #[napi(ts_return_type = "{ is: 'made'; id: number }")]
-  pub fn span(&self, lo: i32, hi: i32) -> napi::Result<Value> {
-    self.held.call(move |life| invoke(life, "span", vec![json!(lo), json!(hi)], json!({})))
-  }
-  #[napi(ts_return_type = "{ is: 'made'; id: number }")]
-  pub fn grep(&self, pattern: String) -> napi::Result<Value> {
-    self.held.call(move |life| invoke(life, "grep", vec![json!(pattern)], json!({})))
-  }
-  #[napi(ts_return_type = "{ is: 'made'; id: number }")]
-  pub fn differs(&self, lines: Vec<String>) -> napi::Result<Value> {
-    self.held.call(move |life| invoke(life, "differs", vec![json!(lines)], json!({})))
-  }
   #[napi(ts_return_type = "{ is: 'made'; id: number }")]
   pub fn take(&self, ids: Vec<String>, inside: Option<bool>) -> napi::Result<Value> {
     self.held.call(move |life| {

@@ -106,7 +106,7 @@ with this ledger.
   BashOptions, GrantOptions and the typed builtin methods; rebuild `index.cjs`/`index.d.cts`.
 - The npm package bundles the builtin words (bind/typescript/build.ts writes them like system.json).
 
-## Done so far (committed and pushed, commit 3f3fa27, plus uncommitted edits in test/)
+## Done so far (committed and pushed)
 
 - `src/furb/engine.pyi` and `engine.py`: builtins removed; `ladder` query answered in the chain (`("ladder", qid,
   by, on, prompt, *word)`); Showing `(str, str, Show)`; `shown(note, seen)`; sentences rewritten (see `git diff
