@@ -53,6 +53,7 @@ pub struct JsLife {
   held: Rc<Held>,
   root: String,
   raised: Option<Value>,
+  words: Vec<String>,
 }
 
 /// A named act. Keep its id for controls, or await the act for its outcome.
@@ -99,9 +100,10 @@ impl JsAct {
 
 #[napi]
 impl JsLife {
-  /// Open on JavaScript ears, using the same call and reply protocol as the Python binding. The life plays the
-  /// words of the extensions and their life words as the World, on every chain without a source, once boot stands on
-  /// its record and at the birth of each such chain after.
+  /// Open on JavaScript ears, using the same call and reply protocol as the Python binding. The module of the engine
+  /// runs the words of the extensions after the engine: those the record pins, or else these, which the life pins as
+  /// the World. The life plays the life words as rungs, as the World, on every chain without a source, once boot
+  /// stands on its record and at the birth of each such chain after.
   #[napi(
     factory,
     ts_args_type = "callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null, words?: string[] | null, lives?: string[] | null"
@@ -127,12 +129,19 @@ impl JsLife {
       .map_err(error)?;
     let root = life.root().to_owned();
     let raised = life.raised().map(|fault| outward(fault.object().as_ref()));
-    Ok(Self { held: Held::new(life), root, raised })
+    let words = life.words().to_vec();
+    Ok(Self { held: Held::new(life), root, raised, words })
   }
 
   #[napi(getter)]
   pub fn root(&self) -> String {
     self.root.clone()
+  }
+
+  /// The words of the extensions the life runs after the engine, which the system prompt reads after the engine.
+  #[napi(getter)]
+  pub fn words(&self) -> Vec<String> {
+    self.words.clone()
   }
 
   /// What boot raised, and nothing when it raised nothing. After a drift the life goes on, with nothing kept.

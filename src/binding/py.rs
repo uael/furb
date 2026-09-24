@@ -241,20 +241,33 @@ impl Life {
   /// `ear(generator)`, which hears one more generator and gives the name it is heard by and whether it was started,
   /// and `callable(function)`, which gives the name the function is called back by.
   #[new]
+  #[pyo3(signature = (ears, names, record, words = Vec::new(), lives = Vec::new()))]
   fn new(
     py: Python<'_>,
     ears: Py<PyAny>,
     names: Vec<String>,
     record: Bound<'_, PyAny>,
+    words: Vec<String>,
+    lives: Vec<String>,
   ) -> PyResult<Self> {
     let made = Made::new(py)?;
     let kept = of_python(&made, &ears, &record)?;
     let kept: Vec<Object> =
       kept.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
     let hosted = Hosted { host: ears.clone_ref(py), made: made.clone_ref(py) };
-    let held =
-      life::Life::open_on(hosted, names).boot(kept).map_err(|fault| raised(py, &made, &fault))?;
+    let held = life::Life::open_on(hosted, names)
+      .words(words)
+      .lives(lives)
+      .boot(kept)
+      .map_err(|fault| raised(py, &made, &fault))?;
     Ok(Life { held, made, ears })
+  }
+
+  /// The words of the extensions the life runs after the engine: those its record pins, or else those it was given,
+  /// which it pinned.
+  #[getter]
+  fn words(&self) -> Vec<String> {
+    self.held.words().to_vec()
   }
 
   /// The root chain of the life, which is the first act of any record.

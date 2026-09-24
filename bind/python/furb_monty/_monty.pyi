@@ -13,14 +13,23 @@ from typing import final
 class Life:
   """One life: the engine in the sandbox, and the host it reaches."""
 
-  def __init__(self, ears: object, names: Sequence[str], record: object) -> None:
+  def __init__(
+    self, ears: object, names: Sequence[str], record: object, words: Sequence[str] = (), lives: Sequence[str] = ()
+  ) -> None:
     """A life, opened on the ears of the host, the names they hear by in the order the engine hears them, and the
     record a World kept. The ears are one object with `hears(name, fact)`, `answered(name, value)`,
-    `called(name, args, kwargs)`, `ear(generator)` and `callable(function)`."""
+    `called(name, args, kwargs)`, `ear(generator)` and `callable(function)`. The module of the engine runs the words
+    of the extensions after the engine: those the record pins, or else these, which the life pins as the World. The
+    life plays the life words as rungs, as the World, on every chain without a source."""
 
   @property
   def root(self) -> str:
     """The root chain of the life, which is the first act of any record."""
+
+  @property
+  def words(self) -> list[str]:
+    """The words of the extensions the life runs after the engine: those its record pins, or else those it was
+    given, which it pinned."""
 
   @property
   def raised(self) -> BaseException | None:

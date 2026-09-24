@@ -558,6 +558,26 @@ fn the_words_follow_the_engine_after_an_empty_line_in_their_order() {
 }
 
 #[test]
+fn a_record_pins_the_words_of_the_first_fact_the_world_said_of_them() {
+  let fact = |by: &str, words: &[&str]| {
+    Object::list([Object::tuple([
+      Object::string(PINNED),
+      Object::string("chain1"),
+      Object::string(by),
+      Object::list(words.iter().map(|&one| Object::string(one))),
+    ])])
+  };
+  let other = Object::list([Object::tuple([Object::string("stood"), Object::string("chain1")])]);
+  assert_eq!(pinned(&[]), None);
+  assert_eq!(pinned(&[other.clone(), fact("operator", &["x = 1"])]), None);
+  assert_eq!(
+    pinned(&[other, fact("world", &["a = 1\n"]), fact("world", &["b = 2\n"])]),
+    Some(vec!["a = 1\n".to_owned()])
+  );
+  assert_eq!(pinned(&[fact("world", &[])]), Some(vec![]));
+}
+
+#[test]
 fn an_engine_that_does_not_parse_is_refused_with_its_line() {
   let refused = system("x = 1\ny = (\n", &[], &[]).unwrap_err();
   assert!(

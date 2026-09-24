@@ -26,7 +26,6 @@ use std::{
 use crate::{
   Actor, Fact, Fault, Later, Life, Object, ObjectRef, Standing, Voice, World,
   ear::Reply,
-  extension,
   value::{entry, field},
 };
 
@@ -298,11 +297,6 @@ fn block_on<T>(fut: impl Future<Output = T>) -> T {
   }
 }
 
-/// The words of the builtins, which a life of the tests plays.
-fn builtin() -> Vec<String> {
-  extension::words(&extension::builtins())
-}
-
 /// One life of the real engine, on a yard of the disk, with the model answering these words.
 struct Lived {
   life: Life,
@@ -314,7 +308,7 @@ struct Lived {
 
 impl Lived {
   fn new(yard: &str, words: &[&str], record: Vec<Object>) -> Result<Self, Fault> {
-    Lived::playing(yard, words, record, builtin(), vec![])
+    Lived::playing(yard, words, record, vec![], vec![])
   }
 
   fn playing(
@@ -405,9 +399,9 @@ impl Lived {
   }
 }
 
-/// One field of an instance a word defined, as the stand-in sends it out: its fields under `value`.
+/// One field of an instance of a class of the engine, as monty carries it out: by its name.
 fn of<'a>(got: &ObjectRef<'a>, name: &str) -> Option<ObjectRef<'a>> {
-  field(&field(got, "value")?, name)
+  field(got, name)
 }
 
 #[test]
@@ -591,72 +585,112 @@ fn a_second_life_on_the_record_the_world_kept_makes_the_same_acts_again() {
   assert_eq!(second.life.outcome(&id).unwrap().and_then(|one| one.as_ref().as_int()), Some(2));
 }
 
+/// The word of an extension of the tests, which defines a verb that a model calls.
+const HELLO: &str = "def hello(name: str) -> str:\n  return f'hi {name}'\n";
+
 #[test]
-fn the_life_plays_the_words_of_the_extensions_on_the_root_as_the_world() {
-  let mut lived = Lived::new("plays", &[], vec![]).unwrap();
+fn the_words_of_the_extensions_run_in_the_module_of_the_engine_and_no_chain_plays_them() {
+  let mut lived = Lived::playing("words", &[], vec![], vec![HELLO.to_owned()], vec![]).unwrap();
   let root = lived.root();
-  assert_eq!(lived.program(&root), builtin());
-  assert_eq!(lived.rungs(&root), vec![("world".to_owned(), String::new()); 3]);
-  assert_eq!(lived.life.get("rung1").unwrap().by(), "world");
+  assert_eq!(lived.program(&root), Vec::<String>::new());
+  assert_eq!(lived.rungs(&root), vec![]);
+  let got = lived.life.verb("hello", vec![Object::string("root")], vec![]).unwrap();
+  assert_eq!(got.as_ref().as_str(), Some("hi root"));
+  let two = lived.life.chain("two", "", None, "").unwrap().id().to_owned();
+  assert_eq!(lived.program(&two), Vec::<String>::new());
+  let got = block_on(lived.life.rung("close(hello('two'))", "", "", &two).unwrap()).unwrap();
+  assert_eq!(got.as_ref().as_str(), Some("hi two"));
 }
 
 #[test]
-fn the_life_plays_the_words_on_a_chain_born_without_a_source() {
-  let mut lived = Lived::new("births", &[], vec![]).unwrap();
-  let two = block_on(async { lived.life.chain("two", "", None, "").unwrap().id().to_owned() });
-  assert_eq!(lived.program(&two), builtin());
-  assert!(lived.rungs(&two).iter().all(|(by, retells)| by == "world" && retells.is_empty()));
+fn the_gate_reads_a_word_after_the_words_of_the_extensions() {
+  let words = &["close(hello('m'))", "close('none')"];
+  let mut lived = Lived::playing("gated", words, vec![], vec![HELLO.to_owned()], vec![]).unwrap();
+  let root = lived.root();
+  let got = block_on(lived.life.prompt("str", "greet", "", &root).unwrap()).unwrap();
+  assert_eq!(got.as_ref().as_str(), Some("hi m"));
+  let mut bare = Lived::playing("ungated", words, vec![], vec![], vec![]).unwrap();
+  let root = bare.root();
+  let got = block_on(bare.life.prompt("str", "greet", "", &root).unwrap()).unwrap();
+  assert_eq!(got.as_ref().as_str(), Some("none"));
+  assert!(bare.read.borrow()[1].contains("refused"), "{}", bare.read.borrow()[1]);
 }
 
 #[test]
-fn a_chain_with_a_source_is_played_no_word_of_its_own() {
-  let mut lived = Lived::new("sources", &[], vec![]).unwrap();
-  let root = lived.root();
-  let twin = lived.life.chain("twin", &root, None, "").unwrap().id().to_owned();
-  block_on(lived.life.drive()).unwrap();
-  assert_eq!(lived.program(&twin), builtin());
-  let rungs = lived.rungs(&twin);
-  assert_eq!(rungs.len(), 3);
-  assert!(
-    rungs.iter().all(|(by, retells)| by == &twin && retells.starts_with("rung")),
-    "{rungs:?}"
+fn a_later_life_with_the_same_words_makes_the_same_rungs_again() {
+  let mut first =
+    Lived::playing("again", &["close(hello('m'))"], vec![], vec![HELLO.to_owned()], vec![])
+      .unwrap();
+  let root = first.root();
+  let id = first.life.prompt("str", "greet", "", &root).unwrap().id().to_owned();
+  first.settled(&id);
+  let kept = first.kept.borrow().clone();
+  let mut second = Lived::playing("again", &[], kept, vec![HELLO.to_owned()], vec![]).unwrap();
+  assert!(second.life.raised().is_none(), "{:?}", second.life.raised());
+  assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
+  assert_eq!(
+    second.life.outcome(&id).unwrap().and_then(|one| one.as_ref().as_str().map(str::to_owned)),
+    Some("hi m".to_owned())
   );
 }
 
 #[test]
-fn a_later_life_plays_only_the_words_its_record_lacks() {
-  let first = Lived::new("later", &[], vec![]).unwrap();
+fn a_life_pins_its_words_and_a_later_life_runs_the_words_its_record_pins() {
+  let mut first =
+    Lived::playing("pins", &["close(hello('m'))"], vec![], vec![HELLO.to_owned()], vec![]).unwrap();
+  assert_eq!(first.life.words(), [HELLO.to_owned()]);
   let root = first.root();
+  let id = first.life.prompt("str", "greet", "", &root).unwrap().id().to_owned();
+  first.settled(&id);
   let kept = first.kept.borrow().clone();
-  let mut second = Lived::new("later", &[], kept.clone()).unwrap();
-  assert_eq!(second.rungs(&root).len(), 3);
-  let mut more = builtin();
-  more.push("extra = 1".to_owned());
-  let mut third = Lived::playing("later", &[], kept, more.clone(), vec![]).unwrap();
-  assert_eq!(third.program(&root), more);
-  assert_eq!(third.rungs(&root).len(), 4);
+  assert_eq!(crate::extension::pinned(&kept), Some(vec![HELLO.to_owned()]));
+  let mut second = Lived::playing("pins", &[], kept.clone(), vec![], vec![]).unwrap();
+  assert!(second.life.raised().is_none(), "{:?}", second.life.raised());
+  assert_eq!(second.life.words(), [HELLO.to_owned()]);
+  let got = second.life.verb("hello", vec![Object::string("again")], vec![]).unwrap();
+  assert_eq!(got.as_ref().as_str(), Some("hi again"));
+  let third = Lived::playing("pins", &[], kept, vec!["other = 1\n".to_owned()], vec![]).unwrap();
+  assert_eq!(third.life.words(), [HELLO.to_owned()]);
+  assert_eq!(
+    third
+      .kept
+      .borrow()
+      .iter()
+      .filter(|one| crate::extension::pinned(&[(*one).clone()]).is_some())
+      .count(),
+    0,
+    "a life whose record pins words pins none again"
+  );
 }
 
 #[test]
-fn a_life_opened_with_no_words_plays_nothing() {
-  let mut lived = Lived::playing("nothing", &[], vec![], vec![], vec![]).unwrap();
+fn a_life_opened_with_no_life_word_plays_nothing() {
+  let mut lived = Lived::new("nothing", &[], vec![]).unwrap();
   let root = lived.root();
   assert_eq!(lived.program(&root), Vec::<String>::new());
   assert_eq!(lived.rungs(&root), vec![]);
 }
 
 #[test]
-fn the_life_plays_the_life_words_in_every_life_after_the_words() {
+fn the_life_plays_the_life_words_as_the_world_in_every_life_on_each_chain_without_a_source() {
   let lives = vec!["seen = 1".to_owned()];
-  let first = Lived::playing("lives", &[], vec![], builtin(), lives.clone()).unwrap();
+  let mut first = Lived::playing("lives", &[], vec![], vec![], lives.clone()).unwrap();
   let root = first.root();
+  assert_eq!(first.program(&root), ["seen = 1"]);
+  assert_eq!(first.rungs(&root), vec![("world".to_owned(), String::new())]);
   let kept = first.kept.borrow().clone();
-  let mut first = first;
-  assert_eq!(first.program(&root)[3..], ["seen = 1"]);
-  let mut second = Lived::playing("lives", &[], kept, builtin(), lives).unwrap();
-  assert_eq!(second.program(&root)[3..], ["seen = 1", "seen = 1"]);
+  let mut second = Lived::playing("lives", &[], kept, vec![], lives).unwrap();
+  assert_eq!(second.program(&root), ["seen = 1", "seen = 1"]);
   let two = second.life.chain("two", "", None, "").unwrap().id().to_owned();
-  assert_eq!(second.program(&two)[3..], ["seen = 1"]);
+  assert_eq!(second.program(&two), ["seen = 1"]);
+  let twin = second.life.chain("twin", &two, None, "").unwrap().id().to_owned();
+  block_on(second.life.drive()).unwrap();
+  let rungs = second.rungs(&twin);
+  assert!(
+    rungs.iter().all(|(by, retells)| by == &twin && retells.starts_with("rung")),
+    "{rungs:?}"
+  );
+  assert_eq!(rungs.len(), 1, "a chain with a source plays no life word of its own");
 }
 
 /// A value of json as the sandbox takes it: plain data as itself.
@@ -676,7 +710,7 @@ fn json(value: &serde_json::Value) -> Object {
 }
 
 #[test]
-fn a_record_of_0_1_0_opens_and_the_life_plays_its_words_after() {
+fn a_record_of_0_1_0_opens_though_it_answers_a_read_and_a_write_with_a_text() {
   let text = include_str!("../test/outside/record-0.1.0.jsonl");
   let record: Vec<Object> = text
     .lines()

@@ -322,6 +322,12 @@ def playing(world: Ear, engine: Names) -> Ear:
     a = yield said
 
 
+def pinning(engine: Names, root: str, words: list[str]) -> None:
+  """The words the life runs, said once as the World about the root, which the record keeps, so a later life on the
+  record runs the same words."""
+  verb(engine, "send")("extensions", root, words, by=str(engine["WORLD"]))
+
+
 def played(engine: Names, lives: list[str]) -> None:
   """The life words, played as the World on every chain without a source once boot stands on the record, and on each
   such chain at its birth from then on."""

@@ -348,7 +348,8 @@ impl Opening {
   }
 
   /// The words of the extensions, which the module of the engine runs after the engine, so every chain binds their
-  /// names from its birth, and the gate reads a word after them.
+  /// names from its birth, and the gate reads a word after them. A record that pins words gives its own instead, and
+  /// a life whose record pins none pins these, as the World, about the root.
   #[must_use]
   pub fn words(mut self, words: impl IntoIterator<Item = impl Into<String>>) -> Self {
     self.words.extend(words.into_iter().map(Into::into));
@@ -370,6 +371,9 @@ impl Opening {
   /// `boot` is given the Kernel of the crate and one generator for the World and for each ear.
   pub fn boot(self, record: impl IntoIterator<Item = Object>) -> Result<Life, Fault> {
     let Opening { mut world, ears, mut names, limits, words, lives } = self;
+    let record: Vec<Object> = record.into_iter().collect();
+    let pin = crate::extension::pinned(&record);
+    let words = pin.clone().unwrap_or(words);
     let voice = Voice::default();
     if let Worldly::Typed(world) = &mut world {
       world.opened(voice.clone());
@@ -405,13 +409,19 @@ impl Opening {
     let got = got.as_ref();
     let root = entry(&got, 0).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
     let raised = entry(&got, 1).and_then(Fault::of);
+    if raised.is_none() && pin.is_none() {
+      inner.run(
+        "pinning(__engine, __root, __words)",
+        vec![("__words", Object::list(words.iter().map(Object::string)))],
+      )?;
+    }
     if raised.is_none() && !lives.is_empty() {
       inner.run(
         "played(__engine, __lives)",
         vec![("__lives", Object::list(lives.into_iter().map(Object::string)))],
       )?;
     }
-    Ok(Life { held: inner, root, raised })
+    Ok(Life { held: inner, root, raised, words })
   }
 }
 
@@ -424,6 +434,7 @@ pub struct Life {
   held: Inner,
   root: String,
   raised: Option<Fault>,
+  words: Vec<String>,
 }
 
 impl Life {
@@ -466,6 +477,12 @@ impl Life {
   /// The root chain of the life, which is the first act of any record.
   pub fn root(&self) -> &str {
     &self.root
+  }
+
+  /// The words of the extensions the life runs after the engine: those its record pins, or else those it was
+  /// opened with, which it pinned.
+  pub fn words(&self) -> &[String] {
+    &self.words
   }
 
   /// What boot raised, if it raised: a drift, which breaks the journal while the life goes on with nothing kept,

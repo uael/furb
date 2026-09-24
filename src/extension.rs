@@ -35,7 +35,11 @@ use ruff_text_size::{Ranged, TextRange};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-use crate::value::Fault;
+use crate::{
+  Object,
+  life::WORLD,
+  value::{Fault, entry},
+};
 
 /// The package the engine and the extensions are imported from, whose imports a word leaves out.
 const PACKAGE: &str = "furb";
@@ -782,6 +786,24 @@ fn appended(text: &str, words: &[String]) -> String {
     out.push_str(one);
   }
   out
+}
+
+/// The kind of the fact by which the World says once the words a life runs, which the record keeps, so a later life
+/// on that record runs the same words whatever the configs say then.
+pub const PINNED: &str = "extensions";
+
+/// The words a record pins: the words of the first fact of the kind [`PINNED`] that the World said, and none when
+/// the record holds no such fact.
+pub fn pinned(record: &[Object]) -> Option<Vec<String>> {
+  record.iter().find_map(|one| {
+    let one = one.as_ref();
+    let fact = entry(&one, 0)?.items()?;
+    if fact.first()?.as_str()? != PINNED || fact.get(2)?.as_str()? != WORLD {
+      return None;
+    }
+    let words = fact.get(3)?.items()?;
+    Some(words.iter().filter_map(|word| word.as_str().map(str::to_owned)).collect())
+  })
 }
 
 /// The source of the engine that a life runs, and that the gate reads a word on: the engine, then the words of the
