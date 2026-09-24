@@ -164,16 +164,19 @@ async def test_the_gate_accepts_a_builtin_exactly_when_a_rung_runs_it() -> None:
   the builtins of python exactly when a rung runs a word that names it. A refused word never runs, so a refused name
   is run as the Kernel runs a word, in the globals of the chain."""
   root = engine.boot((), world=Sand(stands=STANDS).hears())
-  refused_yet_ran, accepted_yet_unbound = [], []
-  for name in sorted(vars(builtins)):
-    word = f"got = {name}"
-    if engine.gate(word, on=root):
-      probe = f"ran = True\ntry:\n  eval(compile({word!r}, 'probe', 'exec'), dict(globals()))\nexcept NameError:\n  ran = False\nclose(ran)"
-      if await engine.rung(probe, on=root):
-        refused_yet_ran.append(name)
-    else:
-      try:
-        await engine.rung(word, on=root)
-      except NameError:
-        accepted_yet_unbound.append(name)
+  names = sorted(vars(builtins))
+  # Each new sheet costs the checker tens of milliseconds, and a sheet for each name outlasts the timeout of a test
+  # on a slow machine. So one word holds every name, one on each line, and the line of a finding is the name it
+  # refuses.
+  found = engine.gate("\n".join(f"got = {name}" for name in names), on=root)
+  refused = sorted({names[int(one.split(":")[0].removeprefix("line ")) - 1] for one in found})
+  probe = (
+    f"ran = []\nfor name in {refused!r}:\n  try:\n    eval(compile('got = ' + name, 'probe', 'exec'), dict(globals()))\n"
+    "    ran.append(name)\n  except NameError:\n    pass\nclose(ran)"
+  )
+  tries = "".join(
+    f"try:\n  got = {name}\nexcept NameError:\n  unbound.append({name!r})\n" for name in names if name not in refused
+  )
+  refused_yet_ran = await engine.rung(probe, on=root)
+  accepted_yet_unbound = await engine.rung(f"unbound = []\n{tries}close(unbound)", on=root)
   assert (refused_yet_ran, accepted_yet_unbound) == ([], [])
