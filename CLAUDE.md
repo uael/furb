@@ -5,19 +5,18 @@ that boot is given, each a generator under a name: the World, the Kernel and the
 contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/CLAUDE.md` holds the technical names of
 the engine and the laws that no test can hold. `script/CLAUDE.md` says how to run the DeepSWE rig.
 
-The builtin extensions, `files`, `bash` and `grant`, are definitions of `engine.py`. A host that turns one off cuts
-its definitions out of the system prompt, and the engine that runs keeps them. The word of any other extension runs
-in the module of the engine after the engine, before boot, and the system prompt reads it after the engine. The
-official extensions live in `extensions/`, each with its manifest, its contract and its suite in
-`extensions/<name>/test/`. The crate reads the configs, fetches, orders and makes the words of the extensions, the
-engine source with the words and the system prompt in `src/extension.rs`. `docs/extensions.md` is the guide of the
+The system prompt of a life is the text the life runs: the engine less the definitions of each builtin extension,
+`files`, `bash` or `grant`, that a config turns off, then the word of each other extension, which runs in the module
+of the engine after the engine, before boot. The official extensions live in `extensions/`, each with its manifest,
+its contract and its suite in `extensions/<name>/test/`. The crate reads the configs, fetches, orders and makes the
+words of the extensions and the system prompt in `src/extension.rs`. `docs/extensions.md` is the guide of the
 extensions.
 
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
 
-- `src/lib.rs` says what the crate gives: `Life`, whose methods are the verbs of the contract, which runs the words of
-  the extensions in the module of the engine, pins them in its record and plays their life words, `World`, the one
+- `src/lib.rs` says what the crate gives: `Life`, whose methods are the verbs of the contract, which runs its system
+  prompt, pins its builtins and its words in its record and plays the life words, `World`, the one
   trait that a host writes, and `extension`, the extension API that every host shares, which napi and pyo3 give too.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
 - The Kernel and the gate are the crate's. The gate is the type checker of monty. It reads a word on the sheet of

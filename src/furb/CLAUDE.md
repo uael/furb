@@ -109,16 +109,16 @@ Each name has one meaning, which the contract's sentences use as given here.
 - paused: the state of an act while a pause over it stands with no wake after it.
 - grant: an act that puts a ceiling on a chain: dollars, a share of the window, or both.
 - ledger: what the grant holds: the dollars of the answers since it was made and the share the last one filled.
-- builtin: files, bash or grant: definitions of engine.py that a host takes unless a config turns them off; a host
-  that turns one off cuts its definitions out of the system prompt, and the engine that runs keeps them.
+- builtin: files, bash or grant: definitions of engine.py that a life takes unless a config turns them off; a life
+  that does not take one runs the engine less its definitions.
 - extension: what a host adds to the engine: a word, a life word, and parts for a World and for a TUI that the host
   holds; the builtins are extensions too.
 - word of an extension: python that the module of the engine runs after the engine, before boot, so every chain
   binds its names from its birth, and that the system prompt reads after the engine; the word of a module is the
   module less each top-level import from furb.
 - life word: a word that a host plays as a rung, as the World, in every life on each chain without a source.
-- pin: the fact of the World that says the words of the extensions a life runs, which the record keeps, so a later
-  life on that record runs the same words.
+- pin: the fact of the World that says the builtins a life takes and the words of the extensions it runs, which the
+  record keeps, so a later life on that record runs the same system prompt.
 - journal: the ear of the life that hears everything and says a keep for each entry of the record.
 - record: the entries the journal keeps, in the order they were said.
 - entry: one line of the record: the fact, and for a query of a run its answer beside.
@@ -132,8 +132,9 @@ Each name has one meaning, which the contract's sentences use as given here.
 
 - A model does everything with the python that the model writes.
 - The engine hosts itself.
-- The system prompt a model reads is the engine, minified in layout alone, less the definitions of each builtin that a
-  config turns off, then the word of each extension the life runs, and nothing else.
+- The system prompt a model reads is the text its life runs: the engine, minified in layout alone, less the
+  definitions of each builtin the life does not take, then the word of each extension the life runs, and nothing
+  else.
 - The engine phrases everything that a model reads, as python, and the World renders nothing.
 - Everything that the file defines is public, and what is in engine.py is the API, the same for the model and for the
   operator.
@@ -158,8 +159,8 @@ Each name has one meaning, which the contract's sentences use as given here.
   annotation but what ty and a dataclass need.
 - engine.py has no private names, and a name one thing alone uses lives inside it.
 - Each technical name has one meaning.
-- A life runs the words its record pins, and pins its own when its record pins none, since a record is made again by
-  running its words.
+- A life runs the builtins and the words its record pins, and pins its own on an empty record, since a record is made
+  again by running its words.
 - ty check passes on engine.py.
 - There is one root per record, and one process at a time owns a record.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a

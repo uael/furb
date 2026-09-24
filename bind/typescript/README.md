@@ -182,12 +182,12 @@ host in TypeScript needs:
   parts, `world.ts`, `world.py` and `tui`. It throws with what failed. `builtinExtensions()` gives the builtins
   alone. `configDirectory()` and `cacheDirectory()` give the directories, which `process.env` names:
   `FURB_CONFIG_DIR` and `FURB_CACHE_DIR`, then the directories of XDG, of Windows, and of the home. `wordOf(source)`
-  gives the word of a python part, and `systemPrompt(engine, taken, words)` the system prompt of a life: the engine
-  less the definitions of each builtin that `taken` does not name, then the words.
-- `Life.boot(callback, names, record, words, lives)` runs the words in the module of the engine after the engine, or
-  the words the record pins, and pins them when the record pins none; `life.words` gives the words it runs. It plays
-  the life words as the World, on every chain without a source, once boot stands on its record and at the birth of
-  each such chain after. The supplied World and `boot` give them, and the World builds its system prompt from them.
+  gives the word of a python part.
+- `Life.boot(callback, names, record, {engine, taken, words, lives})` runs the system prompt of the life: the engine,
+  less the definitions of each builtin it does not take, then the words, or what the record pins; it pins them on an
+  empty record. `life.system` gives that text. The life plays the life words as the World, on every chain without a
+  source, once boot stands on its record and at the birth of each such chain after. The supplied World and `boot`
+  give the engine as the build minified it, and the extensions, and the World sends `life.system` to each model.
 - `World.load(options)` resolves the extensions of the directory when the options name none, imports the part for a
   World of each one, and gives the World. `new World(options)` takes the `extensions` and the `parts` it is given,
   and the builtins when it is given none. It refuses an extension whose part for a World it does not hold.

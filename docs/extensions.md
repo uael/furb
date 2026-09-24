@@ -24,11 +24,12 @@ The builtins are `files` (read, write, cd, cwd, Text and the shows), `bash` (bas
 They are definitions of `engine.py` itself, so the engine and its contract say what they do. Each has its parts for
 a World and for the TUI in each host. They are on unless a config turns them off.
 
-A host that turns a builtin off cuts its definitions out of the system prompt: the crate holds the top-level names
-each builtin defines, and cuts each top-level statement of the minified engine that binds only such names. The
-engine that runs stays whole. The code of the engine that only answers a verb of a builtin, as the chain answers a
-read of the door of a prompt, stays in the prompt, and does nothing while no verb asks it. The World holds no part of
-a builtin that is off, so it refuses the work of that builtin if a word asks for it.
+A host that turns a builtin off cuts its definitions out of the system prompt, which is the text the life runs: the
+crate holds the top-level names each builtin defines, and cuts each top-level statement of the engine that binds only
+such names. No statement that stays reads a name that goes, as a test of the crate proves for each set of builtins a
+config may take, so the gate refuses a word that names a builtin that is off. The code of the engine that only
+answers a verb of a builtin, as the chain answers a read of the door of a prompt, stays, and does nothing while no
+verb asks it. The World holds no part of a builtin that is off.
 
 `bash` requires `files`. A read and a write cross to the World and back as plain data, a path and a content, and
 the engine makes the `Text`, so no class of the engine crosses to a World.
@@ -78,7 +79,7 @@ furb fetches an extension once, the first time a config names it:
   itself. When the package has dependencies, furb runs `npm install --omit=dev --ignore-scripts` there.
 
 To fetch every extension again, run `furb update` or `/extensions update` in the TUI. A new session takes the
-change; a session that exists runs the words it pinned.
+change; a session that exists runs what its record pins.
 
 ## The manifest
 
@@ -125,17 +126,18 @@ reads as a python file that a person wrote. A word of form (a) has no such impor
 **Where it runs.** The module of the engine runs each word after the engine, in the order of the extensions, before
 boot. Every chain copies the module of the engine at its birth, so every chain binds the names of the words, and a
 later rung may bind any of them again, as it may bind a name of the engine. The gate reads a word of a model after
-the engine and the words, so it refuses a name that neither binds. A word defines; it asks the bus only from a verb,
+the system prompt, so it refuses a name that the prompt does not bind. A word defines; it asks the bus only from a verb,
 since no life lives while it runs.
 
 **What a word may use.** A word speaks through the bus: `ask` for a query, `act` for an act, `send` for a fact,
 `tell` for notes. The World answers a question of an extension with plain data, and the verb makes its own values of
 it.
 
-**The pin.** A life says once, as the World, the words it runs, in a fact of the kind `extensions` about the root,
-which the record keeps. A later life on that record runs the words its record pins, whatever the configs say then,
-since a record is made again by running its words. A life with no word pins nothing. The crate holds this rule, so
-every host runs the same words.
+**The pin.** A life says once, as the World, the builtins it takes and the words it runs, in a fact of the kind
+`extensions` about the root, which the record keeps. A later life on that record runs the same system prompt,
+whatever the configs say then, since a record is made again by running its words. A life that takes every builtin
+and runs no word pins nothing, and a life on a record that pins nothing takes every builtin and runs no word. The
+crate holds this rule, so every host runs the same text.
 
 **The life word.** The host plays each life word as a rung, as the World, on every chain without a source, once
 the life stands on its record, and at the birth of each such chain after. A chain with a source runs the rungs of
@@ -149,9 +151,12 @@ both engines.
 
 ## The system prompt
 
-The system prompt of a life is the engine, minified in layout alone, less the definitions of each builtin that a
-config turns off, then the word of each extension the life runs, each after an empty line. The crate makes it for
-every host: `system_prompt` in python, `systemPrompt` in TypeScript.
+The system prompt of a life is the text the life runs: the engine, minified in layout alone, less the definitions of
+each builtin that a config turns off, then the word of each extension the life runs, each after an empty line. A host
+gives the life the engine and the builtins it takes. The life runs that text, the gate reads a word after it, and
+`life.system` gives it to the host, which sends it to each model. The python host runs `engine.py` less the names
+that each builtin it does not take defines, then the words, which is the same program; `system_prompt` gives it the
+text.
 
 ## The part for a World
 
@@ -249,7 +254,8 @@ replays each query from the record by its name, so a read and a write of that re
 - **word of an extension**: the python that the module of the engine runs after the engine, before boot.
 - **word of a module**: the module less its imports of furb, with its line ends made LF.
 - **life word**: a word of the manifest that the host plays as a rung in every life.
-- **pin**: the fact `extensions` of the World, which says the words a life runs, so a later life runs the same.
+- **pin**: the fact `extensions` of the World, which says the builtins a life takes and the words it runs, so a later
+  life runs the same.
 - **config**: `config.json` of the config directory, or `.furb/config.json` of a project.
 - **cache**: where furb keeps the extensions it fetched.
 

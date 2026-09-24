@@ -17,12 +17,12 @@ It gives the extension API of the crate too, the same for every host:
   project, fetches into the cache once, and again on a refresh, and raises `Refused` with what failed.
 - `builtin_extensions()` gives the builtins `files`, `bash` and `grant`, and `places()` gives the config directory
   and the cache directory.
-- `word_of(source)` gives the word of a python part, `engine_source(words)` the engine with the words after it,
-  `system_prompt(engine, taken, words)` the system prompt of a life, and `pinned_words(record)` the words a record
-  pins.
-- `Life(ears, names, record, words, lives)` runs the words in the module of the engine, or the words the record pins,
-  and plays the life words, and `gate(sheet, engine)` reads a sheet against the engine with its words.
+- `word_of(source)` gives the word of a python part, `system_prompt(engine, taken, words)` the system prompt of a life,
+  which is the text the life runs, `cut_names(taken)` the names it cuts, and `pinned(record, taken, words)` what a
+  life on a record takes and runs, and whether it pins them.
+- `Life(ears, names, record, words, lives, taken=, engine=)` runs its system prompt, pins, and plays the life words,
+  and `life.system` gives that text. `gate(sheet, engine)` reads a sheet against a system prompt.
 
-The command line of furb runs the words of the extensions in the module of the engine with these, pins them, plays
-the life words, and holds the parts for a World of the builtins. [The guide of the
+The command line of furb runs the system prompt of the life in the module of the engine with these, pins it, plays
+the life words, and holds the parts for a World of the builtins it takes. [The guide of the
 extensions](../../docs/extensions.md) says more.

@@ -57,9 +57,8 @@ bun install && bun run build     # The TypeScript workspace and the N-API packag
 2. The model answers with Python. That answer is a word, and a rung runs it.
 3. The gate, a type checker, reads the word first. A word that it refuses does not run, and the model reads the
    reason in its next turn.
-4. The Kernel runs the word in the module of its chain. Each call such as `prompt` or `wait` makes an act, which
-   the World serves: the models, a wait, and the record. `read` and `bash` are definitions of the engine, the builtin
-   extensions, whose parts in the World serve the disk and the machine.
+4. The Kernel runs the word in the module of its chain. Each call such as `read`, `bash`, `prompt`, or `wait`
+   makes an act, which the World serves: the disk, the machine, the models, and the record.
 5. Each act says what it did as a fact. The chain folds its facts into turns, which are the Python that the model
    reads next.
 
@@ -73,7 +72,7 @@ the turns. The changes are the files that the life wrote.
 ```sh
 uv run pytest -q                                     # The suite on both engines, with coverage.
 uv run pytest -q test/test_hygiene.py                # The hygiene laws alone.
-uv run pytest -q test/bash/test_bash.py -k "timeout" # One file, or some tests of it.
+uv run pytest -q test/test_bash.py -k "timeout"      # One file, or some tests of it.
 uv run ruff format src test script extensions && uv run ruff check src test script extensions
 uv run ty check --error-on-warning                   # The type check, against the contracts.
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
