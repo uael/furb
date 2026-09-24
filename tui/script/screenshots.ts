@@ -60,12 +60,14 @@ const summary: Extension = {
   world: {},
   tui: resolve("tui/examples/project-summary/tui.ts"),
 };
+/** What every session of the gallery plays: the builtins and the example. */
+const played = [...builtinExtensions(), summary];
 /** A new demo session in the project that the conversation of the gallery is about. */
 async function demoSession(): Promise<Session> {
   const { life, world } = await openEngine({
     demo: true,
     cwd: await project("fieldnotes"),
-    extensions: [...builtinExtensions(), summary],
+    extensions: played,
   });
   const opened = new Session(life, world, true);
   await opened.refresh();
@@ -108,7 +110,7 @@ const followSelection = () =>
 async function mount(next: Session): Promise<void> {
   session = next;
   if (session.sessionName === basename(session.world.directory)) await session.command("/name Session 1");
-  library = new Workspaces(session.preferences, { demo: true });
+  library = new Workspaces(session.preferences, { demo: true, extensions: played });
   const group = await library.add(session.world.directory);
   const entry = library.adopt(session, group);
   await library.select(entry);
@@ -336,7 +338,7 @@ try {
   const archive = new Session(archived.life, archived.world, true, preferences);
   await archive.command("/name Archive");
   await archive.dispose();
-  library = new Workspaces(preferences, { demo: true });
+  library = new Workspaces(preferences, { demo: true, extensions: played });
   const first = await library.add(notes),
     second = await library.add(atlas);
   const main = await library.create(first, "Implementation");
