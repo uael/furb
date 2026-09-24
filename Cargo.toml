@@ -30,9 +30,9 @@ typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build", "dep:serde_json",
 # A revision of the fork and not a version, because the interpreter the engine
 # needs is not released. A revision and not a branch, so a build of today and a
 # build of next month read the same interpreter.
-monty = { git = "https://github.com/uael/monty", rev = "54604c02" }
-monty-type-checking = { git = "https://github.com/uael/monty", rev = "54604c02" }
-monty-types = { git = "https://github.com/uael/monty", rev = "54604c02" }
+monty = { git = "https://github.com/uael/monty", rev = "b70678d3" }
+monty-type-checking = { git = "https://github.com/uael/monty", rev = "b70678d3" }
+monty-types = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 pyo3 = { version = "0.29.2", features = ["generate-import-lib"], optional = true }
 napi = { version = "3", default-features = false, features = ["napi6", "serde-json", "dyn-symbols"], optional = true }
 napi-derive = { version = "3", optional = true }

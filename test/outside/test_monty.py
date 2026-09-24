@@ -3,10 +3,12 @@
 The suite proves the contract on both engines, sentence for sentence. What is proved here is the door itself: an
 ear of this interpreter that says a verb from its thread and is answered with what the verb raised, a show the
 engine made that an ear calls back from its thread, a class a word defined held as a type of this interpreter
-and its instances as objects of it, both ways, a map of the life read where it stands, and the Kernel of this
-interpreter refused, since the engine of monty holds its own.
+and its instances as objects of it, both ways, a map of the life read where it stands, the Kernel of this
+interpreter refused, since the engine of monty holds its own, and a gate that accepts a builtin or a name of a module
+exactly when the sandbox runs it.
 """
 
+import builtins
 from collections.abc import Generator
 
 import pytest
@@ -155,6 +157,33 @@ async def test_boot_refuses_a_kernel_or_a_gate_of_this_interpreter() -> None:
     engine.boot((), world=Sand(stands=STANDS).hears(), kernel=Py().kernel())
   with pytest.raises(Refused, match="gate hears: the engine of monty holds its Kernel and its gate"):
     engine.boot((), world=Sand(stands=STANDS).hears(), gate=Py().gating())
+
+
+async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_rung_runs_it() -> None:
+  """The gate reads a word against the typeshed of the sandbox and a chain that is a module, so it accepts a name of
+  the builtins of python, or a name ty gives every module, exactly when a rung runs a word that names it. A refused
+  word never runs, so a refused name is run as the Kernel runs a word, in the globals of the chain."""
+  root = engine.boot((), world=Sand(stands=STANDS).hears())
+  # The names ty gives every module are those of module_type_implicit_global_symbol in ty_python_semantic: the names
+  # that the typeshed of the sandbox declares in the class types.ModuleType, but __dict__, __init__ and __getattr__,
+  # and __builtins__, __debug__ and __warningregistry__, which ty adds itself.
+  module = {"__name__", "__file__", "__loader__", "__package__", "__path__", "__spec__", "__doc__", "__annotations__"}
+  module |= {"__annotate__", "__builtins__", "__debug__", "__warningregistry__"}
+  names = sorted({*vars(builtins), *module})
+  # Every rung grows the program that each later sheet reads again, so a sheet and a rung for each name cost
+  # seconds. One word holds every name, one on each line, and the line of a finding is the name it refuses.
+  found = engine.gate("\n".join(f"got = {name}" for name in names), on=root)
+  refused = sorted({names[int(one.split(":")[0].removeprefix("line ")) - 1] for one in found})
+  probe = (
+    f"ran = []\nfor name in {refused!r}:\n  try:\n    eval(compile('got = ' + name, 'probe', 'exec'), dict(globals()))\n"
+    "    ran.append(name)\n  except NameError:\n    pass\nclose(ran)"
+  )
+  tries = "".join(
+    f"try:\n  got = {name}\nexcept NameError:\n  unbound.append({name!r})\n" for name in names if name not in refused
+  )
+  refused_yet_ran = await engine.rung(probe, on=root)
+  accepted_yet_unbound = await engine.rung(f"unbound = []\n{tries}close(unbound)", on=root)
+  assert (refused_yet_ran, accepted_yet_unbound) == ([], [])
 
 
 async def test_the_gate_of_the_sandbox_finds_what_the_run_finds_of_a_name_the_program_bound_again() -> None:

@@ -76,25 +76,26 @@ mod tests {
 
   use super::*;
   use crate::{
-    SHEET as SOURCE,
+    PREAMBLE, SHEET as SOURCE,
     sand::Sand,
     value::{Object, entry},
   };
 
   /// The sheet of one word after a program, and how many lines stand above the word, as `furb.sheet` writes it in
-  /// the sandbox from the module of the engine.
+  /// the sandbox from the module of the engine, made as a life makes it.
   fn sheet(program: &[&str], word: &str) -> (String, usize) {
-    let code = "__engine = {}\nexec(__source, __engine)\n__sheet = {}\nexec(__sheet_source, __sheet)\n__sheet['sheet'](__engine, __program, __word)";
+    let code = "__engine = module(__source, {**MODULE})\n__sheet = module(__sheet_source, {})\n__sheet['sheet'](__engine, __program, __word)";
     let mut named = NamedValues::new();
     named.push("__source", Object::string(ENGINE));
     named.push("__sheet_source", Object::string(SOURCE));
     named.push("__program", Object::list(program.iter().map(|one| Object::string(*one))));
     named.push("__word", Object::string(word));
-    let got = Sand::default()
-      .run(code, named, &mut |_, name, _| {
-        Err(Fault::refused(format!("the sheet calls no host, and it called {name}")))
-      })
-      .expect("furb.sheet writes the sheet");
+    let mut host = |_, name: &str, _| -> Result<Object, Fault> {
+      Err(Fault::refused(format!("the sheet calls no host, and it called {name}")))
+    };
+    let mut sand = Sand::default();
+    sand.run(PREAMBLE, NamedValues::new(), &mut host).expect("the preamble runs");
+    let got = sand.run(code, named, &mut host).expect("furb.sheet writes the sheet");
     let got = got.as_ref();
     let text = entry(&got, 0).and_then(|one| one.as_str()).expect("a sheet is a text").to_owned();
     let above =
@@ -169,6 +170,26 @@ mod tests {
   fn a_warning_refuses_no_word() {
     // A name that may be unbound is a warning of the checker, and a word that reads it is no word the gate refuses.
     assert_eq!(said(&[], "if chance() > 0.5:\n  maybe = 1\nclose(maybe)"), vec![]);
+  }
+
+  #[test]
+  fn a_builtin_the_sandbox_runs_is_accepted_and_one_it_does_not_run_is_refused() {
+    for word in [
+      "close(hasattr(1, 'a'))",
+      "close(getattr(1, 'a', None))",
+      "setattr(Exit, 'a', 1)",
+      "close(open)",
+    ] {
+      assert_eq!(said(&[], word), vec![], "{word}");
+    }
+    for word in
+      ["close(vars())", "close(dir())", "close(__import__('os'))", "close(exit)", "close(IOError)"]
+    {
+      let found = said(&[], word);
+      assert_eq!(found.len(), 1, "{word}: {found:?}");
+      assert_eq!(found[0].0, 1);
+      assert!(found[0].1.contains("unresolved-reference"), "{found:?}");
+    }
   }
 
   #[test]

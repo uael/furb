@@ -49,7 +49,7 @@ def asks(calls: list[tuple]) -> list[tuple]:
 
 async def first(yard: Path, record: Path) -> None:
   """The first life: the model reads the file and answers with the number of the lines it holds."""
-  world, root, held = lived(record, yard, TO)
+  world, root, held = lived(record, yard, TO, keeps=True)
   assert held == [], "the first life is opened on no record"
   engine.grant(usd=CEILING, on=root)
   try:
@@ -73,7 +73,7 @@ async def first(yard: Path, record: Path) -> None:
 
 async def second(yard: Path, record: Path) -> None:
   """The second life, on the record of the first: it asks no model, since the record answers the prompt."""
-  world, root, held = lived(record, yard, TO)
+  world, root, held = lived(record, yard, TO, keeps=True)
   name = again(held, root, int, MESSAGE, TO)
   assert name, "the record holds no prompt of the operator"
   try:

@@ -25,10 +25,14 @@ def said(word: str, program: tuple[str, ...] = ()) -> list[str]:
 
 def test_the_sheet_binds_every_name_of_the_engine_and_lays_each_word_in_a_try_of_its_own() -> None:
   """The module of a chain holds every name of the engine, so the sheet imports the engine under a name no word
-  knows, binds each name of it, then the two names the chain binds, then each word of the program in a try of its
-  own, then the word, and ty reads a word in the vocabulary it will have when it runs."""
+  knows, declares each name ty gives a module that the chain does not hold, binds each name of the engine, then the
+  two names the chain binds, then each word of the program in a try of its own, then the word, and ty reads a word
+  in the vocabulary it will have when it runs."""
   laid, above = sheet.sheet(ENGINE, ["k = 1", "j = 2"], "close(k)")
-  assert laid.startswith(f"import {sheet.MODULE}\nasync def __body():\n  re = {sheet.MODULE}.re\n")
+  unbound = "".join(
+    f"  {name}: object\n" for name in ("__path__", "__annotations__", "__annotate__", "__warningregistry__")
+  )
+  assert laid.startswith(f"import {sheet.MODULE}\nasync def __body():\n{unbound}  re = {sheet.MODULE}.re\n")
   assert f"  read = {sheet.MODULE}.read\n" in laid
   assert "__builtins__" not in laid
   assert laid.endswith(

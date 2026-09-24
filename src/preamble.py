@@ -72,6 +72,17 @@ if TYPE_CHECKING:
 
 IS = "is"
 """IS marks a map that is an instance of a class of the engine, by the name of that class."""
+MODULE: dict[str, object] = {
+  "__debug__": True,
+  "__doc__": None,
+  "__package__": "furb",
+  "__spec__": None,
+  "__loader__": None,
+}
+"""MODULE is what the module of the engine holds before the engine runs: the names python gives that module, so a
+word reads them in a chain as it reads them in python, and as the gate reads them. No loader made the module here, so
+it has no spec and no loader. Python binds `__debug__` among its builtins, and the sandbox binds it in its main module
+alone."""
 MADE: dict[int, object] = {}
 """MADE holds every callable the engine made and every class a word defined that crossed to the host, by its
 handle, which is its identity, for as long as the host holds the handle: the host says when it forgot one, and it
@@ -405,9 +416,8 @@ def kernel(names: Names) -> Ear:
         held.dropped(about)
 
 
-def module(source: str) -> dict[str, object]:
-  """One module of its own, from its source: a namespace nothing else shares."""
-  held: dict[str, object] = {}
+def module(source: str, held: dict[str, object]) -> dict[str, object]:
+  """One module of its own, from its source, run in what it holds before: a namespace nothing else shares."""
   exec(source, held)  # noqa: S102
   return held
 

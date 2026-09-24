@@ -125,7 +125,7 @@ async def watching(root: str, record: Path, name: str) -> None:
 
 async def first(yard: Path, record: Path) -> list[object]:
   """The life that does the work, and everything the play holds it to when the work is done."""
-  _world, root, held = lived(record, yard, TO)
+  _world, root, held = lived(record, yard, TO, keeps=True)
   assert held == [], "the first life is opened on no record"
   engine.grant(usd=CEILING, on=root)
   waits = engine.prompt(list, MESSAGE, TO, on=root)
@@ -178,7 +178,7 @@ async def first(yard: Path, record: Path) -> list[object]:
 
 async def second(yard: Path, record: Path, got: list[object]) -> float:
   """The life on the record of the first: it asks no model for what the record holds, and takes one prompt more."""
-  world, root, held = lived(record, yard, TO)
+  world, root, held = lived(record, yard, TO, keeps=True)
   await settle()
   asks = [one for one in world.calls if one[0] == "ask"]
   assert asks == [], f"the resumed life asked a model {len(asks)} times for what its record holds"

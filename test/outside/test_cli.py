@@ -26,7 +26,7 @@ async def answered(yard: Path, message: str = "say a word") -> Path:
   """A record that holds one prompt of the operator and the answer the operator gave it at its terminal."""
   record = held(yard)
   with speaking("7\n"):
-    world, root, said = lived(record, yard, "opus/low")
+    world, root, said = lived(record, yard, "opus/low", keeps=True)
     assert said == []
     waits = engine.prompt(int, message, OPERATOR, on=root)
     for _ in range(2000):
@@ -63,7 +63,7 @@ def test_one_line_to_the_operator(capsys: pytest.CaptureFixture[str]) -> None:
 async def test_a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it(yard: Path) -> None:
   """One command is one life: it is opened from the record it is given, and what that record holds it is given."""
   record = await answered(yard)
-  world, root, said = lived(record, yard, "opus/low")
+  world, root, said = lived(record, yard, "opus/low", keeps=True)
   await settle()
   assert root == "chain1"
   assert world.directory == str(yard)
@@ -75,7 +75,7 @@ async def test_a_prompt_the_record_already_holds_is_taken_up_and_never_asked_aga
   """A pin: the engine matches nothing the operator says again, so a life stood up on its own record would open a
   second prompt beside the one that record stands on, and ask a model for what it was answered once."""
   record = await answered(yard)
-  _world, root, said = lived(record, yard, "opus/low")
+  _world, root, said = lived(record, yard, "opus/low", keeps=True)
   name = again(said, root, int, "say a word", OPERATOR)
   assert name == "prompt1"
   assert await Act(name) == 7
@@ -110,6 +110,24 @@ async def test_the_turns_of_a_root_are_printed_as_a_model_read_them(
   assert said.startswith("[user] ")
   assert "#chain1 root\n" in said
   assert "\n\n#prompt1 say a word\nprompt1: Act[int] = Act('prompt1')\n\n#prompt1 closed 7" in said
+
+
+async def test_the_turns_of_a_record_run_every_word_again_and_keep_nothing(
+  yard: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+  """A life that only reads a record keeps nothing, since a World given the record it reads appends to it, and it
+  stands whole when boot returns, since the Kernel runs every word of the record again."""
+  record = held(yard)
+  assert await running(record, yard, "k = 3") is None
+  assert await running(record, yard, "close(k + 1)") == 4
+  before = record.read_bytes()
+  elsewhere = yard / "elsewhere"
+  elsewhere.mkdir()
+  capsys.readouterr()
+  await turned(record, elsewhere)
+  assert record.read_bytes() == before
+  said = capsys.readouterr().out
+  assert "#rung2 closed 4" in said
 
 
 def test_the_console_script_runs_one_command_of_the_operator(

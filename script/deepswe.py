@@ -41,7 +41,7 @@ from tempfile import gettempdir, mkdtemp
 from furb import engine
 from furb.cli import lived, say
 from furb.provider.claude import BIN, cool
-from furb.world import Live, kept
+from furb.world import kept
 
 ROOT = Path(__file__).resolve().parent.parent
 """ROOT is the root of this repository, which the archive of a run stands under."""
@@ -544,7 +544,7 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
   what it is and what it may say is the engine, which is its system prompt.
   """
   record = run_dir / "record.jsonl"
-  world, root, held = lived(record, app, args.to)
+  world, root, held = lived(record, app, args.to, keeps=True)
   del world
   say(f"[deepswe] life on {app}, root {root}, {len(held)} facts kept")
   if args.ceiling:
@@ -642,10 +642,8 @@ def turns(args: argparse.Namespace) -> int:
     raise SystemExit(1)
 
   async def folded() -> None:
-    """The life again on what the record kept, given room to say every word of it back before it is read."""
-    root = engine.boot(kept(record), world=Live(str(WORK / args.task / "app"), None, args.to).hears())
-    for _ in range(400):
-      await asyncio.sleep(0)
+    """The life again on what the record kept, booted as the run was, which stands whole when boot returns."""
+    root = lived(record, WORK / args.task / "app", args.to, keeps=False)[1]
     for n, (role, py, _, _) in enumerate(engine.turns(on=root)):
       say(f"{'=' * 100}\n[{n} {role}]")
       say(py)
