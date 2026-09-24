@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   builtinExtensions,
   cacheDirectory,
@@ -9,6 +9,7 @@ import {
   furbDirectory,
   type Instance,
   isInstance,
+  loadTuiParts,
   loadWorldParts,
   remade,
   resolveExtensions,
@@ -208,3 +209,82 @@ test("the directory of a project keeps its records out of version control but it
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+/** The skills extension of the repository, as a config names it three ways: by its path, by a git remote made of it,
+ * and by an npm package packed from it. */
+async function sources(at: string): Promise<Record<string, unknown>> {
+  const skills = join(import.meta.dir, "../../../extensions/skills");
+  const work = join(at, "work");
+  await mkdir(join(work, "extensions/skills"), { recursive: true });
+  for (const file of ["package.json", "skills.py", "skills.pyi", "world.ts", "tui.ts"])
+    await writeFile(join(work, "extensions/skills", file), await readFile(join(skills, file)));
+  const git = (cwd: string, ...args: string[]) => {
+    const done = Bun.spawnSync(
+      [
+        "git",
+        "-c",
+        "init.defaultBranch=main",
+        "-c",
+        "user.name=furb",
+        "-c",
+        "user.email=furb@example.com",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "core.autocrlf=false",
+        ...args,
+      ],
+      { cwd },
+    );
+    if (done.exitCode) throw new Error(done.stderr.toString());
+  };
+  git(work, "init", "-q");
+  git(work, "add", ".");
+  git(work, "commit", "-qm", "skills");
+  git(at, "clone", "-q", "--bare", "work", "remote.git");
+  const remote = join(at, "remote.git").replaceAll("\\", "/");
+  return {
+    path: skills,
+    git: {
+      git: remote.startsWith("/") ? `file://${remote}` : `file:///${remote}`,
+      path: "extensions/skills",
+    },
+    npm: { npm: skills },
+  };
+}
+
+test("a host plays the skills extension by a path, a git remote and an npm package, and imports its parts from where it stands", async () => {
+  await project(undefined, undefined, async (cwd) => {
+    const given = await sources(cwd);
+    const brew = join(cwd, ".furb/skills/brew/SKILL.md");
+    await mkdir(dirname(brew), { recursive: true });
+    await writeFile(brew, "---\ndescription: Make tea.\n---\nBoil the water.\n");
+    await mkdir(configDirectory(), { recursive: true });
+    for (const [how, source] of Object.entries(given)) {
+      await writeFile(
+        join(configDirectory(), "config.json"),
+        JSON.stringify({ extensions: { skills: source } }),
+      );
+      const extensions = resolveExtensions(cwd);
+      const skills = extensions.find((one) => one.name === "skills");
+      expect([how, extensions.map((one) => one.name)]).toEqual([how, ["files", "bash", "grant", "skills"]]);
+      const world = await World.load({ cwd, extensions });
+      try {
+        const life = world.open();
+        const [, found] = life.call<[unknown, unknown]>("ask", ["skills", life.root], {});
+        expect(found).toEqual([{ name: "brew", description: "Make tea.", path: brew }]);
+        expect(life.turns()[0]?.[1]).toContain("#skills\n# brew: Make tea.");
+        expect(
+          unwrapped<{ content: string }>(await life.rung('close(skill("brew", HIDDEN))')).content,
+        ).toContain("Boil the water.");
+      } finally {
+        await world.dispose();
+      }
+      const [tui] = await loadTuiParts(extensions.filter((one) => one === skills));
+      expect([how, Object.keys(tui?.part.commands ?? {})]).toEqual([
+        how,
+        ["skills", "skill", "reload-skills"],
+      ]);
+    }
+  });
+}, 60000);

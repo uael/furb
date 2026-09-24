@@ -675,3 +675,51 @@ fn extensions_refuses_a_python_part_that_does_not_parse_with_its_name_and_its_li
   let got = extensions(&places, &at.join("project"), false, false).unwrap_err();
   assert!(matches!(&got, Error::Word { name, .. } if name == "x"), "{got:?}");
 }
+
+/// The folder of the skills extension of the repository.
+fn skills() -> PathBuf {
+  PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/extensions/skills"))
+}
+
+#[test]
+fn the_skills_extension_of_the_repository_loads_the_same_by_a_path_a_git_remote_and_an_npm_package()
+{
+  let at = yard("skills");
+  let places = places(&at);
+  let work = at.join("work");
+  for file in ["package.json", "skills.py", "skills.pyi", "world.ts", "tui.ts"] {
+    wrote(
+      &work.join("extensions/skills").join(file),
+      &fs::read_to_string(skills().join(file)).unwrap(),
+    );
+  }
+  git(&work, &["init"]);
+  git(&work, &["add", "."]);
+  git(&work, &["commit", "-m", "skills"]);
+  git(&at, &["clone", "--bare", "work", "remote.git"]);
+  let path = at.join("remote.git").display().to_string().replace('\\', "/");
+  let url =
+    if path.starts_with('/') { format!("file://{path}") } else { format!("file:///{path}") };
+  let sources = [
+    Source::Path(skills()),
+    Source::Git { url, reference: None, path: Some("extensions/skills".into()) },
+    Source::Npm { package: skills().display().to_string(), version: None },
+  ];
+  let got: Vec<Extension> = sources
+    .iter()
+    .map(|source| loaded("skills", &fetched("skills", source, &places, false).unwrap()).unwrap())
+    .collect();
+  for one in &got {
+    assert_eq!(one.word, got[0].word);
+    assert_eq!(one.life.as_deref(), Some("skills()"));
+    assert_eq!(one.requires, ["files"]);
+    assert!(one.world.ts.as_ref().is_some_and(|ts| ts.ends_with("world.ts") && ts.is_file()));
+    assert!(one.tui.as_ref().is_some_and(|tui| tui.ends_with("tui.ts") && tui.is_file()));
+  }
+  let word = got[0].word.clone().unwrap();
+  assert_eq!(
+    word.lines().count(),
+    fs::read_to_string(skills().join("skills.py")).unwrap().lines().count()
+  );
+  assert!(word.starts_with("from dataclasses import dataclass\n\n\n\n\n"));
+}

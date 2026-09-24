@@ -54,6 +54,8 @@ export interface Spawned {
 export interface WorldContext {
   /** The directory the chains of the life start in. */
   readonly directory: string;
+  /** The config directory of the user, which the config of the extensions stands in. */
+  readonly config: string;
   /** An inspection of a record: the part hears nothing and starts nothing. */
   readonly readOnly: boolean;
   /** Aborts when the World is disposed. */

@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { Life } from "../index.cjs";
+import { configDirectory, Life } from "../index.cjs";
 import type { FileChange } from "./changes.js";
 import type { Call, Fault, Hearing, Saying, WorldContext, WorldPart } from "./extension.js";
 import { spawnShell } from "./shell.js";
@@ -293,6 +293,7 @@ export function worldContext(
 ): WorldContext {
   return {
     ...given,
+    config: configDirectory(),
     *where(on: string): Hearing<string> {
       try {
         return String(yield { verb: "cwd", kwargs: { on } });

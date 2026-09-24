@@ -21,6 +21,19 @@
         "@earendil-works/pi-ai": "0.87.0",
       },
     },
+    "extensions/skills": {
+      "name": "@furb/skills",
+      "version": "0.2.0",
+      "devDependencies": {
+        "@furb/engine": "workspace:*",
+      },
+      "peerDependencies": {
+        "@furb/engine": ">=0.2.0 <0.3.0",
+      },
+      "optionalPeers": [
+        "@furb/engine",
+      ],
+    },
     "tui": {
       "name": "@furb/tui",
       "version": "0.1.0",
@@ -109,6 +122,8 @@
     "@emnapi/wasi-threads": ["@emnapi/wasi-threads@1.2.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-uTII7OYF+/Mes/MrcIOYp5yOtSMLBWSIoLPpcgwipoiKbli6k322tcoFsxoIIxPDqW01SQGAgko4EzZi2BNv2w=="],
 
     "@furb/engine": ["@furb/engine@workspace:bind/typescript"],
+
+    "@furb/skills": ["@furb/skills@workspace:extensions/skills"],
 
     "@furb/tui": ["@furb/tui@workspace:tui"],
 
