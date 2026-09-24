@@ -1,10 +1,13 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, setDefaultTimeout, test } from "bun:test";
 import { createTestRenderer, setRendererCapabilities } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
 
+// Each test opens a demo session, with its worker and its record, as the tests of the App do, and so has their time:
+// a Windows runner has run such a test four times slower than usual, past the five seconds that bun gives by default.
+setDefaultTimeout(30000);
 afterAll(removeDemoDirectories);
 
 /** A demo session in an App on a test terminal, which a test uses and which ends after it. */
