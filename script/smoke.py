@@ -16,7 +16,7 @@ from furb import engine
 from furb.cli import again, lived, say
 from furb.engine import Act
 from furb.provider.claude import BIN, cool
-from furb.world import kept
+from furb.world import kept, verb
 
 MESSAGE = "How many lines does the file a.txt hold?"
 """MESSAGE is what the model is asked, of a file it must read to answer."""
@@ -51,7 +51,7 @@ async def first(yard: Path, record: Path) -> None:
   """The first life: the model reads the file and answers with the number of the lines it holds."""
   world, root, held = lived(record, yard, TO, keeps=True)
   assert held == [], "the first life is opened on no record"
-  engine.grant(usd=CEILING, on=root)
+  verb(root, "grant")(usd=CEILING)
   try:
     got = await asyncio.wait_for(engine.prompt(int, MESSAGE, TO, on=root), STALL)
   except TimeoutError:

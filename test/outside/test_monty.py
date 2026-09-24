@@ -36,28 +36,30 @@ async def test_an_ear_that_says_a_verb_the_world_refuses_is_answered_with_the_re
     while True:
       if (a := (yield)) is not None and a[0] == "poke":
         try:
-          engine.read("a.txt", on=a[1])
+          engine.ask("clock", a[1])
         except Refused as no:
           caught.append(str(no))
 
   root = engine.boot((), world=Dead(stands=STANDS).hears(), asking=asking())
   engine.send("poke", root, by=OPERATOR)
   await settle()
-  assert caught == ["a dead World answers no read"]
+  assert caught == ["a dead World answers no clock"]
 
 
 async def test_a_show_the_engine_made_is_called_back_from_the_thread_of_an_ear() -> None:
   """A show the engine made crosses to an ear as a callable, which the ear calls back from its own thread."""
-  sand = Sand(files={"/w/n.txt": "one\ntwo\n"}, stands=STANDS)
+  sand = Sand(stands=STANDS)
   picked: list[list[int]] = []
 
   def looking() -> Generator[tuple | None, tuple | None]:
     while True:
       if (a := (yield)) is not None and a[0] == "tell":
-        picked.extend(show(text.lines) for note in a[3] if isinstance(note, tuple) for text, show in [note])
+        picked.extend(
+          show(content.splitlines()) for note in a[3] if isinstance(note, tuple) for _, content, show in [note]
+        )
 
   root = engine.boot((), world=sand.hears(), looking=looking())
-  sand.script[root] = ["read('n.txt', span(2, 2))\nclose(1)"]
+  sand.script[root] = ["tell('seen', 'n', ('/w/n', 'one\\ntwo\\n', lambda lines: [2]))\nclose(1)"]
   assert await engine.prompt(int, "read it", on=root) == 1
   assert picked == [[2]]
 

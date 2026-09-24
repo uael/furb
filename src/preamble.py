@@ -260,7 +260,7 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
         match settled(world.hears(a), lambda got: world.answered(got), names, ears):  # noqa: PLW0108
           case ("say", tuple(saying)):
             said = again(saying, names, ears)
-    if said is not None:
+    if isinstance(said, tuple):
       yield said
 
 
@@ -307,8 +307,9 @@ def crossing(name: str, ears: Ears, names: Names) -> Ear:
 def plays(engine: Names, chain: str) -> None:
   """The extensions, played on a chain as rungs by whoever speaks: each word its program lacks, in order, and then
   each life word."""
-  _, program = verb(engine, "ask")("program", chain)
-  held = list(program.values()) if isinstance(program, dict) else []
+  got = verb(engine, "ask")("program", chain)
+  assert isinstance(got, tuple)
+  held = list(got[1].values()) if isinstance(got[1], dict) else []
   for word in [*[one for one in WORDS if one not in held], *LIVES]:
     verb(engine, "rung")(word, on=chain)
 

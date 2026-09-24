@@ -16,6 +16,14 @@ from furb.provider.claude import CLI, cool
 
 
 @pytest.fixture(autouse=True)
+def placed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+  """No config and no cache of the developer reach a test: the config directory and the cache directory of the
+  extensions are directories of the test, empty."""
+  monkeypatch.setenv("FURB_CONFIG_DIR", str(tmp_path / "config"))
+  monkeypatch.setenv("FURB_CACHE_DIR", str(tmp_path / "cache"))
+
+
+@pytest.fixture(autouse=True)
 async def cooled() -> AsyncGenerator[None]:
   """No claude outlives the test that spawned it, and no pool outlives it either."""
   yield

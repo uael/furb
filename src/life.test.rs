@@ -658,3 +658,39 @@ fn the_life_plays_the_life_words_in_every_life_after_the_words() {
   let two = second.life.chain("two", "", None, "").unwrap().id().to_owned();
   assert_eq!(second.program(&two)[3..], ["seen = 1"]);
 }
+
+/// A value of json as the sandbox takes it: plain data as itself.
+fn json(value: &serde_json::Value) -> Object {
+  match value {
+    serde_json::Value::Null => Object::none(),
+    serde_json::Value::Bool(one) => Object::bool(*one),
+    serde_json::Value::Number(one) => {
+      one.as_i64().map_or_else(|| Object::float(one.as_f64().unwrap_or_default()), Object::int)
+    }
+    serde_json::Value::String(one) => Object::string(one),
+    serde_json::Value::Array(held) => Object::list(held.iter().map(json)),
+    serde_json::Value::Object(held) => {
+      Object::dict(held.iter().map(|(key, one)| (Object::string(key), json(one))))
+    }
+  }
+}
+
+#[test]
+fn a_record_of_0_1_0_opens_and_the_life_plays_its_words_after() {
+  let text = include_str!("../test/outside/record-0.1.0.jsonl");
+  let record: Vec<Object> = text
+    .lines()
+    .filter(|line| !line.trim().is_empty())
+    .map(|line| json(&serde_json::from_str(line).unwrap()))
+    .collect();
+  let at = std::env::temp_dir().join("furb-life-old");
+  let _ = fs::remove_dir_all(&at);
+  fs::create_dir_all(&at).unwrap();
+  fs::write(at.join("a.txt"), "one\n").unwrap();
+  let mut lived = Lived::new("old", &[], record).unwrap();
+  assert!(lived.life.raised().is_none(), "{:?}", lived.life.raised());
+  let root = lived.root();
+  assert_eq!(root, "chain1");
+  let got = lived.said("read", vec![Object::string("a.txt")], &root).unwrap();
+  assert_eq!(of(&got.as_ref(), "content").and_then(|one| one.as_str()), Some("one\n"));
+}

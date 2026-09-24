@@ -1,0 +1,5 @@
+[["chain","chain1","operator","","root",""]]
+[["stand","stand@chain1.1","chain1","chain1"],[[["operator",[],200000],["fable",["low","medium","high","xhigh","max"],1000000],["opus",["low","medium","high","xhigh","max"],1000000],["sonnet",["low","medium","high","xhigh","max"],1000000],["haiku",["low","medium","high","xhigh","max"],200000]],"/w","opus/low"]]
+[["rung","rung1","operator","chain1","t = read('a.txt')\nw = write(Text('b.txt', t.content + 'three\\n'))\nclose([len(t.lines), w.content])","",""]]
+[["read","read@rung1.1","rung1","chain1","a.txt"],{"is":"Text","path":"/w/a.txt","content":"one\ntwo\n"}]
+[["write","write@rung1.2","rung1","chain1",{"is":"Text","path":"b.txt","content":"one\ntwo\nthree\n"}],{"is":"Text","path":"/w/b.txt","content":"one\ntwo\nthree\n"}]
