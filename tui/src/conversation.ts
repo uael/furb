@@ -10,8 +10,8 @@ import { type ActRow, failed } from "./session.ts";
  * - `result`: the close of a prompt, and whether other prompts closed in the same turn.
  * - `act`: the open or the end of any other act, which the conversation shows once.
  * - `note`: any other paragraph: what an act told of itself after its open, or a query of a run, by its header.
- *   The rungs that the World played stand as one note, `extensions`, which names the extensions the life plays,
- *   and which is `played`.
+ *   The rungs of the life words that the World played stand as one note, `extensions`, which names the extensions
+ *   whose life words the life plays, and which is `played`.
  */
 export type Item =
   | { type: "python"; key: string; code: string; rung?: ActRow }
@@ -30,7 +30,7 @@ export type Item =
 
 /** What the conversation of a chain shows, in the order of its turns, with the parts of the extensions, which say
  * how the acts of their kinds end, which acts no card shows, and which notes are quiet, and the names of the
- * extensions whose words the World played. */
+ * extensions whose life words the World played. */
 export function conversation(
   turns: readonly Turn[],
   acts: readonly ActRow[],
@@ -59,7 +59,7 @@ export function conversation(
       const shown = () => items.push(note(key, paragraph, act, word, rest.join(" ")));
       if (parts.quiet.has(word)) continue;
       if (act?.kind === "rung" && act.by === "world") {
-        // The words of the extensions are the World's, and one line names them all, the first time they are told.
+        // The life words of the extensions are the World's, and one line names them all, the first time they are told.
         if (!told)
           items.push({
             type: "note",

@@ -25,7 +25,8 @@ export interface Text {
 
 /** The text at a path that the read of the files extension gives, as its plain data. */
 export function read(life: Life, path: string, on = life.root): Text {
-  return unwrapped(life.call("read", [path], { on }));
+  const { path: at, content, before } = life.call<Text>("read", [path], { on });
+  return { path: at, content, before };
 }
 
 /** A write of a content to a path, asked of the life as the write of the files extension asks it, and what the World

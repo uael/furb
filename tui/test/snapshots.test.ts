@@ -25,11 +25,10 @@ test("idle snapshots add no facts or sandbox calls as the act table grows, and s
       },
     }) as Life;
     const snapshots = new Snapshots(traced, world);
-    // The root and the rungs of the words of the builtins, which the World played.
-    const born = snapshots.take(life.root).acts.length;
+    snapshots.take(life.root);
     for (let index = 0; index < 100; index++) life.wait(60);
     await Promise.resolve();
-    expect(snapshots.take(life.root).acts).toHaveLength(born + 100);
+    expect(snapshots.take(life.root).acts).toHaveLength(101);
     await Promise.resolve();
     const before = [...calls],
       facts = world.facts.length;

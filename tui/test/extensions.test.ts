@@ -107,16 +107,19 @@ test("an act of a kind that its part hides is no card, and a start that the Worl
   });
 });
 
-test("with bash off in the config of the project, ! is text of a message and /bash is no command", async () => {
+test("with bash off in the config of the project, ! is text of a message, /bash is no command, and the World runs no command", async () => {
   await project({ bash: false }, async (session) => {
     expect([...session.world.parts.commands.keys()]).toEqual(["read", "cd", "grant", "context"]);
+    expect(session.world.extensions.map((one) => one.name)).toEqual(["files", "grant"]);
     await expect(session.submit("/bash ls")).rejects.toThrow("Unknown command /bash");
     await session.submit("!ls");
     await idle(session);
     expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
       "!ls",
     ]);
-    expect(session.acts.some((act) => act.kind === "bash")).toBe(false);
+    // The engine that runs keeps bash, so a word may still make a command, which the World refuses.
+    for (const act of session.acts.filter((one) => one.kind === "bash"))
+      expect(act.value).toEqual({ is: "Refused", args: ["the World does no bash"] });
   });
 });
 

@@ -14,7 +14,14 @@ import {
   type ThinkingLevel,
 } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import { builtinExtensions, decodeRecord, type Extension, type Life, resolveExtensions } from "../index.cjs";
+import {
+  builtinExtensions,
+  decodeRecord,
+  type Extension,
+  type Life,
+  resolveExtensions,
+  systemPrompt,
+} from "../index.cjs";
 import { Activity, type RunState } from "./activity.js";
 import { FileChanges } from "./changes.js";
 import { type Ears, WorldAdapter, type WorldHandler, type WorldRequest, worldContext } from "./ears.js";
@@ -38,12 +45,12 @@ import {
 
 export { display, opens, paragraphs, safeText, uncommented } from "./types.js";
 
-let prompt: string | undefined;
-/** The system prompt of every model: the engine minified in layout alone, which `bun run build` writes beside the
- * package, read once. */
-function system(): string {
-  prompt ??= JSON.parse(readFileSync(new URL("../system.json", import.meta.url), "utf8")) as string;
-  return prompt;
+let minified: string | undefined;
+/** The engine minified in layout alone, which `bun run build` writes beside the package, read once: what the system
+ * prompt of every life is made of. */
+function engine(): string {
+  minified ??= JSON.parse(readFileSync(new URL("../system.json", import.meta.url), "utf8")) as string;
+  return minified;
 }
 
 /** A value the operator gives, in the shape its prompt wants: a whole number crosses as an int, so a float prompt
@@ -118,6 +125,7 @@ export class World extends EventEmitter {
   /** The ears of the life, whose callable carries a show or a filter of the host into it. */
   readonly ears: Ears;
   private life?: Life;
+  private systemText?: string;
   private readonly adapter: WorldAdapter;
   private readonly controller = new AbortController();
   private readonly asks = new Map<string, AbortController>();
@@ -242,10 +250,22 @@ export class World extends EventEmitter {
     return new World({ ...options, extensions, parts: await loadWorldParts(extensions, options.parts) });
   }
 
+  /** The system prompt of every model of the life: the engine less the definitions of each builtin the World does not
+   * take, then the words of the extensions the life runs, as the crate makes it for every host. */
+  system(): string {
+    this.systemText ??= systemPrompt(
+      engine(),
+      this.extensions.map((one) => one.name),
+      this.life?.words ?? [],
+    );
+    return this.systemText;
+  }
+
   open(): Life {
     if (this.life) throw new Error("This World already owns a life.");
     try {
-      // An inspection plays nothing, since it says nothing new.
+      // An inspection plays no life word and pins nothing, since it says nothing new; it runs the words its record
+      // pins, which the replay needs.
       const played = this.options.readOnly ? [] : this.extensions;
       this.life = this.adapter.boot(
         this.records.entries,
@@ -425,7 +445,7 @@ export class World extends EventEmitter {
       });
       const stream = this.models.streamSimple(
         model,
-        { systemPrompt: system(), messages },
+        { systemPrompt: this.system(), messages },
         {
           signal,
           sessionId: `${this.conversations}/${chain}`,

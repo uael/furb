@@ -1,4 +1,12 @@
-import { type Fact, type Life, type LiveAct, questionKind, unwrapped, type World } from "@furb/engine";
+import {
+  type Fact,
+  isQuestion,
+  type Life,
+  type LiveAct,
+  questionKind,
+  unwrapped,
+  type World,
+} from "@furb/engine";
 import type { Snapshot } from "./bridge.ts";
 import { queueDispatches } from "./queue.ts";
 import type { ActRow } from "./session.ts";
@@ -69,19 +77,11 @@ export class Snapshots {
     // A stood says the standing that its chain takes, the roster, the directory and the actor, and tells it there.
     if (kind === "stood")
       Object.assign(view, { roster: undefined, directory: undefined, actor: undefined, turns: undefined });
-    // A ladder given a word edits the program of the ladder and replays it.
-    if (kind === "ladder" && fact.length > 5) {
+    // A write of the door of a prompt edits the program of its ladder and replays it.
+    if (kind === "write" && isQuestion("prompt", String(fact[4]))) {
       view.turns = undefined;
       view.program = undefined;
       view.actor = undefined;
-    }
-  }
-  /** Where the paths of a chain resolve: what its `cwd` gives, and nothing when the chain binds no `cwd`. */
-  private directory(chain: string): string {
-    try {
-      return String(this.life.call("cwd", [], { on: chain }));
-    } catch {
-      return "";
     }
   }
   /** The view of a chain, with the acts that changed after a count of changes of the act table. */
@@ -105,7 +105,7 @@ export class Snapshots {
     view.program ??=
       this.life.call<[unknown, Record<string, string>]>("ask", ["program", selected], {})[1] ?? {};
     view.turns ??= this.life.turns(selected);
-    view.directory ??= this.directory(selected);
+    view.directory ??= String(this.life.call("cwd", [], { on: selected }));
     view.actor ??= this.life.held("modules", [selected, "actor"], "at") as string;
     if (this.entries !== this.world.records.entries.length) {
       this.entries = this.world.records.entries.length;

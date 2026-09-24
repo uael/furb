@@ -20,12 +20,15 @@ export type JsAct = Act
 
 export declare class Life {
   /**
-   * Open on JavaScript ears, using the same call and reply protocol as the Python binding. The life plays the
-   * words of the extensions and their life words as the World, on every chain without a source, once boot stands on
-   * its record and at the birth of each such chain after.
+   * Open on JavaScript ears, using the same call and reply protocol as the Python binding. The module of the engine
+   * runs the words of the extensions after the engine: those the record pins, or else these, which the life pins as
+   * the World. The life plays the life words as rungs, as the World, on every chain without a source, once boot
+   * stands on its record and at the birth of each such chain after.
    */
   static boot(callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null, words?: string[] | null, lives?: string[] | null): Life
   get root(): string
+  /** The words of the extensions the life runs after the engine, which the system prompt reads after the engine. */
+  get words(): Array<string>
   /** What boot raised, and nothing when it raised nothing. After a drift the life goes on, with nothing kept. */
   get raised(): { is: string; args: unknown[] } | null
   get disposed(): boolean
@@ -122,9 +125,6 @@ export interface Inspection {
   value?: unknown
 }
 
-/** The words that a program lacks, in their order, which is the rule a host plays the words by. */
-export declare function missingWords(program: Array<string>, words: Array<string>): Array<string>
-
 /**
  * Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
  * and at a shutdown, with the name of the event: `break`, `close`, `logoff` or `shutdown`. The system holds the
@@ -167,7 +167,14 @@ export interface RungOptions {
 }
 
 /**
- * The word of the python part of an extension, which a host plays as a rung: the file with its line ends made LF
- * and less every top-level import from `furb`, which leaves no line of its own. It throws for a file python cannot parse.
+ * The system prompt of a life: the engine as the build minified it, less the definitions of each builtin that
+ * `taken` does not name, then the words of the extensions, in their order.
+ */
+export declare function systemPrompt(engine: string, taken: Array<string>, words: Array<string>): string
+
+/**
+ * The word of the python part of an extension, which the module of the engine runs after the engine: the file with
+ * its line ends made LF and less every top-level import from `furb`, which leaves no line of its own. It throws for
+ * a file python cannot parse.
  */
 export declare function wordOf(source: string): string

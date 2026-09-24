@@ -771,9 +771,9 @@ test("record inspection reports pending work when its replay starts or feeds a c
   await first.dispose();
   try {
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
-      "rung4",
+      "rung1",
       "bash1",
-      "rung5",
+      "rung2",
       "bash2",
     ]);
   } finally {
@@ -797,7 +797,7 @@ test("a later life stands on what its host offers now, and a stood tells its cha
   life.prompt("int", "later");
   await until(first, () => first.activity.acts.has("wait1"));
   await first.dispose();
-  const pending = ["prompt2", "rung6", "wait1"];
+  const pending = ["prompt2", "rung3", "wait1"];
   const second = new World({ record });
   try {
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual(pending);
@@ -1062,7 +1062,7 @@ test("a World with no model puts to the operator every prompt that names no acto
   }
 });
 
-test("a record of 0.1.0 opens with no drift, and the World plays the words of the extensions after", async () => {
+test("a record of 0.1.0 opens with no drift, though it answers a read and a write with a text", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-old-record-"));
   const record = join(cwd, "record.jsonl");
   await writeFile(record, await readFile(join(import.meta.dir, "../../../test/outside/record-0.1.0.jsonl")));
@@ -1072,9 +1072,8 @@ test("a record of 0.1.0 opens with no drift, and the World plays the words of th
     const life = world.open();
     expect(life.raised).toBeNull();
     expect(life.root).toBe("chain1");
-    // The word of 0.1.0 reads a verb that the engine held then and an extension binds now, after the replay, so the
-    // gate refuses it while the record replays; nothing hangs on it, so nothing drifts.
-    expect(life.outcome("rung1")).toEqual({ done: true, value: { is: "Refused", args: [] } });
+    // The word of 0.1.0 runs again, and its read and its write take the text the record answers them with.
+    expect(life.outcome("rung1")).toEqual({ done: true, value: [2, "one\ntwo\nthree\n"] });
     expect(read(life, "a.txt")).toEqual({
       path: join(cwd, "a.txt"),
       content: "one\ntwo\nthree\n",

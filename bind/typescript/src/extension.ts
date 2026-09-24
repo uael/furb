@@ -60,8 +60,7 @@ export interface WorldContext {
   readonly readOnly: boolean;
   /** Aborts when the World is disposed. */
   readonly signal: AbortSignal;
-  /** `yield* context.where(on)`: where the paths of a chain resolve, which the `cwd` verb of the chain gives, and
-   * the directory of the World when the chain binds no `cwd`. */
+  /** `yield* context.where(on)`: where the paths of a chain resolve, which the `cwd` of the engine gives. */
   where(on: string): Hearing<string>;
   /** A path of the disk: the directory of the World, where the chain stands, then the path. It throws for a path of
    * a scheme, which names no file. */

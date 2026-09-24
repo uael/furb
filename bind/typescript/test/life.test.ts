@@ -1,6 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
 import {
-  builtinExtensions,
   decodeRecord,
   type Ear,
   Ears,
@@ -20,8 +19,8 @@ afterEach(async () => {
   for (const life of lives.splice(0)) await life.dispose();
 });
 
-/** The words of the builtins, which a life plays on each chain without a source. */
-const words = builtinExtensions().flatMap((one) => (one.word ? [one.word] : []));
+/** The word of an extension of the tests, which the module of the engine runs after the engine. */
+const HELLO = "def hello(name: str) -> str:\n  return f'hi {name}'\n";
 
 /** A part of the World that reads and writes files in memory, and does the work of bash, which the test says. */
 function memory(files: Map<string, string>): WorldPart {
@@ -52,7 +51,7 @@ const said = <T = unknown>(
   kwargs: Record<string, unknown> = {},
 ) => life.call<T>(verb, args, { on: life.root, ...kwargs });
 
-async function open(record: unknown[] = [], answer = 'close("hello")') {
+async function open(record: unknown[] = [], answer = 'close("hello")', words: string[] = []) {
   const entries: unknown[] = [];
   const facts: unknown[] = [];
   const files = new Map<string, string>([["a", "one\ntwo\n"]]);
@@ -146,20 +145,19 @@ test("pause holds a model response until wake and cancel rejects a native await"
 test("text, command results, and engine callables cross N-API", async () => {
   const { life } = await open();
   const text = said(life, "read", ["a"]);
-  expect(text).toMatchObject({ is: "instance", class: { is: "class", name: "Text" } });
-  expect(unwrapped<object>(text)).toEqual({ path: "a", content: "one\ntwo\n", before: null });
+  expect(text).toEqual({ is: "Text", path: "a", content: "one\ntwo\n", before: null });
   expect(() => said(life, "read", ["missing"])).toThrow("missing file");
-  const span = life.held<{ is: "made"; id: number }>("modules", [life.root, "span"], "at");
-  const show = life.made<{ is: "made"; id: number }>(span.id, [1, 1], {});
+  const show = life.call<{ is: "made"; id: number }>("span", [1, 1], {});
   expect(await life.made<number[]>(show.id, [["one", "two"]], {})).toEqual([1]);
   await life.forget(show.id);
   const command = said<string>(life, "bash", ["fake"], { fed: true });
   await life.send("out", command, ["hello\n", "stdout"]);
   await life.send("exited", command, [0]);
   const exit = await life.result(command);
-  expect(unwrapped(exit)).toMatchObject({
+  expect(exit).toMatchObject({
+    is: "Exit",
     code: 0,
-    stdout: { path: `${command}/stdout`, content: "hello\n" },
+    stdout: { is: "Text", path: `${command}/stdout`, content: "hello\n" },
   });
 });
 
@@ -171,16 +169,21 @@ test("the World closes the start of an act whose kind no part does with why", as
   expect(outcome.value).toEqual({ is: "Refused", args: ["the World does no job"] });
 });
 
-test("a life plays the words of the extensions once on each chain without a source", async () => {
-  const first = await open();
+test("a life runs the words of its extensions in the module of the engine, and a later life the words it pinned", async () => {
+  const first = await open([], 'close(hello("m"))', [HELLO]);
   const program = (life: Life, chain: string) =>
     Object.values(life.call<[unknown, Record<string, string>]>("ask", ["program", chain], {})[1]);
-  expect(program(first.life, first.life.root)).toEqual(words);
+  expect(first.life.words).toEqual([HELLO]);
+  expect(program(first.life, first.life.root)).toEqual([]);
+  expect(await first.life.result<string>(first.life.prompt("str", "Greet").id)).toBe("hi m");
   const fork = first.life.chain("fork").id;
-  expect(program(first.life, fork)).toEqual(words);
-  const second = await open(first.entries);
+  expect(await first.life.result<string>(first.life.rung('close(hello("fork"))', { on: fork }).id)).toBe(
+    "hi fork",
+  );
+  const second = await open(first.entries, 'close("none")', ["other = 1\n"]);
+  expect(second.life.words).toEqual([HELLO]);
+  expect(second.asks()).toBe(0);
   expect(second.entries).toHaveLength(0);
-  expect(program(second.life, second.life.root)).toEqual(words);
 });
 
 test("a second life replays model answers and durable rung effects without asking again", async () => {

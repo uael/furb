@@ -417,25 +417,16 @@ export class Session extends EventEmitter {
   isUserPrompt(act: ActRow): boolean {
     return act.kind === "prompt" && act.by === "operator";
   }
-  /** The names of the extensions whose words the World plays on each chain. */
+  /** The names of the extensions whose life words the World plays on each chain. */
   get played(): string[] {
-    return this.world.extensions.flatMap((one) => (one.word || one.life ? [one.name] : []));
+    return this.world.extensions.flatMap((one) => (one.life ? [one.name] : []));
   }
   /** What a reference holds, which the operator follows: the text at a path, as the read of the chain on screen gives
-   * it, and the program of a prompt, as its ladder gives it, when the chain reads no such path. A read of the
-   * operator outside an act tells nothing, so it takes no show. */
+   * it, the program of a prompt among them, which its door gives. A read of the operator outside an act tells
+   * nothing, so it takes no show. */
   async follow(value: string): Promise<string> {
-    try {
-      return unwrapped<{ content: string }>(await this.life.call("read", [value], { on: this.selected }))
-        .content;
-    } catch (error) {
-      if (this.actOf(value)?.kind !== "prompt") throw error;
-      const [, program] = (await this.life.call("ask", ["ladder", this.selected, value], {})) as [
-        unknown,
-        string,
-      ];
-      return program;
-    }
+    return unwrapped<{ content: string }>(await this.life.call("read", [value], { on: this.selected }))
+      .content;
   }
   /** The act that a name or a door names: the act whose name is the first part of the path. */
   actOf(path: string): ActRow | undefined {
@@ -710,9 +701,8 @@ export class Session extends EventEmitter {
     const prefixed = this.world.parts.prefixed(text);
     if (text.startsWith("/")) await this.command(text);
     else if (this.editing) {
-      // The ladder of a prompt given a word replays the program of that prompt with it, which the rung asks.
       await this.life.result(
-        await this.life.rung(`ask("ladder", "", ${JSON.stringify(this.editing)}, ${JSON.stringify(input)})`, {
+        await this.life.rung(`write(Text(${JSON.stringify(this.editing)}, ${JSON.stringify(input)}))`, {
           on: this.selected,
         }),
       );
@@ -852,12 +842,9 @@ export class Session extends EventEmitter {
                 this.activity.some((rung) => rung.by === act.id && Object.hasOwn(this.program, rung.id)),
             )?.id;
         if (!id) throw new Error("There is no prompt program to edit.");
-        const [, program] = (await this.life.call("ask", ["ladder", this.selected, id], {})) as [
-          unknown,
-          string,
-        ];
+        const got = unwrapped<{ content: string }>(await this.life.call("read", [id], { on: this.selected }));
         this.editing = id;
-        this.emit("compose", this.drafts[this.draftKey] ?? program);
+        this.emit("compose", this.drafts[this.draftKey] ?? got.content);
         this.notice = "Edit the Python program, then submit to replay it.";
         break;
       }

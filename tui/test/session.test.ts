@@ -150,10 +150,7 @@ test("a follow-up that the operator removes while an earlier one is sent is not 
     expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
       "First follow-up on main",
     ]);
-    // No rung read a file that the removed follow-up named: the rungs of the chain are the words the World played.
-    expect(
-      session.acts.filter((act) => act.on === other && act.kind === "rung" && act.by !== "world"),
-    ).toEqual([]);
+    expect(session.acts.filter((act) => act.on === other && act.kind === "rung")).toEqual([]);
   } finally {
     session.world.sendQueued = send;
     await session.dispose();

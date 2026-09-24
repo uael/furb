@@ -16,7 +16,7 @@ import {
   unwrapped,
   World,
 } from "../src/index.ts";
-import { exited, verb } from "./verbs.ts";
+import { verb } from "./verbs.ts";
 
 /** A project with a config of its own, and the config of the user, each written for one test and removed after it. */
 async function project(
@@ -147,28 +147,20 @@ test("a part for a World must be the default export of its file, a function", as
   }
 });
 
-test("an instance crosses out as its fields, and a remade instance crosses back as its class", async () => {
+test("an instance of the engine crosses as its class and its fields, and comes back in as one", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-instance-"));
   const world = new World({ cwd });
   try {
     const life = world.open();
     const id = verb<string>(life, "bash", ["printf out"]);
-    const exit = await life.result(id);
-    expect(isInstance(exit, "Exit")).toBe(true);
-    expect(isInstance(exit, "Text")).toBe(false);
-    expect(await exited(life, id)).toEqual({
+    expect(await life.result<object>(id)).toEqual({
+      is: "Exit",
       code: 0,
-      stdout: { path: `${id}/stdout`, content: "out", before: null },
-      stderr: { path: `${id}/stderr`, content: "", before: null },
+      stdout: { is: "Text", path: `${id}/stdout`, content: "out", before: null },
+      stderr: { is: "Text", path: `${id}/stderr`, content: "", before: null },
     });
-    const stdout = (exit as Instance & { value: { stdout: Instance } }).value.stdout;
-    const text = remade(stdout, { path: "made.txt", content: "made\n", before: null });
-    expect(text).toEqual({
-      is: "instance",
-      class: stdout.class.id,
-      fields: { path: "made.txt", content: "made\n", before: null },
-    });
-    expect(unwrapped<object>(verb(life, "write", [text]))).toEqual({
+    expect(verb<object>(life, "write", [{ is: "Text", path: "made.txt", content: "made\n" }])).toEqual({
+      is: "Text",
       path: join(cwd, "made.txt"),
       content: "made\n",
       before: null,
@@ -180,12 +172,31 @@ test("an instance crosses out as its fields, and a remade instance crosses back 
   }
 });
 
+test("an instance of a class a word defined crosses out as its fields, and a remade one crosses back as its class", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-word-instance-"));
+  const world = new World({ cwd });
+  try {
+    const life = world.open();
+    const word =
+      "@dataclass\nclass Point:\n  x: int\ndef twice(p, on=''):\n  return p.x * 2\nclose(Point(1))";
+    const point = await life.result<Instance>(life.rung(`from dataclasses import dataclass\n${word}`).id);
+    expect(isInstance(point, "Point")).toBe(true);
+    expect(unwrapped<object>(point)).toEqual({ x: 1 });
+    expect(verb<number>(life, "twice", [remade(point, { x: 2 })])).toBe(4);
+  } finally {
+    await world.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("a verb said with no chain is said on the chain of who speaks, and the operator speaks on none", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-no-chain-"));
   const world = new World({ cwd });
   try {
     const life = world.open();
-    expect(() => life.call("cwd", [], {})).toThrow("name 'cwd' is not defined, and no chain was said");
+    expect(() => life.call("nothing", [], {})).toThrow(
+      "name 'nothing' is not defined, and no chain was said",
+    );
     expect(() => life.call("nothing", [], { on: life.root })).toThrow(
       "name 'nothing' is not defined on chain1",
     );
