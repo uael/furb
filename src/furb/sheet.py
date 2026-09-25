@@ -47,7 +47,7 @@ from collections.abc import Callable, Generator, Sequence
 
 type Checked = Callable[[str], Sequence[tuple[int, str]]]
 """What reads a sheet: ty, in whichever form the Kernel holds it, giving each finding by its line."""
-type Ear = Generator[tuple | None, tuple | None]
+type Ear = Generator[None, tuple | None]
 """An ear, as the engine hears one."""
 
 MODULE = "__engine__"
@@ -113,11 +113,12 @@ def gate(engine: dict[str, object], program: Sequence[str], word: str, checked: 
 def gating(engine: dict[str, object], checked: Checked) -> Ear:
   """The gate as the ear of a life: it answers each gate with what it finds against the word on the sheet of the
   engine whose names it is given, after the program of the chain as it stands when the gate takes it."""
-  program = engine["program"]
+  program, say = engine["program"], engine["say"]
   assert callable(program)
+  assert callable(say)
   while True:
     match (yield):
       case ("gate", qid, _, on, word):
         words = program(on)
         assert isinstance(words, dict)
-        yield "done", qid, gate(engine, [*words.values()], word, checked)
+        say("done", qid, gate(engine, [*words.values()], word, checked))

@@ -9,7 +9,7 @@ from furb.engine import OPERATOR, WORLD
 
 
 async def test_who_is_speaking_is_the_site_which_every_fact_is_said_from() -> None:
-  """Who is speaking is the site, which every fact is said from: the generator while it speaks, the run while it is stepped, the operator otherwise."""
+  """Who is speaking is the site, which every fact is said from: the ear while it hears, the run while it is stepped, the operator otherwise."""
   sand = sown()
   log, root = life(sand)
   assert engine.site.get() == OPERATOR
@@ -26,7 +26,7 @@ async def test_who_is_speaking_is_the_site_which_every_fact_is_said_from() -> No
 
 
 async def test_work_that_an_ear_begins_while_it_speaks_keeps_the_site_of_that_ear() -> None:
-  """Work that an ear begins while it speaks keeps the site of that ear, so what the work says later is said by that ear."""
+  """Work that an ear begins while it hears keeps the site of that ear, so what the work says later is said by that ear."""
   sand = sown()
   log, root = life(sand)
   loop = asyncio.get_running_loop()

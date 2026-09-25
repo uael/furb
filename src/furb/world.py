@@ -42,7 +42,7 @@ from furb import engine, python
 from furb.engine import Drift, Exit, Refused, Text
 from furb.provider.claude import ACTOR, Claude, Settings, actors
 
-type World = Generator[tuple | None, tuple]
+type World = Generator[None, tuple]
 """The World, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
 
 CAP = 524288
@@ -453,24 +453,24 @@ class Live:
         self.calls.append(a)
       match a:
         case ("bash", about, _, on, command, fed, timeout):
-          yield "started", about
+          engine.say("started", about)
           running[about] = held = Command(about, command, fed, timeout, bool(engine.ask("merged", on, about)))
           start(self.ran(held, engine.cwd(on=on)))
         case ("wait", about, _, _, seconds):
-          yield "started", about
+          engine.say("started", about)
           loop.call_later(seconds, partial(engine.say, "done", about, None))
         case ("prompt", about, _, _, shape, message, _):
-          yield "started", about
+          engine.say("started", about)
           start(self.show(about, shape, message))
         case ("reply", about, _, on, actor):
-          yield "started", about
+          engine.say("started", about)
           start(self.asked(about, on, actor, engine.turns(on=on)))
         case ("stand", qid, *_):
-          yield "done", qid, [self.roster, self.directory, self.actor]
+          engine.say("done", qid, [self.roster, self.directory, self.actor])
         case ("read", qid, _, on, path) if self.serves(path):
-          yield "done", qid, self.read(engine.cwd(on=on), path)
+          engine.say("done", qid, self.read(engine.cwd(on=on), path))
         case ("write", qid, _, on, Text(path=path, content=content)) if self.serves(path):
-          yield "done", qid, self.write(engine.cwd(on=on), path, content)
+          engine.say("done", qid, self.write(engine.cwd(on=on), path, content))
         case ("feed", about, _, text) if about in running:
           running[about].feed(text)
         case ("cancel" | "close", *_):
@@ -483,6 +483,6 @@ class Live:
         case ("keep", _, _, entry):
           self.keep(entry)
         case ("clock", qid, *_):
-          yield "done", qid, time.time()
+          engine.say("done", qid, time.time())
         case ("chance", qid, *_):
-          yield "done", qid, random.random()  # noqa: S311
+          engine.say("done", qid, random.random())  # noqa: S311

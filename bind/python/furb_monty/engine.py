@@ -101,50 +101,52 @@ def speaks(value: str | None) -> str:
 class Crossing:
   """One generator of this interpreter, heard from the sandbox on a thread of its own.
 
-  The generator is primed where it is made, on the thread of the loop, since a World reads the running loop at its
-  first step, and what that step gave stands for its birth in the sandbox. From then, every fact the sandbox gives
-  it goes through its inbox to the thread, and what the generator did with it comes back through its outbox: a
-  saying, nothing, its end, or what it raised. A verb the generator says goes the other way through the same two
-  doors, and its value wakes the thread.
+  The generator is stepped on its thread from its birth on, since an ear may speak at its birth and nothing may call
+  into a life that stands waiting for it; the thread reads the loop it was made in as its running loop, since a
+  World reads the running loop at its first step. Every fact the sandbox gives it, and nothing at its birth, goes
+  through its inbox to the thread, and what the generator did with it comes back through its outbox: nothing, its
+  end, or what it raised. A verb the generator says, say among them, goes the other way through the same two doors,
+  and its value wakes the thread.
   """
 
-  def __init__(self, name: str, gen: Generator[tuple | None, tuple]) -> None:
+  def __init__(self, name: str, gen: Generator[None, tuple]) -> None:
     self.name = name
     self.gen = gen
     self.inbox: queue.Queue[object] = queue.Queue()
     self.outbox: queue.Queue[object] = queue.Queue()
-    # A generator that was started already stands at a yield, and so does its stand-in.
-    started = inspect.getgeneratorstate(gen) != inspect.GEN_CREATED
-    self.first = None if started else self.stepped(None)
-    self.born = False
-    threading.Thread(target=self.serve, daemon=True).start()
+    # A generator that was started already stands at a yield, and so does its stand-in, so it has no birth to hear.
+    self.born = inspect.getgeneratorstate(gen) != inspect.GEN_CREATED
+    threading.Thread(target=self.serve, args=(asyncio.get_running_loop(),), daemon=True).start()
 
   def stepped(self, sent: object) -> object:
     """One step of the generator with what it was given, as the ear it hears by, and what came of it, as the
     sandbox reads a reply."""
     token = SPEAKER.set(self.name)
     try:
-      out = self.gen.send(sent) if isinstance(sent, tuple) else next(self.gen)
+      self.gen.send(sent) if isinstance(sent, tuple) else next(self.gen)
     except StopIteration:
       return ("over",)
     except BaseException as no:
       return ("raised", no)
     finally:
       SPEAKER.reset(token)
-    return None if out is None else ("say", tuple(out))
+    return None
 
-  def serve(self) -> None:
-    """The thread of the generator: every fact from the inbox stepped, and what came of it put in the outbox."""
+  def serve(self, loop: asyncio.AbstractEventLoop) -> None:
+    """The thread of the generator, which runs in the loop of the life: every fact from the inbox stepped, and what
+    came of it put in the outbox."""
     LOCAL.crossing = self
+    # The one way a thread reads a loop as its running one, which asyncio gives to those that run a loop.
+    asyncio._set_running_loop(loop)
     while (got := self.inbox.get()) is not END:
       self.outbox.put(self.stepped(got))
 
   def channel(self, said: object) -> object:
     """What the sandbox gave this generator, and what the generator did with it: at its birth the sandbox gives
-    it nothing, and what the priming step gave stands for that."""
-    if not self.born:
-      self.born = True
-      return self.first
+    it nothing, and a generator that was started already hears no birth."""
+    if said is None and self.born:
+      return None
+    self.born = True
     self.inbox.put(said)
     return self.outbox.get()
 
@@ -176,12 +178,12 @@ class Crossing:
 class Living:
   """One life of the engine in the sandbox, and the ears of this interpreter it hears, by name."""
 
-  def __init__(self, outside: dict[str, Generator[tuple | None, tuple]]) -> None:
+  def __init__(self, outside: dict[str, Generator[None, tuple]]) -> None:
     self.crossings = {name: Crossing(name, gen) for name, gen in outside.items()}
     self.callables: dict[str, Callable[..., object]] = {}
     self.life: _monty.Life | None = None
 
-  def ear(self, gen: Generator[tuple | None, tuple]) -> tuple[str, bool]:
+  def ear(self, gen: Generator[None, tuple]) -> tuple[str, bool]:
     """A generator of this interpreter, heard from now on under a name of its own: its name, and whether it was
     started already, so that its stand-in stands where it stands. The door makes the mark the engine reads."""
     name = f"ear:{len(self.crossings)}"
@@ -311,7 +313,7 @@ class Site:
     speaks(previous)
 
 
-def boot(record: Iterable[object] = (), **outside: Generator[tuple | None, tuple]) -> Act:
+def boot(record: Iterable[object] = (), **outside: Generator[None, tuple]) -> Act:
   """A life of the engine in the sandbox, opened from the record and on the ears given, which gives the root.
 
   The Kernel and the gate are the crate's, so a generator under either name is refused as the engine refuses one

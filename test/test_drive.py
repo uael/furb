@@ -1,4 +1,4 @@
-"""drive, the other way to speak: a generator brought to life under a name."""
+"""drive, the way to bring an ear to life under a name."""
 
 from collections.abc import Generator
 
@@ -6,32 +6,34 @@ import pytest
 
 from conftest import STANDS, Sand, keeping, life, said, settle
 from furb import engine
-from furb.engine import Refused
+from furb.engine import OPERATOR, WORLD, Refused
 
 
-def ends(mark: list[tuple]) -> Generator[tuple | None, tuple | None]:
+def ends(mark: list[tuple]) -> Generator[None, tuple | None]:
   """A generator that says a done of its own and returns at the first fact it hears after it."""
-  yield "done", "none://one", None
+  engine.say("done", "none://one", None)
   if (word := (yield)) is not None:
     mark.append(word)
 
 
-def breaks() -> Generator[tuple | None, tuple | None]:
+def breaks() -> Generator[None, tuple | None]:
   """A generator that raises the first fact it hears."""
   yield
   raise ValueError("boom")
 
 
-async def test_the_other_way_to_speak_a_generator_is_brought_to_life_under_a_name() -> None:
-  """The other way to speak: a generator is brought to life under a name, and from then it hears every fact that is said and says its own."""
+async def test_the_way_to_bring_an_ear_to_life() -> None:
+  """The way to bring an ear to life: a generator is brought to life under a name, and from then it hears every fact that is said and every question offered to it."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   heard: list[tuple] = []
   at = len(log)
-  engine.drive(keeping(heard, ("done", "none://one", None)), "keeper")
+  engine.drive(keeping(heard), "keeper")
   engine.bash("echo hi", on=root)
-  assert said(log, "done")[-1][1] == "none://one" or heard
-  assert heard == log[at:]
+  note = engine.act("note", root, None)
+  await settle()
+  assert said(heard, "bash") == [] and said(heard, "note") == [engine.get(note)]
+  assert heard == [a for a in log[at:] if not engine.question(a) or a[1] == note]
 
 
 async def test_one_that_returns_is_over_and_lives_no_more() -> None:
@@ -57,9 +59,10 @@ async def test_one_that_raises_while_it_hears_is_broken_the_same_way() -> None:
   after: list[tuple] = []
   engine.drive(keeping(after), "broken")
   engine.bash("echo again", on=root)
-  assert len(said(log, "bash")) == 2
-  assert said(heard, "bash") == said(log, "bash") and said(after, "bash") == said(log, "bash")[1:]
-  assert [e[0] for e in sand.record if e[0][0] == "bash"] == said(log, "bash")
+  await settle()
+  first, again = said(log, "bash")
+  assert [a[1] for a in said(heard, "started")] == [a[1] for a in said(after, "started")] == [first[1], again[1]]
+  assert [e[0] for e in sand.record if e[0][0] == "bash"] == [first, again]
 
 
 async def test_a_generator_brought_to_life_under_a_name_and_nothing_more() -> None:
@@ -72,17 +75,19 @@ async def test_a_generator_brought_to_life_under_a_name_and_nothing_more() -> No
   engine.drive(keeping(fresh, ("done", "none://tip", None)), "tip")
   assert said(log, "done")[-1][1] == "none://tip"
 
-  def bearing() -> Generator[tuple | None, tuple | None]:
+  def bearing() -> Generator[None, tuple | None]:
     """An ear that brings another to life while a fact goes round, so the newborn hears from the next fact on."""
     while (heard := (yield)) is not None:
-      if heard[0] == "bash":
+      if heard[0] == "started":
         engine.drive(keeping(later), "later")
 
   engine.drive(bearing(), "bearing")
   engine.bash("echo hi", on=root)
-  command = said(log, "bash")[0]
-  assert fresh == log[at:] and command in fresh
-  assert later and command not in later and later == log[log.index(command) + 1 :]
+  await settle()
+  started = said(log[at:], "started")[0]
+  assert fresh == [a for a in log[at:] if not engine.question(a)] and started in fresh
+  assert later and started not in later
+  assert later == [a for a in log[log.index(started) + 1 :] if not engine.question(a)]
 
 
 async def test_it_lives_until_it_returns() -> None:
@@ -101,15 +106,15 @@ async def test_it_lives_until_it_returns() -> None:
   assert heard and heard[-1] == log[-1]
 
 
-async def test_a_generator_that_yields_a_saying_is_given_the_fact_as_the_bus_said_it() -> None:
-  """A generator that yields a saying is given the fact as the bus said it, and one that yields nothing waits for the next fact said."""
+async def test_an_ear_yields_nothing() -> None:
+  """An ear yields nothing, and each yield waits for what it hears next, the next fact said or the next question offered to it."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   got: list[object] = []
 
-  def asking() -> Generator[tuple | None, tuple | None]:
-    """An ear that says one saying of its own and then waits for what is said after it."""
-    got.append((yield "tell", root, [("noted", [], None)]))
+  def asking() -> Generator[None, tuple | None]:
+    """An ear that says one fact of its own by say, and then waits for what it hears after it."""
+    got.append(engine.say("tell", root, [("noted", [], None)]))
     while True:
       got.append((yield))
 
@@ -117,5 +122,22 @@ async def test_a_generator_that_yields_a_saying_is_given_the_fact_as_the_bus_sai
   engine.drive(asking(), "asker")
   assert got[0] == ("tell", root, "asker", [("noted", [], None)]) == log[at]
   engine.bash("echo hi", on=root)
+  note = engine.act("note", root, None)
   await settle()
-  assert got[1:] == log[at:]
+  assert got[1:] == [a for a in log[at:] if not engine.question(a) or a[1] == note]
+
+
+async def test_drive_refuses_a_name_that_an_ear_hears_by_already() -> None:
+  """drive refuses a name that an ear hears by already, and the name of the operator, which is a site and never an ear."""
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
+  heard: list[tuple] = []
+  for name in ("world", "record", OPERATOR):
+    with pytest.raises(Refused, match=rf"^{name} hears$"):
+      engine.drive(keeping(heard), name)
+  engine.drive(keeping(heard), "keeper")
+  with pytest.raises(Refused, match=r"^keeper hears$"):
+    engine.drive(keeping([]), "keeper")
+  engine.bash("echo hi", on=root)
+  await settle()
+  assert said(sand.calls, "bash") == said(log, "bash") and said(heard, "started") == [("started", "bash1", WORLD)]

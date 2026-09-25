@@ -1,11 +1,11 @@
-"""Ear, any generator that hears every fact and speaks by yielding one: the World and the Kernel among them."""
+"""Ear, any generator that hears the facts of a life and speaks by say: the World and the Kernel among them."""
 
 import asyncio
 from asyncio import CancelledError
 from collections.abc import Generator
 from functools import partial
 
-from conftest import STANDS, Py, Sand, Where, World, dones, life, ran, said, settle, sown, world_says
+from conftest import STANDS, Py, Sand, Where, World, dones, keeping, kernel, life, ran, said, settle, sown, world_says
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Exit, Refused, Text
 
@@ -23,13 +23,13 @@ class Knows(Sand):
       match a:
         case ("stand", qid, *_):
           self.calls.append(a)
-          yield "done", qid, self.stands or [[], "", ""]
+          engine.say("done", qid, self.stands or [[], "", ""])
         case ("ping", about, *_):
           self.calls.append(a)
-          yield "done", about, "did ping"
+          engine.say("done", about, "did ping")
         case ("reply", about, _, on, _) if self.script.get(on):
           self.calls.append(a)
-          yield "started", about
+          engine.say("started", about)
           word = self.script[on].pop(0)
           turn = ("assistant", word, (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
           loop.call_soon(partial(world_says, "done", about, turn))
@@ -92,8 +92,8 @@ async def test_the_facts_that_the_world_says_of_its_own_are_for_the_acts_that_co
   assert {a[1] for a in own} == {command, asked}
 
 
-async def test_an_ear_speaks_by_yielding_a_saying_and_the_work_it_began_speaks_later_by_say() -> None:
-  """An ear speaks by yielding a saying, and the work it began speaks later by say, under the site of the ear that began it."""
+async def test_an_ear_yields_only_to_wait_for_what_it_hears_next() -> None:
+  """An ear yields only to wait for what it hears next: it speaks by say and asks by act while it hears, and the work it began speaks later by say, under the site of the ear that began it."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   act = engine.bash("echo hi", on=root)
@@ -102,21 +102,36 @@ async def test_an_ear_speaks_by_yielding_a_saying_and_the_work_it_began_speaks_l
   _, standing, *_ = said(log, "stand")[0]
   facts = [(a[0], a[1]) for a in log if a[2] == WORLD and engine.get(a[1]) != a]
   assert facts == [("done", standing), ("started", act), ("out", act), ("done", act)]
+  assert [(a[1], a[2], a[4]) for a in said(log, "merged")] == [("merged1", WORLD, act)]
 
 
-def note(kept: list[tuple]) -> Generator[tuple | None, tuple]:
+async def test_an_ear_hears_every_fact_that_is_no_question() -> None:
+  """An ear hears every fact that is no question, in the order of the log, and a question only while it is offered it."""
+  sand = Sand(stands=STANDS)
+  before: list[tuple] = []
+  after: list[tuple] = []
+  root = engine.boot((), **kernel(), before=keeping(before), world=sand.hears(), after=keeping(after))
+  act = engine.bash("echo hi", on=root)
+  assert (await act).code == 0
+  await settle()
+  assert [a[1] for a in before if engine.question(a)] == ["stand1", act]
+  assert [a for a in before if not engine.question(a)] == after != []
+  assert [a for a in after if engine.question(a)] == []
+
+
+def note(kept: list[tuple]) -> Generator[None, tuple]:
   """An ear of the outside that answers a read of a door of its own and keeps every fact it hears."""
   while True:
     match a := (yield):
       case ("read", qid, _, _, path) if path.startswith("note://"):
         kept.append(a)
-        yield "done", qid, Text(path, "kept")
+        engine.say("done", qid, Text(path, "kept"))
       case (_, _, _, *_):
         kept.append(a)
 
 
 async def test_an_ear_is_any_generator_of_that_shape() -> None:
-  """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by."""
+  """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by but the name of the operator."""
   sand = sown()
   kept: list[tuple] = []
   root = engine.boot((), world=sand.hears(), kernel=Py().kernel(), gate=Py().gating(), note=note(kept))
