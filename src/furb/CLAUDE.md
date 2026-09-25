@@ -33,29 +33,32 @@ Each name has one meaning, which the contract's sentences use as given here.
   nothing when the word may run.
 - boot: the life, given the record and the generators of the outside, which binds say, act, drive, get, peek and
   transcript, and gives the root.
-- bus: what boot binds for every verb to speak through: say for a fact, act for an act, and drive for a generator.
+- bus: what boot binds for every verb to speak through: say for a fact, act for a question, and drive for an ear.
 - view: a read of the life that makes nothing and keeps nothing: get, peek and transcript, and every read derived
   from them.
 - fact: what is said to the life, inert, with no response, which every ear hears in the order of the log; a tuple
   of its kind, the act it is about, who said it, and its words.
-- site: who is speaking, which every fact is said from: the generator while it speaks, the run while it is
-  stepped, the operator otherwise.
+- site: who is speaking, which every fact is said from: the ear while it hears, the run while it is stepped, the
+  operator otherwise.
 - kind: the first slot of a fact; for a question, the verb that made it.
 - question: a fact that is asked, which is an act: it takes a name when it is said, its first word is the chain it
   is on, and what it came to the life holds under its name.
-- act: a question, answered now or later, which goes to the ears in turn until one owns it, and is over at its
+- act: a question, answered now or later, which is offered to the ears in turn until one owns it, and is over at its
   done.
 - owner: the ear that took an act by saying a started or a done about it, which answers it.
-- started: the fact by which an ear takes an act whose done comes later.
+- started: the fact by which an ear, while it is offered an act, takes the act when its done comes after the offer.
 - query: an act that no ear started, which its owner answers with a done at once.
 - life: one run of the engine, which boot opens and a second boot ends; every act, name and outcome is of it.
-- ear: a generator that hears the facts of the life and speaks by yielding one; the ear of an act is given the name
-  of the act, and a verb makes it with pausing and ending. An ear of the engine hears every fact and every act; an
-  ear of the outside, the World, the Kernel and every other generator that boot is given, hears every fact, and an
-  act only while no ear before it took it.
+- ear: a generator that hears the facts of the life and the questions offered to it, and speaks by say and act
+  while it hears; it yields only to wait for what it hears next. The ear of an act is given the name of the act, and
+  a verb makes it with pausing and ending. Every other ear is an ear of the life: the ears of the outside that boot
+  is given, the World, the Kernel and the gate among them, then the record, then every ear that drive brings to life
+  later. An ear hears every fact that is no question, in the order of the log, and a question only while it is
+  offered it: an act goes to its own ear at its birth, then to the ears of acts, then to the ears of the life, each
+  in the order it came to life, until one owns it.
 - done: the fact that settles the act it names with what the act came to.
 - outcome: what an act came to, held under its name once its done lands: the value or the exception.
-- id: the name of an act, as a string: its kind and its number among the acts of that kind, as bash1 or read3,
+- id: the name of an act, as a string: its kind and the lowest number of that kind that no act holds, as bash1 or read3,
   which python can bind.
 - maker: the one that made a question, which its fact says as who said it; for a rung that retells, the rung it
   retells.
@@ -125,14 +128,16 @@ Each name has one meaning, which the contract's sentences use as given here.
 - paused: the state of an act while a pause over it stands with no wake after it.
 - grant: an act that puts a ceiling on a chain: dollars, a share of the window, or both.
 - ledger: what the grant holds: the dollars of the answers since it was made and the share the last one filled.
-- journal: the ear of the life that hears everything and says a keep for each entry of the record.
+- journal: the ear of the life under the name record, which hears every fact, keeps an act at the first fact it
+  hears about it, and says a keep for each entry of the record.
 - record: the entries the journal keeps, in the order they were said.
 - entry: one line of the record: one fact, an act among them.
 - plain: the form of a value on the wire, which the World may keep an entry as: nothing, a boolean, a number, a
   string, a list of plain, or a table from a string to plain.
 - drift: an act that, made again, does not agree with the record.
 - pending: what the record shows started and not done when boot returns: a command, a wait, a prompt to the operator
-  or a reply that the outside took, which the life holds with no fact until a wake that the life says.
+  or a reply that the outside took, which the record holds with no fact until a wake that this life says over it
+  offers it, once, to the ears.
 
 ## Laws no test holds
 

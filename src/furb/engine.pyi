@@ -44,7 +44,7 @@ A read takes its number as a command does, so the first read is read1, whoever m
 The generator that settles an await of an act from outside a run is named after that act and the task that awaits it, which is the name of no question.
 """
 type Ear = Generator[None, Fact]
-"""An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by but the name of the operator.
+"""An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by.
 The World hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
 The World performs any fact that an extension defines and that the World knows.
 The facts that the World says of its own are for the acts that complete later.
@@ -100,11 +100,11 @@ def act(kind: str, on: str, ear: Callable[[str], Ear] | None, *words: object) ->
 
 def drive(g: Ear, name: str) -> None:
   """The way to bring an ear to life: a generator is brought to life under a name, and from then it hears every fact that is said and every question offered to it.
-    One that returns is over and lives no more, which is how a thing that watches for one fact alone is dropped the moment it hears it.
-    One that raises while it hears is broken the same way, and what went wrong goes to the one that spoke.
-    A generator brought to life under a name and nothing more: it hears from the tip and runs to its first wait, and one born while a fact goes round hears from the next.
-    It lives until it returns, and an act that hears nothing more returns at the first fact it hears after its own end.
-    An ear yields nothing, and each yield waits for what it hears next, the next fact said or the next question offered to it.
+  One that returns is over and lives no more, which is how a thing that watches for one fact alone is dropped the moment it hears it.
+  One that raises while it hears is broken the same way, and what went wrong goes to the one that spoke.
+  A generator brought to life under a name and nothing more: it hears from the tip and runs to its first wait, and one born while a fact goes round hears from the next.
+  It lives until it returns, and an act that hears nothing more returns at the first fact it hears after its own end.
+  An ear yields nothing, and each yield waits for what it hears next, the next fact said or the next question offered to it.
   drive refuses a name that an ear hears by already, and the name of the operator, which is a site and never an ear.
   """
 

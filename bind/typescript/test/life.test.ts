@@ -205,7 +205,7 @@ test("every ear hears a fact whose values have no plain form, and each value cro
 test("a record keeps a value with no plain form, so a later life makes the same act again", async () => {
   const first = await open();
   await first.life.rung(
-    "def takes(id):\n  yield 'started', id\n  while True:\n    yield\nnote = act('note', '', takes, {1: 'a'}, 2**70, float('inf'))",
+    "def takes(id):\n  say('started', id)\n  while True:\n    yield\nnote = act('note', '', takes, {1: 'a'}, 2**70, float('inf'))",
   );
   const note = first.life.inspect("note").value as string;
   // The operator speaks of the act, so the record keeps the act with its words.
@@ -256,9 +256,10 @@ test("the World reads the turns of a chain when it takes a reply, which carries 
   const world = (function* (): Ear {
     for (;;) {
       const fact = (yield null) as Fact;
-      if (fact?.[0] === "stand") yield ["done", fact[1], [[["model", ["low"], 200000]], "/tmp", "model/low"]];
+      if (fact?.[0] === "stand")
+        yield { verb: "say", args: ["done", fact[1], [[["model", ["low"], 200000]], "/tmp", "model/low"]] };
       if (fact?.[0] === "reply") {
-        yield ["started", fact[1]];
+        yield { verb: "say", args: ["started", fact[1]] };
         read.push(fact, yield { verb: "turns", kwargs: { on: fact[3] } });
       }
     }
