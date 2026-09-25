@@ -11,7 +11,7 @@ KEPT = (
   "  while True:\n"
   "    match (yield):\n"
   "      case ('write', qid, _, _, Text(path=path)) if path.startswith('nums://'):\n"
-  "        say('done', qid, 7)\n"
+  "        yield 'done', qid, 7\n"
   "\n"
   "act('nums', '', kept)\n"
   "close(write(Text('nums://a', 'x')))\n"
@@ -28,12 +28,12 @@ class Hoard(Sand):
       a = yield
       match a:
         case ("stand", qid, *_):
-          engine.say("done", qid, self.stands or [[], "", ""])
+          yield "done", qid, self.stands or [[], "", ""]
         case ("read", qid, _, _, path):
-          engine.say("done", qid, Text(path, self.files.get(path, "")))
+          yield "done", qid, Text(path, self.files.get(path, ""))
         case ("write", qid, _, _, Text(path=path, content=content)):
           self.files[path] = self.files.get(path, "") + content
-          engine.say("done", qid, Text(path, self.files[path]))
+          yield "done", qid, Text(path, self.files[path])
 
 
 class Firm(Sand):
@@ -46,11 +46,11 @@ class Firm(Sand):
       match a:
         case ("stand", qid, *_):
           self.calls.append(a)
-          engine.say("done", qid, self.stands or [[], "", ""])
+          yield "done", qid, self.stands or [[], "", ""]
         case ("write", qid, _, _, Text(path=path, content=content)):
           self.calls.append(a)
           self.files[path] = content + "END\n"
-          engine.say("done", qid, Text(path, self.files[path]))
+          yield "done", qid, Text(path, self.files[path])
 
 
 async def test_a_write_whoever_serves_the_path_of_the_text_takes_its_content() -> None:

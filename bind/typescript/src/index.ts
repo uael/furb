@@ -4,6 +4,7 @@ export {
   type Call,
   type Ear,
   Ears,
+  type Saying,
   WorldAdapter,
   type WorldHandler,
   type WorldRequest,

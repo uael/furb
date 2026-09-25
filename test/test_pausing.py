@@ -109,8 +109,8 @@ async def test_a_control_from_outside_reaches_a_paused_act_at_once() -> None:
   assert isinstance(engine.peek(act), CancelledError)
   heard: list[tuple] = []
 
-  def listening(id: str) -> Generator[None, tuple]:
-    engine.say("started", id)
+  def listening(id: str) -> Generator[tuple | None, tuple]:
+    yield "started", id
     while True:
       heard.append((yield))
 
@@ -128,13 +128,13 @@ async def test_a_control_from_outside_reaches_a_paused_act_at_once() -> None:
 
 
 async def test_a_paused_ear_hears_at_once_an_act_put_to_it() -> None:
-  """A paused ear is offered a question at once, since an offer is no delivery, and hears every other fact at the wake."""
+  """A paused ear hears at once an act put to it, and every other fact at the wake."""
   sand = sown()
   _, root = life(sand)
   heard: list[tuple] = []
 
-  def listening(id: str) -> Generator[None, tuple]:
-    engine.say("started", id)
+  def listening(id: str) -> Generator[tuple | None, tuple]:
+    yield "started", id
     while True:
       heard.append((yield))
 

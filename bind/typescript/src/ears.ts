@@ -1,5 +1,5 @@
 import { Life } from "../index.cjs";
-import { type Entry, type Fact, isQuestion } from "./types.js";
+import type { Entry, Fact } from "./types.js";
 
 export interface WorldRequest {
   kind:
@@ -18,14 +18,13 @@ export interface WorldRequest {
   args: unknown[];
 }
 export type WorldHandler = (request: WorldRequest) => unknown;
-/** One verb of the engine that an ear says while it hears, say and act among them, whose value the ear is given
- * back: an ear of the host hears on the thread of the life, and so speaks through what it yields. */
+export type Saying = [kind: string, about: string, ...words: unknown[]];
 export interface Call {
   verb: string;
   args?: unknown[];
   kwargs?: Record<string, unknown>;
 }
-export type Ear = Generator<Call | null | undefined, void, unknown>;
+export type Ear = Generator<Saying | Call | null | undefined, void, unknown>;
 const fault = (error: unknown) =>
   error && typeof error === "object" && "is" in error && "args" in error
     ? error
@@ -41,8 +40,12 @@ export class Ears {
   private readonly ears = new Map<string, Ear>();
   private readonly functions = new Map<string, (...args: never[]) => unknown>();
   private serial = 0;
-  /** The ears by name, which boot is given in this order, the order in which the engine offers them a question. */
-  constructor(ears: Record<string, Ear>) {
+  /** The ears by name, and the names of the ears of the outside, which boot is given in the order the engine offers
+   * them an act; any other ear is one that an ear drives as an ear of the engine. */
+  constructor(
+    ears: Record<string, Ear>,
+    private readonly outside = Object.keys(ears),
+  ) {
     for (const [name, ear] of Object.entries(ears)) this.ears.set(name, ear);
   }
   callable(callback: (...args: never[]) => unknown): { is: "callable"; name: string } {
@@ -72,13 +75,14 @@ export class Ears {
           : ear.next(value);
       if (next.done) return ["over"];
       if (!next.value) return null;
+      if (Array.isArray(next.value)) return ["say", next.value];
       return ["calls", next.value.verb, next.value.args ?? [], next.value.kwargs ?? {}];
     } catch (error) {
       return { error: fault(error) };
     }
   };
   boot(record: Entry[] = []): Life {
-    return Life.boot(this.callback, [...this.ears.keys()], record);
+    return Life.boot(this.callback, this.outside, record);
   }
 }
 
@@ -93,11 +97,6 @@ export class WorldAdapter {
   private readonly running = new Map<string, [merged: boolean, stdout: string, stderr: string]>();
   /** The actor whose last reply on each chain answered nothing, so a second such reply in a row pauses the chain. */
   private readonly mute = new Map<string, string>();
-  /** The name of every act the observer holds whole, and of every name a fact was about that is no act. */
-  private readonly seen = new Set<string>();
-  /** The facts the observer heard since it last gave them to its host, and whether it will give them. */
-  private readonly heard: Fact[] = [];
-  private queued = false;
   constructor(
     readonly handle: WorldHandler,
     readonly onFacts?: (facts: Fact[]) => void,
@@ -106,50 +105,26 @@ export class WorldAdapter {
     readonly onFact?: (fact: Fact) => Generator<Call, void, unknown> | undefined,
   ) {
     const owner = this;
+    let queued = false;
+    const facts: Fact[] = [];
     const observer = (function* (): Ear {
       for (;;) {
-        const fact = (yield null) as Fact | null;
-        if (fact) yield* owner.observe(fact);
+        const fact = (yield null) as Fact;
+        if (fact) {
+          facts.push(fact);
+          const hearing = onFact?.(fact);
+          if (hearing) yield* hearing;
+        }
+        if (!queued) {
+          queued = true;
+          queueMicrotask(() => {
+            queued = false;
+            if (!owner.stopped && facts.length) onFacts?.(facts.splice(0));
+          });
+        }
       }
     })();
-    this.ears = new Ears({ world: this.world(), typescript: observer });
-  }
-
-  /** One fact the observer hears, and before it the act it is about when the observer holds no such act: an ear
-   * hears a question only while it is offered it, so the observer reads an act it was not offered whole from the
-   * life, at the first fact it hears about that act. */
-  private *observe(fact: Fact): Generator<Call, void, unknown> {
-    const [kind, id] = fact;
-    if (!this.seen.has(id)) {
-      this.seen.add(id);
-      const made = isQuestion(kind, id) ? null : ((yield { verb: "get", args: [id] }) as Fact | null);
-      if (made) yield* this.observe(made);
-    }
-    this.heard.push(fact);
-    const hearing = this.onFact?.(fact);
-    if (hearing) yield* hearing;
-    if (this.queued) return;
-    this.queued = true;
-    queueMicrotask(() => {
-      this.queued = false;
-      if (!this.stopped && this.heard.length) this.onFacts?.(this.heard.splice(0));
-    });
-  }
-
-  /** The acts of the record that are neither done nor heard when boot returns: the record holds an act the outside
-   * started and did not end with no fact, so no ear heard it, and the observer reads each whole from the life, the
-   * calls of its hearing said as the operator. */
-  held(entries: Entry[]): void {
-    const life = this.life;
-    if (!life) return;
-    for (const [[kind, id]] of entries) {
-      const made =
-        isQuestion(kind, id) && !this.seen.has(id) ? (life.call("get", [id], {}) as Fact | null) : null;
-      if (!made || life.outcome(id).done) continue;
-      const hearing = this.observe(made);
-      for (let next = hearing.next(); !next.done; )
-        next = hearing.next(life.call(next.value.verb, next.value.args ?? [], next.value.kwargs ?? {}));
-    }
+    this.ears = new Ears({ world: this.world(), typescript: observer }, ["world"]);
   }
 
   private get closed(): boolean {
@@ -205,6 +180,9 @@ export class WorldAdapter {
     });
   }
   private *world(): Ear {
+    // An ear of the outside hears an act only when no ear before it took it, so the observer, which keeps every fact
+    // and every act, is an ear of the engine, which the World drives as it is born, before the record is said again.
+    yield { verb: "drive", args: [{ is: "ear", name: "typescript", started: false }, "typescript"] };
     for (;;) {
       const fact = (yield null) as Fact;
       if (!fact) continue;
@@ -238,10 +216,10 @@ export class WorldAdapter {
         } catch (error) {
           value = fault(error);
         }
-        yield { verb: "say", args: ["done", id, value] };
+        yield ["done", id, value];
       } else if (kind === "keep") synchronous(this.handle({ kind: "Keep", args: [words[0]] }));
       else if (kind === "reply") {
-        yield { verb: "say", args: ["started", id] };
+        yield ["started", id];
         const [chain, actor] = [String(words[0]), String(words[1])];
         const turns = yield { verb: "turns", kwargs: { on: chain } };
         this.later(
@@ -270,7 +248,7 @@ export class WorldAdapter {
           },
         );
       } else if (kind === "bash") {
-        yield { verb: "say", args: ["started", id] };
+        yield ["started", id];
         const [on, command, fed, timeout] = words;
         const here = yield { verb: "cwd", kwargs: { on } };
         const merged = Boolean(yield { verb: "ask", args: ["merged", on, id] });
@@ -279,10 +257,10 @@ export class WorldAdapter {
           synchronous(this.handle({ kind: "Run", args: [{ id, here, command, fed, timeout, merged }] }));
         } catch (error) {
           this.running.delete(id);
-          yield { verb: "say", args: ["done", id, fault(error)] };
+          yield ["done", id, fault(error)];
         }
       } else if (kind === "wait") {
-        yield { verb: "say", args: ["started", id] };
+        yield ["started", id];
         this.later(
           { kind: "Wait", args: [words[1], id] },
           () => {
@@ -291,7 +269,7 @@ export class WorldAdapter {
           (error) => this.life?.say("done", id, [fault(error)]),
         );
       } else if (kind === "prompt") {
-        yield { verb: "say", args: ["started", id] };
+        yield ["started", id];
         this.later(
           { kind: "Prompt", args: [id, words[1], words[2]] },
           (value) => this.life?.close(value, id),

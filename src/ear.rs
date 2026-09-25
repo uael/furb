@@ -1,15 +1,15 @@
 //! The ears of a host, by name: every ear the contract lets a host give a life, as the contract has them.
 //!
-//! The contract lets `boot`, `act` and `drive` take any generator: it hears the facts of a life and the questions
-//! offered to it, and speaks by say and act while it hears. The World is one, and it has a trait of its own,
-//! [`World`](crate::World), since what the engine asks of it is known. Every other ear is heard here, by the name
-//! the engine hears it under, and so is the World when a host hands it over as a generator, which a host that is
-//! python does.
+//! The contract lets `boot`, `act` and `drive` take any generator: it hears every fact and speaks by yielding a
+//! saying. The World is one, and it has a trait of its own, [`World`](crate::World), since what the engine asks of
+//! it is known. Every other ear is heard here, by the name the engine hears it under, and so is the World when a
+//! host hands it over as a generator, which a host that is python does.
 //!
-//! An ear answers where it is asked. An ear that answers from a thread of its own, as a generator of python does,
-//! cannot say a verb of the engine itself: it says the verb as data, [`Reply::Calls`], say among them, and the
-//! value comes back through [`Ears::answered`]. What it says is said under its name, since it speaks while it
-//! hears.
+//! An ear answers where it is asked. What it says of a fact is one saying, which the bus says whole and hands
+//! back to the ear as the next fact it hears, so an ear that has two things to say says the second on hearing
+//! the first. An ear that answers from a thread of its own, as a generator of python does, cannot say a verb of
+//! the engine itself: it says the verb as data, [`Reply::Calls`], and the value comes back through
+//! [`Ears::answered`].
 
 use crate::{
   fact::Fact,
@@ -19,8 +19,10 @@ use crate::{
 /// What an ear answers when it has heard a fact.
 #[derive(Debug, Clone)]
 pub enum Reply {
-  /// Nothing more: the ear is done hearing, and waits for the next fact.
+  /// Nothing at all, which is the answer to every fact the ear only hears.
   Nothing,
+  /// One saying, which the bus makes whole and hands back to the ear as the next fact it hears.
+  Say(Fact),
   /// What the ear raised, which is raised in the ear where it stands in the sandbox.
   Raised(Fault),
   /// The ear is over: it hears nothing more, as a generator that returned.

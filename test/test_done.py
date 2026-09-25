@@ -57,7 +57,7 @@ async def test_a_done_that_an_act_said_itself_is_the_result_of_the_act() -> None
 
 
 async def test_a_done_that_an_ear_says_while_the_act_is_put_to_it_is_the_answer_to_the_act() -> None:
-  """A done that an ear says while the act is offered to it is the answer to the act, which takes it now."""
+  """A done that an ear says while the act is put to it is the answer to the act, which takes it now."""
   sand = Sand(files={"/w/a.txt": "one\n"}, stands=STANDS)
   log, root = life(sand)
   got = engine.read("a.txt", on=root)

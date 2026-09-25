@@ -54,7 +54,7 @@ async def test_a_question_is_named_by_its_kind() -> None:
 
 
 async def test_the_name_of_an_act() -> None:
-  """The name of an act is its kind and the lowest number of that kind that no act holds, so the root is chain1, the first command is bash1 and the first prompt is prompt1, and python binds each name as it is."""
+  """The name of an act is its kind and how many acts of that kind the life has made with it, so the root is chain1, the first command is bash1 and the first prompt is prompt1, and python binds each name as it is."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\ny = bash('echo ho')\nclose(1)", "close(bash1 + bash2 == 'bash1bash2')"]

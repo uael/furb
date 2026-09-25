@@ -221,6 +221,7 @@ fn answered(got: Result<Text, Fault>) -> Object {
 fn replied(reply: Reply) -> Object {
   match reply {
     Reply::Nothing => Object::none(),
+    Reply::Say(fact) => Object::tuple([Object::string("say"), fact.0]),
     Reply::Raised(fault) => Object::tuple([Object::string("raised"), fault.object()]),
     Reply::Over => Object::tuple([Object::string("over")]),
     Reply::Calls { name, args, kwargs } => Object::tuple([

@@ -246,8 +246,7 @@ export class World extends EventEmitter {
       const raised = this.life.raised;
       if (raised) throw new Error(`${raised.is}: ${raised.args.map(String).join(" ")}`);
       // The journal said the whole record again before boot returned, so every act that is not done now is one the
-      // record showed begun and not done, which the observer reads whole when no ear heard it.
-      this.adapter.held(this.records.entries);
+      // record showed begun and not done.
       for (const act of this.activity.acts.values())
         if (PENDING.includes(act.kind) && !act.done && !act.paused) this.pending.set(act.id, act.kind);
       this.save();

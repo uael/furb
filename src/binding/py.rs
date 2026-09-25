@@ -125,7 +125,7 @@ struct Hosted {
 }
 
 impl Hosted {
-  /// What the object answered, as a reply: nothing, a verb to say, what it raised, or its end.
+  /// What the object answered, as a reply: nothing, a saying, a verb to say, what it raised, or its end.
   fn reply(&self, py: Python<'_>, got: PyResult<Bound<'_, PyAny>>) -> Reply {
     let got = match got {
       Ok(got) => got,
@@ -140,6 +140,10 @@ impl Hosted {
       held.get_item(0).ok().and_then(|one| one.extract::<String>().ok()).unwrap_or_default();
     let plain = |i: usize| held.get_item(i).and_then(|one| of_python(&self.made, &self.host, &one));
     match mark.as_str() {
+      "say" => match plain(1) {
+        Ok(said) => Fact::of(said.as_ref()).map_or(Reply::Nothing, Reply::Say),
+        Err(fault) => Reply::Raised(fault_of(py, &fault)),
+      },
       "calls" => {
         let name =
           held.get_item(1).ok().and_then(|one| one.extract::<String>().ok()).unwrap_or_default();

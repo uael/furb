@@ -35,7 +35,7 @@ async def test_what_a_question_answered_now_that_shows_a_text_or_changes_a_state
 
 
 async def test_a_question_is_put_to_the_ears_of_the_engine_before_those_of_the_outside() -> None:
-  """A question is offered to the ears of acts before the ears of the outside, so the World is asked for nothing that the engine knows."""
+  """A question is put to the ears of the engine before those of the outside, so the World is asked for nothing that the engine knows."""
   sand = sown()
   _, root = life(sand)
   assert engine.cwd(on=root) == "/w"
