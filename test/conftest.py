@@ -48,9 +48,9 @@ MONTY_SKIPS: dict[str, str] = {
 """MONTY_SKIPS names the tests the engine of monty does not run, each with why: what the test reads is a fact of one
 interpreter, which the boundary does not carry."""
 
-type World = Generator[tuple | None, tuple]
+type World = Generator[None, tuple]
 """The World, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
-type Kernel = Generator[tuple | None, tuple]
+type Kernel = Generator[None, tuple]
 """The Kernel, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
 
 STANDS: list = [[[OPERATOR, [], 200000], ["m", ["low", "high"], 400000], ["n", ["low"], 200000]], "/w", "m/low"]
@@ -67,11 +67,11 @@ MANY = "".join(f"line {i}\n" for i in range(1, 301))
 
 DOOR = (
   "def note(id):\n"
-  "  yield 'started', id\n"
+  "  say('started', id)\n"
   "  while True:\n"
   "    match (yield):\n"
   "      case ('read', qid, _, _, path) if path.startswith('note://'):\n"
-  "        yield 'done', qid, Text(path, 'kept')\n"
+  "        say('done', qid, Text(path, 'kept'))\n"
   "\n"
   "act('note', '', note)\n"
   "close(1)\n"
@@ -169,7 +169,7 @@ class Sand:
         self.calls.append(a)
       match a:
         case ("bash", about, _, on, command, _, timeout):
-          yield "started", about
+          engine.say("started", about)
           self.outs[about] = [engine.ask("merged", on, about), "", ""]
           loop.call_later(timeout, ends, about)
           if self.auto:
@@ -178,23 +178,23 @@ class Sand:
         case ("out", about, _, text, stream) if about in self.outs:
           self.outs[about][1 if self.outs[about][0] or stream == "stdout" else 2] += text
         case ("wait", about, _, _, seconds):
-          yield "started", about
+          engine.say("started", about)
           loop.call_later(seconds, partial(engine.say, "done", about, None))
         case ("prompt", about, _, _, shape, _, _):
-          yield "started", about
+          engine.say("started", about)
           if shape not in ("None", "bool", "int", "float", "str"):
             engine.close(Refused(f"the operator answers no {shape}"), about)
         case ("stand", qid, *_):
-          yield "done", qid, self.stands or [[], "", ""]
+          engine.say("done", qid, self.stands or [[], "", ""])
         case ("read", qid, _, on, path) if (full := resolved(engine.cwd(on=on), path)) in self.files:
-          yield "done", qid, Text(full, self.files[full])
+          engine.say("done", qid, Text(full, self.files[full]))
         case ("write", qid, _, on, Text(path=path, content=content)) if (
           "://" not in path and engine.get(path.split("/")[0]) is None
         ):
           self.files[full := resolved(engine.cwd(on=on), path)] = content
-          yield "done", qid, Text(full, content)
+          engine.say("done", qid, Text(full, content))
         case ("reply", about, _, on, _):
-          yield "started", about
+          engine.say("started", about)
           self.turns[about] = engine.turns(on=on)
           if self.script.get(on):
             word = self.script[on].pop(0)
@@ -209,10 +209,10 @@ class Sand:
           self.record.append(entry)
         case ("clock", qid, *_):
           self.tick += 1
-          yield "done", qid, 1000.0 + self.tick
+          engine.say("done", qid, 1000.0 + self.tick)
         case ("chance", qid, *_):
           self.tick += 1
-          yield "done", qid, (self.tick % 7) / 7
+          engine.say("done", qid, (self.tick % 7) / 7)
 
 
 class Dead(Sand):
@@ -230,10 +230,10 @@ class Dead(Sand):
       match a:
         case ("stand", qid, *_):
           self.calls.append(a)
-          yield "done", qid, self.stands or [[], "", ""]
+          engine.say("done", qid, self.stands or [[], "", ""])
         case (kind, qid, *_) if engine.get(qid) == a:
           self.calls.append(a)
-          yield "done", qid, Refused(f"a dead World answers no {kind}")
+          engine.say("done", qid, Refused(f"a dead World answers no {kind}"))
 
 
 @dataclass
@@ -248,17 +248,17 @@ class Where(Sand):
       a = yield
       match a:
         case ("stand", qid, *_):
-          yield "done", qid, self.stands or [[], "", ""]
+          engine.say("done", qid, self.stands or [[], "", ""])
         case ("read", qid, _, on, path):
           full = f"{engine.cwd(on=on)}/{path}"
-          yield "done", qid, Text(full, self.files.get(full, ""))
+          engine.say("done", qid, Text(full, self.files.get(full, "")))
         case ("write", qid, _, on, Text(path=path, content=content)):
           self.files[full := f"{engine.cwd(on=on)}/{path}"] = content
-          yield "done", qid, Text(full, content)
+          engine.say("done", qid, Text(full, content))
         case ("bash", about, _, on, *_):
-          yield "started", about
+          engine.say("started", about)
           self.where.append(engine.cwd(on=on))
-          yield "done", about, Exit(0, Text(f"{about}/stdout"), Text(f"{about}/stderr"))
+          engine.say("done", about, Exit(0, Text(f"{about}/stdout"), Text(f"{about}/stderr")))
 
 
 def seen(held: list[tuple]):  # noqa: ANN201
@@ -305,7 +305,7 @@ class Py:
     while True:
       match (yield):
         case ("gate", qid, _, on, word):
-          yield "done", qid, self.gate(word, [*engine.program(on).values()])
+          engine.say("done", qid, self.gate(word, [*engine.program(on).values()]))
 
   def kernel(self) -> Kernel:
     """The Kernel as one generator for one life. It takes each run as that run, begins the word of it when it hears
@@ -394,9 +394,9 @@ def kept(inner: Kernel) -> Kernel:
 
 
 def watched(log: list[tuple]) -> Kernel:
-  """A generator of the suite that says nothing and keeps every fact it hears, each act among them: an ear of the
-  outside hears only an act that no ear before it took, so an act it did not hear it keeps before the first fact it
-  hears about that act."""
+  """A generator of the suite that says nothing and keeps every fact it hears, each act among them: an ear hears a
+  question only while it is offered it, so an act it was not offered it keeps before the first fact it hears about
+  that act."""
   heard: set[str] = set()
   while True:
     if (a := (yield)) is not None:
@@ -466,21 +466,32 @@ async def relived(sand: Sand, record: Sequence[tuple]) -> tuple[list[tuple], str
   return log, root
 
 
-def keeping(heard: list[tuple], say: tuple | None = None) -> Generator[tuple | None, tuple]:
+def keeping(heard: list[tuple], say: tuple | None = None) -> Generator[None, tuple]:
   """A generator that says one fact of its own at its birth when it is given one, and keeps every fact it hears."""
   if say is not None:
-    yield say
+    engine.say(*say)
   while True:
     if (word := (yield)) is not None:
       heard.append(word)
 
 
-def pair() -> Generator[tuple | None, tuple]:
+def pair() -> Generator[None, tuple]:
   """A generator that says two facts of its own at its birth and nothing after."""
-  yield "done", "none://one", None
-  yield "done", "none://two", None
+  engine.say("done", "none://one", None)
+  engine.say("done", "none://two", None)
   while True:
     yield
+
+
+def redacting() -> Generator[None, tuple]:
+  """An ear of the suite that takes a read of a secret path, asks the same read again, and answers the first with the
+  text masked."""
+  while True:
+    match a := (yield):
+      case ("read", about, _, on, str(path)) if path.endswith(".secret") and engine.get(about) == a:
+        got = engine.ask("read", on, path)
+        assert isinstance(got, Text)
+        engine.say("done", about, Text(got.path, "x" * len(got.content)))
 
 
 def dones(log: Sequence[tuple], kind: str) -> list[tuple]:

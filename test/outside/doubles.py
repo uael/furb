@@ -26,7 +26,7 @@ from furb import engine
 from furb.kernel import Native, gating
 from furb.world import Live
 
-type Words = Generator[tuple | None, tuple]
+type Words = Generator[None, tuple]
 """The World, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
 
 
@@ -77,12 +77,12 @@ def worlds(stands: list) -> Words:
   while True:
     match (yield):
       case ("wait", about, _, _, seconds):
-        yield "started", about
+        engine.say("started", about)
         loop.call_later(seconds, partial(engine.say, "done", about, None))
       case ("reply", about, *_):
-        yield "started", about
+        engine.say("started", about)
       case ("stand", qid, *_):
-        yield "done", qid, stands
+        engine.say("done", qid, stands)
 
 
 def broken(why: str = "the model was not there") -> FunctionModel:
@@ -128,7 +128,7 @@ def blind() -> Words:
   while True:
     match (yield):
       case ("gate", qid, *_):
-        yield "done", qid, []
+        engine.say("done", qid, [])
 
 
 def booted(said: Words, *, gated: bool = True) -> str:

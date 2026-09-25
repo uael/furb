@@ -1,4 +1,4 @@
-//! JavaScript ears cross like Python ears: a saying, a call to the bus, or nothing.
+//! JavaScript ears cross like Python ears: a call to the bus, say among them, their end, or nothing.
 use super::wire::{inward, outward, record};
 use crate::{Ears, Fact, Fault, Life, Object, ObjectRef, Reply};
 use napi::{
@@ -37,7 +37,6 @@ impl Host {
       let value = self.call(value)?;
       Ok(match value[0].as_str() {
         Some("over") => Reply::Over,
-        Some("say") => Reply::Say(Fact(Object::tuple(args(&value[1])?))),
         Some("calls") => Reply::Calls {
           name: value[1].as_str().unwrap_or_default().into(),
           args: args(&value[2])?,
@@ -50,7 +49,7 @@ impl Host {
   }
 }
 impl Ears for Host {
-  /// Every ear hears every fact.
+  /// Every ear hears the facts of the life and the questions offered to it.
   fn hears(&mut self, name: &str, fact: Option<&Fact>) -> Reply {
     let value = fact.map(|fact| {
       if fact.kind() == "keep" { record(fact.0.as_ref()) } else { outward(fact.0.as_ref()) }

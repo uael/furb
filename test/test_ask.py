@@ -4,17 +4,17 @@ from collections.abc import Generator
 
 import pytest
 
-from conftest import STANDS, Dead, Sand, acts, life, said
+from conftest import STANDS, Dead, Sand, acts, kernel, life, said
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
 
-def boom() -> Generator[tuple | None, tuple]:
+def boom() -> Generator[None, tuple]:
   """A door of the suite, which answers a read of boom:// with an exception."""
   while True:
     match (yield):
       case ("read", name, _, _, "boom://x"):
-        yield "done", name, ValueError("boom")
+        engine.say("done", name, ValueError("boom"))
 
 
 async def test_the_way_to_put_a_question_that_is_answered_now() -> None:
@@ -39,10 +39,9 @@ async def test_it_is_no_entry_of_the_bus() -> None:
 async def test_the_call_raises_the_refusal_an_act_came_to() -> None:
   """The call raises the refusal an act came to, and gives back anything else, an exception among it."""
   dead = Dead(stands=STANDS)
-  _, root = life(dead)
+  root = engine.boot((), **kernel(), boom=boom(), world=dead.hears())
   with pytest.raises(Refused, match="a dead World answers no read"):
     engine.ask("read", root, "a.txt")
-  engine.drive(boom(), "boom")
   got = engine.ask("read", root, "boom://x")
   assert isinstance(got, ValueError) and str(got) == "boom"
 

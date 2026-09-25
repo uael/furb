@@ -40,15 +40,15 @@ class Busy(Sand):
       a = yield
       match a:
         case ("stand", qid, *_):
-          yield "done", qid, self.stands or [[], "", ""]
+          engine.say("done", qid, self.stands or [[], "", ""])
         case ("reply", about, _, on, _):
           self.calls.append(a)
           if not self.balked:
             self.balked = True
             engine.pause(on)
-            yield "done", about, Refused("the World is busy")
+            engine.say("done", about, Refused("the World is busy"))
           else:
-            yield "started", about
+            engine.say("started", about)
             word = self.script[on].pop(0)
             turn = ("assistant", word, self.cost or (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
             loop.call_soon(partial(world_says, "done", about, turn))

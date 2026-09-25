@@ -16,8 +16,8 @@ TIMEOUT: Final[float] = 600.0
 ROOT: Final[str] = "chain1"
 """ROOT is the name of the root, which every life opens first under that one name, and on which boot stands the life."""
 site: Final[ContextVar[str]] = ContextVar("site", default=OPERATOR)
-"""Who is speaking is the site, which every fact is said from: the generator while it speaks, the run while it is stepped, the operator otherwise.
-Work that an ear begins while it speaks keeps the site of that ear, so what the work says later is said by that ear.
+"""Who is speaking is the site, which every fact is said from: the ear while it hears, the run while it is stepped, the operator otherwise.
+Work that an ear begins while it hears keeps the site of that ear, so what the work says later is said by that ear.
 """
 
 type Fact = tuple[str, str, str, *tuple[object, ...]]
@@ -39,18 +39,17 @@ type Question = tuple[str, str, str, str, *tuple[object, ...]]
 A question is a fact whose about is its own name and whose first word is the chain it is on.
 Every question takes a name, what is answered now as well as what is answered later.
 A question is named by its kind, so a fact is a question when the act it is about is named under its kind, which is what question says.
-The name of an act is its kind and how many acts of that kind the life has made with it, so the root is chain1, the first command is bash1 and the first prompt is prompt1, and python binds each name as it is.
+The name of an act is its kind and the lowest number of that kind that no act holds, so the root is chain1, the first command is bash1 and the first prompt is prompt1, and python binds each name as it is.
 A read takes its number as a command does, so the first read is read1, whoever made it.
 The generator that settles an await of an act from outside a run is named after that act and the task that awaits it, which is the name of no question.
 """
-type Saying = tuple[str, str, *tuple[object, ...]]
-"""What an ear says: the kind of the fact, the act it is about, and the words, and nothing of who says it, which the bus fills in from whoever is speaking."""
-type Ear = Generator[Saying | None, Fact]
-"""An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by.
+type Ear = Generator[None, Fact]
+"""An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by but the name of the operator.
 The World hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
 The World performs any fact that an extension defines and that the World knows.
 The facts that the World says of its own are for the acts that complete later.
-An ear speaks by yielding a saying, and the work it began speaks later by say, under the site of the ear that began it.
+An ear yields only to wait for what it hears next: it speaks by say and asks by act while it hears, and the work it began speaks later by say, under the site of the ear that began it.
+An ear hears every fact that is no question, in the order of the log, and a question only while it is offered it.
 The chain has the gate read every rung but the ones it wrote itself, and the Kernel begin every rung, by the acts gate and run.
 The Kernel takes a run as that run, begins its word in the module of the chain when it hears that it took it, makes a wants as the run when the word waits for an act that is not done, carries the word on at the done of that wants, and says the run done with what the word gave.
 The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung.
@@ -70,24 +69,24 @@ A filter is no word of a chain: the verb keeps it for what the chain holds, so n
 """
 
 def say(kind: str, about: str, *words: object) -> Fact:
-  """The way to say a fact from what is no ear: a word through its verbs, the operator, and the work an ear began, which speaks from its own loop; the fact is said to the living, whole as the bus made it, and given back.
+  """The one way to say a fact, for every speaker: an ear while it hears, a word through its verbs, the operator, and the work an ear began, which speaks from its own loop; the fact is said to the living, whole as the bus made it, and given back.
   Every verb of the file, and every verb of an extension, speaks through the two entries of the bus: say for a fact and act for a question.
   A fact reaches the World, the Kernel and the record only through the bus.
   A rebound verb reaches the World only through the bus.
   Who says it is whoever is speaking, which the site holds, and nothing names another.
   A fact said: it says its kind, the act it is about, who said it and its words, in that order, and nothing else, since the chain it is on is the scope of the act it is about.
   The bus makes every fact whole from what it is given, so nobody holds a fact that is not whole.
-  Every generator, the acts first, then those of the engine, then those the life was given from the outside, since the engine settles what it knows before the outside reads it or acts on it, and it asks the outside for nothing it can answer itself.
-  Every generator hears every fact it has not heard, in order, until none is left, and each act as act puts it.
+  Every ear hears in one order, the ears of acts first, then the ears of the life in the order they came to life, since the engine settles what it knows before the outside reads it or acts on it, and it asks the outside for nothing it can answer itself.
+  Every ear hears every fact it has not heard, in order, until none is left, and a question only as act offers it.
   While one speaks nobody hears, and whoever spoke has everyone hear when it is done, so the facts of one speaker stand together in the log, and no one is having everyone hear while another is.
   A done said of a question that has no outcome yet fills its outcome, and a later done of the same question fills nothing.
   """
 
 def act(kind: str, on: str, ear: Callable[[str], Ear] | None, *words: object) -> Act[object]:
-  """The way to make a question: it takes a name when it is made, it is put to the ears, its ear, when it has one, is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it.
-  An act is put to every ear of the engine, the acts first, and a busy one hears it once it is done speaking, at its place among what was said.
-  Its own ear is born after the ears of the engine heard it, so the acts that ear makes stand after it.
-  It is then put to the ears of the outside in turn, until one takes it, and no ear of the outside after that one hears it.
+  """The way to make a question: it takes a name when it is made, its ear, when it has one, is brought to life under that name and given the name, it is offered to the other ears, and the name is given back, which is the act to whoever holds it.
+  An act is offered in turn until one ear takes it: to its own ear at the birth of that ear, then to the ears of acts, then to the ears of the life, each in the order it came to life, and no ear after the one that takes it hears it.
+  Its own ear is born before any other ear is offered it, since an act with an ear of its own belongs to that ear when the ear takes it at its birth, and the acts that ear makes stand after it.
+  An ear that speaks while an act is offered is passed over, so a question that an ear asks goes to the other ears.
   To take an act is to say a started or a done about it: a done settles it now, and a started says that its done comes later.
   An act that no ear takes and that the record does not hold is refused: the life says it done with a refusal that names its kind.
   An act said: it is begun, and what the call gives is its name, which is awaited for what the act comes to.
@@ -95,17 +94,18 @@ def act(kind: str, on: str, ear: Callable[[str], Ear] | None, *words: object) ->
   Two acts that say the same words under one name are one act.
   The engine refuses an act said from outside a run that names no chain, a chain apart.
   The chain an act is on is the chain named to the call, or the scope of the one that made it when the call names none.
-  The ear of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a saying.
+  The ear of an act is given the name of the act and hears every fact said after its birth, and it speaks by say.
   An act carries the words of its kind, which are the plain arguments the verb was given, in the order of the verb, and a show or a filter is none of them.
   """
 
 def drive(g: Ear, name: str) -> None:
-  """The other way to speak: a generator is brought to life under a name, and from then it hears every fact that is said and says its own.
-  One that returns is over and lives no more, which is how a thing that watches for one fact alone is dropped the moment it hears it.
-  One that raises while it hears is broken the same way, and what went wrong goes to the one that spoke.
-  A generator brought to life under a name and nothing more: it hears from the tip and runs to its first wait, and one born while a fact goes round hears from the next.
-  It lives until it returns, and an act that hears nothing more returns at the first fact it hears after its own end.
-  A generator that yields a saying is given the fact as the bus said it, and one that yields nothing waits for the next fact said.
+  """The way to bring an ear to life: a generator is brought to life under a name, and from then it hears every fact that is said and every question offered to it.
+    One that returns is over and lives no more, which is how a thing that watches for one fact alone is dropped the moment it hears it.
+    One that raises while it hears is broken the same way, and what went wrong goes to the one that spoke.
+    A generator brought to life under a name and nothing more: it hears from the tip and runs to its first wait, and one born while a fact goes round hears from the next.
+    It lives until it returns, and an act that hears nothing more returns at the first fact it hears after its own end.
+    An ear yields nothing, and each yield waits for what it hears next, the next fact said or the next question offered to it.
+  drive refuses a name that an ear hears by already, and the name of the operator, which is a site and never an ear.
   """
 
 def transcript(on: str = "") -> list[Fact]:
@@ -271,7 +271,7 @@ def pause(id: str) -> None:
   A pause stops no reply in flight: the reply returns.
   A paused chain goes quiet as its in-flight work returns.
   A kind a pause stops: it starts its ear, and while a pause over it stands the ear hears nothing, and at the wake it hears everything that was said meanwhile, in order.
-  An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, so a paused rung takes the wants of its run.
+  An act made in that time it hears at once, since an act is offered to the ears while it is made and to no ear after the one that takes it, so a paused rung takes the wants of its run.
   A pause stands over what is made after it, until the wake.
   A control is on the scope of what it is over, so it takes no chain of its own.
   """
@@ -285,7 +285,7 @@ def wake(id: str) -> None:
   A wake gates and runs a held response.
   A wake makes a prompt ask its model with the transcript as it grew.
   A wake makes no reply twice and loses none.
-  A wake that this life says, and not one that the record says again, puts every pending act it is over on to the outside, so the World takes each command, wait, prompt to the operator and reply of them, and a model reads the transcript as it grew.
+  A wake that this life says, and not one that the record says again, offers every pending act it is over, once, to the ears, so the World takes each command, wait, prompt to the operator and reply of them, and a model reads the transcript as it grew.
   """
 
 def cancel(id: str) -> None:
@@ -711,7 +711,7 @@ type Done = tuple[Literal["done"], str, str, object]
 A result enters the transcript whether or not anyone awaits it.
 An act that is over says nothing, and a command lives on to answer its doors.
 A done that an act said itself is the result of the act.
-A done that an ear says while the act is put to it is the answer to the act, which takes it now.
+A done that an ear says while the act is offered to it is the answer to the act, which takes it now.
 A kind that ends when it is told to: it starts its ear, and then a done that names it is what it came to; a cancel over it ends it with a CancelledError, and a close of it with the value that close carries.
 """
 type Tell = tuple[Literal["tell"], str, str, list[Note]]
@@ -742,7 +742,7 @@ type Close = tuple[Literal["close"], str, str, object, list[Note]]
 A close is over the act it names and the words running under it, where a cancel is over everything under it.
 """
 type Started = tuple[Literal["started"], str, str]
-"""What an ear says to take an act whose done comes later, and which no ear after it hears.
+"""What an ear says while it is offered an act, to take the act when its done comes after the offer, and which no ear after it hears.
 The started names the act and says no more of it, since the ear heard the act itself and nothing is told twice.
 The record keeps a started of the outside, so a later life holds the act from the outside and says no started for it, since only the outside runs it: the act is done where the record holds its done, and pending when the record holds none.
 """
@@ -859,7 +859,7 @@ def under(name: str, of: str) -> bool:
 def acting() -> str:
   """The run a fact speaks from, which is the name the site holds when that name is an act's, and nothing at all for the operator and for the World, since a fact of theirs is said from no run."""
 
-def question(a: Saying) -> bool:
+def question(a: tuple[str, str, *tuple[object, ...]]) -> bool:
   """Whether a fact is a question, which its name says: a question is about itself, and its name is under its kind."""
 
 def scope(name: str) -> str:
@@ -867,7 +867,7 @@ def scope(name: str) -> str:
 
 def tell(name: str, text: object = "", *notes: Note) -> None:
   """What a question answered now that shows a text or changes a state tells of itself: a paragraph headed with its kind, its words and what it was answered, said on the run that asked it, and nothing at all outside a run; one that only reads a value tells nothing, since the word that asked it holds the value, which it debugs to see.
-  A question is put to the ears of the engine before those of the outside, so the World is asked for nothing that the engine knows.
+  A question is offered to the ears of acts before the ears of the outside, so the World is asked for nothing that the engine knows.
   """
 
 def tells(id: str) -> bool:
@@ -876,7 +876,7 @@ def tells(id: str) -> bool:
 def told(id: str, text: object = "", *notes: Note) -> Tell:
   """The open of an act tells the id and what the act says of itself, and no actor and no arguments as such.
   A closed header tells the act with what it came to, as python shows it.
-  told gives the saying of a tell about an act, with one paragraph headed with the id of the act, which an ear yields and a verb says, so a chain holds what it told where it told it.
+  told says a tell about an act, with one paragraph headed with the id of the act, and gives the fact, so a chain holds what it told where it told it.
   """
 
 def control(kind: str, name: str, id: str, *words: object) -> Fact:
@@ -922,11 +922,11 @@ def paused(id: str) -> bool:
 def ended(a: Fact, id: str) -> object:
   """What an act a control is over is done with: the value a close carries for the act it names, and a CancelledError for every other."""
 
-def idle(id: str) -> Generator[None, Fact]:
-  """idle hears every fact and says nothing of its own, which is the ear of a wait and the ear of the operator."""
+def idle(id: str) -> Ear:
+  """idle hears every fact and says nothing of its own, which is the ear of a wait, and of a prompt to the operator once it told its open."""
 
 def lives(g: Ear, a: Fact | None) -> bool:
-  """lives carries a fact into an ear, says everything the ear yields, and gives whether the ear lives on."""
+  """lives carries a fact into an ear and gives whether the ear lives on, which is how an ear made of an ear gives its inner ear what it hears."""
 
 def pausing(ear: Callable[[str], Ear]) -> Callable[[str], Ear]:
   """An act is paused while the last control in record order that is over it is a pause.
@@ -935,7 +935,7 @@ def pausing(ear: Callable[[str], Ear]) -> Callable[[str], Ear]:
   The engine holds the response of a reply that returns on a paused chain.
   A rung carries on only while its own chain is not paused.
   A control from outside reaches a paused act at once, where what the words of the act say waits for the wake.
-  A paused ear hears at once an act put to it, and every other fact at the wake.
+  A paused ear is offered a question at once, since an offer is no delivery, and hears every other fact at the wake.
   """
 
 def ending(ear: Callable[[str], Ear]) -> Callable[[str], Ear]:
@@ -944,7 +944,7 @@ def ending(ear: Callable[[str], Ear]) -> Callable[[str], Ear]:
   """
 
 def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
-  """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names and the tables of the life are its own, and it binds the names that reach them: say, which says a fact, act, which makes an act, drive, which brings a generator to life, and get, peek and transcript, which read the tables.
+  """A life: everything that is said in it is said here, so the log of what was said, the ears that listen by their names and the tables of the life are its own, and it binds the names that reach them: say, which says a fact, act, which makes an act, drive, which brings an ear to life, and get, peek and transcript, which read the tables.
   A verb from a rung takes the chain of the rung when the call leaves on unsaid.
   The kind of an act is the verb that made the act, or the kind an ear made it with.
   An act says who made it, and the one that made it says its own maker in turn, which is how the life knows every ancestor of an act.
@@ -972,24 +972,25 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   In a later life the rungs of every chain run again from the record that the World kept.
   The engine serves the doors of the file itself, and asks the World for nothing.
   A later life reads the same text from a door.
-  It is given what the World kept of the life before it, and the generators of the outside, the Kernel, the gate and the World among them, each under the name it is to hear by, and it brings them to life with its own.
+  It is given what the World kept of the life before it, and the ears of the outside, the Kernel, the gate and the World among them, each under the name it is to hear by, and it brings them to life in the order it is given them, and its record after them.
   It opens the root, the first act of any record, which every life opens under the one name, and which a record that holds it already gives back, and that root is what it gives back.
-  What the record holds of an act made again keeps that act from the outside: a done that is its first answer the record says at once, and an act that the outside started it holds with no fact, since it cannot run it, so no ear of the outside hears that act, and a chain with a source which asks again what its origin asked is answered from the record too.
+  What the record holds of an act made again keeps that act from every ear but its own: a done that is its first answer the record says at once, and an act that the outside started it holds with no fact, since it cannot run it, so no other ear is offered that act, and a chain with a source which asks again what its origin asked is answered from the record too.
   The record a life was opened from, which answers what it holds of an act, so that an act the World did once is done no more.
-  The record: an ear of the engine, which hears everything and keeps every act that no act of the life made and every fact that no act of the life said, the act it is about before it, and nothing that it says itself, since a later life makes again everything that an act made or said, and what the record says it holds already.
+  The record: an ear of the life, which hears every fact and keeps every act that no act of the life made and every fact that no act of the life said, the act before the fact, at the first fact it hears about that act, and nothing that it says itself, since a later life makes again everything that an act made or said, and what the record says it holds already.
   A read the operator makes is kept like any other act of the operator, since what it reads may change, and a later life makes it again at its place.
   What it keeps it says, so that the World holds the record and the record alone says what belongs in it; a World that is durable keeps what it is told, one that is not keeps nothing, and either way what the World holds is what the life after it is given.
-  Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard: an act of the operator, or of a site that is no ear, it makes again through its verb under the site of its maker, once the chain it is on has been made again; an act that an ear or an act made it makes not, since that ear, or the word of that act, makes it again when it needs it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed.
-  An entry whose act this life has not made again when every fact said before it has been heard, which for an act of the operator or of a site that is no ear is the chain it is on, the record steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names.
+  Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard: an act of the operator, or of a site that names no living ear, it makes again through its verb under the site of its maker, once the chain it is on has been made again; an act that an ear or an act made it makes not, since that ear, or the word of that act, makes it again when it needs it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed.
+  An entry whose act this life has not made again when every fact said before it has been heard, which for an act of the operator or of a site that names no living ear is the chain it is on, the record steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names.
   The record says the whole record again before boot returns, so no entry waits for an act that a host makes after boot.
   One said again takes the name it had, since a later life makes its acts again in the order of the record, and the life counts each kind on from there, so that no later act takes a name that is taken.
   A boot is a life; a second boot is a second life, and the first is gone.
-  The names operator and record are the life's own, and boot refuses a generator of the outside named operator, since record names the record it is given.
+  The names operator and record are the life's own, and boot refuses an ear named operator, since operator is a site and never an ear, and record names the record it is given.
   A life settles an await of its acts from outside a run in the loop it is opened in, so boot outside a running loop raises before it makes anything.
-  An act of the operator or of a site that is no ear is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and a show or a filter it was given is not said again, since the record holds none.
-  A later life says an act of the operator or of a site that is no ear again only through a verb in the globals of its chain, and an act whose kind no verb binds is a drift.
+  An act of the operator or of a site that names no living ear is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and a show or a filter it was given is not said again, since the record holds none.
+  A later life says an act of the operator or of a site that names no living ear again only through a verb in the globals of its chain, and an act whose kind no verb binds is a drift.
   The record says again a done that is the first answer of an act when the act is made again, and every later fact of it but a started at the place where the record holds it.
-  What the record shows started and not done when boot returns is pending: the record holds it from the outside until a wake that this life says.
+  What the record shows started and not done when boot returns is pending: the record holds it from every other ear until a wake that this life says over it offers it, once, to the ears.
+  The record takes, at its birth, the name of every act of the record that a living ear made, since that ear makes it again only when it needs it, so no word that runs ahead of the record takes its number.
   """
 
 actor: str

@@ -32,7 +32,7 @@ from monty import instance
 
 type Names = dict[str, object]
 """The names of the engine: its module, in which every word of the operator and every stand-in runs."""
-type Ear = Generator[tuple | None, tuple | None]
+type Ear = Generator[None, tuple | None]
 """An ear, as the engine hears one."""
 
 
@@ -214,7 +214,7 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
   with a started, and the host says what it came to into the life later. It keeps the streams of a command, feeds
   it and ends every command a control is over, and it keeps what the journal says to keep.
   """
-  cwd, ask, covers, turns = verb(names, "cwd"), verb(names, "ask"), verb(names, "covers"), verb(names, "turns")
+  cwd, ask, covers, turns, say = (verb(names, x) for x in ("cwd", "ask", "covers", "turns", "say"))
 
   def at(on: str) -> str:
     here = cwd(on=on)
@@ -224,30 +224,30 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
   while True:
     match (yield):
       case ("stand", qid, *_):
-        yield "done", qid, again(world.stand(), names, ears)
+        say("done", qid, again(world.stand(), names, ears))
       case ("clock", qid, *_):
-        yield "done", qid, world.clock()
+        say("done", qid, world.clock())
       case ("chance", qid, *_):
-        yield "done", qid, world.chance()
+        say("done", qid, world.chance())
       case ("read", qid, _, on, path):
-        yield "done", qid, again(world.read(at(on), path), names, ears)
+        say("done", qid, again(world.read(at(on), path), names, ears))
       case ("write", qid, _, on, text):
-        yield "done", qid, again(world.write(at(on), text.path, text.content), names, ears)
+        say("done", qid, again(world.write(at(on), text.path, text.content), names, ears))
       case ("reply", about, _, on, actor):
-        yield "started", about
+        say("started", about)
         now = turns(on=on)
         assert isinstance(now, list)
         world.reply(about, on, actor, now)
       case ("bash", about, _, on, command, fed, timeout):
-        yield "started", about
+        say("started", about)
         merged = bool(ask("merged", on, about))
         RUNNING[about] = [merged, "", ""]
         world.run(about, at(on), command, fed, timeout, merged)
       case ("wait", about, _, _, seconds):
-        yield "started", about
+        say("started", about)
         world.wait(about, seconds)
       case ("prompt", about, _, _, shape, message, _):
-        yield "started", about
+        say("started", about)
         world.prompt(about, shape, message)
       case ("out", about, _, text, stream) if about in RUNNING:
         RUNNING[about][1 if RUNNING[about][0] or stream == "stdout" else 2] += text
@@ -265,10 +265,9 @@ def crossing(name: str, ears: Ears, names: Names) -> Ear:
   """One ear of the host, heard under its name.
 
   The ear is on the other side, so this stands in for it: every fact it is given goes to the ears of the host, and
-  what comes back is what the ear did with it. It said something, which this yields, and the bus hands back the
-  fact as it was said, which goes to the host next. It said nothing, so this waits for the next fact. It said a
-  verb, which is said here by its name and its value handed back. It is over, so this returns, and it raised, so
-  this raises.
+  what comes back is what the ear did with it. It said a verb, say among them, which is said here by its name and
+  its value handed back, under the site of this ear, since it speaks while it hears. It is done hearing, so this
+  waits for the next fact. It is over, so this returns, and it raised, so this raises.
   """
   a = None
   while True:
@@ -284,16 +283,11 @@ def crossing(name: str, ears: Ears, names: Names) -> Ear:
           reply = ears.answered(name, got)
         case ("raised", no):
           raise fault(no, names, ears)
-        case ("say", tuple(saying)):
-          made = again(saying, names, ears)
-          assert isinstance(made, tuple)
-          a = yield made
-          break
         case ("over",):
           return
         case _:
-          a = yield
           break
+    a = yield
 
 
 def fault(no: object, names: Names, ears: Ears) -> BaseException:
@@ -425,7 +419,7 @@ def gating(gate: Gate, sheet: Names, engine: Names) -> Ear:
       case ("gate", qid, _, on, word):
         program = verb(engine, "program")(on)
         assert isinstance(program, dict)
-        yield "done", qid, verb(sheet, "gate")(engine, [*program.values()], word, checked)
+        verb(engine, "say")("done", qid, verb(sheet, "gate")(engine, [*program.values()], word, checked))
 
 
 def kernel(names: Names) -> Ear:
