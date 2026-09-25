@@ -1,20 +1,20 @@
-//! The core of an AI harness: the engine in a sandbox, behind an async API, with a World of your own.
+//! The core of an AI harness: the engine in a sandbox, behind an async API, with ears of your own.
 //!
 //! The engine is one python file, `src/furb/engine.py`, which the contract beside it specifies: it is the whole
-//! system prompt of a model, and all it takes from the outside is ears: generators that hear every fact, each
-//! under a name, the World, the Kernel and the gate among them. This crate runs that file inside monty, a python
-//! interpreter written in rust for untrusted code, and gives a host three things.
+//! system prompt of a model, and all it takes from the outside is ears: generators that hear the facts of a life
+//! and the questions offered to them, each under a name, the World, the Kernel and the gate among them. This crate
+//! runs that file inside monty, a python interpreter written in rust for untrusted code, and gives a host two
+//! things.
 //!
 //! [`Life`] is one life of the engine. Its methods are the verbs of the contract, `read`, `bash`, `prompt` and
 //! the rest, with the same names and the same words, and what an act comes to is awaited as an [`Act`].
 //!
-//! [`World`] is what a host writes: what the engine asks of the machine it runs on, as one trait. What the World
-//! answers at once, it returns; what takes time, it gives back as a future, which the life drives. A command
-//! speaks while it runs through a [`Voice`].
+//! [`Ears`] is what a host writes: its ears, by name, the World among them, and nothing else. An ear answers where
+//! it is asked, and the work it begins speaks later through its [`Voice`].
 //!
-//! The Kernel is the crate's. The word of a rung is gated by the type checker of monty, reading the word on
-//! the sheet of `furb.sheet`, every name of the engine bound first, and it runs where the engine runs, in the module
-//! of its chain.
+//! The Kernel and the gate are the crate's. The word of a rung is gated by the type checker of monty, reading the
+//! word on the sheet of `furb.sheet`, every name of the engine bound first, and it runs where the engine runs, in
+//! the module of its chain.
 //!
 //! What crosses is what monty carries, [`Object`], and the engine's own classes read as [`Text`], [`Exit`] and
 //! [`Fault`]. Inside the sandbox, [`PREAMBLE`] stands in for every ear of the host, in a module of its own, so the
@@ -26,16 +26,14 @@ pub mod gate;
 pub mod life;
 mod sand;
 pub mod value;
-pub mod world;
 
 pub mod binding;
 
 pub use crate::{
-  ear::{Ears, Reply},
+  ear::{Ears, Reply, Voice},
   fact::Fact,
   life::{Act, Came, Life, Opening},
   value::{Exit, Fault, Object, ObjectRef, Text},
-  world::{Actor, Command, Later, Running, Said, Standing, Voice, World},
 };
 
 /// The engine: the one file the sandbox runs, and the whole system prompt of a model.

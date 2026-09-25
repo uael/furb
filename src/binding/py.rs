@@ -248,7 +248,7 @@ impl Life {
       kept.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
     let hosted = Hosted { host: ears.clone_ref(py), made: made.clone_ref(py) };
     let held =
-      life::Life::open_on(hosted, names).boot(kept).map_err(|fault| raised(py, &made, &fault))?;
+      life::Life::open(hosted, names).boot(kept).map_err(|fault| raised(py, &made, &fault))?;
     Ok(Life { held, made, ears })
   }
 
