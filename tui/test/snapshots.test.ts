@@ -137,8 +137,9 @@ test("an act of a kind an extension defines joins the act table, and what it tel
     await life.rung(
       [
         "def noted(name):",
-        '  yield ("tell", name, [f"#{name} said", "# hello"])',
-        '  yield ("done", name, "noted")',
+        '  say("tell", name, [f"#{name} said", "# hello"])',
+        '  say("done", name, "noted")',
+        "  yield",
         'note = act("note", "", noted)',
       ].join("\n"),
     );
@@ -203,7 +204,9 @@ test("a take carries the acts that changed after the count it is given, and ever
     expect(third.acts.map((act) => [act.id, act.done])).toEqual([[waiting, true]]);
     expect(snapshots.take(life.root, third.count).acts).toEqual([]);
     await life.rung(
-      ["def noted(name):", '  yield ("done", name, "noted")', 'note = act("note", "", noted)'].join("\n"),
+      ["def noted(name):", '  say("done", name, "noted")', "  yield", 'note = act("note", "", noted)'].join(
+        "\n",
+      ),
     );
     await until(world, () => [...world.activity.acts.values()].some((act) => act.kind === "note"));
     const fourth = snapshots.take(life.root, third.count);
@@ -229,7 +232,7 @@ test("a new standing drops the roster, the directory and the actor that the view
     ]);
     // A stand that an ear of the word takes is answered by whoever says its done, here the operator.
     await life.rung(
-      'def takes(id):\n  yield "started", id\n  while True:\n    yield\nasked = act("stand", "", takes)',
+      'def takes(id):\n  say("started", id)\n  while True:\n    yield\nasked = act("stand", "", takes)',
     );
     const asked = String(life.inspect("asked").value);
     life.say("done", asked, [[[["operator", [], 200000]], join(cwd, "elsewhere"), "operator"]]);
