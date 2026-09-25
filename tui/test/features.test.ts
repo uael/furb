@@ -237,7 +237,7 @@ test("clipboard import and share publication use bounded files and the explicitl
   }
 }, 30000);
 
-test("model request failures remain act failures while the session pauses after two failures", async () => {
+test("a model request failure is an act failure, and a second in a row pauses the session before its rung hears it", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-model-failure-"));
   const opened = await openEngine({
     cwd: directory,
@@ -262,7 +262,8 @@ test("model request failures remain act failures while the session pauses after 
     expect(session.error).toBe("");
     expect(screen.captureCharFrame()).not.toContain("Refresh view");
     expect(screen.captureCharFrame()).toContain("answered nothing");
-    expect(session.activity.filter((act) => act.run?.status === "failed")).toHaveLength(2);
+    // The World pauses the chain before it says the second reply done, so its rung comes to that refusal at the wake.
+    expect(session.activity.filter((act) => act.run?.status === "failed")).toHaveLength(1);
   } finally {
     app.dispose();
     screen.renderer.destroy();
@@ -333,7 +334,7 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
     );
     await extensions.load(extension);
     await extensions.run("test-extension", "");
-    expect(await session.life.held("modules", [session.selected, "extension_value"], "at")).toBe(23);
+    expect((await session.life.inspect("extension_value", session.selected)).value).toBe(23);
     expect(session.notice).toBe("Extension finished.");
     session.sessionName = '<script>alert("name")</script>';
     await session.submit('<script>alert("message")</script> [bad link](javascript:alert(1))');

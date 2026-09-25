@@ -1,89 +1,56 @@
-"""ask, the way to put a question that lives not."""
+"""ask, the way to put a question that is answered now."""
 
-from asyncio import CancelledError
+from collections.abc import Generator
 
 import pytest
 
-from conftest import STANDS, Dead, Sand, life, said, settle
+from conftest import STANDS, Dead, Sand, acts, life, said
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Refused
+from furb.engine import OPERATOR, Refused
 
 
-async def test_the_way_to_put_a_question_that_lives_not() -> None:
-  """The way to put a question that lives not: it takes a name when it is put, it is put to the living generators in turn, the acts first and the outside last, it stops at the first answer, and the question and its answer are given back."""
+def boom() -> Generator[tuple | None, tuple]:
+  """A door of the suite, which answers a read of boom:// with an exception."""
+  while True:
+    match (yield):
+      case ("read", name, _, _, "boom://x"):
+        yield "done", name, ValueError("boom")
+
+
+async def test_the_way_to_put_a_question_that_is_answered_now() -> None:
+  """The way to put a question that is answered now: it makes the act, and gives back what the act came to."""
+  sand = Sand(stands=STANDS)
+  _, root = life(sand)
+  assert engine.ask("clock", root) == 1001.0
+  assert engine.get("clock1") == ("clock", "clock1", OPERATOR, root)
+  assert engine.peek("clock1") == 1001.0
+
+
+async def test_it_is_no_entry_of_the_bus() -> None:
+  """It is no entry of the bus: it makes the act through act and reads what it came to through peek."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
-  here, where = engine.ask("cwd", root)
-  assert here == ("cwd", "cwd@operator.2", OPERATOR, "chain1") and where == "/w"
-  assert engine.asked[here[1]] == here
-  when, at = engine.ask("clock", root)
-  assert at == 1001.0
-  assert [a[1] for a in log if a[0] in ("cwd", "clock")] == [when[1]]
+  made = len(acts(log))
+  assert engine.ask("chance", root) == 1 / 7
+  assert len(acts(log)) == made + 1 and said(log, "ask") == []
+  assert [a[1] for a in said(log, "done") if a[1].startswith("chance")] == ["chance1"]
 
 
-async def test_a_query_is_put_at_once_and_is_no_event_of_the_log() -> None:
-  """A query is put at once and is no event of the log, since what answers it is; it is answered while the one that asked waits, so nothing awaits it, and the done that names it is its answer."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
-  mark = len(log)
-  here, where = engine.ask("cwd", root)
-  assert where == "/w" and engine.asked[here[1]] == here
-  assert log[mark:] == [("done", here[1], root, "/w")]
-  assert engine.outcomes[here[1]] == where
-
-
-async def test_the_call_raises_what_the_engine_will_not_make_and_gives_back_anything_else() -> None:
-  """The call raises what the engine will not make, and gives back anything else; a peek gives back whatever it was answered, since what an act came to, a cancel and a raise among it, is no refusal of the peek."""
+async def test_the_call_raises_the_refusal_an_act_came_to() -> None:
+  """The call raises the refusal an act came to, and gives back anything else, an exception among it."""
   dead = Dead(stands=STANDS)
   _, root = life(dead)
   with pytest.raises(Refused, match="a dead World answers no read"):
     engine.ask("read", root, "a.txt")
-  sand = Sand(stands=STANDS, auto=False)
-  _, root = life(sand)
-  assert engine.ask("cwd", root)[1] == "/w"
-  one = engine.bash("slow", on=root)
-  engine.cancel(one)
-  two = engine.prompt(int, "how many?", to=OPERATOR, on=root)
-  ghost = engine.prompt(int, "how many?", to="ghost/low", on=root)
-  await settle()
-  engine.close(ValueError("boom"), two)
-  await settle()
-  assert isinstance(engine.ask("peek", root, one)[1], CancelledError)
-  assert isinstance(engine.ask("peek", root, two)[1], ValueError)
-  assert isinstance(engine.ask("peek", root, ghost)[1], Refused)
+  engine.drive(boom(), "boom")
+  got = engine.ask("read", root, "boom://x")
+  assert isinstance(got, ValueError) and str(got) == "boom"
 
 
-async def test_the_chain_a_query_is_on_is_the_chain_named_to_the_call() -> None:
-  """The chain a query is on is the chain named to the call, or the scope of the one that asked when the call names none, so a query said from a run is on the chain of that run."""
+async def test_an_act_that_is_not_done_when_it_is_made_is_no_answer_now() -> None:
+  """An act that is not done when it is made is no answer now, so the call raises Refused."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  two = engine.chain("two")
-  there, _ = engine.ask("cwd", two)
-  assert there[3] == two
-  sand.script[root] = ["close(cwd())"]
-  assert await engine.prompt(str, "where", on=root) == "/w"
-  assert [a[3] for a in engine.asked.values() if a[0] == "cwd"] == [two, root]
-
-
-async def test_a_question_that_nobody_answers_is_answered_with_nothing() -> None:
-  """A question that nobody answers is answered with nothing."""
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
-  merged, got = engine.ask("merged", root, "bash9")
-  assert got is None and merged[1] not in engine.outcomes
-  assert engine.read("missing.txt", on=root) is None
-
-
-async def test_a_query_the_operator_asks_from_outside_a_run_that_names_no_chain() -> None:
-  """A query the operator asks from outside a run that names no chain is put to every generator, and no chain answers it."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
-  two = engine.chain("two")
-  when, at = engine.ask("clock", "")
-  assert when == ("clock", "clock@operator.3", OPERATOR, "") and at == 1001.0
-  assert when in log
-  assert [a[2] for a in said(log, "done") if a[1] == when[1]] == [WORLD]
-  held, theirs = engine.ask("transcript", root, root)[1], engine.ask("transcript", two, two)[1]
-  assert isinstance(held, list) and isinstance(theirs, list)
-  assert [a for a in held if a[1] == when[1]] == []
-  assert [a for a in theirs if a[1] == when[1]] == []
+  with pytest.raises(Refused, match="wait1 not done"):
+    engine.ask("wait", root, 5.0)
+  assert engine.get("wait1") == ("wait", "wait1", OPERATOR, root, 5.0) and engine.peek("wait1", ...) is ...

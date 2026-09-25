@@ -1,6 +1,6 @@
 """Ready, the word a rung holds."""
 
-from conftest import DOOR, STANDS, Sand, life, plain, relived, said, settle, sown
+from conftest import DOOR, STANDS, Sand, acts, life, plain, relived, said, settle, sown
 from furb import engine
 
 
@@ -32,11 +32,11 @@ async def test_the_word_of_a_rung_enters_the_program_when_the_gate_accepts_it_or
   wrote = f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"
   (binding,) = [a[1] for a in said(log, "rung") if a[2] == root]
   refused, first, second = [a[1] for a in said(log, "rung") if a[2] == act]
-  assert engine.ask("program", root)[1] == {binding: wrote, first: "a = 1", second: "close(a + 1)"}
-  assert [q[4] for q in engine.asked.values() if q[0] == "gate"] == ["a = BAD", "a = 1", "close(a + 1)"]
+  assert engine.program(root) == {binding: wrote, first: "a = 1", second: "close(a + 1)"}
+  assert [q[4] for q in acts(log).values() if q[0] == "gate"] == ["a = BAD", "a = 1", "close(a + 1)"]
   assert engine.read(act, on=root).content == "a = BAD\na = 1\nclose(a + 1)"
-  assert (engine.modules[root][root], engine.modules[root][act], engine.modules[root]["a"]) == (root, act, 1)
-  assert type(engine.outcomes[refused]).__name__ == "Refused"
+  assert (engine.module(root)[root], engine.module(root)[act], engine.module(root)["a"]) == (root, act, 1)
+  assert type(engine.peek(refused)).__name__ == "Refused"
 
 
 async def test_the_word_of_a_rung_that_extends_the_engine_is_part_of_the_program() -> None:
@@ -46,8 +46,7 @@ async def test_the_word_of_a_rung_that_extends_the_engine_is_part_of_the_program
   sand.script[root] = [DOOR, "close(None)"]
   assert await engine.prompt(int, "a door", on=root) == 1
   await settle()
-  _, program = engine.ask("program", root)
-  assert isinstance(program, dict)
+  program = engine.program(root)
   assert DOOR in program.values()
   _, over = await relived(Sand(stands=STANDS), plain(sand.record))
   assert engine.read("note://a", on=over).content == "kept"
@@ -65,7 +64,7 @@ async def test_the_old_words_stay_in_the_program_and_in_the_turns_after_a_rung_r
   await laid
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   (binding,) = [a[1] for a in said(log, "rung") if a[2] == root]
-  _, program = engine.ask("program", root)
+  program = engine.program(root)
   assert program == {
     binding: f"{root}: Act[object] = Act({root!r})\n{act}: Act[None] = Act({act!r})",
     step: old,

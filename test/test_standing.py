@@ -1,58 +1,47 @@
-"""Standing, what a chain stands on."""
+"""standing, what the chains stand on."""
 
-import pytest
+from collections.abc import Generator
 
-from conftest import STANDS, Sand, life, paragraphs, plain, rows, said, settle, stood
+from conftest import STANDS, Sand, heads, kernel, life, relived, said, settle
 from furb import engine
-from furb.engine import Drift
-
-ROSTER, WHERE, WHO = STANDS
 
 
-async def test_what_a_chain_stands_on() -> None:
-  """What a chain stands on: the actors the World offers, the directory the chain starts in, and the actor a prompt goes to when it names none."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
-  sand.script[root] = ["close(1)"]
-  assert await engine.prompt(int, "count", on=root) == 1
-  assert (WHERE, WHO) == ("/w", "m/low")
-  assert [name for name, *_ in ROSTER] == ["operator", "m", "n"]
-  assert engine.cwd(on=root) == "/w"
-  assert [a[4] for a in said(log, "ask")] == ["m/low"]
-  assert engine.modules[root]["actor"] == "m/low"
+async def test_standing_gives_what_the_chains_stand_on() -> None:
+  """standing gives what the chains stand on: the answer of the last stand that the transcript of the root holds, and an empty standing before the first."""
+  seen: list[object] = []
 
+  def world() -> Generator[tuple | None, tuple]:
+    while True:
+      a = yield
+      if a[0] == "stand":
+        seen.append(engine.standing())
+        yield "done", a[1], STANDS
 
-async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_the_transcript() -> None:
-  """The roster, the directory and the actor that a model reads are in the transcript of its chain."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
-  sand.script[root] = ["close(1)"]
-  assert await engine.prompt(int, "count", on=root) == 1
-  told = stood(root)
-  assert told == (
-    "#chain1 roster [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
-    "#chain1 cwd /w\n"
-    "#chain1 actor m/low"
-  )
-  assert [paragraphs(a[5])[1] for a in said(log, "ask")] == [told]
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
-  assert [a for a in held if a[0] == "tell" and a[3][0].startswith(f"#{root} roster ")] == [
-    ("tell", root, root, rows(root))
-  ]
-
-
-async def test_a_standing_holds_no_source() -> None:
-  """A standing holds no source: the engine is one file the model imports, and a record made by another engine is a drift."""
-  assert len(STANDS) == 3
-  sand = Sand(stands=STANDS)
+  engine.boot((), **kernel(), world=world())
+  assert seen == [[]] and engine.standing() == STANDS == engine.peek("stand1")
+  later = [[STANDS[0][0]], "/z", "operator"]
+  seen.clear()
+  sand = Sand(stands=later)
   _, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\nclose(1)"]
-  assert await engine.prompt(int, "run it", on=root) == 1
+  assert engine.standing() == later
+  sand.stands = STANDS
+  assert engine.stand() == STANDS and engine.standing() == STANDS
+  assert [a[1] for a in engine.transcript(root) if a[0] == "stand"] == ["stand1", "stand2"]
+
+
+async def test_it_reads_the_transcript_of_the_root_as_it_stands_where_the_call_is_made() -> None:
+  """It reads the transcript of the root as it stands where the call is made, so a grant reads the window of an actor off the standing where the answer of its reply lands, and a later life reads at each place of the record the standing that the record held there."""
+  sand = Sand(stands=STANDS, cost=(200000, 0, 0, 0, 0.0))
+  log, root = life(sand)
+  sand.script[root] = ["close(1)"]
+  engine.grant(share=0.9, on=root)
+  one = engine.prompt(int, "count", on=root)
+  assert await one == 1
   await settle()
-  kept = [
-    ((*fact[:4], "echo other", *fact[5:]), *rest) if fact[0] == "bash" else (fact, *rest)
-    for fact, *rest in plain(sand.record)
-  ]
-  with pytest.raises(Drift, match=r"^bash1 drifts$"):
-    life(Sand(stands=STANDS), kept)
+  (answered,) = [a[1] for a in said(log, "rung") if a[2] == one]
+  ledger = [f"#{answered} ledger spent=0.0 filled=0.5"]
+  assert [a for a in heads(engine.turns(on=root)) if " ledger " in a] == ledger
+  later = Sand(stands=[[STANDS[0][0]], "/z", "operator"])
+  await relived(later, list(sand.record))
+  assert engine.standing() == later.stands
+  assert [a for a in heads(engine.turns(on=root)) if " ledger " in a] == ledger

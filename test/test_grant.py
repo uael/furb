@@ -13,21 +13,21 @@ BOUND = "chain1: Act[object] = Act('chain1')\ngrant1: Act[None] = Act('grant1')\
 
 
 async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_both() -> None:
-  """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells that ledger at each answer of a model, so no turn an ask has sent grows a line after it."""
+  """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells that ledger at each answer of a model, so no turn a reply has sent grows a line after it."""
   sand = Sand(stands=STANDS, cost=COST)
   log, root = life(sand)
   engine.grant(usd=10.0, on=root)
   sand.script[root] = ["a = 1", "b = 2", "close(a + b)"]
   assert await engine.prompt(int, "count", on=root) == 3
   await settle()
-  one, two, three = [a[1] for a in said(log, "answer")]
+  one, two, three = [a[2] for a in said(log, "reply")]
   final = engine.turns(on=root)
   assert [line for line in heads(final) if " ledger " in line] == [
     f"#{one} ledger spent=1.5 filled=0.2",
     f"#{two} ledger spent=3.0 filled=0.2",
     f"#{three} ledger spent=4.5 filled=0.2",
   ]
-  assert [final[: len(a[5])] == a[5] for a in said(log, "ask")] == [True, True, True]
+  assert [final[: len(turns)] == turns for turns in sand.turns.values()] == [True, True, True]
 
 
 async def test_grant_on_a_chain_puts_a_ceiling_on_it_dollars_a_share_of_the_window_or_both() -> None:
@@ -57,7 +57,7 @@ async def test_the_engine_enters_a_pause_on_the_chain_when_a_response_carries_th
   sand.script[root] = ["a = 1", "close(2)"]
   act = engine.prompt(int, "count", on=root)
   await settle()
-  assert act not in engine.outcomes
+  assert engine.peek(act, ...) is ...
   assert [(one[1], one[2]) for one in said(log, "pause")] == [(root, ceiling)]
 
 
@@ -69,22 +69,22 @@ async def test_the_word_of_the_response_that_crossed_the_ceiling_runs() -> None:
   sand.script[root] = ["a = 1", "close(2)"]
   act = engine.prompt(int, "count", on=root)
   await settle()
-  assert ran(log) == [BOUND, "a = 1"] and engine.modules[root]["a"] == 1
-  assert act not in engine.outcomes
+  assert ran(log) == [BOUND, "a = 1"] and engine.module(root)["a"] == 1
+  assert engine.peek(act, ...) is ...
 
 
-async def test_no_ask_follows_the_response_that_carried_the_ledger_to_the_ceiling_until_a_wake() -> None:
-  """No ask follows the response that carried the ledger to the ceiling, until a wake."""
+async def test_no_reply_follows_the_response_that_carried_the_ledger_to_the_ceiling_until_a_wake() -> None:
+  """No reply follows the response that carried the ledger to the ceiling, until a wake."""
   sand = Sand(stands=STANDS, cost=COST)
   log, root = life(sand)
   engine.grant(usd=1.0, on=root)
   sand.script[root] = ["a = 1", "close(2)"]
   act = engine.prompt(int, "count", on=root)
   await settle()
-  assert len(said(log, "ask")) == 1 and act not in engine.outcomes
+  assert len(said(log, "reply")) == 1 and engine.peek(act, ...) is ...
   engine.wake(root)
   await settle()
-  assert len(said(log, "ask")) == 2
+  assert len(said(log, "reply")) == 2
 
 
 async def test_the_model_continues_after_a_later_grant_and_a_wake() -> None:
@@ -95,7 +95,7 @@ async def test_the_model_continues_after_a_later_grant_and_a_wake() -> None:
   sand.script[root] = ["a = 1", "close(2)"]
   act = engine.prompt(int, "count", on=root)
   await settle()
-  assert act not in engine.outcomes
+  assert engine.peek(act, ...) is ...
   engine.grant(usd=4.0, on=root)
   engine.wake(root)
   await settle()
@@ -110,8 +110,8 @@ async def test_an_answer_that_carries_the_ledger_past_the_ceiling_pauses_the_cha
   sand.script[root] = ["close(5)"]
   act = engine.prompt(int, "spend", on=root)
   await settle()
-  assert ran(log) == [BOUND, "close(5)"] and act not in engine.outcomes
-  assert len(said(log, "ask")) == 1
+  assert ran(log) == [BOUND, "close(5)"] and engine.peek(act, ...) is ...
+  assert len(said(log, "reply")) == 1
   engine.wake(root)
   await settle()
   assert (await act) == 5
@@ -125,10 +125,10 @@ async def test_lifting_a_ceiling_wakes_nothing() -> None:
   sand.script[root] = ["close(5)"]
   act = engine.prompt(int, "spend", on=root)
   await settle()
-  assert act not in engine.outcomes
+  assert engine.peek(act, ...) is ...
   engine.cancel(ceiling)
   await settle()
-  assert isinstance(engine.outcomes[ceiling], CancelledError) and act not in engine.outcomes
+  assert isinstance(engine.peek(ceiling), CancelledError) and engine.peek(act, ...) is ...
   engine.wake(root)
   await settle()
   assert (await act) == 5
@@ -140,13 +140,13 @@ async def test_it_stands_until_it_is_lifted_as_the_chain_it_is_on_does() -> None
   _, root = life(sand)
   one = engine.grant(usd=1.0, on=root)
   await settle()
-  assert one not in engine.outcomes
+  assert engine.peek(one, ...) is ...
   two = engine.grant(share=0.5, on=root)
   await settle()
-  assert (await one) is None and two not in engine.outcomes
+  assert (await one) is None and engine.peek(two, ...) is ...
   engine.cancel(two)
   await settle()
-  assert isinstance(engine.outcomes[two], CancelledError) and isinstance(engine.peek(two, on=root), CancelledError)
+  assert isinstance(engine.peek(two), CancelledError) and isinstance(engine.peek(two), CancelledError)
 
 
 async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one_is_no_ceiling() -> None:
@@ -157,13 +157,13 @@ async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one
   below = engine.grant(usd=-1.0, on=root)
   beyond = engine.grant(share=1.5, on=root)
   await settle()
-  got = [engine.outcomes[act] for act in (none, below, beyond)]
+  got = [engine.peek(act) for act in (none, below, beyond)]
   assert [type(one) for one in got] == [Refused, Refused, Refused]
   assert [str(one) for one in got] == ["None/None no ceiling", "-1.0/None no ceiling", "None/1.5 no ceiling"]
   assert heads(engine.turns(on=root)) == [f"#{root} root", rows(root)[0]]
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
-  assert isinstance(engine.outcomes[ghost], Refused) and said(log, "ask") == []
+  assert isinstance(engine.peek(ghost), Refused) and said(log, "reply") == []
   assert paragraphs(engine.turns(on=root))[2:] == [
     f"#{ghost} hi\n{ghost}: Act[int] = Act({ghost!r})",
     f"#{ghost} closed Refused('ghost no actor')",
@@ -178,17 +178,17 @@ async def test_a_later_grant_that_stands_closes_every_grant_of_the_chain_before_
   sand.script[root] = ["a = 1", "b = 2", "close(a + b)"]
   act = engine.prompt(int, "count", on=root)
   await settle()
-  assert act not in engine.outcomes
+  assert engine.peek(act, ...) is ...
   top = engine.grant(usd=4.0, on=root)
   await settle()
-  assert (await ceiling) is None and top not in engine.outcomes
+  assert (await ceiling) is None and engine.peek(top, ...) is ...
   none = engine.grant(usd=-1.0, on=root)
   await settle()
-  assert isinstance(engine.outcomes[none], Refused) and top not in engine.outcomes
+  assert isinstance(engine.peek(none), Refused) and engine.peek(top, ...) is ...
   engine.wake(root)
   assert await act == 3
   await settle()
-  one, two, three = [a[1] for a in said(log, "answer")]
+  one, two, three = [a[2] for a in said(log, "reply")]
   final = heads(engine.turns(on=root))
   assert [line for line in final if " ledger " in line] == [
     f"#{one} ledger spent=1.5 filled=0.2",
@@ -210,8 +210,8 @@ async def test_a_cancel_of_it_lifts_the_ceiling_since_it_is_an_act_like_any_othe
   await settle()
   engine.cancel(ceiling)
   await settle()
-  assert isinstance(engine.outcomes[ceiling], CancelledError)
-  assert isinstance(engine.peek(ceiling, on=root), CancelledError)
+  assert isinstance(engine.peek(ceiling), CancelledError)
+  assert isinstance(engine.peek(ceiling), CancelledError)
   sand.script[root] = ["a = 1", "close(2)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
@@ -229,7 +229,7 @@ async def test_a_grant_is_any_callers_on_any_chain() -> None:
   sand.script[root] = [f"theirs = grant(usd=2.0, on={two!r})\nclose(1)"]
   assert await engine.prompt(int, "grant", on=root) == 1
   await settle()
-  step = said(log, "answer")[0][1]
+  step = said(log, "reply")[0][2]
   assert [(one[3], one[2]) for one in said(log, "grant")] == [(two, OPERATOR), (two, step)]
   assert (await mine) is None
 
@@ -244,7 +244,7 @@ async def test_a_grant_finds_the_grants_of_its_chain_among_the_acts_of_the_life(
   await settle(300)
   theirs = engine.grant(usd=9.0, on=twin)
   await settle()
-  assert first not in engine.outcomes and theirs not in engine.outcomes
+  assert engine.peek(first, ...) is ... and engine.peek(theirs, ...) is ...
   mine = engine.grant(usd=7.0, on=root)
   await settle()
-  assert engine.outcomes[first] is None and theirs not in engine.outcomes and mine not in engine.outcomes
+  assert engine.peek(first) is None and engine.peek(theirs, ...) is ... and engine.peek(mine, ...) is ...

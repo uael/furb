@@ -11,8 +11,7 @@ async def test_a_filter_is_given_the_acts_of_the_transcript_up_to_the_source() -
   held: list[tuple] = []
   engine.chain("twin", source=root, filter=seen(held))
   await settle()
-  _, theirs = engine.ask("transcript", root, root)
-  assert isinstance(theirs, list)
+  theirs = engine.transcript(root)
   facts = [one[1] for one in theirs if engine.question(one)]
   assert [one[1] for one in held] == facts[: len(held)]
   made = {said(log, "prompt")[0][1], said(log, "rung")[0][1], said(log, "bash")[0][1]}
@@ -45,7 +44,7 @@ async def test_a_filter_is_any_callable_of_that_shape() -> None:
   await settle(200)
   command = said(log, "bash")[0][1]
   assert command in named(engine.turns(on=root)) and command not in named(engine.turns(on=side))
-  assert engine.modules[side]["n"] == 0
+  assert engine.module(side)["n"] == 0
   assert engine.take(command, inside=False)([engine.get(command)]) == []
 
 

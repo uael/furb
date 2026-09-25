@@ -19,10 +19,10 @@ async def spoke(sand: Sand, words: list[str]) -> tuple[list[tuple], str]:
 async def test_one_turn_of_what_a_model_reads() -> None:
   """One turn of what a model reads: who said it, the python it holds, what the answer to it cost, and the blocks of the provider, which are its own, are read by nothing of the engine, and go back to it with the turn."""
   sand = Sand(stands=STANDS, cost=COST)
-  log, root = await spoke(sand, ["a = 1", "close(1)"])
+  _, root = await spoke(sand, ["a = 1", "close(1)"])
   got = engine.turns(on=root)
   assert got[1] == ("assistant", "a = 1", COST, ["signed 5"])
-  assert said(log, "ask")[1][5][1] == said(log, "answer")[0][3]
+  assert sand.turns["reply2"][1] == engine.peek("reply1")
   assert [type(one[1]).__name__ for one in got] == ["str"] * 5
 
 
@@ -38,7 +38,7 @@ async def test_the_blocks_of_an_assistant_turn_are_the_response_as_the_provider_
   sand = Sand(stands=STANDS, cost=COST)
   log, root = await spoke(sand, ["close(1)"])
   assert [blocks for *_, blocks in engine.turns(on=root)] == [None, ["signed 8"], None]
-  assert said(log, "answer")[0][3][3] == ["signed 8"]
+  assert [a[3][3] for a in said(log, "done") if a[1] == "reply1"] == [["signed 8"]]
 
 
 async def test_a_turn_is_a_role_python_a_usage_and_blocks() -> None:
@@ -64,8 +64,8 @@ async def test_an_assistant_turn_carries_the_usage_of_the_response() -> None:
 async def test_an_assistant_turn_keeps_the_role_assistant_for_every_model_that_reads_the_turns() -> None:
   """An assistant turn keeps the role assistant for every model that reads the turns."""
   sand = Sand(stands=STANDS, cost=COST)
-  log, root = await spoke(sand, ["a = 1", "close(1)"])
-  assert [role for role, *_ in said(log, "ask")[1][5]] == ["user", "assistant", "user"]
+  _, root = await spoke(sand, ["a = 1", "close(1)"])
+  assert [role for role, *_ in sand.turns["reply2"]] == ["user", "assistant", "user"]
   twin = engine.chain("twin", source=root)
   await settle(300)
   assert [role for role, *_ in engine.turns(on=twin)] == ["user", "assistant", "user", "assistant", "user"]
@@ -75,13 +75,13 @@ async def test_the_engine_sends_the_response_to_the_provider_again_whole() -> No
   """The engine sends the response to the provider again whole."""
   sand = Sand(stands=STANDS, cost=COST)
   log, _ = await spoke(sand, ["a = 1", "close(1)"])
-  answered = said(log, "answer")[0][3]
-  assert said(log, "ask")[1][5][1] == answered
-  assert said(log, "ask")[1][5][1] == ("assistant", "a = 1", COST, ["signed 5"])
+  answered = [a[3] for a in said(log, "done") if a[1] == "reply1"]
+  assert [sand.turns["reply2"][1]] == answered
+  assert sand.turns["reply2"][1] == ("assistant", "a = 1", COST, ["signed 5"])
 
 
 async def test_the_python_of_a_turn() -> None:
-  """The python of an assistant turn is the word the model wrote, quotes and all, and the python of a user turn is the paragraphs told since the ask before it, and nothing else."""
+  """The python of an assistant turn is the word the model wrote, quotes and all, and the python of a user turn is the paragraphs told since the reply before it, and nothing else."""
   sand = Sand(stands=STANDS, cost=COST)
   _, root = await spoke(sand, ["<S1>\nhi\n</S1>\na = S1", "close(len(a) - 2)"])
   got = engine.turns(on=root)

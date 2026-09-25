@@ -4416,9 +4416,7 @@ export class App {
   }
   async names(): Promise<void> {
     const w = this.session;
-    const names = ((await w.life.held("modules", [w.selected], "keys")) as string[]).filter(
-      (name) => !name.startsWith("_"),
-    );
+    const names = (await w.life.names(w.selected)).filter((name) => !name.startsWith("_"));
     // The names that the words of this chain bind come first, then the acts of the chain, then what the engine gives.
     const identifier = "[\\p{L}_][\\p{L}\\p{N}_]*";
     // A name is bound by an assignment, a def or a class, a for loop, an import, or an as.
@@ -4455,7 +4453,7 @@ export class App {
     );
   }
   private async completeNames(): Promise<void> {
-    const names = (await this.session.life.held("modules", [this.session.selected], "keys")) as string[];
+    const names = await this.session.life.names(this.session.selected);
     const prefix = this.beforeCursor().match(/[\p{L}_][\p{L}\p{N}_]*$/u)?.[0] ?? "";
     this.openPalette(
       "Complete Python name",

@@ -11,7 +11,7 @@ async def test_what_a_word_is_as_python() -> None:
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   assert await engine.rung("<S1>\nhello\n</S1>\nx = S1", on=root) is None
-  assert engine.modules[root]["x"] == "hello\n"
+  assert engine.module(root)["x"] == "hello\n"
 
 
 async def test_a_quote_is_a_string_a_word_writes_between_two_marks() -> None:
@@ -23,7 +23,7 @@ async def test_a_quote_is_a_string_a_word_writes_between_two_marks() -> None:
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   assert await engine.rung(f"<S12>\n{text}\n</S12>\nk = S12", on=root) is None
-  assert engine.modules[root]["k"] == f"{text}\n"
+  assert engine.module(root)["k"] == f"{text}\n"
 
 
 async def test_the_open_mark_is_looked_for_from_the_top_and_its_close_mark_from_the_last_line_up() -> None:

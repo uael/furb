@@ -30,12 +30,11 @@ async def test_take_keeps_the_acts_it_names_and_everything_they_made() -> None:
 async def test_take_is_given_ids_and_keeps_the_acts_with_those_ids() -> None:
   """take is given ids and keeps the acts with those ids."""
   root, first, second, one, two = await twice(Sand(stands=STANDS))
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
-  made = [a for a in held if engine.question(a)]
-  assert [a[1] for a in take(first)(made)] == [first, one]
-  assert [a[1] for a in take(second)(made)] == [second, two]
-  assert [a[1] for a in take(first, second)(made)] == [first, one, second, two]
+  held = engine.transcript(root)
+  made: list[tuple] = [a for a in held if engine.question(a)]
+  assert [a[1] for a in take(first)(made)] == [first, one, "reply1"]
+  assert [a[1] for a in take(second)(made)] == [second, two, "reply2"]
+  assert [a[1] for a in take(first, second)(made)] == [first, one, "reply1", second, two, "reply2"]
 
 
 async def test_take_keeps_everything_that_the_acts_with_those_ids_caused() -> None:
@@ -48,10 +47,9 @@ async def test_take_keeps_everything_that_the_acts_with_those_ids_caused() -> No
   await settle()
   _, step, *_ = said(log, "rung")[0]
   _, command, *_ = said(log, "bash")[0]
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
-  made = [a for a in held if engine.question(a)]
-  assert [a[1] for a in take(first)(made)] == [first, step, f"holds@{command}.1", command]
+  held = engine.transcript(root)
+  made: list[tuple] = [a for a in held if engine.question(a)]
+  assert [a[1] for a in take(first)(made)] == [first, step, "reply1", command]
   kept = engine.chain("kept", source=root, filter=take(first))
   await settle(300)
   assert named(engine.turns(on=kept)) == [root, root, first, step, command, first, command, kept]

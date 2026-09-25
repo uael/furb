@@ -2,9 +2,8 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, life, said, settle
+from conftest import STANDS, Sand, life, said, settle, world_says
 from furb import engine
-from furb.engine import WORLD
 
 
 async def test_a_cancel_ends_everything_it_is_over() -> None:
@@ -19,7 +18,7 @@ async def test_a_cancel_ends_everything_it_is_over() -> None:
   await settle()
   assert [type(engine.peek(x)).__name__ for x in (one, step, command)] == ["CancelledError"] * 3
   mark = len(log)
-  engine.send("out", command, "late\n", "stdout", by=WORLD)
+  world_says("out", command, "late\n", "stdout")
   await settle()
   assert [a for a in log[mark:] if a[2] in (one, step, command)] == []
 

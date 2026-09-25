@@ -5,9 +5,9 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import STANDS, Sand, heads, life, rows, said, settle
+from conftest import STANDS, Sand, acts, heads, life, rows, said, settle
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Exit, Text
+from furb.engine import OPERATOR, Exit, Text
 
 
 async def test_to_await_an_act_gives_the_value_of_the_act_when_the_act_completes() -> None:
@@ -45,8 +45,8 @@ async def test_a_rung_awaits_an_act_and_nothing_else() -> None:
   one = engine.prompt(int, "run it", on=root)
   await settle()
   command = said(log, "bash")[0][1]
-  assert [a[3] for a in said(log, "wants")] == [command]
-  assert {a[3] for a in said(log, "wants")} <= set(engine.acts)
+  assert [a[4] for a in said(log, "wants")] == [command]
+  assert {a[4] for a in said(log, "wants")} <= set(acts(log))
   engine.cancel(one)
 
 
@@ -112,12 +112,12 @@ async def test_a_run_that_awaits_it_hands_it_to_whoever_steps_the_run() -> None:
   sand.script[root] = ["x = bash('echo hi')\nclose((await x).code)"]
   assert await engine.prompt(int, "run it", on=root) == 0
   command = said(log, "bash")[0]
-  assert [(a[3], a[2]) for a in said(log, "wants")] == [(command[1], command[2])]
+  assert [(a[4], engine.get(a[2])[4]) for a in said(log, "wants")] == [(command[1], command[2])]
   mine = engine.bash("echo again", on=root)
-  assert (await mine).code == 0 and [a[3] for a in said(log, "wants")] == [command[1]]
+  assert (await mine).code == 0 and [a[4] for a in said(log, "wants")] == [command[1]]
   sand.auto = False
   slow = engine.bash("slow", on=root)
   with pytest.raises(TimeoutError):
     await asyncio.wait_for(slow, 0.01)
-  engine.send("exited", slow, 0, by=WORLD)
-  assert engine.outcomes[slow] == Exit(0, Text(f"{slow}/stdout"), Text(f"{slow}/stderr"))
+  sand.exits(slow, 0)
+  assert engine.peek(slow) == Exit(0, Text(f"{slow}/stdout"), Text(f"{slow}/stderr"))

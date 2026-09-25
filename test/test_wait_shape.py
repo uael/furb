@@ -10,9 +10,8 @@ async def test_a_wait_carries_the_seconds_that_must_pass_before_the_world_is_don
   _, root = life(sand)
   slow = engine.wait(0.2, on=root)
   quick = engine.wait(on=root)
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   assert [(a[1], a[4]) for a in said(held, "wait")] == [(slow, 0.2), (quick, 0.0)]
   await settle()
-  assert quick in engine.outcomes and slow not in engine.outcomes
+  assert engine.peek(quick, ...) is not ... and engine.peek(slow, ...) is ...
   assert await slow is None

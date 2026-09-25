@@ -2,7 +2,8 @@
 
 The engine holds the record as entries and this holds it as lines, one json array to an entry, made plain by wire
 and read back by unwire. Everything the World does runs on the loop the operator booted the life on: a command and
-an ask are tasks of that loop, and what they come to reaches the life through send, under the name of the World.
+a reply are tasks of that loop, begun while the World speaks, so what they come to reaches the life through say
+under the name of the World.
 """
 
 import asyncio
@@ -38,7 +39,7 @@ from pydantic_ai.models import Model
 from python_minifier import minify
 
 from furb import engine, python
-from furb.engine import WORLD, Drift, Refused, Text
+from furb.engine import Drift, Exit, Refused, Text
 from furb.provider.claude import ACTOR, Claude, Settings, actors
 
 type World = Generator[tuple | None, tuple]
@@ -158,7 +159,8 @@ def kept(record: Path) -> list[tuple]:
 
 @dataclass
 class Command:
-  """One command of the World: its act, its process once the process stands, and what waits to be fed to it.
+  """One command of the World: its act, its process once the process stands, what waits to be fed to it, and its
+  two streams as they came, which the World answers the command with when it ends.
 
   A rung writes the stdin of a command as soon as it has made the command, which is before the World has the
   process up, so what is fed before then waits here and goes in the order it was said once the process stands.
@@ -172,6 +174,7 @@ class Command:
   proc: Process | None = None
   waiting: list[str | None] = field(default_factory=list)
   over: bool = False
+  streams: dict[str, str] = field(default_factory=lambda: {"stdout": "", "stderr": ""})
 
   def feed(self, text: str | None) -> None:
     """The text into the stdin of the command, and a text of nothing closes that stdin."""
@@ -209,8 +212,8 @@ class Live:
   `directory` is where the chains of the life start, `record` the file it keeps the record in and reads it back
   from, `actor` the actor a prompt goes to when it names none, and `roster` the actors it offers. `calls` holds
   every fact it answered or performed, in order, and `model` is the one model it asks, when it is given one.
-  `mute` holds, for each chain, the actor whose last ask on that chain answered nothing, so a second such ask in a
-  row pauses the chain, and an answer between the two ends the row.
+  `mute` holds, for each chain, the actor whose last reply on that chain answered nothing, so a second such reply in
+  a row pauses the chain, and an answer between the two ends the row.
   `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
   """
 
@@ -234,7 +237,7 @@ class Live:
     return self.bought[name]
 
   async def answer(self, actor: str, on: str, turns: Sequence[tuple]) -> tuple:
-    """One turn of a model for one ask: the turns of the chain as messages, and what comes back as the turn it is.
+    """One turn of a model for one reply: the turns of the chain as messages, and what comes back as the turn it is.
 
     The system prompt stands first, then each turn of the chain: a user turn as the python the engine wrote, an
     assistant turn as the parts the provider gave, so that the provider reads its own answer whole and its cache
@@ -290,7 +293,7 @@ class Live:
 
   def door(self, path: str) -> bool:
     """Whether a path is a door: its first part names an act of the life, so `./` before it reaches the file."""
-    return path.split("/", 1)[0] in engine.acts
+    return engine.get(path.split("/", 1)[0]) is not None
 
   def read(self, here: str, path: str) -> Text | Refused:
     """The text at a path: the file on the disk, and a refusal for the door of nothing that lives."""
@@ -328,7 +331,8 @@ class Live:
       os.fsync(file.fileno())
 
   async def ran(self, one: Command, here: str) -> None:
-    """The command in a session of its own: what it says as it says it, and its code when it is over.
+    """The command in a session of its own: what it says as it says it, and what it came to when it is over, which
+    the World answers it with, since the World took it.
 
     When the command is merged, its stderr is its stdout, so the two stand in the order the command wrote them. The
     World ends the command at its timeout, and the code of it is nothing then.
@@ -341,7 +345,7 @@ class Live:
       )
     except OSError as no:
       # The machine would not start it, so the command never runs and whoever waits for it hears why instead.
-      engine.close(Refused(f"{one.command!r} did not start: {no}"), one.id)
+      engine.say("done", one.id, Refused(f"{one.command!r} did not start: {no}"))
       return
     one.stands(proc)
     if one.over:
@@ -349,7 +353,7 @@ class Live:
 
     async def drained() -> None:
       """Both streams to their end, and then the code of the command."""
-      await asyncio.gather(self.told(proc.stdout, one.id, "stdout"), self.told(proc.stderr, one.id, "stderr"))
+      await asyncio.gather(self.told(proc.stdout, one, "stdout"), self.told(proc.stderr, one, "stderr"))
       await proc.wait()
 
     # Every way out reads both streams to their end and reaps the process, the one ended before it stood and the
@@ -368,25 +372,28 @@ class Live:
       await job
       raise
     if not one.over:
-      engine.send("exited", one.id, None if late else proc.returncode, by=WORLD)
+      out, err = (Text(f"{one.id}/{name}", text) for name, text in one.streams.items())
+      engine.say("done", one.id, Exit(None if late else proc.returncode, out, err))
 
-  async def told(self, reader: asyncio.StreamReader | None, about: str, stream: str) -> None:
-    """One stream of a command, said as it comes, one out fact of the engine for each part that arrives."""
+  async def told(self, reader: asyncio.StreamReader | None, one: Command, stream: str) -> None:
+    """One stream of a command, said as it comes, one out fact of the engine for each part that arrives, and kept."""
     if reader is None:
       return
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
     while raw := await reader.read(PIPE):
       if text := decoder.decode(raw):
-        engine.send("out", about, text, stream, by=WORLD)
+        one.streams[stream] += text
+        engine.say("out", one.id, text, stream)
     if text := decoder.decode(b"", final=True):
-      engine.send("out", about, text, stream, by=WORLD)
+      one.streams[stream] += text
+      engine.say("out", one.id, text, stream)
 
-  async def asked(self, rung: str, on: str, actor: str, turns: Sequence[tuple]) -> None:
-    """One turn of a model for one ask, and the refusal for an ask the World cannot answer, with a pause when the
+  async def asked(self, about: str, on: str, actor: str, turns: Sequence[tuple]) -> None:
+    """One turn of a model for one reply, and the refusal for a reply the World cannot answer, with a pause when the
     fault of it stands.
 
-    A fault of the moment is no pause: the rung is closed with the refusal, the prompt asks again, and the model
-    reads what was dropped. A second nothing of the same actor in a row on the chain is a fault that stands, so the
+    A fault of the moment is no pause: the reply is done with the refusal, which its rung comes to, and the prompt
+    asks again. A second nothing of the same actor in a row on the chain is a fault that stands, so the
     chain goes quiet until the operator wakes it, and the operator is told here why it went quiet. The World counts
     the row by what it was answered, and never by a text a chain was told.
     """
@@ -398,10 +405,10 @@ class Live:
         sys.stderr.write(f"{on} is paused: {why}\n")
         engine.pause(on)
       self.mute[on] = actor
-      engine.close(why, rung)
+      engine.say("done", about, why)
       return
     self.mute.pop(on, None)
-    engine.send("answer", rung, turn, by=WORLD)
+    engine.say("done", about, turn)
 
   async def show(self, about: str, shape: str, message: str) -> None:
     """A prompt of the operator: the message on the terminal, and one line back as the shape the prompt wants.
@@ -426,11 +433,10 @@ class Live:
       engine.close(Refused(f"{line!r} is no {shape}: {no}"), about)
 
   def hears(self) -> World:  # noqa: PLR0912
-    """The World as one generator for one life: it does the act a start names, answers the questions that are its
-    own, feeds and ends its commands, answers an ask with the turn of a model, and keeps what it is told.
+    """The World as one generator for one life: it takes a command, a wait, a prompt to the operator and a reply,
+    answers the questions that are its own, feeds and ends its commands, and keeps what it is told.
     """
     running: dict[str, Command] = {}
-    acts: dict[str, tuple] = {}
     jobs: set[Task[None]] = set()
     loop = asyncio.get_running_loop()
 
@@ -443,37 +449,36 @@ class Live:
     while True:
       a = yield
       # Every fact the World answered or performed, and none that it only heard.
-      if a[0] in ("start", "stand", "read", "write", "ask", "feed", "clock", "chance"):
+      if a[0] in ("bash", "wait", "prompt", "reply", "stand", "read", "write", "feed", "clock", "chance"):
         self.calls.append(a)
       match a:
-        case (_, id, *_) if engine.question(a) and id in engine.acts:
-          acts[id] = a
-        case ("start", about, _):
-          match acts[about]:
-            case ("bash", _, _, on, command, fed, timeout):
-              merged = engine.ask("merged", on, about)[1]
-              running[about] = held = Command(about, command, fed, timeout, bool(merged))
-              start(self.ran(held, engine.cwd(on=on)))
-            case ("wait", _, _, _, seconds):
-              loop.call_later(seconds, partial(engine.send, "done", about, None, by=WORLD))
-            case ("prompt", _, _, _, shape, message, _):
-              start(self.show(about, shape, message))
+        case ("bash", about, _, on, command, fed, timeout):
+          yield "started", about
+          running[about] = held = Command(about, command, fed, timeout, bool(engine.ask("merged", on, about)))
+          start(self.ran(held, engine.cwd(on=on)))
+        case ("wait", about, _, _, seconds):
+          yield "started", about
+          loop.call_later(seconds, partial(engine.say, "done", about, None))
+        case ("prompt", about, _, _, shape, message, _):
+          yield "started", about
+          start(self.show(about, shape, message))
+        case ("reply", about, _, on, actor):
+          yield "started", about
+          start(self.asked(about, on, actor, engine.turns(on=on)))
         case ("stand", qid, *_):
           yield "done", qid, [self.roster, self.directory, self.actor]
         case ("read", qid, _, on, path) if self.serves(path):
           yield "done", qid, self.read(engine.cwd(on=on), path)
         case ("write", qid, _, on, Text(path=path, content=content)) if self.serves(path):
           yield "done", qid, self.write(engine.cwd(on=on), path, content)
-        case ("ask", rung, _, on, actor, turns):
-          start(self.asked(rung, on, actor, turns))
         case ("feed", about, _, text) if about in running:
           running[about].feed(text)
         case ("cancel" | "close", *_):
           for one in [x for x in running.values() if engine.covers(a, x.id)]:
             one.over = True
             one.slay()
-            yield "exited", one.id, None
-        case ("exited", about, *_):
+            running.pop(one.id)
+        case ("done", about, *_):
           running.pop(about, None)
         case ("keep", _, _, entry):
           self.keep(entry)

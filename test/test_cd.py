@@ -1,18 +1,18 @@
 """cd, the verb that moves the working directory of a chain."""
 
-from conftest import STANDS, Sand, life, paragraphs, settle
+from conftest import STANDS, Sand, acts, life, paragraphs, said, settle
 from furb import engine
 
 
 async def test_a_cd_the_paths_of_its_chain_resolve_against_its_path_from_then_on() -> None:
   """A cd: the paths of its chain resolve against its path from then on, and it does nothing else."""
   sand = Sand(files={"/w/a.txt": "one\n", "/x/a.txt": "two\n"}, stands=STANDS)
-  _, root = life(sand)
+  log, root = life(sand)
   assert engine.read("a.txt", on=root).content == "one\n"
-  made = list(engine.acts)
+  made = list(acts(log))
   assert engine.cd("/x", on=root) == "/x"
+  assert list(acts(log)) == [*made, "cd1"]
   assert engine.read("a.txt", on=root).content == "two\n"
-  assert list(engine.acts) == made
 
 
 async def test_cd_completes_at_once_and_gives_the_new_working_directory() -> None:
@@ -24,14 +24,17 @@ async def test_cd_completes_at_once_and_gives_the_new_working_directory() -> Non
   assert engine.cwd(on=root) == "/x"
 
 
-async def test_it_answers_with_the_path_it_was_given_and_the_chain_that_hears_it_holds_it() -> None:
-  """It answers with the path it was given, and the chain that hears it holds it, so what a chain heard is where its working directory stands."""
+async def test_the_chain_answers_it_with_the_path_it_was_given_and_holds_it() -> None:
+  """The chain answers it with the path it was given, and holds it, so what a chain heard is where its working directory stands."""
   sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  log, root = life(sand)
   assert [engine.cd("/x", on=root), engine.cd("/y", on=root)] == ["/x", "/y"]
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   assert [a[4] for a in held if a[0] == "cd"] == ["/x", "/y"]
+  assert [a for a in said(log, "done") if a[1].startswith("cd")] == [
+    ("done", "cd1", root, "/x"),
+    ("done", "cd2", root, "/y"),
+  ]
   assert engine.cwd(on=root) == "/y"
 
 

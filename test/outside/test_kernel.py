@@ -2,7 +2,7 @@
 
 The gate reads a word on the sheet of `furb.sheet` with the gate of the crate, after the program of its chain. The
 run is begun and carried by the facts of the engine, so it is driven through a life whose World answers a
-standing and refuses everything else.
+standing, takes a wait, and takes nothing else.
 """
 
 import asyncio
@@ -13,7 +13,7 @@ import furb_monty
 from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
 from furb.kernel import ENGINE, checked, gate
-from outside.doubles import heads, settle, stood, worlds
+from outside.doubles import booted, heads, settle, worlds
 
 STANDS = [[[OPERATOR, [], WINDOW], ["opus", ["low"], 1000]], "/w", "opus/low"]
 
@@ -103,7 +103,7 @@ async def test_a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last() 
   """The gate finds what the run finds: a rung that bound a name of the engine again leaves that value to the word
   after it, so a word that calls a name the program bound to a number is refused, and it raises when it runs."""
   assert said("close(read('a'))", ("read = 1",))[0].startswith("line 1: error[call-non-callable]")
-  root = stood(worlds(STANDS), gated=False)
+  root = booted(worlds(STANDS), gated=False)
   assert await engine.rung("read = 1", on=root) is None
   with pytest.raises(TypeError, match="not callable"):
     await engine.rung("close(read('a'))", on=root)
@@ -164,18 +164,18 @@ def test_a_return_inside_a_word_is_the_scope_it_stands_in() -> None:
 
 async def test_a_word_runs_in_the_module_of_its_chain_and_what_it_binds_stays_bound() -> None:
   """Every rung of a chain runs in the globals of the chain, and the last rung to bind a name wins."""
-  root = stood(worlds(STANDS))
+  root = booted(worlds(STANDS))
   assert await engine.rung("k = 6 * 7", on=root) is None
   assert await engine.rung("close(k + 1)", on=root) == 43
-  assert engine.modules[root]["k"] == 42
+  assert engine.module(root)["k"] == 42
   assert await engine.rung("def f():\n  return 1\nclose(f() + 1)", on=root) == 2
   assert await engine.rung("k = k", on=root) is None
 
 
 async def test_a_word_stops_at_the_act_it_awaits_and_is_carried_on_at_its_done() -> None:
-  """The Kernel says wants for the act a run waits for, takes a sent of what that act came to, and says ran with
-  what the word gave, so the engine owns the order of every run."""
-  root = stood(worlds(STANDS))
+  """The Kernel makes a wants for the act a run waits for, carries the word on at the done of that wants, and says
+  the run done with what the word gave, so the engine owns the order of every run."""
+  root = booted(worlds(STANDS))
   assert await engine.rung("x = wait(0.01)\nawait x\nclose('after')", on=root) == "after"
   assert await engine.rung("k = 1\nawait wait(0)\nclose(k)", on=root) == 1
 
@@ -183,7 +183,7 @@ async def test_a_word_stops_at_the_act_it_awaits_and_is_carried_on_at_its_done()
 async def test_a_word_awaits_an_act_and_nothing_else() -> None:
   """A rung awaits an act and nothing else, so anything else it awaits is refused where it waited, and a word that
   catches the refusal carries on."""
-  root = stood(worlds(STANDS))
+  root = booted(worlds(STANDS))
   with pytest.raises(Refused, match="a rung awaits an act"):
     await engine.rung("import asyncio\nawait asyncio.sleep(0)", on=root)
   word = "import asyncio\ntry:\n  await asyncio.sleep(0)\nexcept Refused as no:\n  why = str(no)\nclose(why)"
@@ -192,17 +192,17 @@ async def test_a_word_awaits_an_act_and_nothing_else() -> None:
 
 async def test_what_a_word_raises_is_what_the_run_came_to() -> None:
   """It is done with what the word gave, the exception for a raise, which it tells with its type and its message."""
-  root = stood(worlds(STANDS))
+  root = booted(worlds(STANDS))
   with pytest.raises(ValueError, match="boom"):
     await engine.rung("kept = 1\nraise ValueError('boom')", on=root)
-  assert engine.modules[root]["kept"] == 1
+  assert engine.module(root)["kept"] == 1
   assert [head for head in heads(root) if " raised " in head] == ["#rung1 raised ValueError('boom')"]
 
 
 async def test_a_word_the_interpreter_cannot_compile_is_what_the_run_came_to() -> None:
   """A pin: the compile stands inside the run, so a word the interpreter will not take is what the run came to and
   no more, and never an error out of the life that began the frame."""
-  root = stood(worlds(STANDS), gated=False)
+  root = booted(worlds(STANDS), gated=False)
   with pytest.raises(SyntaxError, match="'yield' outside function"):
     await engine.rung("x = yield 1", on=root)
   assert await engine.rung("close('alive')", on=root) == "alive"
@@ -210,7 +210,7 @@ async def test_a_word_the_interpreter_cannot_compile_is_what_the_run_came_to() -
 
 async def test_a_cancel_drops_the_frame_of_the_run_it_is_over() -> None:
   """A cancel of a rung is the Kernel's to do, since the Kernel is the one running the word."""
-  root = stood(worlds(STANDS))
+  root = booted(worlds(STANDS))
   waits = engine.rung("await wait(30)\nclose(1)", on=root)
   await settle()
   engine.cancel(waits)
@@ -219,10 +219,20 @@ async def test_a_cancel_drops_the_frame_of_the_run_it_is_over() -> None:
   assert await engine.rung("close('alive')", on=root) == "alive"
 
 
+async def test_a_rung_cancelled_before_its_word_begins_runs_no_word() -> None:
+  """A pin: a word that makes a rung and cancels it in one step leaves the cancel before the start of its run, so
+  the Kernel begins no word of a rung that is done already."""
+  root = booted(worlds(STANDS))
+  assert await engine.rung("r = rung('ran = 1')\ncancel(r)", on=root) is None
+  await settle()
+  assert "ran" not in engine.module(root)
+  assert isinstance(engine.peek(engine.module(root)["r"]), asyncio.CancelledError)
+
+
 async def test_the_kernel_speaks_from_the_run_it_steps() -> None:
   """The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says
   is said by that rung: a debug of a word stands in the turns under the name of its own rung."""
-  root = stood(worlds(STANDS), gated=False)
+  root = booted(worlds(STANDS), gated=False)
   waits = engine.rung('x = 3\ndebug(t"{x}")', on=root)
   await waits
   assert [head for head in heads(root) if " debugged " in head] == [f"#{waits} debugged x = 3"]
@@ -230,15 +240,15 @@ async def test_the_kernel_speaks_from_the_run_it_steps() -> None:
 
 async def test_a_word_that_awaits_and_then_ends_gives_nothing() -> None:
   """The Kernel gives nothing when the rung ended without a close, whether it awaited on the way there or not."""
-  root = stood(worlds(STANDS))
+  root = booted(worlds(STANDS))
   assert await engine.rung("await wait(0)\nk = 1", on=root) is None
-  assert engine.modules[root]["k"] == 1
+  assert engine.module(root)["k"] == 1
 
 
 async def test_a_word_that_awaits_an_act_already_over_is_carried_on_where_it_stands() -> None:
   """An act that is over when the word comes to await it hands its value straight in, so the run is never suspended
   for a done that already stands; a cancelled one raises where the word waited."""
-  root = stood(worlds(STANDS))
+  root = booted(worlds(STANDS))
   assert await engine.rung("a = wait(0)\nawait wait(0.02)\nawait a\nclose('both')", on=root) == "both"
   word = "a = wait(30)\ncancel(a)\nawait wait(0.02)\ntry:\n  await a\nexcept BaseException:\n  close('cut')"
   assert await engine.rung(word, on=root) == "cut"

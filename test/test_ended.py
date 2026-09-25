@@ -19,4 +19,4 @@ async def test_what_an_act_a_control_is_over_is_done_with() -> None:
   shut = said(log, "close")[0]
   assert engine.ended(shut, act) == 21
   assert isinstance(engine.ended(shut, step), CancelledError)
-  assert engine.outcomes[act] == 21 and isinstance(engine.outcomes[step], CancelledError)
+  assert engine.peek(act) == 21 and isinstance(engine.peek(step), CancelledError)

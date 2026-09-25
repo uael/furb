@@ -14,7 +14,7 @@ async def test_operator_is_the_name_of_the_operator_in_the_roster_and_as_an_acto
   assert engine.get(root) == ("chain", "chain1", OPERATOR, "", "root", "")
   wanted = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
-  assert said(log, "ask") == [] and wanted not in engine.outcomes
+  assert said(log, "reply") == [] and engine.peek(wanted, ...) is ...
   engine.close(12, wanted)
   await settle()
   assert (await wanted) == 12

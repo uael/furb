@@ -57,13 +57,12 @@ impl Fact {
     self.word(0).and_then(|one| one.as_str()).unwrap_or_default()
   }
 
-  /// Whether the fact is a question: one whose name is its kind and a number, as an act is named, or its kind, `@`
-  /// and more, as a query is named.
+  /// Whether the fact is a question: one whose name is its kind and a number, as every act is named.
   pub fn question(&self) -> bool {
-    self.about().strip_prefix(self.kind()).is_some_and(|rest| match rest.strip_prefix('@') {
-      Some(maker) => !maker.is_empty(),
-      None => !rest.is_empty() && rest.bytes().all(|one| one.is_ascii_digit()),
-    })
+    self
+      .about()
+      .strip_prefix(self.kind())
+      .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|one| one.is_ascii_digit()))
   }
 
   fn at(&self, i: usize) -> &str {

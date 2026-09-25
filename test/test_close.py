@@ -6,7 +6,7 @@ import pytest
 
 from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Exit, Refused, Text
+from furb.engine import OPERATOR, Refused
 
 
 async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
@@ -20,8 +20,8 @@ async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
   engine.close(21, act)
   await settle()
   assert (await act) == 21
-  assert isinstance(engine.peek(step, on=root), CancelledError)
-  assert engine.peek(command, on=root) == Exit(None, Text(f"{command}/stdout"), Text(f"{command}/stderr"))
+  assert isinstance(engine.peek(step), CancelledError)
+  assert engine.peek(command) is None
 
 
 async def test_the_close_of_the_operator_enters_the_record_as_a_fact_of_its_own() -> None:
@@ -46,7 +46,7 @@ async def test_a_close_ends_the_rung_of_a_prompt_at_its_next_await() -> None:
   step = said(log, "rung")[0][1]
   engine.close(21, act)
   await settle()
-  assert (await act) == 21 and isinstance(engine.outcomes[step], CancelledError)
+  assert (await act) == 21 and isinstance(engine.peek(step), CancelledError)
 
 
 async def test_the_operator_closes_a_prompt_of_shape_none_with_none() -> None:
@@ -57,7 +57,7 @@ async def test_the_operator_closes_a_prompt_of_shape_none_with_none() -> None:
   await settle()
   engine.close(None, act)
   await settle()
-  assert act in engine.outcomes and (await act) is None
+  assert engine.peek(act, ...) is not ... and (await act) is None
 
 
 async def test_the_close_of_the_operator_delivers_to_the_act_of_the_rung_whenever_the_close_comes() -> None:
@@ -68,7 +68,7 @@ async def test_the_close_of_the_operator_delivers_to_the_act_of_the_rung_wheneve
   act = engine.prompt(int, "ask them", on=root)
   await settle()
   theirs = said(log, "prompt")[-1][1]
-  assert act not in engine.outcomes
+  assert engine.peek(act, ...) is ...
   engine.close(21, theirs)
   await settle()
   assert (await act) == 21
@@ -80,7 +80,7 @@ async def test_the_operator_closes_a_pending_prompt_of_any_actor() -> None:
   log, root = life(sand)
   act = engine.prompt(int, "count", to="m/low", on=root)
   await settle()
-  assert act not in engine.outcomes and said(log, "ask")
+  assert engine.peek(act, ...) is ... and said(log, "reply")
   engine.close(21, act)
   await settle()
   assert (await act) == 21
@@ -118,7 +118,7 @@ async def test_an_exception_closes_a_prompt_with_that_exception() -> None:
   await settle()
   engine.close(ValueError("boom"), act)
   await settle()
-  got = engine.outcomes[act]
+  got = engine.peek(act)
   assert isinstance(got, ValueError) and str(got) == "boom"
 
 
@@ -130,8 +130,7 @@ async def test_the_close_of_the_operator_stands_in_the_transcript_with_the_name_
   await settle()
   engine.close(21, act)
   await settle()
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   assert [one[2] for one in held if one[0] == "close"] == [OPERATOR]
   assert heads(engine.turns(on=root))[2:] == [f"#{act} how many?", f"#{act} closed 21"]
 
@@ -145,7 +144,7 @@ async def test_a_prompt_completes_with_the_exception_that_the_word_of_the_prompt
   sand.script[root] = [f"close(ValueError('boom'), {waiting!r})\nclose(1)"]
   act = engine.prompt(int, "close it", on=root)
   await settle()
-  assert (await act) == 1 and isinstance(engine.outcomes[waiting], ValueError)
+  assert (await act) == 1 and isinstance(engine.peek(waiting), ValueError)
 
 
 async def test_close_is_given_the_value_first() -> None:
@@ -181,8 +180,8 @@ async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the
   sand.script[root] = ["close('nope')", "close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
-  assert len(said(log, "ask")) == 2
-  step = said(log, "answer")[0][1]
+  assert len(said(log, "reply")) == 2
+  step = said(log, "reply")[0][2]
   raised = [line for line in heads(engine.turns(on=root)) if " raised " in line]
   assert raised == [f"#{step} raised Refused(\"'nope' not int\")"]
 
@@ -192,7 +191,7 @@ async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
   act = engine.bash("echo hi", on=root)
-  engine.send("exited", act, 0, by=WORLD)
+  sand.exits(act, 0)
   sand.script[root] = ["y = bash('slow')\nclose(7)"]
   answered = engine.prompt(int, "go", on=root)
   assert await answered == 7
@@ -203,7 +202,7 @@ async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
   engine.close(9, answered)
   await settle()
   assert (await act).code == 0 and await answered == 7
-  assert engine.peek(running, on=root) == Exit(None, Text(f"{running}/stdout"), Text(f"{running}/stderr"))
+  assert engine.peek(running) is None
   assert said(log, "close") == closes
   assert engine.turns(on=root) == was
 
@@ -223,7 +222,7 @@ async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_tha
   sand.script[root] = ["close(5, 'rung4')", "close(6)"]
   named = engine.prompt(int, "count", on=root)
   assert await named == 6
-  assert [one[1] for one in said(log, "close")][2:] == ["rung4", named] and engine.outcomes["rung4"] == 5
+  assert [one[1] for one in said(log, "close")][2:] == ["rung4", named] and engine.peek("rung4") == 5
 
 
 async def test_a_close_said_from_a_word_that_retells_reaches_nothing_and_says_nothing() -> None:
@@ -238,8 +237,8 @@ async def test_a_close_said_from_a_word_that_retells_reaches_nothing_and_says_no
   twin = engine.chain("twin", source=root)
   await settle(300)
   copy = next(a[1] for a in said(log, "rung") if a[3] == twin)
-  assert engine.modules[twin]["k"] == 1 and "j" not in engine.modules[twin]
-  assert engine.outcomes[copy] is None
+  assert engine.module(twin)["k"] == 1 and "j" not in engine.module(twin)
+  assert engine.peek(copy) is None
   assert [(one[1], one[3]) for one in said(log, "close")] == [(command, 7), (act, 21)]
 
 
@@ -250,6 +249,6 @@ async def test_a_close_of_the_prompt_of_the_running_word_stops_that_word_where_i
   sand.script[root] = ["close(21)\nk = 1"]
   assert await engine.prompt(int, "count", on=root) == 21
   await settle()
-  assert "k" not in engine.modules[root]
+  assert "k" not in engine.module(root)
   await engine.rung("try:\n  close(5)\nexcept Exception:\n  after = 1", on=root)
-  assert "after" not in engine.modules[root]
+  assert "after" not in engine.module(root)

@@ -87,11 +87,17 @@ test("the act table holds an act paused while the last pause or wake that covers
     expect(paused()).toEqual([life.root]);
     expect(world.isPaused(life.wait(60).id)).toBe(true);
     expect(world.isPaused(life.wait(60, two).id)).toBe(false);
-    // An act of a kind the file does not make derives the table again from every fact, with the same answers.
-    const generation = world.activity.generation;
-    await life.rung('note = act("note", "", idle)', { on: two });
-    await until(world, () => world.activity.generation > generation);
-    expect(paused()).toEqual([life.root]);
+    // An act of a kind the file does not make is a row of the table, which a pause holds as it holds any other.
+    await life.rung(
+      'def takes(id):\n  yield "started", id\n  while True:\n    yield\nnote = act("note", "", takes)',
+      {
+        on: two,
+      },
+    );
+    const note = String(life.inspect("note", two).value);
+    expect(world.activity.acts.get(note)?.kind).toBe("note");
+    life.pause(two);
+    expect(world.isPaused(note)).toBe(true);
   } finally {
     await world.dispose();
     await rm(cwd, { recursive: true, force: true });
@@ -129,11 +135,7 @@ test("the standing takes each model's efforts from its pi-ai metadata", async ()
   const world = new World({ models, model: "claude-cli:org/plain", roster: ["claude-cli:focused"] });
   try {
     const life = world.open();
-    const [, [roster]] = life.call<[unknown, [[string, string[], number][], string, string]]>(
-      "ask",
-      ["stand", life.root],
-      {},
-    );
+    const [roster] = life.call<[[string, string[], number][], string, string]>("standing", [], {});
     expect(roster.map(([name, efforts]) => [name, efforts])).toEqual([
       ["claude-cli:org/plain", ["off"]],
       ["claude-cli:focused", ["low", "high"]],
@@ -157,7 +159,7 @@ test("a World offers the models its host names, and keeps the model and the effo
   try {
     expect(alone.roster).toEqual([]);
     const life = alone.open();
-    const [, [, , actor]] = life.call<[unknown, [unknown, string, string]]>("ask", ["stand", life.root], {});
+    const [, , actor] = life.call<[unknown, string, string]>("standing", [], {});
     expect(actor).toBe("operator");
     expect(alone.actor).toBe("operator");
   } finally {
@@ -311,7 +313,7 @@ test("record ownership, a torn last line, and a damaged complete line are distin
   }
 });
 
-test("one failed model ask retries, while two consecutive failures pause with a reason", async () => {
+test("one failed reply is asked again, while two failures in a row pause with a reason", async () => {
   let calls = 0;
   const session = boot({
     ...modeled,
@@ -343,12 +345,10 @@ test("one failed model ask retries, while two consecutive failures pause with a 
     expect(calls).toBe(2);
     expect(broken.life.outcome(prompt.id).done).toBe(false);
     expect(broken.world?.facts.filter((fact) => fact[0] === "pause")).toHaveLength(1);
-    expect(
-      broken.life
-        .turns()
-        .map(([, python]) => python)
-        .join("\n"),
-    ).toContain("answered nothing: Error: unavailable");
+    const reasons = [...world.activity.acts.values()]
+      .filter((act) => act.kind === "rung")
+      .map((act) => act.run?.reason);
+    expect(reasons).toContain(`Refused: ${modeled.model}/low answered nothing: Error: unavailable`);
   } finally {
     await broken.dispose();
   }
@@ -367,7 +367,9 @@ test("reopening unfinished work does not add another pause to the record", async
       later.open();
       await later.dispose();
     }
-    expect(await readFile(record, "utf8")).toBe(original);
+    // Each life keeps the stand it opened with, and nothing more.
+    const added = (await readFile(record, "utf8")).slice(original.length).trim().split("\n");
+    expect(added.map((line) => JSON.parse(line)[0][0])).toEqual(["stand", "done", "stand", "done"]);
   } finally {
     await rm(cwd, { recursive: true });
   }
@@ -534,7 +536,7 @@ test("host ears yield nested bus calls and host shows remain callable", () => {
   try {
     const show = ears.callable((lines: string[]) => lines.map((_, index) => index + 1));
     expect(life.read("file", show).path).toBe("/tmp/file");
-    expect(() => life.clock()).toThrow("no number");
+    expect(() => life.clock()).toThrow("nothing takes clock");
   } finally {
     life.dispose();
   }
@@ -557,11 +559,13 @@ test("a command an earlier World started and did not end runs again once, at the
     await tick();
     expect(second.pending.has(command)).toBe(true);
     expect(await readFile(join(cwd, "count"), "utf8")).toBe("x");
-    await second.resume();
     // What the command told before the death of its process stands in its door.
+    expect(resumed.read<{ content: string }>(`${command}/stdout`).content).toBe("ready");
+    await second.resume();
+    // The World answers the command with the streams of the process it ran, which told nothing this time.
     expect(await resumed.result<{ code: number; stdout: { content: string } }>(command)).toMatchObject({
       code: 0,
-      stdout: { content: "ready" },
+      stdout: { content: "" },
     });
     expect(await readFile(join(cwd, "count"), "utf8")).toBe("xx");
     resumed.wake(resumed.root);
@@ -781,7 +785,7 @@ test("record inspection reports pending work when its replay starts or feeds a c
   }
 });
 
-test("a later life stands on what its host offers now, and a stood tells its chains, though its work stays pending", async () => {
+test("a later life stands on what its host offers now, and its chains tell that standing, though its work stays pending", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-gone-model-"));
   const record = join(cwd, "life.jsonl");
   let calls = 0;
@@ -803,13 +807,9 @@ test("a later life stands on what its host offers now, and a stood tells its cha
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual(pending);
     const again = second.open();
     expect(second.roster).toEqual([]);
-    const [, [, , actor]] = again.call<[unknown, [unknown, string, string]]>(
-      "ask",
-      ["stand", again.root],
-      {},
-    );
+    const [, , actor] = again.call<[unknown, string, string]>("standing", [], {});
     expect(actor).toBe("operator");
-    expect(second.facts.filter(([kind]) => kind === "stood").map(([, id]) => id)).toContain(again.root);
+    expect(again.turns().at(-1)?.[1]).toContain(`#${again.root} actor operator`);
     expect(again.outcome(answered.id)).toEqual({ done: true, value: 5 });
     expect([...second.pending.keys()]).toEqual(pending);
   } finally {

@@ -31,7 +31,7 @@ async def answered(yard: Path, message: str = "say a word") -> Path:
     waits = engine.prompt(int, message, OPERATOR, on=root)
     for _ in range(2000):
       await asyncio.sleep(0.001)
-      if waits in engine.outcomes:
+      if engine.peek(waits, ...) is not ...:
         break
     assert await waits == 7
     await settle()
@@ -67,7 +67,7 @@ async def test_a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it(ya
   await settle()
   assert root == "chain1"
   assert world.directory == str(yard)
-  assert [fact[0] for fact, *_ in said] == [fact[0] for fact, *_ in kept(record)]
+  assert [fact[0] for fact, *_ in kept(record)] == [*[fact[0] for fact, *_ in said], "stand", "done"]
   assert any(fact[0] == "prompt" for fact, *_ in said)
 
 

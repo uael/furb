@@ -105,7 +105,13 @@ impl World for Yard {
     self.kept.borrow_mut().push(entry.to_owned());
   }
 
-  fn ask(&mut self, _rung: &str, _on: &str, _actor: &str, turns: ObjectRef<'_>) -> Later<Object> {
+  fn reply(
+    &mut self,
+    _about: &str,
+    _on: &str,
+    _actor: &str,
+    turns: ObjectRef<'_>,
+  ) -> Later<Object> {
     self.read.borrow_mut().push(turns.py_repr());
     let word = {
       let mut words = self.words.borrow_mut();
@@ -209,14 +215,7 @@ impl Lived {
 
   /// The life driven until it holds an act of this name.
   fn made(&mut self, id: &str) {
-    while !self
-      .life
-      .held("acts", vec![Object::string(id)], "in")
-      .unwrap()
-      .as_ref()
-      .as_bool()
-      .unwrap()
-    {
+    while self.life.get(id).is_err() {
       block_on(self.life.drive()).unwrap();
       thread::sleep(Duration::from_millis(5));
     }
@@ -357,6 +356,8 @@ fn a_callable_of_the_host_is_called_back_by_the_sandbox_with_what_the_word_gave_
 fn what_the_engine_raised_reaches_the_host_as_the_fault_it_is() {
   let mut lived = Lived::new("faults", &[], vec![]).unwrap();
   let no = lived.life.get("bash9").unwrap_err();
+  assert_eq!(no.name, "Refused", "a name of no act is no act");
+  let no = lived.life.word("{}['bash9']", vec![]).unwrap_err();
   assert_eq!(no.name, "KeyError");
   let no = lived.life.word("nowhere", vec![]).unwrap_err();
   assert_eq!(no.name, "NameError");
@@ -366,8 +367,8 @@ fn what_the_engine_raised_reaches_the_host_as_the_fault_it_is() {
 fn a_second_life_on_the_record_the_world_kept_makes_the_same_acts_again() {
   let mut first = Lived::new("again", &["close(len(read('a.txt').lines))"], vec![]).unwrap();
   let root = first.root();
-  // The file is put there by hand: a write of the operator is a query, which takes a number of the operator's,
-  // and a later life that says it not would name its acts otherwise.
+  // The file is put there by hand: a write of the operator is an act that the record keeps, and what this test
+  // holds are the acts of a prompt alone.
   fs::write(first.at.join("a.txt"), "one\ntwo\n").unwrap();
   let act = first.life.prompt("int", "count", "", &root).unwrap();
   let id = act.id().to_owned();

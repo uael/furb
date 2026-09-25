@@ -8,10 +8,8 @@ export interface Snapshot {
   dispatched: string[];
   paused: boolean;
   roster: [string, string[], number][];
-  /** The acts that changed after the count the session asked with, or every act when `whole` says so. */
+  /** The acts that changed after the count the session asked with. */
   acts: ActRow[];
-  /** Whether the acts are the whole table, which the session takes in place of its own. */
-  whole: boolean;
   /** The count of changes of the act table that the acts are read at. */
   count: number;
   selected: string;

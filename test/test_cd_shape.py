@@ -10,8 +10,7 @@ async def test_a_cd_is_a_question_that_answers_with_its_path_which_the_chain_hol
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   assert engine.cd("/x", on=root) == "/x"
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   word = next(a for a in held if a[0] == "cd")
   assert engine.question(word) and word == ("cd", word[1], OPERATOR, root, "/x")
   answered = [a for a in said(log, "done") if a[1] == word[1]]

@@ -1,8 +1,8 @@
-"""The World of this machine: the disk, the shell, the operator, a clock, chance, a record file, and an ask.
+"""The World of this machine: the disk, the shell, the operator, a clock, chance, a record file, and a reply.
 
 Each thing the World does has a law of its own here: a command in the directory it names, its streams as they
 come, its death at a timeout and at a cancel, what it is fed, a text read and written, a clock and chance of this
-machine, a roster bought once, an ask that carries the turns in their roles, the facts the World answers, the
+machine, a roster bought once, a reply that carries the turns in their roles, the facts the World answers, the
 record file, and the operator at its terminal.
 """
 
@@ -55,6 +55,15 @@ def runs() -> list[asyncio.Task]:
   ]
 
 
+def mutes(root: str) -> list[str]:
+  """What each reply of a chain that the World could not answer was done with, in the order of the transcript."""
+  return [
+    str(a[3])
+    for a in engine.transcript(root)
+    if a[0] == "done" and a[1].startswith("reply") and isinstance(a[3], Refused)
+  ]
+
+
 async def drained() -> None:
   """Room for the tasks the World still holds to end, since the machine takes a time of its own to grow a process."""
   for _ in range(2000):
@@ -68,8 +77,7 @@ async def test_the_world_answers_what_a_chain_stands_on(yard: Path) -> None:
   live = world(yard)
   root = life(live)
   await settle()
-  standing = engine.ask("stand", root)[1]
-  assert isinstance(standing, list)
+  standing = engine.standing()
   roster, directory, actor = standing
   assert f"#{root} roster {roster!r}" in heads(root)
   told = "\n\n".join(py for role, py, _, _ in engine.turns(on=root) if role == "user")
@@ -95,14 +103,16 @@ async def test_a_text_is_read_and_written_on_the_disk_it_names(yard: Path) -> No
 
 
 async def test_a_reading_refuses_what_no_text_could_be(yard: Path) -> None:
-  """A file that is not there, one past the cap and one that is no utf-8 are each refused, and a door of no act of the
-  life the World says nothing of, so nobody answers it and the read gives nothing."""
+  """A file that is not there, one past the cap and one that is no utf-8 are each refused, and a path of a scheme
+  the World takes not, so the life refuses it as a question that nothing takes."""
   live = world(yard)
   root = life(live)
   with pytest.raises(Refused, match="no file at"):
     engine.read("nowhere.txt", on=root)
-  assert engine.read("mem://x", on=root) is None
-  assert engine.write(Text("mem://x", "no"), on=root) is None
+  with pytest.raises(Refused, match="nothing takes read"):
+    engine.read("mem://x", on=root)
+  with pytest.raises(Refused, match="nothing takes write"):
+    engine.write(Text("mem://x", "no"), on=root)
   (yard / "big.txt").write_bytes(b"x" * (CAP + 1))
   with pytest.raises(Refused, match=f"over the {CAP} the World reads"):
     engine.read("big.txt", on=root)
@@ -134,7 +144,7 @@ async def test_a_command_runs_in_the_directory_it_names_and_ends_at_its_timeout(
   assert (await engine.bash("exit 3", on=root)).code == 3
   slow = await engine.bash("echo said this; sleep 5", timeout=0.3, on=root)
   assert (slow.code, slow.stdout.content) == (None, "said this\n")
-  assert [one[0] for one in live.calls] == ["stand", "start", "start", "start"]
+  assert [one[0] for one in live.calls] == ["stand", "bash", "bash", "bash"]
 
 
 async def test_a_command_the_machine_will_not_start_is_closed_with_the_refusal(yard: Path) -> None:
@@ -166,7 +176,7 @@ async def test_what_a_command_says_enters_the_record_while_it_runs(yard: Path) -
     if engine.read(f"{waits}/stdout", on=root).content:
       break
   assert engine.read(f"{waits}/stdout", on=root).content == "one\n"
-  assert waits not in engine.outcomes
+  assert engine.peek(waits, ...) is ...
   got = await waits
   assert got.stdout.content == "one\ntwo\n"
   assert engine.read(f"{waits}/stdout", on=root).content == "one\ntwo\n"
@@ -202,7 +212,7 @@ async def test_a_command_ends_at_a_cancel_of_its_prompt_and_runs_on_after_a_clos
   cancelled = engine.prompt(int, "go", on=root)
   for _ in range(2000):
     await asyncio.sleep(0.001)
-    if "bash1" in engine.acts:
+    if engine.get("bash1") is not None:
       break
   engine.cancel(cancelled)
   with pytest.raises(asyncio.CancelledError):
@@ -258,8 +268,8 @@ async def test_a_later_life_runs_a_command_an_earlier_world_left_not_ended_only_
     live = world(yard, scripted([]), record)
     root = life(live, kept(record))
     await settle()
-    assert [one for one in live.calls if one[0] == "start"] == []
-    assert "bash1" not in engine.outcomes and "bash2" not in engine.outcomes
+    assert [one for one in live.calls if one[0] == "bash"] == []
+    assert engine.peek("bash1", ...) is ... and engine.peek("bash2", ...) is ...
     assert engine.read("bash2/stdout", on=root).content == "up\n"
     assert (yard / "count").read_text(encoding="utf-8") == "once"
   engine.wake(root)
@@ -267,10 +277,10 @@ async def test_a_later_life_runs_a_command_an_earlier_world_left_not_ended_only_
     await asyncio.sleep(0.001)
     if (yard / "count").read_text(encoding="utf-8") == "onceonce":
       break
-  assert [one[1] for one in live.calls if one[0] == "start"] == ["bash1", "bash2"]
+  assert [one[1] for one in live.calls if one[0] == "bash"] == ["bash1", "bash2"]
   engine.wake(root)
   await settle()
-  assert [one[1] for one in live.calls if one[0] == "start"] == ["bash1", "bash2"]
+  assert [one[1] for one in live.calls if one[0] == "bash"] == ["bash1", "bash2"]
   assert (yard / "count").read_text(encoding="utf-8") == "onceonce"
   up = runs()
   for one in up:
@@ -283,14 +293,14 @@ async def test_a_command_cancelled_before_its_process_stood_dies_as_soon_as_it_s
   grows the group after the word that ended it."""
   live = world(yard)
   root = life(live)
-  # The start of a command is said as the command is made, and the World grows the group in a task after it, so a
-  # cancel with no turn of the loop between the two always lands first.
+  # The World takes a command as the command is made, and grows the group in a task after it, so a cancel with no
+  # turn of the loop between the two always lands first.
   waits = engine.bash("sleep 30", timeout=60.0, on=root)
   engine.cancel(waits)
   with pytest.raises(asyncio.CancelledError):
     await waits
   await drained()
-  assert [one[0] for one in live.calls] == ["stand", "start"]
+  assert [one[0] for one in live.calls] == ["stand", "bash"]
 
 
 async def test_slaying_what_already_died_harms_nobody(yard: Path) -> None:
@@ -389,7 +399,7 @@ def test_the_word_of_a_rung_is_all_the_text_the_model_wrote() -> None:
   assert worded(ModelResponse(parts=[TextPart("```\nclose(1)\n```")])) == "```\nclose(1)\n```"
 
 
-async def test_an_ask_carries_the_system_prompt_and_the_turns_in_their_roles(yard: Path) -> None:
+async def test_a_reply_carries_the_system_prompt_and_the_turns_in_their_roles(yard: Path) -> None:
   """The system prompt stands first and is the engine alone, then every turn of the chain in the role it has."""
   seen: list[list[ModelMessage]] = []
   live = world(yard, watched(seen, ["close(1)"]))
@@ -421,9 +431,9 @@ async def test_an_assistant_turn_is_resent_as_the_parts_the_provider_gave(yard: 
   assert first.content == "a = 1"
 
 
-async def test_every_turn_an_ask_sent_stands_unchanged_at_every_later_ask(yard: Path) -> None:
-  """A pin: the ledger of a ceiling is told at the answer it counts, so no turn an ask already sent grows a line
-  after it, and the prefix the provider holds stands from one ask of a chain to the next."""
+async def test_every_turn_a_reply_sent_stands_unchanged_at_every_later_reply(yard: Path) -> None:
+  """A pin: the ledger of a ceiling is told at the answer it counts, so no turn a reply already sent grows a line
+  after it, and the prefix the provider holds stands from one reply of a chain to the next."""
   seen: list[list[ModelMessage]] = []
   live = world(yard, watched(seen, ["a = 1", "b = 2", "close(3)"]))
   root = life(live)
@@ -435,15 +445,15 @@ async def test_every_turn_an_ask_sent_stands_unchanged_at_every_later_ask(yard: 
     assert [canon(one) for one in after[: len(before)]] == [canon(one) for one in before]
 
 
-async def test_an_ask_the_world_cannot_answer_is_closed_with_the_refusal_and_asked_again(yard: Path) -> None:
-  """A fault of the moment is no pause: the World closes the rung with the refusal, the prompt asks again, and the
-  answer it gets then is the answer of the prompt."""
+async def test_a_reply_the_world_cannot_answer_is_done_with_the_refusal_and_asked_again(yard: Path) -> None:
+  """A fault of the moment is no pause: the World says the reply done with the refusal, the prompt asks again, and
+  the answer it gets then is the answer of the prompt."""
   live = world(yard, mute())
   root = life(live)
   assert await engine.prompt(int, "count", on=root) == 3
   await settle()
   assert [head for head in heads(root) if head.endswith(" paused")] == []
-  assert [head for head in heads(root) if " closed Refused(" in head and "answered nothing" in head] != []
+  assert mutes(root) == ["opus/low answered nothing: RuntimeError: the model was not there"]
 
 
 async def test_a_fault_that_stands_pauses_the_chain_so_no_rung_of_it_asks_again(yard: Path) -> None:
@@ -454,12 +464,12 @@ async def test_a_fault_that_stands_pauses_the_chain_so_no_rung_of_it_asks_again(
   act = engine.prompt(int, "count", on=root)
   await settle()
   assert [head for head in heads(root) if head.endswith(" paused")] == [f"#{root} paused"]
-  assert len([head for head in heads(root) if " closed Refused(" in head and "answered nothing" in head]) == 2
-  assert act not in engine.outcomes
+  assert len(mutes(root)) == 2
+  assert engine.peek(act, ...) is ...
 
 
 def faltering(words: Sequence[str | None]) -> FunctionModel:
-  """A model that answers each ask with the next word of a script, and answers nothing where the script holds None."""
+  """A model that answers each reply with the next word of a script, and answers nothing where the script holds None."""
   said = list(words)
 
   async def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -472,17 +482,17 @@ def faltering(words: Sequence[str | None]) -> FunctionModel:
   return FunctionModel(turn)
 
 
-async def test_the_world_counts_a_row_of_mute_asks_by_what_it_was_answered_and_never_by_a_text(yard: Path) -> None:
+async def test_the_world_counts_a_row_of_mute_replies_by_what_it_was_answered_and_never_by_a_text(yard: Path) -> None:
   """A text that says an actor answered nothing is no nothing of that actor, and an answer between two nothings ends
-  the row, so neither nothing of these asks pauses the chain and the prompt gets its answer."""
+  the row, so neither nothing of these replies pauses the chain and the prompt gets its answer."""
   (yard / "notes.txt").write_text(f"Last run: {ACTOR} answered nothing: Error: 529 overloaded\n", encoding="utf-8")
   live = world(yard, faltering(["t = read('notes.txt')", None, "x = 1", None, "close(3)"]))
   root = life(live)
   act = engine.prompt(int, "count", on=root)
   await settle()
   assert [head for head in heads(root) if head.endswith(" paused")] == []
-  assert len([head for head in heads(root) if " closed Refused(" in head and "answered nothing" in head]) == 2
-  assert engine.outcomes.get(act) == 3
+  assert len(mutes(root)) == 2
+  assert engine.peek(act) == 3
 
 
 def test_the_operator_answers_the_shapes_the_world_puts_to_it() -> None:
@@ -506,7 +516,7 @@ async def test_the_world_shows_a_prompt_to_the_operator_and_closes_it_with_the_l
     got = engine.prompt(str, "say a word", OPERATOR, on=root)
     for _ in range(2000):
       await asyncio.sleep(0.001)
-      if got in engine.outcomes:
+      if engine.peek(got, ...) is not ...:
         break
     assert await got == "a word of the operator"
   finally:
@@ -528,7 +538,7 @@ async def test_two_prompts_of_the_operator_are_shown_and_answered_one_at_a_time(
     two = engine.prompt(str, "the second", OPERATOR, on=root)
     for _ in range(2000):
       await asyncio.sleep(0.001)
-      if one in engine.outcomes and two in engine.outcomes:
+      if engine.peek(one, ...) is not ... and engine.peek(two, ...) is not ...:
         break
     assert (await one, await two) == ("first", "second")
   finally:
@@ -542,7 +552,7 @@ async def test_the_world_refuses_a_shape_the_operator_does_not_answer(yard: Path
   root = life(live)
   got = engine.prompt(list, "a list please", OPERATOR, on=root)
   await settle()
-  assert got in engine.outcomes
+  assert engine.peek(got, ...) is not ...
   with pytest.raises(Refused, match="the operator answers no list"):
     await got
 
@@ -555,19 +565,14 @@ async def test_the_record_is_kept_as_json_and_read_back_as_the_entries_it_holds(
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   said = kept(record)
-  assert [fact[0] for fact, *_ in said] == ["chain", "stand", "prompt", "rung", "answer"]
-  match said[4]:
-    case (("answer", _, _, (_, py, _, _)),):
+  kinds = ["chain", "stand", "done", "prompt", "reply", "started", "done", "gate", "done"]
+  assert [fact[0] for fact, *_ in said] == kinds
+  match said[6]:
+    case (("done", "reply1", _, (_, py, _, _)),):
       assert py == "close(1)"
     case _:
-      pytest.fail(str(said[4]))
-  assert [json.loads(line)[0][0] for line in record.read_text(encoding="utf-8").splitlines()] == [
-    "chain",
-    "stand",
-    "prompt",
-    "rung",
-    "answer",
-  ]
+      pytest.fail(str(said[6]))
+  assert [json.loads(line)[0][0] for line in record.read_text(encoding="utf-8").splitlines()] == kinds
 
 
 def test_a_torn_last_line_is_cut_away_and_a_blank_line_stands_for_no_entry(yard: Path) -> None:
@@ -589,7 +594,7 @@ async def test_a_wait_is_done_when_the_seconds_it_carries_have_passed(yard: Path
   live = world(yard)
   root = life(live)
   waits = engine.wait(0.05, on=root)
-  assert waits not in engine.outcomes
+  assert engine.peek(waits, ...) is ...
   assert await waits is None
 
 
@@ -633,7 +638,7 @@ async def test_the_operator_that_cannot_be_read_closes_the_prompt_with_a_refusal
   root = life(live)
   got = engine.prompt(str, "say a word", OPERATOR, on=root)
   await settle()
-  assert got in engine.outcomes
+  assert engine.peek(got, ...) is not ...
   with pytest.raises(Refused, match="the operator cannot be read"):
     await got
 
@@ -646,7 +651,7 @@ async def test_a_line_that_is_no_value_of_the_shape_closes_the_prompt_with_a_ref
     got = engine.prompt(int, "a number please", OPERATOR, on=root)
     for _ in range(2000):
       await asyncio.sleep(0.001)
-      if got in engine.outcomes:
+      if engine.peek(got, ...) is not ...:
         break
     with pytest.raises(Refused, match="is no int"):
       await got
@@ -701,7 +706,7 @@ async def test_the_plain_form_of_a_whole_record_is_a_fixed_point_of_json(yard: P
   assert await engine.prompt(int, "run", on=root) == 0
   await settle()
   plain = wire(kept(record))
-  assert {"chain", "prompt", "rung", "bash", "answer", "out", "exited"} <= {fact[0] for fact, *_ in kept(record)}
+  assert {"chain", "prompt", "reply", "bash", "out", "done"} <= {fact[0] for fact, *_ in kept(record)}
   assert json.loads(json.dumps(plain)) == plain
 
 

@@ -48,7 +48,7 @@ test("a view that cannot be read opens the record with the default view and name
       session = new Session(opened.life, opened.world, true);
       expect(session.notice).toContain(`Could not read ${record}.ui.json`);
       expect(session.sessionName).toBe(basename(directory));
-      expect(await session.life.held("modules", [session.selected, "kept"], "at")).toBe(7);
+      expect((await session.life.inspect("kept", session.selected)).value).toBe(7);
       await session.dispose();
     }
     session = undefined;
@@ -115,9 +115,7 @@ test("a snapshot asked before a model choice lands after it, and the choice hold
     expect(prompt?.words).toEqual(["str", "Which model reads this?", "claude-cli:opus/low"]);
     await idle(session);
     await session.refresh();
-    expect(await session.life.held("modules", [session.life.root, "actor"], "at")).toBe(
-      "claude-cli:opus/low",
-    );
+    expect((await session.life.inspect("actor", session.life.root)).value).toBe("claude-cli:opus/low");
     expect(session.actor).toBe("claude-cli:opus/low");
   } finally {
     release();

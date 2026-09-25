@@ -13,7 +13,9 @@ from conftest import (
   STANDS,
   Py,
   Sand,
+  acts,
   heads,
+  lasting,
   life,
   named,
   paragraphs,
@@ -24,15 +26,15 @@ from conftest import (
   seen,
   settle,
   sown,
-  stood,
+  takes,
 )
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Act, Refused, Text, take
+from furb.engine import OPERATOR, Act, Refused, Text, take
 
 
 def made(held: list[tuple]) -> list[str]:
   """The name of every act among the facts, which is the name the life holds an act under."""
-  return [a[1] for a in held if engine.question(a) and a[1] in engine.acts]
+  return [a[1] for a in held if engine.question(a) and engine.get(a[1]) is not None]
 
 
 def binding(id: str, of: str = "object") -> str:
@@ -73,9 +75,9 @@ async def test_chain_says_what_a_chain_does() -> None:
   two = engine.chain("two", source=root)
   await settle()
   assert isinstance(two, Act) and engine.peek(two) is None
-  assert paragraphs(engine.turns(on=two)) == [opened(root, "root"), stood(root), opened(two, f"two from {root}")]
-  assert engine.ask("program", two)[1] == {}
-  assert engine.ask("stand", two)[1] == STANDS
+  assert paragraphs(engine.turns(on=two)) == [opened(root, "root"), takes(root), opened(two, f"two from {root}")]
+  assert engine.program(two) == {}
+  assert engine.standing() == STANDS
 
 
 async def test_boot_gives_the_root_and_chain_gives_the_chain_which_never_settles() -> None:
@@ -107,13 +109,11 @@ async def test_the_entry_that_opens_a_chain_with_a_source_carries_its_label_afte
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
-  asked, was = engine.ask("transcript", root, root)
+  was = list(engine.transcript(root))
   twin = engine.chain("twin", source=root)
   await settle()
-  held = engine.ask("transcript", twin, twin)[1]
-  assert isinstance(was, list) and isinstance(held, list)
   opens = ("tell", twin, twin, [f"#{twin} twin from {root}", binding(twin)])
-  assert held == [*was, asked, ("done", asked[1], root, was), opens]
+  assert engine.transcript(twin)[: len(was) + 2] == [*was, ("started", twin, twin), opens]
 
 
 async def test_chain_gives_the_new_chain_which_never_completes() -> None:
@@ -132,7 +132,7 @@ async def test_boot_gives_the_root_as_an_act_of_never_and_the_root_never_complet
   _, root = life(sand)
   await engine.rung("k = 1", on=root)
   await settle()
-  one = engine.boot(list(sand.record), kernel=Py().kernel(), world=Sand(stands=STANDS).hears())
+  one = engine.boot(list(sand.record), kernel=Py().kernel(), gate=Py().gating(), world=Sand(stands=STANDS).hears())
   await settle(300)
   assert one == root and engine.peek(one) is None
 
@@ -144,9 +144,9 @@ async def test_the_engine_makes_a_chain_in_one_way_by_running_its_ladder() -> No
   await engine.rung("k = 1", on=root)
   twin = engine.chain("twin", source=root)
   await settle()
-  assert ran(log) == ["k = 1", "k = 1"] and engine.modules[twin]["k"] == 1
+  assert ran(log) == ["k = 1", "k = 1"] and engine.module(twin)["k"] == 1
   await engine.rung("later = 2", on=root)
-  assert "later" not in engine.modules[twin]
+  assert "later" not in engine.module(twin)
 
 
 async def test_in_a_chain_with_a_source_the_ladder_of_the_origin_runs_again_in_its_module() -> None:
@@ -160,8 +160,8 @@ async def test_in_a_chain_with_a_source_the_ladder_of_the_origin_runs_again_in_i
   twin = engine.chain("twin", source=root)
   await settle()
   words = [f"{binding(root)}\n{binding(one, 'int')}", "a = 1", "close(a + 1)"]
-  assert [(a[3], a[4]) for a in said(log, "run")] == [(root, word) for word in words] + [(twin, word) for word in words]
-  assert engine.modules[twin]["a"] == 1 and engine.modules[twin]["__name__"] == twin
+  assert [(a[3], a[5]) for a in said(log, "run")] == [(root, word) for word in words] + [(twin, word) for word in words]
+  assert engine.module(twin)["a"] == 1 and engine.module(twin)["__name__"] == twin
 
 
 async def test_a_chain_given_a_source_stands_on_that_one() -> None:
@@ -172,14 +172,13 @@ async def test_a_chain_given_a_source_stands_on_that_one() -> None:
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   command = said(log, "bash")[0][1]
-  program = engine.ask("program", root)[1]
-  assert isinstance(program, dict)
+  program = engine.program(root)
   narrow = engine.chain("narrow", source=root, filter=take(command, inside=False))
   await settle()
   retold = [a for a in said(log, "rung") if a[3] == narrow]
   assert [(a[4], a[5]) for a in retold] == [(word, one) for one, word in program.items()]
   assert [a[1] for a in said(log, "bash")] == [command]
-  assert engine.modules[narrow]["n"] == 0 and engine.modules[narrow][command] == command
+  assert engine.module(narrow)["n"] == 0 and engine.module(narrow)[command] == command
   assert command in named(engine.turns(on=root)) and command not in named(engine.turns(on=narrow))
 
 
@@ -220,7 +219,7 @@ async def test_the_engine_refuses_a_prompt_to_an_actor_outside_the_roster() -> N
   one = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
   got = engine.peek(one)
-  assert isinstance(got, Refused) and str(got) == "ghost no actor" and said(log, "ask") == []
+  assert isinstance(got, Refused) and str(got) == "ghost no actor" and said(log, "reply") == []
 
 
 async def test_the_chain_holds_the_control_it_says_itself() -> None:
@@ -234,9 +233,8 @@ async def test_the_chain_holds_the_control_it_says_itself() -> None:
   one = engine.prompt(int, "try", on=root)
   assert await one == 1
   step, last = steps(log, one)
-  held = engine.ask("transcript", root, root)[1]
-  assert isinstance(held, list)
-  shut = [(a[1], a[2], a[4]) for a in held if a[0] == "close"]
+  held = engine.transcript(root)
+  shut = [(a[1], a[2], a[4]) for a in said(held, "close")]
   assert shut == [
     (ghost, root, [f"#{ghost} closed Refused('ghost no actor')"]),
     (step, root, [f"#{step} closed Refused()"]),
@@ -251,8 +249,8 @@ async def test_the_engine_binds_the_exception_of_a_raise_in_the_globals_of_the_c
   _, root = life(sand)
   sand.script[root] = ["raise ValueError('boom')", "close(1)", "close(None)"]
   assert await engine.prompt(int, "try", on=root) == 1
-  assert isinstance(engine.modules[root]["raised"], ValueError)
-  assert str(engine.modules[root]["raised"]) == "boom"
+  assert isinstance(engine.module(root)["raised"], ValueError)
+  assert str(engine.module(root)["raised"]) == "boom"
 
 
 async def test_the_engine_binds_the_exception_again_at_each_raise() -> None:
@@ -261,25 +259,24 @@ async def test_the_engine_binds_the_exception_again_at_each_raise() -> None:
   _, root = life(sand)
   sand.script[root] = ["raise ValueError('one')", "raise KeyError('two')", "close(1)", "close(None)"]
   assert await engine.prompt(int, "try", on=root) == 1
-  assert isinstance(engine.modules[root]["raised"], KeyError)
+  assert isinstance(engine.module(root)["raised"], KeyError)
 
 
 async def test_a_chain_its_module_which_is_the_engine_itself_named_for_the_chain() -> None:
   """A chain: its module, which is the engine itself, named for the chain, since everything the file defines is the model's to call and nothing of it is bound to one chain, and what the operator would add to it, it makes a rung of, which binds it, stands in the program and is said again in a later life, a fact said from a run being on the chain of that run, and a word that wants a chain of its own giving the name of its own as the source."""
   sand = sown()
   log, root = life(sand)
-  assert engine.modules[root]["__name__"] == root and engine.modules[root]["bash"] is engine.bash
+  assert engine.module(root)["__name__"] == root and engine.module(root)["bash"] is engine.bash
   await engine.rung("k = 21", on=root)
-  _, program = engine.ask("program", root)
-  assert isinstance(program, dict)
-  assert list(program.values()) == ["k = 21"] and engine.modules[root]["k"] == 21
+  program = engine.program(root)
+  assert list(program.values()) == ["k = 21"] and engine.module(root)["k"] == 21
   sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   assert said(log, "bash")[0][3] == root
   _, over = life(Sand(stands=STANDS), list(sand.record))
   await settle(300)
-  assert engine.modules[over]["k"] == 21
+  assert engine.module(over)["k"] == 21
 
 
 async def test_a_chain_is_chain_n_whether_boot_or_chain_opened_it_and_the_root_is_chain1() -> None:
@@ -313,26 +310,26 @@ async def test_the_turns_of_a_chain_tell_the_standing_and_the_acts_of_the_operat
   await settle()
   assert paragraphs(engine.turns(on=root)) == [
     opened(root, "root"),
-    stood(root),
+    takes(root),
     f"#{step}\nk = 1",
     f"#{one} how many?\n{binding(one, 'int')}",
   ]
 
 
 async def test_the_transcript_of_a_chain_is_the_facts_on_it_in_the_order_it_heard_them() -> None:
-  """The transcript of a chain is the facts on it, in the order it heard them."""
+  """The transcript of a chain is the facts on it, in the order they were said."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
   one = engine.prompt(int, "count", on=root)
   assert await one == 1
   await settle()
-  held = engine.ask("transcript", root, root)[1]
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   assert all(on(a) == root for a in held)
-  assert made(held) == [one, *steps(log, one)]
-  heard = [log.index(a) for a in held if a in log]
-  assert heard == sorted(heard) and [a[0] for a in held if a not in log] == ["holds"]
+  assert made(held) == ["stand1", one, *steps(log, one), "rung2", "reply1", "run1", "gate1", "run2"]
+  facts, log = lasting(held), lasting(log)
+  heard = [log.index(a) for a in facts if not engine.question(a)]
+  assert heard == sorted(heard) and [a for a in facts if a not in log] == []
 
 
 async def test_nothing_leaves_a_transcript_once_the_transcript_holds_it() -> None:
@@ -341,11 +338,10 @@ async def test_nothing_leaves_a_transcript_once_the_transcript_holds_it() -> Non
   _, root = life(sand)
   one = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
-  was = engine.ask("transcript", root, root)[1]
+  was = list(engine.transcript(root))
   engine.cancel(one)
   await settle()
-  now = engine.ask("transcript", root, root)[1]
-  assert isinstance(was, list) and isinstance(now, list)
+  now = engine.transcript(root)
   assert now[: len(was)] == was and len(now) > len(was)
 
 
@@ -393,7 +389,7 @@ async def test_the_globals_of_a_chain_whose_filter_is_a_take_that_is_not_inside(
   assert words == ["x = bash('echo hi')\nn = (await x).code", "close(n)"]
   assert [turn[1] for turn in engine.turns(on=narrow) if turn[0] == "assistant"] == words[1:]
   assert skipped not in named(engine.turns(on=narrow)) and command not in named(engine.turns(on=narrow))
-  assert (engine.modules[narrow]["x"], engine.modules[narrow]["n"]) == (command, 0)
+  assert (engine.module(narrow)["x"], engine.module(narrow)["n"]) == (command, 0)
 
 
 async def test_a_chain_with_a_source_made_after_the_rung_that_defined_a_door_has_the_door_too() -> None:
@@ -413,36 +409,36 @@ async def test_the_globals_of_a_chain_are_those_of_a_module_named_by_the_id_of_t
   sand = sown()
   _, root = life(sand)
   two = engine.chain("two")
-  assert engine.modules[root]["__name__"] == root and engine.modules[two]["__name__"] == two
+  assert engine.module(root)["__name__"] == root and engine.module(two)["__name__"] == two
   await engine.rung("k = 1", on=root)
-  assert "k" in engine.modules[root] and "k" not in engine.modules[two]
+  assert "k" in engine.module(root) and "k" not in engine.module(two)
 
 
 async def test_every_name_that_the_file_defines_is_in_the_globals_of_a_chain() -> None:
   """Every name that the file defines is in the globals of a chain."""
   sand = sown()
   _, root = life(sand)
-  assert defined(Path(furb.python.__file__).read_text(encoding="utf-8")) <= set(engine.modules[root])
+  assert defined(Path(furb.python.__file__).read_text(encoding="utf-8")) <= set(engine.module(root))
 
 
 async def test_a_chain_holds_whole_every_act_made_on_the_chain() -> None:
-  """A chain holds whole every act made on the chain, but a rung it makes itself, which it runs and holds nothing of."""
+  """A chain holds whole every act made on the chain, the rungs it makes itself among them, which tell nothing."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["t = read('a.txt')\nx = bash('echo hi')\nclose(1)", "close(None)"]
   assert await engine.prompt(int, "work", on=root) == 1
   await settle()
-  held = engine.ask("transcript", root, root)[1]
-  assert isinstance(held, list)
-  mine = [a for a in log if engine.question(a) and a[1] in engine.acts and a[3] == root]
-  assert [a[0] for a in mine] == ["prompt", "rung", "rung", "bash", "prompt", "rung", "rung"]
+  held = engine.transcript(root)
+  mine = [a for a in held if engine.question(a)]
+  assert [a for a in acts(log).values() if a[3] == root and a not in mine] == []
+  kinds = ["stand", "prompt", "rung", "rung", "reply", "run", "gate", "run", "read", "bash", "merged"]
+  assert [a[0] for a in mine] == [*kinds, "prompt", "rung", "rung", "reply", "run", "gate", "run"]
   own = [a[1] for a in mine if a[0] == "rung" and a[2] == root]
-  assert own == ["rung2", "rung4"] and [engine.acts[one][4] for one in own] == [
+  assert own == ["rung2", "rung4"] and [engine.get(one)[4] for one in own] == [
     f"{root}: Act[object] = Act('{root}')\nprompt1: Act[int] = Act('prompt1')",
     "bash1: Act[Exit] = Act('bash1')\nprompt2: Act[None] = Act('prompt2')",
   ]
-  assert [a[1] for a in mine if a not in held] == own
-  assert [a for a in held if a[1] in own] == []
+  assert [a for a in held if a[1] in own and a[0] == "tell"] == []
   assert [a for a in held if a[0] == "bash"] == said(log, "bash")
 
 
@@ -455,8 +451,7 @@ async def test_a_chain_holds_every_fact_on_it_and_an_act_on_another_chain_is_tha
   assert await engine.prompt(int, "delegate", on=root) == 1
   await settle()
   theirs = said(log, "prompt")[-1]
-  held, ours = engine.ask("transcript", two, two)[1], engine.ask("transcript", root, root)[1]
-  assert isinstance(held, list) and isinstance(ours, list)
+  held, ours = engine.transcript(two), engine.transcript(root)
   assert theirs in held
   assert theirs not in ours
 
@@ -470,64 +465,63 @@ async def test_a_prompt_that_a_step_of_another_chain_made_reads_nothing_of_that_
   sand.script[two] = ["close(2)"]
   assert await engine.prompt(int, "delegate", on=root) == 2
   await settle()
-  theirs = next(a for a in said(log, "ask") if a[3] == two)
+  theirs = next(a for a in said(log, "reply") if a[3] == two)
   asked = next(a[1] for a in said(log, "prompt") if a[3] == two)
-  assert paragraphs(theirs[5]) == [
+  assert paragraphs(sand.turns[theirs[1]]) == [
     opened(two, "two"),
-    stood(two),
+    takes(two),
     f"#{asked} count\n{binding(asked, 'int')}",
-    f"#{theirs[1]} advance on {asked}",
+    f"#{theirs[2]} advance on {asked}",
   ]
 
 
 async def test_the_word_of_a_rung_rebinds_the_default_actor_like_any_name() -> None:
-  """The word of a rung rebinds the default actor like any name, and so does a stood, and the last binding in record order wins."""
+  """The word of a rung rebinds the default actor like any name, and so does an answer of a stand that changes the standing, and the last binding in record order wins."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["actor = 'n/low'\nclose(1)", "close(None)"]
   assert await engine.prompt(int, "rebind", on=root) == 1
   await settle()
-  assert engine.modules[root]["actor"] == "n/low"
+  assert engine.module(root)["actor"] == "n/low"
   sand.script[root] = ["close(2)", "close(None)"]
   assert await engine.prompt(int, "again", on=root) == 2
-  assert [a[4] for a in said(log, "ask")][-1] == "n/low"
+  assert said(log, "reply")[-1][4] == "n/low"
   await relived(Sand(stands=STANDS), list(sand.record))
-  assert engine.modules[root]["actor"] == "n/low"
+  assert engine.module(root)["actor"] == "n/low"
   await relived(Sand(stands=[STANDS[0], "/w", "m/high"]), list(sand.record))
-  assert engine.modules[root]["actor"] == "m/high"
+  assert engine.module(root)["actor"] == "m/high"
 
 
 async def test_the_transcript_of_the_root_begins_with_the_open_of_the_root_and_then_the_standing() -> None:
   """The transcript of the root begins with the open of the root and then the standing."""
   sand = sown()
   _, root = life(sand)
-  held = engine.ask("transcript", root, root)[1]
-  assert isinstance(held, list)
+  held = [a for a in engine.transcript(root) if a[0] == "tell"]
   assert held[:2] == [("tell", root, root, [f"#{root} root", binding(root)]), ("tell", root, root, rows(root))]
-  assert paragraphs(engine.turns(on=root))[:2] == [opened(root, "root"), stood(root)]
+  assert paragraphs(engine.turns(on=root))[:2] == [opened(root, "root"), takes(root)]
 
 
-async def test_the_transcript_then_holds_the_prompt_of_the_operator_and_the_asks_and_the_responses() -> None:
-  """The transcript then holds the prompt of the operator, and the asks and the responses of the model."""
+async def test_the_transcript_then_holds_the_prompt_of_the_operator_and_the_replies_of_the_model() -> None:
+  """The transcript then holds the prompt of the operator, and the replies of the model, each with its turn."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(a)"]
   one = engine.prompt(int, "count", on=root)
   assert await one == 1
   await settle()
-  held = engine.ask("transcript", root, root)[1]
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   assert [a[1] for a in held if a[0] == "prompt"] == [one]
-  assert [a[1] for a in held if a[0] == "ask"] == [a[1] for a in held if a[0] == "answer"] == steps(log, one)
-  assert [a[3][1] for a in held if a[0] == "answer"] == ["a = 1", "close(a)"]
+  replies = [a[1] for a in held if a[0] == "reply"]
+  assert [a[2] for a in held if a[0] == "reply"] == steps(log, one)
+  assert [a[3][1] for a in said(held, "done") if a[1] in replies] == ["a = 1", "close(a)"]
 
 
 async def test_the_engine_reads_its_own_names_through_the_globals_of_the_chain() -> None:
   """The engine reads its own names through the globals of the chain."""
   sand = Sand(files={"/w/mine.txt": "mine\n"}, stands=STANDS)
   _, root = life(sand)
-  assert engine.modules[root]["read"] is engine.read
-  await engine.rung("def read(path, show=HEAD, on=''):\n  return ask('read', __name__, 'mine.txt')[1]", on=root)
+  assert engine.module(root)["read"] is engine.read
+  await engine.rung("def read(path, show=HEAD, on=''):\n  return ask('read', __name__, 'mine.txt')", on=root)
   sand.script[root] = ["close(read('any.txt').content)", "close(None)"]
   assert await engine.prompt(str, "read it", on=root) == "mine\n"
   assert [a[4] for a in sand.calls if a[0] == "read"] == ["mine.txt"]
@@ -539,7 +533,7 @@ async def test_the_engine_uses_a_rebound_name_from_the_next_use_on() -> None:
   _, root = life(sand)
   sand.script[root] = [
     "was = read('a.txt').content",
-    "def read(path, show=HEAD, on=''):\n  return ask('read', __name__, 'mine.txt')[1]",
+    "def read(path, show=HEAD, on=''):\n  return ask('read', __name__, 'mine.txt')",
     "close([was, read('a.txt').content])",
     "close(None)",
   ]
@@ -576,7 +570,7 @@ async def test_a_chain_has_a_globals_dict_and_a_working_directory_of_its_own() -
   await engine.rung("here = 1", on=root)
   engine.cd("/deep", on=two)
   assert (engine.cwd(on=root), engine.cwd(on=two)) == ("/w", "/deep")
-  assert "here" in engine.modules[root] and "here" not in engine.modules[two]
+  assert "here" in engine.module(root) and "here" not in engine.module(two)
 
 
 async def test_a_chain_with_a_source_holds_the_acts_it_inherited_as_the_filter_kept_them() -> None:
@@ -589,8 +583,7 @@ async def test_a_chain_with_a_source_holds_the_acts_it_inherited_as_the_filter_k
   one, two = said(log, "bash")
   twin = engine.chain("twin", source=root, filter=take(two[1], inside=False))
   await settle()
-  held = engine.ask("transcript", twin, twin)[1]
-  assert isinstance(held, list)
+  held = engine.transcript(twin)
   assert one in held and two not in held
 
 
@@ -608,17 +601,17 @@ async def test_the_steps_that_an_inherited_prompt_takes_after_the_point_enter_it
   await settle()
   assert (await one) == 2
   first, *later = steps(log, one)
-  held = engine.ask("transcript", twin, twin)[1]
-  assert isinstance(held, list)
-  assert later and [(a[0], a[1]) for a in held if a[0] in ("rung", "ask", "answer")] == [
+  replies = [a[1] for a in said(log, "reply")]
+  held = engine.transcript(twin)
+  assert later and [(a[0], a[1]) for a in held if a[:3:2] == ("rung", one) or a[1] in replies] == [
     ("rung", first),
-    ("ask", first),
-    ("answer", first),
+    ("reply", replies[0]),
+    ("started", replies[0]),
+    ("done", replies[0]),
   ]
   assert [a for a in held if a[1] in later] == []
-  _, theirs = engine.ask("transcript", root, root)
-  assert isinstance(theirs, list)
-  assert [a[1] for a in theirs if a[0] == "answer"] == [first, *later]
+  theirs = engine.transcript(root)
+  assert [a[2] for a in theirs if a[0] == "reply"] == [first, *later]
 
 
 async def test_what_a_chain_binds_is_its_own_and_a_chain_with_a_source_is_how_it_gets_isolation() -> None:
@@ -629,7 +622,7 @@ async def test_what_a_chain_binds_is_its_own_and_a_chain_with_a_source_is_how_it
   twin = engine.chain("twin", source=root)
   await settle()
   await engine.rung("k = 2", on=twin)
-  assert (engine.modules[root]["k"], engine.modules[twin]["k"]) == (1, 2)
+  assert (engine.module(root)["k"], engine.module(twin)["k"]) == (1, 2)
 
 
 async def test_two_chains_from_one_source_hold_the_same_values() -> None:
@@ -640,7 +633,7 @@ async def test_two_chains_from_one_source_hold_the_same_values() -> None:
   one = engine.chain("one", source=root)
   two = engine.chain("two", source=root)
   await settle()
-  assert engine.modules[one]["k"] == engine.modules[two]["k"] == 21
+  assert engine.module(one)["k"] == engine.module(two)["k"] == 21
 
 
 async def test_a_chain_with_a_source_inherits_the_default_actor_with_the_globals_of_its_origin() -> None:
@@ -649,7 +642,7 @@ async def test_a_chain_with_a_source_inherits_the_default_actor_with_the_globals
   _, root = life(sand)
   twin = engine.chain("twin", source=root)
   await settle()
-  assert engine.modules[twin]["actor"] == engine.modules[root]["actor"] == "m/low"
+  assert engine.module(twin)["actor"] == engine.module(root)["actor"] == "m/low"
 
 
 async def test_a_chain_with_a_source_that_holds_an_act_reads_the_close_of_the_act() -> None:
@@ -691,10 +684,10 @@ async def test_the_engine_does_not_wake_a_chain_with_a_source_for_an_inherited_a
   command = said(log, "bash")[0][1]
   twin = engine.chain("twin", source=root)
   await settle()
-  before = len([a for a in said(log, "ask") if a[3] == twin])
-  engine.send("exited", command, 0, by=WORLD)
+  before = len([a for a in said(log, "reply") if a[3] == twin])
+  sand.exits(command, 0)
   await settle()
-  assert len([a for a in said(log, "ask") if a[3] == twin]) == before
+  assert len([a for a in said(log, "reply") if a[3] == twin]) == before
   assert [a for a in said(log, "prompt") if a[2] == twin] == []
 
 
@@ -710,7 +703,7 @@ async def test_the_globals_of_a_chain_with_a_source_may_hold_more_than_its_turns
   await settle()
   assert command not in named(engine.turns(on=narrow))
   assert [one for one in paragraphs(engine.turns(on=narrow)) if binding(command, "Exit") in one] == []
-  assert (engine.modules[narrow]["n"], engine.modules[narrow]["x"], engine.modules[narrow][command]) == (
+  assert (engine.module(narrow)["n"], engine.module(narrow)["x"], engine.module(narrow)[command]) == (
     0,
     command,
     command,
@@ -722,14 +715,12 @@ async def test_the_transcript_of_a_chain_with_a_source_holds_the_entries_up_to_t
   sand = sown()
   _, root = life(sand)
   await engine.rung("k = 1", on=root)
-  asked, was = engine.ask("transcript", root, root)
+  was = list(engine.transcript(root))
   twin = engine.chain("twin", source=root)
   await settle()
-  held = engine.ask("transcript", twin, twin)[1]
-  assert isinstance(was, list) and isinstance(held, list)
   opens = ("tell", twin, twin, [f"#{twin} twin from {root}", binding(twin)])
-  assert held == [*was, asked, ("done", asked[1], root, was), opens]
-  assert all(on(a) == root for a in held[:-1])
+  assert engine.transcript(twin)[: len(was) + 2] == [*was, ("started", twin, twin), opens]
+  assert all(on(a) == root for a in was)
 
 
 async def test_the_acts_of_the_prefix_of_a_chain_with_a_source_keep_the_ids_they_had() -> None:
@@ -739,13 +730,11 @@ async def test_the_acts_of_the_prefix_of_a_chain_with_a_source_keep_the_ids_they
   sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
-  held = engine.ask("transcript", root, root)[1]
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   was = made(held)
   twin = engine.chain("twin", source=root)
   await settle()
-  now = engine.ask("transcript", twin, twin)[1]
-  assert isinstance(now, list)
+  now = engine.transcript(twin)
   assert made(now)[: len(was)] == was
 
 
@@ -756,8 +745,8 @@ async def test_the_globals_of_a_chain_with_a_source_are_those_of_a_module_of_its
   await engine.rung("k = 1", on=root)
   twin = engine.chain("twin", source=root)
   await settle()
-  assert engine.modules[twin] is not engine.modules[root]
-  assert engine.modules[twin]["__name__"] == twin and engine.modules[twin]["k"] == 1
+  assert engine.module(twin) is not engine.module(root)
+  assert engine.module(twin)["__name__"] == twin and engine.module(twin)["k"] == 1
 
 
 async def test_the_objects_of_a_rung_of_a_chain_with_a_source_are_that_chains_own() -> None:
@@ -767,10 +756,10 @@ async def test_the_objects_of_a_rung_of_a_chain_with_a_source_are_that_chains_ow
   await engine.rung("marks = [1]\ndef twice(x):\n  return x * 2", on=root)
   twin = engine.chain("twin", source=root)
   await settle()
-  assert engine.modules[twin]["marks"] == engine.modules[root]["marks"]
-  assert engine.modules[twin]["marks"] is not engine.modules[root]["marks"]
-  assert engine.modules[twin]["twice"] is not engine.modules[root]["twice"]
-  mine, theirs = engine.ask("program", twin)[1], engine.ask("program", root)[1]
+  assert engine.module(twin)["marks"] == engine.module(root)["marks"]
+  assert engine.module(twin)["marks"] is not engine.module(root)["marks"]
+  assert engine.module(twin)["twice"] is not engine.module(root)["twice"]
+  mine, theirs = engine.program(twin), engine.program(root)
   assert isinstance(mine, dict) and isinstance(theirs, dict)
   assert list(mine.values()) == list(theirs.values()) and list(mine) != list(theirs)
 
@@ -782,8 +771,8 @@ async def test_the_globals_of_a_chain_with_a_source_are_the_origins_whatever_the
   await engine.rung("k = 21", on=root)
   twin = engine.chain("twin", source=root, filter=take())
   await settle()
-  assert engine.modules[twin]["k"] == 21
-  assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), stood(root), opened(twin, f"twin from {root}")]
+  assert engine.module(twin)["k"] == 21
+  assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), takes(root), opened(twin, f"twin from {root}")]
 
 
 async def test_a_chain_with_a_source_inherits_the_words_its_caller_wrote_with_its_prefix() -> None:
@@ -796,7 +785,7 @@ async def test_a_chain_with_a_source_inherits_the_words_its_caller_wrote_with_it
   await engine.rung("m = 3", on=root)
   twin = engine.chain("twin", source=root)
   await settle()
-  assert (engine.modules[twin]["k"], engine.modules[twin]["j"], engine.modules[twin]["m"]) == (1, 2, 3)
+  assert (engine.module(twin)["k"], engine.module(twin)["j"], engine.module(twin)["m"]) == (1, 2, 3)
 
 
 async def test_a_filter_that_skips_a_rung_its_caller_wrote_keeps_it_out_of_the_turns() -> None:
@@ -807,9 +796,9 @@ async def test_a_filter_that_skips_a_rung_its_caller_wrote_keeps_it_out_of_the_t
   await laid
   twin = engine.chain("twin", source=root, filter=take(laid, inside=False))
   await settle()
-  assert engine.modules[twin]["k"] == 1
-  assert paragraphs(engine.turns(on=root)) == [opened(root, "root"), stood(root), f"#{laid}\nk = 1"]
-  assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), stood(root), opened(twin, f"twin from {root}")]
+  assert engine.module(twin)["k"] == 1
+  assert paragraphs(engine.turns(on=root)) == [opened(root, "root"), takes(root), f"#{laid}\nk = 1"]
+  assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), takes(root), opened(twin, f"twin from {root}")]
 
 
 async def test_a_chain_with_a_source_holds_the_classes_its_origin_defined_before_that_source() -> None:
@@ -819,8 +808,8 @@ async def test_a_chain_with_a_source_holds_the_classes_its_origin_defined_before
   await engine.rung("class Plan:\n  n = 21\n\nmine = Plan().n", on=root)
   twin = engine.chain("twin", source=root)
   await settle()
-  assert isinstance(engine.modules[twin]["Plan"], type) and engine.modules[twin]["mine"] == 21
-  assert engine.modules[twin]["Plan"] is not engine.modules[root]["Plan"]
+  assert isinstance(engine.module(twin)["Plan"], type) and engine.module(twin)["mine"] == 21
+  assert engine.module(twin)["Plan"] is not engine.module(root)["Plan"]
 
 
 async def test_a_chain_with_a_source_reads_nothing_that_its_origin_did_after_that_source() -> None:
@@ -834,8 +823,8 @@ async def test_a_chain_with_a_source_reads_nothing_that_its_origin_did_after_tha
   await after
   await settle()
   assert engine.turns(on=twin) == told == [("user", "\n\n".join(paragraphs(told)), None, None)]
-  assert paragraphs(told) == [opened(root, "root"), stood(root), opened(twin, f"twin from {root}")]
-  assert "after" not in engine.modules[twin] and paragraphs(engine.turns(on=root))[-1:] == [f"#{after}\nafter = 1"]
+  assert paragraphs(told) == [opened(root, "root"), takes(root), opened(twin, f"twin from {root}")]
+  assert "after" not in engine.module(twin) and paragraphs(engine.turns(on=root))[-1:] == [f"#{after}\nafter = 1"]
 
 
 async def test_what_a_rung_of_a_chain_with_a_source_binds_lands_on_that_chain() -> None:
@@ -845,7 +834,7 @@ async def test_what_a_rung_of_a_chain_with_a_source_binds_lands_on_that_chain() 
   twin = engine.chain("twin", source=root)
   await settle()
   await engine.rung("mine = 1", on=twin)
-  assert engine.modules[twin]["mine"] == 1 and "mine" not in engine.modules[root]
+  assert engine.module(twin)["mine"] == 1 and "mine" not in engine.module(root)
 
 
 async def test_the_origin_holds_the_chain_fact_of_a_chain_that_a_rung_of_it_made() -> None:
@@ -855,8 +844,7 @@ async def test_the_origin_holds_the_chain_fact_of_a_chain_that_a_rung_of_it_made
   sand.script[root] = ["side = chain('side', source=__name__)\nclose(side)", "close(None)"]
   side = await engine.prompt(str, "fork one", on=root)
   await settle()
-  held = engine.ask("transcript", root, root)[1]
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   assert [a[1] for a in held if a[0] == "chain"] == [side]
   assert [a for a in held if on(a) == side] == []
 
@@ -870,23 +858,24 @@ async def test_two_names_of_the_module_are_the_chains_to_bind() -> None:
 
 
 async def test_it_holds_the_transcript_of_its_origin_first_and_tells_its_own_open_after_it() -> None:
-  """It holds the transcript of its origin first and tells its own open after it, and it holds nothing of the rungs it runs again, since every word of those stands in what it inherited."""
+  """It holds the transcript of its origin first and tells its own open after it, and the rungs it runs again tell nothing, since every word of those stands in what it inherited."""
   sand = sown()
   log, root = life(sand)
   step = engine.rung("k = 1", on=root)
   await step
-  was = engine.ask("transcript", root, root)[1]
+  was = list(engine.transcript(root))
   twin = engine.chain("twin", source=root)
   await settle()
-  held = engine.ask("transcript", twin, twin)[1]
+  held = engine.transcript(twin)
   assert isinstance(was, list) and isinstance(held, list)
-  assert held[: len(was)] == was and held[-1] == ("tell", twin, twin, [f"#{twin} twin from {root}", binding(twin)])
+  opens = ("tell", twin, twin, [f"#{twin} twin from {root}", binding(twin)])
+  assert held[: len(was) + 2] == [*was, ("started", twin, twin), opens]
   retold = [a[1] for a in said(log, "rung") if a[3] == twin]
   assert [engine.get(one)[5] for one in retold] == [step]
-  assert [a for a in held if a[1] in retold] == []
+  assert [a for a in held if a[1] in retold and a[0] == "tell"] == []
   assert paragraphs(engine.turns(on=twin)) == [
     opened(root, "root"),
-    stood(root),
+    takes(root),
     f"#{step}\nk = 1",
     opened(twin, f"twin from {root}"),
   ]
@@ -906,24 +895,22 @@ async def test_it_hears_no_control_that_ends_it() -> None:
   assert await engine.prompt(int, "still here", on=two) == 1
 
 
-async def test_it_holds_no_done_of_a_query_it_does_not_hold() -> None:
-  """It holds no done of a query it does not hold, since the answer to what it asked of the gate is of the moment, so every done it holds answers a question it holds."""
+async def test_every_done_it_holds_answers_a_question_it_holds() -> None:
+  """Every done it holds answers a question it holds, since it holds every question made on it, the ones it made itself among them."""
   sand = sown()
-  log, root = life(sand)
+  _, root = life(sand)
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
-  held = engine.ask("transcript", root, root)[1]
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   names = {a[1] for a in held if engine.question(a)}
-  assert all(a[1] in names for a in held if a[0] == "done")
-  gates = [a[1] for a in engine.asked.values() if a[0] == "gate"]
-  assert [a[1] for a in said(log, "done") if a[1] in gates] == gates == [f"gate@{root}.4"]
-  assert [a for a in held if a[1] in gates] == []
+  assert [a[1] for a in held if a[0] == "done" and a[1] not in names] == []
+  assert [a[1] for a in held if engine.question(a) and a[2] == root] == ["rung2", "run1", "gate1", "run2"]
+  assert [a[1] for a in held if a[0] == "done" and a[1] in ("run1", "gate1", "run2")] == ["run1", "gate1", "run2"]
 
 
 async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin() -> None:
-  """What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, each holds of that transcript, which cuts its turns where an ask of the origin stood, and the open of the origin, which tells the standing."""
+  """What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin, which tells the standing."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]
@@ -932,30 +919,31 @@ async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin(
   command, one = said(log, "bash")[0], said(log, "prompt")[0][1]
   twin = engine.chain("twin", source=root, filter=take(command[1]))
   await settle()
-  held, theirs = engine.ask("transcript", twin, twin)[1], engine.ask("transcript", root, root)[1]
-  assert isinstance(held, list) and isinstance(theirs, list)
+  held, theirs = engine.transcript(twin), engine.transcript(root)
+  asked = [a for a in theirs if a[0] == "reply"]
   assert command in held and [a[1] for a in held if a[0] == "prompt"] == [one]
-  assert made(held) == [one, command[2], command[1]]
+  assert made(held[: held.index(("started", twin, twin))]) == [one, command[2], asked[0][1], command[1]]
   assert notes(held, root) == [[f"#{root} root", binding(root)], rows(root)]
-  assert [a for a in held if a[0] == "holds"] == [a for a in theirs if a[0] == "holds"] != []
+  assert [a for a in held if a[0] == "reply"] == asked[:1] and len(asked) == 2
+  assert [a[1] for a in held if a[0] == "done" and a[1] in (asked[0][1], asked[1][1])] == [asked[0][1]]
   got = engine.turns(on=twin)
   assert [role for role, *_ in got] == ["user", "assistant", "user"]
   assert got[0][1].endswith(f"#{command[2]} advance on {one}")
 
 
-async def test_the_filter_is_given_every_act_the_queries_of_the_operator_among_them() -> None:
-  """The filter is given every act, the queries of the operator among them, since what the operator asked of a chain no rung of it says again."""
+async def test_the_filter_is_given_every_act_what_the_operator_asked_among_them() -> None:
+  """The filter is given every act, what the operator asked among them, since what the operator asked of a chain no rung of it says again."""
   sand = sown()
   _, root = life(sand)
+  engine.read("a.txt", on=root)
   engine.cd("/deep", on=root)
   await engine.rung("k = 1", on=root)
   watch: list[tuple] = []
   twin = engine.chain("twin", source=root, filter=seen(watch))
   await settle()
   assert all(engine.question(a) for a in watch)
-  assert [a[0] for a in watch if a[2] == OPERATOR] == ["cd", "rung"]
-  held = engine.ask("transcript", twin, twin)[1]
-  assert isinstance(held, list)
+  assert [a[0] for a in watch if a[2] == OPERATOR] == ["stand", "read", "cd", "rung"]
+  held = engine.transcript(twin)
   assert [a[4] for a in held if a[0] == "cd"] == ["/deep"]
 
 
@@ -974,14 +962,13 @@ async def test_the_source_of_a_chain_is_a_chain_by_its_name() -> None:
   sand = sown()
   log, root = life(sand)
   await engine.rung("k = 1", on=root)
-  was = engine.ask("transcript", root, root)[1]
+  was = list(engine.transcript(root))
   twin = engine.chain("twin", source=root)
   await settle()
   await engine.rung("later = 2", on=root)
-  held = engine.ask("transcript", twin, twin)[1]
-  assert isinstance(was, list) and isinstance(held, list)
+  held = engine.transcript(twin)
   assert said(log, "chain")[-1][5] == root
-  assert held[: len(was)] == was and "later" not in engine.modules[twin]
+  assert lasting(held[: len(was)]) == lasting(was) and "later" not in engine.module(twin)
 
 
 async def test_a_source_that_names_no_chain_of_the_life_refuses_the_call() -> None:
@@ -1006,78 +993,26 @@ async def test_a_source_that_names_no_chain_of_the_life_refuses_the_call() -> No
   assert [e[0][4] for e in sand.record if e[0][0] == "chain"] == ["root"]
 
 
-async def test_a_chain_with_a_source_asks_its_origin_what_it_stands_on() -> None:
-  """A chain with a source asks its origin what it stands on, and the origin answers with its standing as it stands."""
+async def test_a_chain_with_a_source_reads_what_its_origin_stands_on_as_it_stands() -> None:
+  """A chain with a source reads what its origin stands on, as it stands."""
   sand = sown()
-  _, root = life(sand)
+  log, root = life(sand)
   before = [a for a in sand.calls if a[0] == "stand"]
   twin = engine.chain("twin", source=root)
   await settle()
   assert [a for a in sand.calls if a[0] == "stand"] == before
-  asked = [a for a in engine.asked.values() if a[0] == "stand"]
-  assert [(a[2], a[3]) for a in asked] == [(root, root), (twin, root)]
-  assert engine.outcomes[asked[1][1]] == STANDS and engine.modules[twin]["actor"] == "m/low"
-
-
-async def test_the_chain_answers_a_stand_asked_on_it_with_what_it_stands_on() -> None:
-  """The chain answers a stand asked on it with what it stands on, and a stand that names one of its questions with what it stood on when it heard that question, so a grant reads the window of a rung off the chain it is on."""
-  sand = Sand(stands=STANDS, cost=(200000, 0, 0, 0, 0.0))
-  log, root = life(sand)
-  assert engine.ask("stand", root)[1] == STANDS
-  sand.script[root] = ["close(1)"]
-  engine.grant(share=0.9, on=root)
-  one = engine.prompt(int, "count", on=root)
-  assert await one == 1
-  await settle()
-  answered = steps(log, one)[0]
-  assert [a for a in heads(engine.turns(on=root)) if " ledger " in a] == [f"#{answered} ledger spent=0.0 filled=0.5"]
-  assert [a for a in sand.calls if a[0] == "stand"] == sand.calls[:1]
-  assert engine.ask("stand", root, answered)[1] == STANDS == engine.ask("stand", root, root)[1]
+  assert [a[1] for a in acts(log).values() if a[0] == "stand"] == ["stand1"]
+  assert engine.standing() == STANDS and engine.module(twin)["actor"] == "m/low"
   later = Sand(stands=[[STANDS[0][0]], "/z", "operator"])
-  await relived(later, list(sand.record))
-  assert engine.ask("stand", root)[1] == later.stands and engine.ask("stand", root, answered)[1] == STANDS
-
-
-async def test_the_chain_answers_a_transcript_asked_of_one_of_its_names() -> None:
-  """The chain answers a transcript asked of one of its names with its transcript up to that act, and whole for the chain itself."""
-  sand = sown()
-  log, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]
-  assert await engine.prompt(int, "run it", on=root) == 1
+  _, over = await relived(later, list(sand.record))
+  again = engine.chain("again", source=over)
   await settle()
-  whole = engine.ask("transcript", root, root)[1]
-  one = said(log, "prompt")[0][1]
-  cut = engine.ask("transcript", root, one)[1]
-  assert isinstance(whole, list) and isinstance(cut, list)
-  assert cut == whole[: len(cut)] and len(cut) < len(whole)
-  assert cut[-1][1] == one
+  assert engine.standing() == later.stands == engine.standing()
+  assert engine.module(again)["actor"] == "operator"
 
 
-async def test_the_chain_answers_a_program_asked_on_it() -> None:
-  """The chain answers a program asked on it with the word of every rung it holds that runs, as python, each under the name of that rung, in order."""
-  sand = sown()
-  log, root = life(sand)
-  mine = engine.rung("mine = 1", on=root)
-  await mine
-  sand.script[root] = ["<S1>\nhi\n</S1>\na = S1", "b = BAD", "close(len(a))"]
-  one = engine.prompt(int, "count", on=root)
-  assert await one == 3
-  await settle()
-  first, refused, last = steps(log, one)
-  (bind,) = steps(log, root)
-  program = engine.ask("program", root)[1]
-  assert isinstance(program, dict)
-  assert list(program.items()) == [
-    (mine, "mine = 1"),
-    (bind, f"{binding(root)}\n{binding(one, 'int')}"),
-    (first, "S1 = 'hi\\n'\n\n\na = S1"),
-    (last, "close(len(a))"),
-  ]
-  assert refused not in program and [a[1] for a in said(log, "run")] == list(program)
-
-
-async def test_the_chain_retells_the_ladder_of_its_origin_through_the_program() -> None:
-  """The chain retells the rungs of its origin through the program the origin answers, and it owns the rungs it retells, though it holds nothing of them."""
+async def test_the_chain_retells_the_rungs_of_its_origin_through_the_program_of_the_origin() -> None:
+  """The chain retells the rungs of its origin through the program of the origin, and it makes the rungs it retells itself, so they tell nothing."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(a + 1)"]
@@ -1086,18 +1021,14 @@ async def test_the_chain_retells_the_ladder_of_its_origin_through_the_program() 
   await settle()
   twin = engine.chain("twin", source=root)
   await settle()
-  asked = [a for a in engine.asked.values() if a[0] == "program"]
-  assert [a[2:] for a in asked] == [(twin, root)]
-  theirs = engine.outcomes[asked[0][1]]
-  assert isinstance(theirs, dict)
+  theirs = engine.program(root)
   assert list(theirs.values()) == [f"{binding(root)}\n{binding(one, 'int')}", "a = 1", "close(a + 1)"]
   retold = [a for a in said(log, "rung") if a[3] == twin]
   assert [(a[2], a[4], a[5]) for a in retold] == [(twin, word, donor) for donor, word in theirs.items()]
-  assert engine.ask("program", twin)[1] == {a[1]: a[4] for a in retold}
-  held = engine.ask("transcript", twin, twin)[1]
-  assert isinstance(held, list)
+  assert engine.program(twin) == {a[1]: a[4] for a in retold}
+  held = engine.transcript(twin)
   owned = {a[1] for a in retold}
-  assert [a for a in held if a[1] in owned] == []
+  assert [a for a in held if a[1] in owned and a[0] == "tell"] == []
 
 
 async def test_a_replay_makes_the_rungs_of_a_chain_again_from_its_donor() -> None:
@@ -1113,12 +1044,11 @@ async def test_a_replay_makes_the_rungs_of_a_chain_again_from_its_donor() -> Non
   was = [a[1] for a in said(log, "rung")]
   engine.write(Text(act, "a = 1\nb = 20\nc = 30"), on=root)
   await settle()
-  kept = engine.ask("program", root)[1]
-  assert isinstance(kept, dict)
+  kept = engine.program(root)
   assert list(kept.values()) == [f"{binding(root)}\n{binding(act, 'None')}", "a = 1", "b = 20\nc = 30"]
   assert [one for one in kept if one in was] == []
   assert [engine.get(one)[5] for one in kept] == [bind, first, ""]
-  assert (engine.modules[root]["b"], engine.modules[root]["c"]) == (20, 30)
+  assert (engine.module(root)["b"], engine.module(root)["c"]) == (20, 30)
 
 
 async def test_the_donor_of_a_replay_is_the_ladder_of_the_origin_or_the_ladder_as_it_stands() -> None:
@@ -1135,7 +1065,7 @@ async def test_the_donor_of_a_replay_is_the_ladder_of_the_origin_or_the_ladder_a
   await settle()
   mine = [a for a in said(log, "rung") if a[3] == twin]
   assert [a[5] for a in mine[len(theirs) :]] == [theirs[0][5], ""]
-  assert engine.modules[twin]["k"] == 2 and engine.modules[root]["k"] == 1
+  assert engine.module(twin)["k"] == 2 and engine.module(root)["k"] == 1
 
 
 async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
@@ -1150,10 +1080,9 @@ async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
   assert engine.read(act, on=root) == Text(act, "a = 1\nclose(None)")
   engine.write(Text(act, "a = 2"), on=root)
   await settle()
-  _, program = engine.ask("program", root)
-  assert isinstance(program, dict)
+  program = engine.program(root)
   assert list(program.values()) == ["mine = 1", f"{binding(root)}\n{binding(act, 'None')}", "a = 2"]
-  assert engine.modules[root]["mine"] == 1 and engine.modules[root]["a"] == 2
+  assert engine.module(root)["mine"] == 1 and engine.module(root)["a"] == 2
 
 
 async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_birth() -> None:
@@ -1166,23 +1095,23 @@ async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_bir
   engine.write(Text(act, "a = 1"), on=root)
   await settle()
   assert engine.read(act, on=root) == Text(act, "a = 1")
-  assert engine.modules[root]["a"] == 1 and "b" not in engine.modules[root]
+  assert engine.module(root)["a"] == 1 and "b" not in engine.module(root)
   sand.script[root] = ["write(Text(get(acting())[2], 'c = 3'))\nd = 4", "close(None)"]
   later = engine.prompt(None, "edit", on=root)
   assert await later is None
   await settle(300)
   assert engine.read(later, on=root) == Text(later, "c = 3\nclose(None)")
-  assert engine.modules[root]["c"] == 3 and engine.modules[root]["a"] == 1
-  assert "d" not in engine.modules[root]
+  assert engine.module(root)["c"] == 3 and engine.module(root)["a"] == 1
+  assert "d" not in engine.module(root)
   await relived(Sand(stands=[STANDS[0], "/w", "m/high"]), list(sand.record))
-  assert engine.modules[root]["actor"] == "m/high"
+  assert engine.module(root)["actor"] == "m/high"
   engine.write(Text(act, "a = 5"), on=root)
   await settle()
-  assert engine.modules[root]["a"] == 5 and engine.modules[root]["actor"] == "m/high"
+  assert engine.module(root)["a"] == 5 and engine.module(root)["actor"] == "m/high"
 
 
-async def test_before_every_ask_the_chain_tells_the_last_line_of_the_turn() -> None:
-  """Before every ask the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung."""
+async def test_before_every_reply_the_chain_tells_the_last_line_of_the_turn() -> None:
+  """Before every reply the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(a)", "k = 2"]
@@ -1192,13 +1121,13 @@ async def test_before_every_ask_the_chain_tells_the_last_line_of_the_turn() -> N
   assert await bare is None
   await settle()
   first, second = steps(log, one)
-  asks = said(log, "ask")
-  assert [(a[1], a[5][-1][0], a[5][-1][1].split("\n")[-1]) for a in asks] == [
+  asks = [(a[2], sand.turns[a[1]][-1]) for a in said(log, "reply")]
+  assert [(by, last[0], last[1].split("\n")[-1]) for by, last in asks] == [
     (first, "user", f"#{first} advance on {one}"),
     (second, "user", f"#{second} advance on {one}"),
     (bare, "user", f"#{bare} advance on {OPERATOR}"),
   ]
-  assert engine.modules[root]["k"] == 2
+  assert engine.module(root)["k"] == 2
 
 
 async def test_where_it_asks_the_chain_makes_a_rung_of_the_statements_the_turn_shows() -> None:
@@ -1215,17 +1144,18 @@ async def test_where_it_asks_the_chain_makes_a_rung_of_the_statements_the_turn_s
   ack = said(log, "prompt")[-1][1]
   assert engine.peek(ack) is None and ack != one
   binders = steps(log, root)
-  asks = said(log, "ask")
-  assert [[a for a in log[: log.index(ask)] if a[0] == "rung"][-1][1] for ask in asks] == binders
+  made = [a[1] for a in engine.transcript(root) if engine.question(a)]
+  asks = [made.index(a[1]) for a in said(log, "reply")]
+  assert [[one for one in made[:at] if one.startswith("rung")][-1] for at in asks] == binders
   statements = [binding(root), binding(one, "int"), binding(command, "Exit"), binding(ack, "None")]
   assert [engine.get(bind)[4] for bind in binders] == ["\n".join(statements[:2]), "\n".join(statements[2:])]
   shown = [line for part in paragraphs(engine.turns(on=root)) for line in part.split("\n") if line[:1] != "#"]
   assert shown == [statements[0], "k = 1", *statements[1:]]
-  assert [engine.modules[root][name] for name in (root, one, command, ack)] == [root, one, command, ack]
-  assert [a[1] for a in said(log, "rung") if a[1] in engine.modules[root]] == []
+  assert [engine.module(root)[name] for name in (root, one, command, ack)] == [root, one, command, ack]
+  assert [a[1] for a in said(log, "rung") if a[1] in engine.module(root)] == []
   words = [turn[1] for turn in engine.turns(on=root) if turn[0] == "assistant"]
   assert words == ["x = bash('echo hi')\nclose(1)", "close(None)"]
-  assert [a[4] for a in engine.asked.values() if a[0] == "gate"] == ["k = 1", *words]
+  assert [a[4] for a in acts(log).values() if a[0] == "gate"] == ["k = 1", *words]
   assert [name for name in named(engine.turns(on=root)) if name in binders] == []
   sand.auto = False
   sand.script[root] = ["y = bash('sleep')\nawait y"]
@@ -1236,4 +1166,27 @@ async def test_where_it_asks_the_chain_makes_a_rung_of_the_statements_the_turn_s
   sand.script[fork] = [f"close({opened} is not None)"]
   asked = engine.prompt(bool, "is it bound", on=fork)
   await settle()
-  assert engine.peek(asked) is True and engine.modules[fork][opened] == opened
+  assert engine.peek(asked) is True and engine.module(fork)[opened] == opened
+
+
+async def test_the_chain_takes_its_own_act() -> None:
+  """The chain takes its own act, since the engine is the one that runs it."""
+  sand = sown()
+  log, root = life(sand)
+  two = engine.chain("two")
+  await settle()
+  assert [(a[1], a[2]) for a in said(log, "started") if a[1] in (root, two)] == [(root, root), (two, two)]
+  assert [a for a in said(log, "done") if a[1] in (root, two)] == [] and engine.peek(two) is None
+  assert [a for a in sand.calls if a[1] in (root, two)] == []
+
+
+async def test_the_chain_asks_the_model_of_a_rung_for_its_word_by_a_reply() -> None:
+  """The chain asks the model of a rung for its word by a reply it makes under the site of that rung, whose one word is the actor."""
+  sand = sown()
+  log, root = life(sand)
+  sand.script[root] = ["close(1)"]
+  one = engine.prompt(int, "count", to="n/low", on=root)
+  assert await one == 1
+  (step,) = steps(log, one)
+  assert [(a[2], a[3], *a[4:]) for a in said(log, "reply")] == [(step, root, "n/low")]
+  assert engine.get(step)[6] == "n/low" and [a[1] for a in said(sand.calls, "reply")] == ["reply1"]

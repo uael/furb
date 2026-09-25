@@ -1,39 +1,33 @@
-"""Program, the question of the words of the rungs of a chain that run, as python."""
+"""program, the words of the rungs that run on a chain."""
 
-import pytest
-
-from conftest import Sand, life, said, settle, sown
+from conftest import bindings, life, said, settle, sown
 from furb import engine
-from furb.engine import OPERATOR, Refused
+from furb.engine import OPERATOR, Text
 
 
-async def test_a_program_is_the_question_of_the_words_of_the_rungs_of_a_chain_that_run_as_python() -> None:
-  """A program is the question of the words of the rungs of a chain that run, as python, each with the name of its rung, which the chain answers."""
-  sand: Sand = sown()
+async def test_program_gives_the_program_of_a_chain() -> None:
+  """program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of that rung, in order, as the runs of its transcript say."""
+  sand = sown()
   log, root = life(sand)
-  quoted = engine.rung("<S1>hi</S1>\nk = S1", on=root)
-  assert await quoted is None
-  with pytest.raises(Refused):
-    await engine.rung("x = BAD", on=root)
-  refused = said(log, "rung")[-1][1]
-  word, got = engine.ask("program", root)
-  assert word == ("program", f"program@{OPERATOR}.4", OPERATOR, root) and isinstance(got, dict)
-  assert got == {quoted: "S1 = 'hi'\nk = S1"} and refused not in got
-  assert [a for a in said(log, "done") if a[1] == word[1]] == [("done", word[1], root, got)]
-  assert engine.modules[root]["k"] == "hi"
-
-
-async def test_a_chain_with_a_source_asks_the_program_of_its_origin() -> None:
-  """A chain with a source asks the program of its origin, and gate asks the program of the chain before it asks the gate whether the word may run."""
-  sand: Sand = sown()
-  _, root = life(sand)
-  step = engine.rung("k = 1", on=root)
-  assert await step is None
-  twin = engine.chain("twin", source=root)
+  mine = engine.rung("mine = 1", on=root)
+  await mine
+  sand.script[root] = ["<S1>\nhi\n</S1>\na = S1", "b = BAD", "close(len(a))"]
+  one = engine.prompt(int, "count", on=root)
+  assert await one == 3
   await settle()
-  assert engine.gate("j = k", on=root) == []
-  programs = [one for one in engine.asked.values() if one[0] == "program"]
-  assert [one[2:] for one in programs] == [(twin, root), (OPERATOR, root)]
-  assert [engine.outcomes[one[1]] for one in programs] == [{step: "k = 1"}, {step: "k = 1"}]
-  last = list(engine.asked.values())[-2:]
-  assert last == [programs[-1], ("gate", last[1][1], OPERATOR, root, "j = k", {step: "k = 1"})]
+  first, refused, last = [a[1] for a in said(log, "rung") if a[2] == one]
+  (bind,) = [a[1] for a in said(log, "rung") if a[2] == root]
+  program = engine.program(root)
+  assert list(program.items()) == [
+    (mine, "mine = 1"),
+    (bind, bindings(root, one, "int")),
+    (first, "S1 = 'hi\\n'\n\n\na = S1"),
+    (last, "close(len(a))"),
+  ]
+  assert refused not in program
+  assert {a[4]: a[5] for a in engine.transcript(root) if a[0] == "run"} == program
+  asked = engine.prompt(int, "edit", to=OPERATOR, on=root)
+  engine.write(Text(asked, "k = 1"), on=root)
+  await settle()
+  again = engine.program(root)
+  assert list(again.values()) == [*program.values(), "k = 1"] and not set(again) & set(program)

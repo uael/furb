@@ -23,7 +23,6 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import RequestUsage
 
 from furb import engine
-from furb.engine import WORLD, Refused
 from furb.kernel import Native, gating
 from furb.world import Live
 
@@ -67,27 +66,23 @@ def reply(text: str) -> ModelResponse:
 
 
 def worlds(stands: list) -> Words:
-  """A World of the suite: it answers a stand, it does a wait, and it refuses every other question it is put but a
-  gate, which is the gate's to answer and none of the World's.
+  """A World of the suite: it answers a stand, it takes a wait and says it done when the time is up, it takes a
+  reply and never answers it, since no model stands behind it, and it takes no other question, so the life refuses
+  each of them.
 
   It is what a test of the Kernel stands a life on, since the Kernel neither reads a disk nor asks a model, and a
   word that awaits needs one act of the World that comes to something.
   """
-  acts: dict[str, tuple] = {}
   loop = asyncio.get_running_loop()
   while True:
-    a = yield
-    match a:
-      case (_, id, *_) if engine.question(a) and id in engine.acts:
-        acts[id] = a
-      case ("start", about, _):
-        match acts.get(about):
-          case ("wait", _, _, _, seconds):
-            loop.call_later(seconds, partial(engine.send, "done", about, None, by=WORLD))
+    match (yield):
+      case ("wait", about, _, _, seconds):
+        yield "started", about
+        loop.call_later(seconds, partial(engine.say, "done", about, None))
+      case ("reply", about, *_):
+        yield "started", about
       case ("stand", qid, *_):
         yield "done", qid, stands
-      case (kind, qid, *_) if engine.question(a) and qid in engine.asked and kind != "gate":
-        yield "done", qid, Refused(f"the suite answers no {kind}")
 
 
 def broken(why: str = "the model was not there") -> FunctionModel:
@@ -128,17 +123,25 @@ def speaking(text: str) -> Iterator[None]:
     sys.stdin = held
 
 
-def stood(said: Words, *, gated: bool = True) -> str:
+def blind() -> Words:
+  """A gate that finds nothing in any word, so every word runs: the gate of a life whose test is not the gate."""
+  while True:
+    match (yield):
+      case ("gate", qid, *_):
+        yield "done", qid, []
+
+
+def booted(said: Words, *, gated: bool = True) -> str:
   """A life on a World of the suite, with the Kernel of this interpreter and its gate when it is gated, and the id
-  of its root; a life with no gate refuses no word, since a question nobody answers is answered with nothing."""
-  return engine.boot((), kernel=Native().kernel(), world=said, **({"gate": gating()} if gated else {}))
+  of its root; a life that is not gated reads every word with a gate that finds nothing, so it refuses no word."""
+  return engine.boot((), kernel=Native().kernel(), world=said, gate=gating() if gated else blind())
 
 
 def life(world: Live, record: Sequence[tuple] = (), *, gated: bool = False) -> str:
   """A life on the World under test, with the Kernel of this interpreter and its gate when it is gated, and the id
-  of its root. A World under test is no gate, and reading every word with ty would spend a second of the suite on
-  each of them, so it is driven by the words a model would write."""
-  return engine.boot(record, kernel=Native().kernel(), world=world.hears(), **({"gate": gating()} if gated else {}))
+  of its root. The gate of a World under test finds nothing, since reading every word with ty would spend a second
+  of the suite on each of them, so it is driven by the words a model would write."""
+  return engine.boot(record, kernel=Native().kernel(), world=world.hears(), gate=gating() if gated else blind())
 
 
 async def settle(n: int = 2000) -> None:

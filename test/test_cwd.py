@@ -1,8 +1,8 @@
 """cwd, the working directory that the paths of a chain resolve against."""
 
-from conftest import STANDS, Sand, Where, life, plain, said, settle
+from conftest import STANDS, Sand, Where, acts, life, plain, said, settle
 from furb import engine
-from furb.engine import OPERATOR, Text
+from furb.engine import Text
 
 
 async def test_the_working_directory_of_a_chain_is_the_closest_cd_back_in_its_transcript() -> None:
@@ -33,7 +33,7 @@ async def test_the_working_directory_of_a_chain_is_the_directory_of_the_standing
 
 
 async def test_the_world_resolves_the_path_of_a_read_a_write_and_a_command_against_the_working_directory() -> None:
-  """The World resolves the path of a read, a write and a command against the working directory it asks the chain for."""
+  """The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads."""
   sand = Where(files={"/x/a.txt": "two\n"}, stands=STANDS)
   _, root = life(sand)
   engine.cd("/x", on=root)
@@ -53,14 +53,10 @@ async def test_cwd_gives_the_working_directory_that_the_paths_of_the_chain_resol
   assert engine.cwd(on=root) == "/x" and engine.read("a.txt", on=root).path == "/x/a.txt"
 
 
-async def test_the_chain_answers_for_where_its_paths_resolve() -> None:
-  """The chain answers for where its paths resolve, which is the closest cd back in what it heard."""
+async def test_cwd_reads_the_transcript_of_the_chain_and_asks_nothing() -> None:
+  """cwd reads the transcript of the chain and asks nothing, so no act is made and the record keeps nothing."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
+  made, kept = list(acts(log)), list(sand.record)
   assert engine.cwd(on=root) == "/w"
-  engine.cd("/deep", on=root)
-  assert engine.cwd(on=root) == "/deep"
-  asked = [a for a in engine.asked.values() if a[0] == "cwd"]
-  assert asked == [("cwd", "cwd@operator.2", OPERATOR, root), ("cwd", "cwd@operator.4", OPERATOR, root)]
-  answered = [a for a in said(log, "done") if a[1].startswith("cwd@")]
-  assert answered == [("done", "cwd@operator.2", root, "/w"), ("done", "cwd@operator.4", root, "/deep")]
+  assert list(acts(log)) == made and sand.record == kept and said(log, "cwd") == []

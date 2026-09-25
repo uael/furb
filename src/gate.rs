@@ -84,7 +84,7 @@ mod tests {
   /// The sheet of one word after a program, and how many lines stand above the word, as `furb.sheet` writes it in
   /// the sandbox from the module of the engine, made as a life makes it.
   fn sheet(program: &[&str], word: &str) -> (String, usize) {
-    let code = "__engine = module(__source, {**MODULE})\n__sheet = module(__sheet_source, {})\n__sheet['sheet'](__engine, __program, __word)";
+    let code = "__engine = loaded(__source, {**MODULE})\n__sheet = loaded(__sheet_source, {})\n__sheet['sheet'](__engine, __program, __word)";
     let mut named = NamedValues::new();
     named.push("__source", Object::string(ENGINE));
     named.push("__sheet_source", Object::string(SOURCE));

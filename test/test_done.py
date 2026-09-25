@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, life, said, settle
+from conftest import STANDS, Sand, life, said, settle, world_says
 from furb import engine
 from furb.engine import OPERATOR, WORLD, Exit
 
@@ -15,7 +15,7 @@ async def test_what_an_act_came_to_a_done_settles_the_act_it_names() -> None:
   await act
   ends = [one for one in said(log, "done") if one[1] == act]
   assert [one[3] for one in ends] == [21]
-  assert act in engine.outcomes and (await act) == 21
+  assert engine.peek(act, ...) is not ... and (await act) == 21
 
 
 async def test_a_result_enters_the_transcript_whether_or_not_anyone_awaits_it() -> None:
@@ -24,8 +24,7 @@ async def test_a_result_enters_the_transcript_whether_or_not_anyone_awaits_it() 
   _, root = life(sand)
   act = engine.bash("echo hi", on=root)
   await settle()
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   ends = [one for one in held if one[0] == "done" and one[1] == act]
   assert [isinstance(one[3], Exit) for one in ends] == [True]
 
@@ -40,7 +39,7 @@ async def test_an_act_that_is_over_says_nothing_and_a_command_lives_on_to_answer
   await command
   await settle()
   mark = len(log)
-  engine.send("out", command, "late\n", "stdout", by=WORLD)
+  world_says("out", command, "late\n", "stdout")
   await settle()
   assert [one for one in log[mark:] if one[2] in (step, command)] == []
   assert engine.read(f"{command}/stdout", on=root).content == "ran echo hi\n"
@@ -54,17 +53,21 @@ async def test_a_done_that_an_act_said_itself_is_the_result_of_the_act() -> None
   await act
   ends = [one for one in said(log, "done") if one[1] == act]
   assert [one[2] for one in ends] == [act]
-  assert engine.peek(act, on=root) == 21
+  assert engine.peek(act) == 21
 
 
-async def test_a_done_that_names_a_question_is_the_answer_to_the_question() -> None:
-  """A done that names a question is the answer to the question."""
+async def test_a_done_that_an_ear_says_while_the_act_is_put_to_it_is_the_answer_to_the_act() -> None:
+  """A done that an ear says while the act is put to it is the answer to the act, which takes it now."""
   sand = Sand(files={"/w/a.txt": "one\n"}, stands=STANDS)
   log, root = life(sand)
   got = engine.read("a.txt", on=root)
   word = next(one for one in sand.calls if one[0] == "read")
   ends = [one for one in said(log, "done") if one[1] == word[1]]
   assert [(one[2], one[3]) for one in ends] == [(WORLD, got)]
+  command = engine.bash("echo hi", on=root)
+  await command
+  door = engine.read(f"{command}/stdout", on=root)
+  assert [one[2] for one in said(log, "done") if one[1] == "read2"] == [command] and door.content == "ran echo hi\n"
 
 
 async def test_a_kind_that_ends_when_it_is_told_to() -> None:
@@ -81,6 +84,6 @@ async def test_a_kind_that_ends_when_it_is_told_to() -> None:
   await settle()
   engine.cancel(gone)
   await settle()
-  assert isinstance(engine.outcomes[gone], CancelledError)
-  assert isinstance(engine.peek(gone, on=root), CancelledError)
+  assert isinstance(engine.peek(gone), CancelledError)
+  assert isinstance(engine.peek(gone), CancelledError)
   assert said(log, "bash") == []

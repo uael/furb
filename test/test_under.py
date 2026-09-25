@@ -19,7 +19,7 @@ async def test_whether_one_act_is_another_or_was_made_by_it_which_the_life_says(
   assert engine.under(asking, asking)
   assert engine.under(step, asking) and engine.under(command, step)
   assert not engine.under(asking, step)
-  assert (engine.acts[step][2], engine.acts[command][2]) == (asking, step)
+  assert (engine.get(step)[2], engine.get(command)[2]) == (asking, step)
 
 
 async def test_an_act_is_under_every_ancestor_of_the_act() -> None:
@@ -27,8 +27,8 @@ async def test_an_act_is_under_every_ancestor_of_the_act() -> None:
   _, asking, step, command = await made(Sand(stands=STANDS))
   assert (asking, step, command) == ("prompt1", "rung1", "bash1")
   assert engine.under(command, step) and engine.under(command, asking) and engine.under(command, command)
-  assert engine.acts[asking][2] == OPERATOR and engine.under(command, OPERATOR)
-  (merged,) = [engine.asked[name] for name in engine.asked if name.startswith("merged@")]
+  assert engine.get(asking)[2] == OPERATOR and engine.under(command, OPERATOR)
+  merged = engine.get("merged1")
   assert merged[2] == WORLD and engine.under(merged[1], WORLD) and not engine.under(merged[1], OPERATOR)
 
 
@@ -36,8 +36,7 @@ async def test_an_act_is_under_its_chain_only_when_the_chain_made_it() -> None:
   """An act is under its chain only when the chain made it: the rung of a prompt the operator made is under that prompt, and on the chain, so the maker of an act says who made it and never where it stands."""
   where, asking, step, _ = await made(Sand(stands=STANDS))
   assert engine.under(step, asking) and not engine.under(step, where)
-  _, held = engine.ask("transcript", where, where)
-  assert isinstance(held, list)
+  held = engine.transcript(where)
   assert [a[3] for a in held if a[0] == "rung" and a[1] == step] == [where]
 
 

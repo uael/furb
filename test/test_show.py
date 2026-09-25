@@ -1,6 +1,6 @@
 """Show, what says which lines of a text the engine tells."""
 
-from conftest import MANY, life, paragraphs, said, settle, sown
+from conftest import MANY, acts, life, paragraphs, said, settle, sown
 from furb import engine
 from furb.engine import HEAD, Text, differs, grep, span
 
@@ -35,7 +35,7 @@ async def test_a_show_is_no_word_of_a_fact() -> None:
   await settle()
   command = said(log, "bash")[0][1]
   assert said(log, "bash")[0][4:] == ("echo hi", False, 600.0)
-  assert [a[4:] for a in engine.asked.values() if a[0] == "read"] == [("a.txt",)]
+  assert [a[4:] for a in acts(log).values() if a[0] == "read"] == [("a.txt",)]
   assert [word for entry in sand.record for word in (*entry[0], *entry[1:]) if callable(word)] == []
   told = [one for one in paragraphs(engine.turns(on=root)) if one.startswith(("#read ", f"#{command} exited"))]
   assert told == [

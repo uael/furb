@@ -45,12 +45,12 @@ async def test_what_a_prompt_names_is_one_of_these_names_and_one_effort_of_that_
   log, root = life(sand)
   right = engine.prompt(int, "hi", to="m/high", on=root)
   await settle()
-  assert engine.peek(right) is None and [a[4] for a in said(log, "ask")] == ["m/high"]
+  assert engine.peek(right) is None and [a[4] for a in said(log, "reply")] == ["m/high"]
   ghost = engine.prompt(int, "hi", to="ghost/low", on=root)
   engine.cancel(right)
   await settle()
   assert isinstance(engine.peek(ghost), Refused)
-  assert [a[4] for a in said(log, "ask")] == ["m/high"]
+  assert [a[4] for a in said(log, "reply")] == ["m/high"]
 
 
 async def test_an_actor_takes_an_effort_of_its_own_and_any_actor_takes_the_effort_that_is_not_named() -> None:
@@ -60,7 +60,7 @@ async def test_an_actor_takes_an_effort_of_its_own_and_any_actor_takes_the_effor
   for to in ("m/low", "m/high", "m", "n"):
     sand.script[root] = ["close(1)"]
     assert await engine.prompt(int, "hi", to=to, on=root) == 1
-  assert [a[4] for a in said(log, "ask")] == ["m/low", "m/high", "m", "n"]
+  assert [a[4] for a in said(log, "reply")] == ["m/low", "m/high", "m", "n"]
   wrong = engine.prompt(int, "hi", to="n/high", on=root)
   await settle()
   assert isinstance(engine.peek(wrong), Refused)

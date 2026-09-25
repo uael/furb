@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     def chance(self) -> float: ...
     def read(self, here: str, path: str) -> object: ...
     def write(self, here: str, path: str, content: str) -> object: ...
-    def ask(self, rung: str, on: str, actor: str, turns: list) -> None: ...
+    def reply(self, about: str, on: str, actor: str, turns: list) -> None: ...
     def run(self, about: str, here: str, command: str, fed: bool, timeout: float | None, merged: bool) -> None: ...
     def wait(self, about: str, seconds: float) -> None: ...
     def prompt(self, about: str, shape: str, message: str) -> None: ...
@@ -83,6 +83,9 @@ MODULE: dict[str, object] = {
 word reads them in a chain as it reads them in python, and as the gate reads them. No loader made the module here, so
 it has no spec and no loader. Python binds `__debug__` among its builtins, and the sandbox binds it in its main module
 alone."""
+RUNNING: dict[str, list] = {}
+"""RUNNING holds each command the World runs, by its act: whether its stderr flows into its stdout, and its two
+streams as they came, of which the World makes the Exit it answers the command with when the host says it ended."""
 MADE: dict[int, object] = {}
 """MADE holds every callable the engine made and every class a word defined that crossed to the host, by its
 handle, which is its identity, for as long as the host holds the handle: the host says when it forgot one, and it
@@ -206,14 +209,12 @@ def again(x: object, names: Names, ears: Ears) -> object:
 def worldly(world: World, names: Names, ears: Ears) -> Ear:
   """The World as the engine hears it, over the World as a host has it.
 
-  It answers where it can: what a chain stands on, the clock, a chance, a read and a write, each after asking the
-  chain where its paths resolve. It starts what takes time, a model's turn, a command, a wait, a prompt of the
-  operator, and the host says the result into the life later, as the fact the engine waits for. It feeds a command
-  and ends every command a control is over, and it keeps what the journal says to keep.
+  It answers where it can: what the chains stand on, the clock, a chance, a read and a write, each after asking the
+  chain where its paths resolve. It takes what takes time, a reply, a command, a wait, a prompt to the operator,
+  with a started, and the host says what it came to into the life later. It keeps the streams of a command, feeds
+  it and ends every command a control is over, and it keeps what the journal says to keep.
   """
-  cwd, ask, acts, covers = verb(names, "cwd"), verb(names, "ask"), names["acts"], verb(names, "covers")
-  assert isinstance(acts, dict)
-  running: set[str] = set()
+  cwd, ask, covers, turns = verb(names, "cwd"), verb(names, "ask"), verb(names, "covers"), verb(names, "turns")
 
   def at(on: str) -> str:
     here = cwd(on=on)
@@ -232,26 +233,29 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
         yield "done", qid, again(world.read(at(on), path), names, ears)
       case ("write", qid, _, on, text):
         yield "done", qid, again(world.write(at(on), text.path, text.content), names, ears)
-      case ("ask", rung, _, on, actor, turns):
-        world.ask(rung, on, actor, turns)
-      case ("start", about, _):
-        match acts[about]:
-          case ("bash", _, _, on, command, fed, timeout):
-            running.add(about)
-            merged = ask("merged", on, about)
-            assert isinstance(merged, tuple)
-            world.run(about, at(on), command, fed, timeout, bool(merged[1]))
-          case ("wait", _, _, _, seconds):
-            world.wait(about, seconds)
-          case ("prompt", _, _, _, shape, message, _):
-            world.prompt(about, shape, message)
-      case ("feed", about, _, text) if about in running:
+      case ("reply", about, _, on, actor):
+        yield "started", about
+        now = turns(on=on)
+        assert isinstance(now, list)
+        world.reply(about, on, actor, now)
+      case ("bash", about, _, on, command, fed, timeout):
+        yield "started", about
+        merged = bool(ask("merged", on, about))
+        RUNNING[about] = [merged, "", ""]
+        world.run(about, at(on), command, fed, timeout, merged)
+      case ("wait", about, _, _, seconds):
+        yield "started", about
+        world.wait(about, seconds)
+      case ("prompt", about, _, _, shape, message, _):
+        yield "started", about
+        world.prompt(about, shape, message)
+      case ("out", about, _, text, stream) if about in RUNNING:
+        RUNNING[about][1 if RUNNING[about][0] or stream == "stdout" else 2] += text
+      case ("feed", about, _, text) if about in RUNNING:
         world.feed(about, text)
-      case ("exited", about, *_):
-        running.discard(about)
       case ("cancel" | "close", *_) as fact:
-        for one in [x for x in running if covers(fact, x)]:
-          running.discard(one)
+        for one in [x for x in RUNNING if covers(fact, x)]:
+          RUNNING.pop(one)
           world.slay(one)
       case ("keep", _, _, entry):
         world.keep(entry)
@@ -311,77 +315,97 @@ def ran_in(word: str, rung: str, module: dict[str, object]) -> object:
 class Running:
   """The runs of one life: the word of each rung that stands.
 
-  A run is begun in the globals of its chain and carried forward at the done of every act its word waits for, and
-  what it says it says under the name of its rung, which is what makes a fact of the word the rung's own.
+  The Kernel takes a run as that run, and begins its word when it hears that it took it, in the globals of its chain
+  and as its rung, which is what makes a fact of the word the rung's own. When the word waits for an act that is not
+  done, it makes a wants as the run, and carries the word forward at the done of that wants. It says the run done,
+  as the run, with what the word gave.
   """
 
   def __init__(self, names: Names) -> None:
-    site, outcomes, modules = names["site"], names["outcomes"], names["modules"]
+    site = names["site"]
     assert isinstance(site, ContextVar)
-    assert isinstance(outcomes, dict)
-    assert isinstance(modules, dict)
     self.site: ContextVar[str] = site
-    self.outcomes: dict[str, object] = outcomes
-    self.modules: dict[str, dict[str, object]] = modules
     # A name of the engine is read at each use and never held: boot binds the bus into the engine itself, and a
     # rebound name is used from the next use on, so a verb kept here would be the one that stood before it.
     self.names = names
     self.frames: dict[str, Coroutine[object, object, object]] = {}
+    self.taken: set[str] = set()
+    self.waits: dict[str, str] = {}
 
-  def ended(self, rung: str, got: BaseException | None) -> None:
-    """The run is over, and what it came to goes to the chain that had it run."""
-    self.frames.pop(rung, None)
-    verb(self.names, "send")("ran", rung, got, by=rung)
+  def of(self, run: str) -> tuple:
+    """The run, as the life holds it: its chain, its rung and its word, among its words."""
+    got = verb(self.names, "get")(run)
+    assert isinstance(got, tuple)
+    return got
 
-  def carry(self, rung: str, sent: object) -> None:
-    """The run stepped with what it waited for, and stepped again while what it waits for is over already."""
-    token = self.site.set(rung)
-    try:
+  def took(self, run: str) -> None:
+    """The run, taken as that run, which is what the Kernel says of it first."""
+    with self.site.set(run):
+      verb(self.names, "say")("started", run)
+    self.taken.add(run)
+
+  def ended(self, run: str, got: BaseException | None) -> None:
+    """The word is over, and the run is done with what the word gave, as that run."""
+    self.frames.pop(run, None)
+    with self.site.set(run):
+      verb(self.names, "say")("done", run, got)
+
+  def carry(self, run: str, given: object) -> None:
+    """The word stepped as its rung with what it waited for, and stepped again while what it waits for is done."""
+    peek = verb(self.names, "peek")
+    with self.site.set(str(self.of(run)[4])):
       while True:
         try:
-          frame = self.frames[rung]
-          got = frame.throw(sent) if isinstance(sent, BaseException) else frame.send(sent)
+          frame = self.frames[run]
+          got = frame.throw(given) if isinstance(given, BaseException) else frame.send(given)
           # A rung awaits an act and nothing else, so anything else is refused where the word waited.
           while not isinstance(got, str):
             got = frame.throw(self.refusal(got))
         except StopIteration:
-          return self.ended(rung, None)
+          return self.ended(run, None)
         except BaseException as raised:
-          return self.ended(rung, raised)
-        if got not in self.outcomes:
-          verb(self.names, "send")("wants", rung, got, by=rung)
+          return self.ended(run, raised)
+        if peek(got, ...) is ...:
+          with self.site.set(run):
+            wants = verb(self.names, "act")("wants", "", None, got)
+          assert isinstance(wants, str)
+          self.waits[wants] = run
           return None
-        sent = self.outcomes[got]
-    finally:
-      self.site.reset(token)
+        given = peek(got)
 
   def refusal(self, got: object) -> BaseException:
     made = verb(self.names, "Refused")(f"a rung awaits an act, and {got!r} is none")
     assert isinstance(made, BaseException)
     return made
 
-  def begin(self, rung: str, chain: str, word: str) -> None:
-    """A run begun: the word runs in the globals of its chain, and one that awaits nothing is over where it began."""
-    token = self.site.set(rung)
+  def begin(self, run: str) -> None:
+    """A word begun as its rung: it runs in the globals of its chain, and one that awaits nothing is over where it
+    began. A rung that is done already begins no word."""
+    _, _, _, chain, rung, word, *_ = self.of(run)
+    self.taken.discard(run)
+    if verb(self.names, "peek")(rung, ...) is not ...:
+      return None
+    module = verb(self.names, "module")(chain)
+    assert isinstance(module, dict)
     try:
-      ran = ran_in(word, rung, self.modules[chain])
+      with self.site.set(str(rung)):
+        ran = ran_in(str(word), str(rung), module)
     except BaseException as raised:
-      return self.ended(rung, raised)
-    finally:
-      self.site.reset(token)
+      return self.ended(run, raised)
     if not isinstance(ran, Coroutine):
-      return self.ended(rung, None)
-    self.frames[rung] = ran
-    return self.carry(rung, None)
+      return self.ended(run, None)
+    self.frames[run] = ran
+    return self.carry(run, None)
 
   def dropped(self, about: str) -> None:
-    """Every run a control is over, dropped: the frame of a word that is mid step is never closed."""
+    """Every run whose rung a control is over, dropped: the frame of a word that is mid step is never closed."""
     under = verb(self.names, "under")
-    for one in [x for x in self.frames if under(x, about) and not getattr(self.frames[x], "cr_running", False)]:
-      self.frames[one].close()
-      got = verb(self.names, "CancelledError")()
-      assert isinstance(got, BaseException)
-      self.ended(one, got)
+    for one in [x for x in self.frames if under(self.of(x)[4], about)]:
+      if not getattr(self.frames[one], "cr_running", False):
+        self.frames[one].close()
+        got = verb(self.names, "CancelledError")()
+        assert isinstance(got, BaseException)
+        self.ended(one, got)
 
 
 def gating(gate: Gate, sheet: Names, engine: Names) -> Ear:
@@ -398,26 +422,32 @@ def gating(gate: Gate, sheet: Names, engine: Names) -> Ear:
 
   while True:
     match (yield):
-      case ("gate", qid, _, _, word, program):
+      case ("gate", qid, _, on, word):
+        program = verb(engine, "program")(on)
+        assert isinstance(program, dict)
         yield "done", qid, verb(sheet, "gate")(engine, [*program.values()], word, checked)
 
 
 def kernel(names: Names) -> Ear:
-  """The Kernel: it runs the word of a rung in the module of its chain, and carries the run at every done."""
+  """The Kernel: it takes each run, begins its word when it hears that it took it, and carries the word at the done
+  of each wants it made."""
   held = Running(names)
   while True:
     match (yield):
-      case ("run", rung, _, chain, word, _):
+      case ("run", run, *_):
         # This Kernel runs every word, retold or not, so it reads no donor off the run.
-        held.begin(rung, chain, word)
-      case ("sent", rung, _, value) if rung in held.frames:
-        held.carry(rung, value)
+        held.took(run)
+      case ("started", run, *_) if run in held.taken:
+        held.begin(run)
+      case ("done", wants, _, value) if wants in held.waits:
+        held.carry(held.waits.pop(wants), value)
       case ("cancel" | "close", about, *_):
         held.dropped(about)
 
 
-def module(source: str, held: dict[str, object]) -> dict[str, object]:
-  """One module of its own, from its source, run in what it holds before: a namespace nothing else shares."""
+def loaded(source: str, held: dict[str, object]) -> dict[str, object]:
+  """One module of its own, from its source, run in what it holds before: a namespace nothing else shares, under a
+  name the engine binds to nothing, since a word of the host reads the names of the preamble beside the engine's."""
   exec(source, held)  # noqa: S102
   return held
 
@@ -434,6 +464,7 @@ def opened(
   of a run what it was answered.
   """
   MADE.clear()
+  RUNNING.clear()
   kept = again(record, engine, ears)
   assert isinstance(kept, list)
   entries = [(tuple(e[0]), *e[1:]) for e in kept]
@@ -446,9 +477,7 @@ def opened(
   except BaseException as no:
     # What boot raised comes out of the entry the operator went in by, and the life goes on: a drift breaks the
     # journal and keeps nothing more, so the root stands when the record held it.
-    acts = engine["acts"]
-    assert isinstance(acts, dict)
-    return ("chain1" if "chain1" in acts else "", no)
+    return ("chain1" if verb(engine, "get")("chain1") is not None else "", no)
   return (str(root), None)
 
 
@@ -476,11 +505,9 @@ def forgotten(n: int) -> None:
 
 
 def asked(engine: Names, ears: Ears, which: str, args: list, kwargs: dict) -> object:
-  """What an ear of the host asks of the life from a thread of its own, answered here on its behalf: a reading of a
-  map, who speaks, or a verb of the engine."""
+  """What an ear of the host asks of the life from a thread of its own, answered here on its behalf: who speaks,
+  or a verb of the engine."""
   match which:
-    case "held":
-      return held(engine, *args)
     case "spoken":
       return spoken(engine, *args)
     case "made":
@@ -488,32 +515,11 @@ def asked(engine: Names, ears: Ears, which: str, args: list, kwargs: dict) -> ob
   return called(engine, ears, which, args, kwargs)
 
 
-def held(engine: Names, name: str, keys: list, ask: str) -> object:
-  """One reading of a map of the life where it stands, under these keys: whether a key is held, the keys, how
-  many, or the value, which is what a host reads of `acts`, `asked`, `outcomes` and `modules`."""
-  table = engine[name]
-  for key in keys[:-1] if ask in ("in", "at") else keys:
-    assert isinstance(table, dict)
-    table = table[key]
-  assert isinstance(table, dict)
-  match ask:
-    case "in":
-      return keys[-1] in table
-    case "at":
-      return outward(table[keys[-1]], engine)
-    case "keys":
-      return list(table)
-    case "len":
-      return len(table)
-  raise KeyError(ask)
-
-
 def outcomes_of(engine: Names, ids: list) -> list:
   """What each of these acts came to, in one reading: what it came to, alone in a tuple, or nothing for an act
   that lives, so that an act that came to nothing is told apart from one that is not done."""
-  outcomes = engine["outcomes"]
-  assert isinstance(outcomes, dict)
-  return [(outward(outcomes[one], engine),) if one in outcomes else None for one in ids]
+  peek = verb(engine, "peek")
+  return [None if (got := peek(one, ...)) is ... else (outward(got, engine),) for one in ids]
 
 
 def spoken(engine: Names, value: object) -> str:
@@ -549,13 +555,24 @@ def debugged(engine: Names, ears: Ears, pairs: list) -> None:
 
 
 def said(engine: Names, ears: Ears, one: object) -> None:
-  """One thing the World said unasked, said into the life: a fact as the World, a close of an act, or a pause.
+  """One thing the World said unasked, said into the life: a fact as the World, the end of a command, which the
+  World answers with the Exit of the streams it kept, a close of an act, or a pause.
 
-  A saying has no slot for who said it: the bus says that, as it does for what an ear yields.
+  A saying has no slot for who said it: the World is the one that speaks.
   """
+  site = engine["site"]
+  assert isinstance(site, ContextVar)
   match again(one, engine, ears):
     case ("fact", (str(kind), str(about), *words)):
-      verb(engine, "send")(kind, about, *words, by="world")
+      with site.set("world"):
+        verb(engine, "say")(kind, about, *words)
+    case ("exited", str(about), code) if about in RUNNING:
+      _, out, err = RUNNING.pop(about)
+      text = verb(engine, "Text")
+      with site.set("world"):
+        verb(engine, "say")(
+          "done", about, verb(engine, "Exit")(code, text(f"{about}/stdout", out), text(f"{about}/stderr", err))
+        )
     case ("close", str(id), value):
       verb(engine, "close")(value, id)
     case ("pause", str(id)):

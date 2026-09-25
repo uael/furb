@@ -1,8 +1,8 @@
 """Exit, what a command came to."""
 
-from conftest import STANDS, Sand, life, said
+from conftest import STANDS, Sand, life, said, world_says
 from furb import engine
-from furb.engine import TAIL, WORLD, Exit, Text
+from furb.engine import TAIL, Exit, Text
 
 
 async def test_what_a_command_came_to_its_code_and_each_of_its_streams_as_a_text() -> None:
@@ -10,9 +10,9 @@ async def test_what_a_command_came_to_its_code_and_each_of_its_streams_as_a_text
   sand = Sand(stands=STANDS, auto=False)
   _, root = life(sand)
   act = engine.bash("run", show_err=TAIL, on=root)
-  engine.send("out", act, "out\n", "stdout", by=WORLD)
-  engine.send("out", act, "err\n", "stderr", by=WORLD)
-  engine.send("exited", act, 3, by=WORLD)
+  world_says("out", act, "out\n", "stdout")
+  world_says("out", act, "err\n", "stderr")
+  sand.exits(act, 3)
   got = await act
   assert list(vars(got)) == ["code", "stdout", "stderr"]
   assert got == Exit(3, Text(f"{act}/stdout", "out\n"), Text(f"{act}/stderr", "err\n"))
@@ -25,7 +25,7 @@ async def test_an_exit_is_the_value_that_a_command_completes_with() -> None:
   got = await engine.bash("echo hi", on=root)
   command = said(log, "bash")[0][1]
   assert isinstance(got, Exit) and got.code == 0
-  assert engine.peek(command, on=root) == got
+  assert engine.peek(command) == got
 
 
 async def test_the_streams_of_an_exit_are_its_stdout_and_its_stderr_each_a_text() -> None:

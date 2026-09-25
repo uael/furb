@@ -23,7 +23,7 @@ async def test_what_an_ear_says() -> None:
   engine.drive(note(), "note")
   saying, fact = kept
   assert saying == ("tell", "chain1", ["#chain1 noted"])
-  assert fact == ("tell", "chain1", "note", ["#chain1 noted"]) == log[-1]
+  assert fact == ("tell", "chain1", "note", ["#chain1 noted"]) == [a for a in log if a[0] != "keep"][-1]
   assert len(fact) == len(saying) + 1 and fact[2] == "note"
   act = engine.bash("echo hi", on=root)
   opened = next(one for one in said(log, "tell") if one[1] == act)

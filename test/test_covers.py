@@ -2,6 +2,7 @@
 
 from conftest import STANDS, Sand, life, said, settle
 from furb import engine
+from furb.engine import OPERATOR
 
 
 async def test_whether_a_control_is_over_an_act() -> None:
@@ -13,11 +14,7 @@ async def test_whether_a_control_is_over_an_act() -> None:
   await settle()
   step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
   mine = engine.bash("mine", on=root)
-  engine.close(21, act)
-  engine.cancel(act)
-  engine.cancel(root)
-  await settle()
-  shut, over, whole = said(log, "close")[0], said(log, "cancel")[0], said(log, "cancel")[1]
+  shut, over, whole = ("close", act, OPERATOR, 21, []), ("cancel", act, OPERATOR, []), ("cancel", root, OPERATOR, [])
   assert [engine.covers(shut, one) for one in (act, step, command, mine)] == [True, True, False, False]
   assert [engine.covers(over, one) for one in (act, step, command, mine)] == [True, True, True, False]
   assert [engine.covers(whole, one) for one in (act, step, command, mine)] == [True, True, True, True]

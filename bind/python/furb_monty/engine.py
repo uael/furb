@@ -3,9 +3,9 @@
 The engine of this interpreter is `furb.python`, and this module gives the same names over one life of that engine
 running in the sandbox of monty with the Kernel of the crate. A name that reads no life is the engine's own: a
 constant, a class, a show or a filter, and the pure functions. A verb says itself in the sandbox by its name with
-its words, and what it gave comes back as the instance of `furb.python` it is. `acts`, `asked`, `outcomes` and
-`modules` are read where they stand, and `site` says who speaks there. An act is awaited for what it comes to,
-which the life says once, when it is done.
+its words, and what it gave comes back as the instance of `furb.python` it is, which is how `get`, `peek` and
+`transcript` read the life too, and `site` says who speaks there. An act is awaited for what it comes to, which
+the life says once, when it is done.
 
 A generator of this interpreter, which a World is, is heard from the sandbox on a thread of its own, since a World
 reads the engine while it answers and nothing may call into a life that stands waiting for it: a verb the thread
@@ -18,11 +18,12 @@ and an instance of one is an object of that type holding its fields, which goes 
 
 import ast
 import asyncio
+import contextvars
 import inspect
 import queue
 import threading
 import weakref
-from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterable
 from pathlib import Path
 
 import furb
@@ -34,11 +35,9 @@ NAMES = vars(python)
 """NAMES are the names of the engine of this interpreter."""
 PURE = frozenset({
   "span", "grep", "differs", "HEAD", "TAIL", "HIDDEN",
-  "question", "headed", "commented", "bound", "showing", "shown", "turns_of", "unquoted", "offered", "ended", "idle",
+  "question", "headed", "commented", "bound", "showing", "shown", "unquoted", "offered", "ended", "idle",
 })  # fmt: skip
 """PURE are the callables of the engine that read no life, so the engine of this interpreter answers them."""
-HELD = ("modules", "acts", "asked", "outcomes")
-"""HELD are the maps of the life, which stand in the sandbox and are read there."""
 ACTS = frozenset({"wait", "rung", "prompt", "chain", "grant", "bash", "act"})
 """ACTS are the verbs that give an act, whose name comes back as the act it names."""
 END = object()
@@ -49,11 +48,17 @@ FORGOTTEN: list[int] = []
 """FORGOTTEN holds the handles of the callables the engine made and of the classes a word defined that this
 interpreter dropped since the life last heard of them, which the next verb of the operator says into the sandbox,
 so the sandbox drops them too."""
+MADE: weakref.WeakValueDictionary[int, Callable[..., object]] = weakref.WeakValueDictionary()
+"""MADE holds every callable the engine made that crossed to this interpreter, by its handle, as the one function
+this interpreter calls it by, for as long as this interpreter holds that function, so a callable read twice is one."""
 CLASSES: weakref.WeakValueDictionary[int, type] = weakref.WeakValueDictionary()
 """CLASSES holds every class a word defined that crossed to this interpreter, by its handle, as the type this
 interpreter holds it as, for as long as this interpreter holds that type."""
 LIFE: Living | None = None
 """LIFE is the life this process holds, and a second boot ends it."""
+SPEAKER: contextvars.ContextVar[str | None] = contextvars.ContextVar("speaker", default=None)
+"""SPEAKER is the ear of this interpreter whose work speaks, on the thread of that ear and in the work it began there,
+which keeps the context it was begun in, so a verb that work says later is said by that ear."""
 
 
 def living() -> Living:
@@ -76,20 +81,17 @@ def call(name: str, args: tuple, kwargs: dict[str, object]) -> object:
   life = living().life
   while FORGOTTEN:
     life.forget(FORGOTTEN.pop())
-  return life.verb(name, list(args), dict(kwargs))
-
-
-def stands(name: str, under: list[str], ask: str) -> object:
-  """One reading of a map of the life where it stands, under these keys. From the thread of a generator it is
-  asked of the sandbox as a verb is; from anywhere else the life answers it."""
-  held = getattr(LOCAL, "crossing", None)
-  if held is not None:
-    return held.calls("held", [name, under, ask], {})
-  return living().life.held(name, under, ask)
+  if (who := SPEAKER.get()) is None:
+    return life.verb(name, list(args), dict(kwargs))
+  before = life.site(who)
+  try:
+    return life.verb(name, list(args), dict(kwargs))
+  finally:
+    life.site(before)
 
 
 def speaks(value: str | None) -> str:
-  """Who speaks in the life, and who speaks from now on when a value is given, read as a map of the life is."""
+  """Who speaks in the life, and who speaks from now on when a value is given."""
   held = getattr(LOCAL, "crossing", None)
   got = held.calls("spoken", [value], {}) if held is not None else living().life.site(value)
   assert isinstance(got, str)
@@ -106,7 +108,8 @@ class Crossing:
   doors, and its value wakes the thread.
   """
 
-  def __init__(self, gen: Generator[tuple | None, tuple]) -> None:
+  def __init__(self, name: str, gen: Generator[tuple | None, tuple]) -> None:
+    self.name = name
     self.gen = gen
     self.inbox: queue.Queue[object] = queue.Queue()
     self.outbox: queue.Queue[object] = queue.Queue()
@@ -117,13 +120,17 @@ class Crossing:
     threading.Thread(target=self.serve, daemon=True).start()
 
   def stepped(self, sent: object) -> object:
-    """One step of the generator with what it was given, and what came of it, as the sandbox reads a reply."""
+    """One step of the generator with what it was given, as the ear it hears by, and what came of it, as the
+    sandbox reads a reply."""
+    token = SPEAKER.set(self.name)
     try:
       out = self.gen.send(sent) if isinstance(sent, tuple) else next(self.gen)
     except StopIteration:
       return ("over",)
     except BaseException as no:
       return ("raised", no)
+    finally:
+      SPEAKER.reset(token)
     return None if out is None else ("say", tuple(out))
 
   def serve(self) -> None:
@@ -170,7 +177,7 @@ class Living:
   """One life of the engine in the sandbox, and the ears of this interpreter it hears, by name."""
 
   def __init__(self, outside: dict[str, Generator[tuple | None, tuple]]) -> None:
-    self.crossings = {name: Crossing(gen) for name, gen in outside.items()}
+    self.crossings = {name: Crossing(name, gen) for name, gen in outside.items()}
     self.callables: dict[str, Callable[..., object]] = {}
     self.life: _monty.Life | None = None
 
@@ -179,7 +186,7 @@ class Living:
     started already, so that its stand-in stands where it stands. The door makes the mark the engine reads."""
     name = f"ear:{len(self.crossings)}"
     started = inspect.getgeneratorstate(gen) != inspect.GEN_CREATED
-    self.crossings[name] = Crossing(gen)
+    self.crossings[name] = Crossing(name, gen)
     return name, started
 
   def callable(self, fn: Callable[..., object]) -> str:
@@ -221,6 +228,8 @@ def calling(n: int, args: tuple[object, ...], kwargs: dict[str, object]) -> obje
 def made(n: int) -> Callable[..., object]:
   """One callable the engine made, as this interpreter calls it: by its handle, which it carries as `__monty__`, so
   that it goes back in as the callable it is and never as a callable of this interpreter."""
+  if (held := MADE.get(n)) is not None:
+    return held
 
   def back(*args: object, **kwargs: object) -> object:
     return calling(n, args, kwargs)
@@ -228,6 +237,7 @@ def made(n: int) -> Callable[..., object]:
   vars(back)["__monty__"] = n
   # When this interpreter drops the last reference, the handle is forgotten at the next verb of the operator.
   weakref.finalize(back, FORGOTTEN.append, n)
+  MADE[n] = back
   return back
 
 
@@ -287,44 +297,6 @@ class Act[T = object](str):
     return got
 
 
-class Held(Mapping[str, object]):
-  """One map of the life, read where it stands: nothing is copied, and every read is one reading."""
-
-  def __init__(self, name: str, under: tuple[str, ...] = ()) -> None:
-    self.name = name
-    self.under = under
-
-  def __getitem__(self, key: str) -> object:
-    if key not in self:
-      raise KeyError(key)
-    return stands(self.name, [*self.under, key], "at")
-
-  def __contains__(self, key: object) -> bool:
-    return bool(stands(self.name, [*self.under, str(key)], "in"))
-
-  def __iter__(self) -> Iterator[str]:
-    got = stands(self.name, list(self.under), "keys")
-    assert isinstance(got, list)
-    return iter(got)
-
-  def __len__(self) -> int:
-    got = stands(self.name, list(self.under), "len")
-    assert isinstance(got, int)
-    return got
-
-  def __repr__(self) -> str:
-    return f"{self.name} of the life"
-
-
-class Modules(Held):
-  """The module of every chain of the life, each read where it stands, since a module holds what no host reads."""
-
-  def __getitem__(self, key: str) -> Held:
-    if key not in self:
-      raise KeyError(key)
-    return Held(self.name, (*self.under, key))
-
-
 class Site:
   """Who is speaking in the life, read and set where it stands: a set gives back what stood before it, and a reset
   puts that back, which is what a token of a context variable does within one context."""
@@ -366,6 +338,9 @@ def worded(name: str) -> Callable[..., object]:
 
   def verb(*args: object, **kwargs: object) -> object:
     got = call(name, args, kwargs)
+    if name == "drive":
+      # The generator hears by the name drive gave it, so its work speaks by that name.
+      next(one for one in living().crossings.values() if one.gen is args[0]).name = str(args[1])
     return Act(got) if name in ACTS and isinstance(got, str) else got
 
   verb.__name__ = verb.__qualname__ = name
@@ -392,9 +367,7 @@ for _name in defined():
   if _name in ("boot", "Act"):
     continue
   _held = NAMES[_name]
-  if _name in HELD:
-    globals()[_name] = Modules(_name) if _name == "modules" else Held(_name)
-  elif _name == "site":
+  if _name == "site":
     globals()[_name] = Site()
   elif _name in PURE or isinstance(_held, type) or not callable(_held):
     globals()[_name] = _held

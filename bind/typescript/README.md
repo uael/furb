@@ -1,7 +1,7 @@
 # furb for TypeScript
 
-The same Rust crate and Monty sandbox, through N-API. Queries and controls are synchronous. An `Act` has an
-`id`, converts to its name as a string, and can be awaited. Its Promise resolves with its outcome or rejects
+The same Rust crate and Monty sandbox, through N-API. Views, queries and controls are synchronous. An `Act` has
+an `id`, converts to its name as a string, and can be awaited. Its Promise resolves with its outcome or rejects
 with an error that names the engine's fault. A TUI is not part of this package.
 
 From the repository root:
@@ -34,7 +34,7 @@ const session = boot({
 });
 try {
   const { life } = session;
-  console.log(life.cwd()); // A synchronous query.
+  console.log(life.cwd()); // A synchronous view.
   const work = life.prompt<string>("str", "What is this project?");
   console.log(work.id);
   const answer = await work;
@@ -52,9 +52,9 @@ which is the first of the roster when unsaid; a World given neither offers the o
 that names no actor goes to the operator. A name without its provider routes to the one model of that id, by
 the rule that `modelNamed(models, name)` gives a host. A
 reopened World offers what its host names now. It keeps the model and the effort that the host chose last, and
-takes that model when the host names none and the World holds it. The record keeps the standing that each chain
-was lived on, and the later life tells each chain whose standing changed with a `stood`. Configure an API
-provider through its pi-ai credentials.
+takes that model when the host names none and the World holds it. The record keeps each stand and what the World
+answered it, and every life stands again as it opens, so a later life tells the new standing on each chain whose
+standing changed. Configure an API provider through its pi-ai credentials.
 
 The Claude CLI provider, `claudeProvider` from `@furb/engine/claude`, is a pi-ai provider that a host adds to
 its collection at run time. It follows the pooled session design in [dirt](https://github.com/uael/dirt/tree/main/packages/cli/src/providers).
@@ -81,9 +81,9 @@ Pass `answer` to replace only model requests, or `operator` to supply operator a
 the models that `answer` stands in for, and a World given `answer` and no model is refused, since every prompt
 would go to the operator. With no `operator`, questions stand in `world.prompts`; call `world.answer(id, text)`
 to parse and validate an answer. `world` emits `change` and `facts`; `fault` reports a failure to deliver an
-outside result. `world.facts` holds the facts of the life but the answers to the queries that the host asks
-outside a rung, which no record keeps either, so a listener that asks the life hears no change of its own. A
-failed outside act carries its refusal in the record. A `Keep` writes and syncs one complete record entry
+outside result. `world.facts` holds every fact of the life, every act among them, since the World drives the
+ear that keeps them as an ear of the engine. A view reads the life and says nothing, so a listener that reads the
+life hears no change of its own. A failed outside act carries its refusal in the record. A `Keep` writes and syncs one complete record entry
 before it returns. The engine phrases every turn as python, so the World renders nothing. A turn is its role,
 its python, its usage and the blocks of its provider, as `life.turns(chain)` gives it. The World hands a
 provider the python of each user turn as it is, and no user turn that holds nothing, and the `answer` callback
@@ -98,15 +98,18 @@ Pass `world` to `boot` to replace the whole World. It receives these operations:
 | Write | directory, path, content | `{path, content}` |
 | Clock, Chance | none | number |
 | Keep | entry | nothing |
-| Ask | rung, chain, actor, turns | Promise of a turn |
-| Run | `{id, here, command, fed, timeout, merged}` | nothing; send out/exited later |
+| Reply | reply id, rung, chain, actor, turns | Promise of a turn |
+| Run | `{id, here, command, fed, timeout, merged}` | nothing; say out later, then `exited` |
 | Feed | command id, text or null | nothing |
 | Slay | command id | nothing |
 | Wait | seconds, act id | Promise that resolves when time passes |
 | Prompt | id, shape, message | Promise of an operator answer |
 
 Stand, Read, Write, Clock, Chance, Keep, Run, Feed, and Slay answer synchronously. They must not call back
-into the same life. For a World that needs nested engine queries, use `Ears`: its generators yield a saying
+into the same life. The World takes a reply, a command, a wait and a prompt to the operator with a started, and
+says each done when it ends. A command says what it writes through `session.adapter.say("out", id, [text,
+stream])`, and its end through `session.adapter.exited(id, code)`, which says it done with the Exit of the
+streams it heard. For a World that needs nested engine queries, use `Ears`: its generators yield a saying
 `[kind, id, ...words]`, a call `{verb, args, kwargs}`, or nothing. A yielded call is answered before the ear
 continues, as in the Python binding. `Ears.callable` carries a JavaScript show or filter into the engine,
 from the `Ears` the life boots on: `world.ears` for the supplied World, and `session.ears` from `boot`.
@@ -127,9 +130,8 @@ JavaScript holds it rounded: send a BigInt, or the `int` form above. A BigInt pa
 as its digits in a string. `inspect(name, chain)` also gives the Python type and representation of a value.
 
 Records preserve integral floats as `{"is":"float","args":["1"]}`. The native record reader checks integer
-precision before JavaScript can round a number. A query of a rung enters the record with its answer, and a
-query that the host asks outside a rung enters none. To keep a program edit across a later open, perform its
-`write` in a `rung`.
+precision before JavaScript can round a number. Every act the host makes enters the record, a query among them, and
+a later life makes it again at its place. A view enters nothing.
 
 A record whose replay drifts gives a life all the same, and `life.raised` holds the drift; that life keeps
 nothing more. `World.open` refuses such a record with the drift.
@@ -139,12 +141,13 @@ when the process ends, so a lease of a process that ended never blocks an open. 
 with the record, and a process that locked the moved file opens the path again. On Windows the lock also refuses
 a read of the file by any other handle; the file holds no text, and nothing reads it. A torn final line is removed
 before an append; a damaged complete line fails.
-The record keeps a command, a wait and a prompt to the operator from its start, and a rung from its ask. What
-it shows begun and not done is pending in a later life: the engine starts none of it, and asks for no rung of
-it, until a wake that this life says. `world.pending` holds that work, and `world.resume()` says a wake of each
+The record keeps a command, a wait, a prompt to the operator and a reply from the started of the World. What it
+shows started and not done is pending in a later life: the engine starts none of it until a wake that this life
+says. `world.pending` holds that work, and `world.resume()` says a wake of each
 chain that holds some. Work that a pause of the operator holds is not in `world.pending`, and it waits for the
-wake of the operator. A command that an earlier World started and did not end runs again at that wake, once,
-and what it told before stands in its door. Wait deadlines and partial streams live in the record's
+wake of the operator. A command that an earlier World started and did not end runs again at that wake, once;
+what it told before stands in its door until then, and it is answered with the streams of the process it runs
+again. Wait deadlines and partial streams live in the record's
 `.world.json` companion. File snapshots append to `.changes.jsonl`; `world.changes.read` loads a page of them.
 Keep both companions with the JSONL record. The World saves `.world.json` whole with `saveFile(path, text)`,
 which writes `<path>.tmp` and gives it the name of the file. A save that fails throws an error that names the file,
@@ -152,8 +155,9 @@ with the error of the system as its cause. The TUI saves its own files with it.
 
 `inspectRecord(path, models)` reads pending work through the same native replay without taking a record lock,
 writing files, or starting a model or command. The TUI runs this inspection in its own worker. `World.activity` holds
-the state of every act, derived once from the facts as the life hears them, so a host reads it without asking the
-sandbox. It asks the engine's `covers` which live acts a pause or a wake is over, one call for each act whose state
+the state of every act a person follows, derived once from the facts as the life hears them, so a host reads it
+without asking the sandbox; the acts the engine asks on the way, such as a read, a run or a reply, are no rows of
+it. It asks the engine's `covers` which live acts a pause or a wake is over, one call for each act whose state
 the control would change. `World.isPaused` and `World.rungState` read it.
 
 `world.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type,

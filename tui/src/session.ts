@@ -240,16 +240,15 @@ export class Session extends EventEmitter {
             "bash",
             "wait",
             "grant",
-            "answer",
+            "reply",
             "out",
-            "exited",
             "close",
             "cancel",
             "pause",
             "wake",
             "tell",
           ].includes(kind) ||
-          (kind === "done" && /^(prompt|rung|bash|wait|grant)\d+$/.test(id)),
+          (kind === "done" && /^(prompt|rung|bash|wait|grant|reply)\d+$/.test(id)),
       )
     )
       void this.refresh().catch(this.fail);
@@ -274,15 +273,14 @@ export class Session extends EventEmitter {
       do {
         this.dirty = false;
         const selected = this.selected;
-        const { acts, whole, count, ...snapshot } = await this.world.snapshot(selected, this.counted);
+        const { acts, count, ...snapshot } = await this.world.snapshot(selected, this.counted);
         if (this.selected !== selected) {
           this.dirty = true;
           continue;
         }
         Object.assign(this, snapshot);
         // A snapshot carries the acts that changed since the session last read them, in the order of the table.
-        if (whole) this.acts = acts;
-        else if (acts.length) {
+        if (acts.length) {
           const rows = new Map(this.acts.map((act) => [act.id, act]));
           for (const act of acts) rows.set(act.id, act);
           this.acts = [...rows.values()];

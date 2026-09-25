@@ -22,66 +22,56 @@ type Hearing<T = void> = Generator<Call, T, unknown>;
 const exception = (value: unknown): value is { is: string; args: unknown[] } =>
   Boolean(value && typeof value === "object" && "is" in value && "args" in value);
 const covers = (control: Fact, id: string): Call => ({ verb: "covers", args: [control, id] });
+/** The questions the engine asks on the way to what an act does, which are no acts a person follows: each is
+ * answered for the act that asked it, which shows what it came to. */
+const STEPS = new Set([
+  "stand",
+  "read",
+  "write",
+  "clock",
+  "chance",
+  "gate",
+  "cd",
+  "merged",
+  "run",
+  "wants",
+  "reply",
+]);
 
-/** The observable state of acts, updated once as facts enter the life. It asks the engine what a fact alone cannot
- * say. One question per kind of question the file does not make: a kind is made by one verb, an act or a query,
- * and the last ear hears every act but only a query nobody answered. And covers, for a pause or a wake and each
- * live act whose state it would change, and for a new act and the controls that could decide its state. */
+/** The observable state of the acts a person follows, updated once as facts enter the life. It asks the engine
+ * what a fact alone cannot say: covers, for a pause or a wake and each live act whose state it would change, and
+ * for a new act and the controls that could decide its state. */
 export class Activity {
   readonly acts = new Map<string, LiveAct>();
   completed = 0;
   cost = 0;
-  /** Each kind of question and whether its verb makes acts: the file's own acts, then the kinds the life said. */
-  private readonly kinds = new Map(
-    ["chain", "prompt", "rung", "bash", "wait", "grant"].map((kind) => [kind, true]),
-  );
-  /** A question of each kind not known yet, which the owner of the life asks it about outside any ear. */
-  readonly unknown = new Map<string, string>();
-  /** How many times the table was derived again, which a reader of it compares to know that. */
-  generation = 0;
   /** How many changes of a row the table has made, and the count at the last change of each row, so that a reader
    * takes only the rows that changed since it last read. */
   private changes = 0;
-  private changed = new Map<string, number>();
-  /** The count of changes when the table was last derived again: a reader behind it takes the whole table. */
-  private derived = 0;
+  private readonly changed = new Map<string, number>();
   /** The last pause or wake of each act it names, oldest first. A pause and a wake are over acts by the act they
    * name alone, so an earlier control of the same name decides nothing more. */
-  private controls = new Map<string, Fact>();
-  private children = new Map<string, Set<string>>();
-  private ran = new Map<string, unknown>();
-  private refused = new Map<string, string>();
-  private merged = new Map<string, boolean>();
+  private readonly controls = new Map<string, Fact>();
+  private readonly children = new Map<string, Set<string>>();
+  /** The chain each question stands on, which is the chain itself for a chain, so a fact about any question finds
+   * the transcript it stands in. */
+  private readonly scopes = new Map<string, string>();
+  /** The rung each run runs the word of, and what the word of each rung gave when its run is done. */
+  private readonly runs = new Map<string, string>();
+  private readonly ran = new Map<string, unknown>();
+  private readonly refused = new Map<string, string>();
+  private readonly merged = new Map<string, boolean>();
 
-  /** What the life said of a kind: an act kind derives the table again from the facts, which now hold its acts, and
-   * asks the engine through the call it is given. */
-  learn(kind: string, act: boolean, facts: readonly Fact[], call: (question: Call) => unknown): void {
-    this.kinds.set(kind, act);
-    this.unknown.delete(kind);
-    if (!act) return;
-    this.acts.clear();
-    this.completed = 0;
-    this.cost = 0;
-    this.controls = new Map();
-    this.children = new Map();
-    this.ran = new Map();
-    this.refused = new Map();
-    this.merged = new Map();
-    this.generation++;
-    this.changed = new Map();
-    this.derived = this.changes;
-    for (const fact of facts) {
-      const hearing = this.hear(fact);
-      for (let step = hearing.next(); !step.done; step = hearing.next(call(step.value)));
-    }
+  /** The chain whose transcript holds a fact about a name: the chain itself for a chain, the chain a question stands
+   * on for any other question, and nothing for a name of no question. */
+  scope(id: string): string {
+    return this.scopes.get(id) ?? "";
   }
 
-  /** The rows that changed after a count of changes, all of them when the table was derived again since, and the
-   * count now. */
-  since(count: number): { count: number; whole: boolean; acts: LiveAct[] } {
-    const whole = count < this.derived;
-    const acts = [...this.acts.values()].filter((act) => whole || (this.changed.get(act.id) ?? 0) > count);
-    return { count: this.changes, whole, acts };
+  /** The rows that changed after a count of changes, and the count now. */
+  since(count: number): { count: number; acts: LiveAct[] } {
+    const acts = [...this.acts.values()].filter((act) => (this.changed.get(act.id) ?? 0) > count);
+    return { count: this.changes, acts };
   }
   private mark(act: LiveAct): void {
     this.changed.set(act.id, ++this.changes);
@@ -90,9 +80,9 @@ export class Activity {
   *hear(fact: Fact): Hearing {
     const [kind, id, by] = fact;
     const question = isQuestion(kind, id);
-    const known = this.kinds.get(kind);
-    if (question && known === undefined && !this.unknown.has(kind)) this.unknown.set(kind, id);
-    if (question && known) {
+    if (question) this.scopes.set(id, kind === "chain" ? id : String(fact[3]));
+    if (question && kind === "run") this.runs.set(id, String(fact[4]));
+    if (question && !STEPS.has(kind)) {
       const act: LiveAct = {
         id,
         kind,
@@ -118,8 +108,6 @@ export class Activity {
       return;
     }
     const act = this.acts.get(id);
-    if (kind === "answer" && Array.isArray(fact[3]) && Array.isArray(fact[3][2]))
-      this.cost += Number(fact[3][2][4] ?? 0);
     if (kind === "pause" || kind === "wake") {
       const paused = kind === "pause";
       this.controls.delete(id);
@@ -132,6 +120,14 @@ export class Activity {
     } else if (kind === "done") {
       if (isQuestion("merged", id) && this.acts.get(by)?.kind === "bash")
         this.merged.set(by, Boolean(fact[3]));
+      if (isQuestion("reply", id) && Array.isArray(fact[3]) && Array.isArray(fact[3][2]))
+        this.cost += Number(fact[3][2][4] ?? 0);
+      const rung = this.runs.get(id);
+      if (rung !== undefined) {
+        this.ran.set(rung, fact[3]);
+        const row = this.acts.get(rung);
+        if (row) this.updateRun(row);
+      }
       if (act) {
         if (!act.done && ["prompt", "rung", "bash", "wait"].includes(act.kind)) this.completed++;
         act.done = true;
@@ -143,9 +139,6 @@ export class Activity {
           if (row) this.updateRun(row);
         }
       }
-    } else if (kind === "ran") {
-      this.ran.set(id, fact[3]);
-      if (act) this.updateRun(act);
     } else if (kind === "tell" && act?.kind === "rung" && Array.isArray(fact[3])) {
       // The chain tells the findings that refused a word under the header refused, one comment for each.
       const [header, ...findings] = fact[3];

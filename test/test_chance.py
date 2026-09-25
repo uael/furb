@@ -27,15 +27,15 @@ async def test_a_number_the_world_draws_at_least_zero_and_under_one() -> None:
     engine.chance(on=over)
 
 
-async def test_chance_is_a_question_the_world_answers_and_it_enters_the_record() -> None:
-  """chance is a question the World answers, and it enters the record as any question of a run does."""
+async def test_chance_is_a_question_the_world_answers_and_the_record_keeps_what_it_answered() -> None:
+  """chance is a question the World answers, and the record keeps what it answered, as it keeps every answer of the World."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   sand.script[root] = ["close(chance())"]
   assert await engine.prompt(float, "draw", on=root) == 1 / 7
   await settle()
-  drawn = [e for e in sand.record if e[0][0] == "chance"]
-  assert [(e[0][3], e[1]) for e in drawn] == [(root, 1 / 7)]
+  drawn = [e[0] for e in sand.record if e[0][0] == "chance"]
+  assert [a[3] for a in drawn] == [root] and (("done", drawn[0][1], "world", 1 / 7),) in sand.record
   later = Sand(stands=STANDS)
   _, over = await relived(later, list(sand.record))
   assert over == root and [one for one in later.calls if one[0] == "chance"] == []

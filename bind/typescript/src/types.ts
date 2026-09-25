@@ -32,8 +32,8 @@ export function modelNamed<M extends { provider: string; id: string }>(
 export const shapes = ["str", "None", "bool", "int", "float", "list", "dict"] as const;
 
 export type Turn = Awaited<ReturnType<Life["turns"]>>[number];
-export type Fact = Awaited<ReturnType<Life["send"]>>;
-/** One entry of the record: the fact, and for a query of a run what it was answered beside. */
+export type Fact = Awaited<ReturnType<Life["say"]>>;
+/** One entry of the record: one fact, an act among them. */
 export type Entry = [Fact, unknown?];
 export type Usage = NonNullable<Turn[2]>;
 export interface TextValue {
@@ -49,8 +49,8 @@ export interface OperatorPrompt {
   reject(error: Error): void;
 }
 
-/** What one fact that tells stands as in a user turn: its header, `#` and the name of the act or the kind of the
- * query it is of, then its words; and the lines after the header. */
+/** What one fact that tells stands as in a user turn: its header, `#` and the name of the act it is of, or the kind
+ * of a query, then its words; and the lines after the header. */
 export interface Paragraph {
   name: string;
   words: string;
@@ -81,14 +81,13 @@ export function opens(paragraph: Paragraph): boolean {
 export function uncommented(lines: readonly string[]): string {
   return lines.map((line) => (line === "#" ? "" : line.startsWith("# ") ? line.slice(2) : line)).join("\n");
 }
-/** Whether a name is the name of a question of that kind: the kind and a number for an act, and the kind, @ and
- * its maker for a query. */
+/** Whether a name is the name of a question of that kind: the kind and a number, as every act is named. */
 export function isQuestion(kind: string, id: string): boolean {
-  return id.startsWith(kind) && /^(?:\d+|@.+)$/.test(id.slice(kind.length));
+  return id.startsWith(kind) && /^\d+$/.test(id.slice(kind.length));
 }
-/** The kind of a question, from its name: an act is its kind and a number, and a query its kind, @ and its maker. */
+/** The kind of a question, from its name, which is its kind and a number. */
 export function questionKind(id: string): string | undefined {
-  return id.match(/^(\w+?)(?:\d+|@.+)$/)?.[1];
+  return id.match(/^(\w+?)\d+$/)?.[1];
 }
 /** A map as JavaScript holds it again: a map the life marked as its pairs, since it holds the key `is`, whose keys
  * are all strings becomes that map, and its entries are read the same way. */

@@ -1,8 +1,8 @@
 """Wake, the fact that ends a pause."""
 
-from conftest import STANDS, Sand, life, said, settle
+from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Exit
+from furb.engine import OPERATOR
 
 
 async def test_a_wake_ends_the_pause_over_the_same_act_and_what_waited_is_heard() -> None:
@@ -12,13 +12,13 @@ async def test_a_wake_ends_the_pause_over_the_same_act_and_what_waited_is_heard(
   act = engine.bash("slow", on=root)
   await settle()
   engine.pause(root)
-  engine.send("exited", act, 0, by=WORLD)
+  sand.exits(act, 0)
   await settle()
-  assert act not in engine.outcomes
+  assert f"#{act} exited 0" not in heads(engine.turns(on=root))
   engine.wake(root)
   await settle()
   assert said(log, "wake") == [("wake", root, OPERATOR, [f"#{root} woke"])]
-  assert act in engine.outcomes and (await act).code == 0
+  assert heads(engine.turns(on=root))[-1] == f"#{act} exited 0"
 
 
 async def test_a_wake_is_over_the_act_it_names_and_everything_under_it() -> None:
@@ -29,11 +29,10 @@ async def test_a_wake_is_over_the_act_it_names_and_everything_under_it() -> None
   await settle()
   command = said(log, "bash")[0][1]
   engine.pause(act)
-  engine.send("exited", command, 0, by=WORLD)
+  sand.exits(command, 0)
   await settle()
-  assert command not in engine.outcomes
+  assert f"#{command} exited 0" not in heads(engine.turns(on=root)) and engine.peek(act, ...) is ...
   engine.wake(act)
   await settle()
-  got = engine.outcomes[command]
-  assert isinstance(got, Exit) and got.code == 0
+  assert heads(engine.turns(on=root))[-2:] == [f"#{command} exited 0", f"#{act} closed 0"]
   assert await act == 0

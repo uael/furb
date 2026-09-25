@@ -9,7 +9,7 @@ async def test_actor_is_the_default_actor_of_the_chain_bound_from_the_standing()
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   assert STANDS[2] == "m/low"
-  assert engine.modules[root]["actor"] == "m/low"
+  assert engine.module(root)["actor"] == "m/low"
   assert await engine.rung("close(actor)", on=root) == "m/low"
 
 
@@ -18,7 +18,7 @@ async def test_the_program_rebinds_actor_like_any_name_and_the_last_binding_wins
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   await engine.rung("actor = 'n/low'", on=root)
-  assert engine.modules[root]["actor"] == "n/low"
+  assert engine.module(root)["actor"] == "n/low"
   await engine.rung("actor = 'm/high'", on=root)
-  assert engine.modules[root]["actor"] == "m/high"
+  assert engine.module(root)["actor"] == "m/high"
   assert await engine.rung("close(actor)", on=root) == "m/high"

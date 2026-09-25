@@ -10,6 +10,13 @@ from furb.engine import Act, Text
 EVERY = (
   "x = bash('echo hi')\n"
   "read('a.txt')\n"
+  "def shut(id):\n"
+  "  yield 'started', id\n"
+  "  while True:\n"
+  "    match (yield):\n"
+  "      case ('write', q, _, _, t) if t.path == 'x://b.txt':\n"
+  "        yield 'done', q, len(t.content)\n"
+  "act('shut', '', shut)\n"
   "write(Text('x://b.txt', 'x'))\n"
   "peek(__name__)\n"
   "turns()\n"
@@ -38,7 +45,7 @@ EVENTS = {
 }
 """The words a header of an act says after its id, when it says what happened and no open of the act."""
 QUERIES = {"read", "write", "cd"}
-"""The queries that tell, each of which heads its paragraph with its kind."""
+"""The questions that tell, each of which heads its paragraph with its kind."""
 
 
 def headers(got: Sequence[tuple]) -> list[str]:
@@ -47,7 +54,7 @@ def headers(got: Sequence[tuple]) -> list[str]:
 
 
 def spoken(head: str) -> str:
-  """What a header says: the kind of a query, the word after the id of an act, or the open of an act."""
+  """What a header says: the kind of a question that tells, the word after the id of an act, or the open of an act."""
   first, *rest = head[1:].split(" ", 2)
   if first in QUERIES:
     return first
@@ -79,7 +86,7 @@ async def test_a_paragraph_is_what_one_fact_that_tells_stands_as_in_a_turn() -> 
 
 
 async def test_the_first_line_of_a_paragraph_is_its_header() -> None:
-  """The first line of a paragraph is its header: # and, with no space, the id of the act it is of, or the kind of the query it is of, then its words, as #bash1 exited 0 or #read a.txt."""
+  """The first line of a paragraph is its header: # and, with no space, the id of the act it is of, or the kind of the read, the write or the cd it tells, then its words, as #bash1 exited 0 or #read a.txt."""
   sand = sown()
   _, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nread('a.txt')\nclose((await x).code)"]
@@ -111,7 +118,7 @@ async def test_a_paragraph_may_hold_more_headers_of_what_it_is_of() -> None:
 
 
 async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> None:
-  """The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a query stands at the place in the run where the query was asked."""
+  """The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write or a cd stands at the place in the run where it was asked."""
   sand = Sand(files={"/w/n.txt": "one\n"}, stands=STANDS, auto=False)
   _, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nread('n.txt')\nclose(1)"]
@@ -122,7 +129,7 @@ async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> N
 
 
 async def test_the_headers_of_the_file() -> None:
-  """The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, roster, cwd, actor, advance, paused, woke, cancelled, and one for each query that tells: read, write and cd."""
+  """The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, roster, cwd, actor, advance, paused, woke, cancelled, and one for each question that tells: read, write and cd."""
   sand = sown()
   _, root = life(sand)
   ceiling = engine.grant(usd=10.0, on=root)
@@ -153,4 +160,4 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   ]
   shown = [line for one in paragraphs(engine.turns(on=root)) for line in one.split("\n") if not line.startswith("#")]
   assert shown == [line for word in own for line in word.split("\n")]
-  assert engine.modules[root]["bash1"] == "bash1"
+  assert engine.module(root)["bash1"] == "bash1"
