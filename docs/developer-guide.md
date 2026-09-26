@@ -41,9 +41,10 @@ bun install && bun run build     # The TypeScript workspace and the N-API packag
 | `src/furb/CLAUDE.md` | The technical names of the engine, and the laws that no test can hold. |
 | `test/` | The suite: one file for each definition, and one test for each sentence. |
 | `test/outside/` | The tests of the World, the Kernel, the command line, and the provider. |
-| `src/*.rs` | The crate `furb`, which runs the same engine in monty, a Python interpreter written in Rust. |
+| `src/*.rs` | The crate `furb`, which runs the same engine in monty, a Python interpreter written in Rust. `build.rs` makes a method of `Engine` for each verb of the contract. |
+| `src/world/` | The ears of the World that the crate writes: the files, the commands, time, and the store of the record. |
 | `bind/python` | The package `furb-monty`, the crate for Python. |
-| `bind/typescript` | The crate for TypeScript through N-API, with a World for models, files, commands, and records. |
+| `bind/typescript` | The crate for TypeScript through N-API, with a `Session`: an engine on the ears of the crate, on a provider of models, and on a console of the operator. |
 | `tui/` | The terminal application, built on OpenTUI. |
 | `script/` | The smoke run, the play run, and the DeepSWE rig. `script/CLAUDE.md` says how to run the rig. |
 | `docs/` | The gallery of the TUI, its animation, and this guide. |
@@ -55,8 +56,9 @@ bun install && bun run build     # The TypeScript workspace and the N-API packag
 3. The gate, a type checker, reads the word first. A word that it refuses does not run, and the model reads the
    reason in its next turn.
 4. The Kernel runs the word in the module of its chain. Each call such as `read`, `bash`, `prompt`, or `wait`
-   makes an act, which goes to the ears in turn until one owns it: the ear of the act, or the World, which reaches
-   the disk, the machine, the models, and the record. The owner answers the act: now, or later.
+   makes an act, which goes to the ears in turn until one owns it: the ear of the act, or an ear of the World,
+   which reaches the disk, the machine, the models, the operator, or the record. The owner answers the act: now, or
+   later.
 5. What an act does and what it comes to are facts about it. The chain folds its facts into turns, which are the
    Python that the model reads next.
 
@@ -117,7 +119,7 @@ and the TypeScript gates on Linux, on macOS, and on Windows.
 | --- | --- |
 | `tui/src/app.ts` | The screen: the top line, the feed, the sidebar, the composer, the footer, and the dialogs. |
 | `tui/src/session.ts` | The state of one session: its chains, its views, its drafts, its queue, and its record of the UI. |
-| `tui/src/worker.ts` | The engine and its World, in a worker thread, and the demo World with its scripted answers. |
+| `tui/src/worker.ts` | The session, in a worker thread, and the demo session with its scripted answers. |
 | `tui/src/theme.ts` | The palettes, the marks, and the spacing. One mark says one thing everywhere. |
 | `tui/src/keys.ts`, `tui/src/commands.ts` | The keys and the slash commands, which the help and the docs read. |
 | `tui/script/` | The gallery, the animation, and the rasterizer that turns a frame into a PNG. |

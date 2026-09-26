@@ -23,9 +23,9 @@ Each name has one meaning, which the contract's sentences use as given here.
 - tip: the point of a later life where the journal has said the record again whole, at which boot stands the life
   again, and after which the life goes on past it.
 - default actor: the actor a prompt goes to when the prompt leaves the actor unsaid, bound as `actor` in the chain.
-- World: the ear of the outside that boot takes under the name WORLD, which reaches the disk, the machine, the
-  actors and the record; it answers what is its own to answer, takes what takes time, a command, a wait, a prompt to
-  the operator and a reply, and says each done when it ends, and it keeps what the journal says it keeps.
+- World: the ears of the outside that serve the machine, one or many, which reach the disk, the machine, the actors,
+  the operator and the record; they answer what is theirs to answer, take what takes time, a command, a wait, a
+  prompt to the operator and a reply, and say each done when it ends, and they keep what the journal says to keep.
 - Kernel: the ear of the outside that runs rungs: it takes a run, makes a wants as the run while the word waits for
   an act that is not done, and says the run done with what the word gave.
 - gate: the ear of the outside that answers a gate, apart from the Kernel, so a word may ask it while the Kernel
