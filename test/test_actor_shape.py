@@ -11,7 +11,7 @@ async def test_an_actor_the_world_offers() -> None:
   name, efforts, window = one
   assert (name, efforts, window) == ("m", ["low", "high"], 400000)
   assert one in STANDS[0]
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   assert paragraphs(engine.turns(on=root)) == [
     "#chain1 root\nchain1: Act[object] = Act('chain1')",
@@ -41,7 +41,7 @@ async def test_the_window_that_a_roster_entry_leaves_unsaid_is_the_window_that_t
 
 async def test_what_a_prompt_names_is_one_of_these_names_and_one_effort_of_that_range() -> None:
   """What a prompt names is one of these names and one effort of that range."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   right = engine.prompt(int, "hi", to="m/high", on=root)
   await settle()
@@ -55,7 +55,7 @@ async def test_what_a_prompt_names_is_one_of_these_names_and_one_effort_of_that_
 
 async def test_an_actor_takes_an_effort_of_its_own_and_any_actor_takes_the_effort_that_is_not_named() -> None:
   """An actor takes an effort of its own, and any actor takes the effort that is not named."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   for to in ("m/low", "m/high", "m", "n"):
     sand.script[root] = ["close(1)"]

@@ -1,6 +1,6 @@
 """Filter, what says which acts of a transcript the turns of a chain with a source keep."""
 
-from conftest import STANDS, Sand, life, lived, named, paragraphs, plain, relived, said, seen, settle, sown
+from conftest import Sand, life, lived, named, paragraphs, plain, relived, said, seen, settle, sown
 from furb import engine
 
 
@@ -34,7 +34,7 @@ async def test_a_filter_says_which_acts_the_turns_of_that_chain_keep_each_with_i
 
 async def test_a_filter_is_any_callable_of_that_shape() -> None:
   """A filter is any callable of that shape, so a word adds a filter by writing one, and take makes the filter of the file."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = [
     "x = bash('echo one')\nn = (await x).code",
@@ -50,7 +50,7 @@ async def test_a_filter_is_any_callable_of_that_shape() -> None:
 
 async def test_a_later_life_runs_the_filter_again_and_keeps_the_same_acts() -> None:
   """A later life runs the filter again and keeps the same acts, since the word that opened the chain opens it again with it."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = [
     "x = bash('echo hi')\nn = (await x).code",
@@ -61,7 +61,7 @@ async def test_a_later_life_runs_the_filter_again_and_keeps_the_same_acts() -> N
   command = said(log, "bash")[0][1]
   was = [(role, py) for role, py, *_ in engine.turns(on=side)]
   assert command in named(engine.turns(on=root)) and command not in named(engine.turns(on=side))
-  _, over = await relived(Sand(stands=STANDS), plain(sand.record))
+  _, over = await relived(Sand(), plain(sand.record))
   assert over == root and [(role, py) for role, py, *_ in engine.turns(on=side)] == was
 
 

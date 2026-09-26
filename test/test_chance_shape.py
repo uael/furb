@@ -1,13 +1,13 @@
 """Chance, the question the World draws a number for."""
 
-from conftest import STANDS, WORLD, Sand, life, said
+from conftest import WORLD, Sand, life, said
 from furb import engine
 from furb.engine import OPERATOR
 
 
 async def test_a_chance_is_the_question_of_a_number_the_world_draws() -> None:
   """A chance is the question of a number the World draws."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   assert engine.chance(on=root) == 1 / 7
   word = next(one for one in sand.calls if one[0] == "chance")

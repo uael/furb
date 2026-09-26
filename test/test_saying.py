@@ -2,13 +2,13 @@
 
 from collections.abc import Generator
 
-from conftest import STANDS, Sand, life, said
+from conftest import Sand, life, said
 from furb import engine
 
 
 async def test_what_an_ear_says() -> None:
   """What an ear says: the kind of the fact, the act it is about, and the words, and nothing of who says it, which the bus fills in from whoever is speaking."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   kept: list[tuple] = []
 

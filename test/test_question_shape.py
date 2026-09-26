@@ -1,6 +1,6 @@
 """Question, a fact that takes a name of its own and is answered."""
 
-from conftest import STANDS, Sand, acts, life, said, settle, sown
+from conftest import Sand, acts, life, said, settle, sown
 from furb import engine
 from furb.engine import OPERATOR, Act, Text
 
@@ -55,7 +55,7 @@ async def test_a_question_is_named_by_its_kind() -> None:
 
 async def test_the_name_of_an_act() -> None:
   """The name of an act is its kind and how many acts of that kind the life has made with it, so the root is chain1, the first command is bash1 and the first prompt is prompt1, and python binds each name as it is."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\ny = bash('echo ho')\nclose(1)", "close(bash1 + bash2 == 'bash1bash2')"]
   asking = engine.prompt(int, "run it", on=root)
@@ -84,7 +84,7 @@ async def test_a_read_takes_its_number_as_a_command_does() -> None:
   assert await asking == 2
   await settle()
   assert [(a[1], a[2]) for a in said(log, "read")] == [("read1", OPERATOR), ("read2", "rung1")]
-  later = Sand(stands=STANDS)
+  later = Sand()
   again, _ = life(later, list(sand.record))
   await settle(300)
   assert [a[1] for a in said(again, "read")] == ["read1", "read2"] and engine.peek("prompt1") == 2

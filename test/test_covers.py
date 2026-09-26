@@ -1,13 +1,13 @@
 """covers, whether a control is over an act."""
 
-from conftest import STANDS, Sand, life, said, settle
+from conftest import Sand, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR
 
 
 async def test_whether_a_control_is_over_an_act() -> None:
   """Whether a control is over an act: over the act it names and everything under it, and over every act on the chain it names; a close is over the act it names, the words running under it and the replies that ask for those words, where a cancel is over everything under it."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   act = engine.prompt(int, "go", on=root)

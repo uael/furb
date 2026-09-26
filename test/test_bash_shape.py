@@ -1,13 +1,13 @@
 """Bash, the act the World hears as a command."""
 
-from conftest import STANDS, Sand, life, paragraphs, said
+from conftest import Sand, life, paragraphs, said
 from furb import engine
 from furb.engine import HEAD, OPERATOR, TAIL
 
 
 async def test_a_bash_carries_the_command_the_fed_flag_and_the_timeout() -> None:
   """A bash carries the command, the fed flag and the timeout, and no show and no working directory."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   engine.cd("/deep", on=root)
   one = engine.bash("echo hi", fed=True, show=HEAD, show_err=TAIL, timeout=5.0, on=root)

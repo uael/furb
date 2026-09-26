@@ -9,7 +9,7 @@ async def test_operator_is_the_name_of_the_operator_in_the_roster_and_as_an_acto
   """OPERATOR is the name of the operator in the roster and as an actor."""
   assert OPERATOR == "operator"
   assert [OPERATOR, [], 200000] in STANDS[0]
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   assert engine.get(root) == ("chain", "chain1", OPERATOR, "", "root", "")
   wanted = engine.prompt(int, "how many?", to=OPERATOR, on=root)

@@ -1,13 +1,13 @@
 """told, the paragraph that an act tells of itself."""
 
-from conftest import STANDS, Sand, heads, life, said, settle
+from conftest import Sand, heads, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR
 
 
 async def test_the_open_of_an_act_tells_the_id_and_what_the_act_says_of_itself() -> None:
   """The open of an act tells the id and what the act says of itself, and no actor and no arguments as such."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   act = engine.bash("echo hi", fed=True, timeout=9.0, on=root)
   assert (await act).code == 0
@@ -19,7 +19,7 @@ async def test_the_open_of_an_act_tells_the_id_and_what_the_act_says_of_itself()
 
 async def test_a_closed_header_tells_the_act_with_what_it_came_to_as_python_shows_it() -> None:
   """A closed header tells the act with what it came to, as python shows it."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   engine.close(21, act)
@@ -36,7 +36,7 @@ async def test_a_closed_header_tells_the_act_with_what_it_came_to_as_python_show
 
 async def test_told_gives_the_saying_of_a_tell_about_an_act() -> None:
   """told gives the saying of a tell about an act, with one paragraph headed with the id of the act, which an ear yields and a verb says, so a chain holds what it told where it told it."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   act = engine.rung("k = 1", on=root)
   assert await act is None

@@ -18,7 +18,7 @@ def test_what_one_answer_of_a_model_cost() -> None:
 
 async def test_a_usage_holds_the_token_counts_and_the_dollars_of_one_model_response() -> None:
   """A usage holds the token counts and the dollars of one model response."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   _, root = life(sand)
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
@@ -27,7 +27,7 @@ async def test_a_usage_holds_the_token_counts_and_the_dollars_of_one_model_respo
 
 async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_the_window_of_the_actor() -> None:
   """The share of the window it filled is the words it read against the window of the actor its rung names, in the standing where the answer lands, so no word of it says the share."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   log, root = life(sand)
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
@@ -41,7 +41,7 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   assert engine.offered(STANDS[0], "m/low") == 400000 and COST[0] / 400000 == 0.2
   assert len(COST) == 5
   engine.cancel(ceiling)
-  rebound = Sand(stands=STANDS, cost=COST)
+  rebound = Sand(cost=COST)
   _, root = life(rebound)
   rebound.script[root] = ["close(2)"]
   asked = engine.prompt(int, "count", on=root)
@@ -50,7 +50,7 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   assert await asked == 2
   assert [line.split("filled=")[1] for line in heads(engine.turns(on=root)) if " ledger " in line] == ["0.2"]
   engine.cancel(later)
-  first = Sand(stands=STANDS, cost=COST)
+  first = Sand(cost=COST)
   _, root = life(first)
   engine.prompt(int, "count", on=root)
   await settle()

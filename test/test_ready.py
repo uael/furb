@@ -1,12 +1,12 @@
 """Ready, the word a rung holds."""
 
-from conftest import DOOR, STANDS, Sand, acts, life, plain, relived, said, settle, sown
+from conftest import DOOR, Sand, acts, life, plain, relived, said, settle, sown
 from furb import engine
 
 
 async def test_a_ready_says_the_word_a_rung_holds() -> None:
   """A ready says the word a rung holds."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   laid = engine.rung("<S1>hi</S1>\nk = S1", on=root)
   await laid
@@ -48,7 +48,7 @@ async def test_the_word_of_a_rung_that_extends_the_engine_is_part_of_the_program
   await settle()
   program = engine.program(root)
   assert DOOR in program.values()
-  _, over = await relived(Sand(stands=STANDS), plain(sand.record))
+  _, over = await relived(Sand(), plain(sand.record))
   assert engine.read("note://a", on=over).content == "kept"
 
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Dead, Sand, World, life, of, paragraphs, said, settle, sown
+from conftest import Dead, Sand, World, life, of, paragraphs, said, settle, sown
 from furb import engine
 from furb.engine import OPERATOR, Refused, Text
 
@@ -22,40 +22,35 @@ KEPT = (
 class Hoard(Sand):
   """A World that keeps what stands at a path and gives it back with what is written after it."""
 
-  def hears(self) -> World:
-    """The World that answers a standing, a read of what it holds, and a write with the whole of what it holds."""
-    while True:
-      a = yield
-      match a:
-        case ("stand", qid, *_):
-          yield "done", qid, self.stands or [[], "", ""]
-        case ("read", qid, _, _, path):
-          yield "done", qid, Text(path, self.files.get(path, ""))
-        case ("write", qid, _, _, Text(path=path, content=content)):
-          self.files[path] = self.files.get(path, "") + content
-          yield "done", qid, Text(path, self.files[path])
+  def hear(self, a: tuple) -> World:
+    """The World of the suite, but for a read of what it holds, and a write it answers with the whole of what it
+    holds."""
+    match a:
+      case ("read", qid, _, _, path):
+        yield "done", qid, Text(path, self.files.get(path, ""))
+      case ("write", qid, _, _, Text(path=path, content=content)):
+        self.files[path] = self.files.get(path, "") + content
+        yield "done", qid, Text(path, self.files[path])
+      case _:
+        yield from super().hear(a)
 
 
 class Firm(Sand):
   """A World whose disk holds one line more than it was asked to write."""
 
-  def hears(self) -> World:
-    """The World that answers a standing, and a write it takes with a line of its own at the end."""
-    while True:
-      a = yield
-      match a:
-        case ("stand", qid, *_):
-          self.calls.append(a)
-          yield "done", qid, self.stands or [[], "", ""]
-        case ("write", qid, _, _, Text(path=path, content=content)):
-          self.calls.append(a)
-          self.files[path] = content + "END\n"
-          yield "done", qid, Text(path, self.files[path])
+  def hear(self, a: tuple) -> World:
+    """The World of the suite, but for a write, which it takes with a line of its own at the end."""
+    match a:
+      case ("write", qid, _, _, Text(path=path, content=content)):
+        self.files[path] = content + "END\n"
+        yield "done", qid, Text(path, self.files[path])
+      case _:
+        yield from super().hear(a)
 
 
 async def test_a_write_whoever_serves_the_path_of_the_text_takes_its_content() -> None:
   """A write: whoever serves the path of the text takes its content."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   assert engine.write(Text("b.txt", "one\n"), on=root) == Text("/w/b.txt", "one\n")
   assert sand.files == {"/w/b.txt": "one\n"}
@@ -69,7 +64,7 @@ async def test_a_write_whoever_serves_the_path_of_the_text_takes_its_content() -
 
 async def test_write_is_given_a_text_and_gives_the_text_as_it_is_on_disk_after_the_write() -> None:
   """write is given a text, and gives the text as it is on disk after the write."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   assert engine.write(Text("b.txt", "one\n"), on=root) == Text("/w/b.txt", "one\n")
   assert engine.write(Text("b.txt", "two\n"), on=root) == Text("/w/b.txt", "two\n")
@@ -83,7 +78,7 @@ async def test_write_is_given_a_text_and_gives_the_text_as_it_is_on_disk_after_t
 
 async def test_a_write_that_the_world_refuses_raises_refused_in_the_caller() -> None:
   """A write that the World refuses raises Refused in the caller."""
-  dead = Dead(stands=STANDS)
+  dead = Dead()
   _, root = life(dead)
   with pytest.raises(Refused, match="a dead World answers no write"):
     engine.write(Text("b.txt", "one\n"), on=root)
@@ -93,7 +88,7 @@ async def test_a_write_that_the_world_refuses_raises_refused_in_the_caller() -> 
 
 async def test_the_engine_tells_of_a_write_of_a_text_only_the_lines_that_differ() -> None:
   """The engine tells of a write of a text only the lines that differ from what the caller asked, and of a write a door answers with a value, that value."""
-  sand = Firm(stands=STANDS)
+  sand = Firm()
   _, root = life(sand)
   assert await engine.rung("write(Text('b.txt', 'one\\ntwo\\n'))", on=root) is None
   assert sand.files == {"b.txt": "one\ntwo\nEND\n"}
@@ -107,7 +102,7 @@ async def test_the_engine_tells_of_a_write_of_a_text_only_the_lines_that_differ(
 
 async def test_a_write_takes_no_show() -> None:
   """A write takes no show, since what a write would show the word of the model already said: it tells the lines of what came back that differ from what it asked for, and of those, the lines the model has not seen, so a write that the disk took as it was asked tells nothing at all."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   assert await engine.rung("write(Text('b.txt', 'one\\ntwo\\n'))", on=root) is None
   assert of(engine.turns(on=root), "write") == []
@@ -117,7 +112,7 @@ async def test_a_write_takes_no_show() -> None:
 
 async def test_a_door_that_answers_a_write_with_more_than_it_was_asked_for() -> None:
   """A door that answers a write with more than it was asked for tells the lines it added and no line the model read before."""
-  sand = Hoard(files={"b.txt": "one\ntwo\n"}, stands=STANDS)
+  sand = Hoard(files={"b.txt": "one\ntwo\n"})
   _, root = life(sand)
   assert await engine.rung("read('b.txt')\nwrite(Text('b.txt', 'three\\n'))", on=root) is None
   await settle()
@@ -166,7 +161,7 @@ async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_
 
 async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_of_that_rung_out() -> None:
   """A write of a door that a rung of that ladder says leaves the word of that rung out, and that rung is no rung of the chain after it."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = [
     "k = 1",
@@ -195,7 +190,7 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
 
 async def test_a_new_file_is_a_write_of_a_text_made_of_its_path_and_its_content() -> None:
   """A new file is a write of a Text made of its path and its content."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   assert "/w/new.txt" not in sand.files
   assert engine.write(Text("new.txt", "one\n"), on=root) == Text("/w/new.txt", "one\n")

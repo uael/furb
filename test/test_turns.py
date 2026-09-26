@@ -1,6 +1,6 @@
 """turns, what a model reads of a chain."""
 
-from conftest import STANDS, Sand, acts, heads, life, paragraphs, rows, said, settle, takes
+from conftest import Sand, acts, heads, life, paragraphs, rows, said, settle, takes
 from furb import engine
 from furb.engine import span
 
@@ -15,7 +15,7 @@ def notes(held: list[tuple]) -> list[list[object]]:
 
 async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
   """The turns of a chain, folded from what it has heard."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
@@ -26,7 +26,7 @@ async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
 
 async def test_the_turns_of_what_a_chain_has_heard() -> None:
   """The turns of what a chain has heard: every fact that carries notes stands as a paragraph of them, and nothing else stands at all."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   assert await engine.rung("k = 1", on=root) is None
   sand.script[root] = ["close(k + 1)"]
@@ -52,7 +52,7 @@ async def test_the_turns_of_what_a_chain_has_heard() -> None:
 
 async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operator() -> None:
   """The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines it has not seen, which the one that tells it says the show of."""
-  sand = Sand(files={"/w/n.txt": "one\ntwo\n"}, stands=STANDS)
+  sand = Sand(files={"/w/n.txt": "one\ntwo\n"})
   log, root = life(sand)
   word = "read('n.txt', span(2, 2))\nclose(1)"
   sand.script[root] = [word]
@@ -69,7 +69,7 @@ async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operato
 
 async def test_turns_reads_the_transcript_of_the_chain_and_asks_nothing() -> None:
   """turns reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   await engine.rung("cd('/x')", on=root)
   made, kept = dict(acts(log)), len(sand.record)
@@ -81,7 +81,7 @@ async def test_turns_reads_the_transcript_of_the_chain_and_asks_nothing() -> Non
 
 async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_last_reply() -> None:
   """A user turn packs one paragraph for each thing told since the last reply, in order."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
@@ -92,7 +92,7 @@ async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_las
 
 async def test_the_turns_of_a_chain_only_grow() -> None:
   """The turns of a chain only grow."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   assert await engine.rung("k = 1", on=root) is None
   was = engine.turns(on=root)
@@ -106,7 +106,7 @@ async def test_the_turns_of_a_chain_only_grow() -> None:
 
 async def test_a_turn_once_phrased_is_phrased_the_same_on_every_later_reply() -> None:
   """A turn once phrased is phrased the same on every later reply."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   engine.grant(usd=10.0, on=root)
   sand.script[root] = ["a = 1", "b = 2", "close(3)"]
@@ -120,7 +120,7 @@ async def test_a_turn_once_phrased_is_phrased_the_same_on_every_later_reply() ->
 
 async def test_the_turns_are_folded_whole_at_each_reply() -> None:
   """The turns are folded whole at each reply, and a user turn holds every paragraph told before its reply and since the reply before it, so a paragraph told while a reply is in flight goes to the turn after the answer."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')", "y = 2", "close(3)"]
   assert await engine.prompt(int, "count", on=root) == 3
@@ -139,7 +139,7 @@ async def test_the_turns_are_folded_whole_at_each_reply() -> None:
 
 async def test_a_reply_appends_the_response_as_an_assistant_turn() -> None:
   """A reply appends the response as an assistant turn."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
@@ -150,7 +150,7 @@ async def test_a_reply_appends_the_response_as_an_assistant_turn() -> None:
 
 async def test_the_next_reply_tells_everything_that_the_step_told() -> None:
   """The next reply tells everything that the step told."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   sand.script[root] = ["raise ValueError('boom')", "close(1)"]
   assert await engine.prompt(int, "try", on=root) == 1
@@ -161,7 +161,7 @@ async def test_the_next_reply_tells_everything_that_the_step_told() -> None:
 
 async def test_the_turns_hold_every_answer_of_the_model_as_the_turn_it_is() -> None:
   """The turns hold every answer of the model as the turn it is."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(2)"]
   assert await engine.prompt(int, "count", on=root) == 2
@@ -172,7 +172,7 @@ async def test_the_turns_hold_every_answer_of_the_model_as_the_turn_it_is() -> N
 
 async def test_the_turns_of_a_chain_show_every_act_the_model_made() -> None:
   """The turns of a chain show every act the model made, with its result, and turns is how they are read."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nclose((await x).code)"]
   assert await engine.prompt(int, "run it", on=root) == 0
@@ -187,7 +187,7 @@ async def test_the_turns_of_a_chain_show_every_act_the_model_made() -> None:
 
 async def test_the_turns_end_with_a_user_turn() -> None:
   """The turns end with a user turn, empty when nothing was told since the last answer."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   assert engine.turns(on=root)[-1][0] == "user"
   sand.script[root] = ["await wait(9)\nclose(1)"]

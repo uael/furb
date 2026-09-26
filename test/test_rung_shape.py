@@ -1,12 +1,12 @@
 """Rung, the word, the rung it retells and the actor of the run of one word."""
 
-from conftest import STANDS, Sand, life, said, settle
+from conftest import Sand, life, said, settle
 from furb import engine
 
 
 async def test_a_rung_carries_the_word_the_rung_it_retells_and_the_actor() -> None:
   """A rung carries the word, the rung it retells and the actor."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   laid = engine.rung("k = 21", on=root)
   assert await laid is None

@@ -4,7 +4,7 @@ from collections.abc import Generator
 
 import pytest
 
-from conftest import STANDS, Sand, keeping, kernel, life, paragraphs, plain, relived, said, settle, sown, watched
+from conftest import Sand, keeping, kernel, life, paragraphs, plain, relived, said, settle, sown, watched
 from furb import engine
 from furb.engine import HIDDEN, OPERATOR, TIMEOUT, Act, Exit, Refused, Text, take
 
@@ -84,7 +84,7 @@ async def test_its_own_ear_is_born_after_the_ears_of_the_engine_heard_it() -> No
 
 async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes_it() -> None:
   """It is then put to the ears of the outside in turn, until one takes it, and no ear of the outside after that one hears it."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log: list[tuple] = []
   after: list[tuple] = []
   root = engine.boot((), **kernel(), probe=watched(log), taker=taking("note"), after=keeping(after), world=sand.hears())
@@ -96,7 +96,7 @@ async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes
 
 async def test_to_take_an_act_is_to_say_a_started_or_a_done_about_it() -> None:
   """To take an act is to say a started or a done about it: a done settles it now, and a started says that its done comes later."""
-  sand = Sand(files={"/w/a.txt": "one\n"}, stands=STANDS, auto=False)
+  sand = Sand(files={"/w/a.txt": "one\n"}, auto=False)
   log, root = life(sand)
   read = engine.act("read", root, None, "a.txt")
   assert said(log, "done")[-1] == ("done", read, "world", Text("/w/a.txt", "one\n")) and engine.peek(read) == Text(
@@ -108,7 +108,7 @@ async def test_to_take_an_act_is_to_say_a_started_or_a_done_about_it() -> None:
 
 async def test_an_act_that_no_ear_takes_is_refused() -> None:
   """An act that no ear takes and that the record does not hold is refused: the life says it done with a refusal that names its kind."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   one = engine.act("note", root, noting([], takes=False))
   got = engine.peek(one)
@@ -120,7 +120,7 @@ async def test_an_act_that_no_ear_takes_is_refused() -> None:
 
 async def test_an_act_said_it_is_begun_and_what_the_call_gives_is_its_name() -> None:
   """An act said: it is begun, and what the call gives is its name, which is awaited for what the act comes to."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   one = engine.bash("echo hi", on=root)
   assert isinstance(one, Act) and engine.peek(one) is None
@@ -130,7 +130,7 @@ async def test_an_act_said_it_is_begun_and_what_the_call_gives_is_its_name() -> 
 
 async def test_an_act_said_twice_under_one_name_is_one_act() -> None:
   """An act said twice under one name is one act, and the second saying brings no second ear and gives the name back."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   first = engine.rung("close(bash('echo hi'))", on=root)
   again = engine.rung("close(bash('echo hi'))", retells=first, on=root)
@@ -141,7 +141,7 @@ async def test_an_act_said_twice_under_one_name_is_one_act() -> None:
 
 async def test_two_acts_that_say_the_same_words_under_one_name_are_one_act() -> None:
   """Two acts that say the same words under one name are one act."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   first = engine.rung("close(bash('echo hi'))", on=root)
   again = engine.rung("close(bash('echo hi'))", retells=first, on=root)
@@ -157,7 +157,7 @@ async def test_two_acts_that_say_the_same_words_under_one_name_are_one_act() -> 
 
 async def test_the_engine_refuses_an_act_said_from_outside_a_run_that_names_no_chain() -> None:
   """The engine refuses an act said from outside a run that names no chain, a chain apart."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, _ = life(sand)
   heard: list[object] = []
   with pytest.raises(Refused, match="no chain"):
@@ -168,7 +168,7 @@ async def test_the_engine_refuses_an_act_said_from_outside_a_run_that_names_no_c
 
 async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
   """The chain an act is on is the chain named to the call, or the scope of the one that made it when the call names none."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   two = engine.chain("two")
   heard: list[object] = []
@@ -181,7 +181,7 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
 
 async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fact_said_after_its_birth() -> None:
   """The ear of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a saying."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   heard: list[object] = []
   one = engine.act("note", root, noting(heard, "spoke"), "one")
@@ -198,7 +198,7 @@ async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fa
 
 async def test_an_act_carries_the_words_of_its_kind() -> None:
   """An act carries the words of its kind, which are the plain arguments the verb was given, in the order of the verb, and a show or a filter is none of them."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   one = engine.bash("echo hi", True, 5.0, HIDDEN, HIDDEN, on=root)
   assert engine.get(one) == ("bash", one, OPERATOR, root, "echo hi", True, 5.0)
@@ -209,5 +209,5 @@ async def test_an_act_carries_the_words_of_its_kind() -> None:
   assert await engine.prompt(int, "edit", on=root) == 1
   (edit,) = said(sand.calls, "write")
   assert edit[4] == Text("/w/a.txt", "uno\n") and edit[4].before is None
-  await relived(Sand(files={"/w/a.txt": "one\n"}, stands=STANDS), plain(sand.record))
+  await relived(Sand(files={"/w/a.txt": "one\n"}), plain(sand.record))
   assert engine.peek(edit[1]) == Text("/w/a.txt", "uno\n")

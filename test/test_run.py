@@ -1,12 +1,12 @@
 """Run, the act of running the word of a rung."""
 
-from conftest import STANDS, Py, Sand, kept, life, plain, ran, relived, said, settle, sown, watched
+from conftest import Py, Sand, kept, life, plain, ran, relived, said, settle, sown, watched
 from furb import engine
 
 
 async def test_a_run_is_the_act_of_running_the_word_of_a_rung() -> None:
   """A run is the act of running the word of a rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs the word as the rung, and says the run done with what the word gave."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   laid = engine.rung("k = 1", on=root)
   await laid
@@ -30,7 +30,7 @@ async def test_a_run_is_the_act_of_running_the_word_of_a_rung() -> None:
 
 async def test_the_word_a_run_carries_is_python_which_unquoted_made_of_the_word_of_the_rung() -> None:
   """The word a run carries is python, which unquoted made of the word of the rung."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   laid = engine.rung("<S1>\nhi\n</S1>\nk = S1", on=root)
   await laid
@@ -91,7 +91,7 @@ async def test_the_last_rung_to_bind_a_name_wins() -> None:
 
 async def test_one_rung_runs_at_a_time_on_a_chain_and_rungs_interleave_at_their_awaits() -> None:
   """One rung runs at a time on a chain, and rungs interleave at their awaits, whether they are rungs of one chain or of many."""
-  sand = Sand(files={"/w/a.txt": "one\ntwo\n"}, stands=STANDS, auto=False)
+  sand = Sand(files={"/w/a.txt": "one\ntwo\n"}, auto=False)
   log, root = life(sand)
   two = engine.chain("two")
   sand.script[root] = ["x = bash('slow here')\nclose((await x).code)"]
@@ -117,7 +117,7 @@ async def test_the_word_of_a_rung_runs_again_in_every_chain_made_from_its_chain(
   twin = engine.chain("twin", source=root)
   await settle(300)
   assert engine.module(twin)["marks"] == [1] and engine.module(twin)["marks"] is not engine.module(root)["marks"]
-  _, over = await relived(Sand(stands=STANDS), plain(sand.record))
+  _, over = await relived(Sand(), plain(sand.record))
   assert engine.module(over)["marks"] == [1]
 
 
@@ -154,7 +154,7 @@ async def test_a_prompt_after_such_a_rung_finds_what_it_bound() -> None:
 
 async def test_the_chain_runs_one_word_at_a_time() -> None:
   """The chain runs one word at a time."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   first = engine.rung("x = bash('echo hi')\nclose(await x)", on=root)
   second = engine.rung("k = 2\nclose(k)", on=root)
@@ -171,7 +171,7 @@ async def test_the_chain_runs_one_word_at_a_time() -> None:
 
 async def test_a_word_that_waits_for_an_act_gives_the_chain_to_the_next_word() -> None:
   """A word that waits for an act gives the chain to the next word, which runs while it waits, and the waiting word runs on at the done of what it awaits."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   waiting = engine.rung("x = bash('slow')\nout = await x\nk = out.code", on=root)
   after = engine.rung("k = 2", on=root)

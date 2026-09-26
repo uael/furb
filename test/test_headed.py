@@ -1,6 +1,6 @@
 """headed, the header of a paragraph."""
 
-from conftest import STANDS, Sand, life, paragraphs
+from conftest import Sand, life, paragraphs
 from furb import engine
 
 
@@ -10,7 +10,7 @@ async def test_the_header_of_a_paragraph() -> None:
   assert engine.headed("read", "a.txt") == "#read a.txt"
   assert engine.headed("rung1") == "#rung1"
   assert engine.headed("prompt1", "count them\n\nall of them") == "#prompt1 count them\n#\n# all of them"
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   asking = engine.prompt(int, "count them\n\nall of them", on=root)
   got = paragraphs(engine.turns(on=root))

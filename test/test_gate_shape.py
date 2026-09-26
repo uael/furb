@@ -2,7 +2,6 @@
 
 from conftest import (
   BAD,
-  STANDS,
   Sand,
   acts,
   bindings,
@@ -23,7 +22,7 @@ from furb.engine import OPERATOR, Refused
 
 async def test_a_gate_is_the_question_of_whether_a_word_may_run() -> None:
   """A gate is the question of whether a word may run, which the ear named gate answers with its findings, apart from the Kernel, so a word may ask it while the Kernel runs that word."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   assert engine.gate("k = BAD", on=root) == [BAD]
   assert engine.get("gate1") == ("gate", "gate1", OPERATOR, root, "k = BAD")

@@ -2,7 +2,7 @@
 
 from collections.abc import Generator
 
-from conftest import STANDS, Sand, keeping, life
+from conftest import Sand, keeping, life
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -14,7 +14,7 @@ def once() -> Generator[tuple | None, tuple | None]:
 
 async def test_lives_carries_a_fact_into_an_ear_and_says_everything_the_ear_yields() -> None:
   """lives carries a fact into an ear, says everything the ear yields, and gives whether the ear lives on."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   heard: list[tuple] = []
   body = keeping(heard)

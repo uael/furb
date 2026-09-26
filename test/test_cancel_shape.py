@@ -2,13 +2,13 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, life, said, settle, world_says
+from conftest import Sand, life, said, settle, world_says
 from furb import engine
 
 
 async def test_a_cancel_ends_everything_it_is_over() -> None:
   """A cancel ends everything it is over: each of them is done with CancelledError, and none of them says anything of its own again."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   one = engine.prompt(int, "go", on=root)
@@ -25,7 +25,7 @@ async def test_a_cancel_ends_everything_it_is_over() -> None:
 
 async def test_a_cancel_reaches_to_any_depth_and_on_whatever_chain() -> None:
   """A cancel reaches to any depth, and on whatever chain."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["two = chain('two')\nx = bash('slow', on=two)\nclose((await x).code)"]
   one = engine.prompt(int, "go", on=root)

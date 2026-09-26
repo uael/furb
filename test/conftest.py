@@ -126,10 +126,11 @@ class Sand:
   `files` is its disk by path, `script` what its models answer by the id of the chain a reply is on, one word per
   reply, `record` what it keeps of the keep facts of the journal, `fed` what was fed to its commands, `calls` every
   fact it answered or performed, in order, and `turns` the turns it read for each reply it took, by its name.
-  `stands` is what a chain stands on, or the refusal it answers a stand with, `cost` the usage of one answer, and
-  `auto` says whether a command tells a line and exits at once. `tick` counts the readings of its clock and the
-  chances it drew, so a later life reads what the life before it read. `outs` holds each command it runs: whether
-  its stderr flows into its stdout, and its two streams as they came.
+  `stands` is what a chain stands on, STANDS unless a test gives another, or the refusal it answers a stand with,
+  `cost` the usage of one answer, and `auto` says whether a command tells a line and exits at once. `tick` counts
+  the readings of its clock and the chances it drew, so a later life reads what the life before it read. `outs`
+  holds each command it runs: whether its stderr flows into its stdout, and its two streams as they came. `loop` is
+  the loop of the life it hears.
   """
 
   files: dict[str, str] = field(default_factory=dict)
@@ -138,11 +139,12 @@ class Sand:
   fed: list[str | None] = field(default_factory=list)
   calls: list[tuple] = field(default_factory=list)
   auto: bool = True
-  stands: list | Refused | None = None
+  stands: list | Refused = field(default_factory=lambda: STANDS)
   cost: tuple | None = None
   tick: int = 0
   turns: dict[str, list] = field(default_factory=dict)
   outs: dict[str, list] = field(default_factory=dict)
+  loop: asyncio.AbstractEventLoop = field(init=False, repr=False, compare=False)
 
   def exits(self, about: str, code: int | None) -> None:
     """The command ends with its code, and the World answers it with what it came to: its code and its streams as
@@ -152,72 +154,73 @@ class Sand:
     _, out, err = self.outs.pop(about)
     world_says("done", about, Exit(code, Text(f"{about}/stdout", out), Text(f"{about}/stderr", err)))
 
-  def hears(self) -> World:  # noqa: PLR0915
-    """The World as one generator for one life: it takes a command, a wait, a prompt to the operator and a reply,
-    answers the questions that are its own, feeds and ends its commands, answers a reply with the next word of its
-    script, and keeps what it is told.
-    """
-    loop = asyncio.get_running_loop()
+  def hears(self) -> World:
+    """The World as one generator for one life, on the loop the life is booted in: it keeps each call it hears, and
+    does with each fact what hear does."""
+    self.loop = asyncio.get_running_loop()
+    while True:
+      a = yield
+      if a[0] in ("bash", "wait", "prompt", "reply", "stand", "read", "write", "feed", "clock", "chance"):
+        self.calls.append(a)
+      yield from self.hear(a)
 
-    def ends(about: str) -> None:
-      """The command ended with no code, when the World still runs it at its timeout."""
-      if about in self.outs:
-        self.exits(about, None)
+  def hear(self, a: tuple) -> World:
+    """What the World does with one fact: it takes a command, a wait, a prompt to the operator and a reply, answers
+    the questions that are its own, feeds and ends its commands, answers a reply with the next word of its script,
+    and keeps what it is told. A World of one test overrides it for what it does otherwise, and hands it every other
+    fact.
+    """
 
     def resolved(here: str, path: str) -> str:
       """A path against a working directory: a path of its own stands as it is, and any other hangs off it."""
       return path if path.startswith("/") or "://" in path else f"{here}/{path}"
 
-    while True:
-      a = yield
-      if a[0] in ("bash", "wait", "prompt", "reply", "stand", "read", "write", "feed", "clock", "chance"):
-        self.calls.append(a)
-      match a:
-        case ("bash", about, _, on, command, _, timeout):
-          yield "started", about
-          self.outs[about] = [engine.ask("merged", on, about), "", ""]
-          loop.call_later(timeout, ends, about)
-          if self.auto:
-            loop.call_soon(partial(engine.say, "out", about, f"ran {command}\n", "stdout"))
-            loop.call_soon(partial(self.exits, about, 0))
-        case ("out", about, _, text, stream) if about in self.outs:
-          self.outs[about][1 if self.outs[about][0] or stream == "stdout" else 2] += text
-        case ("wait", about, _, _, seconds):
-          yield "started", about
-          loop.call_later(seconds, partial(engine.say, "done", about, None))
-        case ("prompt", about, _, _, shape, _, _):
-          yield "started", about
-          if shape not in ("None", "bool", "int", "float", "str"):
-            engine.close(Refused(f"the operator answers no {shape}"), about)
-        case ("stand", qid, *_):
-          yield "done", qid, self.stands or [[], "", ""]
-        case ("read", qid, _, on, path) if (full := resolved(engine.cwd(on=on), path)) in self.files:
-          yield "done", qid, Text(full, self.files[full])
-        case ("write", qid, _, on, Text(path=path, content=content)) if (
-          "://" not in path and engine.get(path.split("/")[0]) is None
-        ):
-          self.files[full := resolved(engine.cwd(on=on), path)] = content
-          yield "done", qid, Text(full, content)
-        case ("reply", about, _, on, _):
-          yield "started", about
-          self.turns[about] = engine.turns(on=on)
-          if self.script.get(on):
-            word = self.script[on].pop(0)
-            turn = ("assistant", word, self.cost or (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
-            loop.call_soon(partial(engine.say, "done", about, turn))
-        case ("cancel" | "close", *_):
-          for one in [x for x in self.outs if engine.covers(a, x)]:
-            self.outs.pop(one)
-        case ("feed", _, _, text):
-          self.fed.append(text)
-        case ("keep", _, _, entry):
-          self.record.append(entry)
-        case ("clock", qid, *_):
-          self.tick += 1
-          yield "done", qid, 1000.0 + self.tick
-        case ("chance", qid, *_):
-          self.tick += 1
-          yield "done", qid, (self.tick % 7) / 7
+    match a:
+      case ("bash", about, _, on, command, _, timeout):
+        yield "started", about
+        self.outs[about] = [engine.ask("merged", on, about), "", ""]
+        self.loop.call_later(timeout, self.exits, about, None)
+        if self.auto:
+          self.loop.call_soon(partial(engine.say, "out", about, f"ran {command}\n", "stdout"))
+          self.loop.call_soon(partial(self.exits, about, 0))
+      case ("out", about, _, text, stream) if about in self.outs:
+        self.outs[about][1 if self.outs[about][0] or stream == "stdout" else 2] += text
+      case ("wait", about, _, _, seconds):
+        yield "started", about
+        self.loop.call_later(seconds, partial(engine.say, "done", about, None))
+      case ("prompt", about, _, _, shape, _, _):
+        yield "started", about
+        if shape not in ("None", "bool", "int", "float", "str"):
+          engine.close(Refused(f"the operator answers no {shape}"), about)
+      case ("stand", qid, *_):
+        yield "done", qid, self.stands
+      case ("read", qid, _, on, path) if (full := resolved(engine.cwd(on=on), path)) in self.files:
+        yield "done", qid, Text(full, self.files[full])
+      case ("write", qid, _, on, Text(path=path, content=content)) if (
+        "://" not in path and engine.get(path.split("/")[0]) is None
+      ):
+        self.files[full := resolved(engine.cwd(on=on), path)] = content
+        yield "done", qid, Text(full, content)
+      case ("reply", about, _, on, _):
+        yield "started", about
+        self.turns[about] = engine.turns(on=on)
+        if self.script.get(on):
+          word = self.script[on].pop(0)
+          turn = ("assistant", word, self.cost or (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
+          self.loop.call_soon(partial(engine.say, "done", about, turn))
+      case ("cancel" | "close", *_):
+        for one in [x for x in self.outs if engine.covers(a, x)]:
+          self.outs.pop(one)
+      case ("feed", _, _, text):
+        self.fed.append(text)
+      case ("keep", _, _, entry):
+        self.record.append(entry)
+      case ("clock", qid, *_):
+        self.tick += 1
+        yield "done", qid, 1000.0 + self.tick
+      case ("chance", qid, *_):
+        self.tick += 1
+        yield "done", qid, (self.tick % 7) / 7
 
 
 class Dead(Sand):
@@ -231,14 +234,10 @@ class Dead(Sand):
   def hears(self) -> World:
     """The World that answers a standing and refuses every other question."""
     while True:
-      a = yield
-      match a:
-        case ("stand", qid, *_):
-          self.calls.append(a)
-          yield "done", qid, self.stands or [[], "", ""]
+      match a := (yield):
         case (kind, qid, *_) if engine.get(qid) == a:
           self.calls.append(a)
-          yield "done", qid, Refused(f"a dead World answers no {kind}")
+          yield "done", qid, self.stands if kind == "stand" else Refused(f"a dead World answers no {kind}")
 
 
 @dataclass
@@ -250,10 +249,9 @@ class Where(Sand):
   def hears(self) -> World:
     """The World that reads, writes and starts a command, each against the directory it asks the chain for."""
     while True:
-      a = yield
-      match a:
+      match (yield):
         case ("stand", qid, *_):
-          yield "done", qid, self.stands or [[], "", ""]
+          yield "done", qid, self.stands
         case ("read", qid, _, on, path):
           full = f"{engine.cwd(on=on)}/{path}"
           yield "done", qid, Text(full, self.files.get(full, ""))

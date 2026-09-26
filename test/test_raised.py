@@ -2,14 +2,14 @@
 
 import pytest
 
-from conftest import STANDS, Sand, life
+from conftest import Sand, life
 from furb import engine
 from furb.engine import Refused
 
 
 async def test_raised_is_the_exception_object_that_the_last_rung_raised_rebound_at_each_raise() -> None:
   """raised is the exception object that the last rung raised, rebound at each raise."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   assert engine.module(root)["raised"] is None
   with pytest.raises(ValueError, match="one"):
@@ -28,7 +28,7 @@ async def test_raised_is_the_exception_object_that_the_last_rung_raised_rebound_
 
 async def test_raised_is_none_at_the_birth_of_the_module_of_a_chain() -> None:
   """raised is None at the birth of the module of a chain, so a word reads it before any rung raised."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   assert engine.module(root)["raised"] is None
   assert await engine.rung("close(raised)", on=root) is None

@@ -2,14 +2,14 @@
 
 import json
 
-from conftest import STANDS, Sand, life, lived, relived, said, settle, sown, wire
+from conftest import Sand, life, lived, relived, said, settle, sown, wire
 from furb import engine
 from furb.engine import Exit
 
 
 async def test_one_entry_of_the_record_kept_and_said() -> None:
   """One entry of the record, kept and said: the journal holds it for this life and the World for the next."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   act = engine.bash("echo hi", on=root)
   await act
@@ -18,7 +18,7 @@ async def test_one_entry_of_the_record_kept_and_said() -> None:
   assert [one[3] for one in kept] == sand.record
   assert [fact[0] for fact, *_ in sand.record] == ["chain", "stand", "done", "bash", "started", "merged", "out", "done"]
   assert {one[2] for one in kept} == {"journal"}
-  later = Sand(stands=STANDS)
+  later = Sand()
   _, over = await relived(later, list(sand.record))
   got = engine.peek(act)
   assert over == root and isinstance(got, Exit) and got.code == 0

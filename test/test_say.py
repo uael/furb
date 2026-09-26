@@ -2,7 +2,6 @@
 
 from conftest import (
   DOOR,
-  STANDS,
   WORLD,
   Dead,
   Sand,
@@ -73,7 +72,7 @@ async def test_a_fact_reaches_the_world_the_kernel_and_the_journal_only_through_
 
 async def test_a_rebound_verb_reaches_the_world_only_through_the_bus() -> None:
   """A rebound verb reaches the World only through the bus."""
-  sand = Sand(files={"/w/mine.txt": "mine\n"}, stands=STANDS)
+  sand = Sand(files={"/w/mine.txt": "mine\n"})
   _, root = life(sand)
   assert await engine.rung(MINE, on=root) is None
   sand.script[root] = ["close(read('any.txt').content)"]
@@ -83,7 +82,7 @@ async def test_a_rebound_verb_reaches_the_world_only_through_the_bus() -> None:
 
 async def test_who_says_it_is_whoever_is_speaking() -> None:
   """Who says it is whoever is speaking, which the site holds, and nothing names another."""
-  sand = Sand(files={"/w/a.txt": "one\n"}, stands=STANDS, auto=False)
+  sand = Sand(files={"/w/a.txt": "one\n"}, auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose(1)"]
   assert await engine.prompt(int, "start one", on=root) == 1
@@ -98,7 +97,7 @@ async def test_who_says_it_is_whoever_is_speaking() -> None:
 
 async def test_a_fact_said_it_says_its_kind_the_act_it_is_about_who_said_it_and_its_words() -> None:
   """A fact said: it says its kind, the act it is about, who said it and its words, in that order, and nothing else, since the chain it is on is the scope of the act it is about."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   act = engine.bash("echo hi", on=root)
   assert said(log, "bash")[0] == ("bash", act, OPERATOR, root, "echo hi", False, 600.0)
@@ -133,7 +132,7 @@ async def test_every_generator_the_acts_first_then_those_of_the_engine_then_thos
   assert len(said(sand.calls, "read")) == before
   assert engine.read("a.txt", on=root).content == "one\ntwo\n"
   assert len(said(sand.calls, "read")) == before + 1
-  dead = Dead(stands=STANDS)
+  dead = Dead()
   _, over = await relived(dead, plain(sand.record))
   text = engine.module(over)["t"]
   assert isinstance(text, Text) and text.content == "one\ntwo\n" and said(dead.calls, "read") == []
@@ -163,7 +162,7 @@ async def test_while_one_speaks_nobody_hears() -> None:
 
 async def test_a_done_said_of_a_question_that_has_no_outcome_yet_fills_its_outcome() -> None:
   """A done said of a question that has no outcome yet fills its outcome, and a later done of the same question fills nothing."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   _, root = life(sand)
   act = engine.bash("slow", on=root)
   await settle()

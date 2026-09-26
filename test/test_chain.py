@@ -132,7 +132,7 @@ async def test_boot_gives_the_root_as_an_act_of_never_and_the_root_never_complet
   _, root = life(sand)
   await engine.rung("k = 1", on=root)
   await settle()
-  one = engine.boot(list(sand.record), kernel=Py().kernel(), gate=Py().gating(), world=Sand(stands=STANDS).hears())
+  one = engine.boot(list(sand.record), kernel=Py().kernel(), gate=Py().gating(), world=Sand().hears())
   await settle(300)
   assert one == root and engine.peek(one) is None
 
@@ -274,7 +274,7 @@ async def test_a_chain_its_module_which_is_the_engine_itself_named_for_the_chain
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   assert said(log, "bash")[0][3] == root
-  _, over = life(Sand(stands=STANDS), list(sand.record))
+  _, over = life(Sand(), list(sand.record))
   await settle(300)
   assert engine.module(over)["k"] == 21
 
@@ -486,7 +486,7 @@ async def test_the_word_of_a_rung_rebinds_the_default_actor_like_any_name() -> N
   sand.script[root] = ["close(2)", "close(None)"]
   assert await engine.prompt(int, "again", on=root) == 2
   assert said(log, "reply")[-1][4] == "n/low"
-  await relived(Sand(stands=STANDS), list(sand.record))
+  await relived(Sand(), list(sand.record))
   assert engine.module(root)["actor"] == "n/low"
   await relived(Sand(stands=[STANDS[0], "/w", "m/high"]), list(sand.record))
   assert engine.module(root)["actor"] == "m/high"
@@ -518,7 +518,7 @@ async def test_the_transcript_then_holds_the_prompt_of_the_operator_and_the_repl
 
 async def test_the_engine_reads_its_own_names_through_the_globals_of_the_chain() -> None:
   """The engine reads its own names through the globals of the chain."""
-  sand = Sand(files={"/w/mine.txt": "mine\n"}, stands=STANDS)
+  sand = Sand(files={"/w/mine.txt": "mine\n"})
   _, root = life(sand)
   assert engine.module(root)["read"] is engine.read
   await engine.rung("def read(path, show=HEAD, on=''):\n  return ask('read', __name__, 'mine.txt')", on=root)
@@ -529,7 +529,7 @@ async def test_the_engine_reads_its_own_names_through_the_globals_of_the_chain()
 
 async def test_the_engine_uses_a_rebound_name_from_the_next_use_on() -> None:
   """The engine uses a rebound name from the next use on."""
-  sand = Sand(files={"/w/a.txt": "one\ntwo\n", "/w/mine.txt": "mine\n"}, stands=STANDS)
+  sand = Sand(files={"/w/a.txt": "one\ntwo\n", "/w/mine.txt": "mine\n"})
   _, root = life(sand)
   sand.script[root] = [
     "was = read('a.txt').content",
@@ -676,7 +676,7 @@ async def test_a_chain_with_a_source_awaits_or_peeks_an_inherited_act_as_it_like
 
 async def test_the_engine_does_not_wake_a_chain_with_a_source_for_an_inherited_act() -> None:
   """The engine does not wake a chain with a source for the result of an inherited act."""
-  sand = Sand(files={"/w/a.txt": "one\ntwo\n"}, stands=STANDS, auto=False)
+  sand = Sand(files={"/w/a.txt": "one\ntwo\n"}, auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose(1)", "close(None)"]
   assert await engine.prompt(int, "start one", on=root) == 1
@@ -973,7 +973,7 @@ async def test_the_source_of_a_chain_is_a_chain_by_its_name() -> None:
 
 async def test_a_source_that_names_no_chain_of_the_life_refuses_the_call() -> None:
   """A source that names no chain of the life refuses the call in the caller, and no chain is made."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   step = engine.rung("k = 1", on=root)
   assert await step is None

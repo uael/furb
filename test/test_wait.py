@@ -2,14 +2,14 @@
 
 import pytest
 
-from conftest import STANDS, WORLD, Sand, life, paragraphs, said, settle
+from conftest import WORLD, Sand, life, paragraphs, said, settle
 from furb import engine
 from furb.engine import Refused
 
 
 async def test_a_wait_the_world_takes_it_and_says_it_is_done_when_its_seconds_have_passed() -> None:
   """A wait: the World takes it and says it is done when its seconds have passed, and it is over then."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   act = engine.wait(0.1, on=root)
   await settle()
@@ -21,7 +21,7 @@ async def test_a_wait_the_world_takes_it_and_says_it_is_done_when_its_seconds_ha
 
 async def test_a_wait_stands_in_no_turns() -> None:
   """A wait stands in no turns, since a wait is no work of a model."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   was = engine.turns(on=root)
   act = engine.wait(0, on=root)
@@ -32,7 +32,7 @@ async def test_a_wait_stands_in_no_turns() -> None:
 
 async def test_it_tells_nothing_and_answers_nothing() -> None:
   """It tells nothing and answers nothing, since a wait is no work of a model."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   act = engine.wait(0, on=root)
   assert await act is None

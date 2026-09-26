@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, heads, life, paragraphs, ran, rows, said, settle
+from conftest import Sand, heads, life, paragraphs, ran, rows, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -14,7 +14,7 @@ BOUND = "chain1: Act[object] = Act('chain1')\ngrant1: Act[None] = Act('grant1')\
 
 async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_both() -> None:
   """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells that ledger at each answer of a model, so no turn a reply has sent grows a line after it."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   log, root = life(sand)
   engine.grant(usd=10.0, on=root)
   sand.script[root] = ["a = 1", "b = 2", "close(a + b)"]
@@ -32,7 +32,7 @@ async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_bot
 
 async def test_grant_on_a_chain_puts_a_ceiling_on_it_dollars_a_share_of_the_window_or_both() -> None:
   """grant on a chain puts a ceiling on it: dollars, a share of the window, or both."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   log, root = life(sand)
   two, three = engine.chain("two"), engine.chain("three")
   await settle()
@@ -51,7 +51,7 @@ async def test_grant_on_a_chain_puts_a_ceiling_on_it_dollars_a_share_of_the_wind
 
 async def test_the_engine_enters_a_pause_on_the_chain_when_a_response_carries_the_ledger_to_its_ceiling() -> None:
   """The engine enters a pause on the chain when a response carries the ledger to its ceiling."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   log, root = life(sand)
   ceiling = engine.grant(usd=1.0, on=root)
   sand.script[root] = ["a = 1", "close(2)"]
@@ -63,7 +63,7 @@ async def test_the_engine_enters_a_pause_on_the_chain_when_a_response_carries_th
 
 async def test_the_word_of_the_response_that_crossed_the_ceiling_runs() -> None:
   """The word of the response that crossed the ceiling runs."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   log, root = life(sand)
   engine.grant(usd=1.0, on=root)
   sand.script[root] = ["a = 1", "close(2)"]
@@ -75,7 +75,7 @@ async def test_the_word_of_the_response_that_crossed_the_ceiling_runs() -> None:
 
 async def test_no_reply_follows_the_response_that_carried_the_ledger_to_the_ceiling_until_a_wake() -> None:
   """No reply follows the response that carried the ledger to the ceiling, until a wake."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   log, root = life(sand)
   engine.grant(usd=1.0, on=root)
   sand.script[root] = ["a = 1", "close(2)"]
@@ -89,7 +89,7 @@ async def test_no_reply_follows_the_response_that_carried_the_ledger_to_the_ceil
 
 async def test_the_model_continues_after_a_later_grant_and_a_wake() -> None:
   """The model continues after a later grant and a wake."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   _, root = life(sand)
   engine.grant(usd=1.0, on=root)
   sand.script[root] = ["a = 1", "close(2)"]
@@ -104,7 +104,7 @@ async def test_the_model_continues_after_a_later_grant_and_a_wake() -> None:
 
 async def test_an_answer_that_carries_the_ledger_past_the_ceiling_pauses_the_chain() -> None:
   """An answer that carries the ledger past the ceiling pauses the chain, so the word that answer brought runs and what it gave waits, and no rung of the chain asks until the wake."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   log, root = life(sand)
   engine.grant(usd=1.0, on=root)
   sand.script[root] = ["close(5)"]
@@ -119,7 +119,7 @@ async def test_an_answer_that_carries_the_ledger_past_the_ceiling_pauses_the_cha
 
 async def test_lifting_a_ceiling_wakes_nothing() -> None:
   """Lifting a ceiling wakes nothing: the pause stands until a wake, ceiling or no ceiling."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   _, root = life(sand)
   ceiling = engine.grant(usd=1.0, on=root)
   sand.script[root] = ["close(5)"]
@@ -136,7 +136,7 @@ async def test_lifting_a_ceiling_wakes_nothing() -> None:
 
 async def test_it_stands_until_it_is_lifted_as_the_chain_it_is_on_does() -> None:
   """It stands until it is lifted, as the chain it is on does, so what it comes to is what lifted it: nothing for a later grant that closes it, and a CancelledError for a cancel."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   one = engine.grant(usd=1.0, on=root)
   await settle()
@@ -151,7 +151,7 @@ async def test_it_stands_until_it_is_lifted_as_the_chain_it_is_on_does() -> None
 
 async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one_is_no_ceiling() -> None:
   """A grant of nothing, of a ceiling under zero, or of a share past one is no ceiling: it is done with the refusal, which whoever made it takes by awaiting it, and it tells nothing, since it never stood; a prompt to no actor of the roster is closed the same way after it has told its open."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   none = engine.grant(on=root)
   below = engine.grant(usd=-1.0, on=root)
@@ -172,7 +172,7 @@ async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one
 
 async def test_a_later_grant_that_stands_closes_every_grant_of_the_chain_before_it_that_stands() -> None:
   """A later grant that stands closes every grant of the chain before it that stands, and none that is over, so the ledger counts from the new one alone; one that is no ceiling closes nothing, and the ceiling that stands stands on."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   log, root = life(sand)
   ceiling = engine.grant(usd=2.0, on=root)
   sand.script[root] = ["a = 1", "b = 2", "close(a + b)"]
@@ -204,7 +204,7 @@ async def test_a_later_grant_that_stands_closes_every_grant_of_the_chain_before_
 
 async def test_a_cancel_of_it_lifts_the_ceiling_since_it_is_an_act_like_any_other() -> None:
   """A cancel of it lifts the ceiling, since it is an act like any other."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   log, root = life(sand)
   ceiling = engine.grant(usd=1.0, on=root)
   await settle()
@@ -219,7 +219,7 @@ async def test_a_cancel_of_it_lifts_the_ceiling_since_it_is_an_act_like_any_othe
 
 async def test_a_grant_is_any_callers_on_any_chain() -> None:
   """A grant is any caller's, on any chain."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   two = engine.chain("two")
   await settle()
@@ -235,7 +235,7 @@ async def test_a_grant_is_any_callers_on_any_chain() -> None:
 
 async def test_a_grant_finds_the_grants_of_its_chain_among_the_acts_of_the_life() -> None:
   """A grant finds the grants of its chain among the acts of the life, so a grant on a chain with a source closes no grant of its origin."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   first = engine.grant(usd=5.0, on=root)
   await settle()

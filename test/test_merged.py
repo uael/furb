@@ -1,13 +1,13 @@
 """Merged, the question of whether the stderr of a command flows into its stdout."""
 
-from conftest import STANDS, WORLD, Sand, acts, life, said, settle
+from conftest import WORLD, Sand, acts, life, said, settle
 from furb import engine
 from furb.engine import TAIL
 
 
 async def test_a_merged_is_the_question_of_whether_the_stderr_of_a_command_flows_into_its_stdout() -> None:
   """A merged is the question of whether the stderr of a command flows into its stdout, which the command answers from what its verb was given, and which the World asks when it takes the command."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   one = engine.bash("plain", on=root)
   two = engine.bash("split", show_err=TAIL, on=root)

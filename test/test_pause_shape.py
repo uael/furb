@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, acts, heads, life, said, settle
+from conftest import Sand, acts, heads, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -12,7 +12,7 @@ COST = (80000, 0, 0, 0, 1.5)
 
 async def test_while_a_pause_stands_nothing_that_the_pause_is_over_hears() -> None:
   """While a pause stands, nothing that the pause is over hears, and what is said meanwhile waits for the wake."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   act = engine.prompt(int, "go", on=root)
@@ -30,7 +30,7 @@ async def test_while_a_pause_stands_nothing_that_the_pause_is_over_hears() -> No
 
 async def test_a_control_is_a_fact_over_an_act() -> None:
   """A control is a fact over an act: over that act, over everything that act made, and over everything on a chain when the control names a chain."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   act = engine.prompt(int, "go", on=root)
@@ -47,7 +47,7 @@ async def test_a_control_is_a_fact_over_an_act() -> None:
 
 async def test_a_control_reaches_what_it_is_over_and_whatever_else_its_words_name() -> None:
   """A control reaches what it is over, and whatever else the words of the control name."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   act = engine.prompt(int, "go", on=root)
@@ -62,7 +62,7 @@ async def test_a_control_reaches_what_it_is_over_and_whatever_else_its_words_nam
 
 async def test_a_control_is_no_act_it_takes_no_name_of_its_own() -> None:
   """A control is no act: it takes no name of its own, and the record holds it as a fact about the acts it is over."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   act = engine.bash("slow", on=root)
   made = set(acts(log))
@@ -77,7 +77,7 @@ async def test_a_control_is_no_act_it_takes_no_name_of_its_own() -> None:
 
 async def test_what_a_control_reaches() -> None:
   """What a control reaches: the act it names, everything that act made, and every act of the chain it names."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   act = engine.prompt(int, "go", on=root)
@@ -94,7 +94,7 @@ async def test_what_a_control_reaches() -> None:
 
 async def test_it_reaches_by_the_chain_as_well_as_by_the_name() -> None:
   """It reaches by the chain as well as by the name, since an act on a chain is not under it unless the chain made it."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   _, root = life(sand)
   act = engine.bash("slow", on=root)
   assert not engine.under(act, root)
@@ -105,7 +105,7 @@ async def test_it_reaches_by_the_chain_as_well_as_by_the_name() -> None:
 
 async def test_a_control_carries_the_header_it_tells() -> None:
   """A control carries the header it tells, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   log, root = life(sand)
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
@@ -128,7 +128,7 @@ async def test_a_control_carries_the_header_it_tells() -> None:
 
 async def test_a_pause_is_over_the_act_it_names_and_everything_under_it() -> None:
   """A pause is over the act it names and everything under it."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   act = engine.prompt(int, "go", on=root)

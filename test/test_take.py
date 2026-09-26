@@ -1,6 +1,6 @@
 """take, the filter of the file."""
 
-from conftest import STANDS, Sand, life, named, said, settle
+from conftest import Sand, life, named, said, settle
 from furb import engine
 from furb.engine import take
 
@@ -20,7 +20,7 @@ async def twice(sand: Sand) -> tuple[str, str, str, str, str]:
 
 async def test_take_keeps_the_acts_it_names_and_everything_they_made() -> None:
   """take keeps the acts it names and everything they made."""
-  root, first, second, one, two = await twice(Sand(stands=STANDS))
+  root, first, second, one, two = await twice(Sand())
   assert named(engine.turns(on=root)) == [root, root, first, one, first, second, two, second]
   kept = engine.chain("kept", source=root, filter=take(first))
   await settle(300)
@@ -29,7 +29,7 @@ async def test_take_keeps_the_acts_it_names_and_everything_they_made() -> None:
 
 async def test_take_is_given_ids_and_keeps_the_acts_with_those_ids() -> None:
   """take is given ids and keeps the acts with those ids."""
-  root, first, second, one, two = await twice(Sand(stands=STANDS))
+  root, first, second, one, two = await twice(Sand())
   held = engine.transcript(root)
   made: list[tuple] = [a for a in held if engine.question(a)]
   assert [a[1] for a in take(first)(made)] == [first, one, "reply1"]
@@ -39,7 +39,7 @@ async def test_take_is_given_ids_and_keeps_the_acts_with_those_ids() -> None:
 
 async def test_take_keeps_everything_that_the_acts_with_those_ids_caused() -> None:
   """take keeps everything that the acts with those ids caused."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]
   first = engine.prompt(int, "first", on=root)
@@ -57,7 +57,7 @@ async def test_take_keeps_everything_that_the_acts_with_those_ids_caused() -> No
 
 async def test_take_that_is_not_inside_keeps_every_other_act() -> None:
   """take that is not inside keeps every other act, and drops everything the ones it names made."""
-  root, first, second, one, two = await twice(Sand(stands=STANDS))
+  root, first, second, one, two = await twice(Sand())
   narrow = engine.chain("narrow", source=root, filter=take(first, inside=False))
   await settle(300)
   assert named(engine.turns(on=root)) == [root, root, first, one, first, second, two, second]

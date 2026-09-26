@@ -1,12 +1,12 @@
 """cd, the verb that moves the working directory of a chain."""
 
-from conftest import STANDS, Sand, acts, life, paragraphs, said, settle
+from conftest import Sand, acts, life, paragraphs, said, settle
 from furb import engine
 
 
 async def test_a_cd_the_paths_of_its_chain_resolve_against_its_path_from_then_on() -> None:
   """A cd: the paths of its chain resolve against its path from then on, and it does nothing else."""
-  sand = Sand(files={"/w/a.txt": "one\n", "/x/a.txt": "two\n"}, stands=STANDS)
+  sand = Sand(files={"/w/a.txt": "one\n", "/x/a.txt": "two\n"})
   log, root = life(sand)
   assert engine.read("a.txt", on=root).content == "one\n"
   made = list(acts(log))
@@ -17,7 +17,7 @@ async def test_a_cd_the_paths_of_its_chain_resolve_against_its_path_from_then_on
 
 async def test_cd_completes_at_once_and_gives_the_new_working_directory() -> None:
   """cd completes at once and gives the new working directory."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   got = engine.cd("/x", on=root)
   assert got == "/x" and isinstance(got, str)
@@ -26,7 +26,7 @@ async def test_cd_completes_at_once_and_gives_the_new_working_directory() -> Non
 
 async def test_the_chain_answers_it_with_the_path_it_was_given_and_holds_it() -> None:
   """The chain answers it with the path it was given, and holds it, so what a chain heard is where its working directory stands."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   assert [engine.cd("/x", on=root), engine.cd("/y", on=root)] == ["/x", "/y"]
   held = engine.transcript(root)
@@ -40,7 +40,7 @@ async def test_the_chain_answers_it_with_the_path_it_was_given_and_holds_it() ->
 
 async def test_it_is_a_question_and_no_fact() -> None:
   """It is a question and no fact, since a fact a running word says is heard when the word yields, where a question is answered at once, so the paths of that word resolve against the new directory from then on."""
-  sand = Sand(files={"/w/a.txt": "one\n", "/x/a.txt": "two\n"}, stands=STANDS)
+  sand = Sand(files={"/w/a.txt": "one\n", "/x/a.txt": "two\n"})
   _, root = life(sand)
   sand.script[root] = ["before = read('a.txt').content\ncd('/x')\nclose([before, cwd(), read('a.txt').content])"]
   assert await engine.prompt(list, "move and read", on=root) == ["one\n", "/x", "two\n"]
@@ -50,7 +50,7 @@ async def test_it_is_a_question_and_no_fact() -> None:
 
 async def test_cd_tells_the_path_it_was_given() -> None:
   """cd tells the path it was given."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   sand.script[root] = ["cd('/x')\nclose(1)"]
   assert await engine.prompt(int, "move", on=root) == 1

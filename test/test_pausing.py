@@ -3,13 +3,13 @@
 from asyncio import CancelledError
 from collections.abc import Generator
 
-from conftest import STANDS, Sand, dones, life, said, settle, sown
+from conftest import Sand, dones, life, said, settle, sown
 from furb import engine
 
 
 async def test_an_act_is_paused_while_the_last_control_in_record_order_that_is_over_it_is_a_pause() -> None:
   """An act is paused while the last control in record order that is over it is a pause."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   act = engine.prompt(int, "go", on=root)
@@ -28,7 +28,7 @@ async def test_an_act_is_paused_while_the_last_control_in_record_order_that_is_o
 
 async def test_a_pause_holds_delivery_a_result_that_arrives_enters_the_record_and_waits() -> None:
   """A pause holds delivery: a result that arrives enters the record and waits."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   act = engine.prompt(int, "go", on=root)
@@ -46,7 +46,7 @@ async def test_a_pause_holds_delivery_a_result_that_arrives_enters_the_record_an
 
 async def test_a_paused_prompt_stops_at_its_next_boundary_with_its_loop_where_it_stood() -> None:
   """A paused prompt stops at its next boundary, with its loop where it stood."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(a + 1)"]
   act = engine.prompt(int, "count", on=root)
@@ -66,7 +66,7 @@ async def test_a_paused_prompt_stops_at_its_next_boundary_with_its_loop_where_it
 
 async def test_the_engine_holds_the_response_of_a_reply_that_returns_on_a_paused_chain() -> None:
   """The engine holds the response of a reply that returns on a paused chain."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["close(7)"]
   act = engine.prompt(int, "count", on=root)
@@ -82,7 +82,7 @@ async def test_the_engine_holds_the_response_of_a_reply_that_returns_on_a_paused
 
 async def test_a_rung_carries_on_only_while_its_own_chain_is_not_paused() -> None:
   """A rung carries on only while its own chain is not paused."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   act = engine.prompt(int, "go", on=root)
@@ -99,7 +99,7 @@ async def test_a_rung_carries_on_only_while_its_own_chain_is_not_paused() -> Non
 
 async def test_a_control_from_outside_reaches_a_paused_act_at_once() -> None:
   """A control from outside reaches a paused act at once, where what the words of the act say waits for the wake."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   _, root = life(sand)
   act = engine.bash("slow", on=root)
   await settle()

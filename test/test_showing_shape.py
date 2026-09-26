@@ -1,6 +1,6 @@
 """Showing, a text a note shows and the show of it."""
 
-from conftest import STANDS, Sand, life, of, paragraphs, said, settle, world_says
+from conftest import Sand, life, of, paragraphs, said, settle, world_says
 from furb import engine
 from furb.engine import TAIL, Text, span
 
@@ -10,7 +10,7 @@ THREE = "one\ntwo\nthree\n"
 
 def sown() -> Sand:
   """A World with a text of three lines and the roster of the suite."""
-  return Sand(files={"/w/n.txt": THREE}, stands=STANDS)
+  return Sand(files={"/w/n.txt": THREE})
 
 
 async def test_a_text_a_note_shows_and_the_show_of_it() -> None:
@@ -28,7 +28,7 @@ async def test_a_text_a_note_shows_and_the_show_of_it() -> None:
 
 async def test_the_paragraph_of_an_exited_command_holds_one_showing_for_each_text_told() -> None:
   """The paragraph of an exited command holds one showing for each text told."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   both = engine.bash("echo hi", show_err=TAIL, on=root)
   assert (await both).code == 0

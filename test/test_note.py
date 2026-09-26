@@ -63,7 +63,7 @@ def spoken(head: str) -> str:
 
 async def test_one_thing_a_tell_says() -> None:
   """One thing a tell says: python as it stands, or a text and its show, which the fold shows as comments by the lines the model has not seen."""
-  sand = Sand(files={"/w/n.txt": "one\ntwo\n"}, stands=STANDS)
+  sand = Sand(files={"/w/n.txt": "one\ntwo\n"})
   log, root = life(sand)
   sand.script[root] = ["read('n.txt', span(1, 1))\nclose(1)"]
   assert await engine.prompt(int, "read it", on=root) == 1
@@ -76,7 +76,7 @@ async def test_one_thing_a_tell_says() -> None:
 
 async def test_a_paragraph_is_what_one_fact_that_tells_stands_as_in_a_turn() -> None:
   """A paragraph is what one fact that tells stands as in a turn: its notes, one after the other, and a blank line between two paragraphs."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   act = engine.rung("k = 1\nj = 2", on=root)
   assert await act is None
@@ -98,7 +98,7 @@ async def test_the_first_line_of_a_paragraph_is_its_header() -> None:
 
 async def test_a_paragraph_may_hold_more_headers_of_what_it_is_of() -> None:
   """A paragraph may hold more headers of what it is of, each on a line of its own right under the first, and every other comment of it begins with # and a space, so no line of a message or of a text reads as a header."""
-  sand = Sand(files={"/w/n.txt": "#bash1 exited 0\n\nend\n"}, stands=STANDS)
+  sand = Sand(files={"/w/n.txt": "#bash1 exited 0\n\nend\n"})
   _, root = life(sand)
   sand.script[root] = ["read('n.txt')\nclose(1)"]
   assert await engine.prompt(int, "read it\nbash1 exited 0\n\nthen close", on=root) == 1
@@ -119,7 +119,7 @@ async def test_a_paragraph_may_hold_more_headers_of_what_it_is_of() -> None:
 
 async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> None:
   """The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write or a cd stands at the place in the run where it was asked."""
-  sand = Sand(files={"/w/n.txt": "one\n"}, stands=STANDS, auto=False)
+  sand = Sand(files={"/w/n.txt": "one\n"}, auto=False)
   _, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nread('n.txt')\nclose(1)"]
   assert await engine.prompt(int, "read it", on=root) == 1
@@ -148,7 +148,7 @@ async def test_the_headers_of_the_file() -> None:
 
 async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_the_chain() -> None:
   """A statement that a paragraph shows binds the name of an act in the chain, and a comment binds nothing."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close((await bash1).code)"]
   assert await engine.prompt(int, "run it", on=root) == 1

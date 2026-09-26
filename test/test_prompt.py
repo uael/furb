@@ -12,7 +12,7 @@ COST = (80000, 0, 0, 0, 1.5)
 
 async def test_a_prompt_it_makes_the_rung_of_one_turn_of_its_model() -> None:
   """A prompt: it makes the rung of one turn of its model, makes another while the rung it made gives no value, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["k = BAD", "raise ValueError('boom')", "close(7)"]
   act = engine.prompt(int, "try", on=root)
@@ -24,7 +24,7 @@ async def test_a_prompt_it_makes_the_rung_of_one_turn_of_its_model() -> None:
 
 async def test_the_driver_gives_the_name_of_the_prompt() -> None:
   """The driver gives the name of the prompt, and the prompt is awaited for the shape."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["close(7)"]
   act = engine.prompt(int, "count", on=root)
@@ -34,7 +34,7 @@ async def test_the_driver_gives_the_name_of_the_prompt() -> None:
 
 async def test_the_engine_asks_the_model_again_after_a_refusal() -> None:
   """The engine asks the model again after a refusal."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["k = BAD", "close(7)"]
   act = engine.prompt(int, "try", on=root)
@@ -49,7 +49,7 @@ async def test_the_engine_asks_the_model_again_after_a_refusal() -> None:
 
 async def test_the_operator_prompts_a_model_to_make_the_model_work() -> None:
   """The operator prompts a model to make the model work."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nclose((await x).code)"]
   assert await engine.prompt(int, "run it", on=root) == 0
@@ -58,7 +58,7 @@ async def test_the_operator_prompts_a_model_to_make_the_model_work() -> None:
 
 async def test_a_model_prompts_the_operator_to_tell_the_model_something_or_to_get_a_decision() -> None:
   """A model prompts the operator to tell the model something or to get a decision."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["p = prompt(int, 'how many?', to='operator')\nclose(await p)"]
   act = engine.prompt(int, "ask them", on=root)
@@ -72,7 +72,7 @@ async def test_a_model_prompts_the_operator_to_tell_the_model_something_or_to_ge
 
 async def test_a_model_prompts_a_model_to_delegate() -> None:
   """A model prompts a model to delegate."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   two = engine.chain("two")
   sand.script[two] = ["close(2)"]
@@ -83,7 +83,7 @@ async def test_a_model_prompts_a_model_to_delegate() -> None:
 
 async def test_a_prompt_to_a_model_is_a_ladder_of_rungs_in_the_globals_of_its_chain() -> None:
   """A prompt to a model is a ladder of rungs in the globals of its chain."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   sand.script[root] = ["a = 1", "b = a + 1", "close(b)"]
   act = engine.prompt(int, "count", on=root)
@@ -94,7 +94,7 @@ async def test_a_prompt_to_a_model_is_a_ladder_of_rungs_in_the_globals_of_its_ch
 
 async def test_nothing_but_a_prompt_asks_a_model() -> None:
   """Nothing but a prompt asks a model."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   await engine.rung("k = 1", on=root)
   engine.bash("echo hi", on=root)
@@ -108,7 +108,7 @@ async def test_nothing_but_a_prompt_asks_a_model() -> None:
 
 async def test_the_value_of_a_prompt_on_another_chain_comes_back_as_the_value() -> None:
   """The value of a prompt on another chain comes back as the value, and nothing is wired between the chains of one life."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   two = engine.chain("two")
   sand.script[two] = ["close(Text('p.txt', 'hi'))"]
@@ -118,7 +118,7 @@ async def test_the_value_of_a_prompt_on_another_chain_comes_back_as_the_value() 
 
 async def test_prompt_is_given_a_shape_a_message_and_an_actor_on_a_chain() -> None:
   """prompt is given a shape, a message and an actor, on a chain."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   engine.prompt(int, "how many?", "n/low", on=root)
   word = said(log, "prompt")[0]
@@ -127,7 +127,7 @@ async def test_prompt_is_given_a_shape_a_message_and_an_actor_on_a_chain() -> No
 
 async def test_prompt_gives_the_prompt_which_is_awaited_for_the_shape() -> None:
   """prompt gives the prompt, which is awaited for the shape."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   sand.script[root] = ["close('seven')"]
   act = engine.prompt(str, "a word", on=root)
@@ -137,7 +137,7 @@ async def test_prompt_gives_the_prompt_which_is_awaited_for_the_shape() -> None:
 
 async def test_the_response_of_a_prompt_has_the_shape() -> None:
   """The response of a prompt has the shape."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   sand.script[root] = ["close(7)"]
   got = await engine.prompt(int, "count", on=root)
@@ -146,7 +146,7 @@ async def test_the_response_of_a_prompt_has_the_shape() -> None:
 
 async def test_none_is_a_shape_of_its_own() -> None:
   """None is a shape of its own."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["k = 1\nclose(None)"]
   act = engine.prompt(None, "work", on=root)
@@ -157,7 +157,7 @@ async def test_none_is_a_shape_of_its_own() -> None:
 
 async def test_without_a_message_the_actor_reads_the_transcript_alone() -> None:
   """Without a message, the actor reads the transcript alone."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["close(7)"]
   act = engine.prompt(int, on=root)
@@ -172,7 +172,7 @@ async def test_without_a_message_the_actor_reads_the_transcript_alone() -> None:
 
 async def test_a_model_answers_any_shape() -> None:
   """A model answers any shape."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   sand.script[root] = ["close(Text('p.txt', 'hi'))"]
   got = await engine.prompt(Text, "a text", on=root)
@@ -181,7 +181,7 @@ async def test_a_model_answers_any_shape() -> None:
 
 async def test_a_model_asked_with_the_shape_none_reads_the_message_works_and_closes_with_nothing() -> None:
   """A model asked with the shape None reads the message, works, and closes with nothing."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["x = bash('echo hi')\nawait x\nclose(None)"]
   assert await engine.prompt(None, "run a command", on=root) is None
@@ -190,7 +190,7 @@ async def test_a_model_asked_with_the_shape_none_reads_the_message_works_and_clo
 
 async def test_a_rung_need_not_wait_for_a_prompt_of_shape_none() -> None:
   """A rung need not wait for a prompt of shape None."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   two = engine.chain("two")
   sand.script[root] = [f"prompt(None, 'look at this', to='operator', on={two!r})\nclose(1)"]
@@ -202,7 +202,7 @@ async def test_a_rung_need_not_wait_for_a_prompt_of_shape_none() -> None:
 
 async def test_the_actor_left_unsaid_is_the_default_actor_of_the_chain() -> None:
   """The actor left unsaid is the default actor of the chain when the prompt is made, which the prompt writes into the actor word of every rung it makes, so every life asks the one actor the record holds."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["actor = 'n/low'", "close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
@@ -225,7 +225,7 @@ async def test_the_actor_left_unsaid_is_the_default_actor_of_the_chain() -> None
 
 async def test_a_prompt_to_a_model_runs_in_steps_until_the_prompt_completes() -> None:
   """A prompt to a model runs in steps until the prompt completes."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["a = 1", "b = a + 1", "close(b + 1)"]
   act = engine.prompt(int, "count", on=root)
@@ -237,7 +237,7 @@ async def test_a_prompt_to_a_model_runs_in_steps_until_the_prompt_completes() ->
 
 async def test_the_binding_of_a_prompt_gives_the_shape_as_python_shows_the_expression() -> None:
   """The binding of a prompt gives the shape as python shows the expression, as prompt1: Act[int] = Act('prompt1')."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   engine.prompt(int, "how many?", to=OPERATOR, on=root)
   engine.prompt(list[Text], "some texts?", to=OPERATOR, on=root)
@@ -255,7 +255,7 @@ async def test_the_binding_of_a_prompt_gives_the_shape_as_python_shows_the_expre
 
 async def test_a_rung_whose_word_closes_nothing_ends_its_step() -> None:
   """A rung whose word closes nothing ends its step, and the engine asks the model again."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(a + 1)"]
   act = engine.prompt(int, "count", on=root)
@@ -271,7 +271,7 @@ async def test_a_rung_whose_word_closes_nothing_ends_its_step() -> None:
 
 async def test_the_completion_of_a_prompt_cancels_nothing_under_the_prompt() -> None:
   """The completion of a prompt cancels nothing under the prompt but the words it ran."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose(1)"]
   act = engine.prompt(int, "start one", on=root)
@@ -288,7 +288,7 @@ async def test_the_completion_of_a_prompt_cancels_nothing_under_the_prompt() -> 
 
 async def test_the_operator_prompts_on_any_chain_by_the_id_of_the_chain() -> None:
   """The operator prompts on any chain, by the id of the chain."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, _ = life(sand)
   two = engine.chain("two")
   sand.script[two] = ["close(2)"]
@@ -298,7 +298,7 @@ async def test_the_operator_prompts_on_any_chain_by_the_id_of_the_chain() -> Non
 
 async def test_a_rung_prompts_on_any_chain_by_the_id_of_the_chain() -> None:
   """A rung prompts on any chain, by the id of the chain."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   two = engine.chain("two")
   sand.script[two] = ["close(2)"]
@@ -309,7 +309,7 @@ async def test_a_rung_prompts_on_any_chain_by_the_id_of_the_chain() -> None:
 
 async def test_a_prompt_to_the_operator_completes_when_the_operator_closes_the_prompt() -> None:
   """A prompt to the operator completes when the operator closes the prompt."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
@@ -321,7 +321,7 @@ async def test_a_prompt_to_the_operator_completes_when_the_operator_closes_the_p
 
 async def test_the_response_of_a_prompt_on_a_chain_with_a_source_comes_to_the_act_the_caller_holds() -> None:
   """The response of a prompt on a chain with a source comes to the act that the caller holds."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   await engine.rung("k = 21", on=root)
   twin = engine.chain("twin", source=root)
@@ -334,7 +334,7 @@ async def test_the_response_of_a_prompt_on_a_chain_with_a_source_comes_to_the_ac
 
 async def test_it_is_the_ladder_of_its_rungs_and_its_name_is_a_door_of_the_program() -> None:
   """It is the ladder of its rungs, and its name is the door of the program of that ladder, which holds the word of every rung of it for as long as the chain lives."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   sand.script[root] = ["a = 1"]
   act = engine.prompt(int, "count", on=root)
@@ -351,7 +351,7 @@ async def test_it_is_the_ladder_of_its_rungs_and_its_name_is_a_door_of_the_progr
 
 async def test_a_word_written_to_its_door_is_a_rung_of_it() -> None:
   """A word written to its door is a rung of it, which answers it as the word of its model does."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["a = 1"]
   act = engine.prompt(int, "count", on=root)
@@ -365,13 +365,13 @@ async def test_a_word_written_to_its_door_is_a_rung_of_it() -> None:
 
 async def test_a_prompt_to_the_operator_asks_no_model() -> None:
   """A prompt to the operator asks no model: the World takes it and shows it, and it waits to be closed; in a later life, one the record shows open is shown again only at a wake, and one the record shows closed is shown no more."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
   assert said(log, "reply") == [] and [one[1] for one in sand.calls if one[0] == "prompt"] == [act]
   assert [a[2] for a in said(log, "started") if a[1] == act] == [WORLD]
-  still = Sand(stands=STANDS)
+  still = Sand()
   _, over = await relived(still, plain(sand.record))
   assert over == root and said(still.calls, "prompt") == []
   engine.wake(over)
@@ -379,7 +379,7 @@ async def test_a_prompt_to_the_operator_asks_no_model() -> None:
   assert [one[1] for one in said(still.calls, "prompt")] == [act]
   engine.close(21, act)
   await settle()
-  after = Sand(stands=STANDS)
+  after = Sand()
   _, over = await relived(after, [*plain(sand.record), *plain(still.record)])
   engine.wake(over)
   await settle()
@@ -388,7 +388,7 @@ async def test_a_prompt_to_the_operator_asks_no_model() -> None:
 
 async def test_its_close_tells_what_closed_it_from_outside() -> None:
   """Its close tells what closed it from outside, which the one that closed it says, and nothing of what its rung gave, which the rung has told."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
@@ -406,7 +406,7 @@ async def test_its_close_tells_what_closed_it_from_outside() -> None:
 
 async def test_a_paused_prompt_makes_no_rung_until_the_wake() -> None:
   """A paused prompt makes no rung until the wake, and a cancel of it is over its rung too, which ends itself."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(a + 1)"]
   act = engine.prompt(int, "count", on=root)
@@ -435,7 +435,7 @@ async def test_a_paused_prompt_makes_no_rung_until_the_wake() -> None:
 
 async def test_the_world_closes_with_a_refusal_a_prompt_it_cannot_put_to_the_operator() -> None:
   """The World closes with a refusal a prompt it cannot put to the operator; which shapes the operator answers is the World's law."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   act = engine.prompt(Text, "a text?", to=OPERATOR, on=root)
   await settle()
@@ -460,7 +460,7 @@ async def test_the_shape_left_unsaid_is_none() -> None:
 
 async def test_a_prompt_takes_any_shape_which_a_close_is_read_against_as_python_reads_an_instance() -> None:
   """A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = [
     "close(Text('p.txt', 'hi'))",
@@ -484,7 +484,7 @@ async def test_a_prompt_takes_any_shape_which_a_close_is_read_against_as_python_
 
 async def test_a_prompt_carries_the_name_of_its_shape_as_a_word() -> None:
   """A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the journal makes it again."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["close(7)"]
   assert await engine.prompt(int, "count", on=root) == 7
@@ -493,7 +493,7 @@ async def test_a_prompt_carries_the_name_of_its_shape_as_a_word() -> None:
   await settle()
   assert [one[4] for one in said(log, "prompt")] == ["int", "int"]
   named = [one[1] for one in said(log, "prompt")]
-  again, over = await relived(Sand(stands=STANDS), plain(sand.record))
+  again, over = await relived(Sand(), plain(sand.record))
   assert over == root and [one[1] for one in said(again, "prompt")] == named
 
 
@@ -519,7 +519,7 @@ async def test_the_turns_of_the_chain_hold_the_result_of_the_command_the_acknowl
 
 async def test_a_cancelled_result_is_no_orphan() -> None:
   """A cancelled result is no orphan."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose(1)"]
   act = engine.prompt(int, "start one", on=root)
@@ -544,7 +544,7 @@ async def test_the_response_of_an_acknowledgment_is_no_orphan() -> None:
 
 async def test_when_an_act_a_rung_of_the_chain_made_is_done_the_chain_prompts_nothing() -> None:
   """When an act that a rung of the chain made is done while the word of that rung does not run, no reply has shown it, no prompt it heard on itself is open and no word of the chain is running, the chain prompts nothing, so that the model sees it."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose(1)"]
   act = engine.prompt(int, "start one", on=root)
@@ -559,7 +559,7 @@ async def test_when_an_act_a_rung_of_the_chain_made_is_done_the_chain_prompts_no
 
 async def test_a_pause_stands_over_the_close_that_answers_a_prompt_too() -> None:
   """A pause stands over the close that answers a prompt too, so what a word gave waits for the wake."""
-  sand = Sand(stands=STANDS, cost=COST)
+  sand = Sand(cost=COST)
   log, root = life(sand)
   engine.grant(usd=1.0, on=root)
   sand.script[root] = ["close(5)"]
@@ -588,7 +588,7 @@ async def test_the_name_of_a_shape_is_the_word_a_chain_says_it_by() -> None:
 
 async def test_a_prompt_tells_its_message_and_its_binding_where_it_is_made() -> None:
   """A prompt tells its message and its binding where it is made, as every act tells its open, whether a model or the operator answers it."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(2)", "close(3)"]
   first = engine.prompt(int, "count\nto three", on=root)
@@ -610,7 +610,7 @@ async def test_a_prompt_tells_its_message_and_its_binding_where_it_is_made() -> 
 
 async def test_a_prompt_to_a_model_takes_its_own_act() -> None:
   """A prompt to a model takes its own act, since the engine is the one that asks the model."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
   act = engine.prompt(int, "count", on=root)

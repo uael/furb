@@ -1,12 +1,9 @@
 """Reply, the question of a turn of a model, which the World answers with that turn."""
 
-import asyncio
 from asyncio import CancelledError
 from dataclasses import dataclass
-from functools import partial
 
 from conftest import (
-  STANDS,
   WORLD,
   Sand,
   Where,
@@ -22,7 +19,6 @@ from conftest import (
   settle,
   sown,
   takes,
-  world_says,
 )
 from furb import engine
 from furb.engine import OPERATOR, Refused
@@ -37,30 +33,20 @@ class Busy(Sand):
 
   balked: bool = False
 
-  def hears(self) -> World:
-    """The World that refuses one reply, and answers the replies after it."""
-    loop = asyncio.get_running_loop()
-    while True:
-      a = yield
-      match a:
-        case ("stand", qid, *_):
-          yield "done", qid, self.stands or [[], "", ""]
-        case ("reply", about, _, on, _):
-          self.calls.append(a)
-          if not self.balked:
-            self.balked = True
-            engine.pause(on)
-            yield "done", about, Refused("the World is busy")
-          else:
-            yield "started", about
-            word = self.script[on].pop(0)
-            turn = ("assistant", word, self.cost or (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
-            loop.call_soon(partial(world_says, "done", about, turn))
+  def hear(self, a: tuple) -> World:
+    """The World of the suite, but for the first reply, which it refuses."""
+    match a:
+      case ("reply", about, _, on, _) if not self.balked:
+        self.balked = True
+        engine.pause(on)
+        yield "done", about, Refused("the World is busy")
+      case _:
+        yield from super().hear(a)
 
 
 async def test_the_request_of_a_reply_is_the_transcript_of_the_chain_as_turns() -> None:
   """The request of a reply is the transcript of the chain as turns, which the World reads when it takes it."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
   act = engine.prompt(int, "count", on=root)
@@ -85,7 +71,7 @@ async def test_the_request_of_a_reply_is_the_transcript_of_the_chain_as_turns() 
 
 async def test_the_model_reads_the_turns_of_the_chain_at_each_step() -> None:
   """The model reads the turns of the chain at each step."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["k = 1", "close(k + 1)"]
   assert await engine.prompt(int, "count", on=root) == 2
@@ -98,7 +84,7 @@ async def test_the_model_reads_the_turns_of_the_chain_at_each_step() -> None:
 
 async def test_a_reply_carries_the_rung_it_asks_for_as_its_maker() -> None:
   """A reply carries the rung it asks for as its maker, the chain that asks as the chain it is on, and the actor as its one word, and nothing else."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
   act = engine.prompt(int, "count", on=root)
@@ -111,7 +97,7 @@ async def test_a_reply_carries_the_rung_it_asks_for_as_its_maker() -> None:
 
 async def test_a_reply_is_on_the_chain_that_asks() -> None:
   """A reply is on the chain that asks, so the World keys its facts and its cache by chain."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   two = engine.chain("two")
   await settle()
@@ -126,7 +112,7 @@ async def test_a_reply_is_on_the_chain_that_asks() -> None:
 
 async def test_a_reply_the_world_cannot_answer_is_the_worlds_to_refuse() -> None:
   """A reply the World cannot answer is the World's to refuse: it pauses the chain first when it wants a wake, and is done with the refusal, which the rung comes to and the prompt asks again after."""
-  sand = Busy(stands=STANDS)
+  sand = Busy()
   log, root = life(sand)
   sand.script[root] = ["close(7)"]
   one = engine.prompt(int, "count", on=root)
@@ -144,7 +130,7 @@ async def test_a_reply_the_world_cannot_answer_is_the_worlds_to_refuse() -> None
 
 async def test_the_life_refuses_a_reply_that_no_ear_owns() -> None:
   """The life refuses a reply that no ear owns, and the chain that asks then pauses itself, since that fault stands until a wake."""
-  where = Where(stands=STANDS)
+  where = Where()
   log, root = life(where)
   asked = engine.prompt(int, "count", on=root)
   await settle()
@@ -160,7 +146,7 @@ async def test_the_life_refuses_a_reply_that_no_ear_owns() -> None:
 
 async def test_a_reply_ends_as_a_wait_does() -> None:
   """A reply ends as a wait does, so a cancel or a close over it ends it with a CancelledError."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   one = engine.prompt(int, "one", on=root)
   await settle()
@@ -178,7 +164,7 @@ async def test_a_reply_ends_as_a_wait_does() -> None:
 
 async def test_the_world_reads_the_turns_of_the_chain_whole_when_it_takes_a_reply() -> None:
   """The World reads the turns of the chain whole when it takes a reply, folded again for that reply, and the journal keeps the answer and no turns."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["k = 1", "close(k + 1)"]
   assert await engine.prompt(int, "count", on=root) == 2
@@ -194,7 +180,7 @@ async def test_the_world_reads_the_turns_of_the_chain_whole_when_it_takes_a_repl
 
 async def test_the_world_answers_a_reply_with_a_done_whose_value_is_the_turn_of_the_model() -> None:
   """The World answers a reply with a done whose value is the turn of the model, which stands as the turn it is, with its usage and the blocks of the provider."""
-  sand = Sand(stands=STANDS, cost=(80000, 7, 0, 0, 1.5))
+  sand = Sand(cost=(80000, 7, 0, 0, 1.5))
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
@@ -276,7 +262,7 @@ async def test_a_later_life_asks_no_model_and_does_no_act_whose_close_the_record
   sand.script[root] = ["x = bash('echo hi')\nclose((await x).code)", "close(None)"]
   assert await engine.prompt(int, "run it", on=root) == 0
   await settle()
-  later = Sand(stands=STANDS)
+  later = Sand()
   await relived(later, plain(sand.record))
   assert [a for a in later.calls if a[0] in ("reply", "bash")] == []
 
@@ -337,7 +323,7 @@ async def test_no_model_is_asked_for_a_rung_the_journal_answered() -> None:
   sand.script[root] = ["a = 1", "close(a + 1)", "close(None)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
-  later = Sand(stands=STANDS)
+  later = Sand()
   _, over = await relived(later, plain(sand.record))
   assert [a for a in later.calls if a[0] == "reply"] == []
   assert engine.module(over)["a"] == 1

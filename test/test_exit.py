@@ -1,13 +1,13 @@
 """Exit, what a command came to."""
 
-from conftest import STANDS, Sand, life, said, world_says
+from conftest import Sand, life, said, world_says
 from furb import engine
 from furb.engine import TAIL, Exit, Text
 
 
 async def test_what_a_command_came_to_its_code_and_each_of_its_streams_as_a_text() -> None:
   """What a command came to: its code, and each of its streams as a text, in the order the command keeps them."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   _, root = life(sand)
   act = engine.bash("run", show_err=TAIL, on=root)
   world_says("out", act, "out\n", "stdout")
@@ -20,7 +20,7 @@ async def test_what_a_command_came_to_its_code_and_each_of_its_streams_as_a_text
 
 async def test_an_exit_is_the_value_that_a_command_completes_with() -> None:
   """An Exit is the value that a command completes with."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   got = await engine.bash("echo hi", on=root)
   command = said(log, "bash")[0][1]
@@ -30,7 +30,7 @@ async def test_an_exit_is_the_value_that_a_command_completes_with() -> None:
 
 async def test_the_streams_of_an_exit_are_its_stdout_and_its_stderr_each_a_text() -> None:
   """The streams of an Exit are its stdout and its stderr, each a Text."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   got = await engine.bash("echo hi", on=root)
   command = said(log, "bash")[0][1]

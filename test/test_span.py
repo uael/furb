@@ -1,6 +1,6 @@
 """span, the show of the lines lo through hi."""
 
-from conftest import STANDS, WORLD, Sand, dones, heads, life, said, settle
+from conftest import WORLD, Sand, dones, heads, life, said, settle
 from furb import engine
 from furb.engine import HIDDEN, Text, span
 
@@ -21,7 +21,7 @@ def test_span_lo_hi_is_the_show_of_the_lines_lo_through_hi() -> None:
 async def test_a_span_that_holds_no_line_shows_none_which_hidden_is() -> None:
   """A span that holds no line shows none, which HIDDEN is, so what a hidden show shows stands in no turns: a command that takes one tells its header and its binding alone, and a read that takes one tells nothing."""
   assert span(0, 0)(LINES) == HIDDEN(LINES) == []
-  sand = Sand(files={"/w/n.txt": "one\n"}, stands=STANDS)
+  sand = Sand(files={"/w/n.txt": "one\n"})
   log, root = life(sand)
   act = engine.bash("quiet", show=HIDDEN, on=root)
   assert (await act).code == 0

@@ -76,9 +76,10 @@ the whole file again.
 The suite drives the engine through its public API alone, end to end, from the module the operator gives.
 
 - `test/conftest.py` is the harness. `Sand` is a World in memory: files by path, scripted words by chain id, the calls
-  it performed, the entries it kept, and what it fed its commands. `Dead` refuses every question but the standing, and
-  `Where` asks the chain where it stands at every path. `Py` is a Kernel that is python, with the gate of the crate,
-  which refuses a word that is not python or that names what nothing binds, such as `BAD`. `life` boots a life on them,
+  it performed, the entries it kept, and what it fed its commands. It stands on `STANDS`, and a World of one test
+  overrides its `hear` for the facts it does otherwise. `Dead` refuses every question but the standing, and `Where`
+  asks the chain where it stands at every path. `Py` is a Kernel that is python, with the gate of the crate, which
+  refuses a word that is not python or that names what nothing binds, such as `BAD`. `life` boots a life on them,
   `settle` gives the loop room, `plain` sends a record through the wire and back, `said` reads the facts, and
   `paragraphs` and `heads` read the turns, which are python.
 - One test file per definition of the contract: `test_<name>.py` for a function, a global or a type alias,

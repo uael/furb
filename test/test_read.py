@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Dead, Sand, life, of, paragraphs, said, settle, sown
+from conftest import Dead, Sand, life, of, paragraphs, said, settle, sown
 from furb import engine
 from furb.engine import HEAD, HIDDEN, OPERATOR, Refused, Text, span, take
 
@@ -35,7 +35,7 @@ async def test_a_read_whoever_serves_the_path_answers_it_with_the_text_of_it() -
 
 async def test_a_read_that_the_world_refuses_raises_refused_in_the_caller() -> None:
   """A read that the World refuses raises Refused in the caller."""
-  dead = Dead(stands=STANDS)
+  dead = Dead()
   _, root = life(dead)
   with pytest.raises(Refused, match="a dead World answers no read"):
     engine.read("a.txt", on=root)
@@ -66,7 +66,7 @@ async def test_a_read_on_a_chain_with_a_source_tells_the_lines_of_a_skipped_read
 
 async def test_the_engine_judges_no_scheme() -> None:
   """The engine judges no scheme, so a path of an unknown scheme goes to the World too."""
-  sand = Sand(files={"weird://x": "kept\n"}, stands=STANDS)
+  sand = Sand(files={"weird://x": "kept\n"})
   _, root = life(sand)
   assert engine.read("weird://x", on=root) == Text("weird://x", "kept\n")
   assert [a[4] for a in said(sand.calls, "read")] == ["weird://x"]
@@ -99,7 +99,7 @@ async def test_read_gives_a_text() -> None:
 async def test_a_text_without_a_show_is_told_as_head() -> None:
   """A text without a show is told as HEAD, which is the span of its first 2000 lines."""
   assert HEAD(BIG.splitlines()) == span(1, 2000)(BIG.splitlines()) == list(range(1, 2001))
-  sand = Sand(files={"/w/big.txt": BIG}, stands=STANDS)
+  sand = Sand(files={"/w/big.txt": BIG})
   _, root = life(sand)
   sand.script[root] = ["read('big.txt')\nclose(1)"]
   assert await engine.prompt(int, "read it", on=root) == 1

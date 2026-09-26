@@ -2,14 +2,14 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, life, said, settle
+from conftest import Sand, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR
 
 
 async def test_a_close_is_a_cancel_that_carries_what_the_act_it_names_is_done_with() -> None:
   """A close is a cancel that carries what the act it names is done with, and it is a kind of its own, since a tuple has no slot that may be empty."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   act = engine.bash("slow", on=root)
   gone = engine.bash("other", on=root)
@@ -25,7 +25,7 @@ async def test_a_close_is_a_cancel_that_carries_what_the_act_it_names_is_done_wi
 
 async def test_a_close_is_over_the_act_it_names_and_the_words_running_under_it() -> None:
   """A close is over the act it names, the words running under it and the replies that ask for those words, where a cancel is over everything under it."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   shut = engine.prompt(int, "go", on=root)

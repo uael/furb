@@ -1,6 +1,6 @@
 """Entry, one entry of the record."""
 
-from conftest import STANDS, Dead, Sand, acts, life, lived, plain, relived, said, settle, sown
+from conftest import Dead, Sand, acts, life, lived, plain, relived, said, settle, sown
 from furb import engine
 from furb.engine import Text
 
@@ -17,12 +17,12 @@ async def test_one_entry_of_the_record_the_fact() -> None:
 
 async def test_the_order_of_the_record_is_what_puts_an_entry_back_in_its_place() -> None:
   """The order of the record is what puts an entry back in its place in a later life."""
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
-  again, over = await relived(Dead(stands=STANDS), list(sand.record))
+  again, over = await relived(Dead(), list(sand.record))
   assert over == root
   assert [one[1] for one in said(again, "prompt")] == [said(log, "prompt")[0][1]]
   assert engine.peek(said(log, "prompt")[0][1]) == 1

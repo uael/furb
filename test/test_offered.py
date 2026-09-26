@@ -13,7 +13,7 @@ async def test_the_window_an_actor_reads() -> None:
   assert engine.offered(STANDS[0], OPERATOR) == 200000
   assert engine.offered(STANDS[0], "n/high") is None
   assert engine.offered(STANDS[0], "ghost") is None
-  sand = Sand(stands=STANDS)
+  sand = Sand()
   _, root = life(sand)
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()

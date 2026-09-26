@@ -2,13 +2,13 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, life, said, settle
+from conftest import Sand, life, said, settle
 from furb import engine
 
 
 async def test_what_an_act_a_control_is_over_is_done_with() -> None:
   """What an act a control is over is done with: the value a close carries for the act it names, and a CancelledError for every other."""
-  sand = Sand(stands=STANDS, auto=False)
+  sand = Sand(auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
   act = engine.prompt(int, "go", on=root)
