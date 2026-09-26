@@ -4,14 +4,16 @@
 //! the sandbox calls back.
 
 use std::{
+  mem::ManuallyDrop,
   rc::Rc,
   sync::Arc,
   task::{Wake, Waker},
+  thread::{self, ThreadId},
 };
 
 use pyo3::{
   Bound, Py, PyAny, PyResult, Python,
-  exceptions::{PyBaseException, PyStopIteration, PyTypeError},
+  exceptions::{PyBaseException, PyRuntimeError, PyStopIteration, PyTypeError},
   prelude::*,
   types::{
     PyBool, PyDict, PyFloat, PyFunction, PyInt, PyList, PyModule, PyString, PyTuple, PyType,
@@ -202,29 +204,80 @@ impl PyEar {
 
 /// An ear that the crate writes: given once, to the boot of an engine or to a verb that takes an ear. The engine of
 /// monty hears it as itself, and the engine of this interpreter steps it as a generator of its own.
-#[pyclass(module = "furb_monty._monty", name = "NativeEar", unsendable, weakref)]
-pub struct NativeEar {
+#[pyclass(module = "furb_monty._monty", name = "NativeEar", weakref)]
+pub struct NativeEar(Owned<Hearing>);
+
+/// The ear, and what the engine of this interpreter steps it with once it is born: the door that makes a value
+/// python, the voices its work speaks with later, and what wakes the loop when one speaks.
+struct Hearing {
   ear: Option<Box<dyn Ear>>,
-  /// What the engine of this interpreter steps it with once it is born: the door that makes a value python, the
-  /// voices its work speaks with later, and what wakes the loop when one speaks.
   stepped: Option<(Door, Voice, Waker)>,
+}
+
+/// What one thread owns: an ear of rust holds what the thread that made it may touch alone. Python may drop the
+/// object that holds it on any thread, as it collects a cycle there, so a drop on another thread frees nothing,
+/// which leaves memory alone once the ear is disposed.
+struct Owned<T> {
+  thread: ThreadId,
+  held: ManuallyDrop<T>,
+}
+
+// SAFETY: what an Owned holds is touched on the thread that made it alone: every reach of it refuses another thread,
+// and a drop on another thread leaves it as it is.
+unsafe impl<T> Send for Owned<T> {}
+unsafe impl<T> Sync for Owned<T> {}
+
+impl<T> Owned<T> {
+  fn new(held: T) -> Self {
+    Owned { thread: thread::current().id(), held: ManuallyDrop::new(held) }
+  }
+
+  fn get(&self) -> PyResult<&T> {
+    self.here()?;
+    Ok(&self.held)
+  }
+
+  fn get_mut(&mut self) -> PyResult<&mut T> {
+    self.here()?;
+    Ok(&mut self.held)
+  }
+
+  fn here(&self) -> PyResult<()> {
+    if thread::current().id() == self.thread {
+      Ok(())
+    } else {
+      Err(PyRuntimeError::new_err("an ear of the crate is heard on the thread that made it"))
+    }
+  }
+}
+
+impl<T> Drop for Owned<T> {
+  fn drop(&mut self) {
+    if thread::current().id() == self.thread {
+      // SAFETY: the value is dropped once, here, on the thread that owns it.
+      unsafe { ManuallyDrop::drop(&mut self.held) }
+    }
+  }
 }
 
 impl NativeEar {
   fn of(ear: Box<dyn Ear>) -> NativeEar {
-    NativeEar { ear: Some(ear), stepped: None }
+    NativeEar(Owned::new(Hearing { ear: Some(ear), stepped: None }))
   }
 
   /// The ear a value of python holds, when it is one, taken out of it, since an ear hears in one engine.
   fn taken(value: &Bound<'_, PyAny>) -> PyResult<Option<Box<dyn Ear>>> {
     let Ok(held) = value.cast::<NativeEar>() else { return Ok(None) };
     let mut held = held.borrow_mut();
-    let ear = if held.stepped.is_none() { held.ear.take() } else { None };
+    let hearing = held.0.get_mut()?;
+    let ear = if hearing.stepped.is_none() { hearing.ear.take() } else { None };
     ear.map(Some).ok_or_else(|| {
       PyTypeError::new_err("an ear of the crate hears in one engine, and this one hears")
     })
   }
+}
 
+impl Hearing {
   /// What the ear does with what it heard, as a generator of this interpreter gives it: a saying, or nothing to
   /// wait. A verb it calls is said to the engine of this interpreter at once, and what it gave is heard back.
   fn step(&mut self, py: Python<'_>, mut heard: Heard) -> PyResult<Py<PyAny>> {
@@ -267,8 +320,9 @@ impl NativeEar {
 impl NativeEar {
   /// The ear is let go before any engine hears it, or after the life it heard in, so what it holds goes: a command
   /// ends, a wait ends, and a store lets its record go.
-  fn dispose(&mut self) {
-    self.ear.take();
+  fn dispose(&mut self) -> PyResult<()> {
+    self.0.get_mut()?.ear.take();
+    Ok(())
   }
 
   fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
@@ -283,8 +337,9 @@ impl NativeEar {
   /// voice its work speaks with under the name the engine steps it by, and each fact after.
   fn send(slf: &Bound<'_, Self>, a: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let py = slf.py();
-    let mut ear = slf.borrow_mut();
-    let heard = match &ear.stepped {
+    let mut held = slf.borrow_mut();
+    let hearing = held.0.get_mut()?;
+    let heard = match &hearing.stepped {
       Some((door, ..)) => {
         let fact = heard(door, a)?;
         Heard::Fact(
@@ -301,18 +356,18 @@ impl NativeEar {
         let voices = Voice::new();
         voices.drained(&waker);
         let heard = Heard::Born(voices.of(&name));
-        ear.stepped = Some((door, voices, waker));
+        hearing.stepped = Some((door, voices, waker));
         heard
       }
     };
-    ear.step(py, heard)
+    hearing.step(py, heard)
   }
 
   /// What the work of the ear said since, said into the engine of this interpreter under the name of the ear. The
   /// ear is let go first, since the engine steps it with what it said.
   fn pump(slf: &Bound<'_, Self>) -> PyResult<()> {
     let py = slf.py();
-    let (door, said) = match &slf.borrow().stepped {
+    let (door, said) = match &slf.borrow().0.get()?.stepped {
       Some((door, voices, waker)) => (door.clone(), voices.drained(waker)),
       None => return Ok(()),
     };
