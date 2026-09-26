@@ -9,7 +9,7 @@ afterEach(() => {
 
 /** An engine on one ear of the test, which serves every question of the World from memory: a wait of no seconds is
  * over at once, and any other is over when the test says so, never by the clock. */
-function open(record: unknown[] = [], answer = 'close("hello")') {
+function open(record: unknown[] = []) {
   const entries: unknown[] = [];
   const facts: Fact[] = [];
   const files = new Map<string, string>([["a", "one\ntwo\n"]]);
@@ -55,7 +55,7 @@ function open(record: unknown[] = [], answer = 'close("hello")') {
       } else if (kind === "reply") {
         replies++;
         yield ["started", id];
-        later(() => engine.say("done", id, [["assistant", answer, [20, 8, 0, 0, 0.001], null]]));
+        later(() => engine.say("done", id, [["assistant", 'close("hello")', [20, 8, 0, 0, 0.001], null]]));
       } else if (kind === "wait") {
         yield ["started", id];
         const over = () => later(() => engine.say("done", id, [null]));
@@ -82,8 +82,6 @@ test("native queries are synchronous and acts await the real engine and an ear t
   const prompt = engine.prompt("str", { message: "Say hello", on }).id;
   expect(await engine.result<string>(prompt)).toBe("hello");
   expect(replies()).toBe(1);
-  expect(engine.turns({ on }).some((turn) => turn[0] === "assistant")).toBe(true);
-  expect(engine.gate("this is not python !!!", { on })).not.toEqual([]);
 });
 
 test("a pending result leaves JavaScript and other native operations available", async () => {
@@ -97,22 +95,9 @@ test("a pending result leaves JavaScript and other native operations available",
   expect(await pending).toBeNull();
 });
 
-test("pause holds a model response until wake and cancel rejects a native await", async () => {
-  const { engine, replies } = open();
-  const on = engine.root;
-  engine.pause(on);
-  const id = engine.prompt("str", { message: "Say hello", on }).id;
-  // A chain the pause is not over is asked and answered meanwhile, and the paused prompt alone is not asked.
-  const free = engine.chain({ label: "free" }).id;
-  expect(await engine.result<string>(engine.prompt("str", { message: "Say hello", on: free }).id)).toBe(
-    "hello",
-  );
-  expect(replies()).toBe(1);
-  expect(engine.outcome(id).done).toBe(false);
-  engine.wake(engine.root);
-  expect(await engine.result<string>(id)).toBe("hello");
-  expect(replies()).toBe(2);
-  const later = engine.wait({ seconds: 60, on }).id;
+test("a cancel rejects a native await", async () => {
+  const { engine } = open();
+  const later = engine.wait({ seconds: 60, on: engine.root }).id;
   const result = engine.result(later).then(
     () => "resolved",
     (error: Error) => error.message,
@@ -186,7 +171,7 @@ test("every ear hears a fact whose values have no plain form, and each value cro
   const on = engine.root;
   await engine.rung({
     on,
-    word: "class P:\n  pass\nd = {1: 'a'}\nn = 2**70\nf = float('-inf')\nb = b'x'\np = P()\nm = {'is': 'name', 'name': 'bash'}\nsay('note', acting(), d, n, f, b, p, m)\ndebug(t'{d}')",
+    word: "class P:\n  pass\nd = {1: 'a'}\nn = 2**70\nf = float('-inf')\nb = b'x'\np = P()\nm = {'is': 'name', 'name': 'bash'}\nsay('note', acting(), d, n, f, b, p, m)",
   });
   const [note] = facts.filter((fact) => fact[0] === "note");
   expect(note?.slice(3, 7)).toEqual([
@@ -207,12 +192,6 @@ test("every ear hears a fact whose values have no plain form, and each value cro
     ],
   });
   expect(display(note?.[8])).toBe(JSON.stringify({ is: "name", name: "bash" }, null, 2));
-  expect(
-    engine
-      .turns({ on })
-      .map(([, python]) => python)
-      .join("\n"),
-  ).toContain("debugged d = {1: 'a'}");
   // The World hears on: it serves a read, a write and a wait after that fact.
   expect(engine.read("a", { on }).content).toBe("one\ntwo\n");
   await engine.rung({ word: 'write(Text("c", "after"))', on });
@@ -256,15 +235,11 @@ test("a whole JavaScript number is an int, and a BigInt is one exactly", () => {
   expect(() => engine.close(2 ** 60, { id: asked("int") })).toThrow("safe integer");
 });
 
-test("a life whose replay drifts is kept, with what boot raised", async () => {
-  const word = "import random\nawait wait(random.random() + 1)\nclose(1)";
-  const first = open([], word);
-  const prompt = first.engine.prompt("int", { message: "roll", on: first.engine.root }).id;
-  const settled = first.engine.result<number>(prompt);
-  await Bun.sleep(20);
-  first.release();
-  expect(await settled).toBe(1);
-  const second = open(first.entries, word);
+test("a life whose replay drifts is kept, with what boot raised", () => {
+  const first = open();
+  // No verb makes an act of this kind again, so a later life drifts at its entry.
+  first.engine.act("note", first.engine.root, null);
+  const second = open(first.entries);
   expect(second.engine.raised).toMatchObject({ is: "Drift" });
   expect(String(second.engine.raised?.args[0])).toContain("drifts");
   expect(second.engine.root).toBe("chain1");

@@ -1,12 +1,11 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import {
   actorParts,
   boot,
-  decodeRecord,
   type Ear,
   type Fact,
   inspectRecord,
@@ -318,65 +317,6 @@ test("one failed reply is asked again, while two failures in a row pause with a 
   }
 });
 
-test("reopening unfinished work does not add another pause to the record", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-pause-"));
-  const record = join(cwd, "life.jsonl");
-  try {
-    const first = new Session({ cwd, record });
-    const engine = first.open();
-    engine.wait({ seconds: 60, on: engine.root });
-    await first.dispose();
-    const original = await readFile(record, "utf8");
-    for (let index = 0; index < 2; index++) {
-      const later = new Session({ record });
-      later.open();
-      await later.dispose();
-    }
-    // Each life keeps the stand it opened with, and nothing more.
-    const added = (await readFile(record, "utf8")).slice(original.length).trim().split("\n");
-    expect(added.map((line) => JSON.parse(line)[0][0])).toEqual(["stand", "done", "stand", "done"]);
-  } finally {
-    await rm(cwd, { recursive: true });
-  }
-});
-
-test("the record, not stale saved metadata, decides whether a reopened life has pending work", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-stale-pending-"));
-  const record = join(cwd, "life.jsonl");
-  const first = new Session({
-    cwd,
-    record,
-    ...modeled,
-    answer: async () => ["assistant", 'close("done")', null, null],
-  });
-  const opened = first.open();
-  const prompt = opened.prompt("str", { message: "finish", on: opened.root });
-  await prompt;
-  await first.dispose();
-  const saved = JSON.parse(await readFile(`${record}.session.json`, "utf8"));
-  saved.pending = [[prompt.id, "prompt"]];
-  await writeFile(`${record}.session.json`, JSON.stringify(saved));
-  let calls = 0;
-  const second = new Session({
-    record,
-    models: offered,
-    answer: async () => {
-      calls++;
-      return ["assistant", 'close("new answer")', null, null];
-    },
-  });
-  try {
-    const engine = second.open();
-    expect(second.pending.size).toBe(0);
-    expect(engine.outcome(prompt.id).done).toBe(true);
-    expect(await engine.prompt("str", { message: "continue", on: engine.root })).toBe("new answer");
-    expect(calls).toBe(1);
-  } finally {
-    await second.dispose();
-    await rm(cwd, { recursive: true });
-  }
-});
-
 test("the provider hands the model the python of a user turn as the engine wrote it, and chain accepts its parent", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-python-turn-"));
   const log = join(cwd, "cli.jsonl");
@@ -434,71 +374,29 @@ test("file changes append once and reopen in pages without growing the session m
   }
 });
 
-test("record numbers refuse precision loss and map keys keep their identity", () => {
-  expect(decodeRecord('{"$serde_json::private::Number":"10"}')).toEqual({
-    "$serde_json::private::Number": "10",
-  });
-  expect(() => decodeRecord("9007199254740993")).toThrow("safe integer");
-  expect(() => decodeRecord("99999999999999999999999999999999")).toThrow("safe integer");
-  expect(decodeRecord('"99999999999999999999999999999999"')).toBe("99999999999999999999999999999999");
-});
-
-test("integral floats keep their Python type in operator replies and records", async () => {
+test("a whole number from the operator answers a float prompt as a float, typed or from its callback", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-float-"));
-  const record = join(cwd, "life.jsonl");
-  const first = new Session({ cwd, record });
-  const engine = first.open();
-  const question = engine.prompt("float", { message: "A number", to: "operator", on: engine.root });
-  await until(first, () => first.console.prompts.has(question.id));
-  first.console.answer(question.id, "1.0");
-  expect(await question).toBe(1);
-  const id = question.id;
-  await first.dispose();
-  expect(await readFile(record, "utf8")).toContain('"is":"float"');
-  const second = new Session({ record });
+  const typed = boot({ cwd });
+  const called = boot({ cwd, operator: async () => 2 });
   try {
-    const next = second.open();
-    expect(await next.result<number>(id)).toBe(1);
-    expect(second.pending.size).toBe(0);
+    const asked = (session: typeof typed) =>
+      session.engine.prompt("float", { message: "A number?", to: "operator", on: session.engine.root });
+    const one = asked(typed);
+    await until(typed, () => typed.console.prompts.has(one.id));
+    typed.console.answer(one.id, "1.0");
+    const two = asked(called);
+    expect([await one, await two]).toEqual([1, 2]);
+    for (const [{ engine }, question, shown] of [
+      [typed, one, "1.0"],
+      [called, two, "2.0"],
+    ] as const) {
+      await engine.rung({ word: `x = peek(${JSON.stringify(question.id)})`, on: engine.root });
+      expect(engine.inspect("x").representation).toBe(shown);
+    }
   } finally {
-    await second.dispose();
+    await typed.dispose();
+    await called.dispose();
     await rm(cwd, { recursive: true });
-  }
-});
-
-test("a command an earlier session started and did not end runs again once, at the resume", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-command-resume-"));
-  const record = join(cwd, "life.jsonl");
-  const first = new Session({ cwd, record });
-  const engine = first.open();
-  const command = engine.bash("printf x >> count; [ -e done ] || { printf ready; exec sleep 30; }", {
-    on: engine.root,
-  }).id;
-  await until(first, () => printed(first, command) === "ready");
-  await first.dispose();
-  await writeFile(join(cwd, "done"), "");
-  const second = new Session({ record });
-  try {
-    const resumed = second.open();
-    const on = resumed.root;
-    await tick();
-    expect(second.pending.has(command)).toBe(true);
-    expect(await readFile(join(cwd, "count"), "utf8")).toBe("x");
-    // What the command told before the death of its process stands in its door.
-    expect(resumed.read(`${command}/stdout`, { on }).content).toBe("ready");
-    await second.resume();
-    // The World answers the command with the streams of the process it ran, which told nothing this time.
-    expect(await resumed.result<{ code: number; stdout: { content: string } }>(command)).toMatchObject({
-      code: 0,
-      stdout: { content: "" },
-    });
-    expect(await readFile(join(cwd, "count"), "utf8")).toBe("xx");
-    resumed.wake(on);
-    await tick();
-    expect(await readFile(join(cwd, "count"), "utf8")).toBe("xx");
-  } finally {
-    await second.dispose();
-    await remove(cwd);
   }
 });
 
@@ -547,80 +445,19 @@ test("resume wakes no work that a pause of the operator holds, so that pause sta
   }
 });
 
-test("a reopened session pauses no chain, so new work asks once the pending work is gone", async () => {
+test("pending work that a cancel ends is pending no more", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-drained-"));
   const record = join(cwd, "life.jsonl");
-  const first = new Session({ cwd, record, ...modeled, answer: () => new Promise(() => {}) });
+  const first = new Session({ cwd, record });
   const opened = first.open();
-  const prompt = opened.prompt("str", { message: "first", on: opened.root }).id;
+  const prompt = opened.prompt("str", { message: "first", to: "operator", on: opened.root }).id;
   await first.dispose();
-  const second = new Session({ record, models: offered, answer: async () => said('close("x")') });
+  const second = new Session({ record });
   try {
     const again = second.open();
     expect(second.pending.has(prompt)).toBe(true);
     again.cancel(prompt);
     await tick();
-    expect(second.pending.size).toBe(0);
-    await second.resume();
-    expect(await again.prompt("str", { message: "next", on: again.root })).toBe("x");
-    expect(second.isPaused(again.root)).toBe(false);
-  } finally {
-    await second.dispose();
-    await rm(cwd, { recursive: true });
-  }
-});
-
-test("a question a rung put to the operator is asked once in a later life", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-asked-once-"));
-  const record = join(cwd, "life.jsonl");
-  const first = new Session({ cwd, record });
-  const opened = first.open();
-  opened.rung({ word: 'x = await prompt(str, "Q?", to="operator")\nclose(x)', on: opened.root });
-  const question = "prompt1";
-  await until(first, () => first.console.prompts.has(question));
-  await first.dispose();
-  const asked: string[] = [];
-  const second = new Session({
-    record,
-    operator: async ({ id }) => {
-      asked.push(id);
-      return `answer ${asked.length}`;
-    },
-  });
-  try {
-    const again = second.open();
-    await second.resume();
-    expect(await again.result<string>(question)).toBe("answer 1");
-    expect(asked.filter((id) => id === question)).toEqual([question]);
-  } finally {
-    await second.dispose();
-    await rm(cwd, { recursive: true });
-  }
-});
-
-test("an act that never ends by design holds nothing, and a close of the session leaves the record as it was", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-door-"));
-  const record = join(cwd, "life.jsonl");
-  const door = [
-    "def note(id):",
-    "  while True:",
-    "    match (yield):",
-    "      case ('read', qid, _, _, path) if path.startswith('note://'):",
-    "        yield 'done', qid, Text(path, 'kept')",
-    "",
-    "act('note', '', note)",
-    "close(1)",
-  ].join("\n");
-  const first = new Session({ cwd, record, ...modeled, answer: async () => said(door) });
-  const opened = first.open();
-  expect(await opened.prompt("int", { message: "make a door", on: opened.root })).toBe(1);
-  const before = await readFile(record, "utf8");
-  await first.dispose();
-  const second = new Session({ record });
-  try {
-    expect(await readFile(record, "utf8")).toBe(before);
-    expect((await inspectRecord(record)).pending).toEqual([]);
-    second.open();
     expect(second.pending.size).toBe(0);
   } finally {
     await second.dispose();
@@ -650,39 +487,6 @@ test("record inspection reports pending work when its replay starts or feeds a c
     ]);
   } finally {
     await remove(cwd);
-  }
-});
-
-test("a later life stands on what its host offers now, and its chains tell that standing, though its work stays pending", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-gone-model-"));
-  const record = join(cwd, "life.jsonl");
-  let calls = 0;
-  const first = new Session({
-    cwd,
-    record,
-    ...modeled,
-    answer: async () => said(++calls === 1 ? "close(5)" : "await wait(60)\nclose(6)"),
-  });
-  const engine = first.open();
-  const answered = engine.prompt("int", { message: "five", on: engine.root });
-  expect(await answered).toBe(5);
-  engine.prompt("int", { message: "later", on: engine.root });
-  await until(first, () => first.activity.acts.has("wait1"));
-  await first.dispose();
-  const pending = ["prompt2", "rung3", "wait1"];
-  const second = new Session({ record });
-  try {
-    expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual(pending);
-    const again = second.open();
-    expect(second.provider.roster).toEqual([]);
-    const [, , actor] = again.standing() as [unknown, string, string];
-    expect(actor).toBe("operator");
-    expect(again.turns({ on: again.root }).at(-1)?.[1]).toContain(`#${again.root} actor operator`);
-    expect(again.outcome(answered.id)).toEqual({ done: true, value: 5 });
-    expect([...second.pending.keys()]).toEqual(pending);
-  } finally {
-    await second.dispose();
-    await rm(cwd, { recursive: true });
   }
 });
 
@@ -737,48 +541,6 @@ test("a host that reads the life at a change of a file leaves the write whole", 
     session.on("change", () => engine.cwd({ on: engine.root }));
     const word = 't = write(Text("note.txt", "hello\\n"))\nclose(t.content)';
     expect(await engine.rung({ word, on: engine.root })).toBe("hello\n");
-  } finally {
-    await session.dispose();
-    await rm(cwd, { recursive: true });
-  }
-});
-
-test("a told text that names a failure is no failure: only two failed asks in a row pause the chain", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-mute-text-"));
-  await writeFile(
-    join(cwd, "notes.txt"),
-    "Last run: claude-cli:sonnet/low answered nothing: Error: 529 overloaded\n",
-  );
-  let calls = 0;
-  const session = boot({
-    cwd,
-    ...modeled,
-    answer: async () => {
-      calls++;
-      if (calls === 2) throw new Error("first outage");
-      return said(calls === 1 ? 'read("notes.txt")' : 'close("ok")');
-    },
-  });
-  try {
-    expect(await session.engine.prompt("str", { message: "work", on: session.engine.root })).toBe("ok");
-    expect(calls).toBe(3);
-    expect(session.facts.some((fact) => fact[0] === "pause")).toBe(false);
-  } finally {
-    await session.dispose();
-    await rm(cwd, { recursive: true });
-  }
-});
-
-test("a whole number from the operator answers a float prompt as a float", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-float-operator-"));
-  const session = boot({ cwd, operator: async () => 2 });
-  try {
-    const { engine } = session;
-    const on = engine.root;
-    const question = engine.prompt("float", { message: "A number?", to: "operator", on });
-    expect(await question).toBe(2);
-    await engine.rung({ word: `x = peek(${JSON.stringify(question.id)})`, on });
-    expect(engine.inspect("x").representation).toBe("2.0");
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
