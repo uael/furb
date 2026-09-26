@@ -34,7 +34,17 @@ test("workspaces keep sessions alive, report background completion and input, an
     if (!first.session || !second.session || !third.session) throw new Error("Sessions did not open.");
     const worker = first.session.engine;
     const command = await worker.bash("sleep 0.6; printf 'background finished'", { on: worker.root });
-    await until(library, () => first.status === "working");
+    await until(
+      library,
+      () => first.status === "working",
+      "change",
+      () => ({
+        status: first.status,
+        error: first.error,
+        errors: first.session?.errors,
+        acts: first.session?.acts.map((act) => [act.kind, act.id, act.done, act.paused]),
+      }),
+    );
     expect(library.groupStatus(alpha)).toBe("working");
     expect(library.current).toBe(third);
     await worker.result(command);
