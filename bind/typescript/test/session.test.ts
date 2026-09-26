@@ -1112,3 +1112,19 @@ test("a reply that a cancel ends asks its model for nothing more, and comes to a
     await session.dispose();
   }
 });
+
+test("a session opens a record in a directory that does not stand yet, and keeps its changes beside it", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-deep-"));
+  const record = join(cwd, "a", "b", "life.jsonl");
+  const session = boot({ cwd, record });
+  try {
+    const { engine } = session;
+    engine.write({ path: "note.txt", content: "one\n" }, { on: engine.root });
+    await until(session, () => session.changes.length === 1);
+    expect(session.changes.read()).toEqual([{ path: join(cwd, "note.txt"), before: "", after: "one\n" }]);
+    expect((await stat(`${record}.changes.jsonl`)).isFile()).toBe(true);
+  } finally {
+    await session.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});

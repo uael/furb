@@ -2,6 +2,7 @@ import {
   closeSync,
   existsSync,
   fsyncSync,
+  mkdirSync,
   mkdtempSync,
   openSync,
   readFileSync,
@@ -11,7 +12,7 @@ import {
   writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { Ear } from "./ears.js";
 import { type Fact, isQuestion } from "./types.js";
 
@@ -33,6 +34,8 @@ export class FileChanges {
     if (readOnly) return;
     if (!record) this.temporary = mkdtempSync(join(tmpdir(), "furb-changes-"));
     const path = record ? `${record}.changes.jsonl` : join(this.temporary ?? "", "changes.jsonl");
+    // The changes stand beside the record, whose directory may not stand yet when the session is made.
+    mkdirSync(dirname(path), { recursive: true });
     if (existsSync(path)) {
       const data = readFileSync(path);
       while (this.end < data.length) {
