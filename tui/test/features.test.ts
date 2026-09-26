@@ -272,15 +272,7 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
   const session = await demoSession();
   const oldEditor = process.env.EDITOR,
     oldVisual = process.env.VISUAL;
-  const extensions = new Extensions(() => ({
-    engine: session.engine,
-    chain: session.selected,
-    directory: session.directory,
-    notify: (message) => {
-      session.notice = message;
-    },
-    submit: (message) => session.submit(message),
-  }));
+  const extensions = new Extensions(() => session);
   try {
     const directory = session.host.directory;
     await writeFile(join(directory, "review notes.txt"), "Unique context for this check.");

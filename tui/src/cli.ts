@@ -5,12 +5,11 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { efforts, furbDirectory, onConsoleEnd, type SessionOptions } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
-import { App } from "./app.ts";
+import { follow } from "./app.ts";
 import { demoDirectory, removeDemoDirectories } from "./demo.ts";
 import { Extensions } from "./extensions.ts";
 import { defaultModel, type EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
-import { sessionChoices } from "./sessions.ts";
 import { palettes } from "./theme.ts";
 import { Workspaces } from "./workspaces.ts";
 
@@ -74,15 +73,7 @@ if (!initial) throw new Error("The session did not open.");
 const extensions = new Extensions(() => {
   const session = library.current?.session;
   if (!session) throw new Error("No session is selected.");
-  return {
-    engine: session.engine,
-    chain: session.selected,
-    directory: session.workingDirectory,
-    notify: (message) => {
-      session.notice = message;
-    },
-    submit: (message) => session.submit(message),
-  };
+  return session;
 });
 try {
   for (const path of values.extension ?? []) await extensions.load(resolve(path));
@@ -98,7 +89,6 @@ const renderer = await createCliRenderer({
   targetFps: 30,
   useMouse: true,
 });
-let app: App;
 let closing = false;
 /** Each step runs whatever the steps before it came to, so that the sessions close even when the terminal is gone. */
 const quit = async () => {
@@ -106,7 +96,7 @@ const quit = async () => {
   closing = true;
   const failures: unknown[] = [];
   for (const step of [
-    () => app.dispose(),
+    () => app().dispose(),
     () => renderer.destroy(),
     () => extensions.dispose(),
     () => library.dispose(),
@@ -120,21 +110,7 @@ const quit = async () => {
   for (const error of failures) console.error(error);
   if (failures.length) process.exitCode = 1;
 };
-const newSession = async () => {
-  await library.create();
-};
-const sessions = async () => {
-  await library.refresh();
-  const group = library.groupOf();
-  return sessionChoices(group, (entry) => library.select(entry), newSession);
-};
-const options = { quit, sessions, newSession, workspaces: library, extensions };
-app = new App(renderer, initial, options);
-library.on("select", (session) => {
-  if (app.session === session) return;
-  app.dispose();
-  app = new App(renderer, session, options);
-});
+const app = follow(renderer, { quit, workspaces: library, extensions });
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)
   process.once(signal, () => void quit().finally(() => process.exit()));
 // The runtime gives no signal for Ctrl+Break or for the close of the console of Windows, and ends the process at once.

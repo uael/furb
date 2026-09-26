@@ -6,7 +6,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
-import { demoSession, removeDemoDirectories } from "../src/demo.ts";
+import { demoLibrary, demoSession, removeDemoDirectories } from "../src/demo.ts";
 import { Session, type View } from "../src/session.ts";
 import { type Composing, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
@@ -30,8 +30,10 @@ async function show({ session, app, screen }: Pick<Composing, "session" | "app" 
 
 test("a view opens at the offset it was left at, after a shorter view, in a new App, and after a reopen", async () => {
   const session = await demoSession(true);
+  const library = await demoLibrary(session);
   const screen = await createTestRenderer({ width: 120, height: 30 });
-  let app = new App(screen.renderer, session, { quit() {} });
+  let app = new App(screen.renderer, session, { quit() {}, workspaces: library });
+  let record: string | undefined;
   try {
     await show({ session, app, screen }, "transcript");
     expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.viewport.height + 20);
@@ -41,29 +43,28 @@ test("a view opens at the offset it was left at, after a shorter view, in a new 
     await show({ session, app, screen }, "transcript");
     expect(app.scroll.scrollTop).toBe(20);
     app.dispose();
-    app = new App(screen.renderer, session, { quit() {} });
+    app = new App(screen.renderer, session, app.options);
     await screen.flush();
     await screen.flush();
     expect(app.scroll.scrollTop).toBe(20);
-  } finally {
-    app.dispose();
-  }
-  const record = session.host.record;
-  await session.dispose();
-  const opened = await openEngine({ record, demo: true });
-  const reopened = new Session(opened.engine, opened.host, true);
-  await reopened.refresh();
-  app = new App(screen.renderer, reopened, { quit() {} });
-  try {
-    await screen.flush();
-    await screen.flush();
-    expect(reopened.view).toBe("transcript");
-    expect(app.scroll.scrollTop).toBe(20);
+    record = session.host.record;
   } finally {
     app.dispose();
     screen.renderer.destroy();
-    await reopened.dispose();
+    await library.dispose();
   }
+  const opened = await openEngine({ record, demo: true });
+  const reopened = new Session(opened.engine, opened.host, true);
+  await reopened.refresh();
+  await composing(
+    async ({ session, app, screen }) => {
+      await screen.flush();
+      expect(session.view).toBe("transcript");
+      expect(app.scroll.scrollTop).toBe(20);
+    },
+    { width: 120, height: 30 },
+    reopened,
+  );
 }, 30000);
 
 test(

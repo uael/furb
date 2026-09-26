@@ -76,7 +76,7 @@ function reply(turn: string): [thinking: string, answer: string] {
 }
 
 /** A session whose models are the demo, which asks no model and answers each turn from the script above. */
-function demoSession(options: SessionOptions): Session {
+function scriptedSession(options: SessionOptions): Session {
   const { record, cwd } = options;
   const directory = cwd ?? (record ? dirname(record) : undefined);
   if (!directory) throw new Error("A demo session needs a directory or a record.");
@@ -138,7 +138,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     const { demo, claude, ...options } = data.args[0] as EngineOptions;
     host = hostModels(claude);
     const given = { ...options, models: host.models, roster: options.roster ?? host.roster };
-    const opened = demo ? demoSession(given) : new Session(given);
+    const opened = demo ? scriptedSession(given) : new Session(given);
     session = opened;
     engine = opened.open();
     snapshots = new Snapshots(engine, opened);

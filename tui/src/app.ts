@@ -50,6 +50,7 @@ import {
   views,
   working,
 } from "./session.ts";
+import { sessionChoices } from "./sessions.ts";
 import { publishShare } from "./share.ts";
 import {
   theme as c,
@@ -158,10 +159,22 @@ interface TreeRow {
 
 export interface AppOptions {
   quit(): void | Promise<void>;
-  sessions?: () => Promise<Choice[]>;
-  newSession?: () => Promise<void>;
-  workspaces?: Workspaces;
+  workspaces: Workspaces;
   extensions?: Extensions;
+}
+
+/** An App on the session that the library selects, which a new App replaces for each session that the library
+ * selects later. It gives the App that shows now. */
+export function follow(renderer: CliRenderer, options: AppOptions): () => App {
+  const session = options.workspaces.current?.session;
+  if (!session) throw new Error("The library has no session selected.");
+  let app = new App(renderer, session, options);
+  options.workspaces.on("select", (next: Session) => {
+    if (app.session === next) return;
+    app.dispose();
+    app = new App(renderer, next, options);
+  });
+  return () => app;
 }
 
 /** The commands whose first argument takes a value that the TUI knows, which the suggestions offer as it is typed. */
@@ -592,7 +605,7 @@ export class App {
     this.rail.add(this.railUsage);
     this.root.add(this.rail);
     session.on("change", this.schedule);
-    options.workspaces?.on("change", this.schedule);
+    options.workspaces.on("change", this.schedule);
     session.on("compose", this.compose);
     session.on("resume", this.resume);
     session.on("shared", this.shared);
@@ -990,12 +1003,7 @@ export class App {
           flexShrink: 0,
           onMouseUp: this.click(run),
         });
-      this.headline.add(
-        button([[name, c.text, bold]], () => {
-          if (this.options.workspaces) void this.workspacePicker();
-          else this.openSessions();
-        }),
-      );
+      this.headline.add(button([[name, c.text, bold]], () => void this.workspacePicker()));
       this.headline.add(
         this.text([[` ${glyph.crumb} `, c.faint]], c.faint, { height: space.bar, flexShrink: 0 }),
       );
@@ -2814,9 +2822,6 @@ export class App {
   /** The workspaces in the sidebar, under the session: each folder with its sessions, which scroll on their own. */
   private renderWorkspaces(): void {
     const library = this.options.workspaces;
-    this.railHeading.visible = Boolean(library);
-    this.railSpaces.visible = Boolean(library);
-    if (!library) return;
     const width = this.session.preferences.sidebarWidth;
     if (
       !this.paneChanged(this.railSpaces, [
@@ -3110,8 +3115,8 @@ export class App {
    * An archived session offers to come back instead. */
   private removeSession(entry: SessionEntry): void {
     const library = this.options.workspaces;
-    const group = library?.groupOf(entry);
-    if (!library || !group) return;
+    const group = library.groupOf(entry);
+    if (!group) return;
     this.openPalette(
       `Remove the session “${entry.name}”?`,
       [
@@ -3158,7 +3163,7 @@ export class App {
     if (!renaming) return;
     this.renaming = undefined;
     const name = renaming.value.trim();
-    if (keep && name && name !== renaming.item.name) this.options.workspaces?.rename(renaming.item, name);
+    if (keep && name && name !== renaming.item.name) this.options.workspaces.rename(renaming.item, name);
     if (this.session.notice.startsWith("Enter keeps the new name")) this.session.notice = "";
     // The input gives its focus back to the composer, and a part that took the focus from it keeps it.
     const focused = this.renderer.currentFocusedRenderable;
@@ -3172,7 +3177,6 @@ export class App {
       return;
     }
     const library = this.options.workspaces;
-    if (!library) return;
     this.openPalette(
       `Remove the workspace “${item.name}” from the list?`,
       [
@@ -3191,7 +3195,6 @@ export class App {
   /** The menu that a right click on the row of a session or a workspace opens, at the pointer. */
   private itemMenu(item: SessionEntry | Workspace, x: number, y: number): void {
     const library = this.options.workspaces;
-    if (!library) return;
     const rename = { label: "Rename", detail: "", run: () => this.startRename(item) };
     const choices: Choice[] =
       "sessions" in item
@@ -3223,7 +3226,6 @@ export class App {
   /** The workspaces and their sessions in a palette, which opens once the workspaces are read again. */
   workspacePicker = (): Promise<void> => {
     const library = this.options.workspaces;
-    if (!library) return Promise.resolve();
     return library
       .refresh()
       .then(() =>
@@ -3308,8 +3310,9 @@ export class App {
       await this.filesPicker();
       return true;
     }
-    if (text === "/new" && this.options.newSession) {
-      await this.options.newSession();
+    const library = this.options.workspaces;
+    if (text === "/new") {
+      await library.create();
       return true;
     }
     if (text === "/image" || text.startsWith("/image ")) {
@@ -3318,8 +3321,6 @@ export class App {
       else await clipboardImage((path) => this.session.attachImage(path));
       return true;
     }
-    const library = this.options.workspaces;
-    if (!library) return false;
     if (text === "/delete") {
       this.openPalette(
         "Delete a session",
@@ -3524,7 +3525,7 @@ export class App {
   private report = (error: unknown): void => {
     const message = error instanceof Error ? error.message : String(error);
     if (this.closed) {
-      const session = this.options.workspaces?.current?.session;
+      const session = this.options.workspaces.current?.session;
       if (session) session.notice = message;
     } else this.showValue("Could not complete action", message);
   };
@@ -3601,14 +3602,9 @@ export class App {
       bash: "!",
       edit: "⌃L",
     };
-    const choices: Choice[] = [];
-    if (this.options.newSession)
-      choices.push({
-        label: "New session",
-        detail: commands.new[2],
-        command: "/new",
-        run: this.options.newSession,
-      });
+    const choices: Choice[] = [
+      { label: "New session", detail: commands.new[2], command: "/new", run: () => this.action("/new") },
+    ];
     for (const [index, view] of views.entries())
       choices.push({
         label: `${viewLabels[view]} view`,
@@ -3781,7 +3777,7 @@ export class App {
           .sort()
           .map((path) => ({ value: path, detail: "" }));
       case "workspace":
-        return (this.options.workspaces?.groups ?? []).map((group) => ({
+        return this.options.workspaces.groups.map((group) => ({
           value: shortenHome(group.directory),
           detail: group.name,
         }));
@@ -5658,7 +5654,7 @@ export class App {
       this.insert("/chain ");
     } else if (key.ctrl && key.name === "o") {
       key.preventDefault();
-      this.openSessions();
+      void this.sessionPicker();
     } else if (key.ctrl && key.name === "f") {
       key.preventDefault();
       this.openSearch();
@@ -5696,13 +5692,7 @@ export class App {
     this.render();
   }
   private toggleSidebar(): void {
-    const library = this.options.workspaces;
-    if (library) library.toggle();
-    else {
-      this.session.preferences.sidebar = !this.session.preferences.sidebar;
-      this.session.preferences.save();
-      this.render();
-    }
+    this.options.workspaces.toggle();
   }
   /** The input put aside, or brought back: the input and the text put aside for its draft trade places. */
   stash(): void {
@@ -5726,12 +5716,26 @@ export class App {
     w.save();
     this.render();
   }
-  private openSessions(): void {
-    void this.options
-      .sessions?.()
-      .then((choices) => this.openPalette("Sessions", choices))
+  /** The saved sessions of the workspace of the session, in a palette, which opens once the workspaces are read
+   * again. */
+  sessionPicker = (): Promise<void> => {
+    const library = this.options.workspaces;
+    return library
+      .refresh()
+      .then(() =>
+        this.openPalette(
+          "Sessions",
+          sessionChoices(
+            library.groupOf(),
+            (entry) => library.select(entry),
+            async () => {
+              await library.create();
+            },
+          ),
+        ),
+      )
       .catch(this.report);
-  }
+  };
   /** The feed scrolled to the message of the operator before or after the top of the view. */
   private jumpMessage(step: number): void {
     const w = this.session;
@@ -5758,7 +5762,7 @@ export class App {
     if (this.redraw) clearTimeout(this.redraw);
     if (this.hoverTimer) clearTimeout(this.hoverTimer);
     this.session.off("change", this.schedule);
-    this.options.workspaces?.off("change", this.schedule);
+    this.options.workspaces.off("change", this.schedule);
     this.session.off("compose", this.compose);
     this.session.off("resume", this.resume);
     this.session.off("shared", this.shared);

@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { openEngine } from "./bridge.ts";
 import type { Preferences } from "./preferences.ts";
 import { Session } from "./session.ts";
+import { Workspaces } from "./workspaces.ts";
 
 /** The files of the demo project: a small notes app with the three parts that its answers name. */
 const demoFiles: Record<string, string> = {
@@ -53,6 +54,14 @@ export async function demoSession(seed = false, preferences?: Preferences): Prom
   await session.refresh();
   if (seed) await seedDemo(session);
   return session;
+}
+
+/** A library that holds a demo session in the workspace of its directory, with the session selected, as the command
+ * line holds the session that it opens. The library keeps its list beside the preferences of the demo. */
+export async function demoLibrary(session: Session): Promise<Workspaces> {
+  const library = new Workspaces(session.preferences, { demo: true });
+  await library.select(library.adopt(session, await library.add(session.host.directory)));
+  return library;
 }
 
 export async function seedDemo(session: Session): Promise<void> {

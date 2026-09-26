@@ -7,7 +7,7 @@ import { type NativeEar, store } from "@furb/engine";
 import type { CapturedFrame, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { App } from "../src/app.ts";
+import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { seedDemoFiles } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
@@ -43,21 +43,13 @@ async function withLibrary(
   };
   const sidebar = async (library: Workspaces): Promise<Sidebar> => {
     const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true });
-    const session = library.current?.session;
-    if (!session) throw new Error("No session is selected.");
-    const options = { quit() {}, workspaces: library };
-    let app = new App(screen.renderer, session, options);
-    library.on("select", (next: Session) => {
-      if (app.session === next) return;
-      app.dispose();
-      app = new App(screen.renderer, next, options);
-    });
+    const app = follow(screen.renderer, { quit() {}, workspaces: library });
     const shown = {
       screen,
-      app: () => app,
+      app,
       left: 152 - library.preferences.sidebarWidth,
       frame: async () => {
-        app.render();
+        app().render();
         await screen.flush();
         return screen.captureCharFrame().split("\n");
       },

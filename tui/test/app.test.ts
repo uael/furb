@@ -5,7 +5,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
-import { demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
+import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
 import { sessionChoices } from "../src/sessions.ts";
@@ -294,11 +294,9 @@ test(
 
 test("resume preserves chains, programs, theme, and input drafts while unfinished work stays paused", async () => {
   const first = await demoSession(true);
-  let library = new Workspaces(first.preferences, { demo: true });
-  const group = await library.add(first.host.directory);
-  library.adopt(first, group);
+  let library = await demoLibrary(first);
   const screen = await createTestRenderer({ width: 120, height: 40 });
-  const app = new App(screen.renderer, first, { quit() {} });
+  const app = new App(screen.renderer, first, { quit() {}, workspaces: library });
   const fork = first.chains.find((chain) => chain.id !== first.engine.root);
   if (!fork) throw new Error("No fork in the fixture.");
   await first.select(fork.id);
@@ -331,22 +329,20 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
   const opened = await openEngine({ record, demo: true });
   const second = new Session(opened.engine, opened.host, true);
   await second.refresh();
-  const next = await createTestRenderer({ width: 120, height: 40 });
-  const view = new App(next.renderer, second, { quit() {} });
-  try {
-    expect(second.chains.map((chain) => chain.id)).toEqual(ids);
-    expect(second.program).toEqual(program);
-    expect(second.selected).toBe(fork.id);
-    expect(second.theme).toBe("paper");
-    expect(second.mode).toBe("python");
-    expect(view.composer.plainText).toBe('draft = "keep this"');
-    expect(second.host.pending.has(pending)).toBe(true);
-    expect((await second.engine.outcome(pending)).done).toBe(false);
-  } finally {
-    view.dispose();
-    next.renderer.destroy();
-    await second.dispose();
-  }
+  await composing(
+    async ({ app }) => {
+      expect(second.chains.map((chain) => chain.id)).toEqual(ids);
+      expect(second.program).toEqual(program);
+      expect(second.selected).toBe(fork.id);
+      expect(second.theme).toBe("paper");
+      expect(second.mode).toBe("python");
+      expect(app.composer.plainText).toBe('draft = "keep this"');
+      expect(second.host.pending.has(pending)).toBe(true);
+      expect((await second.engine.outcome(pending)).done).toBe(false);
+    },
+    { width: 120, height: 40 },
+    second,
+  );
 }, 30000);
 
 test("rewind is a recorded rung and keeps the selected transcript after reopening", async () => {
