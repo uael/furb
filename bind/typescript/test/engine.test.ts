@@ -165,23 +165,6 @@ test("a function of JavaScript crosses as a show or a filter, and what it throws
   expect(() => engine.chain({ label: "fork", source: engine.root, filter: refusing })).toThrow("no lines");
 });
 
-test("a second life replays model answers and durable rung effects without asking again", async () => {
-  const first = open();
-  const on = first.engine.root;
-  const prompt = first.engine.prompt("str", { message: "Say hello", on }).id;
-  await first.engine.result<string>(prompt);
-  const rung = first.engine.rung({ word: 'write(Text("b", "saved"))', on }).id;
-  await first.engine.result(rung);
-  const second = open(first.entries);
-  expect(await second.engine.result<string>(prompt)).toBe("hello");
-  expect(second.replies()).toBe(0);
-  expect(second.files.has("b")).toBe(false);
-  // Every life stands as it opens, and that stand is all the second life keeps.
-  expect(second.entries.map((entry) => (entry as [Fact])[0][0])).toEqual(["stand", "done"]);
-  const fork = second.engine.chain({ label: "branch", source: second.engine.root }).id;
-  expect(second.engine.cwd({ on: fork })).toBe("/tmp");
-});
-
 test("dispose rejects pending native results and further operations", async () => {
   const { engine } = open();
   const result = engine.result(engine.root).then(

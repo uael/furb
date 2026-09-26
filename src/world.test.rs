@@ -4,6 +4,8 @@
 use std::{
   fs,
   path::{Path, PathBuf},
+  thread,
+  time::{Duration, Instant},
 };
 
 use super::{bash::whole, kept, resolved, store};
@@ -89,4 +91,37 @@ fn a_stream_is_read_whole_in_utf8_and_a_character_cut_at_a_read_waits_for_the_ne
   let mut cut = heart[..2].to_vec();
   assert_eq!(whole(&mut cut, true), "\u{fffd}");
   assert!(cut.is_empty());
+}
+
+#[test]
+fn a_holder_may_move_the_lock_file_and_two_holders_never_own_the_record_at_once() {
+  let at = place("race");
+  let path = at.join("record.jsonl");
+  // Each holder makes a file that one alone can make while it owns the record, and two move the lock file away
+  // before they let it go, each to a name of its own, as the delete of a session does.
+  let holders: Vec<_> = (0..8)
+    .map(|n| {
+      let (path, at) = (path.clone(), at.clone());
+      thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut taken = 0;
+        while taken < 50 {
+          assert!(Instant::now() < deadline, "holder {n} took the lease {taken} times");
+          let Ok((_, ear)) = store(&path) else { continue };
+          let owner = at.join("owner");
+          fs::OpenOptions::new().write(true).create_new(true).open(&owner).expect("one owner");
+          taken += 1;
+          fs::remove_file(&owner).unwrap();
+          if n < 2 {
+            let lock = format!("{}.lock", path.display());
+            fs::rename(lock, at.join(format!("moved.{n}.{taken}"))).unwrap();
+          }
+          drop(ear);
+        }
+      })
+    })
+    .collect();
+  for one in holders {
+    one.join().unwrap();
+  }
 }

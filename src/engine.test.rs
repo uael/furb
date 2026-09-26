@@ -1,10 +1,10 @@
 //! One life of the real engine, driven by the crate from end to end, on ears alone.
 //!
-//! Every other test of the crate holds one piece. This holds the whole of it against the engine itself: an engine
-//! boots on the ears of the World that the crate writes, and on a provider and a console that the test writes as
-//! coroutines, as a host does. An operator says verbs, a model answers a prompt, the Kernel gates the word it wrote
-//! and runs it, a command runs on this machine and speaks from its own thread, a wait ends, the console answers a
-//! prompt, and the record the store kept opens a second life.
+//! What the engine does is the suite's to prove, on both engines. What this proves is the crate: an engine boots on
+//! the ears of the World that the crate writes, and on a provider that the test writes as a coroutine, as a host
+//! does. The files read and write, a command runs on this machine and speaks from its own thread, a wait ends at its
+//! due, a function of the host is called back, a fault crosses as itself, and the record the store kept opens a
+//! second life.
 
 use std::{
   cell::RefCell,
@@ -54,21 +54,14 @@ fn done(about: &str, value: Object) -> Fact {
 }
 
 /// The provider of the test: it answers what the chains stand on, and each reply with the next word of its script.
-/// A word `hang` is a turn that never comes, which the provider drops, and notes, when the reply is done.
 fn provider(
   at: PathBuf,
   words: Rc<RefCell<VecDeque<String>>>,
   read: Rc<RefCell<Vec<String>>>,
-  dropped: Rc<RefCell<Vec<String>>>,
 ) -> Box<dyn Ear> {
   ear(move |co, _| async move {
-    let mut hung = Vec::new();
     loop {
       let a = hear(&co).await;
-      if a.kind() == "done" && hung.contains(&a.about().to_owned()) {
-        hung.retain(|one| one != a.about());
-        dropped.borrow_mut().push(a.about().to_owned());
-      }
       if !a.question() {
         continue;
       }
@@ -94,10 +87,6 @@ fn provider(
           let turns = call(&co, "turns", vec![], vec![("on", Object::string(a.on()))]).await?;
           read.borrow_mut().push(turns.py_repr());
           let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
-          if word == "hang" {
-            hung.push(a.about().to_owned());
-            continue;
-          }
           let turn = Object::tuple([
             Object::string("assistant"),
             Object::string(word),
@@ -112,32 +101,11 @@ fn provider(
   })
 }
 
-/// The console of the test: it takes each prompt to the operator, closes one of an int with 3, and refuses the rest.
-fn console() -> Box<dyn Ear> {
-  ear(|co, _| async move {
-    loop {
-      let a = hear(&co).await;
-      if a.kind() != "prompt" || !a.question() {
-        continue;
-      }
-      say(&co, Fact::says("started", a.about(), [])).await;
-      let shape = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
-      let value = match shape.as_str() {
-        "int" => Object::int(3),
-        _ => Fault::refused(format!("the console answers no {shape}")).object(),
-      };
-      call(&co, "close", vec![value], vec![("id", Object::string(a.about()))]).await?;
-    }
-  })
-}
-
 /// One life of the real engine, in a yard of the disk, with the model answering these words.
 struct Lived {
   engine: Engine,
   at: PathBuf,
   read: Rc<RefCell<Vec<String>>>,
-  /// Every reply whose turn the provider dropped before it came.
-  dropped: Rc<RefCell<Vec<String>>>,
 }
 
 impl Lived {
@@ -159,19 +127,18 @@ impl Lived {
     }
     fs::create_dir_all(&at).expect("a yard of the test");
     let (record, store) = world::store(at.join("record.jsonl"))?;
-    let (read, dropped) = (Rc::default(), Rc::default());
+    let read = Rc::default();
     let words = Rc::new(RefCell::new(words.iter().map(|one| (*one).to_owned()).collect()));
     let mut ears = first;
     ears.extend([
-      ("provider", provider(at.clone(), words, Rc::clone(&read), Rc::clone(&dropped))),
-      ("console", console()),
+      ("provider", provider(at.clone(), words, Rc::clone(&read))),
       ("files", world::files()),
       ("bash", world::bash()),
       ("time", world::time()),
       ("store", store),
     ]);
     let engine = Engine::boot(record, ears)?;
-    Ok(Lived { engine, at, read, dropped })
+    Ok(Lived { engine, at, read })
   }
 
   fn root(&self) -> String {
@@ -189,15 +156,6 @@ fn on(root: &str) -> Option<String> {
 }
 
 #[test]
-fn an_engine_opens_on_its_root_and_the_provider_answers_what_the_root_stands_on() {
-  let mut lived = Lived::new("opens", &[], true).unwrap();
-  assert_eq!(lived.root(), "chain1");
-  assert!(lived.engine.raised().is_none(), "{:?}", lived.engine.raised());
-  let cwd = lived.engine.cwd(verbs::Cwd { on: on(&lived.root()) }).unwrap();
-  assert_eq!(cwd, lived.at.display().to_string());
-}
-
-#[test]
 fn the_files_serve_a_read_and_a_write_of_the_real_engine() {
   let mut lived = Lived::new("reads", &[], true).unwrap();
   let root = lived.root();
@@ -211,6 +169,14 @@ fn the_files_serve_a_read_and_a_write_of_the_real_engine() {
     lived.engine.read("none.txt", verbs::Read { on: on(&root), ..Default::default() }).unwrap_err();
   assert_eq!(no.name, "Refused");
   assert!(no.message().contains("There is no file at"), "{no}");
+  // A byte order mark is a character of the text, which a read keeps and a write writes again.
+  fs::write(lived.at.join("table.csv"), "\u{feff}name,value\n").unwrap();
+  let got =
+    lived.engine.read("table.csv", verbs::Read { on: on(&root), ..Default::default() }).unwrap();
+  assert_eq!(got.content, "\u{feff}name,value\n");
+  let changed = Text::new("table.csv", got.content.replace("value", "amount"));
+  lived.engine.write(&changed, verbs::Write { on: on(&root) }).unwrap();
+  assert_eq!(fs::read(lived.at.join("table.csv")).unwrap()[..3], [0xef, 0xbb, 0xbf]);
 }
 
 #[test]
@@ -230,25 +196,6 @@ fn a_model_answers_a_prompt_and_the_kernel_gates_and_runs_the_word_it_wrote() {
   assert_eq!(got.as_ref().as_int(), Some(3));
   assert_eq!(lived.read.borrow().len(), 1);
   assert!(lived.read.borrow()[0].contains("count the lines"));
-}
-
-#[test]
-fn the_gate_refuses_a_word_and_the_engine_asks_the_model_again() {
-  let mut lived = Lived::new("gates", &["close(nowhere)", "close(7)"], true).unwrap();
-  let with = verbs::Prompt { on: on(&lived.root()), ..Default::default() };
-  let got = block_on(lived.engine.prompt(Object::string("int"), with).unwrap()).unwrap();
-  assert_eq!(got.as_ref().as_int(), Some(7));
-  assert_eq!(lived.read.borrow().len(), 2, "the model was asked again after the refusal");
-  assert!(lived.read.borrow()[1].contains("refused"), "{}", lived.read.borrow()[1]);
-}
-
-#[test]
-fn a_word_that_raises_is_asked_again_and_the_model_reads_what_it_raised() {
-  let mut lived = Lived::new("raises", &["close(1 / 0)", "close(9)"], true).unwrap();
-  let with = verbs::Prompt { on: on(&lived.root()), ..Default::default() };
-  let got = block_on(lived.engine.prompt(Object::string("int"), with).unwrap()).unwrap();
-  assert_eq!(got.as_ref().as_int(), Some(9));
-  assert!(lived.read.borrow()[1].contains("ZeroDivisionError"), "{}", lived.read.borrow()[1]);
 }
 
 #[test]
@@ -290,24 +237,23 @@ fn a_command_is_fed_what_the_operator_writes_into_its_stdin() {
 }
 
 #[test]
+fn a_timeout_or_a_wait_past_the_longest_timer_runs_its_full_time() {
+  let mut lived = Lived::new("long", &[], true).unwrap();
+  let root = lived.root();
+  let wait = lived.engine.wait(verbs::Wait { seconds: Some(1e300), on: on(&root) }).unwrap();
+  let wait = wait.id().to_owned();
+  let with = verbs::Bash { timeout: Some(1e300), on: on(&root), ..Default::default() };
+  let exit: Exit = block_on(lived.engine.bash("echo finished", with).unwrap()).unwrap();
+  assert_eq!((exit.code, exit.stdout.content.as_str()), (Some(0), "finished\n"));
+  assert!(lived.engine.outcome(&wait).unwrap().is_none(), "the wait runs on");
+}
+
+#[test]
 fn a_command_that_outlives_its_timeout_ends_with_no_code() {
   let mut lived = Lived::new("late", &[], true).unwrap();
   let with = verbs::Bash { timeout: Some(0.2), on: on(&lived.root()), ..Default::default() };
   let exit: Exit = block_on(lived.engine.bash("sleep 5 & sleep 5", with).unwrap()).unwrap();
   assert_eq!(exit.code, None);
-}
-
-#[test]
-fn the_provider_drops_the_turn_of_a_reply_that_a_cancel_ends() {
-  let mut lived = Lived::new("drops", &["hang"], true).unwrap();
-  let root = lived.root();
-  let with = verbs::Prompt { message: Some("go".to_owned()), on: on(&root), ..Default::default() };
-  let asked = lived.engine.prompt(Object::string("int"), with).unwrap().id().to_owned();
-  assert!(lived.engine.get("reply1").unwrap().is_some());
-  assert!(lived.dropped.borrow().is_empty());
-  lived.engine.cancel(&asked).unwrap();
-  assert_eq!(*lived.dropped.borrow(), ["reply1"]);
-  assert_eq!(lived.settled("reply1").unwrap_err().name, "CancelledError");
 }
 
 #[test]
@@ -402,17 +348,6 @@ fn a_wait_that_a_wake_starts_again_in_a_later_life_ends_when_it_was_due() {
 }
 
 #[test]
-fn the_console_closes_a_prompt_to_the_operator_with_what_it_answered() {
-  let mut lived = Lived::new("operator", &[], true).unwrap();
-  let root = lived.root();
-  let with = verbs::Prompt { to: Some("operator".to_owned()), on: on(&root), ..Default::default() };
-  let got = block_on(lived.engine.prompt(Object::string("int"), with.clone()).unwrap()).unwrap();
-  assert_eq!(got.as_ref().as_int(), Some(3));
-  let no = block_on(lived.engine.prompt(Object::string("str"), with).unwrap()).unwrap_err();
-  assert_eq!(no.name, "Refused");
-}
-
-#[test]
 fn a_function_of_the_host_is_called_back_by_the_sandbox_with_what_the_word_gave_it() {
   let mut lived = Lived::new("callables", &[], true).unwrap();
   let seen = Rc::new(RefCell::new(0usize));
@@ -445,44 +380,44 @@ fn what_the_engine_raised_reaches_the_host_as_the_fault_it_is() {
 }
 
 #[test]
-fn an_ear_that_comes_before_the_files_takes_a_read_in_their_place() {
-  let mine = ear(|co, _| async move {
-    loop {
-      let a = hear(&co).await;
-      if a.kind() == "read" && a.question() {
-        say(&co, done(a.about(), Text::new("mine", "mine\n").object())).await;
-      }
-    }
-  });
-  let mut lived = Lived::on("replaces", &[], true, vec![("mine", mine)]).unwrap();
-  let got = lived
+fn what_is_fed_to_a_command_before_a_wake_starts_it_in_a_later_life_reaches_its_process() {
+  let id = {
+    let mut first = Lived::new("held", &[], true).unwrap();
+    let root = first.root();
+    let with = verbs::Bash { fed: Some(true), on: on(&root), ..Default::default() };
+    first.engine.bash("cat", with).unwrap().id().to_owned()
+  };
+  let mut second = Lived::new("held", &[], false).unwrap();
+  let root = second.root();
+  let fed = Text::new(format!("{id}/stdin"), "before start\n");
+  second.engine.write(&fed, verbs::Write { on: on(&root) }).unwrap();
+  second
     .engine
-    .read("a.txt", verbs::Read { on: on(&lived.root()), ..Default::default() })
+    .write(&Text::new(format!("{id}/stdin"), ""), verbs::Write { on: on(&root) })
     .unwrap();
-  assert_eq!(got, Text::new("mine", "mine\n"));
+  second.engine.wake(&root).unwrap();
+  let exit = Exit::of(second.settled(&id).unwrap().as_ref()).expect("the command came to its exit");
+  assert_eq!(exit.stdout.content, "before start\n");
 }
 
 #[test]
-fn an_ear_wraps_the_files_by_taking_a_write_and_asking_it_again() {
-  let wraps = ear(|co, _| async move {
-    loop {
-      let a = hear(&co).await;
-      if a.kind() != "write" || !a.question() || a.by() == "loud" {
-        continue;
-      }
-      let Some(text) = a.word(1).and_then(Text::of) else { continue };
-      let loud = Text::new(text.path, text.content.to_uppercase()).object();
-      let asked = vec![Object::string("write"), Object::string(a.on()), loud];
-      let got = call(&co, "ask", asked, vec![]).await;
-      say(&co, done(a.about(), got.unwrap_or_else(|fault| fault.object()))).await;
-    }
-  });
-  let mut lived = Lived::on("wraps", &[], true, vec![("loud", wraps)]).unwrap();
-  let root = lived.root();
-  let got =
-    lived.engine.write(&Text::new("a.txt", "quiet\n"), verbs::Write { on: on(&root) }).unwrap();
-  assert_eq!(got.content, "QUIET\n");
-  assert_eq!(fs::read_to_string(lived.at.join("a.txt")).unwrap(), "QUIET\n");
+fn a_wait_that_a_wake_starts_again_says_nothing_after_a_cancel() {
+  {
+    let mut first = Lived::new("hushed", &[], true).unwrap();
+    let root = first.root();
+    first.engine.wait(verbs::Wait { seconds: Some(0.2), on: on(&root) }).unwrap();
+  }
+  let mut second = Lived::new("hushed", &[], false).unwrap();
+  let root = second.root();
+  second.engine.wake(&root).unwrap();
+  second.engine.cancel("wait1").unwrap();
+  assert_eq!(second.settled("wait1").unwrap_err().name, "CancelledError");
+  // A later wait outlives the deadline of the first.
+  let later = second.engine.wait(verbs::Wait { seconds: Some(0.4), on: on(&root) }).unwrap();
+  block_on(later).unwrap();
+  let facts = second.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let dones = facts.iter().filter(|one| one.kind() == "done" && one.about() == "wait1");
+  assert_eq!(dones.map(|one| one.by().to_owned()).collect::<Vec<_>>(), ["wait1"]);
 }
 
 #[test]
@@ -514,12 +449,4 @@ fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
   );
   assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
   assert_eq!(second.settled(&id).unwrap().as_ref().as_int(), Some(2));
-}
-
-#[test]
-fn a_second_store_on_a_record_that_another_holds_is_refused() {
-  let lived = Lived::new("leased", &[], true).unwrap();
-  let no = world::store(lived.at.join("record.jsonl")).map(|_| ()).unwrap_err();
-  assert!(no.message().contains("Another process owns"), "{no}");
-  drop(lived);
 }
