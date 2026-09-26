@@ -146,7 +146,7 @@ async def test_it_stands_until_it_is_lifted_as_the_chain_it_is_on_does() -> None
   assert (await one) is None and engine.peek(two, ...) is ...
   engine.cancel(two)
   await settle()
-  assert isinstance(engine.peek(two), CancelledError) and isinstance(engine.peek(two), CancelledError)
+  assert isinstance(engine.peek(two), CancelledError)
 
 
 async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one_is_no_ceiling() -> None:
@@ -210,7 +210,6 @@ async def test_a_cancel_of_it_lifts_the_ceiling_since_it_is_an_act_like_any_othe
   await settle()
   engine.cancel(ceiling)
   await settle()
-  assert isinstance(engine.peek(ceiling), CancelledError)
   assert isinstance(engine.peek(ceiling), CancelledError)
   sand.script[root] = ["a = 1", "close(2)"]
   assert await engine.prompt(int, "count", on=root) == 2

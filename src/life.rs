@@ -389,8 +389,8 @@ impl Opening {
 
   /// The life, opened from what a World kept of the life before it.
   ///
-  /// The record is the entries the World kept, each one fact. The stand-in runs first in a module of its own, then the engine, and
-  /// `boot` is given the Kernel of the crate and one generator for the World and for each ear.
+  /// The record is the entries the World kept, each one fact. The stand-in runs first in a module of its own, then
+  /// the engine, and `boot` is given the Kernel of the crate and one generator for the World and for each ear.
   pub fn boot(self, record: impl IntoIterator<Item = Object>) -> Result<Life, Fault> {
     let Opening { mut world, ears, mut names, limits } = self;
     let voice = Voice::default();

@@ -6,7 +6,7 @@ import pytest
 
 from conftest import STANDS, Sand, life, relived, said, settle, world_says
 from furb import engine
-from furb.engine import Refused
+from furb.engine import Exit, Refused, Text
 
 
 async def test_what_the_act_it_is_at_came_to_as_the_record_stands_where_the_call_is_made() -> None:
@@ -70,10 +70,10 @@ async def test_the_done_of_that_act_filled_its_outcome_and_the_life_holds_every_
   assert engine.peek(act, "waiting") == "waiting" and engine.peek(act) is None
   step = engine.rung("close(21)", on=root)
   await step
-  assert engine.peek(step) == 21 == engine.peek(step)
+  assert engine.peek(step) == 21
   sand.exits(act, 0)
   await settle()
-  assert engine.peek(act) == engine.peek(act)
+  assert engine.peek(act) == Exit(0, Text(f"{act}/stdout", "half\n"), Text(f"{act}/stderr"))
 
 
 async def test_a_peek_at_a_chain_gives_none_since_a_chain_never_comes_to_anything() -> None:

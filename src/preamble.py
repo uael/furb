@@ -482,7 +482,7 @@ def opened(
   RUNNING.clear()
   kept = again(record, engine, ears)
   assert isinstance(kept, list)
-  entries = [(tuple(e[0]), *e[1:]) for e in kept]
+  entries = [(tuple(one),) for (one,) in kept]
   outside = {
     name: worldly(world, engine, ears) if name == "world" and world is not None else crossing(name, ears, engine)
     for name in names

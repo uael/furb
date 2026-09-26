@@ -337,7 +337,7 @@ async def test_it_answers_a_read_of_a_stream_while_it_runs() -> None:
     engine.write(Text(door(one, "stdin"), "late"), on=root)
   engine.cancel(one)
   await settle()
-  assert engine.peek(one) == got == engine.peek(one)
+  assert engine.peek(one) == got
   assert engine.read(door(one, "stdout"), on=root).content == "half\n"
 
 

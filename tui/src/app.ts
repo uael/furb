@@ -2435,12 +2435,20 @@ export class App {
     else this.showValue(value, await this.referenced(value));
   }
 
-  /** What a reference holds, as a view reads it: the act a door opens on, whole, or the text the World reads at the
-   * path. This read is no act of the operator, so it makes none and the journal keeps nothing of it. */
+  /** What a reference holds, as a view reads it: the text of a door, which the outcome of its act holds under the
+   * path of that door as an Exit holds its streams; the act the door opens on, whole, while its outcome holds no
+   * such text; or the text the World reads at the path. This read is no act of the operator, so it makes none and
+   * the journal keeps nothing of it. */
   private async referenced(value: string): Promise<unknown> {
     const act = this.session.actOf(value);
-    if (act) return (await this.session.world.act(act.id)) ?? act;
-    return (await this.session.world.look(value, this.session.selected)).content;
+    if (!act) return (await this.session.world.look(value, this.session.selected)).content;
+    const whole = (await this.session.world.act(act.id)) ?? act;
+    const held = whole.value && typeof whole.value === "object" ? Object.values(whole.value) : [];
+    const door = held.find(
+      (one): one is { path: string; content: string } =>
+        Boolean(one) && typeof one === "object" && (one as { path?: unknown }).path === value,
+    );
+    return door ? door.content : whole;
   }
 
   private async referenceHover(value: string, x: number, y: number): Promise<void> {

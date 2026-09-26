@@ -113,7 +113,7 @@ def plain(record: Sequence[object]) -> list:
   """A record as a later life is given it: through the wire and back, so every tuple is a list and every text a Text."""
   got = unwire(json.loads(json.dumps(wire(list(record)))))
   assert isinstance(got, list)
-  return [(tuple(e[0]), *e[1:]) for e in got]
+  return [(tuple(one),) for (one,) in got]
 
 
 @dataclass
@@ -121,12 +121,12 @@ class Sand:
   """A World in memory, outside the engine.
 
   `files` is its disk by path, `script` what its models answer by the id of the chain a reply is on, one word per
-  reply, `record` what it keeps of the keep facts of the record, `fed` what was fed to its commands, `calls` every
+  reply, `record` what it keeps of the keep facts of the journal, `fed` what was fed to its commands, `calls` every
   fact it answered or performed, in order, and `turns` the turns it read for each reply it took, by its name.
-  `stands` is what a chain stands on, or the refusal it answers a stand with, `cost` the usage of one answer, and `auto` says whether a command tells a line
-  and exits at once. `tick` counts the readings of its clock and the chances it drew, so a later life reads what the
-  life before it read. `outs` holds each command it runs: whether its stderr flows into its stdout, and its two
-  streams as they came.
+  `stands` is what a chain stands on, or the refusal it answers a stand with, `cost` the usage of one answer, and
+  `auto` says whether a command tells a line and exits at once. `tick` counts the readings of its clock and the
+  chances it drew, so a later life reads what the life before it read. `outs` holds each command it runs: whether
+  its stderr flows into its stdout, and its two streams as they came.
   """
 
   files: dict[str, str] = field(default_factory=dict)
@@ -294,8 +294,8 @@ class Py:
 
   Its Kernel takes a run, begins it by compiling the word with a top level await and running it in the module of
   its chain, makes a wants for the act the run waits for, carries the run forward at the done of each wants, says
-  the run done with what the word gave, and drops the frame of a run a cancel is over. Its gate is an ear of its own, which reads a word on the
-  sheet of the engine with the gate of the crate.
+  the run done with what the word gave, and drops the frame of a run a cancel is over. Its gate is an ear of its
+  own, which reads a word on the sheet of the engine with the gate of the crate.
   """
 
   def gate(self, word: str, program: list[str]) -> list[str]:
