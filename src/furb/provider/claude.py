@@ -11,7 +11,6 @@ import json
 import os
 import shutil
 import time
-from base64 import b64encode
 from collections.abc import AsyncGenerator, AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
@@ -24,26 +23,21 @@ from uuid import uuid4
 from pydantic import ConfigDict, ValidationError
 from pydantic import TypeAdapter as Adapter
 from pydantic.dataclasses import dataclass as sealed
-from pydantic_ai import RunContext
 from pydantic_ai.messages import (
-  BinaryContent,
   FinishReason,
   ModelMessage,
   ModelRequest,
   ModelResponse,
   ModelResponseStreamEvent,
-  RetryPromptPart,
   SystemPromptPart,
   TextPart,
   ThinkingPart,
-  ToolCallPart,
-  ToolReturnPart,
   UserPromptPart,
 )
 from pydantic_ai.models import Model, ModelRequestParameters, StreamedResponse
 from pydantic_ai.profiles import ModelProfile, ModelProfileSpec
 from pydantic_ai.providers import Provider
-from pydantic_ai.settings import ModelSettings, ThinkingLevel
+from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import RequestUsage
 
 from furb.engine import OPERATOR, WINDOW, Refused
@@ -52,14 +46,12 @@ API = "claude-cli"
 BIN = "FURB_CLAUDE_BIN"
 HELD = "FURB_CLAUDE_STALL"
 MILLION = 1_000_000
-FLOOR = (200_000, 32_000)
 STALL = 900.0
 WARM = 8
 KEEP = 64
 IDLE = 300.0
 ROOM = 32 * 1024 * 1024
 TAIL = 2000
-DATED = 9
 LOOSE = ConfigDict(extra="ignore")
 LEVELS = ("low", "medium", "high", "xhigh", "max")
 LIVE: list[Session] = []
@@ -70,28 +62,9 @@ LIMITS: Mapping[str, tuple[int, int]] = {
   "opus": (MILLION, 128_000),
   "sonnet": (MILLION, 64_000),
   "haiku": (200_000, 64_000),
-  "claude-fable-5": (MILLION, 128_000),
-  "claude-mythos-5": (MILLION, 128_000),
-  "claude-opus-5": (MILLION, 128_000),
-  "claude-opus-4-8": (MILLION, 128_000),
-  "claude-opus-4-7": (MILLION, 128_000),
-  "claude-opus-4-6": (MILLION, 128_000),
-  "claude-sonnet-4-6": (MILLION, 64_000),
-  "claude-haiku-4-5": (200_000, 64_000),
 }
-# The CLI's own ladder is low, medium, high, xhigh, max, so every shared name means what it says and only
-# `minimal`, which claude has no tier for, has to floor. `max` is claude's alone: a caller that speaks the CLI's
-# vocabulary lands on the top tier rather than falling through to whatever claude would have picked by itself.
-EFFORT: Mapping[str, str] = {
-  "minimal": "low",
-  "low": "low",
-  "medium": "medium",
-  "high": "high",
-  "xhigh": "xhigh",
-  "max": "max",
-}
-# What a caller may name, which is the family aliases: a dated name still resolves, but nothing offers one.
-FAMILY = tuple(k for k in LIMITS if not k.startswith("claude-"))
+FAMILY = tuple(LIMITS)
+"""FAMILY is every model the World offers, by the family alias of the CLI."""
 ACTOR = "opus/low"
 """ACTOR is the actor a chain stands on when the operator names none, which is a name of the family and an effort."""
 STOP: Mapping[str, FinishReason] = {
@@ -106,10 +79,9 @@ PROFILE = ModelProfile(
 
 
 class Settings(ModelSettings, total=False):
-  """What a request carries beyond its messages: which conversation it belongs to, which one it forks, and how hard to think."""
+  """What a request carries beyond its messages: which conversation it belongs to, and how hard to think."""
 
   claude_session_id: str
-  claude_fork_of: str
   claude_effort: str
 
 
@@ -200,9 +172,8 @@ def default() -> Cli:
 
 
 def limits(name: str) -> tuple[int, int]:
-  """What a claude model can hold and how much it may write, by full name or by the family alias of the CLI."""
-  dated = len(name) > DATED and name[-DATED] == "-" and name[1 - DATED :].isdigit()
-  return LIMITS.get(name) or LIMITS.get(name[:-DATED] if dated else name) or FLOOR
+  """What a claude model can hold and how much it may write, by the family alias of the CLI."""
+  return LIMITS[name]
 
 
 def actors() -> list[list[str | list[str] | int]]:
@@ -210,20 +181,15 @@ def actors() -> list[list[str | list[str] | int]]:
   return [[OPERATOR, [], WINDOW], *([name, list(LEVELS), limits(name)[0]] for name in FAMILY)]
 
 
-def effort_of(level: ThinkingLevel | str | None) -> str | None:
-  """A thinking level as the `--effort` of the CLI, or nothing, which leaves claude the default it would have picked."""
-  return EFFORT.get(level) if isinstance(level, str) else None
-
-
-def mine(settings: ModelSettings | None) -> tuple[str, str, str]:
-  """The three settings this provider reads for itself, off the mapping a TypedDict is at runtime."""
+def mine(settings: ModelSettings | None) -> tuple[str, str]:
+  """The two settings this provider reads for itself, off the mapping a TypedDict is at runtime."""
   said = dict(settings or {})
 
   def word(key: str) -> str:
     got = said.get(key)
     return got if isinstance(got, str) else ""
 
-  return word("claude_session_id"), word("claude_fork_of"), word("claude_effort")
+  return word("claude_session_id"), word("claude_effort")
 
 
 def spent(usage: Spend | None, cost: float | None) -> RequestUsage:
@@ -248,34 +214,12 @@ def canon(message: ModelMessage) -> str:
   said: list[object] = []
   for part in message.parts:
     if isinstance(part, UserPromptPart):
-      told = part.content
-      said.append(["u", told if isinstance(told, str) else [b if isinstance(b, str) else shown(b) for b in told]])
-    elif isinstance(part, ToolReturnPart):
-      said.append(["r", part.tool_name, part.model_response_str()])
-    elif isinstance(part, RetryPromptPart):
-      said.append(["e", part.model_response()])
+      said.append(["u", part.content])
     elif isinstance(part, TextPart):
       said.append(["t", part.content])
     elif isinstance(part, ThinkingPart):
       said.append(["k"])
-    elif isinstance(part, ToolCallPart):
-      said.append(["c", part.tool_name, part.args_as_json_str()])
   return sha256(json.dumps(said, default=repr).encode()).hexdigest()[:16]
-
-
-def shown(item: object) -> str:
-  """One piece of user content that is not plain text, as the string that stands for it in a fingerprint."""
-  if isinstance(item, BinaryContent):
-    return f"{item.media_type}:{sha256(item.data).hexdigest()[:16]}"
-  return repr(item)
-
-
-def alike(held: Sequence[str], incoming: Sequence[str]) -> int:
-  """How far two fingerprint chains agree, which is how much of a conversation a fork of one already holds."""
-  n = 0
-  while n < min(len(held), len(incoming)) and held[n] == incoming[n]:
-    n += 1
-  return n
 
 
 def based(chain: Sequence[str], asked: Sequence[str], incoming: Sequence[str]) -> int | None:
@@ -517,34 +461,7 @@ class Session:
     One line is load-bearing. `claude -p` answers each user input as its own turn and this call resolves at the first
     boundary, so writing a seed and an ask as two lines would answer the seed and never see the ask.
     """
-    blocks: list[dict[str, object]] = []
     text = ""
-
-    def flush() -> None:
-      nonlocal text
-      if text.strip():
-        blocks.append({"type": "text", "text": text.rstrip()})
-      text = ""
-
-    def fed(items: Sequence[object]) -> None:
-      nonlocal text
-      for item in items:
-        if isinstance(item, str):
-          text += item + "\n\n"
-        elif isinstance(item, BinaryContent) and item.is_image:
-          flush()
-          blocks.append(
-            {
-              "type": "image",
-              "source": {"type": "base64", "media_type": item.media_type, "data": b64encode(item.data).decode()},
-            }
-          )
-        else:
-          wrong(
-            self.seat.name,
-            f"the stream-json input of claude carries text and images alone, never {type(item).__name__}",
-          )
-
     for message in delta:
       if isinstance(message, ModelResponse):
         # claude owns the assistant side of its own history; a crafted seed turn can only arrive as framed context.
@@ -552,17 +469,15 @@ class Session:
         text += f"[earlier turn: you]\n{say}\n\n" if say else ""
         continue
       for part in message.parts:
-        if isinstance(part, ToolReturnPart):
-          text += f"[earlier observation]\n{part.model_response_str()}\n\n"
-        elif isinstance(part, RetryPromptPart):
-          text += f"{part.model_response()}\n\n"
-        elif isinstance(part, UserPromptPart):
+        if isinstance(part, UserPromptPart):
+          if not isinstance(part.content, str):
+            wrong(self.seat.name, "the stream-json input of claude carries text alone")
           # No role label: a labelled transcript teaches the model a format it then continues past its own turn.
-          fed([part.content] if isinstance(part.content, str) else part.content)
-    flush()
-    if not blocks:
+          text += part.content + "\n\n"
+    if not text.strip():
       wrong(self.seat.name, "nothing to send: this request says nothing claude has not already heard")
-    return json.dumps({"type": "user", "message": {"role": "user", "content": blocks}}) + "\n"
+    block = {"type": "text", "text": text.rstrip()}
+    return json.dumps({"type": "user", "message": {"role": "user", "content": [block]}}) + "\n"
 
   async def reset(self) -> None:
     """Give the conversation up entirely: a request that continues nothing gets a session holding nothing."""
@@ -604,38 +519,14 @@ class Pool:
     self.keep = keep
     self.idle = idle
 
-  async def route(self, seat: Seat, fork: str, messages: Sequence[ModelMessage]) -> Session:
+  async def route(self, seat: Seat, messages: Sequence[ModelMessage]) -> Session:
     """The session holding this conversation: the one keyed to it, a fork of the one it grew out of, or a new one."""
     got = self.sessions.get(seat)
     if got is None:
-      incoming = [canon(m) for m in messages]
-      got = self.forked(seat, fork, incoming) or self.tipped(seat, messages, incoming) or Session(seat)
+      got = self.tipped(seat, messages, [canon(m) for m in messages]) or Session(seat)
       self.sessions[seat] = got
     await self.sweep(seat)
     return got
-
-  def forked(self, seat: Seat, fork: str, incoming: Sequence[str]) -> Session | None:
-    """A fork of the conversation this request names as its parent, which already holds everything the two share.
-
-    A same-task hop names what it continues while interleaving messages of its own, so its tip can never match. The
-    forked process holds the parent transcript, the shared prefix reads from the provider's cache, and only the
-    divergence is ever uploaded.
-    """
-    if not fork:
-      return None
-    kin = self.sessions.get(Seat(seat.name, seat.effort, seat.said, fork)) or next(
-      (s for k, s in self.sessions.items() if k.name == seat.name and k.said == seat.said and k.sid == fork), None
-    )
-    if kin is None or kin.busy:
-      return None
-    # The fork holds the parent's whole transcript, the parent's own replies included, so what the two share is
-    # measured against whichever of its positions runs longer: the reply-inclusive one when the caller echoed it back.
-    shared = max(alike(kin.chain, incoming), alike(kin.asked, incoming))
-    if not shared:
-      return None
-    kid = Session(seat, parent=kin.id)
-    kid.chain = list(incoming[:shared])
-    return kid
 
   def tipped(self, seat: Seat, messages: Sequence[ModelMessage], incoming: Sequence[str]) -> Session | None:
     """The idle sibling sitting exactly at this request's branch point, so the fork inherits its whole prefix.
@@ -793,7 +684,6 @@ class Claude(Model[object]):
     profile: ModelProfileSpec | None = None,
   ) -> None:
     self.name = name
-    self.window, self.tokens = limits(name)
     self.cli = default() if cli is None else cli
     self._provider = self.cli
     super().__init__(settings=settings, profile=PROFILE if profile is None else profile)
@@ -809,12 +699,10 @@ class Claude(Model[object]):
     return API
 
   def preface(self, messages: Sequence[ModelMessage]) -> str:
-    """The system prompt a process spawns with: the run's instructions, then every system part the history carries."""
-    told = [
+    """The system prompt a process spawns with: every system part the history carries."""
+    return "\n\n".join(
       p.content for m in messages if isinstance(m, ModelRequest) for p in m.parts if isinstance(p, SystemPromptPart)
-    ]
-    last = next((m.instructions for m in reversed(messages) if isinstance(m, ModelRequest) and m.instructions), "")
-    return "\n\n".join([last, *told] if last else told)
+    )
 
   async def request(
     self,
@@ -834,22 +722,13 @@ class Claude(Model[object]):
     messages: list[ModelMessage],
     model_settings: ModelSettings | None,
     model_request_parameters: ModelRequestParameters,
-    run_context: RunContext[object] | None = None,
   ) -> AsyncGenerator[StreamedResponse]:
     """One turn as a stream, on the session that holds this conversation."""
     settings, params = self.prepare_request(model_settings, model_request_parameters)
-    if params.function_tools or params.output_tools or params.native_tools:
-      wrong(self.name, "this provider bridges no tools: it buys completions, and the CLI it spawns is given none")
-    sid, fork, effort = mine(settings)
+    sid, effort = mine(settings)
     if effort and effort not in LEVELS:
       wrong(self.name, f"claude spends one of {', '.join(LEVELS)} on a turn, never {effort}")
-    # A run is a conversation unless the caller names one, so parallel agent runs land on processes of their own.
-    seat = Seat(
-      self.name,
-      effort or effort_of(params.thinking),
-      self.preface(messages),
-      sid or (run_context.run_id or "" if run_context else ""),
-    )
-    session = await self.cli.pool.route(seat, fork, messages)
+    seat = Seat(self.name, effort or None, self.preface(messages), sid)
+    session = await self.cli.pool.route(seat, messages)
     async with session.turn(messages) as heard:
       yield Reply(model_request_parameters=params, session=session, heard=heard)
