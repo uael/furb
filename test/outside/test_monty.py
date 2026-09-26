@@ -4,11 +4,13 @@ The suite proves the contract on both engines, sentence for sentence. What is pr
 ear of this interpreter that says a verb from its thread and is answered with what the verb raised, a show the
 engine made that an ear calls back from its thread, a class a word defined held as a type of this interpreter
 and its instances as objects of it, both ways, the Kernel of this interpreter refused, since the engine of monty
-holds its own, and a gate that accepts a builtin or a name of a module exactly when the sandbox runs it.
+holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, and the ears
+the crate writes, which serve a life of this interpreter as they serve any other.
 """
 
 import builtins
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 
@@ -16,7 +18,8 @@ import furb
 import furb_monty.engine
 from conftest import OPERATOR, STANDS, Dead, Py, Sand, settle, swapped
 from furb import engine, kernel
-from furb.engine import Refused
+from furb.engine import Refused, Text
+from furb_monty import _monty
 
 
 @pytest.fixture(autouse=True)
@@ -186,3 +189,38 @@ async def test_the_gate_of_the_sandbox_finds_what_the_run_finds_of_a_name_the_pr
   assert engine.gate("close(read('a'))", on=root)[0].startswith("line 1: error[call-non-callable]")
   with pytest.raises(Refused):
     await engine.rung("close(read('a'))", on=root)
+
+
+async def test_the_ears_of_the_crate_serve_a_life_of_this_interpreter(tmp_path: Path) -> None:
+  """The ears the crate writes serve a life of this interpreter before its World, given to the boot of the door,
+  which takes them beside the generators the contract says: the files write and read a path in the directory the
+  chain stands in, a command runs there and says its end from a thread of its own, and so does a wait, and what a
+  thread says drives the life from the loop."""
+  stands = [[[OPERATOR, [], 200000]], str(tmp_path), OPERATOR]
+  world = Dead(stands=stands).hears()
+  root = furb_monty.engine.boot((), files=_monty.files(), bash=_monty.bash(), time=_monty.time(), world=world)
+  engine.write(Text("note.txt", "one\n"), on=root)
+  assert (tmp_path / "note.txt").read_text() == "one\n"
+  assert engine.read("note.txt", on=root).content == "one\n"
+  ran = await engine.bash("printf two; cat note.txt", on=root)
+  assert (ran.code, ran.stdout.content) == (0, "twoone\n")
+  assert await engine.wait(0.01, on=root) is None
+
+
+async def test_the_store_of_the_crate_keeps_a_life_under_its_lease_and_a_later_life_opens_on_it(tmp_path: Path) -> None:
+  """The store the crate writes keeps what the journal says to keep, under the lease of its record, which a second
+  boot lets go with the life before it, and a later life opens on what it kept."""
+  path = str(tmp_path / "life.jsonl")
+  stands = [[[OPERATOR, [], 200000]], str(tmp_path), OPERATOR]
+  record, ear = _monty.store(path)
+  assert record == []
+  root = furb_monty.engine.boot(record, store=ear, world=Dead(stands=stands).hears())
+  assert await engine.rung("x = 7", on=root) is None
+  with pytest.raises(Refused, match="Another process owns"):
+    _monty.store(path)
+  kept = _monty.kept(path)
+  furb_monty.engine.boot((), world=Dead(stands=stands).hears())
+  record, ear = _monty.store(path)
+  assert record == kept
+  root = furb_monty.engine.boot(record, store=ear, world=Dead(stands=stands).hears())
+  assert engine.module(root)["x"] == 7
