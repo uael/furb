@@ -1,3 +1,0 @@
-[test]
-# Bun reads no budget of a test here, so a file it loads first sets the budget.
-preload = ["./bind/typescript/test/budget.ts"]
