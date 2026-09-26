@@ -1,16 +1,18 @@
-//! furb, the command line: the TUI, and one command of the operator on one life.
+//! furb, the command line: the TUI, a JSON-RPC on stdin and stdout, and one command of the operator on one life.
 //!
-//! With no command, furb hands the terminal to the TUI. `prompt`, `turns` and `run` each open one life and print what
-//! it came to. Every life runs on the engine of the crate, on the ears of the World that the crate writes, and on the
-//! provider of the models of the claude command line, which are the models the crate offers.
+//! With no command, furb hands the terminal to the TUI, or, with `--mode rpc`, serves a client on its stdin and its
+//! stdout. `prompt`, `turns` and `run` each open one life and print what it came to. Every life runs on the engine
+//! of the crate, on the ears of the World that the crate writes, and on the provider of the models of the claude
+//! command line, which are the models the crate offers.
 
 mod console;
 mod life;
+mod rpc;
 mod tui;
 
 use std::{path::PathBuf, process::ExitCode};
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use furb::{Object, value::entry, verbs};
 
 use crate::life::Life;
@@ -19,6 +21,9 @@ use crate::life::Life;
 #[derive(Parser)]
 #[command(name = "furb", version, about, args_conflicts_with_subcommands = true)]
 struct Furb {
+  /// What furb serves with no command: the TUI, or a JSON-RPC on stdin and stdout, which docs/rpc.md describes.
+  #[arg(long, value_enum, default_value_t = Mode::Tui)]
+  mode: Mode,
   /// Open the TUI on its demo session, which asks no model.
   #[arg(long)]
   demo: bool,
@@ -29,6 +34,15 @@ struct Furb {
   more: Vec<String>,
   #[command(subcommand)]
   command: Option<Command>,
+}
+
+/// What furb serves with no command.
+#[derive(Clone, Copy, PartialEq, ValueEnum)]
+enum Mode {
+  /// The TUI, which takes the terminal.
+  Tui,
+  /// A JSON-RPC: a command on each line of stdin, and a response or an event on each line of stdout.
+  Rpc,
 }
 
 /// The record a life keeps and resumes from, and the directory its chains start in.
@@ -115,6 +129,13 @@ fn main() -> ExitCode {
     Some(Command::Prompt { message, to, shape, place }) => prompt(&place, shape, message, to),
     Some(Command::Turns { record, cwd }) => turns(record, cwd),
     Some(Command::Run { word, place }) => run(&place, word),
+    None if furb.mode == Mode::Rpc => {
+      if furb.demo || !furb.more.is_empty() {
+        let why = "--demo and the words after -- are for the TUI, and --mode rpc serves no TUI";
+        Furb::command().error(ErrorKind::ArgumentConflict, why).exit();
+      }
+      rpc::serve(furb.place.record.as_deref(), &life::directory(furb.place.cwd.as_deref()))
+    }
     None => tui::launch(furb.demo, &furb.place, &furb.more).map(|never| match never {}),
   };
   match done {

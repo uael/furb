@@ -58,6 +58,7 @@ clone.
 | `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns` and `run`. |
 | `cli/src/life.rs` | One life: the ears it opens on, the prompt of the record it takes up, and how the operator awaits an act. |
 | `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back. |
+| `cli/src/rpc.rs` | The JSON-RPC of `--mode rpc`, which `docs/rpc.md` says. Change the two together. |
 | `cli/src/tui.rs` | How furb finds the TUI and hands the terminal to it. |
 | `cli/tests/furb.rs` | The tests, which run `furb` as a process, on a claude command line that answers from a script. |
 

@@ -131,6 +131,11 @@ impl Life {
     Life::open(record, keeps, &directory(cwd), console::terminal(), |_| {})
   }
 
+  /// Whether a pause stands over the root.
+  pub fn paused(&self) -> bool {
+    self.quiet.borrow().paused
+  }
+
   /// The name of the prompt the record already holds for this message: of the operator, on the root, of this shape
   /// and to this actor; and nothing when it holds none.
   ///
@@ -164,7 +169,9 @@ impl Life {
       if quiet.paused {
         let why =
           if quiet.refused.is_empty() { String::new() } else { format!(": {}", quiet.refused) };
-        return Err(format!("{id} is paused{why}. A wake from the TUI makes it go on."));
+        return Err(format!(
+          "{id} is paused{why}. A wake from the TUI or from `furb --mode rpc` makes it go on."
+        ));
       }
       drop(quiet);
       thread::park();

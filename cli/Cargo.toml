@@ -3,7 +3,7 @@ name = "furb-cli"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"
-description = "furb, the command line: the TUI, and one command of the operator on one life."
+description = "furb, the command line: the TUI, a JSON-RPC on stdin and stdout, and one command on one life."
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
 

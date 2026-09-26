@@ -22,7 +22,8 @@ API of its own:
   contract over one life in the sandbox, and `FURB_ENGINE=monty` makes `from furb import engine` give it.
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout
-  it was built from. `prompt`, `turns` and `run` each open one life on the record they are given. Every life runs on
+  it was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, as Pi does, which
+  `docs/rpc.md` says. `prompt`, `turns` and `run` each open one life on the record they are given. Every life runs on
   the ears of the crate, on the models of the claude command line, and on a console of the operator.
 
 The suite runs on both engines. `test/outside/test_monty.py` proves what the door carries that no sentence of the

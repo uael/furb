@@ -1,4 +1,5 @@
-//! furb, driven as a process, as an operator drives it: the commands, and the TUI it hands the terminal to.
+//! furb, driven as a process, as an operator or a client drives it: the commands, the JSON-RPC, and the TUI it hands
+//! the terminal to.
 //!
 //! Every life runs on the real engine and on the real ears of the crate, and a claude command line that answers from
 //! a script stands in for the models, so no test asks one. The fake answers each line of input with the next word the
@@ -8,13 +9,16 @@
 
 use std::{
   fs,
-  io::Write,
+  io::{BufRead, BufReader, Write},
   os::unix::fs::PermissionsExt,
   path::{Path, PathBuf},
-  process::{Command, Output, Stdio},
+  process::{Child, ChildStdin, Command, Output, Stdio},
+  sync::mpsc,
+  thread,
+  time::{Duration, Instant},
 };
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// The fake claude: each turn is one message that the command line says whole, and the result of the turn.
 const FAKE: &str = r#"#!/bin/sh
@@ -219,9 +223,251 @@ fn a_prompt_the_world_paused_ends_its_command_with_why_and_goes_on_when_it_is_ta
   missing.env("FURB_CLAUDE_BIN", yard.at.join("missing"));
   let said = refused(missing, "");
   assert!(said.contains("furb: prompt1 is paused: opus/low answered nothing: "), "{said}");
-  assert!(said.contains("A wake from the TUI makes it go on."), "{said}");
+  assert!(said.contains("A wake from the TUI or from `furb --mode rpc` makes it go on."), "{said}");
   yard.words(&[COUNT]);
   assert_eq!(printed(yard.kept(&counted), ""), "3\n", "the command wakes the prompt it takes up");
+  assert_eq!(yard.answered(), 1);
+}
+
+/// A client of `furb --mode rpc`: its line into the stdin of furb, and each record furb writes, as it comes.
+struct Client {
+  child: Child,
+  stdin: Option<ChildStdin>,
+  records: mpsc::Receiver<Value>,
+  /// The records read and not yet looked for.
+  held: Vec<Value>,
+}
+
+impl Client {
+  /// furb serving a life on the record of the yard.
+  fn new(yard: &Yard) -> Client {
+    let mut child = yard
+      .kept(&["--mode", "rpc"])
+      .stdin(Stdio::piped())
+      .stdout(Stdio::piped())
+      .spawn()
+      .expect("furb starts");
+    let stdin = child.stdin.take();
+    let stdout = BufReader::new(child.stdout.take().expect("the stdout of furb"));
+    let (sends, records) = mpsc::channel();
+    thread::spawn(move || {
+      for line in stdout.lines().map_while(Result::ok) {
+        let record = serde_json::from_str(&line).unwrap_or_else(|_| panic!("{line} is no JSON"));
+        if sends.send(record).is_err() {
+          return;
+        }
+      }
+    });
+    Client { child, stdin, records, held: Vec::new() }
+  }
+
+  /// One line into the stdin of furb.
+  fn line(&mut self, line: &str) {
+    let stdin = self.stdin.as_mut().expect("the stdin of furb");
+    writeln!(stdin, "{line}").expect("furb reads a command");
+  }
+
+  /// The response to a command, sent under this id.
+  fn asked(&mut self, id: &str, mut command: Value) -> Value {
+    command["id"] = json!(id);
+    self.line(&command.to_string());
+    self.until(|one| one["type"] == "response" && one["id"] == id)
+  }
+
+  /// The data of the response to a command that succeeded.
+  fn data(&mut self, id: &str, command: Value) -> Value {
+    let response = self.asked(id, command);
+    assert_eq!(response["success"], true, "{response}");
+    response["data"].clone()
+  }
+
+  /// The event that an act is done.
+  fn done(&mut self, act: &str) -> Value {
+    self.until(|one| one["type"] == "done" && one["act"] == act)
+  }
+
+  /// The first record that matches, taken, or a failure when none comes within a minute.
+  fn until(&mut self, what: impl Fn(&Value) -> bool) -> Value {
+    if let Some(at) = self.held.iter().position(&what) {
+      return self.held.remove(at);
+    }
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+      let left = deadline.saturating_duration_since(Instant::now());
+      let Ok(one) = self.records.recv_timeout(left) else {
+        panic!("no record came that matches, after {:#?}", self.held);
+      };
+      if what(&one) {
+        return one;
+      }
+      self.held.push(one);
+    }
+  }
+
+  /// Whether no record that matches comes for a while.
+  fn quiet(&mut self, what: impl Fn(&Value) -> bool, time: Duration) -> bool {
+    let deadline = Instant::now() + time;
+    while let Ok(one) =
+      self.records.recv_timeout(deadline.saturating_duration_since(Instant::now()))
+    {
+      self.held.push(one);
+    }
+    !self.held.iter().any(what)
+  }
+
+  /// The end of the life: stdin ends, and furb with it.
+  fn ended(mut self) -> bool {
+    drop(self.stdin.take());
+    self.child.wait().expect("furb ends").success()
+  }
+}
+
+impl Drop for Client {
+  fn drop(&mut self) {
+    let _ = self.child.kill();
+  }
+}
+
+#[test]
+fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
+  let yard = Yard::new("rpc-prompt");
+  yard.words(&[COUNT]);
+  let mut client = Client::new(&yard);
+  let asked = json!({"type": "prompt", "message": "count the lines", "shape": "int"});
+  let response = client.asked("1", asked);
+  assert_eq!(
+    response,
+    json!({"id": "1", "type": "response", "command": "prompt", "success": true, "data": {"act": "prompt1"}})
+  );
+  assert_eq!(client.done("prompt1"), json!({"type": "done", "act": "prompt1", "value": 3}));
+  let fact = client.until(|one| one["type"] == "fact" && one["fact"][0] == "prompt");
+  assert_eq!(
+    fact["fact"],
+    json!(["prompt", "prompt1", "operator", "chain1", "int", "count the lines", ""])
+  );
+  let peeked = client.data("2", json!({"type": "peek", "act": "prompt1"}));
+  assert_eq!(peeked, json!({"done": true, "value": 3}));
+  let turns = client.data("3", json!({"type": "turns"}));
+  let turns = turns["turns"].as_array().expect("the turns");
+  assert_eq!((&turns[1][0], &turns[1][1]), (&json!("assistant"), &json!(COUNT)));
+  let facts = client.data("4", json!({"type": "transcript", "on": "chain1"}));
+  assert!(facts["facts"].as_array().expect("the facts").contains(&fact["fact"]), "{facts}");
+  assert!(client.ended());
+  assert_eq!(yard.answered(), 1);
+}
+
+#[test]
+fn a_prompt_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
+  let yard = Yard::new("rpc-operator");
+  yard.words(&["close(await prompt(int, 'how many?', 'operator'))"]);
+  let mut client = Client::new(&yard);
+  client.data("1", json!({"type": "prompt", "message": "ask me", "shape": "int"}));
+  let asked = client.until(|one| one["type"] == "prompt");
+  let prompt = json!({"type": "prompt", "act": "prompt2", "on": "chain1", "shape": "int", "message": "how many?"});
+  assert_eq!(asked, prompt);
+  let state = client.data("2", json!({"type": "state"}));
+  assert_eq!(
+    state["prompts"],
+    json!([{"act": "prompt2", "on": "chain1", "shape": "int", "message": "how many?"}])
+  );
+  assert_eq!(
+    (&state["root"], &state["paused"], &state["acts"]),
+    (&json!("chain1"), &json!(false), &json!(["prompt1"]))
+  );
+  assert_eq!(state["standing"][2], "opus/low");
+  let wrong = client.asked("3", json!({"type": "close", "act": "prompt2", "value": "seven"}));
+  assert_eq!(wrong["success"], false, "a close of the wrong shape is refused: {wrong}");
+  client.data("4", json!({"type": "close", "act": "prompt2", "value": 7}));
+  assert_eq!(client.done("prompt1")["value"], 7);
+  assert_eq!(client.data("5", json!({"type": "state"}))["prompts"], json!([]));
+  let float = json!({"type": "prompt", "message": "a float", "shape": "float", "to": "operator"});
+  let float = client.data("6", float)["act"].as_str().expect("the act").to_owned();
+  client.until(|one| one["type"] == "prompt" && one["act"] == float);
+  client.data("7", json!({"type": "close", "act": float, "value": 2}));
+  let done = client.done(&float);
+  assert!(
+    done["value"].is_f64() && done["value"] == 2.0,
+    "a whole number closes a prompt of a float: {done}"
+  );
+  let never = json!({"type": "prompt", "message": "never", "shape": "str", "to": "operator"});
+  let never = client.data("8", never)["act"].as_str().expect("the act").to_owned();
+  client.data("9", json!({"type": "cancel", "act": never}));
+  let raised =
+    json!({"type": "done", "act": never, "raised": {"is": "CancelledError", "args": []}});
+  assert_eq!(client.done(&never), raised);
+  let no = json!({"type": "prompt", "message": "no", "shape": "str", "to": "operator"});
+  let no = client.data("10", no)["act"].as_str().expect("the act").to_owned();
+  let refusal = json!({"is": "Refused", "args": ["no"]});
+  client.data("11", json!({"type": "close", "act": no, "value": refusal}));
+  assert_eq!(
+    client.done(&no)["raised"],
+    refusal,
+    "an exception closes a prompt with that exception"
+  );
+}
+
+#[test]
+fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake() {
+  let yard = Yard::new("rpc-rung");
+  yard.words(&["close(1)"]);
+  let mut client = Client::new(&yard);
+  assert_eq!(
+    client.data("1", json!({"type": "rung", "word": "k = 1\nclose(k + 1)"})),
+    json!({"act": "rung1"})
+  );
+  assert_eq!(client.done("rung1")["value"], 2);
+  client.data("2", json!({"type": "pause", "act": "chain1"}));
+  assert_eq!(client.data("3", json!({"type": "state"}))["paused"], true);
+  client.data("4", json!({"type": "prompt", "message": "one", "shape": "int"}));
+  assert!(
+    client.quiet(|one| one["type"] == "done", Duration::from_secs(1)),
+    "a paused chain asks no model"
+  );
+  assert_eq!(yard.answered(), 0);
+  client.data("5", json!({"type": "wake", "act": "chain1"}));
+  assert_eq!(client.done("prompt1")["value"], 1);
+  assert_eq!(client.data("6", json!({"type": "state"}))["paused"], false);
+}
+
+#[test]
+fn a_command_that_does_nothing_says_why() {
+  let yard = Yard::new("rpc-refused");
+  let mut client = Client::new(&yard);
+  client.line("not json");
+  let parse = client.until(|one| one["command"] == "parse");
+  assert_eq!((&parse["type"], &parse["success"]), (&json!("response"), &json!(false)));
+  let unknown = client.asked("1", json!({"type": "nothing"}));
+  assert_eq!(unknown["error"], "Unknown command: nothing");
+  assert_eq!(client.asked("2", json!({"type": "close"}))["error"], "The command needs act.");
+  assert_eq!(
+    client.asked("3", json!({"type": "peek", "act": "bash9"}))["error"],
+    "No act is named bash9."
+  );
+  assert_eq!(client.asked("4", json!({"type": "rung", "word": 1}))["error"], "word is no string.");
+  assert_eq!(client.asked("5", json!({"type": "prompt", "to": "nobody"}))["success"], true);
+  let done = client.done("prompt1");
+  assert_eq!(
+    done["raised"]["is"], "Refused",
+    "a prompt to no actor of the roster is refused: {done}"
+  );
+}
+
+#[test]
+fn the_life_ends_with_stdin_and_a_later_life_resumes_its_record() {
+  let yard = Yard::new("rpc-later");
+  yard.words(&[COUNT]);
+  let mut client = Client::new(&yard);
+  client.data("1", json!({"type": "prompt", "message": "count the lines", "shape": "int"}));
+  client.done("prompt1");
+  assert!(client.ended(), "furb ends well when its stdin ends");
+  let mut later = Client::new(&yard);
+  assert_eq!(
+    later.data("1", json!({"type": "peek", "act": "prompt1"})),
+    json!({"done": true, "value": 3})
+  );
+  let record = later.data("2", json!({"type": "state"}))["record"].clone();
+  assert_eq!(record, json!(yard.record().display().to_string()));
+  assert!(later.ended());
   assert_eq!(yard.answered(), 1);
 }
 
