@@ -4,27 +4,14 @@ The same Rust crate and Monty sandbox, through N-API. Views, queries and control
 an `id`, converts to its name as a string, and can be awaited. Its Promise resolves with its outcome or rejects
 with an error that names the engine's fault. A TUI is not part of this package.
 
-From the repository root:
-
-```sh
-uv sync
-bun install
-bun run build
-bun test bind/typescript/test
-```
-
 `napi-rs` builds `furb.node` and generates `index.d.cts` from `src/binding/ts.rs`, and `index.cjs` loads it. The optional `typescript` feature
 builds the binding in the existing crate. There is no Rust worker or second crate. The `Engine` of the package has
 one method for each verb of the contract, which the build of the crate makes from `src/furb/engine.pyi`, as it
 makes the methods of the crate: the words that the verb needs, in their order, then an object of the words that have
 a default, where nothing leaves the default of the engine. A verb of the operator names its chain in `on`. The
-package runs on Bun and Node.js 22 or later, on macOS, Linux and Windows. The ear of commands of the crate runs a
-command with `/bin/sh`, and on Windows with the `sh` on `PATH`, such as the one of Git for Windows. It ends a
-command with the processes that the command started: on Unix by the process group of the command, and on Windows
-by its tree of processes, through `taskkill`. Build the native binary for the host before using the package. Bun
-gives no signal on Windows for Ctrl+Break or for the close of the console, and ends the process at once.
-`onConsoleEnd(callback)` hears these events there, and the system holds the process until the callback ends it;
-the TUI quits through it.
+package runs on Bun and Node.js 22 or later, on macOS, Linux and Windows. Bun gives no signal on Windows for
+Ctrl+Break or for the close of the console, and ends the process at once: `onConsoleEnd(callback)` hears these
+events there, and the system holds the process until the callback ends it.
 
 ```ts
 import { boot } from "@furb/engine";
@@ -69,8 +56,8 @@ It reads current pi-ai system messages, keeps a warm conversation for each sessi
 preserves text and thinking blocks, and reports the cost of each turn. The provider gives each chain of each life a
 session id of its own, since the ids of chains repeat in every life. It runs pure completions with CLI tools and
 MCP disabled. It finds the standalone CLI (`claude.exe` on Windows) or the CLI installed by Claude Desktop. Set
-`FURB_CLAUDE_BIN` to select a binary. Its pool belongs to the host that made the
-provider, and its `dispose` stops it. No CLI process starts until a model is asked.
+`FURB_CLAUDE_BIN` to select a binary. Its pool belongs to the host that made the provider, and its `dispose` stops
+it. No CLI process starts until a model is asked.
 
 ```ts
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
@@ -127,38 +114,20 @@ string. `inspect(name, chain)` also gives the Python type and representation of 
 
 Records preserve integral floats as `{"is":"float","args":["1"]}`. The native record reader checks integer
 precision before JavaScript can round a number. Every act the host makes enters the record, a query among them, and
-a later life makes it again at its place. A view enters nothing.
+a later life makes it again at its place. A view enters nothing. `Session.open` refuses a record whose replay
+drifts.
 
-A record whose replay drifts gives a life all the same, and `engine.raised` holds the drift; that life keeps
-nothing more. `Session.open` refuses such a record with the drift.
-
-Only one process owns a record. `store(path)` gives the record at the path and the ear of the store, which holds a
-lock on `<record>.lock` for as long as it lives; the system releases the lock when the process ends, so a lease of
-a process that ended never blocks an open. The holder may move the lock file with the record, and a process that
-locked the moved file opens the path again. On Windows the lock also refuses a read of the file by any other
-handle; the file holds no text, and nothing reads it. A torn final line is removed before an append; a damaged
-complete line fails. `kept(path)` reads a record with no lock. The dispose of an engine lets every ear go: the store
-lets its record go, and a command ends. `NativeEar.dispose()` lets go an ear that no engine heard.
-
-The journal keeps a command, a wait, a prompt to the operator and a reply from the started of the ear that took it.
-What the record shows started and not done is pending in a later life: the engine starts none of it until a wake that this
-life says. `session.pending` holds that work, and `session.resume()` says a wake of each chain that holds some. Work
-that a pause of the operator holds is not in `session.pending`, and it waits for the wake of the operator. A
-command that an earlier life started and did not end runs again at that wake, once; what it told before stands in
-its door until then, and it is answered with the streams of the process it runs again. The deadline of a wait is a
-`due` fact that the ear of time says, which the record keeps, so a later life ends the wait at the same time. The
-streams that a model wrote in part live in the record's `.session.json` companion. File snapshots append to
-`.changes.jsonl`; `session.changes.read` loads a page of them. Keep both companions with the JSONL record. The
-session saves `.session.json` whole with `saveFile(path, text)`, which writes `<path>.tmp` and gives it the name
-of the file. A save that fails throws an error that names the file, with the error of the system as its cause. The
-TUI saves its own files with it.
+`session.pending` holds the work that the record showed begun and not done when the life opened, except the work
+that a pause of the operator holds, and `session.resume()` wakes each chain that holds some. The streams that a
+model wrote in part live in the record's `.session.json` companion. File snapshots append to `.changes.jsonl`;
+`session.changes.read` loads a page of them. Keep both companions with the JSONL record. The session saves
+`.session.json` whole with `saveFile(path, text)`, which writes `<path>.tmp` and gives it the name of the file. A
+save that fails throws an error that names the file, with the error of the system as its cause. The TUI saves its
+own files with it.
 
 `inspectRecord(path, models)` reads pending work through the same native replay without taking a record lock,
-writing files, or starting a model or command. The TUI runs this inspection in its own worker. `Session.activity`
-holds the state of every act a person follows, derived once from the facts as the life hears them, so a host reads
-it without asking the sandbox; the acts the engine asks on the way, such as a read, a run or a reply, are no rows of
-it. It asks the engine's `covers` which live acts a pause or a wake is over, one call for each act whose state
-the control would change. `Session.isPaused` reads it.
+writing files, or starting a model or command. `session.activity` holds the state of every act a person follows,
+and `session.isPaused(id)` reads it.
 
 `session.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type,
 size, and `furb-image://` reference. A session with no record copies it into `.furb/images` of its directory. The
