@@ -11,4 +11,4 @@ test("the temporary directory of a demo goes when the process that made it remov
   expect(existsSync(directory)).toBe(true);
   await removeDemoDirectories();
   expect(existsSync(dirname(directory))).toBe(false);
-}, 30000);
+});

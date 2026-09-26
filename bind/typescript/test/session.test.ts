@@ -241,7 +241,7 @@ test("a fenced reply is no python: the gate refuses it and the prompt asks again
     cli.dispose();
     await remove(cwd);
   }
-}, 30000);
+});
 
 test("unfinished model work and waits reopen pending until the host resumes them", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-resume-"));
@@ -345,7 +345,7 @@ test("the provider hands the model the python of a user turn as the engine wrote
     delete process.env.FURB_FAKE_LOG;
     await remove(cwd);
   }
-}, 30000);
+});
 
 test("file changes append once and reopen in pages without growing the session metadata", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-changes-test-"));

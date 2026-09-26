@@ -30,7 +30,7 @@ test("an @word that names no file is text of the message, and a word that names 
   } finally {
     await session.dispose();
   }
-}, 30000);
+});
 
 test("a view that cannot be read opens the record with the default view and names the file", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-view-"));
@@ -56,7 +56,7 @@ test("a view that cannot be read opens the record with the default view and name
     await session?.dispose();
     await rm(directory, { recursive: true, force: true });
   }
-}, 30000);
+});
 
 test("a session that cannot save its view still ends its life, its commands and its lease", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-dispose-"));
@@ -82,7 +82,7 @@ test("a session that cannot save its view still ends its life, its commands and 
   } finally {
     await remove(directory);
   }
-}, 30000);
+});
 
 test("a snapshot asked before a model choice lands after it, and the choice holds for the next prompt", async () => {
   const session = await demoSession();
@@ -122,7 +122,7 @@ test("a snapshot asked before a model choice lands after it, and the choice hold
     session.host.snapshot = snapshot;
     await session.dispose();
   }
-}, 30000);
+});
 
 test("a follow-up that the operator removes while an earlier one is sent is not sent", async () => {
   const session = await demoSession();
@@ -151,7 +151,7 @@ test("a follow-up that the operator removes while an earlier one is sent is not 
     session.host.sendQueued = send;
     await session.dispose();
   }
-}, 30000);
+});
 
 test("a follow-up that the operator removes while its files are read is not sent", async () => {
   const session = await demoSession();
@@ -187,7 +187,7 @@ test("a follow-up that the operator removes while its files are read is not sent
     Object.assign(session, { engine });
     await session.dispose();
   }
-}, 30000);
+});
 
 test("each /feed sends one line, and a /feed with no text closes the input", async () => {
   const session = await demoSession();
@@ -213,7 +213,7 @@ test("each /feed sends one line, and a /feed with no text closes the input", asy
   } finally {
     await session.dispose();
   }
-}, 30000);
+});
 
 test("/model finds a model of the roster by the rule of the provider, so an id with a colon names it", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-models-"));
@@ -236,7 +236,7 @@ test("/model finds a model of the roster by the rule of the provider, so an id w
     await session.dispose();
     await rm(directory, { recursive: true, force: true });
   }
-}, 30000);
+});
 
 test("the answers to the questions of the snapshots stay out of the facts of the host", async () => {
   const session = await demoSession();
@@ -256,7 +256,7 @@ test("the answers to the questions of the snapshots stay out of the facts of the
   } finally {
     await session.dispose();
   }
-}, 30000);
+});
 
 test("a path that starts with ~ is read from the home directory by /share, /export, /image and /extension", async () => {
   const home = await mkdtemp(join(tmpdir(), "furb-home-"));
@@ -309,7 +309,7 @@ try {
   } finally {
     await rm(home, { recursive: true, force: true });
   }
-}, 30000);
+});
 
 test("an undo leaves out of its branch a grant that came after the message it takes back", async () => {
   const session = await demoSession();

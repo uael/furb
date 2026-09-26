@@ -187,7 +187,8 @@ export const keys = [
     chord: "⌥[ / ⌥]",
     legacy: "⌥P / ⌥N",
     action: "Previous / next message of the feed",
-    bindings: [{ on: ["meta+[", "meta+]", "meta+p", "meta+n"], run: "jump" }],
+    // ⌃⌥P and ⌃⌥N jump too, so they are named whole: ⌃P and ⌃N alone name the palette and a new chain.
+    bindings: [{ on: ["meta+[", "meta+]", "meta+p", "meta+n", "ctrl+meta+p", "ctrl+meta+n"], run: "jump" }],
   },
   {
     chord: "⌃PageUp / ⌃PageDown",

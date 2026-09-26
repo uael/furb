@@ -1,4 +1,4 @@
-import { afterAll, expect, setDefaultTimeout, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { setRendererCapabilities } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
@@ -7,7 +7,6 @@ import { idle } from "./idle.ts";
 
 // Each test opens a demo session, with its worker and its record, as the tests of the App do, and so has their time:
 // a Windows runner has run such a test four times slower than usual, past the five seconds that bun gives by default.
-setDefaultTimeout(30000);
 afterAll(removeDemoDirectories);
 
 test("a terminal with no kitty keyboard protocol reaches each action by a chord it sends, and the help names those chords", () =>

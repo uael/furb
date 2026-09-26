@@ -66,7 +66,7 @@ test("image attachments reach pi-ai and the Claude CLI as image blocks and remai
     else process.env.FURB_FAKE_LOG = previous;
     await remove(directory);
   }
-}, 30000);
+});
 
 test("an image attachment is written and read back by one grammar, and a bare uri is no attachment", () => {
   const digest = "a".repeat(64);

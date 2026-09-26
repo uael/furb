@@ -65,7 +65,7 @@ test("idle snapshots add no facts or sandbox calls as the act table grows, and s
     await session.dispose();
     await rm(cwd, { recursive: true, force: true });
   }
-}, 30000);
+});
 
 test("a take reads the program, the turns and the directory of a chain again once a rung changes them", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-state-"));
@@ -87,7 +87,7 @@ test("a take reads the program, the turns and the directory of a chain again onc
     await session.dispose();
     await rm(cwd, { recursive: true, force: true });
   }
-}, 30000);
+});
 
 test("an act of a kind an extension defines joins the act table, and what it tells reaches the view", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-extension-"));
@@ -115,7 +115,7 @@ test("an act of a kind an extension defines joins the act table, and what it tel
     await session.dispose();
     await rm(cwd, { recursive: true, force: true });
   }
-}, 30000);
+});
 
 test("a take after a change of the chain asks its turns by one question", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-rendering-"));
@@ -135,7 +135,7 @@ test("a take after a change of the chain asks its turns by one question", async 
     await session.dispose();
     await rm(cwd, { recursive: true, force: true });
   }
-}, 30000);
+});
 
 test("a take carries the acts that changed after the count it is given, and every act after the table is derived again", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-delta-"));
@@ -167,7 +167,7 @@ test("a take carries the acts that changed after the count it is given, and ever
     await session.dispose();
     await rm(cwd, { recursive: true, force: true });
   }
-}, 30000);
+});
 
 test("a new standing drops the roster, the directory and the actor that the view of a chain read", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-standing-"));

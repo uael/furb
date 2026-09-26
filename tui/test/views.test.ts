@@ -65,109 +65,101 @@ test("a view opens at the offset it was left at, after a shorter view, in a new 
     { width: 120, height: 30 },
     reopened,
   );
-}, 30000);
+});
 
-test(
-  "a command that printed more than a row holds sends the tail and its length, and its open card shows all of it",
-  () =>
-    composing(
-      async ({ session, app, screen }) => {
-        await session.submit("/bash seq 1 3000");
-        const command = session.activity.find((act) => act.kind === "bash");
-        if (!command) throw new Error("No command.");
-        await session.engine.result(command.id);
+test("a command that printed more than a row holds sends the tail and its length, and its open card shows all of it", () =>
+  composing(
+    async ({ session, app, screen }) => {
+      await session.submit("/bash seq 1 3000");
+      const command = session.activity.find((act) => act.kind === "bash");
+      if (!command) throw new Error("No command.");
+      await session.engine.result(command.id);
+      await session.refresh();
+      const row = session.acts.find((act) => act.id === command.id);
+      const printed = Array.from({ length: 3000 }, (_, index) => `${index + 1}\n`).join("");
+      const stdout = (row?.value as { stdout: { content: string } }).stdout.content;
+      expect(row?.output).toBe(printed.length);
+      expect(stdout.length).toBeLessThanOrEqual(2000);
+      expect(printed.endsWith(stdout)).toBe(true);
+      app.render();
+      await screen.flush();
+      const card = app.scroll.getChildren().find((node) => node.id === command.id);
+      const heading = card?.getChildren()[0];
+      if (!card || !heading) throw new Error("No card for the command.");
+      await screen.mockMouse.click(heading.x + 1, heading.y);
+      await screen.flush();
+      const opened = app.scroll.getChildren().find((node) => node.id === command.id);
+      if (!opened) throw new Error("No open card for the command.");
+      // The line end that closes the output ends its last row, and the card draws no empty row for it.
+      const shown = printed.replace(/\n$/, "");
+      await screen.waitFor(() => texts(opened).includes(shown), { maxPasses: 200 });
+      expect(texts(opened)).toContain(shown);
+    },
+    { width: 120, height: 40, useMouse: true },
+  ));
+
+test("the views say each quantity one way, read a page of changes once, and set a heading only when it changes", () =>
+  composing(
+    async ({ session, app, screen }) => {
+      const reads: number[] = [];
+      const readChanges = session.host.readChanges.bind(session.host);
+      session.host.readChanges = (start, count) => {
+        reads.push(start);
+        return readChanges(start, count);
+      };
+      try {
+        // The sidebar says the ceiling of the grant that holds now: a share of the context, then a sum of dollars.
+        await session.submit("/context 0.3");
+        await session.engine.result(
+          await session.engine.rung({ word: "counted = 1", on: session.engine.root }),
+        );
         await session.refresh();
-        const row = session.acts.find((act) => act.id === command.id);
-        const printed = Array.from({ length: 3000 }, (_, index) => `${index + 1}\n`).join("");
-        const stdout = (row?.value as { stdout: { content: string } }).stdout.content;
-        expect(row?.output).toBe(printed.length);
-        expect(stdout.length).toBeLessThanOrEqual(2000);
-        expect(printed.endsWith(stdout)).toBe(true);
         app.render();
         await screen.flush();
-        const card = app.scroll.getChildren().find((node) => node.id === command.id);
-        const heading = card?.getChildren()[0];
-        if (!card || !heading) throw new Error("No card for the command.");
-        await screen.mockMouse.click(heading.x + 1, heading.y);
+        let frame = screen.captureCharFrame();
+        const lines = frame.split("\n");
+        const meter = lines.findIndex((line) => line.includes("━"));
+        await screen.mockMouse.moveTo((lines[meter] ?? "").indexOf("━") + 2, meter);
         await screen.flush();
-        const opened = app.scroll.getChildren().find((node) => node.id === command.id);
-        if (!opened) throw new Error("No open card for the command.");
-        // The line end that closes the output ends its last row, and the card draws no empty row for it.
-        const shown = printed.replace(/\n$/, "");
-        await screen.waitFor(() => texts(opened).includes(shown), { maxPasses: 200 });
-        expect(texts(opened)).toContain(shown);
-      },
-      { width: 120, height: 40, useMouse: true },
-    ),
-  30000,
-);
-
-test(
-  "the views say each quantity one way, read a page of changes once, and set a heading only when it changes",
-  () =>
-    composing(
-      async ({ session, app, screen }) => {
-        const reads: number[] = [];
-        const readChanges = session.host.readChanges.bind(session.host);
-        session.host.readChanges = (start, count) => {
-          reads.push(start);
-          return readChanges(start, count);
-        };
-        try {
-          // The sidebar says the ceiling of the grant that holds now: a share of the context, then a sum of dollars.
-          await session.submit("/context 0.3");
-          await session.engine.result(
-            await session.engine.rung({ word: "counted = 1", on: session.engine.root }),
-          );
-          await session.refresh();
-          app.render();
-          await screen.flush();
-          let frame = screen.captureCharFrame();
-          const lines = frame.split("\n");
-          const meter = lines.findIndex((line) => line.includes("━"));
-          await screen.mockMouse.moveTo((lines[meter] ?? "").indexOf("━") + 2, meter);
-          await screen.flush();
-          frame = screen.captureCharFrame();
-          expect(frame).toContain("pauses at 30%");
-          expect(frame).not.toContain("30.000000000000004");
-          await screen.mockMouse.moveTo(0, 0);
-          await session.submit("/grant 1.5");
-          await session.refresh();
-          app.render();
-          await screen.flush();
-          frame = screen.captureCharFrame();
-          expect(frame).toContain("$1.50");
-          const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
-          const heading = card?.getChildren()[0] as TextRenderable | undefined;
-          if (!heading) throw new Error("No card for the rung.");
-          const content = heading.content;
-          app.render();
-          await screen.flush();
-          expect(heading.content).toBe(content);
-          await session.engine.result(
-            await session.engine.rung({ word: 'write(Text("note.txt", "one\\n"))', on: session.engine.root }),
-          );
-          await until(session.host, () => session.host.changes === 1);
-          session.show("changes");
-          await session.refresh();
-          await session.refresh();
-          expect(reads).toEqual([0]);
-          expect(session.changes[0]?.patch).toContain("+one");
-          await session.engine.result(
-            await session.engine.rung({ word: 'write(Text("note.txt", "two\\n"))', on: session.engine.root }),
-          );
-          await until(session.host, () => session.host.changes === 2);
-          await session.refresh();
-          expect(reads).toEqual([0, 0]);
-          expect(session.changes[1]?.patch).toContain("+two");
-        } finally {
-          session.host.readChanges = readChanges;
-        }
-      },
-      { width: 150, height: 40 },
-    ),
-  30000,
-);
+        frame = screen.captureCharFrame();
+        expect(frame).toContain("pauses at 30%");
+        expect(frame).not.toContain("30.000000000000004");
+        await screen.mockMouse.moveTo(0, 0);
+        await session.submit("/grant 1.5");
+        await session.refresh();
+        app.render();
+        await screen.flush();
+        frame = screen.captureCharFrame();
+        expect(frame).toContain("$1.50");
+        const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
+        const heading = card?.getChildren()[0] as TextRenderable | undefined;
+        if (!heading) throw new Error("No card for the rung.");
+        const content = heading.content;
+        app.render();
+        await screen.flush();
+        expect(heading.content).toBe(content);
+        await session.engine.result(
+          await session.engine.rung({ word: 'write(Text("note.txt", "one\\n"))', on: session.engine.root }),
+        );
+        await until(session.host, () => session.host.changes === 1);
+        session.show("changes");
+        await session.refresh();
+        await session.refresh();
+        expect(reads).toEqual([0]);
+        expect(session.changes[0]?.patch).toContain("+one");
+        await session.engine.result(
+          await session.engine.rung({ word: 'write(Text("note.txt", "two\\n"))', on: session.engine.root }),
+        );
+        await until(session.host, () => session.host.changes === 2);
+        await session.refresh();
+        expect(reads).toEqual([0, 0]);
+        expect(session.changes[1]?.patch).toContain("+two");
+      } finally {
+        session.host.readChanges = readChanges;
+      }
+    },
+    { width: 150, height: 40 },
+  ));
 
 test("a relative path that the operator types is read from the directory of the selected chain", async () => {
   const session = await demoSession();
@@ -189,7 +181,7 @@ test("a relative path that the operator types is read from the directory of the 
   } finally {
     await session.dispose();
   }
-}, 30000);
+});
 
 test("the standing of a chain is no card of the conversation, though its turns hold its three rows", () =>
   composing(

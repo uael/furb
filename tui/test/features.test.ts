@@ -109,7 +109,7 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
     { width: 140, height: 42, useMouse: true },
     session,
   );
-}, 30000);
+});
 
 test("queued follow-ups wait for current work, attach files, and message undo and redo keep their branches", async () => {
   let session = await demoSession();
@@ -186,7 +186,7 @@ test("queued follow-ups wait for current work, attach files, and message undo an
   } finally {
     await session.dispose();
   }
-}, 30000);
+});
 
 test("clipboard import and share publication use bounded files and the explicitly chosen uploader", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-desktop-"));
@@ -234,7 +234,7 @@ test("clipboard import and share publication use bounded files and the explicitl
     else process.env.PATH = oldPath;
     await remove(directory);
   }
-}, 30000);
+});
 
 test("a model request failure shows in the feed as the failure of an act, and not as an error of the view", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-model-failure-"));
@@ -266,7 +266,7 @@ test("a model request failure shows in the feed as the failure of an act, and no
   } finally {
     await remove(directory);
   }
-}, 30000);
+});
 
 test("file and shell shortcuts, an external editor, extensions, and a safe standalone share use the real session", async () => {
   const session = await demoSession();
@@ -346,7 +346,7 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
     await extensions.dispose();
     await session.dispose();
   }
-}, 30000);
+});
 
 test("a queued dispatch recovers both sides of the prompt-write boundary without sending twice", async () => {
   let session = await demoSession();
@@ -407,7 +407,7 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
   } finally {
     await session.dispose();
   }
-}, 30000);
+});
 
 test("a file opens with the command of the system it runs on", () => {
   const path = "C:\\Users\\me\\a picture.png";

@@ -70,306 +70,278 @@ async function withLibrary(
   }
 }
 
-test(
-  "workspaces keep sessions alive, report background completion and input, and reopen saved records paused",
-  () =>
-    withLibrary(async ({ directory, open }) => {
-      await mkdir(join(directory, "alpha"));
-      await mkdir(join(directory, "beta"));
-      await seedDemoFiles(join(directory, "alpha"));
-      await seedDemoFiles(join(directory, "beta"));
-      let library = open();
-      const alpha = await library.add(join(directory, "alpha"));
-      const beta = await library.add(join(directory, "beta"));
-      const first = await library.create(alpha, "Checks");
-      const second = await library.create(alpha, "Notes");
-      const third = await library.create(beta, "Release");
-      expect(alpha.sessions).toHaveLength(2);
-      expect(beta.sessions).toHaveLength(1);
-      if (!first.session || !second.session || !third.session) throw new Error("Sessions did not open.");
-      const worker = first.session.engine;
-      const command = await worker.bash("sleep 0.6; printf 'background finished'", { on: worker.root });
-      await until(library, () => first.status === "working");
-      expect(library.groupStatus(alpha)).toBe("working");
-      expect(library.current).toBe(third);
-      await worker.result(command);
-      await until(library, () => first.status === "done");
-      await library.select(first);
-      expect(first.session.engine).toBe(worker);
-      expect(first.status).toBe("idle");
-      expect(first.unread).toBe(false);
+test("workspaces keep sessions alive, report background completion and input, and reopen saved records paused", () =>
+  withLibrary(async ({ directory, open }) => {
+    await mkdir(join(directory, "alpha"));
+    await mkdir(join(directory, "beta"));
+    await seedDemoFiles(join(directory, "alpha"));
+    await seedDemoFiles(join(directory, "beta"));
+    let library = open();
+    const alpha = await library.add(join(directory, "alpha"));
+    const beta = await library.add(join(directory, "beta"));
+    const first = await library.create(alpha, "Checks");
+    const second = await library.create(alpha, "Notes");
+    const third = await library.create(beta, "Release");
+    expect(alpha.sessions).toHaveLength(2);
+    expect(beta.sessions).toHaveLength(1);
+    if (!first.session || !second.session || !third.session) throw new Error("Sessions did not open.");
+    const worker = first.session.engine;
+    const command = await worker.bash("sleep 0.6; printf 'background finished'", { on: worker.root });
+    await until(library, () => first.status === "working");
+    expect(library.groupStatus(alpha)).toBe("working");
+    expect(library.current).toBe(third);
+    await worker.result(command);
+    await until(library, () => first.status === "done");
+    await library.select(first);
+    expect(first.session.engine).toBe(worker);
+    expect(first.status).toBe("idle");
+    expect(first.unread).toBe(false);
 
-      const question = await second.session.engine.prompt("str", {
-        message: "Name the release",
-        to: "operator",
-        on: second.session.engine.root,
-      });
-      await until(library, () => second.status === "blocked");
-      expect(library.groupStatus(alpha)).toBe("blocked");
-      await second.session.host.answer(question, "v1");
-      await until(library, () => second.status === "done");
+    const question = await second.session.engine.prompt("str", {
+      message: "Name the release",
+      to: "operator",
+      on: second.session.engine.root,
+    });
+    await until(library, () => second.status === "blocked");
+    expect(library.groupStatus(alpha)).toBe("blocked");
+    await second.session.host.answer(question, "v1");
+    await until(library, () => second.status === "done");
 
-      await first.session.submit("/pause");
-      await until(library, () => first.status === "paused");
-      await first.session.submit("/wake");
-      await until(library, () => first.status === "idle");
-      const waiting = await first.session.engine.wait({ seconds: 60, on: first.session.engine.root });
-      await until(library, () => first.status === "working");
-      library.preferences.sidebar = false;
-      library.preferences.save("paper");
-      expect(second.session.theme).toBe("paper");
-      library.toggle(beta);
-      const record = first.path;
-      await library.dispose();
-      library = open();
-      await library.refresh();
-      expect(library.groups.map((group) => group.name)).toEqual(["alpha", "beta"]);
-      expect(library.groups[1]?.collapsed).toBe(true);
-      expect(library.preferences.sidebar).toBe(false);
-      expect(library.preferences.theme).toBe("paper");
-      expect(
-        library.groups
-          .flatMap((group) => group.sessions)
-          .every((entry) => !entry.session && ["saved", "paused"].includes(entry.status)),
-      ).toBe(true);
-      const restored = library.groups[0]?.sessions.find((entry) => entry.path === record);
-      if (!restored) throw new Error("The saved session is missing.");
-      await library.select(restored);
-      expect(restored.status).toBe("paused");
-      expect(restored.session?.host.pending.has(waiting)).toBe(true);
-      const metadata = JSON.parse(await readFile(`${record}.session.json`, "utf8"));
-      expect(metadata.pending).toBeUndefined();
-    }),
-  30000,
-);
+    await first.session.submit("/pause");
+    await until(library, () => first.status === "paused");
+    await first.session.submit("/wake");
+    await until(library, () => first.status === "idle");
+    const waiting = await first.session.engine.wait({ seconds: 60, on: first.session.engine.root });
+    await until(library, () => first.status === "working");
+    library.preferences.sidebar = false;
+    library.preferences.save("paper");
+    expect(second.session.theme).toBe("paper");
+    library.toggle(beta);
+    const record = first.path;
+    await library.dispose();
+    library = open();
+    await library.refresh();
+    expect(library.groups.map((group) => group.name)).toEqual(["alpha", "beta"]);
+    expect(library.groups[1]?.collapsed).toBe(true);
+    expect(library.preferences.sidebar).toBe(false);
+    expect(library.preferences.theme).toBe("paper");
+    expect(
+      library.groups
+        .flatMap((group) => group.sessions)
+        .every((entry) => !entry.session && ["saved", "paused"].includes(entry.status)),
+    ).toBe(true);
+    const restored = library.groups[0]?.sessions.find((entry) => entry.path === record);
+    if (!restored) throw new Error("The saved session is missing.");
+    await library.select(restored);
+    expect(restored.status).toBe("paused");
+    expect(restored.session?.host.pending.has(waiting)).toBe(true);
+    const metadata = JSON.parse(await readFile(`${record}.session.json`, "utf8"));
+    expect(metadata.pending).toBeUndefined();
+  }));
 
-test(
-  "deleting a session moves its record and state to trash, keeps other sessions alive, and refuses another owner",
-  () =>
-    withLibrary(async ({ directory, open }) => {
-      const library = open();
-      let external: Session | undefined;
-      try {
-        const group = await library.add(directory);
-        const first = await library.create(group, "Remove me");
-        const second = await library.create(group, "Keep me");
-        if (!first.session || !second.session) throw new Error("Missing live sessions.");
-        await first.session.engine.result(
-          await first.session.engine.rung({ word: "kept_value = 41", on: first.session.engine.root }),
-        );
-        const otherEngine = second.session.engine;
-        const trash = await library.delete(first);
-        expect(library.current).toBe(second);
-        expect(second.session.engine).toBe(otherEngine);
-        await otherEngine.result(await otherEngine.rung({ word: "still_alive = 17", on: otherEngine.root }));
-        expect((await otherEngine.inspect("still_alive", second.session.selected)).value).toBe(17);
-        expect(await stat(first.path).catch(() => null)).toBeNull();
-        expect(await stat(`${first.path}.lock`).catch(() => null)).toBeNull();
-        const archived = join(trash, basename(first.path));
-        expect((await stat(archived)).isFile()).toBe(true);
-        expect((await stat(`${archived}.lock`)).isFile()).toBe(true);
-        const restored = await library.import(archived, group);
-        expect((await restored.session?.engine.inspect("kept_value", restored.session.selected))?.value).toBe(
-          41,
-        );
-        const locked = join(group.directory, ".furb/sessions/locked.jsonl");
-        const opened = await openEngine({ cwd: directory, record: locked, demo: true });
-        external = new Session(opened.engine, opened.host, true, library.preferences);
-        await library.refresh();
-        const entry = group.sessions.find((entry) => entry.path === locked);
-        if (!entry) throw new Error("The locked session was not listed.");
-        const error = await library.delete(entry).catch((error: unknown) => error);
-        expect(error).toBeInstanceOf(Error);
-        expect(String(error)).toContain("Another process owns");
-        expect((await stat(locked)).isFile()).toBe(true);
-      } finally {
-        await external?.dispose();
-      }
-    }),
-  30000,
-);
-
-test(
-  "the sidebar tree groups sessions, switches by mouse, collapses and toggles without losing a draft",
-  () =>
-    withLibrary(async ({ directory, open, sidebar }) => {
-      await mkdir(join(directory, "project"));
-      const library = open();
-      const group = await library.add(join(directory, "project"));
-      const first = await library.create(group, "foo");
-      const second = await library.create(group, "bar");
-      if (!first.session || !second.session) throw new Error("The session did not open.");
-      const { screen, app, left } = await sidebar(library);
-      app().composer.setText("keep this draft");
-      await screen.flush();
-      const lines = screen.captureCharFrame().split("\n");
-      const projectRow = lines.findIndex((line) => /▾ project/.test(line.slice(left)));
-      const fooRow = lines.findIndex((line) => /[○●◌] foo\b/.test(line.slice(left)));
-      const barRow = lines.findIndex((line) => /[○●◌] bar\b/.test(line.slice(left)));
-      expect(fooRow).toBeGreaterThan(projectRow);
-      expect(barRow).toBeGreaterThan(projectRow);
-      await screen.mockMouse.click(left + 6, fooRow);
-      await until(library, () => library.current === first);
-      await screen.flush();
-      expect(app().session).toBe(first.session);
-      await library.select(second);
-      await screen.flush();
-      expect(app().composer.plainText).toBe("keep this draft");
-      await screen.mockMouse.click(left + 3, projectRow);
-      app().render();
-      await screen.flush();
-      expect(group.collapsed).toBe(true);
-      expect(
-        screen
-          .captureCharFrame()
-          .split("\n")
-          .some((line) => line.slice(left).includes("foo")),
-      ).toBe(false);
-      screen.mockInput.pressKey("\\", { ctrl: true });
-      await screen.flush();
-      app().render();
-      await screen.flush();
-      expect(library.preferences.sidebar).toBe(false);
-      expect(app().scroll.x).toBe(2);
-      expect(app().composer.plainText).toBe("keep this draft");
-      // The picker reads the workspaces again before it opens: the test awaits the picker the key opened.
-      const picker = app().workspacePicker;
-      let opened: Promise<void> | undefined;
-      app().workspacePicker = () => {
-        opened = picker();
-        return opened;
-      };
-      screen.mockInput.pressKey("w", { ctrl: true });
-      await opened;
-      await screen.flush();
-      expect(screen.captureCharFrame()).toContain("Workspaces and sessions");
-      app().closeOverlay();
-      library.toggle();
-      screen.resize(82, 32);
-      app().render();
-      await screen.flush();
-      expect(app().scroll.x).toBe(2);
-      expect(app().composer.plainText).toBe("keep this draft");
-    }),
-  30000,
-);
-
-test(
-  "the list of saved sessions comes before their replays, and a row shows its state when its replay lands",
-  () =>
-    withLibrary(async ({ directory, open }) => {
-      let library = open();
-      const entry = await library.create(await library.add(directory), "Held");
-      const engine = entry.session?.engine;
-      await engine?.wait({ seconds: 60, on: engine.root });
-      await library.dispose();
-      library = open();
-      const row = (await library.add(directory)).sessions.find((candidate) => candidate.path === entry.path);
-      // The replay runs in a worker that loads the native engine first, so the list is there before it.
-      expect(row?.status).toBe("saved");
-      await until(library, () => row?.status === "paused");
-    }),
-  30000,
-);
-
-test(
-  "a session that opens keeps its row through a refresh that comes before its record",
-  () =>
-    withLibrary(async ({ directory, open }) => {
-      const library = open();
+test("deleting a session moves its record and state to trash, keeps other sessions alive, and refuses another owner", () =>
+  withLibrary(async ({ directory, open }) => {
+    const library = open();
+    let external: Session | undefined;
+    try {
       const group = await library.add(directory);
-      await library.create(group, "First");
-      const creating = library.create(group, "Second");
-      await until(library, () =>
-        group.sessions.some((entry) => entry.name === "Second" && entry.status === "opening"),
+      const first = await library.create(group, "Remove me");
+      const second = await library.create(group, "Keep me");
+      if (!first.session || !second.session) throw new Error("Missing live sessions.");
+      await first.session.engine.result(
+        await first.session.engine.rung({ word: "kept_value = 41", on: first.session.engine.root }),
       );
-      const row = group.sessions.find((entry) => entry.name === "Second");
-      expect(await stat(row?.path ?? "").catch(() => null)).toBeNull();
+      const otherEngine = second.session.engine;
+      const trash = await library.delete(first);
+      expect(library.current).toBe(second);
+      expect(second.session.engine).toBe(otherEngine);
+      await otherEngine.result(await otherEngine.rung({ word: "still_alive = 17", on: otherEngine.root }));
+      expect((await otherEngine.inspect("still_alive", second.session.selected)).value).toBe(17);
+      expect(await stat(first.path).catch(() => null)).toBeNull();
+      expect(await stat(`${first.path}.lock`).catch(() => null)).toBeNull();
+      const archived = join(trash, basename(first.path));
+      expect((await stat(archived)).isFile()).toBe(true);
+      expect((await stat(`${archived}.lock`)).isFile()).toBe(true);
+      const restored = await library.import(archived, group);
+      expect((await restored.session?.engine.inspect("kept_value", restored.session.selected))?.value).toBe(
+        41,
+      );
+      const locked = join(group.directory, ".furb/sessions/locked.jsonl");
+      const opened = await openEngine({ cwd: directory, record: locked, demo: true });
+      external = new Session(opened.engine, opened.host, true, library.preferences);
       await library.refresh();
-      const created = await creating;
-      expect(created).toBe(row as SessionEntry);
-      expect(group.sessions.filter((entry) => entry.path === created.path)).toEqual([created]);
-      expect(library.current).toBe(created);
-      expect(created.session?.sessionName).toBe("Second");
-    }),
-  30000,
-);
+      const entry = group.sessions.find((entry) => entry.path === locked);
+      if (!entry) throw new Error("The locked session was not listed.");
+      const error = await library.delete(entry).catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).toContain("Another process owns");
+      expect((await stat(locked)).isFile()).toBe(true);
+    } finally {
+      await external?.dispose();
+    }
+  }));
 
-test(
-  "deleting the current session moves to the next session that opens, and to a new one when none does",
-  () =>
-    withLibrary(async ({ directory, open }) => {
-      let library = open();
-      let lease: NativeEar | undefined;
-      try {
-        const held = await library.create(await library.add(directory), "Held elsewhere");
-        await library.dispose();
-        library = open();
-        const group = await library.add(directory);
-        const current = await library.create(group, "Delete me");
-        lease = store(held.path).ear;
-        const sibling = group.sessions.find((entry) => entry.path === held.path);
-        expect(group.sessions.map((entry) => entry.name)).toEqual(["Delete me", "Held elsewhere"]);
-        await library.delete(current);
-        expect(sibling?.status).toBe("error");
-        expect(sibling?.error).toContain("Another process owns");
-        expect(library.current?.session).toBeDefined();
-        expect(library.current).not.toBe(current);
-        expect(library.current).not.toBe(sibling);
-        expect(await stat(current.path).catch(() => null)).toBeNull();
-      } finally {
-        lease?.dispose();
-      }
-    }),
-  30000,
-);
+test("the sidebar tree groups sessions, switches by mouse, collapses and toggles without losing a draft", () =>
+  withLibrary(async ({ directory, open, sidebar }) => {
+    await mkdir(join(directory, "project"));
+    const library = open();
+    const group = await library.add(join(directory, "project"));
+    const first = await library.create(group, "foo");
+    const second = await library.create(group, "bar");
+    if (!first.session || !second.session) throw new Error("The session did not open.");
+    const { screen, app, left } = await sidebar(library);
+    app().composer.setText("keep this draft");
+    await screen.flush();
+    const lines = screen.captureCharFrame().split("\n");
+    const projectRow = lines.findIndex((line) => /▾ project/.test(line.slice(left)));
+    const fooRow = lines.findIndex((line) => /[○●◌] foo\b/.test(line.slice(left)));
+    const barRow = lines.findIndex((line) => /[○●◌] bar\b/.test(line.slice(left)));
+    expect(fooRow).toBeGreaterThan(projectRow);
+    expect(barRow).toBeGreaterThan(projectRow);
+    await screen.mockMouse.click(left + 6, fooRow);
+    await until(library, () => library.current === first);
+    await screen.flush();
+    expect(app().session).toBe(first.session);
+    await library.select(second);
+    await screen.flush();
+    expect(app().composer.plainText).toBe("keep this draft");
+    await screen.mockMouse.click(left + 3, projectRow);
+    app().render();
+    await screen.flush();
+    expect(group.collapsed).toBe(true);
+    expect(
+      screen
+        .captureCharFrame()
+        .split("\n")
+        .some((line) => line.slice(left).includes("foo")),
+    ).toBe(false);
+    screen.mockInput.pressKey("\\", { ctrl: true });
+    await screen.flush();
+    app().render();
+    await screen.flush();
+    expect(library.preferences.sidebar).toBe(false);
+    expect(app().scroll.x).toBe(2);
+    expect(app().composer.plainText).toBe("keep this draft");
+    // The picker reads the workspaces again before it opens: the test awaits the picker the key opened.
+    const picker = app().workspacePicker;
+    let opened: Promise<void> | undefined;
+    app().workspacePicker = () => {
+      opened = picker();
+      return opened;
+    };
+    screen.mockInput.pressKey("w", { ctrl: true });
+    await opened;
+    await screen.flush();
+    expect(screen.captureCharFrame()).toContain("Workspaces and sessions");
+    app().closeOverlay();
+    library.toggle();
+    screen.resize(82, 32);
+    app().render();
+    await screen.flush();
+    expect(app().scroll.x).toBe(2);
+    expect(app().composer.plainText).toBe("keep this draft");
+  }));
 
-test(
-  "the workspace list keeps what each instance saves, and a list that cannot be read stays for the user to repair",
-  () =>
-    withLibrary(async ({ directory, open }) => {
-      const path = join(directory, "config/workspaces.json");
-      const listed = async () =>
-        (
-          JSON.parse(await readFile(path, "utf8")) as {
-            workspaces: { directory: string; collapsed: boolean }[];
-          }
-        ).workspaces;
-      const project = async (name: string) => {
-        await mkdir(join(directory, name));
-        return realpath(join(directory, name));
-      };
-      const alpha = await project("alpha");
-      const beta = await project("beta");
-      const gamma = await project("gamma");
-      const damaged = `{"workspaces": [{"directory": ${JSON.stringify(alpha)}},]}`;
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, damaged);
-      const first = open();
-      expect(first.notice).toContain(`Could not read the workspace list at ${path}`);
-      await first.add(beta);
-      expect(await readFile(path, "utf8")).toBe(damaged);
-      await writeFile(path, JSON.stringify({ workspaces: [{ directory: alpha, records: [] }] }));
-      const betaGroup = first.groups.find((group) => group.directory === beta);
-      if (!betaGroup) throw new Error("No beta workspace.");
-      first.toggle(betaGroup);
-      expect(first.notice).toBe("");
-      expect((await listed()).map((group) => [group.directory, group.collapsed])).toEqual([
-        [alpha, false],
-        [beta, true],
-      ]);
-      const second = open();
-      await second.add(gamma);
-      first.toggle(betaGroup);
-      expect((await listed()).map((group) => [group.directory, group.collapsed])).toEqual([
-        [alpha, false],
-        [beta, false],
-        [gamma, false],
-      ]);
-      expect(open().groups.map((group) => group.directory)).toEqual([alpha, beta, gamma]);
-    }),
-  30000,
-);
+test("the list of saved sessions comes before their replays, and a row shows its state when its replay lands", () =>
+  withLibrary(async ({ directory, open }) => {
+    let library = open();
+    const entry = await library.create(await library.add(directory), "Held");
+    const engine = entry.session?.engine;
+    await engine?.wait({ seconds: 60, on: engine.root });
+    await library.dispose();
+    library = open();
+    const row = (await library.add(directory)).sessions.find((candidate) => candidate.path === entry.path);
+    // The replay runs in a worker that loads the native engine first, so the list is there before it.
+    expect(row?.status).toBe("saved");
+    await until(library, () => row?.status === "paused");
+  }));
+
+test("a session that opens keeps its row through a refresh that comes before its record", () =>
+  withLibrary(async ({ directory, open }) => {
+    const library = open();
+    const group = await library.add(directory);
+    await library.create(group, "First");
+    const creating = library.create(group, "Second");
+    await until(library, () =>
+      group.sessions.some((entry) => entry.name === "Second" && entry.status === "opening"),
+    );
+    const row = group.sessions.find((entry) => entry.name === "Second");
+    expect(await stat(row?.path ?? "").catch(() => null)).toBeNull();
+    await library.refresh();
+    const created = await creating;
+    expect(created).toBe(row as SessionEntry);
+    expect(group.sessions.filter((entry) => entry.path === created.path)).toEqual([created]);
+    expect(library.current).toBe(created);
+    expect(created.session?.sessionName).toBe("Second");
+  }));
+
+test("deleting the current session moves to the next session that opens, and to a new one when none does", () =>
+  withLibrary(async ({ directory, open }) => {
+    let library = open();
+    let lease: NativeEar | undefined;
+    try {
+      const held = await library.create(await library.add(directory), "Held elsewhere");
+      await library.dispose();
+      library = open();
+      const group = await library.add(directory);
+      const current = await library.create(group, "Delete me");
+      lease = store(held.path).ear;
+      const sibling = group.sessions.find((entry) => entry.path === held.path);
+      expect(group.sessions.map((entry) => entry.name)).toEqual(["Delete me", "Held elsewhere"]);
+      await library.delete(current);
+      expect(sibling?.status).toBe("error");
+      expect(sibling?.error).toContain("Another process owns");
+      expect(library.current?.session).toBeDefined();
+      expect(library.current).not.toBe(current);
+      expect(library.current).not.toBe(sibling);
+      expect(await stat(current.path).catch(() => null)).toBeNull();
+    } finally {
+      lease?.dispose();
+    }
+  }));
+
+test("the workspace list keeps what each instance saves, and a list that cannot be read stays for the user to repair", () =>
+  withLibrary(async ({ directory, open }) => {
+    const path = join(directory, "config/workspaces.json");
+    const listed = async () =>
+      (
+        JSON.parse(await readFile(path, "utf8")) as {
+          workspaces: { directory: string; collapsed: boolean }[];
+        }
+      ).workspaces;
+    const project = async (name: string) => {
+      await mkdir(join(directory, name));
+      return realpath(join(directory, name));
+    };
+    const alpha = await project("alpha");
+    const beta = await project("beta");
+    const gamma = await project("gamma");
+    const damaged = `{"workspaces": [{"directory": ${JSON.stringify(alpha)}},]}`;
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, damaged);
+    const first = open();
+    expect(first.notice).toContain(`Could not read the workspace list at ${path}`);
+    await first.add(beta);
+    expect(await readFile(path, "utf8")).toBe(damaged);
+    await writeFile(path, JSON.stringify({ workspaces: [{ directory: alpha, records: [] }] }));
+    const betaGroup = first.groups.find((group) => group.directory === beta);
+    if (!betaGroup) throw new Error("No beta workspace.");
+    first.toggle(betaGroup);
+    expect(first.notice).toBe("");
+    expect((await listed()).map((group) => [group.directory, group.collapsed])).toEqual([
+      [alpha, false],
+      [beta, true],
+    ]);
+    const second = open();
+    await second.add(gamma);
+    first.toggle(betaGroup);
+    expect((await listed()).map((group) => [group.directory, group.collapsed])).toEqual([
+      [alpha, false],
+      [beta, false],
+      [gamma, false],
+    ]);
+    expect(open().groups.map((group) => group.directory)).toEqual([alpha, beta, gamma]);
+  }));
 
 test("a save of the workspace list that fails names its file", () =>
   withLibrary(async ({ directory, open }) => {
