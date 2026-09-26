@@ -986,6 +986,7 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(store, module)?)?;
   module.add_function(wrap_pyfunction!(kept, module)?)?;
   module.add_function(wrap_pyfunction!(gate, module)?)?;
+  module.add_function(wrap_pyfunction!(provider, module)?)?;
   Ok(())
 }
 
@@ -1000,4 +1001,19 @@ fn verb_said<'py>(py: Python<'py>, door: &Door, call: &Call) -> PyResult<Bound<'
     kwargs.set_item(key, to_python(py, made, one.as_ref())?)?;
   }
   made.python.bind(py).getattr(call.verb.as_str())?.call(args, Some(&kwargs))
+}
+
+/// The ear of the provider of models, whose models are those of the claude command line: the directory the life
+/// stands on, the default actor, the path of claude, and the seconds a turn may go with no progress.
+#[pyfunction]
+#[pyo3(signature = (directory, actor = None, claude = None, stall = None))]
+fn provider(
+  directory: String,
+  actor: Option<String>,
+  claude: Option<String>,
+  stall: Option<f64>,
+) -> NativeEar {
+  let stall = stall.and_then(|seconds| std::time::Duration::try_from_secs_f64(seconds).ok());
+  let claude = world::claude::Claude::with(claude.map(std::path::PathBuf::from), stall);
+  NativeEar::of(world::provider(directory, claude.models(), actor))
 }
