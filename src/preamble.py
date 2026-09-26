@@ -1,12 +1,8 @@
 """The stand-in: what stands inside the sandbox for a host that is not python.
 
-The engine takes any generator of the outside as an ear, under the name it hears by. An ear of a host written in
-another language is no generator, so a generator here stands in its place: every fact it is given goes to the ears
-of the host by that name, and what comes back is what the ear did with it. The ears of the World are ears of the
-host like any other.
-
-The Kernel is here too, since the word of a rung runs where the engine runs, in the module of its chain, and so
-is the gate, an ear of its own, which reads a word with the checker of the host on the sheet of the engine.
+An ear of a host written in another language is no generator, so a generator here stands in its place: every fact
+it is given goes to the ears of the host by that name, and what comes back is what the ear did with it. The Kernel
+and the gate are here too, since the word of a rung runs where the engine runs, in the module of its chain.
 
 What crosses, crosses as the interpreter carries it, but for the callables, which it carries no way back. An
 instance of a class of the engine comes in as a map that names its class under `is`, with its fields, since the
@@ -352,23 +348,17 @@ class Running:
 
 
 def gating(gate: Gate, sheet: Names, engine: Names) -> Ear:
-  """The gate as the ear of a life: it reads the word of a rung on its sheet, after the program the gate says.
-
-  The sheet is `furb.sheet`'s, written here as the python package writes it, from the names of the module of the
-  engine, and the reading of it is the gate of the host, given the sheet, which answers each finding by its line.
-  """
+  """The gate as the ear of a life: the gate of `furb.sheet`, which reads a word with the checker of the host, given
+  the sheet, which answers each finding by its line."""
 
   def checked(text: str) -> list[tuple[int, str]]:
     found = gate.checked(text)
     assert isinstance(found, list)
     return [(line, why) for line, why in found]
 
-  while True:
-    match (yield):
-      case ("gate", qid, _, on, word):
-        program = verb(engine, "program")(on)
-        assert isinstance(program, dict)
-        yield "done", qid, verb(sheet, "gate")(engine, [*program.values()], word, checked)
+  ear = verb(sheet, "gating")(engine, checked)
+  assert isinstance(ear, Generator)
+  return ear
 
 
 def kernel(names: Names) -> Ear:

@@ -1,21 +1,10 @@
 """The engine in monty, with every name of engine.pyi.
 
-The engine of this interpreter is `furb.python`, and this module gives the same names over one life of that engine
-running in the sandbox of monty with the Kernel of the crate. A name that reads no life is the engine's own: a
-constant, a class, a show or a filter, and the pure functions. A verb is the method of the engine of the crate that
-says it, and any other name of the engine says itself in the sandbox by its name with its words, and what either
-gave comes back as the instance of `furb.python` it is, which is how `get`, `peek` and `transcript` read the life
-too, and `site` says who speaks there. An act is awaited for what it comes to, which the life says once, when it is
-done.
-
-A generator of this interpreter, which an ear of the World is, is heard from the sandbox on a thread of its own,
-since such an ear reads the engine while it hears and nothing may call into a life that stands waiting for it: a
-verb the thread says is a call the ear yields to the sandbox, which says it on the ear's behalf and answers. An ear
-of the crate, which `furb_monty._monty` gives, is heard as itself. A callable of this interpreter is called back
-from the sandbox, and a callable the engine made is called back by its handle, so a show crosses either way as
-itself. A class a word defined is a type of this interpreter, one per class, derived from the type its base is here,
-whose call makes the instance in the sandbox by the handle of the class, and an instance of one is an object of that
-type holding its fields, which goes back in made from them.
+This module gives the names of `furb.python` over one life of that engine in the sandbox of monty. A name that reads
+no life is the engine's own. A verb is the method of the engine of the crate that says it, and any other name says
+itself in the sandbox, and what it gave comes back as the instance of `furb.python` it is. An act is awaited for what
+it comes to. A generator of this interpreter is heard on a thread of its own, since it may say a verb while it hears,
+and a verb it says is a call it yields to the sandbox.
 """
 
 import ast

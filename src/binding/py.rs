@@ -1,13 +1,7 @@
-//! furb for python, with the engine in monty: one engine in the sandbox, reached from python.
-//!
-//! This is the door between the two interpreters, and it is the crate itself, behind the `python` feature. An engine
-//! is one [`PyEngine`], whose verbs are the verbs of the contract, made from the contract when the crate is built, as
-//! the methods of the crate are. The ears of an engine are generators of python and the ears the crate writes, each
-//! a [`NativeEar`], in the order the engine offers them a question. What crosses is what monty carries, made python
-//! here: a value of the engine comes out as the instance of `furb.python` it is, a `Text` as a `Text`, an exception
-//! as the one object that exception is for the life, and goes in as its name and its fields. A name of the engine
-//! crosses as its name, a callable the engine made as one that calls it back, a function of python as one the
-//! sandbox calls back, and a generator as an ear. Nothing of the crossing is python's to do.
+//! The door to python, behind the `python` feature: a [`PyEngine`] whose verbs are those of the crate, and the ears
+//! the crate writes, each a [`NativeEar`]. A value of the engine comes out as the instance of `furb.python` it is,
+//! an exception as the one object it is for the life, a generator of python goes in as an ear, and a function as one
+//! the sandbox calls back.
 
 use std::{
   rc::Rc,
@@ -25,10 +19,9 @@ use pyo3::{
 };
 
 use crate::{
-  Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step,
-  ear::Call,
+  Ear, Engine, Fault, Heard, Object, ObjectRef, Step,
   engine::Hosted,
-  value::{IS, entry, marked},
+  value::{IS, entry, field, marked},
   world,
 };
 
@@ -179,7 +172,9 @@ struct PyEar {
 
 impl Ear for PyEar {
   fn resume(&mut self, heard: Heard) -> Step {
-    Python::attach(|py| self.step(py, heard).unwrap_or_else(|no| Step::Raised(fault_of(py, &no))))
+    Python::attach(|py| {
+      self.step(py, heard).unwrap_or_else(|no| Step::Raised(fault_of(&self.door, py, &no)))
+    })
   }
 }
 
@@ -199,35 +194,9 @@ impl PyEar {
         self.ear.take();
         return Ok(Step::Over);
       }
-      Err(no) => return Ok(Step::Raised(fault_of(py, &no))),
+      Err(no) => return Ok(Step::Raised(fault_of(&self.door, py, &no))),
     };
-    if got.is_none() {
-      return Ok(Step::Wait);
-    }
-    if got.is_instance_of::<PyTuple>() {
-      let said = of_python(&self.door, &got)?;
-      return Fact::of(said.as_ref()).map(Step::Say).ok_or_else(|| {
-        PyTypeError::new_err("an ear says a kind and what it is about, then its words")
-      });
-    }
-    let asked = got.cast::<PyDict>().ok().map(|held| held.get_item("verb")).transpose()?.flatten();
-    let Some(verb) = asked else {
-      return Err(PyTypeError::new_err("an ear yields a saying, a call of a verb, or nothing"));
-    };
-    let held = got.cast::<PyDict>()?;
-    let args = match held.get_item("args")? {
-      Some(args) => {
-        args.try_iter()?.map(|one| of_python(&self.door, &one?)).collect::<PyResult<_>>()?
-      }
-      None => Vec::new(),
-    };
-    let mut kwargs = Vec::new();
-    if let Some(named) = held.get_item("kwargs")? {
-      for (key, one) in named.cast::<PyDict>()?.iter() {
-        kwargs.push((key.extract::<String>()?, of_python(&self.door, &one)?));
-      }
-    }
-    Ok(Step::Call(Call { verb: verb.extract()?, args, kwargs }))
+    Ok(Step::of(&of_python(&self.door, &got)?).unwrap_or_else(Step::Raised))
   }
 }
 
@@ -309,15 +278,23 @@ impl PyEngine {
     got.map_err(|fault| raised(py, self.door.made(), &fault))
   }
 
-  /// The words python gave, as the engine takes them.
-  fn words(&self, args: &Bound<'_, PyAny>, kwargs: &Bound<'_, PyDict>) -> PyResult<Words> {
+  /// One call of the engine with the words python gave, and what it gave, as python holds it.
+  fn answered<'py>(
+    &mut self,
+    py: Python<'py>,
+    args: &Bound<'py, PyAny>,
+    kwargs: &Bound<'py, PyDict>,
+    call: impl FnOnce(&mut Engine, Vec<Object>, Vec<(&str, Object)>) -> Result<Object, Fault>,
+  ) -> PyResult<Bound<'py, PyAny>> {
     let args =
       args.try_iter()?.map(|one| of_python(&self.door, &one?)).collect::<PyResult<Vec<_>>>()?;
     let mut named = Vec::new();
     for (key, value) in kwargs.iter() {
       named.push((key.extract::<String>()?, of_python(&self.door, &value)?));
     }
-    Ok((args, named))
+    let named = named.iter().map(|(key, value)| (key.as_str(), value.clone())).collect();
+    let got = self.call(py, |engine| call(engine, args, named))?;
+    to_python(py, self.door.made(), got.as_ref())
   }
 
   /// One verb said with the words python gave, and what it gave, as python holds it.
@@ -344,9 +321,6 @@ impl PyEngine {
     to_python(py, self.door.made(), got.as_ref())
   }
 }
-
-/// The words of a call: those by position, and those by name.
-type Words = (Vec<Object>, Vec<(String, Object)>);
 
 #[pymethods]
 impl PyEngine {
@@ -413,10 +387,7 @@ impl PyEngine {
     args: Bound<'py, PyAny>,
     kwargs: Bound<'py, PyDict>,
   ) -> PyResult<Bound<'py, PyAny>> {
-    let (args, named) = self.words(&args, &kwargs)?;
-    let named = named.iter().map(|(key, value)| (key.as_str(), value.clone())).collect();
-    let got = self.call(py, |engine| engine.verb(name, args, named))?;
-    to_python(py, self.door.made(), got.as_ref())
+    self.answered(py, &args, &kwargs, |engine, args, named| engine.verb(name, args, named))
   }
 
   /// One callable the engine made, called back by the handle it crossed under, with these words.
@@ -427,10 +398,7 @@ impl PyEngine {
     args: Bound<'py, PyAny>,
     kwargs: Bound<'py, PyDict>,
   ) -> PyResult<Bound<'py, PyAny>> {
-    let (args, named) = self.words(&args, &kwargs)?;
-    let named = named.iter().map(|(key, value)| (key.as_str(), value.clone())).collect();
-    let got = self.call(py, |engine| engine.made(n, args, named))?;
-    to_python(py, self.door.made(), got.as_ref())
+    self.answered(py, &args, &kwargs, |engine, args, named| engine.made(n, args, named))
   }
 
   /// A callable the engine made, forgotten: python holds its handle no more.
@@ -440,14 +408,11 @@ impl PyEngine {
 
   /// What to call when an act is done, with what it came to: at once for one done already, and once otherwise.
   fn watch(&mut self, py: Python<'_>, act: &str, then: Py<PyAny>) -> PyResult<()> {
-    let made = Made {
-      python: self.door.made().python.clone_ref(py),
-      faults: self.door.made().faults.clone_ref(py),
-    };
+    let door = self.door.clone();
     self.call(py, |engine| {
       engine.watch(act, move |got| {
         Python::attach(|py| {
-          if let Ok(value) = to_python(py, &made, got.as_ref()) {
+          if let Ok(value) = to_python(py, door.made(), got.as_ref()) {
             let _ = then.bind(py).call1((value,));
           }
         });
@@ -543,13 +508,11 @@ fn fault_to_python<'py>(
 
 /// What python raised, as the crossing reads it: its type and what it was made with, or what it says when its words
 /// do not cross.
-fn fault_of(py: Python<'_>, no: &PyErr) -> Fault {
+fn fault_of(door: &Door, py: Python<'_>, no: &PyErr) -> Fault {
   let value = no.value(py);
   let name = value.get_type().name().map_or("Exception".to_owned(), |one| one.to_string());
-  let args = Made::new(py).ok().and_then(|made| {
-    let door = Door(Rc::new(Doorway { made, hosted: Hosted::default() }));
-    let args = value.getattr("args").ok()?;
-    args.try_iter().ok()?.map(|one| of_python(&door, &one.ok()?).ok()).collect::<Option<Vec<_>>>()
+  let args = value.getattr("args").ok().and_then(|args| {
+    args.try_iter().ok()?.map(|one| of_python(door, &one.ok()?).ok()).collect::<Option<Vec<_>>>()
   });
   Fault::new(name, args.unwrap_or_else(|| vec![Object::string(no.to_string())]))
 }
@@ -584,8 +547,7 @@ fn to_python<'py>(
     "dict" => {
       let pairs = said.pairs().unwrap_or_default();
       // The two marks of a callable that goes out: a name of the engine, and a handle to a callable it made.
-      let at =
-        |name: &str| pairs.iter().find(|(key, _)| key.as_str() == Some(name)).map(|(_, one)| *one);
+      let at = |name: &str| field(&said, name);
       if let Some(mark) = at(IS).and_then(|one| one.as_str()) {
         // A map that holds the key of the mark goes out as its pairs, and is the map it is here.
         if mark == "dict"
@@ -803,7 +765,7 @@ impl Called {
         let got = self.f.bind(py).call1(PyTuple::new(py, args)?)?;
         of_python(&self.door, &got)
       })();
-      got.map_err(|no| fault_of(py, &no))
+      got.map_err(|no| fault_of(&self.door, py, &no))
     })
   }
 }

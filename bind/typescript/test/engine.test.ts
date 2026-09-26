@@ -121,14 +121,11 @@ test("pause holds a model response until wake and cancel rejects a native await"
   expect(await result).toContain("CancelledError");
 });
 
-test("text, command results, and engine callables cross N-API", async () => {
+test("text and command results cross N-API", async () => {
   const { engine } = open();
   const on = engine.root;
   expect(engine.read("a", { on })).toEqual({ is: "Text", path: "a", content: "one\ntwo\n" } as never);
   expect(() => engine.read("missing", { on })).toThrow("missing file");
-  const show = engine.span(1, 1) as { is: "made"; id: number };
-  expect(engine.made<number[]>(show.id, [["one", "two"]], {})).toEqual([1]);
-  engine.forget(show.id);
   const command = engine.bash("fake", { fed: true, on }).id;
   speaking(engine, "world", () => engine.say("out", command, ["hello\n", "stdout"]));
   const text = (stream: string, content: string) => ({ is: "Text", path: `${command}/${stream}`, content });

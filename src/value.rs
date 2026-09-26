@@ -140,14 +140,6 @@ impl Fault {
   }
 }
 
-impl PartialEq for Fault {
-  fn eq(&self, other: &Self) -> bool {
-    self.name == other.name
-      && self.args.len() == other.args.len()
-      && self.args.iter().zip(&other.args).all(|(a, b)| a.py_repr() == b.py_repr())
-  }
-}
-
 impl std::fmt::Display for Fault {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{}: {}", self.name, self.message())

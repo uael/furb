@@ -29,11 +29,11 @@ use genawaiter::{GeneratorState, rc::Gen};
 
 use crate::{
   fact::Fact,
-  value::{Fault, Object},
+  value::{Fault, Object, field},
 };
 
 /// What an ear is resumed with.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Heard {
   /// Its birth, with the voice its later work speaks with, under the name the engine hears the ear by.
   Born(Voice),
@@ -46,7 +46,7 @@ pub enum Heard {
 }
 
 /// What an ear does with what it heard.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Step {
   /// One saying, which the bus makes whole and gives back as the next fact the ear hears.
   Say(Fact),
@@ -61,11 +61,42 @@ pub enum Step {
 }
 
 /// One verb of the engine as an ear says it: its name and its words.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Call {
   pub verb: String,
   pub args: Vec<Object>,
   pub kwargs: Vec<(String, Object)>,
+}
+
+impl Step {
+  /// What a generator of a host yielded, as a step: nothing is a wait, a list or a tuple is a saying, and a map of
+  /// a verb and its words is a call.
+  #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
+  pub(crate) fn of(yielded: &Object) -> Result<Step, Fault> {
+    let got = yielded.as_ref();
+    if got.type_name() == "NoneType" {
+      return Ok(Step::Wait);
+    }
+    if let Some(items) = got.items() {
+      let saying = Object::tuple(items.into_iter().map(|one| one.to_owned()));
+      return Fact::of(saying.as_ref())
+        .map(Step::Say)
+        .ok_or_else(|| Fault::refused("an ear says a kind and what it is about, then its words"));
+    }
+    let verb = field(&got, "verb")
+      .and_then(|one| one.as_str())
+      .ok_or_else(|| Fault::refused("an ear yields a saying, a call of a verb, or nothing"))?;
+    let args = field(&got, "args").and_then(|one| one.items()).unwrap_or_default();
+    let kwargs = field(&got, "kwargs").and_then(|one| one.pairs()).unwrap_or_default();
+    Ok(Step::Call(Call {
+      verb: verb.to_owned(),
+      args: args.into_iter().map(|one| one.to_owned()).collect(),
+      kwargs: kwargs
+        .into_iter()
+        .map(|(key, one)| (key.as_str().unwrap_or_default().to_owned(), one.to_owned()))
+        .collect(),
+    }))
+  }
 }
 
 /// An ear: one generator of the life, resumed with what it heard.
@@ -160,7 +191,6 @@ pub async fn call(
 }
 
 /// One saying that the work of an ear said once its hearing was over: who says it, and the saying.
-#[derive(Debug, Clone)]
 pub(crate) struct Said {
   pub by: String,
   pub saying: Fact,

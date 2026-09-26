@@ -30,10 +30,6 @@ export declare class Engine {
   result<T = unknown>(id: string): Promise<T>
   /** What an act came to, and whether it is done. */
   outcome(id: string): Outcome
-  /** One callable the engine made, called back by the handle it crossed under, with these words. */
-  made<T = unknown>(id: number, args: unknown[], kwargs: Record<string, unknown>): T
-  /** A callable the engine made, forgotten: JavaScript holds its handle no more. */
-  forget(id: number): void
   /**
    * One name of a chain, read without calling it, with its type and its representation in the sandbox. The value
    * crosses as every value does, so a map that holds the key `is` crosses as its pairs.

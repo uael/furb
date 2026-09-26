@@ -30,11 +30,10 @@ pub(crate) struct Sand {
 }
 
 impl Sand {
-  /// A sandbox with the limits a host chooses, and nothing in it yet.
-  pub(crate) fn new(limits: ResourceLimits) -> Self {
-    Self {
-      repl: Some(MontyRepl::new("furb", ResourceTracker::new(limits), CompileOptions::default())),
-    }
+  /// A sandbox with the limits of monty, and nothing in it yet.
+  pub(crate) fn new() -> Self {
+    let limits = ResourceTracker::new(ResourceLimits::default());
+    Self { repl: Some(MontyRepl::new("furb", limits, CompileOptions::default())) }
   }
 
   /// One piece of code, run in the sandbox with these names bound, and what its last expression gave.
@@ -95,18 +94,6 @@ impl Sand {
       failed.error.type_name(),
       vec![Object::string(failed.error.message().unwrap_or_default())],
     )
-  }
-}
-
-impl Default for Sand {
-  fn default() -> Self {
-    Self::new(ResourceLimits::default())
-  }
-}
-
-impl std::fmt::Debug for Sand {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_str("Sand")
   }
 }
 

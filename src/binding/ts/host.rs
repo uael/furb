@@ -16,17 +16,16 @@ use napi::{
   Env, JsDeferred, JsValue, ValueType,
   bindgen_prelude::{
     FnArgs, FromNapiValue, Function, FunctionRef, JsObjectValue, Object as JsObject, ObjectRef,
-    Unknown,
+    ToNapiValue, Unknown,
   },
   threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
 };
 use serde_json::Value;
 
 use crate::{
-  Ear, Engine, Fact, Fault, Heard, Object, Step,
-  ear::Call,
+  Ear, Engine, Fault, Heard, Object, Step,
   engine::Hosted,
-  value::marked,
+  value::{field, marked},
   wire::{inward, outward},
 };
 
@@ -42,9 +41,8 @@ pub enum Word {
 /// The deepest a value of JavaScript goes in, which a value that holds itself would pass.
 const DEEPEST: usize = 64;
 
-/// The functions of JavaScript that call another, as a method or alone, and catch what it throws.
-const CAUGHT: &str = "({ step(f, self, args) { try { return { ok: f.apply(self, args) } } catch (no) { return { no } } }, \
-  call(f, args) { try { return { ok: f(...args) } } catch (no) { return { no } } } })";
+/// The function of JavaScript that calls another, as a method of `self` or alone, and catches what it throws.
+const CAUGHT: &str = "({ step(f, self, args) { try { return { ok: f.apply(self, args) } } catch (no) { return { no } } } })";
 
 /// The thread of JavaScript, as the door reaches it: its env, the function that steps what may throw, and the ears
 /// and the functions of the host.
@@ -91,18 +89,13 @@ impl Door {
   ) -> Result<Unknown<'env>, Fault> {
     let held = self.0.step.as_ref().ok_or_else(|| Fault::refused("the door is closed"))?;
     let holder = held.get_value(env).map_err(refused)?;
-    let got: JsObject = match this {
-      Some(this) => {
-        let step: Function<'env, FnArgs<(Unknown, Unknown, Vec<Unknown>)>, JsObject> =
-          holder.get_named_property("step").map_err(refused)?;
-        step.apply(holder, (f, this, args).into()).map_err(refused)?
-      }
-      None => {
-        let call: Function<'env, FnArgs<(Unknown, Vec<Unknown>)>, JsObject> =
-          holder.get_named_property("call").map_err(refused)?;
-        call.apply(holder, (f, args).into()).map_err(refused)?
-      }
+    let this = match this {
+      Some(this) => this,
+      None => ().into_unknown(env).map_err(refused)?,
     };
+    let step: Function<'env, FnArgs<(Unknown, Unknown, Vec<Unknown>)>, JsObject> =
+      holder.get_named_property("step").map_err(refused)?;
+    let got = step.apply(holder, (f, this, args).into()).map_err(refused)?;
     if got.has_named_property("no").map_err(refused)? {
       let no: Unknown = got.get_named_property("no").map_err(refused)?;
       return Err(self.fault(env, no));
@@ -185,9 +178,7 @@ impl Door {
     };
     if callable("next") && callable("throw") {
       // JavaScript tells no one whether a generator was started, so one that crosses was not.
-      let ear =
-        JsEar { door: self.clone(), generator: Some(object.create_ref().map_err(refused)?) };
-      return Ok(self.0.hosted.ear(Box::new(ear), false));
+      return Ok(self.0.hosted.ear(self.ear(object)?, false));
     }
     if object.is_array().map_err(refused)? {
       let mut held = Vec::new();
@@ -264,11 +255,9 @@ impl Door {
 
 /// A fault that JavaScript threw as a map that names its class under `is` with what it was made with.
 fn marked_fault(held: &Object) -> Option<Fault> {
-  let pairs = held.as_ref().pairs()?;
-  let at =
-    |name: &str| pairs.iter().find(|(key, _)| key.as_str() == Some(name)).map(|(_, one)| *one);
-  let name = at("is")?.as_str()?.to_owned();
-  let args = at("args")?.items()?.into_iter().map(|one| one.to_owned()).collect();
+  let held = held.as_ref();
+  let name = field(&held, "is")?.as_str()?.to_owned();
+  let args = field(&held, "args")?.items()?.into_iter().map(|one| one.to_owned()).collect();
   Some(Fault::new(name, args))
 }
 
@@ -348,32 +337,7 @@ impl JsEar {
       return Ok(Step::Over);
     }
     let value: Unknown = got.get_named_property("value").map_err(refused)?;
-    if matches!(value.get_type().map_err(refused)?, ValueType::Undefined | ValueType::Null) {
-      return Ok(Step::Wait);
-    }
-    let said = door.inward(&env, value, Word::Plain, 0)?;
-    if let Some(items) = said.as_ref().items() {
-      let saying = Object::tuple(items.into_iter().map(|one| one.to_owned()));
-      return Fact::of(saying.as_ref())
-        .map(Step::Say)
-        .ok_or_else(|| Fault::refused("an ear says a kind and what it is about, then its words"));
-    }
-    let pairs = said.as_ref().pairs().unwrap_or_default();
-    let at =
-      |name: &str| pairs.iter().find(|(key, _)| key.as_str() == Some(name)).map(|(_, one)| *one);
-    let verb = at("verb")
-      .and_then(|one| one.as_str())
-      .ok_or_else(|| Fault::refused("an ear yields a saying, a call of a verb, or nothing"))?;
-    let args = at("args").and_then(|one| one.items()).unwrap_or_default();
-    let kwargs = at("kwargs").and_then(|one| one.pairs()).unwrap_or_default();
-    Ok(Step::Call(Call {
-      verb: verb.to_owned(),
-      args: args.into_iter().map(|one| one.to_owned()).collect(),
-      kwargs: kwargs
-        .into_iter()
-        .map(|(key, one)| (key.as_str().unwrap_or_default().to_owned(), one.to_owned()))
-        .collect(),
-    }))
+    Ok(Step::of(&door.inward(&env, value, Word::Plain, 0)?).unwrap_or_else(Step::Raised))
   }
 }
 

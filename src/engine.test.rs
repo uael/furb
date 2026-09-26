@@ -111,16 +111,6 @@ struct Lived {
 impl Lived {
   /// A life in a yard of its own, fresh, or opened on what the store kept there.
   fn new(yard: &str, words: &[&str], fresh: bool) -> Result<Self, Fault> {
-    Lived::on(yard, words, fresh, vec![])
-  }
-
-  /// A life whose ears of the host come before the ears of the World.
-  fn on(
-    yard: &str,
-    words: &[&str],
-    fresh: bool,
-    first: Vec<(&str, Box<dyn Ear>)>,
-  ) -> Result<Self, Fault> {
     let at = std::env::temp_dir().join(format!("furb-engine-{yard}"));
     if fresh {
       let _ = fs::remove_dir_all(&at);
@@ -129,14 +119,13 @@ impl Lived {
     let (record, store) = world::store(at.join("record.jsonl"))?;
     let read = Rc::default();
     let words = Rc::new(RefCell::new(words.iter().map(|one| (*one).to_owned()).collect()));
-    let mut ears = first;
-    ears.extend([
+    let ears = [
       ("provider", provider(at.clone(), words, Rc::clone(&read))),
       ("files", world::files()),
       ("bash", world::bash()),
       ("time", world::time()),
       ("store", store),
-    ]);
+    ];
     let engine = Engine::boot(record, ears)?;
     Ok(Lived { engine, at, read })
   }

@@ -1,4 +1,4 @@
-//! The door to TypeScript, through N-API, which also makes the loader of the package and its declarations.
+//! The door to TypeScript, through N-API, which also makes the declarations of the package.
 //!
 //! An engine is one [`JsEngine`], whose verbs are the verbs of the contract, made from the contract when the crate is
 //! built, as the methods of the crate are. Views, queries and controls give their value at once, and an act is an
@@ -266,39 +266,6 @@ impl JsEngine {
         value: got.map_or(Value::Null, |value| wire::outward(value.as_ref())),
       })
     })
-  }
-
-  /// One callable the engine made, called back by the handle it crossed under, with these words.
-  #[napi(
-    ts_generic_types = "T = unknown",
-    ts_args_type = "id: number, args: unknown[], kwargs: Record<string, unknown>",
-    ts_return_type = "T"
-  )]
-  pub fn made<'env>(
-    &self,
-    env: &'env Env,
-    id: i64,
-    args: Vec<Unknown<'env>>,
-    kwargs: JsObject<'env>,
-  ) -> napi::Result<Unknown<'env>> {
-    let door = self.held.door.clone();
-    let args = args
-      .into_iter()
-      .map(|one| door.inward(env, one, Word::Plain, 1))
-      .collect::<Result<Vec<_>, _>>();
-    let kwargs = door.named(env, kwargs, &[]);
-    let got = self.held.call(|engine| {
-      let kwargs = kwargs?;
-      let kwargs = kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
-      engine.made(id, args?, kwargs)
-    })?;
-    door.outward(env, &got).map_err(error)
-  }
-
-  /// A callable the engine made, forgotten: JavaScript holds its handle no more.
-  #[napi]
-  pub fn forget(&self, id: i64) -> napi::Result<()> {
-    self.held.call(move |engine| engine.forget(id))
   }
 
   /// One name of a chain, read without calling it, with its type and its representation in the sandbox. The value

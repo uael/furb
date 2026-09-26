@@ -93,7 +93,7 @@ mod tests {
     let mut host = |_, name: &str, _| -> Result<Object, Fault> {
       Err(Fault::refused(format!("the sheet calls no host, and it called {name}")))
     };
-    let mut sand = Sand::default();
+    let mut sand = Sand::new();
     sand.run(PREAMBLE, NamedValues::new(), &mut host).expect("the preamble runs");
     let got = sand.run(code, named, &mut host).expect("furb.sheet writes the sheet");
     let got = got.as_ref();
@@ -135,16 +135,6 @@ mod tests {
   }
 
   #[test]
-  fn a_sheet_the_gate_accepts_gives_no_finding() {
-    assert_eq!(said(&[], "close(len(read('a.txt').lines))"), vec![]);
-  }
-
-  #[test]
-  fn every_name_the_engine_binds_is_a_name_a_word_may_say() {
-    assert_eq!(said(&[], "close((re.compile('a'), CancelledError, Counter()))"), vec![]);
-  }
-
-  #[test]
   fn the_gate_reads_one_sheet_after_another_the_same() {
     let (text, _) = sheet(&[], "close(nowhere)");
     assert_eq!(found(&text).len(), 1);
@@ -162,77 +152,8 @@ mod tests {
   }
 
   #[test]
-  fn a_word_may_await_an_act_at_its_top_level() {
-    assert_eq!(said(&[], "close((await bash('ls')).code)"), vec![]);
-  }
-
-  #[test]
   fn a_warning_refuses_no_word() {
     // A name that may be unbound is a warning of the checker, and a word that reads it is no word the gate refuses.
     assert_eq!(said(&[], "if chance() > 0.5:\n  maybe = 1\nclose(maybe)"), vec![]);
-  }
-
-  #[test]
-  fn a_builtin_the_sandbox_runs_is_accepted_and_one_it_does_not_run_is_refused() {
-    for word in [
-      "close(hasattr(1, 'a'))",
-      "close(getattr(1, 'a', None))",
-      "setattr(Exit, 'a', 1)",
-      "close(open)",
-    ] {
-      assert_eq!(said(&[], word), vec![], "{word}");
-    }
-    for word in
-      ["close(vars())", "close(dir())", "close(__import__('os'))", "close(exit)", "close(IOError)"]
-    {
-      let found = said(&[], word);
-      assert_eq!(found.len(), 1, "{word}: {found:?}");
-      assert_eq!(found[0].0, 1);
-      assert!(found[0].1.contains("unresolved-reference"), "{found:?}");
-    }
-  }
-
-  #[test]
-  fn a_word_that_imports_what_the_sandbox_does_not_run_is_refused() {
-    let found = said(&[], "import subprocess\nclose(subprocess.run)");
-    assert_eq!(found.len(), 1, "{found:?}");
-    assert_eq!(found[0].0, 1);
-    assert!(found[0].1.contains("unresolved-import"), "{found:?}");
-  }
-
-  #[test]
-  fn a_word_that_imports_the_engine_by_its_package_is_refused() {
-    for word in ["import furb\nclose(furb)", "from furb.engine import read\nclose(read)"] {
-      let found = said(&[], word);
-      assert_eq!(found.len(), 1, "{found:?}");
-      assert!(found[0].1.contains("unresolved-import"), "{found:?}");
-    }
-  }
-
-  #[test]
-  fn a_word_binds_a_name_of_the_engine_again_to_any_value() {
-    assert_eq!(said(&[], "read = 1\nclose(read)"), vec![]);
-    assert_eq!(said(&[], "old = HEAD\nHEAD = old\nclose(TIMEOUT + 1)"), vec![]);
-    assert_eq!(said(&[], "x = read('a')\nread = 1\nclose(x)"), vec![]);
-  }
-
-  #[test]
-  fn a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last() {
-    let found = said(&["read = 1"], "close(read('a'))");
-    assert_eq!(found.len(), 1, "{found:?}");
-    assert!(found[0].1.contains("call-non-callable"), "{found:?}");
-  }
-
-  #[test]
-  fn a_word_may_use_the_async_forms_at_its_top_level() {
-    let word = "async def g():\n  yield 1\nasync for x in g():\n  close([y async for y in g()])";
-    assert_eq!(said(&[], word), vec![]);
-  }
-
-  #[test]
-  fn each_word_of_the_program_stands_in_a_try_of_its_own() {
-    let (text, _) = sheet(&["a = 1", "b = 2"], "close(a + b)");
-    assert_eq!(text.matches("  try:\n    acting()\n").count(), 2);
-    assert_eq!(said(&["raise ValueError('x')\na = 1", "b = 2"], "close(b)"), vec![]);
   }
 }

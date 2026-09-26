@@ -21,15 +21,9 @@ extension-module = ["python", "pyo3/extension-module"]
 typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build", "dep:windows-sys"]
 
 [dependencies]
-# The sandbox the engine runs in, which is the reason the crate exists, and its
-# type checker, which is the gate of the Kernel: ty as a library, reading the
-# sheet of a word against the typeshed of the sandbox, so that a word which
-# imports what monty does not run is refused before it runs. The python
-# package gates through the same checker, so a word is judged once and the same.
-#
-# A revision of the fork and not a version, because the interpreter the engine
-# needs is not released. A revision and not a branch, so a build of today and a
-# build of next month read the same interpreter.
+# The sandbox the engine runs in, and its type checker, which is the gate of the
+# Kernel. A revision of the fork, since the interpreter the engine needs is not
+# released, and a revision reads the same interpreter at every build.
 monty = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 monty-type-checking = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 monty-types = { git = "https://github.com/uael/monty", rev = "b70678d3" }

@@ -19,7 +19,7 @@ use std::{
   task::{Context, Poll, Waker},
 };
 
-use monty_types::{MontyUuid, NamedValues, ResourceLimits};
+use monty_types::{MontyUuid, NamedValues};
 
 use crate::{
   ENGINE, PREAMBLE, SHEET,
@@ -42,13 +42,11 @@ type Callable = Box<dyn FnMut(Vec<Object>) -> Result<Object, Fault>>;
 /// What a host does when an act is done, given what it came to.
 type Watcher = Box<dyn FnMut(&Object)>;
 
-/// The two objects of the host the stand-in holds, by their ids.
-mod objects {
-  /// The gate, which reads a sheet.
-  pub const GATE: u8 = 2;
-  /// The ears, which hear every ear of the host by name.
-  pub const EARS: u8 = 3;
-}
+/// The id of the gate, which reads a sheet, one of the two objects of the host the stand-in holds.
+const GATE: u8 = 2;
+
+/// The id of the ears, which hear every ear of the host by name, the other object of the host.
+const EARS: u8 = 3;
 
 /// The ears and the functions of the host, by the names the sandbox calls them by.
 ///
@@ -127,34 +125,29 @@ impl Hosted {
   }
 }
 
-/// The host, as the sandbox reaches it: its ears and its functions, and the voice of the engine. The gate is the
-/// thread's.
-struct Hosting {
-  hosted: Hosted,
-  voice: Voice,
-}
-
-impl Hosting {
-  /// One call of the sandbox, answered: a method of one of the objects of the host, or a function of the host.
+impl Hosted {
+  /// One call of the sandbox, answered: a method of one of the objects of the host, or a function of the host. The
+  /// gate is the thread's, and an ear is born with the voice of the engine.
   fn called(
-    &mut self,
+    &self,
+    voice: &Voice,
     on: Option<MontyUuid>,
     name: &str,
     args: Vec<Object>,
   ) -> Result<Object, Fault> {
-    let Some(on) = on else { return self.hosted.call(name, args) };
+    let Some(on) = on else { return self.call(name, args) };
     let at = |i: usize| args.get(i).map(Object::as_ref);
-    if on == id(objects::GATE) {
+    if on == id(GATE) {
       let found = checked(&text(at(0)))?;
       return Ok(Object::list(found.into_iter().map(|(line, why)| {
         Object::tuple([Object::int(i64::try_from(line).unwrap_or_default()), Object::string(why)])
       })));
     }
-    if on != id(objects::EARS) {
+    if on != id(EARS) {
       return Err(Fault::refused(format!("{on} is no object of the host")));
     }
     let heard = match name {
-      "born" => Heard::Born(self.voice.of(&text(at(1)))),
+      "born" => Heard::Born(voice.of(&text(at(1)))),
       "hears" => Heard::Fact(
         at(1).and_then(Fact::of).ok_or_else(|| Fault::refused("an ear hears a fact or nothing"))?,
       ),
@@ -170,7 +163,7 @@ impl Hosting {
       }
       _ => return Err(Fault::refused(format!("the ears of the host have no {name}"))),
     };
-    Ok(replied(self.hosted.resume(&text(at(0)), heard)?))
+    Ok(replied(self.resume(&text(at(0)), heard)?))
   }
 }
 
@@ -203,15 +196,26 @@ fn templated(pairs: &[(&str, Object)]) -> Object {
   marked("Templated", [("interpolations", Object::list(held))])
 }
 
-/// The sandbox and the host it reaches, which is what an engine holds.
-struct Inner {
-  sand: Sand,
-  host: Hosting,
-  /// Who waits on an act, by its name, told once when it is done.
-  watchers: HashMap<String, Vec<Watcher>>,
+/// The words of a verb that have a name, as the map the stand-in reads.
+fn named(kwargs: Vec<(&str, Object)>) -> Object {
+  Object::dict(kwargs.into_iter().map(|(key, value)| (Object::string(key), value)))
 }
 
-impl Inner {
+/// One life of the engine, as a host holds it.
+///
+/// One host holds one engine and says one thing at a time, as an operator does: its methods are the verbs of the
+/// contract, and an act borrows the engine while it is awaited, since awaiting it drives the engine.
+pub struct Engine {
+  sand: Sand,
+  hosted: Hosted,
+  voice: Voice,
+  /// Who waits on an act, by its name, told once when it is done.
+  watchers: HashMap<String, Vec<Watcher>>,
+  root: String,
+  raised: Option<Fault>,
+}
+
+impl Engine {
   /// One piece of code of the stand-in, run in the sandbox with these names bound, each as it goes in; and then
   /// whoever watches an act that is done now is told.
   fn run(&mut self, code: &str, inputs: Vec<(&str, Object)>) -> Result<Object, Fault> {
@@ -221,12 +225,12 @@ impl Inner {
   }
 
   fn ran(&mut self, code: &str, inputs: Vec<(&str, Object)>) -> Result<Object, Fault> {
-    let Inner { sand, host, .. } = self;
+    let Engine { sand, hosted, voice, .. } = self;
     let mut named = NamedValues::new();
     for (name, value) in inputs {
       named.push(name, inward(&value));
     }
-    sand.run(code, named, &mut |on, name, args| host.called(on, name, args))
+    sand.run(code, named, &mut |on, name, args| hosted.called(voice, on, name, args))
   }
 
   /// What every watched act came to, in one reading, and each watcher told once.
@@ -255,10 +259,11 @@ impl Inner {
   }
 
   /// What the voices said since the engine was last driven, said into it, each under the name of its ear, until
-  /// they say nothing more; and the waker to wake when they do.
-  fn pump(&mut self, waker: &Waker) -> Result<(), Fault> {
+  /// they say nothing more; and the waker to wake when they do. An awaited act drives the engine so, and a door
+  /// that awaits in the loop of its own language drives it so too.
+  pub(crate) fn pump(&mut self, waker: &Waker) -> Result<(), Fault> {
     loop {
-      let said = self.host.voice.drained(waker);
+      let said = self.voice.drained(waker);
       if said.is_empty() {
         return Ok(());
       }
@@ -268,19 +273,7 @@ impl Inner {
       }
     }
   }
-}
 
-/// One life of the engine, as a host holds it.
-///
-/// One host holds one engine and says one thing at a time, as an operator does: its methods are the verbs of the
-/// contract, and an act borrows the engine while it is awaited, since awaiting it drives the engine.
-pub struct Engine {
-  held: Inner,
-  root: String,
-  raised: Option<Fault>,
-}
-
-impl Engine {
   /// An engine, opened from the record, on these ears, each under the name the engine hears it by, in the order
   /// the engine offers them a question.
   ///
@@ -305,30 +298,27 @@ impl Engine {
       hosted.named(name.clone(), ear)?;
       names.push(name);
     }
-    let host = Hosting { hosted, voice: Voice::new() };
-    let sand = Sand::new(ResourceLimits::default());
-    let mut held = Inner { sand, host, watchers: HashMap::new() };
-    held.ran(PREAMBLE, vec![])?;
+    let sand = Sand::new();
+    let (voice, watchers) = (Voice::new(), HashMap::new());
+    let mut engine = Engine { sand, hosted, voice, watchers, root: String::new(), raised: None };
+    engine.ran(PREAMBLE, vec![])?;
     // The two objects of the host and the two modules are bound as names of the session, which every later piece
     // of code of the stand-in reads.
     let opening = "__engine = loaded(__source, {**MODULE})\n__sheet = loaded(__sheet_source, {})\n__gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __record, __gate, __ears, __names)\n(__root, __raised)";
-    let got = held.ran(
+    let got = engine.ran(
       opening,
       vec![
         ("__source", Object::string(ENGINE)),
         ("__sheet_source", Object::string(SHEET)),
         ("__record", Object::list(record)),
-        (
-          "__given",
-          Object::tuple([object("Gate", id(objects::GATE)), object("Ears", id(objects::EARS))]),
-        ),
+        ("__given", Object::tuple([object("Gate", id(GATE)), object("Ears", id(EARS))])),
         ("__names", Object::list(names.into_iter().map(Object::string))),
       ],
     )?;
     let got = got.as_ref();
-    let root = entry(&got, 0).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
-    let raised = entry(&got, 1).and_then(Fault::of);
-    Ok(Engine { held, root, raised })
+    engine.root = entry(&got, 0).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
+    engine.raised = entry(&got, 1).and_then(Fault::of);
+    Ok(engine)
   }
 
   /// The root chain of the life, which is the first act of any record.
@@ -348,13 +338,13 @@ impl Engine {
     &mut self,
     call: impl FnMut(Vec<Object>) -> Result<Object, Fault> + 'static,
   ) -> Object {
-    self.held.host.hosted.callable(Box::new(call))
+    self.hosted.callable(Box::new(call))
   }
 
   /// The ears and the functions of the host, which a door adds to as it carries a value of its language in.
   #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
   pub(crate) fn hosted(&self) -> Hosted {
-    self.held.host.hosted.clone()
+    self.hosted.clone()
   }
 
   /// One verb of the engine by its name, said with these words, and what it gave.
@@ -364,10 +354,13 @@ impl Engine {
     args: Vec<Object>,
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
-    let kwargs = Object::dict(kwargs.into_iter().map(|(key, value)| (Object::string(key), value)));
-    self.held.run(
+    self.run(
       "called(__engine, __ears, __name, __args, __kwargs)",
-      vec![("__name", Object::string(name)), ("__args", Object::list(args)), ("__kwargs", kwargs)],
+      vec![
+        ("__name", Object::string(name)),
+        ("__args", Object::list(args)),
+        ("__kwargs", named(kwargs)),
+      ],
     )
   }
 
@@ -377,42 +370,40 @@ impl Engine {
   pub(crate) fn word(&mut self, word: &str, inputs: Vec<(&str, Object)>) -> Result<Object, Fault> {
     let mut bound = vec![("__word", Object::string(word))];
     bound.extend(inputs);
-    self.held.run("eval(__word, __engine, dict(locals()))", bound)
+    self.run("eval(__word, __engine, dict(locals()))", bound)
   }
 
   /// One callable the engine made, called back by the handle it crossed under, with these words, and what it gave.
-  #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
+  #[cfg_attr(not(feature = "python"), allow(dead_code))]
   pub(crate) fn made(
     &mut self,
     n: i64,
     args: Vec<Object>,
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
-    let kwargs = Object::dict(kwargs.into_iter().map(|(key, value)| (Object::string(key), value)));
-    self.held.run(
+    self.run(
       "made_called(__engine, __ears, __n, __args, __kwargs)",
-      vec![("__n", Object::int(n)), ("__args", Object::list(args)), ("__kwargs", kwargs)],
+      vec![("__n", Object::int(n)), ("__args", Object::list(args)), ("__kwargs", named(kwargs))],
     )
   }
 
   /// A callable the engine made, forgotten: the host holds its handle no more, so the sandbox holds it no more.
-  #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
+  #[cfg_attr(not(feature = "python"), allow(dead_code))]
   pub(crate) fn forget(&mut self, n: i64) -> Result<(), Fault> {
-    self.held.run("forgotten(__n)", vec![("__n", Object::int(n))]).map(|_| ())
+    self.run("forgotten(__n)", vec![("__n", Object::int(n))]).map(|_| ())
   }
 
   /// Who speaks in the life, and who speaks from now on when a value is given: `site`, read and set where it stands.
   #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
   pub(crate) fn site(&mut self, value: Option<&str>) -> Result<String, Fault> {
     let value = value.map_or_else(Object::none, Object::string);
-    let got = self.held.run("spoken(__engine, __value)", vec![("__value", value)])?;
+    let got = self.run("spoken(__engine, __value)", vec![("__value", value)])?;
     Ok(got.as_ref().as_str().unwrap_or_default().to_owned())
   }
 
   /// What an act came to, once it is done, and nothing while it lives.
   pub(crate) fn outcome(&mut self, id: &str) -> Result<Option<Object>, Fault> {
-    let got =
-      self.held.run("outcomes_of(__engine, [__id])[0]", vec![("__id", Object::string(id))])?;
+    let got = self.run("outcomes_of(__engine, [__id])[0]", vec![("__id", Object::string(id))])?;
     Ok(entry(&got.as_ref(), 0).map(|one| one.to_owned()))
   }
 
@@ -424,14 +415,8 @@ impl Engine {
     id: &str,
     then: impl FnMut(&Object) + 'static,
   ) -> Result<(), Fault> {
-    self.held.watchers.entry(id.to_owned()).or_default().push(Box::new(then));
-    self.held.told()
-  }
-
-  /// The engine driven as far as it goes without the host: what the voices said is said into it. An awaited act
-  /// drives the engine itself; this is for a door that awaits in the loop of its own language.
-  pub(crate) fn pump(&mut self, waker: &Waker) -> Result<(), Fault> {
-    self.held.pump(waker)
+    self.watchers.entry(id.to_owned()).or_default().push(Box::new(then));
+    self.told()
   }
 
   /// One act a verb made, to await.
@@ -460,8 +445,9 @@ pub mod verbs {
   include!(concat!(env!("OUT_DIR"), "/verbs.rs"));
 }
 
-/// What a verb gave, read as the plain value it is.
-trait Plain: Sized {
+/// What a verb gave or an act came to, read as the value a host of rust is given.
+pub trait Plain: Sized {
+  /// The value, or why it is not one.
   fn plain(got: Object) -> Result<Self, Fault>;
 }
 
@@ -503,6 +489,12 @@ impl Plain for Text {
   }
 }
 
+impl Plain for Exit {
+  fn plain(got: Object) -> Result<Self, Fault> {
+    Exit::of(got.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no exit", got.py_repr())))
+  }
+}
+
 impl Plain for Fact {
   fn plain(got: Object) -> Result<Self, Fault> {
     Fact::of(got.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no fact", got.py_repr())))
@@ -522,41 +514,6 @@ impl<T: Plain> Plain for Vec<T> {
       .items()
       .ok_or_else(|| Fault::refused(format!("{} is no list", got.py_repr())))?;
     items.into_iter().map(|one| T::plain(one.to_owned())).collect()
-  }
-}
-
-/// What an act comes to, read as a value of the host.
-pub trait Came: Sized {
-  /// The value the act came to, or the fault it completed with.
-  fn came(got: ObjectRef<'_>) -> Result<Self, Fault>;
-}
-
-impl Came for Object {
-  fn came(got: ObjectRef<'_>) -> Result<Self, Fault> {
-    match Fault::of(got) {
-      Some(fault) => Err(fault),
-      None => Ok(got.to_owned()),
-    }
-  }
-}
-
-impl Came for () {
-  fn came(got: ObjectRef<'_>) -> Result<Self, Fault> {
-    Object::came(got).map(|_| ())
-  }
-}
-
-impl Came for Exit {
-  fn came(got: ObjectRef<'_>) -> Result<Self, Fault> {
-    let held = Object::came(got)?;
-    Exit::of(held.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no exit", held.py_repr())))
-  }
-}
-
-impl Came for Text {
-  fn came(got: ObjectRef<'_>) -> Result<Self, Fault> {
-    let held = Object::came(got)?;
-    Text::of(held.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no text", held.py_repr())))
   }
 }
 
@@ -589,7 +546,7 @@ impl<T> std::fmt::Debug for Act<'_, T> {
   }
 }
 
-impl<T: Came + Unpin> Future for Act<'_, T> {
+impl<T: Plain + Unpin> Future for Act<'_, T> {
   type Output = Result<T, Fault>;
 
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -598,7 +555,7 @@ impl<T: Came + Unpin> Future for Act<'_, T> {
       return Poll::Ready(Err(fault));
     }
     match this.engine.outcome(&this.id) {
-      Ok(Some(got)) => Poll::Ready(T::came(got.as_ref())),
+      Ok(Some(got)) => Poll::Ready(Fault::of(got.as_ref()).map_or_else(|| T::plain(got), Err)),
       Ok(None) => Poll::Pending,
       Err(fault) => Poll::Ready(Err(fault)),
     }
