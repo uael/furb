@@ -5,14 +5,12 @@ hear by, so no name of them stands in the globals of the engine. Every fact is a
 (kind, about, by, *words), and a question (kind, id, by, on, *words), deconstructed only by match.
 """
 
-import ast
 import asyncio
 import builtins
 import json
 import re
 import sys
-from asyncio import CancelledError
-from collections.abc import Coroutine, Generator, Sequence
+from collections.abc import Generator, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import partial
 from pathlib import Path
@@ -20,11 +18,13 @@ from pathlib import Path
 import pytest
 
 import furb
+import furb.kernel
 import furb_monty.engine
 from furb import engine, sheet
 from furb.engine import OPERATOR, Act, Exit, Refused, Text, site
-from furb.kernel import ENGINE
 
+ENGINE = vars(furb.python)
+"""ENGINE is the module of the engine of this interpreter, whose names the Kernel and the gate read."""
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
 ENGINES = {"python": furb.python, "monty": furb_monty.engine}
@@ -289,13 +289,9 @@ def findings(log: Sequence[tuple]) -> list[list[str]]:
 
 
 class Py:
-  """A Kernel that is python, outside the engine like the World.
-
-  Its Kernel takes a run, begins it by compiling the word with a top level await and running it in the module of
-  its chain, makes a wants for the act the run waits for, carries the run forward at the done of each wants, says
-  the run done with what the word gave, and drops the frame of a run a cancel is over. Its gate is an ear of its
-  own, which reads a word on the sheet of the engine with the gate of the crate.
-  """
+  """The Kernel and the gate of this interpreter, outside the engine like the World: the Kernel of `furb.kernel`,
+  which runs a word in the module of its chain, and the gate of the sheet, which reads a word with the gate of the
+  crate."""
 
   def gate(self, word: str, program: list[str]) -> list[str]:
     """What the gate finds against a word: the sheet of the engine, read by the gate of the crate."""
@@ -303,79 +299,11 @@ class Py:
 
   def gating(self) -> Kernel:
     """The gate as the ear of a life, which answers each gate with what it finds against the word."""
-    while True:
-      match (yield):
-        case ("gate", qid, _, on, word):
-          yield "done", qid, self.gate(word, [*engine.program(on).values()])
+    return sheet.gating(ENGINE, furb_monty.gate)
 
-  def kernel(self) -> Kernel:  # noqa: PLR0915
-    """The Kernel as one generator for one life. It takes each run as that run, begins the word of it when it hears
-    that it took it, which is after the step of the chain, and runs the word as its rung. When the word waits for an
-    act that is not done, it makes a wants as the run, and carries the word forward at the done of that wants. It is
-    done with the run with what the word gave, and drops the frame of a word that a cancel is over."""
-    frames: dict[str, Coroutine[object, object, object]] = {}
-    waits: dict[str, str] = {}
-    taken: set[str] = set()
-
-    def ended(run: str, got: BaseException | None) -> None:
-      """The word is over, and the Kernel is done with its run with what the word gave, as that run: its frame and
-      the wants it waits on are dropped."""
-      frames.pop(run, None)
-      for wants in [x for x, one in waits.items() if one == run]:
-        waits.pop(wants)
-      with site.set(run):
-        engine.say("done", run, got)
-
-    def carry(run: str, given: object) -> None:
-      """The word stepped as its rung with what it waited for, and stepped again while what it waits for is done."""
-      with site.set(str(engine.get(run)[4])):
-        while True:
-          try:
-            got = frames[run].throw(given) if isinstance(given, BaseException) else frames[run].send(given)
-          except StopIteration:
-            return ended(run, None)
-          except BaseException as raised:
-            return ended(run, raised)
-          assert isinstance(got, Act), got
-          if engine.peek(got, ...) is ...:
-            with site.set(run):
-              waits[engine.act("wants", "", None, got)] = run
-            return None
-          given = engine.peek(got)
-
-    def begin(run: str) -> None:
-      """A word begun as its rung: it is python, and a word that awaits nothing is over where it is begun."""
-      _, _, _, chain, rung, word, _ = (str(x) for x in engine.get(run))
-      code = compile(word, "<rung>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
-      try:
-        with site.set(rung):
-          ran = eval(code, engine.module(chain))  # noqa: S307
-      except BaseException as raised:
-        return ended(run, raised)
-      if not asyncio.iscoroutine(ran):
-        return ended(run, None)
-      frames[run] = ran
-      return carry(run, None)
-
-    while True:
-      match (yield):
-        case ("run", run, *_):
-          with site.set(run):
-            engine.say("started", run)
-          taken.add(run)
-        case ("started", run, *_) if run in taken:
-          taken.discard(run)
-          if engine.peek(str(engine.get(run)[4]), ...) is ...:
-            begin(run)
-          else:
-            ended(run, CancelledError())
-        case ("done", wants, _, value) if wants in waits:
-          carry(waits.pop(wants), value)
-        case ("cancel" | "close", *_) as control:
-          for one in [x for x in frames if engine.covers(control, str(engine.get(x)[4]))]:
-            if not getattr(frames[one], "cr_running", False):
-              frames[one].close()
-              ended(one, CancelledError())
+  def kernel(self) -> Kernel:
+    """The Kernel as one generator for one life."""
+    return furb.kernel.kernel(ENGINE)
 
 
 def kept(inner: Kernel) -> Kernel:

@@ -9,9 +9,9 @@ import asyncio
 
 import pytest
 
+from conftest import ENGINE, Py
 from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
-from furb.kernel import ENGINE, gate
 from outside.doubles import booted, heads, settle, worlds
 
 STANDS = [[[OPERATOR, [], WINDOW], ["opus", ["low"], 1000]], "/w", "opus/low"]
@@ -19,7 +19,7 @@ STANDS = [[[OPERATOR, [], WINDOW], ["opus", ["low"], 1000]], "/w", "opus/low"]
 
 def said(word: str, program: tuple[str, ...] = ()) -> list[str]:
   """What the gate finds against a word, read after the program of its chain."""
-  return gate(word, list(program))
+  return Py().gate(word, list(program))
 
 
 def test_the_sheet_binds_every_name_of_the_engine_and_lays_each_word_in_a_try_of_its_own() -> None:

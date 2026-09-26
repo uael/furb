@@ -11,9 +11,10 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from furb import engine
+import furb_monty
+from furb import engine, python, sheet
 from furb.engine import Act
-from furb.kernel import Native, gating
+from furb.kernel import kernel
 from furb.provider.claude import ACTOR, cool
 from furb.world import Live, entries, kept
 from furb_monty import _monty
@@ -29,7 +30,7 @@ def say(text: str) -> None:
 
 
 def lived(record: Path | None, cwd: Path, actor: str, *, keeps: bool) -> tuple[Live, str, list[tuple]]:
-  """One life on the loop that runs: its World, the ears of the crate, the Kernel of this interpreter, and its root.
+  """One life on the loop that runs: its World, the ears of the crate, the Kernel, the gate of the crate, and its root.
 
   The life is made again from what the record holds, and it keeps what it says to the record when it keeps, through
   the store of the crate, which holds the lease of the record until the World ends. A life that only reads a record
@@ -44,7 +45,8 @@ def lived(record: Path | None, cwd: Path, actor: str, *, keeps: bool) -> tuple[L
     held = entries(stored)
   else:
     held = kept(record) if record is not None and record.is_file() else []
-  root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating(), **world.ears)
+  gate = sheet.gating(vars(python), furb_monty.gate)
+  root = engine.boot(held, world=world.hears(), kernel=kernel(vars(python)), gate=gate, **world.ears)
   return world, root, held
 
 

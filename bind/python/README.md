@@ -1,8 +1,8 @@
 # furb-monty
 
 furb for python, with the engine in monty. `furb_monty.engine` gives every name of `engine.pyi` over one life of
-the engine in the sandbox of monty, with the Kernel of the crate, so it needs no Kernel of its own.
-`furb_monty.gate` is the gate of the crate, which the Kernel of the package `furb` reads a word with too.
+the engine in the sandbox of monty, with the Kernel that the crate loads there, so it needs no Kernel of its own.
+`furb_monty.gate` is the gate of the crate, which the package `furb` reads a word with too.
 
 `furb_monty._monty` is the door itself. Its `Engine` says each name of the contract by its name, with the words
 python gives, as the engine of this interpreter takes them. It also gives the ears of the World that the crate

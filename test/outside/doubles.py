@@ -19,7 +19,6 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 import conftest
 from furb import engine
-from furb.kernel import Native, gating
 from furb.world import Live
 
 type Words = Generator[tuple | None, tuple]
@@ -95,7 +94,8 @@ def blind() -> Words:
 def booted(said: Words, record: Sequence[tuple] = (), *, gated: bool = True, **ears: Words) -> str:
   """A life on a World and these ears, with the Kernel of this interpreter and its gate when it is gated, and the id
   of its root; a life that is not gated reads every word with a gate that finds nothing, so it refuses no word."""
-  return engine.boot(record, kernel=Native().kernel(), world=said, gate=gating() if gated else blind(), **ears)
+  py = conftest.Py()
+  return engine.boot(record, kernel=py.kernel(), world=said, gate=py.gating() if gated else blind(), **ears)
 
 
 def life(world: Live, record: Sequence[tuple] = ()) -> str:

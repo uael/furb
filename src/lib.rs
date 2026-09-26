@@ -34,6 +34,9 @@ pub const ENGINE: &str = include_str!("furb/engine.py");
 /// The sheet the gate reads a word on, which the Kernel of the sandbox writes the same way the python package does.
 pub const SHEET: &str = include_str!("furb/sheet.py");
 
+/// The Kernel, which the sandbox loads in a module of its own, as the python package imports it.
+pub const KERNEL: &str = include_str!("furb/kernel.py");
+
 /// The stand-in, which runs in the sandbox in a module of its own.
 pub const PREAMBLE: &str = include_str!("preamble.py");
 

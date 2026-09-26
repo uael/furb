@@ -13,9 +13,9 @@ API of its own:
 - `src/world/` holds the ears of the World that the crate writes: the files, the commands, time, and the store of the
   record. A host adds its own, such as the provider of its models and the console of its operator.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
-- The Kernel and the gate are the crate's. The gate is the type checker of monty. It reads a word on the sheet of
-  the engine, `src/furb/sheet.py`, against the typeshed of the sandbox. The gate of the python package reads
-  through it too.
+- The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
+  names of its engine. The gate is the type checker of monty. It reads a word on the sheet of the engine,
+  `src/furb/sheet.py`, against the typeshed of the sandbox. The gate of the python package reads through it too.
 - `src/binding/py.rs`, behind the `python` feature, is the door to python: an `Engine` that says each name of the
   contract by its name, and the ears of the crate. `bind/python` is the package `furb-monty`. Its module `furb_monty.engine` gives every name of the
   contract over one life in the sandbox, and `FURB_ENGINE=monty` makes `from furb import engine` give it.
@@ -78,11 +78,11 @@ The suite drives the engine through its public API alone, end to end, from the m
 - `test/conftest.py` is the harness. `Sand` is a World in memory: files by path, scripted words by chain id, the calls
   it performed, the entries it kept, and what it fed its commands. It stands on `STANDS`, and a World of one test
   overrides its `hear` for the facts it does otherwise. `Dead` refuses every question but the standing, and `Where`
-  asks the chain where it stands at every path. `Py` is a Kernel that is python, with the gate of the crate, which
-  refuses a word that is not python or that names what nothing binds, such as `BAD`. `life` boots a life on them,
-  `born` boots a life on the World of the suite, which holds one file, with the words its models answer the root
-  with, `settle` gives the loop room, `plain` sends a record through the wire and back, `said` reads the facts, and
-  `paragraphs` and `heads` read the turns, which are python.
+  asks the chain where it stands at every path. `Py` is the Kernel of `furb.kernel` on the engine of this
+  interpreter, with the gate of the crate, which refuses a word that is not python or that names what nothing binds,
+  such as `BAD`. `life` boots a life on them, `born` boots a life on the World of the suite, which holds one file,
+  with the words its models answer the root with, `settle` gives the loop room, `plain` sends a record through the
+  wire and back, `said` reads the facts, and `paragraphs` and `heads` read the turns, which are python.
 - One test file per definition of the contract: `test_<name>.py` for a function, a global or a type alias,
   `test_<class>_<method>.py` for a method, in lower case, with dunder underscores stripped. A capitalized definition
   whose lower-case name is another definition's, `Bash` beside `bash`, has `test_<name>_shape.py`.

@@ -22,7 +22,7 @@ use std::{
 use monty_types::{MontyUuid, NamedValues};
 
 use crate::{
-  ENGINE, PREAMBLE, SHEET,
+  ENGINE, KERNEL, PREAMBLE, SHEET,
   ear::{Ear, Heard, Step, Voice},
   fact::Fact,
   gate::checked,
@@ -304,12 +304,13 @@ impl Engine {
     engine.ran(PREAMBLE, vec![])?;
     // The two objects of the host and the two modules are bound as names of the session, which every later piece
     // of code of the stand-in reads.
-    let opening = "__engine = loaded(__source, {**MODULE})\n__sheet = loaded(__sheet_source, {})\n__gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __record, __gate, __ears, __names)\n(__root, __raised)";
+    let opening = "__engine = loaded(__source, {**MODULE})\n__sheet = loaded(__sheet_source, {})\n__kernel = loaded(__kernel_source, {})\n__gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __kernel, __record, __gate, __ears, __names)\n(__root, __raised)";
     let got = engine.ran(
       opening,
       vec![
         ("__source", Object::string(ENGINE)),
         ("__sheet_source", Object::string(SHEET)),
+        ("__kernel_source", Object::string(KERNEL)),
         ("__record", Object::list(record)),
         ("__given", Object::tuple([object("Gate", id(GATE)), object("Ears", id(EARS))])),
         ("__names", Object::list(names.into_iter().map(Object::string))),

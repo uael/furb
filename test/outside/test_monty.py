@@ -17,7 +17,7 @@ import pytest
 import furb
 import furb_monty.engine
 from conftest import OPERATOR, STANDS, Dead, Py, Sand, settle, swapped
-from furb import engine, kernel
+from furb import engine
 from furb.engine import Refused
 from furb_monty import _monty
 
@@ -165,7 +165,7 @@ async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_r
   # seconds. One word holds every name, one on each line, and the line of a finding is the name it refuses.
   word = "\n".join(f"got = {name}" for name in names)
   found = engine.gate(word, on=root)
-  assert kernel.gate(word, []) == found
+  assert Py().gate(word, []) == found
   refused = sorted({names[int(one.split(":")[0].removeprefix("line ")) - 1] for one in found})
   probe = (
     f"ran = []\nfor name in {refused!r}:\n  try:\n    eval(compile('got = ' + name, 'probe', 'exec'), dict(globals()))\n"
