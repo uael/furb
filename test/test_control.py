@@ -1,6 +1,6 @@
 """control, the one way a pause, a wake, a cancel or a close is said over an act."""
 
-from conftest import STANDS, Sand, life, said, settle
+from conftest import STANDS, Sand, heads, life, said, settle
 from furb import engine
 
 
@@ -26,5 +26,28 @@ async def test_the_call_gives_the_control_as_the_life_made_it_whole() -> None:
   assert await act == 3
   await settle()
   step = said(log, "rung")[0][1]
-  assert engine.modules[root]["k"] == ("pause", "bash1", step, ["#bash1 paused"])
+  assert engine.module(root)["k"] == ("pause", "bash1", step, ["#bash1 paused"])
   assert [(one[1], one[3]) for one in said(log, "close")] == [(act, 3)]
+
+
+async def test_a_control_is_said_while_it_is_over_an_act_that_is_not_done() -> None:
+  """A control is said while the act it names is not done, and a wake while it is paused too, so a control that reaches nothing says nothing."""
+  sand = Sand(stands=STANDS, auto=False)
+  log, root = life(sand)
+  sand.script[root] = ["x = bash('slow')\nclose(7)"]
+  act = engine.prompt(int, "go", on=root)
+  assert await act == 7
+  command = said(log, "bash")[0][1]
+  engine.close(1, act)
+  engine.pause(command)
+  sand.exits(command, 0)
+  await settle()
+  engine.cancel(command)
+  engine.wake(command)
+  engine.cancel(act)
+  engine.pause("nothing9")
+  engine.close(1, "bogus9")
+  await settle()
+  controls = [(a[0], a[1]) for a in log if a[0] in ("pause", "wake", "cancel", "close")]
+  assert controls == [("close", act), ("pause", command), ("wake", command)]
+  assert heads(engine.turns(on=root))[-1] == f"#{command} exited 0"

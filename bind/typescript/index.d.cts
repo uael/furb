@@ -31,7 +31,6 @@ export declare class Life {
   /** Await one act. JavaScript continues to drive the World while the Promise waits. */
   result<T = unknown>(id: string): Promise<T>
   outcome(id: string): Outcome
-  held<T = unknown>(name: string, keys: unknown[], ask: string): T
   made<T = unknown>(id: number, args: unknown[], kwargs: Record<string, unknown>): T
   forget(id: number): void
   prompt<T = unknown>(shape: string, message: string, options?: PromptOptions | undefined | null): Act & PromiseLike<T>
@@ -41,13 +40,15 @@ export declare class Life {
    * as every value of the life does, through the stand-in, so a map that holds the key `is` crosses as its pairs.
    */
   inspect(name: string, chain?: string | undefined | null): Inspection
+  /** Every name the module of a chain binds, in the order it bound them. */
+  names(chain?: string | undefined | null): Array<string>
   chain(label: string, source?: string | null, filter?: unknown, on?: string | null): Act & PromiseLike<never>
   grant(options: GrantOptions): Act & PromiseLike<null>
   bash(command: string, options?: BashOptions | undefined | null): Act & PromiseLike<ExitValue>
   wait(seconds: number, chain?: string | undefined | null): Act & PromiseLike<null>
   read<T = TextValue>(path: string, show?: unknown, chain?: string | null): T
   write<T = TextValue>(text: TextValue, chain?: string | undefined | null): T
-  peek<T = unknown>(id: string, chain?: string | undefined | null): T | null
+  peek<T = unknown>(id: string): T | null
   get(id: string): [string, string, string, string, ...unknown[]]
   /** The turns of a chain, each the python a model reads, which the engine wrote. */
   turns(chain?: string | undefined | null): Array<['user' | 'assistant', string, [number, number, number, number, number] | null, unknown]>
@@ -61,7 +62,8 @@ export declare class Life {
   wake(id: string): void
   cancel(id: string): void
   close(value: unknown, id: string): void
-  send(kind: string, about: string, words: Array<any>, by?: string | undefined | null): [string, string, string, ...unknown[]]
+  /** Say one fact, from whoever the site names, and give it back as the life holds it. */
+  say(kind: string, about: string, words: Array<any>): [string, string, string, ...unknown[]]
   span(lo: number, hi: number): { is: 'made'; id: number }
   grep(pattern: string): { is: 'made'; id: number }
   differs(lines: Array<string>): { is: 'made'; id: number }

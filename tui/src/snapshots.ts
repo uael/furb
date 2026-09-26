@@ -30,11 +30,10 @@ function row(act: LiveAct): ActRow {
   };
 }
 
-/** Queries belong to changes of the life, not to frames or refresh requests. */
+/** Views belong to changes of the life, not to frames or refresh requests. */
 export class Snapshots {
   private readonly chains = new Map<string, ChainView>();
   private heard = 0;
-  private generation = 0;
   private entries = -1;
   private dispatched: string[] = [];
   constructor(
@@ -43,35 +42,28 @@ export class Snapshots {
   ) {}
 
   private changed(fact: Fact): void {
-    const [kind, id, by] = fact;
-    const act = this.world.activity.acts.get(id);
+    const [kind, id] = fact;
     // The kind of the question that a done answers.
     const answered = kind === "done" ? questionKind(id) : undefined;
-    const chain = ["cd", "write"].includes(kind)
-      ? String(fact[3])
-      : kind === "stood"
-        ? id
-        : (act?.on ??
-          (answered === "cd" || answered === "write" ? this.world.activity.acts.get(by)?.on : undefined));
-    if (["run", "ran", "ready", "wants", "sent"].includes(kind))
+    // A word may bind the actor of its chain again, so the actor is read again at each step of a word.
+    if (["run", "ready", "wants"].includes(kind) || answered === "run" || answered === "wants")
       for (const cached of this.chains.values()) cached.actor = undefined;
-    const view = chain ? this.chains.get(chain) : undefined;
+    // The standing has one home, the root, and every chain that takes it tells it and holds its actor.
+    if (answered === "stand")
+      for (const cached of this.chains.values())
+        Object.assign(cached, {
+          roster: undefined,
+          directory: undefined,
+          actor: undefined,
+          turns: undefined,
+        });
+    // A fact stands in the transcript of the chain its scope names, which is all that view reads.
+    const view = this.chains.get(this.world.activity.scope(id));
     if (!view) return;
-    if (
-      ["tell", "ready", "run", "ran", "answer", "ask", "pause", "wake", "close", "cancel", "cd"].includes(
-        kind,
-      ) ||
-      (kind === "done" && act)
-    )
+    if (["tell", "pause", "wake", "cancel", "close", "reply"].includes(kind) || answered === "reply")
       view.turns = undefined;
-    if (["tell", "ready", "run", "ran"].includes(kind)) view.program = undefined;
-    // A stood says the standing that its chain takes, the roster, the directory and the actor, and tells it there.
-    if (kind === "stood")
-      Object.assign(view, { roster: undefined, directory: undefined, actor: undefined, turns: undefined });
-    if (kind === "cd" || answered === "cd") {
-      view.directory = undefined;
-      view.turns = undefined;
-    }
+    if (kind === "run" || kind === "module") view.program = undefined;
+    if (kind === "cd") view.directory = undefined;
     // A write of the door of a prompt edits the program of its ladder and replays it.
     const written = kind === "write" ? fact[4] : answered === "write" ? fact[3] : undefined;
     if (
@@ -86,36 +78,24 @@ export class Snapshots {
   }
   /** The view of a chain, with the acts that changed after a count of changes of the act table. */
   take(requested: string, since = 0): Snapshot {
-    // An act table derived again knows acts whose facts the views were read without, so every view reads again.
-    if (this.generation !== this.world.activity.generation) {
-      this.generation = this.world.activity.generation;
-      for (const view of this.chains.values())
-        Object.assign(view, { program: undefined, turns: undefined, directory: undefined, actor: undefined });
-    }
     for (const fact of this.world.facts.slice(this.heard)) this.changed(fact);
     this.heard = this.world.facts.length;
     const selected = this.world.activity.acts.get(requested)?.kind === "chain" ? requested : this.life.root;
     const view = this.chains.get(selected) ?? {};
     this.chains.set(selected, view);
-    view.roster ??= this.life.call<[unknown, [Snapshot["roster"], string, string]]>(
-      "ask",
-      ["stand", selected],
-      {},
-    )[1][0];
-    view.program ??=
-      this.life.call<[unknown, Record<string, string>]>("ask", ["program", selected], {})[1] ?? {};
+    view.roster ??= this.life.call<[Snapshot["roster"], string, string]>("standing", [], {})[0];
+    view.program ??= this.life.call<Record<string, string>>("program", [selected], {});
     view.turns ??= this.life.turns(selected);
     view.directory ??= this.life.cwd(selected);
-    view.actor ??= this.life.held("modules", [selected, "actor"], "at") as string;
+    view.actor ??= String(this.life.inspect("actor", selected).value ?? "");
     if (this.entries !== this.world.records.entries.length) {
       this.entries = this.world.records.entries.length;
       this.dispatched = [...queueDispatches(this.world.records.entries).keys()];
     }
-    const { acts, whole, count } = this.world.activity.since(since);
+    const { acts, count } = this.world.activity.since(since);
     return {
       selected,
       acts: acts.map(row),
-      whole,
       count,
       paused: this.world.isPaused(selected) || this.world.pending.size > 0,
       dispatched: this.dispatched,

@@ -196,7 +196,7 @@ test("a take carries the acts that changed after the count it is given, and ever
     const waiting = life.wait(60).id;
     await Promise.resolve();
     const second = snapshots.take(life.root, first.count);
-    expect([second.whole, second.acts.map((act) => act.id)]).toEqual([false, [waiting]]);
+    expect(second.acts.map((act) => act.id)).toEqual([waiting]);
     life.cancel(waiting);
     await until(world, () => world.activity.acts.get(waiting)?.done === true);
     const third = snapshots.take(life.root, second.count);
@@ -207,16 +207,15 @@ test("a take carries the acts that changed after the count it is given, and ever
     );
     await until(world, () => [...world.activity.acts.values()].some((act) => act.kind === "note"));
     const fourth = snapshots.take(life.root, third.count);
-    expect(fourth.whole).toBe(true);
-    expect(fourth.acts.map((act) => act.id)).toEqual([...world.activity.acts.keys()]);
+    expect(fourth.acts.map((act) => act.kind)).toEqual(["rung", "note"]);
   } finally {
     await world.dispose();
     await rm(cwd, { recursive: true, force: true });
   }
 }, 30000);
 
-test("a stood about a chain drops the roster, the directory and the actor that its view read", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-stood-"));
+test("a new standing drops the roster, the directory and the actor that the view of a chain read", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-standing-"));
   const host = hostModels();
   const world = new World({ cwd, models: host.models, model: defaultModel });
   try {
@@ -228,7 +227,12 @@ test("a stood about a chain drops the roster, the directory and the actor that i
       cwd,
       `${defaultModel}/low`,
     ]);
-    life.send("stood", life.root, [[[["operator", [], 200000]], join(cwd, "elsewhere"), "operator"]]);
+    // A stand that an ear of the word takes is answered by whoever says its done, here the operator.
+    await life.rung(
+      'def takes(id):\n  yield "started", id\n  while True:\n    yield\nasked = act("stand", "", takes)',
+    );
+    const asked = String(life.inspect("asked").value);
+    life.say("done", asked, [[[["operator", [], 200000]], join(cwd, "elsewhere"), "operator"]]);
     await Promise.resolve();
     const after = snapshots.take(life.root);
     expect([after.roster, after.directory, after.actor]).toEqual([

@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Sand, heads, life, paragraphs, rows, said, settle
+from conftest import STANDS, Sand, acts, heads, life, paragraphs, rows, said, settle
 from furb import engine
 from furb.engine import Refused
 
@@ -14,7 +14,7 @@ async def test_what_a_word_tells_of_itself_as_it_runs() -> None:
   sand.script[root] = ["n = 42\ndebug(t'{n} and {n + 1}')\nclose(n)"]
   assert await engine.prompt(int, "tell me", on=root) == 42
   await settle()
-  step = said(log, "answer")[0][1]
+  step = said(log, "reply")[0][2]
   assert [one for one in paragraphs(engine.turns(on=root)) if " debugged " in one] == [
     f"#{step} debugged n = 42",
     f"#{step} debugged n + 1 = 43",
@@ -28,7 +28,7 @@ async def test_the_engine_tells_what_a_step_debugged() -> None:
   sand.script[root] = ["debug(t'{7}')\nclose(1)"]
   assert await engine.prompt(int, "tell me", on=root) == 1
   await settle()
-  step = said(log, "answer")[0][1]
+  step = said(log, "reply")[0][2]
   assert [line for line in heads(engine.turns(on=root)) if " debugged " in line] == [f"#{step} debugged 7 = 7"]
 
 
@@ -49,7 +49,7 @@ async def test_a_raised_header_and_a_debugged_header_stand_at_the_place_in_the_r
   act = engine.prompt(int, "try", on=root)
   assert await act == 1
   await settle()
-  one, two = [a[1] for a in said(log, "answer")]
+  one, two = [a[2] for a in said(log, "reply")]
   got = engine.turns(on=root)
   assert heads([got[2]]) == [f"#{one} debugged 1 = 1", f"#{one} raised ValueError('boom')", f"#{two} advance on {act}"]
 
@@ -61,9 +61,8 @@ async def test_the_transcript_holds_between_the_entries_what_the_run_of_each_wor
   sand.script[root] = ["debug(t'{1}')\nclose(1)"]
   assert await engine.prompt(int, "tell me", on=root) == 1
   await settle()
-  step = said(log, "answer")[0][1]
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
+  step = said(log, "reply")[0][2]
+  held = engine.transcript(root)
   told = [i for i, one in enumerate(held) if one[0] == "tell" and one[3] == [f"#{step} debugged 1 = 1"]]
   opened = [i for i, one in enumerate(held) if one[0] == "rung" and one[1] == step]
   shut = [i for i, one in enumerate(held) if one[0] == "done" and one[1] == step]
@@ -110,26 +109,29 @@ async def test_debug_tells_nothing_but_the_interpolations() -> None:
 async def test_debug_enters_nothing_in_the_record() -> None:
   """debug enters nothing in the record."""
   sand = Sand(stands=STANDS)
-  log, root = life(sand)
+  _, root = life(sand)
   step = engine.rung("n = 1\ndebug(t'{n}')", on=root)
   await step
   await settle()
   assert [fact[:2] for fact, *_ in sand.record] == [
     ("chain", root),
-    ("stand", said(log, "stand")[0][1]),
+    ("stand", "stand1"),
+    ("done", "stand1"),
     ("rung", step),
+    ("gate", "gate1"),
+    ("done", "gate1"),
   ]
 
 
 async def test_it_is_no_act_and_it_enters_no_record() -> None:
   """It is no act and it enters no record, and it stands in the turns at the place in the run where it happened."""
   sand = Sand(stands=STANDS)
-  _, root = life(sand)
-  made = set(engine.acts)
+  log, root = life(sand)
+  made = set(acts(log))
   act = engine.rung("n = 1\ndebug(t'{n}')", on=root)
   await act
   await settle()
-  assert set(engine.acts) - made == {act}
+  assert {a[0] for a in acts(log).values() if a[1] not in made} == {"rung", "gate", "run"}
   assert [fact for fact, *_ in sand.record if fact[0] == "tell"] == []
   assert heads(engine.turns(on=root)) == [f"#{root} root", rows(root)[0], f"#{act}", f"#{act} debugged n = 1"]
 

@@ -6,7 +6,7 @@ import pytest
 
 from conftest import STANDS, Sand, life, settle
 from furb import engine
-from furb.engine import OPERATOR, Act, Refused, Text
+from furb.engine import OPERATOR, Act, Refused
 
 
 async def test_the_name_of_an_act() -> None:
@@ -29,7 +29,7 @@ async def test_the_name_of_an_act() -> None:
 
 
 async def test_an_act_is_over_when_its_done_stands_and_lives_until_then() -> None:
-  """An act is over when its done stands and lives until then; there is no other state, and a control over an act that is over reaches nothing."""
+  """An act is over when its done stands and lives until then; there is no other state, and a control over an act that is over reaches nothing, but a wake of the ear of a command that a pause holds."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   one = engine.prompt(None, "hi", to=OPERATOR, on=root)
@@ -55,7 +55,7 @@ async def test_the_outcome_of_a_cancelled_act_is_the_cancellederror_it_completed
   _, root = life(sand)
   one = engine.bash("slow", on=root)
   await settle()
-  assert engine.peek(one) == engine.Exit(None, Text(f"{one}/stdout"), Text(f"{one}/stderr"))
+  assert engine.peek(one) is None
   engine.cancel(one)
   await settle()
   assert isinstance(engine.peek(one), CancelledError)

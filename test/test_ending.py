@@ -13,7 +13,7 @@ async def test_a_close_from_outside_still_ends_what_a_pause_is_over() -> None:
   engine.pause(act)
   engine.close(21, act)
   await settle()
-  assert act in engine.outcomes and (await act) == 21
+  assert engine.peek(act, ...) is not ... and (await act) == 21
 
 
 async def test_it_is_over_as_it_says_a_done_of_its_own() -> None:
@@ -28,4 +28,4 @@ async def test_it_is_over_as_it_says_a_done_of_its_own() -> None:
   engine.cancel(act)
   await settle()
   assert [one for one in log[mark:] if one[2] == act] == []
-  assert engine.outcomes[act] == 21
+  assert engine.peek(act) == 21

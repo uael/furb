@@ -16,7 +16,7 @@ async def test_whether_a_fact_is_a_question_which_its_name_says() -> None:
   assert engine.question(made) and made[1] == act == "bash1"
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
   asked = said(log, "read")[0]
-  assert engine.question(asked) and asked[1] == "read@operator.3"
+  assert engine.question(asked) and asked[1] == "read1"
   assert engine.question(("chain", root, OPERATOR, "", "root", ""))
   assert not engine.question(("cancel", root, OPERATOR, []))
   assert not engine.question(("close", "chain12", OPERATOR, None, []))

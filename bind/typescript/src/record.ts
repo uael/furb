@@ -30,7 +30,7 @@ export function readRecord(path: string, repair = false): Entry[] {
       }
       if (
         !Array.isArray(value) ||
-        ![1, 2].includes(value.length) ||
+        value.length !== 1 ||
         !Array.isArray(value[0]) ||
         value[0].length < 3 ||
         typeof value[0][0] !== "string"

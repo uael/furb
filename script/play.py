@@ -20,7 +20,7 @@ from furb import engine
 from furb.cli import lived, say
 from furb.engine import OPERATOR
 from furb.provider.claude import BIN, cool
-from furb.world import kept
+from furb.world import answered, kept
 
 TO = "opus/low"
 """TO is the actor the play asks, which is opus at the least effort it takes."""
@@ -67,28 +67,20 @@ def heads(root: str, name: str) -> list[str]:
   ]
 
 
-def transcript(root: str) -> list[tuple]:
-  """The transcript of a chain, which the operator asks of the chain itself."""
-  _, got = engine.ask("transcript", root, root)
-  assert isinstance(got, list), got
-  return got
-
-
 async def settle(n: int = 400) -> None:
   """Room for the loop to do what it still owes, so that finding nothing done means something."""
   for _ in range(n):
     await asyncio.sleep(0)
 
 
-def answered(record: Path) -> list[tuple]:
-  """Every answer of a model that the record holds."""
-  said = kept(record) if record.is_file() else []
-  return [entry[0] for entry in said if entry[0][0] == "answer" and entry[0][3] is not None]
+def bought(record: Path) -> list[tuple]:
+  """Every answer of a model that the record holds, and none before the record is written."""
+  return answered(kept(record)) if record.is_file() else []
 
 
 def spent(record: Path) -> float:
   """What every answer the record holds has cost so far."""
-  return sum(one[3][2][4] for one in answered(record) if one[3][2])
+  return sum(one[3][2][4] for one in bought(record) if one[3][2])
 
 
 async def watching(root: str, record: Path, name: str) -> None:
@@ -102,16 +94,16 @@ async def watching(root: str, record: Path, name: str) -> None:
   size, still = 0, time.monotonic()
   while True:
     await asyncio.sleep(SETTLE)
-    for one in transcript(root):
+    for one in engine.transcript(root):
       match one:
-        case ("prompt", pid, _, _, _, _, "operator") if engine.peek(pid, on=root) is None:
+        case ("prompt", pid, _, _, _, _, "operator") if engine.peek(pid, ...) is ...:
           engine.close(SAID, pid)
     if spent(record) > CEILING:
       say(f"the play spent {spent(record):.4f} dollars, over its ceiling of {CEILING}, and ends the prompt")
       engine.cancel(name)
       return
-    if len(answered(record)) > TRIES:
-      say(f"the play bought {len(answered(record))} answers, over the {TRIES} it allows, and ends the prompt")
+    if len(bought(record)) > TRIES:
+      say(f"the play bought {len(bought(record))} answers, over the {TRIES} it allows, and ends the prompt")
       engine.cancel(name)
       return
     grown = record.stat().st_size if record.is_file() else 0
@@ -136,20 +128,20 @@ async def first(yard: Path, record: Path) -> list[object]:
     watched.cancel()
   assert isinstance(got, list), got
   assert len(got) == ITEMS, got
-  said = transcript(root)
+  said = engine.transcript(root)
 
   forks = [one for one in said if one[0] == "chain" and one[5] == root]
   assert forks, "the model opened no chain with a source of its own"
   assert got[6] in {one[1] for one in forks}, (got[6], [one[1] for one in forks])
   # The chain it names must have served it: a word of a model ran on it, and a prompt of the model stands there.
   assert isinstance(got[6], str), got[6]
-  theirs = transcript(got[6])
+  theirs = engine.transcript(got[6])
   assert [one for one in theirs if one[0] == "prompt"], f"no prompt of the model stands on {got[6]}"
-  assert [one for one in theirs if one[0] == "answer"], f"no model answered on {got[6]}"
+  assert [one for one in engine.turns(on=got[6]) if one[0] == "assistant"], f"no model answered on {got[6]}"
 
   asked = [one for one in said if one[0] == "prompt" and one[6] == OPERATOR]
   assert len(asked) == 1, f"the model put {len(asked)} prompts to the operator"
-  assert engine.peek(asked[0][1], on=root) == SAID, engine.peek(asked[0][1], on=root)
+  assert engine.peek(asked[0][1]) == SAID, engine.peek(asked[0][1])
   assert got[3] == SAID, got[3]
 
   made = sorted(one.name for one in yard.rglob("*.py"))
@@ -161,8 +153,8 @@ async def first(yard: Path, record: Path) -> list[object]:
   assert got[0].strip(), got[0]
   assert isinstance(got[2], int), got[2]
   assert heads(root, "debugged"), "no debug of the model stands in the turns"
-  peeked = [one[4] for one in said if one[0] == "peek" and one[2] != OPERATOR]
-  assert got[4] in peeked, (got[4], peeked)
+  assert isinstance(got[4], str), got[4]
+  assert engine.get(got[4]) is not None, f"the model peeked at {got[4]!r}, which names no act"
 
   assert got[5] != str(yard), f"the working directory of the chain did not move from {yard}"
   assert engine.cwd(on=root) == got[5], (engine.cwd(on=root), got[5])
@@ -180,8 +172,8 @@ async def second(yard: Path, record: Path, got: list[object]) -> float:
   """The life on the record of the first: it asks no model for what the record holds, and takes one prompt more."""
   world, root, held = lived(record, yard, TO, keeps=True)
   await settle()
-  asks = [one for one in world.calls if one[0] == "ask"]
-  assert asks == [], f"the resumed life asked a model {len(asks)} times for what its record holds"
+  replies = [one for one in world.calls if one[0] == "reply"]
+  assert replies == [], f"the resumed life asked a model {len(replies)} times for what its record holds"
   assert held, "the resumed life was opened on nothing"
   say(f"the resumed life made {len(held)} words of its record again and asked no model")
   # A pause the World said when it could not reach a model stands in the record, so every later life of that record
@@ -208,14 +200,12 @@ def ledger(root: str, record: Path) -> float:
     say(f"[{role}] {py}")
   say("")
   say("=== the program of the root: every word the model wrote that the gate took ===")
-  _, program = engine.ask("program", root)
-  assert isinstance(program, dict), program
-  for name, word in program.items():
+  for name, word in engine.program(root).items():
     say(f"--- {name}")
     say(str(word))
   say("")
   say("=== the ledger ===")
-  for one in answered(record):
+  for one in bought(record):
     if one[3][2] is not None:
       say(f"{one[1]} {one[3][2]}")
   say(f"the play spent {spent(record):.6f} dollars over {len(kept(record))} entries of record")

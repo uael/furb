@@ -23,9 +23,10 @@ contract says.
 
 The TypeScript side is a bun workspace at the root, with two packages:
 
-- `bind/typescript` is the crate through N-API. Its queries and controls are synchronous, and its acts can be
-  awaited. It includes a World with pi-ai models, files, commands, and records. `bind/typescript/README.md` says
-  how to use it. The TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
+- `bind/typescript` is the crate through N-API. Its views, its queries and its controls are synchronous, and an
+  act that is answered later can be awaited. It includes a World with pi-ai models, files, commands, and records.
+  `bind/typescript/README.md` says how to use it. The TUI imports its build in `bind/typescript/dist`, which
+  `bun run build` makes again.
 - `tui` is the OpenTUI application on that package. The engine and its World run in a worker, `tui/src/worker.ts`,
   which also holds the demo World and its scripted answers. `tui/README.md` says what the TUI does, and
   `docs/tui.md` shows each screen. The gallery and the animation come from `tui/script/`.
@@ -46,12 +47,15 @@ sentence, not a name. When you find a hole or a contradiction in it, say so and 
 The owner is the source of truth of what a word means, and a name serves its meaning strictly. When a name of the
 engine does not serve its meaning, the name is wrong, and the name changes.
 
-- A fact is inert: a piece of information dropped into the life, with no response, that is queried later.
-- A query is a synchronous question: it is answered now, or with nothing.
-- An act is an asynchronous question: it is answered now, or later, and it is awaited for its answer.
-- A fact with an answer makes no sense. The answer belongs to the question, and a question is a fact that is
-  asked: it takes a name when it is said, and what it was answered the life holds under that name. A query and an
-  act are the two kinds of question, side by side, and neither is a kind of the other.
+- A fact is inert: a piece of information dropped into the life, with no response, which every ear hears in the
+  order of the log.
+- A question is an act: it takes a name when it is said, it goes to the ears in turn until one owns it, and what it
+  came to the life holds under that name. A fact with an answer makes no sense: the answer belongs to the question.
+- An act is answered now, or later, and it is awaited for its answer. The ear that owns it says so: a done for an
+  act it answers now, or a started now and a done later. A query is only an act that no ear started.
+- started or done is ownership, and the owner of an act answers it. The life refuses an act that no ear owns.
+- A view reads the life, and makes nothing and keeps nothing: get, peek and transcript, and all that is derived
+  from them.
 
 ## The bar
 
@@ -110,7 +114,7 @@ Run every command from the root of the repository.
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
   `furb-monty`. After a change of the crate, `uv sync --reinstall-package furb-monty` builds it again.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
-  whole but for the four stubs of the bus that the toml excludes with their reason.
+  whole but for the stubs of what boot binds, which the toml excludes with their reason.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
 - `uv run ruff format src test script` then `uv run ruff check src test script`: format and lint. Two spaces of
   indentation, 120 columns.

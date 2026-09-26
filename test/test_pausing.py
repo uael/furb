@@ -3,9 +3,8 @@
 from asyncio import CancelledError
 from collections.abc import Generator
 
-from conftest import STANDS, Sand, life, said, settle
+from conftest import STANDS, Sand, dones, life, said, settle, sown
 from furb import engine
-from furb.engine import WORLD
 
 
 async def test_an_act_is_paused_while_the_last_control_in_record_order_that_is_over_it_is_a_pause() -> None:
@@ -19,9 +18,9 @@ async def test_an_act_is_paused_while_the_last_control_in_record_order_that_is_o
   engine.pause(root)
   engine.wake(root)
   engine.pause(root)
-  engine.send("exited", command, 0, by=WORLD)
+  sand.exits(command, 0)
   await settle()
-  assert act not in engine.outcomes
+  assert engine.peek(act, ...) is ...
   engine.wake(root)
   await settle()
   assert (await act) == 0
@@ -36,10 +35,10 @@ async def test_a_pause_holds_delivery_a_result_that_arrives_enters_the_record_an
   await settle()
   command = said(log, "bash")[0][1]
   engine.pause(root)
-  engine.send("exited", command, 0, by=WORLD)
+  sand.exits(command, 0)
   await settle()
-  kept = [fact for fact, *_ in sand.record if fact[0] == "exited"]
-  assert [one[1] for one in kept] == [command] and act not in engine.outcomes
+  kept = [fact for fact, *_ in sand.record if fact[:2] == ("done", command)]
+  assert [one[1] for one in kept] == [command] and engine.peek(act, ...) is ...
   engine.wake(root)
   await settle()
   assert (await act) == 0
@@ -54,18 +53,19 @@ async def test_a_paused_prompt_stops_at_its_next_boundary_with_its_loop_where_it
   engine.pause(act)
   await settle()
   (first,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  assert [a[1] for a in said(log, "ask")] == [first] and [a[1] for a in said(log, "answer")] == [first]
-  assert [a for a in said(log, "ready") if a[1] == first] == [] and act not in engine.outcomes
+  replies = [a[1] for a in said(log, "done") if a[1].startswith("reply")]
+  assert [a[2] for a in said(log, "reply")] == [first] and replies == ["reply1"]
+  assert [a for a in said(log, "ready") if a[1] == first] == [] and engine.peek(act, ...) is ...
   engine.wake(act)
   await settle()
   assert (await act) == 2
   steps = [a[1] for a in said(log, "rung") if a[2] == act]
-  assert [a[1] for a in said(log, "ask")] == steps == [first, steps[1]]
-  assert [(a[1], a[4]) for a in said(log, "run") if a[1] in steps] == [(first, "a = 1"), (steps[1], "close(a + 1)")]
+  assert [a[2] for a in said(log, "reply")] == steps == [first, steps[1]]
+  assert [(a[4], a[5]) for a in said(log, "run") if a[4] in steps] == [(first, "a = 1"), (steps[1], "close(a + 1)")]
 
 
-async def test_the_engine_holds_the_response_of_an_ask_that_returns_on_a_paused_chain() -> None:
-  """The engine holds the response of an ask that returns on a paused chain."""
+async def test_the_engine_holds_the_response_of_a_reply_that_returns_on_a_paused_chain() -> None:
+  """The engine holds the response of a reply that returns on a paused chain."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["close(7)"]
@@ -73,11 +73,11 @@ async def test_the_engine_holds_the_response_of_an_ask_that_returns_on_a_paused_
   engine.pause(root)
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  assert [a[1] for a in said(log, "answer")] == [step] and act not in engine.outcomes
-  assert [a for a in said(log, "ready") if a[1] == step] == [] and [a for a in said(log, "run") if a[1] == step] == []
+  assert [a[1] for a in said(log, "done") if a[1].startswith("reply")] == ["reply1"] and engine.peek(act, ...) is ...
+  assert [a for a in said(log, "ready") if a[1] == step] == [] and [a for a in said(log, "run") if a[4] == step] == []
   engine.wake(root)
   await settle()
-  assert (await act) == 7 and [a[4] for a in said(log, "run") if a[1] == step] == ["close(7)"]
+  assert (await act) == 7 and [a[5] for a in said(log, "run") if a[4] == step] == ["close(7)"]
 
 
 async def test_a_rung_carries_on_only_while_its_own_chain_is_not_paused() -> None:
@@ -89,12 +89,12 @@ async def test_a_rung_carries_on_only_while_its_own_chain_is_not_paused() -> Non
   await settle()
   command = said(log, "bash")[0]
   engine.pause(root)
-  engine.send("exited", command[1], 0, by=WORLD)
+  sand.exits(command[1], 0)
   await settle()
-  assert said(log, "sent") == []
+  assert dones(log, "wants") == []
   engine.wake(root)
   await settle()
-  assert [one[1] for one in said(log, "sent")] == [command[2]] and (await act) == 0
+  assert [one[2] for one in dones(log, "wants")] == [command[2]] and (await act) == 0
 
 
 async def test_a_control_from_outside_reaches_a_paused_act_at_once() -> None:
@@ -104,15 +104,13 @@ async def test_a_control_from_outside_reaches_a_paused_act_at_once() -> None:
   act = engine.bash("slow", on=root)
   await settle()
   engine.pause(act)
-  engine.send("exited", act, 0, by=WORLD)
-  await settle()
-  assert act not in engine.outcomes
   engine.cancel(act)
   await settle()
-  assert isinstance(engine.outcomes[act], CancelledError)
+  assert isinstance(engine.peek(act), CancelledError)
   heard: list[tuple] = []
 
-  def listening(_: str) -> Generator[None, tuple]:
+  def listening(id: str) -> Generator[tuple | None, tuple]:
+    yield "started", id
     while True:
       heard.append((yield))
 
@@ -123,7 +121,28 @@ async def test_a_control_from_outside_reaches_a_paused_act_at_once() -> None:
   other = engine.bash("other", on=root)
   engine.close(0, other)
   await settle()
-  assert heard[before:] == []
+  assert [a for a in heard[before:] if not engine.question(a)] == []
   engine.wake(probe)
   await settle()
   assert [a[:2] for a in heard[before:] if a[0] in ("bash", "close")] == [("bash", other), ("close", other)]
+
+
+async def test_a_paused_ear_hears_at_once_an_act_put_to_it() -> None:
+  """A paused ear hears at once an act put to it, and every other fact at the wake."""
+  sand = sown()
+  _, root = life(sand)
+  heard: list[tuple] = []
+
+  def listening(id: str) -> Generator[tuple | None, tuple]:
+    yield "started", id
+    while True:
+      heard.append((yield))
+
+  probe = engine.act("probe", root, engine.pausing(listening))
+  engine.pause(probe)
+  before = len(heard)
+  read = engine.act("read", root, None, "a.txt")
+  assert heard[before:] == [engine.get(read)]
+  engine.wake(probe)
+  await settle()
+  assert [a for a in heard[before:] if a[1] == read] == [engine.get(read), ("done", read, "world", engine.peek(read))]

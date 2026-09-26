@@ -1,5 +1,5 @@
 //! Native TypeScript bindings. N-API generates the package loader and declarations from this surface.
-//! Queries and controls are synchronous. Acts carry their name and are awaited through a native Promise.
+//! Views, queries and controls are synchronous. Acts carry their name and are awaited through a native Promise.
 pub mod console;
 mod host;
 mod lease;
@@ -202,18 +202,6 @@ impl JsLife {
 
   #[napi(
     ts_generic_types = "T = unknown",
-    ts_args_type = "name: string, keys: unknown[], ask: string",
-    ts_return_type = "T"
-  )]
-  pub fn held(&self, name: String, keys: Vec<Value>, ask: String) -> napi::Result<Value> {
-    self.held.call(move |life| {
-      let keys = keys.iter().map(inward).collect::<Result<Vec<_>, _>>()?;
-      Ok(outward(life.held(&name, keys, &ask)?.as_ref()))
-    })
-  }
-
-  #[napi(
-    ts_generic_types = "T = unknown",
     ts_args_type = "id: number, args: unknown[], kwargs: Record<string, unknown>",
     ts_return_type = "T"
   )]
@@ -288,11 +276,9 @@ impl JsLife {
     self.held.call(move |life| {
       let chain = crate::Object::string(chain.unwrap_or_else(|| life.root().into()));
       let key = crate::Object::string(&name);
-      let raw = life.word(
-        "modules[__chain][__name]",
-        vec![("__chain", chain.clone()), ("__name", key.clone())],
-      )?;
-      let value = life.held("modules", vec![chain, key], "at")?;
+      let bound = vec![("__chain", chain), ("__name", key)];
+      let raw = life.word("module(__chain)[__name]", bound.clone())?;
+      let value = life.word("outward(module(__chain)[__name], __engine)", bound)?;
       Ok(Inspection {
         kind: raw.as_ref().type_name().into(),
         representation: raw.as_ref().py_repr(),
@@ -300,6 +286,18 @@ impl JsLife {
         name,
       })
     })
+  }
+
+  /// Every name the module of a chain binds, in the order it bound them.
+  #[napi]
+  pub fn names(&self, chain: Option<String>) -> napi::Result<Vec<String>> {
+    let value = self.held.call(move |life| {
+      let chain = crate::Object::string(chain.unwrap_or_else(|| life.root().into()));
+      Ok(outward(
+        life.word("[str(x) for x in module(__chain)]", vec![("__chain", chain)])?.as_ref(),
+      ))
+    })?;
+    serde_json::from_value(value).map_err(|error| napi::Error::from_reason(error.to_string()))
   }
 
   #[napi(
@@ -414,11 +412,8 @@ impl JsLife {
   }
 
   #[napi(ts_generic_types = "T = unknown", ts_return_type = "T | null")]
-  pub fn peek(&self, id: String, chain: Option<String>) -> napi::Result<Value> {
-    self.held.call(move |life| {
-      let named = on(life, chain);
-      invoke(life, "peek", vec![json!(id)], named)
-    })
+  pub fn peek(&self, id: String) -> napi::Result<Value> {
+    self.held.call(move |life| invoke(life, "peek", vec![json!(id)], json!({})))
   }
 
   #[napi(ts_return_type = "[string, string, string, string, ...unknown[]]")]
@@ -512,18 +507,13 @@ impl JsLife {
     self.held.call(move |life| life.close(inward(&value)?, &id))
   }
 
+  /// Say one fact, from whoever the site names, and give it back as the life holds it.
   #[napi(ts_return_type = "[string, string, string, ...unknown[]]")]
-  pub fn send(
-    &self,
-    kind: String,
-    about: String,
-    words: Vec<Value>,
-    by: Option<String>,
-  ) -> napi::Result<Value> {
+  pub fn say(&self, kind: String, about: String, words: Vec<Value>) -> napi::Result<Value> {
     self.held.call(move |life| {
       let mut args = vec![json!(kind), json!(about)];
       args.extend(words);
-      invoke(life, "send", args, json!({"by": by.unwrap_or_default()}))
+      invoke(life, "say", args, json!({}))
     })
   }
 

@@ -318,19 +318,6 @@ impl Life {
     self.held.forget(n).map_err(|fault| raised(py, &self.made, &fault))
   }
 
-  /// One reading of a map of the life where it stands, under these keys: `in`, `at`, `keys` or `len`.
-  fn held<'py>(
-    &mut self,
-    py: Python<'py>,
-    name: &str,
-    keys: Vec<String>,
-    ask: &str,
-  ) -> PyResult<Bound<'py, PyAny>> {
-    let keys = keys.into_iter().map(Object::string).collect();
-    let got = self.held.held(name, keys, ask).map_err(|fault| raised(py, &self.made, &fault))?;
-    to_python(py, &self.made, got.as_ref())
-  }
-
   /// Who speaks in the life, and who speaks from now on when a value is given.
   fn site(&mut self, py: Python<'_>, value: Option<&str>) -> PyResult<String> {
     self.held.site(value).map_err(|fault| raised(py, &self.made, &fault))
@@ -424,6 +411,7 @@ fn to_python<'py>(
   };
   match said.type_name() {
     "NoneType" | "None" => Ok(py.None().into_bound(py)),
+    "ellipsis" => Ok(py.Ellipsis().into_bound(py)),
     "list" => Ok(PyList::new(py, each(said.items().unwrap_or_default())?)?.into_any()),
     "tuple" => Ok(PyTuple::new(py, each(said.items().unwrap_or_default())?)?.into_any()),
     "dict" => {
@@ -536,6 +524,9 @@ fn of_python(made: &Made, ears: &Py<PyAny>, value: &Bound<'_, PyAny>) -> PyResul
   };
   if value.is_none() {
     return Ok(Object::none());
+  }
+  if value.is(py.Ellipsis()) {
+    return Ok(Object::ellipsis());
   }
   if let Ok(held) = value.cast::<PyBool>() {
     return Ok(Object::bool(held.is_true()));

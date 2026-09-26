@@ -8,10 +8,8 @@ export interface Snapshot {
   dispatched: string[];
   paused: boolean;
   roster: [string, string[], number][];
-  /** The acts that changed after the count the session asked with, or every act when `whole` says so. */
+  /** The acts that changed after the count the session asked with. */
   acts: ActRow[];
-  /** Whether the acts are the whole table, which the session takes in place of its own. */
-  whole: boolean;
   /** The count of changes of the act table that the acts are read at. */
   count: number;
   selected: string;
@@ -112,6 +110,10 @@ export class HostView extends EventEmitter {
   /** An act whole, with all that a command printed, and nothing when the life holds no such act. */
   act(id: string): Promise<LiveAct | undefined> {
     return this.request("library", "act", [id]) as Promise<LiveAct | undefined>;
+  }
+  /** The text the World reads at a path, from where a chain stands, which makes no act and keeps nothing. */
+  look(path: string, chain: string): Promise<{ path: string; content: string }> {
+    return this.request("library", "look", [path, chain]) as Promise<{ path: string; content: string }>;
   }
   async dispose(): Promise<void> {
     await this.request("world", "dispose", []);

@@ -55,9 +55,10 @@ bun install && bun run build     # The TypeScript workspace and the N-API packag
 3. The gate, a type checker, reads the word first. A word that it refuses does not run, and the model reads the
    reason in its next turn.
 4. The Kernel runs the word in the module of its chain. Each call such as `read`, `bash`, `prompt`, or `wait`
-   makes an act, which the World serves: the disk, the machine, the models, and the record.
-5. Each act says what it did as a fact. The chain folds its facts into turns, which are the Python that the model
-   reads next.
+   makes an act, which goes to the ears in turn until one owns it: the ear of the act, or the World, which reaches
+   the disk, the machine, the models, and the record. The owner answers the act: now, or later.
+5. What an act does and what it comes to are facts about it. The chain folds its facts into turns, which are the
+   Python that the model reads next.
 
 The TUI shows the same life in three views. The feed shows the facts as cards. The transcript is the exact text of
 the turns. The changes are the files that the life wrote.

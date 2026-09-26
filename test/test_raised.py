@@ -11,18 +11,18 @@ async def test_raised_is_the_exception_object_that_the_last_rung_raised_rebound_
   """raised is the exception object that the last rung raised, rebound at each raise."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  assert engine.modules[root]["raised"] is None
+  assert engine.module(root)["raised"] is None
   with pytest.raises(ValueError, match="one"):
     await engine.rung("raise ValueError('one')", on=root)
-  first = engine.modules[root]["raised"]
+  first = engine.module(root)["raised"]
   assert isinstance(first, ValueError) and str(first) == "one"
   with pytest.raises(KeyError, match="two"):
     await engine.rung("raise KeyError('two')", on=root)
-  second = engine.modules[root]["raised"]
+  second = engine.module(root)["raised"]
   assert isinstance(second, KeyError) and second is not first
   with pytest.raises(Refused):
     await engine.rung("k = BAD", on=root)
-  assert engine.modules[root]["raised"] is second
+  assert engine.module(root)["raised"] is second
   assert await engine.rung("close(str(raised))", on=root) == "'two'"
 
 
@@ -30,9 +30,9 @@ async def test_raised_is_none_at_the_birth_of_the_module_of_a_chain() -> None:
   """raised is None at the birth of the module of a chain, so a word reads it before any rung raised."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
-  assert engine.modules[root]["raised"] is None
+  assert engine.module(root)["raised"] is None
   assert await engine.rung("close(raised)", on=root) is None
   with pytest.raises(ValueError, match="once"):
     await engine.rung("raise ValueError('once')", on=root)
   fresh = engine.chain("fresh", on=root)
-  assert engine.modules[fresh]["raised"] is None
+  assert engine.module(fresh)["raised"] is None

@@ -45,12 +45,21 @@ type Watcher = Box<dyn FnMut(&Object)>;
 
 /// One piece of work the World gave back as a future, and the fact its result becomes.
 enum Work {
-  /// The turn of a model, which answers an ask.
-  Answer { rung: String, later: Later<Object> },
+  /// The turn of a model, which answers a reply.
+  Reply { about: String, later: Later<Object> },
   /// A wait, done when its time is up.
   Wait { about: String, later: Later<()> },
   /// A prompt of the operator, closed with what the operator answered.
   Prompt { about: String, later: Later<Result<Object, Fault>> },
+}
+
+impl Work {
+  /// The act the work answers.
+  fn about(&self) -> &str {
+    match self {
+      Work::Reply { about, .. } | Work::Wait { about, .. } | Work::Prompt { about, .. } => about,
+    }
+  }
 }
 
 /// The three objects of the host the stand-in holds, by their ids.
@@ -163,10 +172,10 @@ fn worldly(
       }
       Object::none()
     }
-    "ask" => {
+    "reply" => {
       let turns = at(3).map_or_else(|| Object::list([]), |one| one.to_owned());
-      let answer = world.ask(&word(0), &word(1), &word(2), turns.as_ref());
-      later.push(Work::Answer { rung: word(0), later: answer });
+      let answer = world.reply(&word(0), &word(1), &word(2), turns.as_ref());
+      later.push(Work::Reply { about: word(0), later: answer });
       Object::none()
     }
     "run" => {
@@ -203,6 +212,12 @@ fn worldly(
       if let Some(mut run) = running.remove(&word(0)) {
         run.slay();
       }
+      Object::none()
+    }
+    // Another ear ended the act, so its future is dropped, which is how a future of rust is cancelled.
+    "over" => {
+      let about = word(0);
+      later.retain(|work| work.about() != about);
       Object::none()
     }
     _ => return Err(Fault::refused(format!("the World of the host has no {name}"))),
@@ -311,8 +326,8 @@ impl Inner {
       let mut i = 0;
       while i < self.host.later.len() {
         let done = match &mut self.host.later[i] {
-          Work::Answer { rung, later } => match later.as_mut().poll(cx) {
-            Poll::Ready(turn) => Some(Said::Fact(Fact::says("answer", rung, [turn]))),
+          Work::Reply { about, later } => match later.as_mut().poll(cx) {
+            Poll::Ready(turn) => Some(Said::Fact(Fact::says("done", about, [turn]))),
             Poll::Pending => None,
           },
           Work::Wait { about, later } => match later.as_mut().poll(cx) {
@@ -374,9 +389,8 @@ impl Opening {
 
   /// The life, opened from what a World kept of the life before it.
   ///
-  /// The record is the entries the World kept, each the fact, and for a query of a run what it was
-  /// answered. The stand-in runs first in a module of its own, then the engine, and
-  /// `boot` is given the Kernel of the crate and one generator for the World and for each ear.
+  /// The record is the entries the World kept, each one fact. The stand-in runs first in a module of its own, then
+  /// the engine, and `boot` is given the Kernel of the crate and one generator for the World and for each ear.
   pub fn boot(self, record: impl IntoIterator<Item = Object>) -> Result<Life, Fault> {
     let Opening { mut world, ears, mut names, limits } = self;
     let voice = Voice::default();
@@ -391,7 +405,7 @@ impl Opening {
     inner.ran(PREAMBLE, vec![])?;
     // The three objects of the host and the two modules are bound as names of the session, which every later
     // piece of code of the stand-in reads.
-    let opening = "__engine = module(__source, {**MODULE})\n__sheet = module(__sheet_source, {})\n__world, __gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __record, __world, __gate, __ears, __names)\n(__root, __raised)";
+    let opening = "__engine = loaded(__source, {**MODULE})\n__sheet = loaded(__sheet_source, {})\n__world, __gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __record, __world, __gate, __ears, __names)\n(__root, __raised)";
     let world = if typed { object("World", id(objects::WORLD)) } else { Object::none() };
     let got = inner.ran(
       opening,
@@ -512,20 +526,6 @@ impl Life {
     self.held.run("forgotten(__n)", vec![("__n", Object::int(n))]).map(|_| ())
   }
 
-  /// One reading of a map of the life where it stands: `acts`, `asked`, `outcomes` or `modules`, under these
-  /// keys, asked whether it holds the last key (`in`), for the value at it (`at`), for its keys (`keys`) or for
-  /// how many (`len`).
-  pub fn held(&mut self, name: &str, keys: Vec<Object>, ask: &str) -> Result<Object, Fault> {
-    self.held.run(
-      "held(__engine, __name, __keys, __ask)",
-      vec![
-        ("__name", Object::string(name)),
-        ("__keys", Object::list(keys)),
-        ("__ask", Object::string(ask)),
-      ],
-    )
-  }
-
   /// Who speaks in the life, and who speaks from now on when a value is given: `site`, read and set where it
   /// stands.
   pub fn site(&mut self, value: Option<&str>) -> Result<String, Fault> {
@@ -536,11 +536,9 @@ impl Life {
 
   /// What an act came to, once it is done, and nothing while it lives.
   pub fn outcome(&mut self, id: &str) -> Result<Option<Object>, Fault> {
-    let held = self.held("outcomes", vec![Object::string(id)], "in")?;
-    if !held.as_ref().as_bool().unwrap_or_default() {
-      return Ok(None);
-    }
-    self.held("outcomes", vec![Object::string(id)], "at").map(Some)
+    let got =
+      self.held.run("outcomes_of(__engine, [__id])[0]", vec![("__id", Object::string(id))])?;
+    Ok(entry(&got.as_ref(), 0).map(|one| one.to_owned()))
   }
 
   /// What to do when an act is done, given what it came to: told at once for an act that is done already, and
@@ -602,8 +600,13 @@ impl Life {
   }
 
   /// What an act came to, or nothing while it lives.
-  pub fn peek(&mut self, at: &str, on: &str) -> Result<Object, Fault> {
-    self.verb("peek", vec![Object::string(at)], Life::on(on))
+  pub fn peek(&mut self, at: &str) -> Result<Object, Fault> {
+    self.verb("peek", vec![Object::string(at)], vec![])
+  }
+
+  /// The facts on a chain, in the order they were said.
+  pub fn transcript(&mut self, on: &str) -> Result<Object, Fault> {
+    self.verb("transcript", vec![], Life::on(on))
   }
 
   /// The turns of a chain, as its model reads them.

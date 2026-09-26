@@ -1,6 +1,6 @@
 """HIDDEN, the span of no line."""
 
-from conftest import STANDS, Sand, heads, life, said, settle
+from conftest import STANDS, Sand, acts, heads, life, said, settle
 from furb import engine
 
 
@@ -16,4 +16,4 @@ async def test_hidden_is_the_span_of_no_line_which_an_act_takes_to_tell_nothing_
   told = [a[3] for a in said(log, "tell") if a[1] == command or a[3][0].startswith("#read")]
   assert told == [[f"#{command}", f"{command}: Act[Exit] = Act({command!r})"]]
   assert [one for one in heads(engine.turns(on=root)) if one.startswith((f"#{command}", "#read"))] == [f"#{command}"]
-  assert [a[4] for a in engine.asked.values() if a[0] == "read"] == ["a.txt"]
+  assert [a[4] for a in acts(log).values() if a[0] == "read"] == ["a.txt"]

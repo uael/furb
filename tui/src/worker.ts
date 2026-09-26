@@ -138,11 +138,12 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     host = hostModels(claude);
     const given = { ...options, models: host.models, roster: options.roster ?? host.roster };
     world = demo ? createDemoWorld(given) : new World(given);
+    // The tail of the record as the life before left it, since this life adds its stand as it opens.
+    const tail = world.records.entries.at(-1)?.[0];
     life = world.open();
     snapshots = new Snapshots(life, world);
-    const tail = world.records.entries.at(-1)?.[0];
     const event = tail && queueEvent(tail);
-    if (tail && event?.step === "begin") life.send("queue", tail[1], ["aborted", event.key]);
+    if (tail && event?.step === "begin") life.say("queue", tail[1], ["aborted", event.key]);
     world.on("fault", (error) =>
       self.postMessage({ fault: error instanceof Error ? error.message : String(error) }),
     );
@@ -159,13 +160,13 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     const entry = data.args[0] as FollowUp;
     const prior = queueDispatches(world.records.entries).get(entry.id);
     if (prior) return prior;
-    life.send("queue", entry.chain, [
+    life.say("queue", entry.chain, [
       "begin",
       entry.id,
       queueHash(entry.chain, entry.shape, entry.text, entry.actor),
     ]);
     const act = life.prompt(entry.shape, entry.text, { on: entry.chain, to: entry.actor });
-    life.send("queue", entry.chain, ["sent", entry.id, act.id]);
+    life.say("queue", entry.chain, ["sent", entry.id, act.id]);
     return act.id;
   }
   if (data.target === "library" && data.method === "model") {
@@ -183,6 +184,11 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     return world?.changes.read(Number(data.args[0]), Number(data.args[1]));
   if (data.target === "library" && data.method === "act")
     return world?.activity.acts.get(String(data.args[0]));
+  if (data.target === "library" && data.method === "look") {
+    if (!life || !world) throw new Error("The session is not open.");
+    // The World reads the path where the chain stands, as a read would, and no act is made, so nothing is kept.
+    return world.handle({ kind: "Read", args: [life.cwd(String(data.args[1])), String(data.args[0])] });
+  }
   if (data.target === "library" && data.method === "snapshot") {
     if (!snapshots) throw new Error("The session is not open.");
     return snapshots.take(String(data.args[0]), Number(data.args[1]));

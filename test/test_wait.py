@@ -1,17 +1,20 @@
 """wait, the act the World is done with when its seconds have passed."""
 
+import pytest
+
 from conftest import STANDS, Sand, life, paragraphs, said, settle
 from furb import engine
-from furb.engine import WORLD
+from furb.engine import WORLD, Refused
 
 
-async def test_a_wait_the_world_says_it_is_done_when_its_seconds_have_passed() -> None:
-  """A wait: the World says it is done when its seconds have passed, and it is over then."""
+async def test_a_wait_the_world_takes_it_and_says_it_is_done_when_its_seconds_have_passed() -> None:
+  """A wait: the World takes it and says it is done when its seconds have passed, and it is over then."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   act = engine.wait(0.1, on=root)
   await settle()
-  assert act not in engine.outcomes
+  assert [a[2] for a in said(log, "started") if a[1] == act] == [WORLD]
+  assert engine.peek(act, ...) is ...
   assert await act is None
   assert [a[2] for a in said(log, "done") if a[1] == act] == [WORLD]
 
@@ -35,5 +38,6 @@ async def test_it_tells_nothing_and_answers_nothing() -> None:
   assert await act is None
   assert [one for one in said(log, "tell") if one[1] == act] == []
   assert [one for one in paragraphs(engine.turns(on=root)) if act in one] == []
-  assert engine.read(f"{act}/stdout", on=root) is None
-  assert engine.peek(act, on=root) is None
+  with pytest.raises(Refused, match="nothing takes read"):
+    engine.read(f"{act}/stdout", on=root)
+  assert engine.peek(act) is None

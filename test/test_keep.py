@@ -16,11 +16,11 @@ async def test_one_entry_of_the_record_kept_and_said() -> None:
   await settle()
   kept = said(log, "keep")
   assert [one[3] for one in kept] == sand.record
-  assert [fact[0] for fact, *_ in sand.record] == ["chain", "stand", "bash", "out", "exited"]
+  assert [fact[0] for fact, *_ in sand.record] == ["chain", "stand", "done", "bash", "started", "merged", "out", "done"]
   assert {one[2] for one in kept} == {"journal"}
   later = Sand(stands=STANDS)
   _, over = await relived(later, list(sand.record))
-  got = engine.peek(act, on=over)
+  got = engine.peek(act)
   assert over == root and isinstance(got, Exit) and got.code == 0
 
 

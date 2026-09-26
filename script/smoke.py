@@ -1,4 +1,5 @@
-"""The smoke of a real life: one model, one record, and the record answering the same prompt the second time.
+"""The smoke of a real life: one model, one record, and the journal answering the same prompt from it the second
+time.
 
 Run it from the root of the repository, as `uv run python script/smoke.py`. It spends the dollars of one turn of
 one model and no more: the first life asks the model, and the second life is given the record of the first and is
@@ -16,7 +17,7 @@ from furb import engine
 from furb.cli import again, lived, say
 from furb.engine import Act
 from furb.provider.claude import BIN, cool
-from furb.world import kept
+from furb.world import answered, kept
 
 MESSAGE = "How many lines does the file a.txt hold?"
 """MESSAGE is what the model is asked, of a file it must read to answer."""
@@ -32,19 +33,14 @@ CEILING = 1.0
 """CEILING is the dollars the first life may spend, ten answers or so, so that a model that loops is paused."""
 
 
-def told(record: Path) -> list[list]:
-  """Every answer of a model that the record holds."""
-  return [entry[0] for entry in kept(record) if entry[0][0] == "answer"]
-
-
 def spent(record: Path) -> float:
   """The dollars the answers of the record cost."""
-  return sum(one[3][2][4] for one in told(record) if one[3] and one[3][2])
+  return sum(one[3][2][4] for one in answered(kept(record)) if one[3][2])
 
 
-def asks(calls: list[tuple]) -> list[tuple]:
-  """Every ask the World performed in one life."""
-  return [one for one in calls if one[0] == "ask"]
+def replies(calls: list[tuple]) -> list[tuple]:
+  """Every reply the World took in one life."""
+  return [one for one in calls if one[0] == "reply"]
 
 
 async def first(yard: Path, record: Path) -> None:
@@ -55,7 +51,7 @@ async def first(yard: Path, record: Path) -> None:
   try:
     got = await asyncio.wait_for(engine.prompt(int, MESSAGE, TO, on=root), STALL)
   except TimeoutError:
-    say(f"no answer in {STALL:.0f} seconds: {len(asks(world.calls))} ask(s) cost {spent(record):.4f} dollars")
+    say(f"no answer in {STALL:.0f} seconds: {len(replies(world.calls))} reply(s) cost {spent(record):.4f} dollars")
     # A chain at the ceiling of its grant is paused and answers nothing more, which is why nothing came back.
     heads = [line.split()[1:2] for turn in engine.turns(on=root) for line in turn[1].split("\n") if line[1:2].isalnum()]
     if ["paused"] in heads:
@@ -63,8 +59,8 @@ async def first(yard: Path, record: Path) -> None:
     raise
   finally:
     await cool()
-  say(f"the first life gave {got!r}, after {len(asks(world.calls))} ask(s)")
-  for one in told(record):
+  say(f"the first life gave {got!r}, after {len(replies(world.calls))} reply(s)")
+  for one in answered(kept(record)):
     _, word, usage, _ = one[3]
     say(f"the word of the model:\n{word}")
     say(f"the usage of the answer: {usage}")
@@ -72,7 +68,8 @@ async def first(yard: Path, record: Path) -> None:
 
 
 async def second(yard: Path, record: Path) -> None:
-  """The second life, on the record of the first: it asks no model, since the record answers the prompt."""
+  """The second life, on the record of the first: it asks no model, since the journal answers the prompt from that
+  record."""
   world, root, held = lived(record, yard, TO, keeps=True)
   name = again(held, root, int, MESSAGE, TO)
   assert name, "the record holds no prompt of the operator"
@@ -80,9 +77,9 @@ async def second(yard: Path, record: Path) -> None:
     got = await asyncio.wait_for(Act(name), STALL)
   finally:
     await cool()
-  say(f"the second life gave {got!r}, after {len(asks(world.calls))} ask(s), from {name}")
-  assert got == LINES, f"the record answered {got!r} and not {LINES}"
-  assert asks(world.calls) == [], "the second life asked a model for what the record holds"
+  say(f"the second life gave {got!r}, after {len(replies(world.calls))} reply(s), from {name}")
+  assert got == LINES, f"the journal answered {got!r} and not {LINES}"
+  assert replies(world.calls) == [], "the second life asked a model for what the record holds"
 
 
 def main() -> int:

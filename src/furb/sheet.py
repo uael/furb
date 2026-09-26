@@ -112,8 +112,12 @@ def gate(engine: dict[str, object], program: Sequence[str], word: str, checked: 
 
 def gating(engine: dict[str, object], checked: Checked) -> Ear:
   """The gate as the ear of a life: it answers each gate with what it finds against the word on the sheet of the
-  engine whose names it is given, after the program the gate says."""
+  engine whose names it is given, after the program of the chain as it stands when the gate takes it."""
+  program = engine["program"]
+  assert callable(program)
   while True:
     match (yield):
-      case ("gate", qid, _, _, word, program):
-        yield "done", qid, gate(engine, [*program.values()], word, checked)
+      case ("gate", qid, _, on, word):
+        words = program(on)
+        assert isinstance(words, dict)
+        yield "done", qid, gate(engine, [*words.values()], word, checked)

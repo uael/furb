@@ -16,7 +16,7 @@ async def test_whether_the_word_of_a_rung_may_run() -> None:
   act = engine.prompt(int, "count", on=root)
   assert await act == 2
   await settle()
-  assert gatings() == [("k = 1", []), ("close(k + 1)", ["k = 1", bindings(root, act, "int")])]
+  assert gatings(log) == [("k = 1", []), ("close(k + 1)", ["k = 1", bindings(root, act, "int")])]
   assert findings(log) == [[], []]
 
 
@@ -27,16 +27,16 @@ async def test_the_word_of_a_rung_runs_only_if_the_gate_accepts_the_word_or_if_t
   with pytest.raises(Refused):
     await engine.rung("k = BAD", on=root)
   assert findings(log) == [[BAD]]
-  assert ran(log) == [] and "k" not in engine.modules[root]
+  assert ran(log) == [] and "k" not in engine.module(root)
   assert await engine.rung("k = 1", on=root) is None
-  assert ran(log) == ["k = 1"] and engine.modules[root]["k"] == 1
+  assert ran(log) == ["k = 1"] and engine.module(root)["k"] == 1
   sand.script[root] = ["close(k)"]
   act = engine.prompt(int, "count", on=root)
   assert await act == 1
   wrote = bindings(root, act, "int")
   assert [a[4] for a in said(log, "rung") if a[2] == root] == [wrote]
-  assert [word for word, _ in gatings()] == ["k = BAD", "k = 1", "close(k)"]
-  assert ran(log) == ["k = 1", wrote, "close(k)"] and engine.modules[root][act] == act
+  assert [word for word, _ in gatings(log)] == ["k = BAD", "k = 1", "close(k)"]
+  assert ran(log) == ["k = 1", wrote, "close(k)"] and engine.module(root)[act] == act
 
 
 async def test_the_gate_checks_the_word_of_a_rung_against_the_rungs_before_it_in_record_order() -> None:
@@ -49,7 +49,7 @@ async def test_the_gate_checks_the_word_of_a_rung_against_the_rungs_before_it_in
     await engine.rung("c = later", on=root)
   await engine.rung("later = 3", on=root)
   await engine.rung("c = later", on=root)
-  assert gatings() == [
+  assert gatings(log) == [
     ("a = 1", []),
     ("b = a + 1", ["a = 1"]),
     ("c = later", ["a = 1", "b = a + 1"]),
@@ -88,14 +88,15 @@ async def test_the_gate_gives_no_finding_when_the_gate_accepts_the_rung() -> Non
   assert engine.gate("k = BAD", on=root) == [BAD]
 
 
-async def test_the_word_of_a_rung_is_gated_again_in_every_life_that_runs_it() -> None:
-  """The word of a rung is gated again in every life that runs it, since the gate is of the moment and its findings are kept by nobody."""
+async def test_the_journal_keeps_what_the_gate_found() -> None:
+  """The journal keeps what the gate found, since the gate is of the outside, so a later life reads the same findings and asks the gate nothing again."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   assert gated(log) == ["close(1)"] and findings(log) == [[]]
-  assert [fact for fact, *_ in sand.record if fact[0] == "gate"] == []
+  assert [fact[1] for fact, *_ in sand.record if fact[0] == "gate"] == ["gate1"]
   again, over = await relived(Sand(stands=STANDS), list(sand.record))
   assert over == root and gated(again) == ["close(1)"] and findings(again) == [[]]
+  assert [a[2] for a in said(again, "done") if a[1] == "gate1"] == ["journal"]

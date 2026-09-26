@@ -81,7 +81,8 @@ ignore = ["S101"]
 # The surface speaks the engine's own vocabulary: its verbs shadow builtins on purpose, take the parameters the
 # contract names, and its exceptions are named as the contract names them.
 "src/furb/engine.pyi" = ["N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "E501", "PLR0904"]
-"src/furb/engine.py" = ["S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "ANN", "PLR0904", "EM101", "EM102", "TRY003", "PLR0917", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "SIM105", "C901", "SLF001"]
+# The sandbox carries no bound method as a value, so boot binds each read of the life through a lambda.
+"src/furb/engine.py" = ["PLW0108", "S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "ANN", "PLR0904", "EM101", "EM102", "TRY003", "PLR0917", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "SIM105", "C901", "SLF001"]
 
 [tool.ruff.lint.pycodestyle]
 max-line-length = 160
@@ -142,8 +143,8 @@ asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["error"]
 
 [tool.coverage.report]
-# The suite runs every line of engine.py. The lines it cannot reach are the bodies of send, ask, act and drive
-# before a life is living: boot binds the four to itself before anything can call them, so the stubs stand only
-# to name the error of a call outside a life.
+# The suite runs every line of engine.py. The lines it cannot reach are the bodies of say, act, drive, get, peek
+# and transcript before a life is living: boot binds the six to itself before anything can call them, so the stubs
+# stand only to name the error of a call outside a life.
 fail_under = 100
 exclude_also = ['raise RuntimeError\("no life"\)']

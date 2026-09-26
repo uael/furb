@@ -63,7 +63,7 @@ async def test_a_write_whoever_serves_the_path_of_the_text_takes_its_content() -
   assert engine.write(Text(act, "k = 1"), on=root) == Text(act, "k = 1")
   await settle()
   assert sand.files == {"/w/b.txt": "one\n"}
-  assert engine.modules[root]["k"] == 1
+  assert engine.module(root)["k"] == 1
   assert engine.read(act, on=root) == Text(act, "k = 1")
 
 
@@ -75,8 +75,7 @@ async def test_write_is_given_a_text_and_gives_the_text_as_it_is_on_disk_after_t
   assert engine.write(Text("b.txt", "two\n"), on=root) == Text("/w/b.txt", "two\n")
   assert sand.files["/w/b.txt"] == "two\n"
   assert engine.read("b.txt", on=root) == Text("/w/b.txt", "two\n")
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   asked = said(held, "write")[0]
   assert asked[4] == Text("b.txt", "one\n")
   assert [a[3] for a in said(held, "done") if a[1] == asked[1]] == [Text("/w/b.txt", "one\n")]
@@ -112,8 +111,7 @@ async def test_a_write_takes_no_show() -> None:
   _, root = life(sand)
   assert await engine.rung("write(Text('b.txt', 'one\\ntwo\\n'))", on=root) is None
   assert of(engine.turns(on=root), "write") == []
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   assert said(held, "write")[0][4:] == (Text("b.txt", "one\ntwo\n"),)
 
 
@@ -135,9 +133,8 @@ async def test_a_write_to_the_door_of_a_prompt_edits_the_program_of_its_ladder()
   got = engine.write(Text(act, "k = 21"), on=root)
   await settle()
   assert got == Text(act, "k = 21")
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
-  assert said(held, "write") == [("write", "write@operator.3", OPERATOR, root, Text(act, "k = 21"))]
+  held = engine.transcript(root)
+  assert said(held, "write") == [("write", "write1", OPERATOR, root, Text(act, "k = 21"))]
   assert [(a[2], a[4], a[5]) for a in said(log, "rung")] == [(act, "k = 21", "")]
   engine.write(Text(act, "k = 21\nk = 22"), on=root)
   await settle()
@@ -147,7 +144,7 @@ async def test_a_write_to_the_door_of_a_prompt_edits_the_program_of_its_ladder()
     (root, "k = 21", first),
     (act, "k = 22", ""),
   ]
-  assert engine.read(act, on=root) == Text(act, "k = 21\nk = 22") and engine.modules[root]["k"] == 22
+  assert engine.read(act, on=root) == Text(act, "k = 21\nk = 22") and engine.module(root)["k"] == 22
 
 
 async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_the_text_it_took() -> None:
@@ -157,14 +154,14 @@ async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_
   act = engine.prompt(int, "count", to=OPERATOR, on=root)
   got = engine.write(Text(act, "k = 21"), on=root)
   await settle()
-  assert engine.modules[root]["k"] == 21
+  assert engine.module(root)["k"] == 21
   assert [a[4] for a in said(log, "rung")] == ["k = 21"]
-  assert got == Text(act, "k = 21") and [a[0] for a in sand.calls] == ["stand", "start"]
+  assert got == Text(act, "k = 21") and [a[0] for a in sand.calls] == ["stand", "prompt"]
   again = engine.write(Text(act, "k = 22"), on=root)
   await settle()
   assert again == Text(act, "k = 22") and engine.read(act, on=root) == Text(act, "k = 22")
-  assert [a[4] for a in said(log, "rung")] == ["k = 21", "k = 22"] and engine.modules[root]["k"] == 22
-  assert [a[0] for a in sand.calls] == ["stand", "start"]
+  assert [a[4] for a in said(log, "rung")] == ["k = 21", "k = 22"] and engine.module(root)["k"] == 22
+  assert [a[0] for a in sand.calls] == ["stand", "prompt"]
 
 
 async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_of_that_rung_out() -> None:
@@ -180,8 +177,8 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
   act = engine.prompt(object, "fix it", on=root)
   assert await act == (1, 2, "k = 1\nok = 2")
   await settle()
-  binding, first, writer = (a[1] for a in said(log, "run")[:3])
-  assert [(a[4], a[5]) for a in said(log, "run")] == [
+  binding, first, writer = (a[4] for a in said(log, "run")[:3])
+  assert [(a[5], a[6]) for a in said(log, "run")] == [
     (f"chain1: Act[object] = Act('chain1')\n{act}: Act[object] = Act({act!r})", ""),
     ("k = 1", ""),
     ("mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))", ""),
@@ -190,9 +187,9 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
     ("ok = 2", ""),
     ("close((k, ok, read(get(acting())[2]).content))", ""),
   ]
-  _, program = engine.ask("program", root)
+  program = engine.program(root)
   assert isinstance(program, dict) and writer not in program
-  assert list(program.values()) == [a[4] for a in said(log, "run")[3:]]
+  assert list(program.values()) == [a[5] for a in said(log, "run")[3:]]
   assert engine.read(act, on=root) == Text(act, "k = 1\nok = 2\nclose((k, ok, read(get(acting())[2]).content))")
 
 

@@ -2432,15 +2432,23 @@ export class App {
     if (value.startsWith("furb-image://")) this.imageActions(value);
     else if (act?.kind === "chain") await this.session.select(act.id);
     else if (act && act.id === value && act.on === this.session.selected) this.go("feed", act.id);
-    else
-      this.showValue(
-        value,
-        (
-          (await this.session.life.read(value, { is: "name", name: "HIDDEN" }, this.session.selected)) as {
-            content: string;
-          }
-        ).content,
-      );
+    else this.showValue(value, await this.referenced(value));
+  }
+
+  /** What a reference holds, as a view reads it: the text of a door, which the outcome of its act holds under the
+   * path of that door as an Exit holds its streams; the act the door opens on, whole, while its outcome holds no
+   * such text; or the text the World reads at the path. This read is no act of the operator, so it makes none and
+   * the journal keeps nothing of it. */
+  private async referenced(value: string): Promise<unknown> {
+    const act = this.session.actOf(value);
+    if (!act) return (await this.session.world.look(value, this.session.selected)).content;
+    const whole = (await this.session.world.act(act.id)) ?? act;
+    const held = whole.value && typeof whole.value === "object" ? Object.values(whole.value) : [];
+    const door = held.find(
+      (one): one is { path: string; content: string } =>
+        Boolean(one) && typeof one === "object" && (one as { path?: unknown }).path === value,
+    );
+    return door ? door.content : whole;
   }
 
   private async referenceHover(value: string, x: number, y: number): Promise<void> {
@@ -2450,15 +2458,7 @@ export class App {
         ? "Image attachment. Click to open its actions."
         : act
           ? `${act.kind}  ${act.done ? display(act.value) : "pending"}`
-          : (
-              (await this.session.life.read(
-                value,
-                { is: "name", name: "HIDDEN" },
-                this.session.selected,
-              )) as {
-                content: string;
-              }
-            ).content;
+          : display(await this.referenced(value));
       if (this.closed || this.overlay) return;
       this.hover?.destroyRecursively();
       this.hover = this.box({
@@ -4396,9 +4396,8 @@ export class App {
         detail: value,
         run: () => {
           if (act.kind === "chain") return this.session.select(act.id);
-          void this.session.life
-            .read(value, undefined, this.session.selected)
-            .then((text) => this.showValue(value, text))
+          void this.referenced(value)
+            .then((held) => this.showValue(value, held))
             .catch(this.report);
         },
       });
@@ -4416,9 +4415,7 @@ export class App {
   }
   async names(): Promise<void> {
     const w = this.session;
-    const names = ((await w.life.held("modules", [w.selected], "keys")) as string[]).filter(
-      (name) => !name.startsWith("_"),
-    );
+    const names = (await w.life.names(w.selected)).filter((name) => !name.startsWith("_"));
     // The names that the words of this chain bind come first, then the acts of the chain, then what the engine gives.
     const identifier = "[\\p{L}_][\\p{L}\\p{N}_]*";
     // A name is bound by an assignment, a def or a class, a for loop, an import, or an as.
@@ -4455,7 +4452,7 @@ export class App {
     );
   }
   private async completeNames(): Promise<void> {
-    const names = (await this.session.life.held("modules", [this.session.selected], "keys")) as string[];
+    const names = await this.session.life.names(this.session.selected);
     const prefix = this.beforeCursor().match(/[\p{L}_][\p{L}\p{N}_]*$/u)?.[0] ?? "";
     this.openPalette(
       "Complete Python name",

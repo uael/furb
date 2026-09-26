@@ -7,8 +7,8 @@
 //! life drives and whose value it says into the engine as the fact the engine waits for.
 //!
 //! A command is the one thing that speaks while it runs: it says what it wrote as it writes it, and its code when
-//! it ends. So a World is given a [`Voice`] once, when the life opens, and a command speaks through it from
-//! wherever it runs.
+//! it ends, which the stand-in answers the command with, as its Exit of the streams it heard. So a World is given a
+//! [`Voice`] once, when the life opens, and a command speaks through it from wherever it runs.
 
 use std::{
   collections::VecDeque,
@@ -88,8 +88,10 @@ pub trait Running {
 /// One thing a World said while nothing asked it to.
 #[derive(Debug, Clone)]
 pub enum Said {
-  /// One fact, said as the World: what a command wrote, or its code when it ended.
+  /// One fact, said as the World: what a command wrote, or what a wait or a reply came to.
   Fact(Fact),
+  /// A command ended, with its code, or with nothing at its timeout.
+  Exited { about: String, code: Option<i64> },
   /// One act closed with a value, which is how a prompt of the operator is answered.
   Closed { id: String, value: Object },
   /// One chain paused, which a World does when a model answers nothing twice.
@@ -101,6 +103,11 @@ impl Said {
   pub(crate) fn object(&self) -> Object {
     match self {
       Said::Fact(one) => Object::tuple([Object::string("fact"), one.0.clone()]),
+      Said::Exited { about, code } => Object::tuple([
+        Object::string("exited"),
+        Object::string(about.clone()),
+        code.map_or_else(Object::none, Object::int),
+      ]),
       Said::Closed { id, value } => {
         Object::tuple([Object::string("close"), Object::string(id.clone()), value.clone()])
       }
@@ -138,7 +145,7 @@ impl Voice {
 
   /// The code a command ended with, or nothing for one ended at its timeout.
   pub fn exited(&self, about: &str, code: Option<i64>) {
-    self.say(Fact::says("exited", about, [code.map_or_else(Object::none, Object::int)]));
+    self.holds(Said::Exited { about: about.to_owned(), code });
   }
 
   /// One act, closed with a value.
@@ -206,8 +213,8 @@ pub trait World {
   /// One entry of the record, kept.
   fn keep(&mut self, entry: ObjectRef<'_>);
 
-  /// The turn of a model asked on a chain, given what it reads: the answer, as the engine reads a turn.
-  fn ask(&mut self, rung: &str, on: &str, actor: &str, turns: ObjectRef<'_>) -> Later<Object>;
+  /// The turn of a model a reply asks for on a chain, given what it reads: the answer, as the engine reads a turn.
+  fn reply(&mut self, about: &str, on: &str, actor: &str, turns: ObjectRef<'_>) -> Later<Object>;
 
   /// A command started: it speaks through the Voice as it runs, and this is what the engine may do to it.
   fn run(&mut self, command: Command) -> Box<dyn Running>;

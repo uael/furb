@@ -1,8 +1,8 @@
 """Showing, a text a note shows and the show of it."""
 
-from conftest import STANDS, Sand, life, of, paragraphs, said, settle
+from conftest import STANDS, Sand, life, of, paragraphs, said, settle, world_says
 from furb import engine
-from furb.engine import TAIL, WORLD, Text, span
+from furb.engine import TAIL, Text, span
 
 THREE = "one\ntwo\nthree\n"
 """A text of three lines."""
@@ -77,8 +77,8 @@ async def test_a_show_applies_to_a_text_or_to_a_stream() -> None:
   act = engine.bash("many", show=span(1, 1), on=root)
   await settle()
   command = said(log, "bash")[0][1]
-  engine.send("out", command, "a\nb\nc\n", "stdout", by=WORLD)
-  engine.send("exited", command, 0, by=WORLD)
+  world_says("out", command, "a\nb\nc\n", "stdout")
+  sand.exits(command, 0)
   assert (await act).code == 0
   assert of(engine.turns(on=root), "read") == ["#read n.txt\n# /w/n.txt, 0 known\n# 1 one"]
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{command} exited")] == [

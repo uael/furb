@@ -1,6 +1,6 @@
 """Fact, what everything said in a life is."""
 
-from conftest import STANDS, Sand, life, said, settle
+from conftest import STANDS, Sand, acts, dones, life, said, settle, world_says
 from furb import engine
 from furb.engine import OPERATOR, WORLD
 
@@ -27,13 +27,19 @@ async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_
   assert await engine.prompt(int, "count", on=root) == 1
   assert all(isinstance(one, tuple) and isinstance(one[0], str) for one in log)
   assert {OPERATOR, WORLD, "gate", root, "journal"} <= {one[2] for one in log}
-  assert {"chain", "stand", "prompt", "rung", "ask", "answer", "ready", "run", "ran", "keep"} <= {one[0] for one in log}
-  assert [(name, one[0]) for name, one in engine.acts.items()] == [
-    ("chain1", "chain"),
-    ("prompt1", "prompt"),
-    ("rung1", "rung"),
-    ("rung2", "rung"),
-  ]
+  kinds = {"chain", "module", "stand", "prompt", "rung", "reply", "gate", "started", "done", "ready", "run", "keep"}
+  assert kinds <= {one[0] for one in log}
+  assert {name: one[0] for name, one in acts(log).items()} == {
+    "chain1": "chain",
+    "stand1": "stand",
+    "prompt1": "prompt",
+    "rung1": "rung",
+    "rung2": "rung",
+    "reply1": "reply",
+    "run1": "run",
+    "gate1": "gate",
+    "run2": "run",
+  }
 
 
 async def test_a_fact_says_who_said_it() -> None:
@@ -44,9 +50,9 @@ async def test_a_fact_says_who_said_it() -> None:
   assert await engine.prompt(str, "read it", on=root) == "one\n"
   assert said(log, "rung")[0][1:3] == ("rung1", "prompt1")
   assert said(log, "read")[0][2] == "rung1"
-  assert said(log, "answer")[0][2] == WORLD
-  assert [one[2] for one in said(log, "done") if one[1].startswith("gate@")] == ["gate"]
-  assert [(one[1], one[2]) for one in said(log, "ran")] == [("rung2", "rung2"), ("rung1", "rung1")]
+  assert [one[2] for one in said(log, "done") if one[1].startswith("reply")] == [WORLD]
+  assert [one[2] for one in said(log, "done") if one[1].startswith("gate")] == ["gate"]
+  assert [(one[1], one[2]) for one in dones(log, "run")] == [("run1", "run1"), ("run2", "run2")]
   engine.read("a.txt", on=root)
   assert said(log, "read")[-1][2] == OPERATOR
 
@@ -69,11 +75,11 @@ async def test_a_control_is_about_the_act_it_is_over() -> None:
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
   act = engine.bash("slow", on=root)
-  engine.send("out", act, "half\n", "stdout", by=WORLD)
+  world_says("out", act, "half\n", "stdout")
   engine.cancel(act)
   await settle()
   assert [one[1] for one in said(log, "cancel")] == [act]
-  assert {one[0] for one in log if one[1] == act} == {"bash", "start", "out", "exited", "tell", "done", "cancel"}
+  assert {one[0] for one in log if one[1] == act} == {"bash", "started", "out", "tell", "done", "cancel"}
   told = [one for one in said(log, "tell") if one[1] == act]
   assert [one[3][0] for one in told] == ["#bash1 slow"]
 
@@ -139,8 +145,10 @@ async def test_the_world_is_given_the_id_of_the_act_and_the_facts_about_the_act_
   log, root = life(sand)
   act = engine.bash("echo hi", on=root)
   await settle()
-  assert [one[1] for one in sand.calls if one[0] == "start"] == [act]
-  assert {one[1] for one in log if one[0] in ("out", "exited", "start")} == {act}
+  assert [one[1] for one in sand.calls if one[0] == "bash"] == [act]
+  assert {
+    one[1] for one in log[log.index(engine.get(act)) :] if one[0] in ("out", "done", "started") and one[2] == WORLD
+  } == {act}
   assert (await act).code == 0
 
 
@@ -155,5 +163,5 @@ async def test_a_prompt_that_a_rung_makes_on_another_chain_is_an_act_of_that_cha
   await settle()
   theirs = said(log, "prompt")[-1]
   assert theirs[3] == two
-  _, held = engine.ask("transcript", two, two)
+  held = engine.transcript(two)
   assert isinstance(held, list) and theirs in held

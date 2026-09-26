@@ -2,9 +2,9 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, heads, life, said, settle
+from conftest import STANDS, Sand, acts, heads, life, said, settle
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Refused
+from furb.engine import OPERATOR, Refused
 
 COST = (80000, 0, 0, 0, 1.5)
 """One answer of a model: a dollar and a half, and a fifth of the window of the actor the suite stands on."""
@@ -19,10 +19,10 @@ async def test_while_a_pause_stands_nothing_that_the_pause_is_over_hears() -> No
   await settle()
   command = said(log, "bash")[0][1]
   engine.pause(root)
-  engine.send("exited", command, 0, by=WORLD)
+  sand.exits(command, 0)
   await settle()
-  assert act not in engine.outcomes
-  assert [one for one in said(log, "done") if one[1] == command] == []
+  assert engine.peek(act, ...) is ...
+  assert f"#{command} exited 0" not in heads(engine.turns(on=root))
   engine.wake(root)
   await settle()
   assert (await act) == 0
@@ -38,11 +38,11 @@ async def test_a_control_is_a_fact_over_an_act() -> None:
   step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
   engine.cancel(act)
   await settle()
-  assert [isinstance(engine.outcomes[one], CancelledError) for one in (act, step, command)] == [True, True, True]
+  assert [isinstance(engine.peek(one), CancelledError) for one in (act, step, command)] == [True, True, True]
   mine = engine.bash("elsewhere", on=root)
   engine.cancel(root)
   await settle()
-  assert isinstance(engine.outcomes[mine], CancelledError)
+  assert isinstance(engine.peek(mine), CancelledError)
 
 
 async def test_a_control_reaches_what_it_is_over_and_whatever_else_its_words_name() -> None:
@@ -57,7 +57,7 @@ async def test_a_control_reaches_what_it_is_over_and_whatever_else_its_words_nam
   await settle()
   word = said(log, "close")[0]
   assert (word[1], word[3]) == (act, 21)
-  assert engine.outcomes[act] == 21 and isinstance(engine.outcomes[step], CancelledError)
+  assert engine.peek(act) == 21 and isinstance(engine.peek(step), CancelledError)
 
 
 async def test_a_control_is_no_act_it_takes_no_name_of_its_own() -> None:
@@ -65,11 +65,11 @@ async def test_a_control_is_no_act_it_takes_no_name_of_its_own() -> None:
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
   act = engine.bash("slow", on=root)
-  made = set(engine.acts)
+  made = set(acts(log))
   engine.pause(act)
   engine.cancel(act)
   await settle()
-  assert set(engine.acts) == made
+  assert set(acts(log)) == made
   assert [(one[0], one[1]) for one in log if one[0] in ("pause", "cancel")] == [("pause", act), ("cancel", act)]
   kept = [fact for fact, *_ in sand.record if fact[0] in ("pause", "cancel")]
   assert [(one[0], one[1], one[2]) for one in kept] == [("pause", act, OPERATOR), ("cancel", act, OPERATOR)]
@@ -100,7 +100,7 @@ async def test_it_reaches_by_the_chain_as_well_as_by_the_name() -> None:
   assert not engine.under(act, root)
   engine.cancel(root)
   await settle()
-  assert isinstance(engine.outcomes[act], CancelledError)
+  assert isinstance(engine.peek(act), CancelledError)
 
 
 async def test_a_control_carries_the_header_it_tells() -> None:
@@ -135,9 +135,9 @@ async def test_a_pause_is_over_the_act_it_names_and_everything_under_it() -> Non
   await settle()
   command = said(log, "bash")[0][1]
   engine.pause(act)
-  engine.send("exited", command, 0, by=WORLD)
+  sand.exits(command, 0)
   await settle()
-  assert act not in engine.outcomes and command not in engine.outcomes
+  assert engine.peek(act, ...) is ... and f"#{command} exited 0" not in heads(engine.turns(on=root))
   engine.wake(act)
   await settle()
   assert (await act) == 0

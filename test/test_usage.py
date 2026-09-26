@@ -1,8 +1,7 @@
 """Usage, what one answer of a model cost."""
 
-from conftest import STANDS, Sand, heads, life, relived, said, settle
+from conftest import STANDS, Sand, heads, life, relived, said, settle, world_says
 from furb import engine
-from furb.engine import WORLD
 
 COST = (80000, 30, 200, 10, 1.5)
 """The usage of one answer: the words read and written, those read again and kept, and the dollars."""
@@ -27,19 +26,19 @@ async def test_a_usage_holds_the_token_counts_and_the_dollars_of_one_model_respo
 
 
 async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_the_window_of_the_actor() -> None:
-  """The share of the window it filled is the words it read against the window of the actor its rung names, in the standing the chain stood on when that rung was born, so no word of it says the share."""
+  """The share of the window it filled is the words it read against the window of the actor its rung names, in the standing where the answer lands, so no word of it says the share."""
   sand = Sand(stands=STANDS, cost=COST)
   log, root = life(sand)
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
   sand.script[root] = ["a = 1", "close(2)"]
   assert await engine.prompt(int, "count", on=root) == 2
-  one, two = [a[1] for a in said(log, "answer")]
+  one, two = [a[2] for a in said(log, "reply")]
   assert [line for line in heads(engine.turns(on=root)) if " ledger " in line] == [
     f"#{one} ledger spent=1.5 filled=0.2",
     f"#{two} ledger spent=3.0 filled=0.2",
   ]
-  assert engine.offered(STANDS, "m/low") == 400000 and COST[0] / 400000 == 0.2
+  assert engine.offered(STANDS[0], "m/low") == 400000 and COST[0] / 400000 == 0.2
   assert len(COST) == 5
   engine.cancel(ceiling)
   rebound = Sand(stands=STANDS, cost=COST)
@@ -55,12 +54,13 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   _, root = life(first)
   engine.prompt(int, "count", on=root)
   await settle()
-  gone = [[STANDS[0][0], STANDS[0][2]], "/w", "n/low"]
-  heard, _ = await relived(Sand(stands=gone, cost=COST), list(first.record))
+  wider: list = [[STANDS[0][0], ["m", ["low"], 800000]], "/w", "m/low"]
+  heard, _ = await relived(Sand(stands=wider, cost=COST), list(first.record))
   step = said(heard, "rung")[0]
-  assert step[6] == "m/low" and [a[1] for a in said(heard, "stood")] == [root]
-  assert engine.offered(gone, "m/low") is None
+  assert step[6] == "m/low" and [a[1] for a in said(heard, "stand")] == ["stand1", "stand2"]
+  assert engine.offered(wider[0], "m/low") == 800000
   engine.grant(share=0.9, on=root)
-  engine.send("answer", step[1], ("assistant", "close(3)", COST, None), by=WORLD)
+  (asked,) = [a for a in engine.transcript(root) if a[0] == "reply"]
+  world_says("done", asked[1], ("assistant", "close(3)", COST, None))
   await settle()
-  assert [line.split("filled=")[1] for line in heads(engine.turns(on=root)) if " ledger " in line] == ["0.2"]
+  assert [line.split("filled=")[1] for line in heads(engine.turns(on=root)) if " ledger " in line] == ["0.1"]

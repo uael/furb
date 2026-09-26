@@ -102,16 +102,14 @@ test("deleting a session moves its record and state to trash, keeps other sessio
     expect(library.current).toBe(second);
     expect(second.session.life).toBe(otherLife);
     await otherLife.result(await otherLife.rung("still_alive = 17"));
-    expect(await otherLife.held("modules", [second.session.selected, "still_alive"], "at")).toBe(17);
+    expect((await otherLife.inspect("still_alive", second.session.selected)).value).toBe(17);
     expect(await stat(first.path).catch(() => null)).toBeNull();
     expect(await stat(`${first.path}.lock`).catch(() => null)).toBeNull();
     const archived = join(trash, basename(first.path));
     expect((await stat(archived)).isFile()).toBe(true);
     expect((await stat(`${archived}.lock`)).isFile()).toBe(true);
     const restored = await library.import(archived, group);
-    expect(
-      await restored.session?.life.held("modules", [restored.session.selected, "kept_value"], "at"),
-    ).toBe(41);
+    expect((await restored.session?.life.inspect("kept_value", restored.session.selected))?.value).toBe(41);
     const locked = join(group.directory, ".furb/sessions/locked.jsonl");
     const opened = await openEngine({ cwd: directory, record: locked, demo: true });
     external = new Session(opened.life, opened.world, true, preferences);

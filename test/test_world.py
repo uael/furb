@@ -14,8 +14,8 @@ async def test_world_is_the_name_that_boot_takes_the_world_under() -> None:
   assert await engine.prompt(int, "run it", on=root) == 0
   await settle()
   _, command, *_ = said(log, "bash")[0]
-  assert said(log, "answer")[0][2] == WORLD
-  assert [a[2] for a in log if a[0] in ("out", "exited")] == [WORLD, WORLD]
+  assert [a[2] for a in said(log, "done") if a[1] == "reply1"] == [WORLD]
+  assert [a[2] for a in log if a[1] == command and a[0] in ("out", "done")] == [WORLD, WORLD]
   _, standing, *_ = said(log, "stand")[0]
   assert [a[2] for a in said(log, "done") if a[1] == standing] == [WORLD]
-  assert [a[1] for a in said(sand.calls, "start")] == [command]
+  assert [a[1] for a in said(sand.calls, "bash")] == [command]

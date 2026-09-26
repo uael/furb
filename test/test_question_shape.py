@@ -1,21 +1,21 @@
 """Question, a fact that takes a name of its own and is answered."""
 
-from conftest import STANDS, Sand, life, said, settle, sown
+from conftest import STANDS, Sand, acts, life, said, settle, sown
 from furb import engine
 from furb.engine import OPERATOR, Act, Text
 
 
 async def test_a_fact_that_takes_a_name_of_its_own_when_it_is_said_and_is_answered() -> None:
-  """A fact that takes a name of its own when it is said and is answered: an act if it lives, a query if it does not."""
+  """A fact that takes a name of its own when it is said and is answered, which is an act: answered now with a done, or later, with a started now and a done after it."""
   sand = sown()
   log, root = life(sand)
   act = engine.bash("echo hi", on=root)
-  assert engine.acts[act] == said(log, "bash")[0]
+  assert engine.get(act) == said(log, "bash")[0] and [a[1] for a in said(log, "started")][-1] == act
   assert (await act).code == 0
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
   asked = said(log, "read")[0]
-  assert engine.asked[asked[1]] == asked and asked[1] not in engine.acts
-  assert engine.outcomes[asked[1]] == Text("/w/a.txt", "one\ntwo\n")
+  assert engine.get(asked[1]) == asked and [a for a in said(log, "started") if a[1] == asked[1]] == []
+  assert engine.peek(asked[1]) == Text("/w/a.txt", "one\ntwo\n")
 
 
 async def test_a_question_is_a_fact_whose_about_is_its_own_name_and_whose_first_word_is_the_chain() -> None:
@@ -30,14 +30,14 @@ async def test_a_question_is_a_fact_whose_about_is_its_own_name_and_whose_first_
   assert engine.scope(act) == root and engine.scope(asked[1]) == root
 
 
-async def test_an_act_or_a_query_takes_a_name() -> None:
-  """An act or a query takes a name."""
+async def test_every_question_takes_a_name() -> None:
+  """Every question takes a name, what is answered now as well as what is answered later."""
   sand = sown()
   log, root = life(sand)
   act = engine.bash("echo hi", on=root)
   engine.read("a.txt", on=root)
   assert act == "bash1"
-  assert [a[1] for a in said(log, "read")] == ["read@operator.3"]
+  assert [a[1] for a in said(log, "read")] == ["read1"]
 
 
 async def test_a_question_is_named_by_its_kind() -> None:
@@ -50,7 +50,7 @@ async def test_a_question_is_named_by_its_kind() -> None:
   made = said(log, "bash")[0]
   assert engine.question(made) and made[1] == made[0] + "1"
   assert not engine.question(said(log, "tell")[0])
-  assert not engine.question(said(log, "exited")[0])
+  assert not engine.question(said(log, "out")[0])
 
 
 async def test_the_name_of_an_act() -> None:
@@ -67,36 +67,28 @@ async def test_the_name_of_an_act() -> None:
   assert await Act("prompt2") is True
   await settle()
   assert [a[1] for a in said(log, "prompt")] == ["prompt1", "prompt2", "prompt3"]
-  assert all(name.isidentifier() for name in engine.acts)
+  assert all(name.isidentifier() for name in acts(log))
   twin = engine.chain("twin", source=root)
   await settle(300)
   assert twin == "chain2"
   assert [a[1] for a in said(log, "bash")] == ["bash1", "bash2"]
 
 
-async def test_the_name_of_a_query() -> None:
-  """The name of a query is its kind, @, the one that made it, a dot, and how many questions that one has made with it, as read@rung1.2, so a query takes no number from the acts, and a query of the operator that a later life does not ask again moves no name."""
+async def test_a_read_takes_its_number_as_a_command_does() -> None:
+  """A read takes its number as a command does, so the first read is read1, whoever made it."""
   sand = sown()
   log, root = life(sand)
-  assert engine.cwd(on=root) == "/w"
+  engine.read("a.txt", on=root)
   sand.script[root] = ["x = bash('echo hi')\nt = read('a.txt')\nclose(len(t.lines))"]
   asking = engine.prompt(int, "read it", on=root)
   assert await asking == 2
   await settle()
-  assert [name for name, a in engine.asked.items() if a[0] == "cwd" and a[2] == OPERATOR] == ["cwd@operator.2"]
-  assert (asking, said(log, "bash")[0][1]) == ("prompt1", "bash1")
-  assert [name for name in engine.asked if name.startswith("read@")] == ["read@rung1.2"]
+  assert [(a[1], a[2]) for a in said(log, "read")] == [("read1", OPERATOR), ("read2", "rung1")]
   later = Sand(stands=STANDS)
   again, _ = life(later, list(sand.record))
   await settle(300)
-  assert [a[1] for a in said(again, "prompt")] == [a[1] for a in said(log, "prompt")] == ["prompt1", "prompt2"]
-  assert [name for name in engine.asked if name.startswith("read@")] == ["read@rung1.2"]
-  assert engine.outcomes["prompt1"] == 2
-  assert [a for a in later.calls if a[0] == "read"] == []
-  assert [a for a in later.calls if a[0] == "ask"] == []
-  engine.wake(root)
-  await settle()
-  assert [a[1] for a in later.calls if a[0] == "ask"] == [a[1] for a in sand.calls if a[0] == "ask"][1:]
+  assert [a[1] for a in said(again, "read")] == ["read1", "read2"] and engine.peek("prompt1") == 2
+  assert [a for a in later.calls if a[0] in ("read", "reply")] == []
 
 
 async def test_the_generator_that_settles_an_await_is_named_after_that_act() -> None:
@@ -107,5 +99,5 @@ async def test_the_generator_that_settles_an_await_is_named_after_that_act() -> 
   asking = engine.prompt(int, "run it", on=root)
   assert await asking == 1
   assert [a for a in log if "waits" in a[1]] == []
-  assert [name for name in (*engine.acts, *engine.asked) if "waits" in name] == []
+  assert [name for name in acts(log) if "waits" in name] == []
   assert not engine.question(("prompt", f"{asking} waits 1", OPERATOR))

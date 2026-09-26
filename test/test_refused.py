@@ -26,7 +26,7 @@ async def test_a_refused_call_raises_refused_in_the_caller() -> None:
   act = engine.rung("k = BAD", on=root)
   with pytest.raises(Refused):
     await act
-  assert isinstance(engine.outcomes[act], Refused)
+  assert isinstance(engine.peek(act), Refused)
   dead = Dead(stands=STANDS)
   _, other = life(dead)
   word = "try:\n  read('a.txt')\nexcept Refused as no:\n  close(str(no))"

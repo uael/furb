@@ -142,7 +142,8 @@ export class World extends EventEmitter {
   private life?: Life;
   private readonly adapter: WorldAdapter;
   private readonly controller = new AbortController();
-  private readonly asks = new Map<string, AbortController>();
+  /** The model request of each reply the World takes, which the done of that reply ends, whoever says it. */
+  private readonly replies = new Map<string, AbortController>();
   private readonly commands = new Map<string, Running>();
   private readonly options: WorldOptions;
   /** The roster with the efforts and the window of each actor, which the standing of every chain gives. */
@@ -177,8 +178,8 @@ export class World extends EventEmitter {
     try {
       this.models = options.models ?? builtinModels();
       // What the host names must route. The model a saved record names is a preference of the host, which a later
-      // World takes only while it holds that model: the record keeps what it was lived on, and a stood tells each
-      // chain what it stands on now.
+      // World takes only while it holds that model: the record holds what it was lived on, and the stand of the
+      // later life tells each chain what it stands on now.
       const preferred = saved?.options.model;
       this.model = named.model ?? (preferred && this.offers(preferred) ? preferred : named.roster[0]);
       this.roster = [...new Set([this.model, ...named.roster])].filter((name) => name !== undefined);
@@ -206,7 +207,7 @@ export class World extends EventEmitter {
       this.hear,
       (error) => this.emit("fault", error),
       (fact) => {
-        if (this.stopped || this.momentary(fact)) return;
+        if (this.stopped) return;
         this.facts.push(fact);
         return this.activity.hear(fact);
       },
@@ -244,7 +245,6 @@ export class World extends EventEmitter {
       // A life that drifted keeps nothing more, so this World refuses to open on it.
       const raised = this.life.raised;
       if (raised) throw new Error(`${raised.is}: ${raised.args.map(String).join(" ")}`);
-      this.learnKinds();
       // The journal said the whole record again before boot returned, so every act that is not done now is one the
       // record showed begun and not done.
       for (const act of this.activity.acts.values())
@@ -266,7 +266,7 @@ export class World extends EventEmitter {
     // An inspection says no wake, so the engine starts nothing, and a World that inspects does nothing new.
     if (
       this.options.readOnly &&
-      ["Read", "Write", "Clock", "Chance", "Ask", "Run", "Wait", "Prompt"].includes(kind)
+      ["Read", "Write", "Clock", "Chance", "Reply", "Run", "Wait", "Prompt"].includes(kind)
     )
       throw new Error("Record inspection cannot do new work of the World.");
     switch (kind) {
@@ -312,8 +312,14 @@ export class World extends EventEmitter {
         queueMicrotask(() => this.emit("change"));
         return { path, content: readFileSync(path, "utf8") };
       }
-      case "Ask":
-        return this.ask(String(args[0]), String(args[1]), String(args[2]), args[3] as Turn[]);
+      case "Reply":
+        return this.reply(
+          String(args[0]),
+          String(args[1]),
+          String(args[2]),
+          String(args[3]),
+          args[4] as Turn[],
+        );
       case "Wait": {
         const [seconds, id] = [args[0], String(args[1])];
         if (typeof seconds !== "number") throw new Error(`A wait needs a number of seconds, not ${seconds}.`);
@@ -363,26 +369,8 @@ export class World extends EventEmitter {
     return resolve(this.directory, here, path);
   }
 
-  /** Each kind of question the act table does not know, asked of the life once, outside any ear. */
-  private learnKinds(): void {
-    const life = this.life;
-    if (!life) return;
-    for (const [kind, id] of this.activity.unknown)
-      this.activity.learn(kind, life.held("acts", [id], "in") === true, this.facts, (question) =>
-        life.call(question.verb, question.args ?? [], question.kwargs ?? {}),
-      );
-  }
-
-  /** Whether a fact answers a query the operator asked outside a run, which is named kind@operator.N. Such a query
-   * is of the moment: the record keeps none of it and the World keeps none either, so a host that asks the life at
-   * each change hears no change of its own asking. */
-  private momentary([kind, id]: Fact): boolean {
-    return kind === "done" && /^\w+@operator\.\d+$/.test(id);
-  }
-
   private hear = (): void => {
     if (this.stopped) return;
-    this.learnKinds();
     const facts = this.facts.slice(this.emitted);
     this.emitted = this.facts.length;
     if (!facts.length) return;
@@ -391,8 +379,8 @@ export class World extends EventEmitter {
         this.pending.delete(id);
         this.streams.delete(id);
         this.feeds.delete(id);
-        this.asks.get(id)?.abort();
-        this.asks.delete(id);
+        this.replies.get(id)?.abort();
+        this.replies.delete(id);
         const prompt = this.prompts.get(id);
         if (prompt) {
           this.prompts.delete(id);
@@ -404,18 +392,20 @@ export class World extends EventEmitter {
     this.emit("change");
   };
 
-  private async ask(id: string, chain: string, actor: string, turns: Turn[]): Promise<Turn> {
+  /** One turn of a model for a reply, streamed under the rung the reply asks for; the done of the reply ends the
+   * request. */
+  private async reply(id: string, rung: string, chain: string, actor: string, turns: Turn[]): Promise<Turn> {
     if (this.stopped) throw new Error("The World was disposed.");
     if (this.life?.outcome(id).done) throw new Error("The act is no longer pending.");
     const controller = new AbortController();
-    this.asks.set(id, controller);
+    this.replies.set(id, controller);
     const signal = AbortSignal.any([this.controller.signal, controller.signal]);
-    this.streams.set(id, { chain, text: "", thinking: "" });
+    this.streams.set(rung, { chain, text: "", thinking: "" });
     this.emit("change");
     try {
       if (this.options.answer)
         return await this.options.answer(actor, chain, turns, signal, ({ text = "", thinking = "" }) => {
-          const held = this.streams.get(id);
+          const held = this.streams.get(rung);
           if (!held) return;
           held.text += text;
           held.thinking += thinking;
@@ -482,7 +472,7 @@ export class World extends EventEmitter {
         },
       );
       for await (const event of stream) {
-        const held = this.streams.get(id);
+        const held = this.streams.get(rung);
         if (held && event.type === "text_delta") held.text += event.delta;
         if (held && event.type === "thinking_delta") held.thinking += event.delta;
         this.emit("change");
@@ -510,8 +500,8 @@ export class World extends EventEmitter {
         JSON.parse(JSON.stringify(reply)),
       ];
     } finally {
-      this.asks.delete(id);
-      this.streams.delete(id);
+      this.replies.delete(id);
+      this.streams.delete(rung);
       this.emit("change");
     }
   }
@@ -592,10 +582,11 @@ export class World extends EventEmitter {
     this.emit("change");
   }
 
-  private send(kind: string, id: string, words: unknown[]): void {
+  /** What a command came to, said into the life in the order it came, and never while an ear speaks. */
+  private deliver(action: () => void): void {
     this.delivery = this.delivery
-      .then(async () => {
-        if (!this.stopped) await this.life?.send(kind, id, words, "world");
+      .then(() => {
+        if (!this.stopped) action();
       })
       .catch((error) => {
         this.emit("fault", error);
@@ -641,19 +632,19 @@ export class World extends EventEmitter {
     this.feeds.delete(command.id);
     for (const name of ["stdout", "stderr"] as const) {
       child[name].setEncoding("utf8");
-      child[name].on("data", (text: string) => this.send("out", command.id, [text, name]));
+      child[name].on("data", (text: string) =>
+        this.deliver(() => this.adapter.say("out", command.id, [text, name])),
+      );
     }
     child.on("error", (error) => {
       cancel();
       this.commands.delete(command.id);
-      this.delivery = this.delivery.then(async () => {
-        if (!this.stopped) await this.life?.close({ is: "Refused", args: [error.message] }, command.id);
-      });
+      this.deliver(() => this.adapter.close(command.id, { is: "Refused", args: [error.message] }));
     });
     child.on("close", (code) => {
       cancel();
       this.commands.delete(command.id);
-      this.send("exited", command.id, [late ? null : code]);
+      this.deliver(() => this.adapter.exited(command.id, late ? null : code));
     });
   }
 
@@ -708,6 +699,8 @@ export async function inspectRecord(
 export interface Session {
   life: Life;
   world?: World;
+  /** The adapter a World that replaces the supplied one speaks through: what a command writes and how it ends. */
+  adapter?: WorldAdapter;
   /** The ears of the life, whose callable carries a show or a filter of the host into it. */
   ears: Ears;
   dispose(): Promise<void>;
@@ -721,6 +714,7 @@ export function boot(
     const life = adapter.boot(options.entries);
     return {
       life,
+      adapter,
       ears: adapter.ears,
       dispose: async () => {
         adapter.stopped = true;

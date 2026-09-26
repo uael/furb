@@ -31,9 +31,9 @@ def lived(record: Path | None, cwd: Path, actor: str, *, keeps: bool) -> tuple[L
   """One life on the loop that runs: its World on the record, the Kernel of this interpreter, and its root.
 
   The life is made again from what the record holds, and it keeps what it says to the record when it keeps. A
-  life that only reads a record keeps nothing, since a World given the record it reads appends to it: a stand of a
-  directory or an actor other than the one the record holds is a stood it keeps. The journal says the whole record
-  again before boot returns, so the life stands whole on its record when this gives the root.
+  life that only reads a record keeps nothing, since a World given the record it reads appends to it: every life
+  stands as it opens, and a life that keeps keeps that stand. The journal says the whole record again before boot
+  returns, so the life stands whole on its record when this gives the root.
   """
   held = kept(record) if record is not None and record.is_file() else []
   world = Live(str(cwd.absolute()), record if keeps else None, actor)

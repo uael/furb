@@ -20,7 +20,7 @@ from types import CoroutineType
 import furb
 import furb_monty
 from furb import engine, sheet
-from furb.engine import Act, Refused, modules, outcomes, site, under
+from furb.engine import Act, Refused, site
 
 type Kernel = Generator[tuple | None, tuple]
 """The Kernel, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
@@ -41,72 +41,85 @@ def checked(text: str) -> list[tuple[int, str]]:
 class Native:
   """The Kernel of the interpreter this process runs in, where the module of a chain is a dict.
 
-  It begins a run by compiling the word in the module of its chain, says wants for the act a run waits for, carries
-  the run forward at each sent, says ran with nothing for a word that ran to its end and with the exception for one
-  that raised, and drops the frame of a run a cancel is over. A frame that is mid step is never closed: the close
-  of a word raises where that word stands, and what unwinds out of it is the drop. One of these serves one life,
-  since the frames it holds are that life's own. The gate is no part of it: an ear of its own, so a word may ask it
-  while the Kernel runs that word.
+  It takes a run as that run, and begins its word when it hears that it took it, compiled in the module of its
+  chain and run as its rung. When the word waits for an act that is not done, it makes a wants as the run, and
+  carries the word forward at the done of that wants. It says the run done, as the run, with nothing for a word that
+  ran to its end and with the exception for one that raised, and it drops the frame of a word a cancel is over. A
+  frame that is mid step is never closed: the close of a word raises where that word stands, and what unwinds out
+  of it is the drop. One of these serves one life, since the frames it holds are that life's own. The gate is no
+  part of it: an ear of its own, so a word may ask it while the Kernel runs that word.
   """
 
   def __init__(self) -> None:
     self.frames: dict[str, CoroutineType[object, object, object]] = {}
+    self.taken: set[str] = set()
+    self.waits: dict[str, str] = {}
 
-  def ended(self, name: str, got: BaseException | None) -> None:
-    """The run is over, and what it came to goes to the chain that had it run."""
-    self.frames.pop(name, None)
-    engine.send("ran", name, got, by=name)
+  def ended(self, run: str, got: BaseException | None) -> None:
+    """The word is over, and the run is done with what the word gave, as that run: its frame and the wants it
+    waits on are dropped, so no done that comes later carries a word that is gone."""
+    self.frames.pop(run, None)
+    self.waits = {wants: one for wants, one in self.waits.items() if one != run}
+    with site.set(run):
+      engine.say("done", run, got)
 
-  def carry(self, name: str, sent: object) -> None:
-    """The run stepped with what it waited for, and stepped again while what it waits for is over already."""
-    token = site.set(name)
-    try:
+  def carry(self, run: str, given: object) -> None:
+    """The word stepped as its rung with what it waited for, and stepped again while what it waits for is done."""
+    with site.set(str(engine.get(run)[4])):
       while True:
         try:
-          frame = self.frames[name]
-          got = frame.throw(sent) if isinstance(sent, BaseException) else frame.send(sent)
+          frame = self.frames[run]
+          got = frame.throw(given) if isinstance(given, BaseException) else frame.send(given)
           while not isinstance(got, Act):
             got = frame.throw(Refused(f"a rung awaits an act, and {got!r} is none"))
         except StopIteration:
-          return self.ended(name, None)
+          return self.ended(run, None)
         except BaseException as raised:
-          return self.ended(name, raised)
-        if got not in outcomes:
-          engine.send("wants", name, got, by=name)
+          return self.ended(run, raised)
+        if engine.peek(got, ...) is ...:
+          with site.set(run):
+            self.waits[engine.act("wants", "", None, got)] = run
           return None
-        sent = outcomes[got]
-    finally:
-      site.reset(token)
+        given = engine.peek(got)
 
-  def begin(self, name: str, word: str, held: dict[str, object]) -> None:
-    """A run begun: the word is compiled in the module of its chain, and a word that awaits nothing ends here."""
-    token = site.set(name)
+  def begin(self, run: str) -> None:
+    """A word begun as its rung: it is compiled in the module of its chain, and a word that awaits nothing ends
+    here. The run of a rung that is done already is done with CancelledError, since its word never begins."""
+    self.taken.discard(run)
+    _, _, _, chain, rung, word, _ = (str(x) for x in engine.get(run))
+    if engine.peek(rung, ...) is not ...:
+      return self.ended(run, CancelledError())
     try:
       # The compile stands inside, so a word the interpreter will not take is what the run came to and no more.
-      ran = eval(compile(word, name, "exec", flags=PyCF_ALLOW_TOP_LEVEL_AWAIT), held)  # noqa: S307
+      with site.set(rung):
+        ran = eval(compile(word, rung, "exec", flags=PyCF_ALLOW_TOP_LEVEL_AWAIT), engine.module(chain))  # noqa: S307
     except BaseException as raised:
-      return self.ended(name, raised)
-    finally:
-      site.reset(token)
+      return self.ended(run, raised)
     if not iscoroutine(ran):
-      return self.ended(name, None)
-    self.frames[name] = ran
-    return self.carry(name, None)
+      return self.ended(run, None)
+    self.frames[run] = ran
+    return self.carry(run, None)
 
   def kernel(self) -> Kernel:
-    """The Kernel as one generator for one life, which speaks from the run it steps."""
+    """The Kernel as one generator for one life: it takes each run, begins its word when it hears that it took it,
+    and carries the word at the done of each wants it made."""
     while True:
       match (yield):
-        case ("run", rung, _, chain, word, _):
+        case ("run", run, *_):
           # This Kernel runs every word, retold or not, so it reads no donor off the run.
-          self.begin(rung, word, modules[chain])
-        case ("sent", rung, _, value) if rung in self.frames:
-          self.carry(rung, value)
-        case ("cancel" | "close", about, *_):
+          with site.set(run):
+            engine.say("started", run)
+          self.taken.add(run)
+        case ("started", run, *_) if run in self.taken:
+          self.begin(run)
+        case ("done", wants, _, value) if wants in self.waits:
+          self.carry(self.waits.pop(wants), value)
+        case ("cancel" | "close", *_) as control:
           # The frame of the word that says the close is mid step, and the CancelledError of close ends that one.
-          for one in [x for x in self.frames if under(x, about) and not self.frames[x].cr_running]:
-            self.frames[one].close()
-            self.ended(one, CancelledError())
+          for one in [x for x in self.frames if engine.covers(control, str(engine.get(x)[4]))]:
+            if not self.frames[one].cr_running:
+              self.frames[one].close()
+              self.ended(one, CancelledError())
 
 
 def gate(word: str, program: list[str]) -> list[str]:

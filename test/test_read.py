@@ -70,7 +70,8 @@ async def test_the_engine_judges_no_scheme() -> None:
   _, root = life(sand)
   assert engine.read("weird://x", on=root) == Text("weird://x", "kept\n")
   assert [a[4] for a in said(sand.calls, "read")] == ["weird://x"]
-  assert engine.read("weird://y", on=root) is None
+  with pytest.raises(Refused, match="nothing takes read"):
+    engine.read("weird://y", on=root)
   assert [a[4] for a in said(sand.calls, "read")] == ["weird://x", "weird://y"]
 
 
@@ -127,9 +128,12 @@ async def test_whether_a_name_is_one_of_the_prompts_a_chain_has_heard_on_itself(
   assert engine.read(act, on=root) == Text(act, "a = 1\nclose(a + 1)")
   other = engine.chain("other")
   await settle()
-  assert engine.read(act, on=other) is None
-  for path in ("", "nowhere://x", root, *[a[1] for a in said(log, "rung")]):
-    assert engine.read(path, on=root) is None
+  for path, on in [
+    (act, other),
+    *[(one, root) for one in ("", "nowhere://x", root, *[a[1] for a in said(log, "rung")])],
+  ]:
+    with pytest.raises(Refused, match="nothing takes read"):
+      engine.read(path, on=on)
 
 
 async def test_a_prompt_is_the_door_of_the_program_of_its_ladder() -> None:
@@ -157,8 +161,8 @@ async def test_a_read_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_
   assert engine.read(act, on=root) == Text(act, "a = 1\nclose(read(get(acting())[2]).content)")
 
 
-async def test_one_asked_from_inside_an_act_tells_itself() -> None:
-  """One asked from inside an act tells itself, with its path and what it was answered, on the scope of that act; one asked from outside an act tells nothing, and neither does one whose show is hidden."""
+async def test_one_made_from_inside_an_act_tells_itself() -> None:
+  """One made from inside an act tells itself, with its path and what it was answered, on the scope of that act; one made from outside an act tells nothing, and neither does one whose show is hidden."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["read('a.txt')\nread('a.txt', HIDDEN)\nclose(1)"]
@@ -168,8 +172,7 @@ async def test_one_asked_from_inside_an_act_tells_itself() -> None:
   assert [(a[1], a[2], a[3][0], a[3][1][0]) for a in told] == [
     (step, step, "#read a.txt", Text("/w/a.txt", "one\ntwo\n"))
   ]
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   assert engine.scope(step) == root and told[0] in held
   was = engine.turns(on=root)
   assert of(was, "read") == ["#read a.txt\n# /w/a.txt, 0 known\n# 1 one\n# 2 two"]

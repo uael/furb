@@ -9,7 +9,7 @@ export interface WorldRequest {
     | "Clock"
     | "Chance"
     | "Keep"
-    | "Ask"
+    | "Reply"
     | "Run"
     | "Feed"
     | "Slay"
@@ -40,7 +40,12 @@ export class Ears {
   private readonly ears = new Map<string, Ear>();
   private readonly functions = new Map<string, (...args: never[]) => unknown>();
   private serial = 0;
-  constructor(ears: Record<string, Ear>) {
+  /** The ears by name, and the names of the ears of the outside, which boot is given in the order the engine offers
+   * them an act; any other ear is one that an ear drives as an ear of the engine. */
+  constructor(
+    ears: Record<string, Ear>,
+    private readonly outside = Object.keys(ears),
+  ) {
     for (const [name, ear] of Object.entries(ears)) this.ears.set(name, ear);
   }
   callable(callback: (...args: never[]) => unknown): { is: "callable"; name: string } {
@@ -77,7 +82,7 @@ export class Ears {
     }
   };
   boot(record: Entry[] = []): Life {
-    return Life.boot(this.callback, [...this.ears.keys()], record);
+    return Life.boot(this.callback, this.outside, record);
   }
 }
 
@@ -87,8 +92,10 @@ export class WorldAdapter {
   stopped = false;
   /** The ears the life boots on, whose callable carries a show or a filter of the host into the life. */
   readonly ears: Ears;
-  private readonly running = new Set<string>();
-  /** The actor whose last ask on each chain answered nothing, so a second such ask in a row pauses the chain. */
+  /** Each command the World runs, whether its stderr goes with its stdout, and its two streams as they came, which
+   * the World answers the command with when it ends. */
+  private readonly running = new Map<string, [merged: boolean, stdout: string, stderr: string]>();
+  /** The actor whose last reply on each chain answered nothing, so a second such reply in a row pauses the chain. */
   private readonly mute = new Map<string, string>();
   constructor(
     readonly handle: WorldHandler,
@@ -117,7 +124,7 @@ export class WorldAdapter {
         }
       }
     })();
-    this.ears = new Ears({ world: this.world(), typescript: observer });
+    this.ears = new Ears({ world: this.world(), typescript: observer }, ["world"]);
   }
 
   private get closed(): boolean {
@@ -132,6 +139,29 @@ export class WorldAdapter {
     } finally {
       if (!this.life.disposed) this.life.site(previous);
     }
+  }
+
+  /** One fact, said as the World, which is how a command says what it writes. */
+  say(kind: string, id: string, words: unknown[]): void {
+    this.speak(() => this.life?.say(kind, id, words));
+  }
+
+  /** One act closed as the World with a value, which is how the World ends a command it could not start. */
+  close(id: string, value: unknown): void {
+    this.speak(() => this.life?.close(value, id));
+  }
+
+  /** A command ended, with its code, or with none at its timeout: the World says it done with the Exit of the
+   * streams it heard, unless a control ended it first. */
+  exited(id: string, code: number | null): void {
+    const held = this.running.get(id);
+    if (!held) return;
+    this.running.delete(id);
+    const [, stdout, stderr] = held;
+    const text = (stream: string, content: string) => ({ is: "Text", path: `${id}/${stream}`, content });
+    this.say("done", id, [
+      { is: "Exit", code, stdout: text("stdout", stdout), stderr: text("stderr", stderr) },
+    ]);
   }
 
   private later(request: WorldRequest, done: (value: unknown) => void, fail: (error: unknown) => void): void {
@@ -155,6 +185,9 @@ export class WorldAdapter {
     });
   }
   private *world(): Ear {
+    // An ear of the outside hears an act only when no ear before it took it, so the observer, which keeps every fact
+    // and every act, is an ear of the engine, which the World drives as it is born, before the record is said again.
+    yield { verb: "drive", args: [{ is: "ear", name: "typescript", started: false }, "typescript"] };
     for (;;) {
       const fact = (yield null) as Fact;
       if (!fact) continue;
@@ -190,20 +223,22 @@ export class WorldAdapter {
         }
         yield ["done", id, value];
       } else if (kind === "keep") synchronous(this.handle({ kind: "Keep", args: [words[0]] }));
-      else if (kind === "ask") {
+      else if (kind === "reply") {
+        yield ["started", id];
         const [chain, actor] = [String(words[0]), String(words[1])];
+        const turns = yield { verb: "turns", kwargs: { on: chain } };
         this.later(
-          { kind: "Ask", args: [id, ...words] },
+          { kind: "Reply", args: [id, fact[2], chain, actor, turns] },
           (value) => {
             if (Array.isArray(value) && Array.isArray(value[2]) && typeof value[2][4] === "number") {
-              const reply = [...value];
-              reply[2] = value[2].map((part, index) =>
+              const turn = [...value];
+              turn[2] = value[2].map((part, index) =>
                 index === 4 ? { is: "float", args: [String(part)] } : part,
               );
-              value = reply;
+              value = turn;
             }
             this.mute.delete(chain);
-            if (!this.life?.outcome(id).done) this.life?.send("answer", id, [value], "world");
+            if (!this.life?.outcome(id).done) this.life?.say("done", id, [value]);
           },
           (error) => {
             if (this.mute.get(chain) === actor) this.life?.pause(chain);
@@ -214,63 +249,52 @@ export class WorldAdapter {
                 : error && typeof error === "object" && "is" in error && "args" in error
                   ? `${error.is}: ${Array.isArray(error.args) ? error.args.map(String).join(", ") : String(error.args)}`
                   : `Refused: ${String(error)}`;
-            this.life?.close({ is: "Refused", args: [`${actor} answered nothing: ${why}`] }, id);
+            this.life?.say("done", id, [{ is: "Refused", args: [`${actor} answered nothing: ${why}`] }]);
           },
         );
-      } else if (kind === "start") {
-        const act = (yield { verb: "get", args: [id] }) as Fact;
-        if (!act) continue;
-        if (act[0] !== "bash") this.started(act);
-        else {
-          const here = yield { verb: "cwd", kwargs: { on: act[3] } };
-          const [, merged] = (yield { verb: "ask", args: ["merged", act[3], id] }) as [unknown, boolean];
-          this.running.add(id);
-          try {
-            synchronous(
-              this.handle({
-                kind: "Run",
-                args: [{ id, here, command: act[4], fed: act[5], timeout: act[6], merged }],
-              }),
-            );
-          } catch (error) {
-            yield { verb: "close", args: [fault(error), id] };
-          }
+      } else if (kind === "bash") {
+        yield ["started", id];
+        const [on, command, fed, timeout] = words;
+        const here = yield { verb: "cwd", kwargs: { on } };
+        const merged = Boolean(yield { verb: "ask", args: ["merged", on, id] });
+        this.running.set(id, [merged, "", ""]);
+        try {
+          synchronous(this.handle({ kind: "Run", args: [{ id, here, command, fed, timeout, merged }] }));
+        } catch (error) {
+          // The machine would not start it, so the World closes it with why, as it closes a prompt it cannot show.
+          this.running.delete(id);
+          yield { verb: "close", args: [fault(error), id] };
         }
+      } else if (kind === "wait") {
+        yield ["started", id];
+        this.later(
+          { kind: "Wait", args: [words[1], id] },
+          () => {
+            if (!this.life?.outcome(id).done) this.life?.say("done", id, [null]);
+          },
+          (error) => this.life?.say("done", id, [fault(error)]),
+        );
+      } else if (kind === "prompt") {
+        yield ["started", id];
+        this.later(
+          { kind: "Prompt", args: [id, words[1], words[2]] },
+          (value) => this.life?.close(value, id),
+          (error) => this.life?.close(fault(error), id),
+        );
+      } else if (kind === "out") {
+        const held = this.running.get(id);
+        if (held) held[held[0] || words[1] === "stdout" ? 1 : 2] += String(words[0]);
       } else if (kind === "feed") synchronous(this.handle({ kind: "Feed", args: [id, words[0]] }));
-      else if (kind === "exited") this.running.delete(id);
+      else if (kind === "done") this.running.delete(id);
       else if (kind === "cancel" || kind === "close") {
-        for (const running of this.running) {
-          const affected = yield { verb: "covers", args: [fact, running] };
-          if (affected) {
+        for (const running of [...this.running.keys()]) {
+          if (yield { verb: "covers", args: [fact, running] }) {
             synchronous(this.handle({ kind: "Slay", args: [running] }));
             this.running.delete(running);
           }
         }
       }
     }
-  }
-  /** The outside work of a wait or of a prompt to the operator, which the start of the act says: at its birth, or at
-   * the first wake over it that this life says, for one the record shows begun and not done. */
-  private started(act: Fact): void {
-    const id = act[1];
-    if (act[0] === "wait")
-      this.later(
-        { kind: "Wait", args: [act[4], id] },
-        () => {
-          if (!this.life?.outcome(id).done) this.life?.send("done", id, [null], "world");
-        },
-        (error) => this.life?.close(fault(error), id),
-      );
-    else if (act[0] === "prompt")
-      this.later(
-        { kind: "Prompt", args: [id, act[4], act[5]] },
-        (value) => {
-          if (!this.life?.outcome(id).done) this.life?.close(value, id);
-        },
-        (error) => {
-          if (!this.life?.outcome(id).done) this.life?.close(fault(error), id);
-        },
-      );
   }
   boot(record: Entry[] = []): Life {
     this.life = this.ears.boot(record);

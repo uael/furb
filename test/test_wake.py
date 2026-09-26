@@ -1,8 +1,11 @@
 """wake, which ends a pause and gives what waited."""
 
-from conftest import STANDS, Sand, gated, life, paragraphs, plain, ran, relived, said, settle
+from conftest import STANDS, Sand, gated, heads, life, paragraphs, plain, ran, relived, said, settle
 from furb import engine
-from furb.engine import OPERATOR, WORLD
+from furb.engine import OPERATOR
+
+TAKEN = ("bash", "wait", "prompt", "reply")
+"""The kinds of act that the World takes."""
 
 
 async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_heard() -> None:
@@ -12,9 +15,9 @@ async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_hea
   act = engine.bash("slow", on=root)
   await settle()
   engine.pause(act)
-  engine.send("exited", act, 3, by=WORLD)
+  sand.exits(act, 3)
   await settle()
-  assert act not in engine.outcomes
+  assert paragraphs(engine.turns(on=root))[-1] == f"#{act} paused"
   engine.wake(act)
   await settle()
   assert (await act).code == 3
@@ -36,9 +39,9 @@ async def test_delivery_carries_on_the_rungs_that_await_the_result_on_whatever_c
   act = engine.prompt(int, "await it", on=two)
   await settle()
   engine.pause(two)
-  engine.send("exited", which, 0, by=WORLD)
+  sand.exits(which, 0)
   await settle()
-  assert act not in engine.outcomes
+  assert engine.peek(act, ...) is ...
   engine.wake(two)
   await settle()
   assert (await act) == 0
@@ -51,22 +54,23 @@ async def test_a_wake_on_one_act_lifts_a_pause_of_its_chain_for_that_act_alone()
   one, two = engine.bash("one", on=root), engine.bash("two", on=root)
   await settle()
   engine.pause(root)
-  engine.send("exited", one, 0, by=WORLD)
-  engine.send("exited", two, 0, by=WORLD)
+  sand.exits(one, 0)
+  sand.exits(two, 0)
   await settle()
   engine.wake(one)
   await settle()
-  assert one in engine.outcomes and two not in engine.outcomes
+  assert heads(engine.turns(on=root))[-2:] == [f"#{one} woke", f"#{one} exited 0"]
   asked = Sand(stands=STANDS)
   log, root = life(asked)
   engine.pause(root)
-  engine.prompt(int, "count", on=root)
+  counting, other = engine.prompt(int, "count", on=root), engine.prompt(int, "wait", on=root)
+  await settle()
+  assert said(log, "rung") == [] and said(log, "reply") == [] and asked.turns == {}
+  engine.wake(counting)
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if not a[4]]
-  assert said(log, "ask") == []
-  engine.wake(step)
-  await settle()
-  assert [a[1] for a in said(log, "ask")] == [step]
+  assert engine.get(step)[2] == counting != other
+  assert [a[2] for a in said(log, "reply")] == [step] and [*asked.turns] == ["reply1"]
 
 
 async def test_wake_is_given_the_id_of_an_act_or_the_id_of_a_chain() -> None:
@@ -76,15 +80,15 @@ async def test_wake_is_given_the_id_of_an_act_or_the_id_of_a_chain() -> None:
   one, two = engine.bash("one", on=root), engine.bash("two", on=root)
   await settle()
   engine.pause(root)
-  engine.send("exited", one, 0, by=WORLD)
-  engine.send("exited", two, 0, by=WORLD)
+  sand.exits(one, 0)
+  sand.exits(two, 0)
   await settle()
   engine.wake(one)
   await settle()
-  assert one in engine.outcomes and two not in engine.outcomes
+  assert heads(engine.turns(on=root))[-2:] == [f"#{one} woke", f"#{one} exited 0"]
   engine.wake(root)
   await settle()
-  assert two in engine.outcomes
+  assert heads(engine.turns(on=root))[-2:] == [f"#{root} woke", f"#{two} exited 0"]
 
 
 async def test_a_wake_lifts_the_pause_and_delivers_every_held_result() -> None:
@@ -94,13 +98,13 @@ async def test_a_wake_lifts_the_pause_and_delivers_every_held_result() -> None:
   one, two = engine.bash("one", on=root), engine.bash("two", on=root)
   await settle()
   engine.pause(root)
-  engine.send("exited", one, 1, by=WORLD)
-  engine.send("exited", two, 2, by=WORLD)
+  sand.exits(one, 1)
+  sand.exits(two, 2)
   await settle()
-  assert one not in engine.outcomes and two not in engine.outcomes
+  assert heads(engine.turns(on=root))[-1] == f"#{root} paused"
   engine.wake(root)
   await settle()
-  assert ((await one).code, (await two).code) == (1, 2)
+  assert heads(engine.turns(on=root))[-3:] == [f"#{root} woke", f"#{one} exited 1", f"#{two} exited 2"]
 
 
 async def test_a_wake_gates_and_runs_a_held_response() -> None:
@@ -118,25 +122,25 @@ async def test_a_wake_gates_and_runs_a_held_response() -> None:
   assert gated(log) == ["close(7)"] and ran(log) == [bound, "close(7)"] and (await act) == 7
 
 
-async def test_a_wake_makes_a_prompt_ask_with_the_transcript_as_it_grew() -> None:
-  """A wake makes a prompt ask with the transcript as it grew."""
+async def test_a_wake_makes_a_prompt_ask_its_model_with_the_transcript_as_it_grew() -> None:
+  """A wake makes a prompt ask its model with the transcript as it grew."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["a = 1", "close(a + 1)"]
   act = engine.prompt(int, "count", on=root)
   engine.pause(act)
   await settle()
-  engine.send("tell", root, [f"#{root} noted"])
+  engine.say("tell", root, [f"#{root} noted"])
   engine.wake(act)
   await settle()
-  asks = said(log, "ask")
+  asks = [sand.turns[a[1]] for a in said(log, "reply")]
   assert len(asks) == 2 and (await act) == 2
-  assert f"#{root} noted" in paragraphs(asks[1][5])
-  assert f"#{root} noted" not in paragraphs(asks[0][5])
+  assert f"#{root} noted" in paragraphs(asks[1])
+  assert f"#{root} noted" not in paragraphs(asks[0])
 
 
-async def test_a_wake_makes_no_ask_twice_and_loses_none() -> None:
-  """A wake makes no ask twice and loses none."""
+async def test_a_wake_makes_no_reply_twice_and_loses_none() -> None:
+  """A wake makes no reply twice and loses none."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["a = 1", "b = a + 1", "close(b + 1)"]
@@ -145,13 +149,13 @@ async def test_a_wake_makes_no_ask_twice_and_loses_none() -> None:
   await settle()
   engine.wake(root)
   await settle()
-  asks = said(log, "ask")
-  assert (await act) == 3 and len(asks) == 3
-  assert len({a[1] for a in asks}) == 3
+  asks = [a[1] for a in said(log, "reply")]
+  assert (await act) == 3 and asks == ["reply1", "reply2", "reply3"]
+  assert [a[1] for a in said(sand.calls, "reply")] == asks
 
 
-async def test_a_wake_that_this_life_says_starts_the_pending_acts_it_is_over() -> None:
-  """A wake that this life says, and not one that the record says again, starts the pending acts it is over: the World starts each command, wait and prompt to the operator of them, and the chain asks for its pending rung with the transcript as it grew."""
+async def test_a_wake_that_this_life_says_puts_every_pending_act_it_is_over_on_to_the_outside() -> None:
+  """A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each command, wait, prompt to the operator and reply of them, and a model reads the transcript as it grew."""
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
   command = engine.bash("sleep 9", on=root)
@@ -162,14 +166,13 @@ async def test_a_wake_that_this_life_says_starts_the_pending_acts_it_is_over() -
   engine.pause(root)
   engine.wake(root)
   await settle()
-  pending = said(log, "ask")[0][1]
+  (pending,) = [a[1] for a in said(log, "reply")]
   later = Sand(stands=STANDS)
   again, over = await relived(later, plain(sand.record))
-  assert [a[1] for a in said(again, "wake") if a[2] == "record"] == [root]
-  assert said(later.calls, "start") == [] and said(later.calls, "ask") == []
+  assert [a[1] for a in said(again, "wake") if a[2] == "journal"] == [root]
+  assert [a for a in later.calls if a[0] in TAKEN] == []
   await engine.rung("k = 1", on=over)
   engine.wake(over)
   await settle()
-  assert [a[1] for a in said(later.calls, "start")] == [command, waited, shown]
-  asks = said(later.calls, "ask")
-  assert [a[1] for a in asks] == [pending] and "k = 1" in asks[0][5][-1][1]
+  assert [a[1] for a in later.calls if a[0] in TAKEN] == [command, waited, shown, pending]
+  assert "k = 1" in later.turns[pending][-1][1]

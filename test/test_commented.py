@@ -13,4 +13,4 @@ async def test_the_text_as_comments() -> None:
   _, root = life(sand)
   word = engine.commented("raise ValueError('boom')\n\nk = 1")
   assert await engine.rung(word, on=root) is None
-  assert "k" not in engine.modules[root]
+  assert "k" not in engine.module(root)

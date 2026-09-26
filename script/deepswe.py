@@ -47,7 +47,7 @@ from urllib.request import Request, urlopen
 from furb import engine
 from furb.cli import lived, say
 from furb.provider.claude import BIN, cool
-from furb.world import kept
+from furb.world import answered, kept
 
 ROOT = Path(__file__).resolve().parent.parent
 """ROOT is the root of this repository, which the archive of a run stands under."""
@@ -664,15 +664,16 @@ def dollars(numbers: Mapping[str, object]) -> float:
 
 def numbered(record: Path, root: str, began: float, got: object) -> Mapping[str, object]:
   """What the life did and what it cost, read off the record it kept."""
-  held = [entry[0] for entry in kept(record)] if record.is_file() else []
-  kinds = [one[0] for one in held]
-  usage = [one[3][2] for one in held if one[0] == "answer" and one[3] and one[3][2]]
+  entries = kept(record) if record.is_file() else []
+  kinds = [entry[0][0] for entry in entries]
+  answers = [one[3] for one in answered(entries)]
+  usage = [one[2] for one in answers if one[2]]
   return {
     "value": got,
-    "facts": len(held),
-    # The record keeps no ask, since a later life asks again for nothing it was answered; the answers say how many.
-    "asks": kinds.count("answer"),
-    "rungs": kinds.count("rung"),
+    "facts": len(entries),
+    "answers": len(answers),
+    # The journal keeps a rung that the operator wrote, and of a rung that a prompt made, only its reply.
+    "rungs": kinds.count("rung") + kinds.count("reply"),
     "prompts": kinds.count("prompt"),
     "commands": kinds.count("bash"),
     "reads": kinds.count("read"),
@@ -703,7 +704,7 @@ def archived(task: str, run_dir: Path, meta: Mapping[str, object]) -> None:
     "p2p": f"{reward.get('p2p_passed')}/{reward.get('p2p_total')}" if reward.get("p2p_total") is not None else None,
     "usd": numbers.get("usd"),
     "wall_seconds": numbers.get("wall_seconds"),
-    "asks": numbers.get("asks"),
+    "answers": numbers.get("answers"),
     "commands": numbers.get("commands"),
     "value": numbers.get("value"),
     "stopped": meta.get("stopped"),
@@ -730,7 +731,7 @@ def watched(record: Path, root: str, began: float, mark: dict[str, int]) -> str:
   """
   numbers = numbered(record, root, began, None)
   say(
-    f"[deepswe] {numbers['wall_seconds']}s: asks={numbers['asks']} commands={numbers['commands']} "
+    f"[deepswe] {numbers['wall_seconds']}s: answers={numbers['answers']} commands={numbers['commands']} "
     f"reads={numbers['reads']} writes={numbers['writes']} ${dollars(numbers):.4f}"
   )
   heads = [line.split()[1:2] for turn in engine.turns(on=root) for line in turn[1].split("\n") if line[1:2].isalnum()]
@@ -738,11 +739,11 @@ def watched(record: Path, root: str, began: float, mark: dict[str, int]) -> str:
   if held[-1:] == ["paused"]:
     return "a pause stands over the chain, which buys nothing more"
   did = sum(counted(numbers, name) for name in ("commands", "reads", "writes"))
-  asks = counted(numbers, "asks")
+  answers = counted(numbers, "answers")
   if did > mark["did"]:
-    mark.update(did=did, asks=asks)
-  elif asks - mark["asks"] >= STUCK:
-    return f"{asks - mark['asks']} answers bought and nothing done with them: the life is wedged"
+    mark.update(did=did, answers=answers)
+  elif answers - mark["answers"] >= STUCK:
+    return f"{answers - mark['answers']} answers bought and nothing done with them: the life is wedged"
   return ""
 
 
@@ -759,12 +760,12 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
   if args.ceiling:
     engine.grant(usd=args.ceiling, on=root)
   stopped, got, looks, message = "", None, 0, told + ASKED
-  mark = {"did": 0, "asks": 0}
+  mark = {"did": 0, "answers": 0}
   began = time.monotonic()
   try:
     while True:
       act = engine.prompt(float, message, args.to, on=root)
-      while act not in engine.outcomes:
+      while engine.peek(act, ...) is ...:
         if args.timeout and time.monotonic() - began > args.timeout:
           stopped = f"the cap of {args.timeout:.0f} seconds ran out"
           break
@@ -813,7 +814,7 @@ def run(args: argparse.Namespace) -> int:
   numbers = numbered(record, args.task, began, got)
   (run_dir / "numbers.json").write_text(json.dumps(numbers, indent=2, default=repr) + "\n", encoding="utf-8")
   say(
-    f"[deepswe] asks={numbers['asks']} commands={numbers['commands']} reads={numbers['reads']} "
+    f"[deepswe] answers={numbers['answers']} commands={numbers['commands']} reads={numbers['reads']} "
     f"writes={numbers['writes']} | ${dollars(numbers):.4f} | {numbers['wall_seconds']}s"
   )
   patch = run_dir / "model.patch"
@@ -851,7 +852,7 @@ def turns(args: argparse.Namespace) -> int:
     raise SystemExit(1)
 
   async def folded() -> None:
-    """The life again on what the record kept, booted as the run was, which stands whole when boot returns."""
+    """The life again on the record of the run, booted as the run was, which stands whole when boot returns."""
     root = lived(record, WORK / args.task / "app", args.to, keeps=False)[1]
     for n, (role, py, _, _) in enumerate(engine.turns(on=root)):
       say(f"{'=' * 100}\n[{n} {role}]")

@@ -34,16 +34,17 @@ async def test_a_closed_header_tells_the_act_with_what_it_came_to_as_python_show
   assert closed == [f"#{act} closed 21", f"#{other} closed 'k'", f"#{step} closed 5"]
 
 
-async def test_told_says_a_tell_about_an_act_with_one_paragraph_headed_with_the_id_of_the_act() -> None:
-  """told says a tell about an act with one paragraph headed with the id of the act, and gives the tell back, so a chain holds what it told where it told it."""
+async def test_told_gives_the_saying_of_a_tell_about_an_act() -> None:
+  """told gives the saying of a tell about an act, with one paragraph headed with the id of the act, which an ear yields and a verb says, so a chain holds what it told where it told it."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   act = engine.rung("k = 1", on=root)
   assert await act is None
   told = [a for a in said(log, "tell") if a[1] == act]
   assert [a[3] for a in told] == [[f"#{act}", "k = 1"]]
-  made = engine.told(act, "said", "# more")
+  saying = engine.told(act, "said", "# more")
+  assert saying == ("tell", act, [f"#{act} said", "# more"])
+  made = engine.say(*saying)
   assert made == ("tell", act, OPERATOR, [f"#{act} said", "# more"])
-  _, held = engine.ask("transcript", root, root)
-  assert isinstance(held, list)
+  held = engine.transcript(root)
   assert [a for a in held if a[0] == "tell" and a[1] == act] == [*told, made]
