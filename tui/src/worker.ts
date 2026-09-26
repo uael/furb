@@ -1,5 +1,6 @@
 // The worker loads no module that loads OpenTUI, whose native library belongs to the thread that draws.
-import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import type { Engine, SessionOptions, Turn } from "@furb/engine";
 import { Act, engineSource, modelNamed, Session } from "@furb/engine";
 import type { HostState } from "./bridge.ts";
@@ -185,6 +186,16 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     return session?.changes.read(Number(data.args[0]), Number(data.args[1]));
   if (data.target === "library" && data.method === "act")
     return session?.activity.acts.get(String(data.args[0]));
+  if (data.target === "library" && data.method === "look") {
+    if (!engine || !session) throw new Error("The session is not open.");
+    // The host reads the path where the chain stands, as the files would, and no act is made, so nothing is kept.
+    const path = resolve(session.directory, engine.cwd({ on: String(data.args[1]) }), String(data.args[0]));
+    try {
+      return { path, content: readFileSync(path, "utf8") };
+    } catch {
+      throw new Error(`There is no file at ${path}.`);
+    }
+  }
   if (data.target === "library" && data.method === "snapshot") {
     if (!snapshots) throw new Error("The session is not open.");
     return snapshots.take(String(data.args[0]), Number(data.args[1]));

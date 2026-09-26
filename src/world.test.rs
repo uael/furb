@@ -63,6 +63,13 @@ fn the_store_removes_a_torn_last_line_ends_a_whole_one_and_refuses_a_damaged_lin
     refused.to_string(),
     format!("Refused: Invalid record entry at byte {at} in {}.", path.display())
   );
+  // An entry is one fact, so an entry that holds a fact and an answer is no entry.
+  fs::write(&path, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"],[[],\"/w\",\"m/low\"]]\n")
+    .unwrap();
+  assert_eq!(
+    store(&path).err().unwrap().to_string(),
+    format!("Refused: Invalid record entry at byte 0 in {}.", path.display())
+  );
   fs::write(&path, "[\"torn\"").unwrap();
   assert!(kept(&path).unwrap().is_empty());
   assert_eq!(fs::read_to_string(&path).unwrap(), "[\"torn\"");

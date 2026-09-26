@@ -188,6 +188,7 @@ async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fa
   two = engine.bash("echo hi", on=root)
   await settle()
   assert heard[0] == one and ("bash", two, OPERATOR, root, "echo hi", False, TIMEOUT) in heard[1:]
+  assert engine.get(one) not in heard
   assert paragraphs(engine.turns(on=root))[2:] == [
     "#note1 spoke by yield",
     "#bash1 echo hi\nbash1: Act[Exit] = Act('bash1')",

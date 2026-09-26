@@ -45,6 +45,8 @@ async def test_a_control_is_said_while_it_is_over_an_act_that_is_not_done() -> N
   engine.cancel(command)
   engine.wake(command)
   engine.cancel(act)
+  engine.pause("nothing9")
+  engine.close(1, "bogus9")
   await settle()
   controls = [(a[0], a[1]) for a in log if a[0] in ("pause", "wake", "cancel", "close")]
   assert controls == [("close", act), ("pause", command), ("wake", command)]

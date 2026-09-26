@@ -25,8 +25,9 @@ module, and each answer of the model is a program that runs in it.
   together. Chains work in parallel, and each chain has its own module and folder.
 - **Rewind to any point.** A new chain can start from any point of another chain. In the TUI, press Escape twice
   to open the rewind tree.
-- **You see what the model sees.** The transcript is the exact text that the model reads. The record keeps every
-  fact, and a later run replays it. Work that was interrupted starts again when you resume it.
+- **You see what the model sees.** The transcript is the exact text that the model reads. The record holds every
+  act of the operator and every answer of the World, and a later run replays it. Work that was interrupted
+  starts again when you resume it.
 - **Limits that hold.** A chain pauses when it reaches a dollar ceiling or a share of the context window.
 - **The model can ask you.** A question to the operator waits in the feed until you answer it.
 - **One contract, proven twice.** `src/furb/engine.pyi` holds each law of the engine as one sentence, and the

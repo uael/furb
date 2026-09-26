@@ -2432,16 +2432,15 @@ export class App {
     if (value.startsWith("furb-image://")) this.imageActions(value);
     else if (act?.kind === "chain") await this.session.select(act.id);
     else if (act && act.id === value && act.on === this.session.selected) this.go("feed", act.id);
-    else
-      this.showValue(
-        value,
-        (
-          await this.session.engine.read(value, {
-            show: { is: "name", name: "HIDDEN" },
-            on: this.session.selected,
-          })
-        ).content,
-      );
+    else this.showValue(value, await this.referenced(value));
+  }
+
+  /** What a reference holds, as a view reads it: the act a door opens on, whole, or the text the World reads at the
+   * path. This read is no act of the operator, so it makes none and the journal keeps nothing of it. */
+  private async referenced(value: string): Promise<unknown> {
+    const act = this.session.actOf(value);
+    if (act) return (await this.session.host.act(act.id)) ?? act;
+    return (await this.session.host.look(value, this.session.selected)).content;
   }
 
   private async referenceHover(value: string, x: number, y: number): Promise<void> {
@@ -2451,12 +2450,7 @@ export class App {
         ? "Image attachment. Click to open its actions."
         : act
           ? `${act.kind}  ${act.done ? display(act.value) : "pending"}`
-          : (
-              await this.session.engine.read(value, {
-                show: { is: "name", name: "HIDDEN" },
-                on: this.session.selected,
-              })
-            ).content;
+          : display(await this.referenced(value));
       if (this.closed || this.overlay) return;
       this.hover?.destroyRecursively();
       this.hover = this.box({
@@ -4394,9 +4388,8 @@ export class App {
         detail: value,
         run: () => {
           if (act.kind === "chain") return this.session.select(act.id);
-          void this.session.engine
-            .read(value, { on: this.session.selected })
-            .then((text) => this.showValue(value, text))
+          void this.referenced(value)
+            .then((held) => this.showValue(value, held))
             .catch(this.report);
         },
       });

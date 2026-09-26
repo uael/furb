@@ -63,12 +63,13 @@ async def test_a_wake_on_one_act_lifts_a_pause_of_its_chain_for_that_act_alone()
   asked = Sand(stands=STANDS)
   log, root = life(asked)
   engine.pause(root)
-  engine.prompt(int, "count", on=root)
+  counting, other = engine.prompt(int, "count", on=root), engine.prompt(int, "wait", on=root)
+  await settle()
+  assert said(log, "rung") == [] and said(log, "reply") == [] and asked.turns == {}
+  engine.wake(counting)
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if not a[4]]
-  assert said(log, "reply") == [] and asked.turns == {}
-  engine.wake(step)
-  await settle()
+  assert engine.get(step)[2] == counting != other
   assert [a[2] for a in said(log, "reply")] == [step] and [*asked.turns] == ["reply1"]
 
 
@@ -154,7 +155,7 @@ async def test_a_wake_makes_no_reply_twice_and_loses_none() -> None:
 
 
 async def test_a_wake_that_this_life_says_puts_every_pending_act_it_is_over_on_to_the_outside() -> None:
-  """A wake that this life says, and not one that the record says again, puts every pending act it is over on to the outside, so the World takes each command, wait, prompt to the operator and reply of them, and a model reads the transcript as it grew."""
+  """A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each command, wait, prompt to the operator and reply of them, and a model reads the transcript as it grew."""
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
   command = engine.bash("sleep 9", on=root)
@@ -168,7 +169,7 @@ async def test_a_wake_that_this_life_says_puts_every_pending_act_it_is_over_on_t
   (pending,) = [a[1] for a in said(log, "reply")]
   later = Sand(stands=STANDS)
   again, over = await relived(later, plain(sand.record))
-  assert [a[1] for a in said(again, "wake") if a[2] == "record"] == [root]
+  assert [a[1] for a in said(again, "wake") if a[2] == "journal"] == [root]
   assert [a for a in later.calls if a[0] in TAKEN] == []
   await engine.rung("k = 1", on=over)
   engine.wake(over)

@@ -88,8 +88,8 @@ async def test_the_gate_gives_no_finding_when_the_gate_accepts_the_rung() -> Non
   assert engine.gate("k = BAD", on=root) == [BAD]
 
 
-async def test_the_record_keeps_what_the_gate_found() -> None:
-  """The record keeps what the gate found, since the gate is of the outside, so a later life reads the same findings and asks the gate nothing again."""
+async def test_the_journal_keeps_what_the_gate_found() -> None:
+  """The journal keeps what the gate found, since the gate is of the outside, so a later life reads the same findings and asks the gate nothing again."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
@@ -99,4 +99,4 @@ async def test_the_record_keeps_what_the_gate_found() -> None:
   assert [fact[1] for fact, *_ in sand.record if fact[0] == "gate"] == ["gate1"]
   again, over = await relived(Sand(stands=STANDS), list(sand.record))
   assert over == root and gated(again) == ["close(1)"] and findings(again) == [[]]
-  assert [a[2] for a in said(again, "done") if a[1] == "gate1"] == ["record"]
+  assert [a[2] for a in said(again, "done") if a[1] == "gate1"] == ["journal"]

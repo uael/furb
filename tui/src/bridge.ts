@@ -114,6 +114,10 @@ export class HostView extends EventEmitter {
   act(id: string): Promise<LiveAct | undefined> {
     return this.request("library", "act", [id]) as Promise<LiveAct | undefined>;
   }
+  /** The text the World reads at a path, from where a chain stands, which makes no act and keeps nothing. */
+  look(path: string, chain: string): Promise<{ path: string; content: string }> {
+    return this.request("library", "look", [path, chain]) as Promise<{ path: string; content: string }>;
+  }
   async dispose(): Promise<void> {
     await this.request("session", "dispose", []);
   }

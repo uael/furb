@@ -22,7 +22,7 @@ shape, drafts, rung folds, queued follow-ups, and scroll positions. Keep its `.i
 the session has image attachments. An unfinished session opens paused and offers a resume
 choice. The native engine replays completed work from the record.
 The picker shows state, save time, cost, and record size. It reads unfinished work through native replay
-without locking or changing the saved record. The record decides what remains unfinished. The list shows at once,
+without locking or changing the saved record. The record shows what remains unfinished. The list shows at once,
 and each saved session shows its state when its replay ends.
 
 ![The furb TUI in action](../docs/furb.gif)

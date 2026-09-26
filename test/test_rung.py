@@ -163,6 +163,16 @@ async def test_a_cancel_of_a_rung_is_the_kernels_to_do() -> None:
   assert [(a[2], type(a[3]).__name__) for a in dones(log, "run") if a[1] == run] == [(run, "CancelledError")]
   assert isinstance(engine.peek(step), CancelledError)
   engine.cancel(act)
+  quick = Sand(stands=STANDS)
+  log, root = life(quick)
+  assert await engine.rung("r = rung('ran = 1')\ncancel(r)", on=root) is None
+  await settle()
+  inner = engine.module(root)["r"]
+  (run,) = [a[1] for a in said(log, "run") if a[4] == inner]
+  assert isinstance(engine.peek(run), CancelledError) and "ran" not in engine.module(root)
+  assert await engine.rung("b = bash('echo hi')", on=root) is None
+  await settle()
+  assert [a[5] for a in said(log, "prompt")] == ["bash1 done"]
 
 
 async def test_the_word_of_a_model_is_python_code_and_nothing_else() -> None:

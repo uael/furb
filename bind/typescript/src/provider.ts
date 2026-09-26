@@ -73,7 +73,7 @@ export class Provider {
   engine?: Engine;
   private readonly actors: Actor[];
   private readonly options: ProviderOptions;
-  /** The model request of each rung that a reply asks for, which a done of that rung ends. */
+  /** The model request of each reply the provider takes, which the done of that reply ends, whoever says it. */
   private readonly replies = new Map<string, AbortController>();
   /** The actor whose last reply on each chain answered nothing, so a second in a row pauses the chain. */
   private readonly mute = new Map<string, string>();
@@ -147,7 +147,7 @@ export class Provider {
     if (!engine || engine.disposed || engine.outcome(id).done) return;
     let said: unknown;
     try {
-      const turn = await this.reply(rung, chain, actor, turns);
+      const turn = await this.reply(id, rung, chain, actor, turns);
       this.mute.delete(chain);
       // A cost that is whole stays a float for python.
       said = Array.isArray(turn[2])
@@ -174,11 +174,12 @@ export class Provider {
       speaking(engine, "provider", () => engine.say("done", id, [said]));
   }
 
-  /** One turn of a model for a reply, streamed under the rung the reply asks for, whose done ends the request. */
-  private async reply(rung: string, chain: string, actor: string, turns: Turn[]): Promise<Turn> {
+  /** One turn of a model for a reply, streamed under the rung the reply asks for; the done of the reply ends the
+   * request. */
+  private async reply(id: string, rung: string, chain: string, actor: string, turns: Turn[]): Promise<Turn> {
     if (this.options.readOnly) throw new Error("Record inspection cannot ask a model.");
     const controller = new AbortController();
-    this.replies.set(rung, controller);
+    this.replies.set(id, controller);
     const signal = AbortSignal.any([this.controller.signal, controller.signal]);
     this.streams.set(rung, { chain, text: "", thinking: "" });
     this.options.changed?.();
@@ -279,7 +280,7 @@ export class Provider {
         JSON.parse(JSON.stringify(reply)),
       ];
     } finally {
-      this.replies.delete(rung);
+      this.replies.delete(id);
       this.streams.delete(rung);
       this.options.changed?.();
     }

@@ -68,7 +68,7 @@ async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operato
 
 
 async def test_turns_reads_the_transcript_of_the_chain_and_asks_nothing() -> None:
-  """turns reads the transcript of the chain and asks nothing, so no act is made and the record keeps nothing."""
+  """turns reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   await engine.rung("cd('/x')", on=root)

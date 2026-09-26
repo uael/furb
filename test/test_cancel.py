@@ -40,6 +40,12 @@ async def test_a_cancel_is_over_the_act_it_names_and_everything_that_act_made() 
   assert isinstance(engine.peek(step), CancelledError)
   assert isinstance(engine.peek(command), CancelledError)
   assert [a[1] for a in said(log, "cancel")] == [one]
+  waiting = engine.rung("await wait(30)\nclose(1)", on=root)
+  await settle()
+  (run,) = [a[1] for a in said(log, "run") if a[4] == waiting]
+  engine.cancel(root)
+  await settle()
+  assert isinstance(engine.peek(waiting), CancelledError) and isinstance(engine.peek(run), CancelledError)
 
 
 async def test_cancel_is_given_the_id_of_an_act_and_says_a_cancel_over_it() -> None:

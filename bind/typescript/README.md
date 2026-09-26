@@ -59,7 +59,7 @@ provider response blocks in the record. The host names what the provider offers 
 neither offers the operator alone, and a prompt that names no actor goes to the operator. A name without its
 provider routes to the one model of that id, by the rule that `modelNamed(models, name)` gives a host. A reopened
 session offers what its host names now. It keeps the model and the effort that the host chose last, and takes that
-model when the host names none and the provider holds it. The record keeps each stand and what the provider
+model when the host names none and the provider holds it. The journal keeps each stand and what the provider
 answered it, and every life stands again as it opens, so a later life tells the new standing on each chain whose
 standing changed. Configure an API provider through its pi-ai credentials.
 
@@ -140,8 +140,8 @@ handle; the file holds no text, and nothing reads it. A torn final line is remov
 complete line fails. `kept(path)` reads a record with no lock. The dispose of an engine lets every ear go: the store
 lets its record go, and a command ends. `NativeEar.dispose()` lets go an ear that no engine heard.
 
-The record keeps a command, a wait, a prompt to the operator and a reply from the started of the ear that took it.
-What it shows started and not done is pending in a later life: the engine starts none of it until a wake that this
+The journal keeps a command, a wait, a prompt to the operator and a reply from the started of the ear that took it.
+What the record shows started and not done is pending in a later life: the engine starts none of it until a wake that this
 life says. `session.pending` holds that work, and `session.resume()` says a wake of each chain that holds some. Work
 that a pause of the operator holds is not in `session.pending`, and it waits for the wake of the operator. A
 command that an earlier life started and did not end runs again at that wake, once; what it told before stands in

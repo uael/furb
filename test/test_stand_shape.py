@@ -1,8 +1,10 @@
 """Stand, what a chain stands on."""
 
+import pytest
+
 from conftest import STANDS, WORLD, Sand, life, paragraphs, plain, relived, rows, said, settle, sown, takes, tip
 from furb import engine
-from furb.engine import OPERATOR
+from furb.engine import OPERATOR, Refused
 
 LATER = [[["operator", [], 200000], ["o", ["low"], 200000]], "/z", "o/low"]
 """What a later World offers: another roster, another directory and another default actor."""
@@ -79,8 +81,8 @@ async def test_the_world_answers_it_with_a_done_at_once() -> None:
   assert engine.module(root)["actor"] == "m/low"
 
 
-async def test_the_record_keeps_each_stand_and_its_answer() -> None:
-  """The record keeps each stand and its answer, so a later life says them again at their places and replays every chain on what it stood on there."""
+async def test_the_journal_keeps_each_stand_and_its_answer() -> None:
+  """The journal keeps each stand and its answer, so a later life says them again at their places and replays every chain on what it stood on there."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["close(1)"]
@@ -92,7 +94,7 @@ async def test_the_record_keeps_each_stand_and_its_answer() -> None:
   later = Sand(stands=LATER)
   again, _ = await relived(later, plain(sand.record))
   opened = [a for a in said(again, "done") if a[1] == said(log, "stand")[0][1]]
-  assert [a[2] for a in opened] == ["record"] and [a[1] for a in said(later.calls, "stand")] == ["stand2"]
+  assert [a[2] for a in opened] == ["journal"] and [a[1] for a in said(later.calls, "stand")] == ["stand2"]
   assert [a[6] for a in said(again, "rung") if not a[4]] == ["m/low"] and said(later.calls, "reply") == []
 
 
@@ -158,7 +160,8 @@ async def test_every_chain_hears_the_done_of_every_stand() -> None:
   assert await engine.rung("k = 1", on=root) is None
   await settle()
   was = engine.turns(on=root)
-  _, over = await relived(Sand(stands=LATER), plain(first.record))
+  later = Sand(stands=LATER)
+  _, over = await relived(later, plain(first.record))
   now = engine.turns(on=over)
   assert now[0][1][: len(was[0][1])] == was[0][1]
   assert (
@@ -169,3 +172,14 @@ async def test_every_chain_hears_the_done_of_every_stand() -> None:
     )
   )
   assert engine.module(root)["actor"] == "o/low"
+  later.stands = Refused("no standing now")
+  with pytest.raises(Refused):
+    engine.stand(on=over)
+  assert (
+    engine.standing() == LATER
+    and engine.cwd(on=over) == "/z"
+    and paragraphs(engine.turns(on=over))[-1] == takes(root, LATER)
+  )
+  later.stands = STANDS
+  engine.stand(on=over)
+  assert paragraphs(engine.turns(on=over))[-1] == takes(root) and engine.module(root)["actor"] == "m/low"

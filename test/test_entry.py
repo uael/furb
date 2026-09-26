@@ -27,12 +27,12 @@ async def test_the_order_of_the_record_is_what_puts_an_entry_back_in_its_place()
   assert [one[1] for one in said(again, "prompt")] == [said(log, "prompt")[0][1]]
   assert engine.peek(said(log, "prompt")[0][1]) == 1
   facts = [(e[0][0], e[0][1], *e[0][3:]) for e in sand.record if e[0][0] != "started" and not engine.question(e[0])]
-  heard = [(a[0], a[1], *a[3:]) for a in again if a[2] == "record" and a[0] not in ("keep", "stood")]
+  heard = [(a[0], a[1], *a[3:]) for a in again if a[2] == "journal" and a[0] != "keep"]
   assert [a for a in heard if not engine.question(a)] == facts != []
 
 
-async def test_the_world_keeps_each_entry_as_the_record_says_it_plain_or_not() -> None:
-  """The World keeps each entry as the record says it, plain or not."""
+async def test_the_world_keeps_each_entry_as_the_journal_says_it_plain_or_not() -> None:
+  """The World keeps each entry as the journal says it, plain or not."""
   sand = sown()
   log, root = await lived(sand)
   assert [one[3] for one in said(log, "keep")] == sand.record

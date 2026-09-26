@@ -423,6 +423,13 @@ async def test_a_paused_prompt_makes_no_rung_until_the_wake() -> None:
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == other]
   assert isinstance(engine.peek(other), CancelledError)
+  engine.pause(root)
+  held = engine.prompt(int, "held", on=root)
+  await settle()
+  assert [a for a in said(log, "rung") if a[2] == held] == []
+  sand.script[root] = ["close(3)"]
+  engine.wake(root)
+  assert await held == 3 and len([a for a in said(log, "rung") if a[2] == held]) == 1
   assert isinstance(engine.peek(step), CancelledError)
 
 
@@ -476,7 +483,7 @@ async def test_a_prompt_takes_any_shape_which_a_close_is_read_against_as_python_
 
 
 async def test_a_prompt_carries_the_name_of_its_shape_as_a_word() -> None:
-  """A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the record replays it."""
+  """A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the journal makes it again."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["close(7)"]

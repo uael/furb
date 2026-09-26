@@ -47,7 +47,7 @@ from urllib.request import Request, urlopen
 from furb import engine
 from furb.cli import lived, say
 from furb.provider.claude import BIN, cool
-from furb.world import kept
+from furb.world import answered, kept
 
 ROOT = Path(__file__).resolve().parent.parent
 """ROOT is the root of this repository, which the archive of a run stands under."""
@@ -664,17 +664,16 @@ def dollars(numbers: Mapping[str, object]) -> float:
 
 def numbered(record: Path, root: str, began: float, got: object) -> Mapping[str, object]:
   """What the life did and what it cost, read off the record it kept."""
-  held = [entry[0] for entry in kept(record)] if record.is_file() else []
-  kinds = [one[0] for one in held]
-  answers = [
-    one[3] for one in held if one[0] == "done" and engine.question(("reply", one[1])) and isinstance(one[3], list)
-  ]
+  entries = kept(record) if record.is_file() else []
+  kinds = [entry[0][0] for entry in entries]
+  answers = [one[3] for one in answered(entries)]
   usage = [one[2] for one in answers if one[2]]
   return {
     "value": got,
-    "facts": len(held),
+    "facts": len(entries),
     "answers": len(answers),
-    "rungs": kinds.count("rung"),
+    # The journal keeps a rung that the operator wrote, and of a rung that a prompt made, only its reply.
+    "rungs": kinds.count("rung") + kinds.count("reply"),
     "prompts": kinds.count("prompt"),
     "commands": kinds.count("bash"),
     "reads": kinds.count("read"),
@@ -853,7 +852,7 @@ def turns(args: argparse.Namespace) -> int:
     raise SystemExit(1)
 
   async def folded() -> None:
-    """The life again on what the record kept, booted as the run was, which stands whole when boot returns."""
+    """The life again on the record of the run, booted as the run was, which stands whole when boot returns."""
     root = lived(record, WORK / args.task / "app", args.to, keeps=False)[1]
     for n, (role, py, _, _) in enumerate(engine.turns(on=root)):
       say(f"{'=' * 100}\n[{n} {role}]")

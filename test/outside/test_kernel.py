@@ -217,16 +217,24 @@ async def test_a_cancel_drops_the_frame_of_the_run_it_is_over() -> None:
   with pytest.raises(asyncio.CancelledError):
     await waits
   assert await engine.rung("close('alive')", on=root) == "alive"
+  held = engine.rung("await wait(30)\nclose(1)", on=root)
+  await settle()
+  (run,) = [a[1] for a in engine.transcript(root) if a[0] == "run" and a[4] == held]
+  engine.cancel(root)
+  await settle()
+  assert isinstance(engine.peek(run), asyncio.CancelledError)
 
 
 async def test_a_rung_cancelled_before_its_word_begins_runs_no_word() -> None:
   """A pin: a word that makes a rung and cancels it in one step leaves the cancel before the start of its run, so
-  the Kernel begins no word of a rung that is done already."""
+  the Kernel begins no word of a rung that is done already, and says that run done with CancelledError."""
   root = booted(worlds(STANDS))
   assert await engine.rung("r = rung('ran = 1')\ncancel(r)", on=root) is None
   await settle()
+  inner = engine.module(root)["r"]
+  (run,) = [a[1] for a in engine.transcript(root) if a[0] == "run" and a[4] == inner]
   assert "ran" not in engine.module(root)
-  assert isinstance(engine.peek(engine.module(root)["r"]), asyncio.CancelledError)
+  assert isinstance(engine.peek(inner), asyncio.CancelledError) and isinstance(engine.peek(run), asyncio.CancelledError)
 
 
 async def test_the_kernel_speaks_from_the_run_it_steps() -> None:

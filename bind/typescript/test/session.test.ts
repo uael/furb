@@ -10,6 +10,7 @@ import {
   type Ear,
   type Fact,
   inspectRecord,
+  isQuestion,
   Session,
   store,
   type Turn,
@@ -1078,5 +1079,36 @@ test("an ear of the host that comes before the files takes a read in their place
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
+  }
+});
+
+test("a reply that a cancel ends asks its model for nothing more, and comes to a CancelledError", async () => {
+  const stopped: string[] = [];
+  const session = boot({
+    ...modeled,
+    answer: (_actor, _chain, _turns, signal) =>
+      new Promise<Turn>((_, reject) =>
+        signal.addEventListener(
+          "abort",
+          () => {
+            stopped.push("aborted");
+            reject(new Error("aborted"));
+          },
+          { once: true },
+        ),
+      ),
+  });
+  try {
+    const { engine } = session;
+    const act = engine.prompt("int", { message: "count", on: engine.root });
+    await until(session, () => session.provider.streams.size > 0);
+    engine.cancel(String(act));
+    expect(stopped).toEqual(["aborted"]);
+    const dones = engine
+      .transcript({ on: engine.root })
+      .filter(([kind, id]) => kind === "done" && isQuestion("reply", id));
+    expect(dones.map((fact) => (fact[3] as { is?: string }).is)).toEqual(["CancelledError"]);
+  } finally {
+    await session.dispose();
   }
 });

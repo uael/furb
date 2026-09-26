@@ -278,8 +278,10 @@ class Running:
     self.taken.add(run)
 
   def ended(self, run: str, got: BaseException | None) -> None:
-    """The word is over, and the run is done with what the word gave, as that run."""
+    """The word is over, and the run is done with what the word gave, as that run: its frame and the wants it
+    waits on are dropped, so no done that comes later carries a word that is gone."""
     self.frames.pop(run, None)
+    self.waits = {wants: one for wants, one in self.waits.items() if one != run}
     with self.site.set(run):
       verb(self.names, "say")("done", run, got)
 
@@ -313,11 +315,11 @@ class Running:
 
   def begin(self, run: str) -> None:
     """A word begun as its rung: it runs in the globals of its chain, and one that awaits nothing is over where it
-    began. A rung that is done already begins no word."""
+    began. The run of a rung that is done already is done with CancelledError, since its word never begins."""
     _, _, _, chain, rung, word, *_ = self.of(run)
     self.taken.discard(run)
     if verb(self.names, "peek")(rung, ...) is not ...:
-      return None
+      return self.ended(run, self.cancelled())
     module = verb(self.names, "module")(chain)
     assert isinstance(module, dict)
     try:
@@ -330,15 +332,19 @@ class Running:
     self.frames[run] = ran
     return self.carry(run, None)
 
-  def dropped(self, about: str) -> None:
+  def cancelled(self) -> BaseException:
+    """The CancelledError of the engine, which a run is done with when its word is dropped or never begins."""
+    got = verb(self.names, "CancelledError")()
+    assert isinstance(got, BaseException)
+    return got
+
+  def dropped(self, control: tuple) -> None:
     """Every run whose rung a control is over, dropped: the frame of a word that is mid step is never closed."""
-    under = verb(self.names, "under")
-    for one in [x for x in self.frames if under(self.of(x)[4], about)]:
+    covers = verb(self.names, "covers")
+    for one in [x for x in self.frames if covers(control, self.of(x)[4])]:
       if not getattr(self.frames[one], "cr_running", False):
         self.frames[one].close()
-        got = verb(self.names, "CancelledError")()
-        assert isinstance(got, BaseException)
-        self.ended(one, got)
+        self.ended(one, self.cancelled())
 
 
 def gating(gate: Gate, sheet: Names, engine: Names) -> Ear:
@@ -374,8 +380,8 @@ def kernel(names: Names) -> Ear:
         held.begin(run)
       case ("done", wants, _, value) if wants in held.waits:
         held.carry(held.waits.pop(wants), value)
-      case ("cancel" | "close", about, *_):
-        held.dropped(about)
+      case ("cancel" | "close", *_) as control:
+        held.dropped(control)
 
 
 def loaded(source: str, held: dict[str, object]) -> dict[str, object]:

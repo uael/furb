@@ -85,7 +85,7 @@ fn read(path: &Path, repair: bool) -> Result<Vec<Object>, Fault> {
     let entry =
       inward(&decoded(raw, 0).map_err(|_| invalid(start))?).map_err(|_| invalid(start))?;
     let fact = entry.as_ref().items().and_then(|held| held.first().and_then(|one| one.items()));
-    let holds = entry.as_ref().items().is_some_and(|held| (1..=2).contains(&held.len()));
+    let holds = entry.as_ref().items().is_some_and(|held| held.len() == 1);
     if !holds || !fact.is_some_and(|fact| fact.len() >= 3 && fact[0].as_str().is_some()) {
       return Err(invalid(start));
     }

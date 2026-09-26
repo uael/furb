@@ -44,8 +44,11 @@ pub fn bash() -> Box<dyn Ear> {
               }
               running.insert(about, one);
             }
+            // The machine would not start it, so the ear closes it with why, as a prompt that the operator cannot
+            // answer is closed, and the chain is told why.
             Err(fault) => {
-              say(&co, Fact::says("done", &about, [fault.object()])).await;
+              call(&co, "close", vec![fault.object()], vec![("id", Object::string(&about))])
+                .await?;
             }
           }
         }
@@ -115,6 +118,7 @@ async fn begun(co: &Co, a: &Fact, voice: Voice) -> Result<Running, Fault> {
   let about = a.about().to_owned();
   let on = a.on().to_owned();
   let line = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+  let shown = format!("{line:?}");
   let fed = a.word(2).and_then(|one| one.as_bool()).unwrap_or_default();
   let timeout = a.word(3).and_then(|one| one.as_float().or_else(|| one.as_int().map(|n| n as f64)));
   let dir = here(co, &on).await?;
@@ -129,8 +133,9 @@ async fn begun(co: &Co, a: &Fact, voice: Voice) -> Result<Running, Fault> {
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
   grouped(&mut command);
-  let mut child =
-    command.spawn().map_err(|no| Fault::refused(format!("{no}: {}", dir.display())))?;
+  let mut child = command
+    .spawn()
+    .map_err(|no| Fault::refused(format!("{shown} did not start: {no}: {}", dir.display())))?;
   let state = Arc::new(Mutex::new(State::default()));
   let pid = child.id();
   let stdin = child.stdin.take().map(fed_by);

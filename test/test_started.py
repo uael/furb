@@ -24,8 +24,8 @@ async def test_the_started_names_the_act_and_says_no_more_of_it() -> None:
   assert [a for a in said(log, "started") if a[1] == act] == [("started", act, WORLD)]
 
 
-async def test_the_record_keeps_a_started_of_the_outside() -> None:
-  """The record keeps a started of the outside, so a later life holds the act from the outside and says no started for it, since only the outside runs it: the act is done where the record holds its done, and pending when the record holds none."""
+async def test_the_journal_keeps_a_started_of_the_outside() -> None:
+  """The journal keeps a started of the outside, so a later life holds the act from the outside and says no started for it, since only the outside runs it: the act is done where the record holds its done, and pending when the record holds none."""
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
   step = engine.rung("x = bash('sleep 9')", on=root)
@@ -45,4 +45,4 @@ async def test_the_record_keeps_a_started_of_the_outside() -> None:
   one = engine.bash("echo hi", on=root)
   assert (await one).code == 0
   again, _ = await relived(Sand(stands=STANDS), plain(ended.record))
-  assert [(a[0], a[2]) for a in again if a[1] == one and a[0] in ("started", "done")] == [("done", "record")]
+  assert [(a[0], a[2]) for a in again if a[1] == one and a[0] in ("started", "done")] == [("done", "journal")]

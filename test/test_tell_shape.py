@@ -16,7 +16,7 @@ async def test_a_tell_carries_notes_about_the_act_it_is_about() -> None:
 
 
 async def test_what_an_act_tells_is_the_telling_of_its_chain() -> None:
-  """What an act tells is the telling of its chain, so the record keeps none of it, and a later life tells it again."""
+  """What an act tells is the telling of its chain, so the journal keeps none of it, and a later life tells it again."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   assert await engine.rung("k = 1", on=root) is None

@@ -72,8 +72,11 @@ Each name has one meaning, which the contract's sentences use as given here.
 - filter: a callable that says which acts of the transcript up to the source the turns of the new chain keep; take
   makes the filter of the file.
 - transcript: the facts on a chain, in the order of the log, which boot adds as they are said; it is the whole state
-  of the chain, and its module, its program, its working directory and its turns are read off it.
+  of the chain, and its module, its program, its working directory and its turns are read off it. The view gives a
+  new list of them at each call.
 - module: the fact that carries the globals of a chain, which the chain says at its birth and at each replay.
+- prefix: the fact that carries what a chain with a source holds of the transcript of its origin, which the chain
+  says at its birth, before its open; the transcript of the chain holds those facts where the prefix stands.
 - note: one thing a tell says: python as it stands, or a text and its show.
 - paragraph: what one fact that tells stands as in a turn: its notes, with a blank line between two paragraphs.
 - header: the first line of a paragraph: # and, with no space, the id of the act it is of, or the kind of a query,
@@ -82,7 +85,7 @@ Each name has one meaning, which the contract's sentences use as given here.
   rung advances.
 - binding: a statement that binds the name of an act to the act, which a turn shows and a rung the chain writes
   runs.
-- tell: a fact that carries notes about the act it is of, which the turns are folded from and the record keeps
+- tell: a fact that carries notes about the act it is of, which the turns are folded from and the journal keeps
   none of.
 - turn: one item of what a model reads of a transcript, folded from the tells: a role, python, a usage and blocks.
 - known: a line that a model was told, in the transcript of its chain.
@@ -148,7 +151,7 @@ Each name has one meaning, which the contract's sentences use as given here.
 - The prompt is the one channel of the engine: every exchange between the operator, the models and a chain is a prompt.
 - A model extends the engine from a step: an extension writes verbs and ears, shows and filters as callables, and
   rebinds names, and it tells notes of its own, from a door or from a rebound verb.
-- The engine has no registry, no plugin surface, no permission and no REPL: the record says who made each act.
+- The engine has no registry, no plugin surface, no permission and no REPL: the record shows who made each act.
 - Within a chain, a rung binds, passes and returns any python value, plain or not.
 - When its share of the window is high, a model opens a chain with a source and a take that is not inside.
 - Compaction is not in the core.

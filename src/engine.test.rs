@@ -54,14 +54,21 @@ fn done(about: &str, value: Object) -> Fact {
 }
 
 /// The provider of the test: it answers what the chains stand on, and each reply with the next word of its script.
+/// A word `hang` is a turn that never comes, which the provider drops, and notes, when the reply is done.
 fn provider(
   at: PathBuf,
   words: Rc<RefCell<VecDeque<String>>>,
   read: Rc<RefCell<Vec<String>>>,
+  dropped: Rc<RefCell<Vec<String>>>,
 ) -> Box<dyn Ear> {
   ear(move |co, _| async move {
+    let mut hung = Vec::new();
     loop {
       let a = hear(&co).await;
+      if a.kind() == "done" && hung.contains(&a.about().to_owned()) {
+        hung.retain(|one| one != a.about());
+        dropped.borrow_mut().push(a.about().to_owned());
+      }
       if !a.question() {
         continue;
       }
@@ -87,6 +94,10 @@ fn provider(
           let turns = call(&co, "turns", vec![], vec![("on", Object::string(a.on()))]).await?;
           read.borrow_mut().push(turns.py_repr());
           let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
+          if word == "hang" {
+            hung.push(a.about().to_owned());
+            continue;
+          }
           let turn = Object::tuple([
             Object::string("assistant"),
             Object::string(word),
@@ -125,6 +136,8 @@ struct Lived {
   engine: Engine,
   at: PathBuf,
   read: Rc<RefCell<Vec<String>>>,
+  /// Every reply whose turn the provider dropped before it came.
+  dropped: Rc<RefCell<Vec<String>>>,
 }
 
 impl Lived {
@@ -146,11 +159,11 @@ impl Lived {
     }
     fs::create_dir_all(&at).expect("a yard of the test");
     let (record, store) = world::store(at.join("record.jsonl"))?;
-    let read = Rc::default();
+    let (read, dropped) = (Rc::default(), Rc::default());
     let words = Rc::new(RefCell::new(words.iter().map(|one| (*one).to_owned()).collect()));
     let mut ears = first;
     ears.extend([
-      ("provider", provider(at.clone(), words, Rc::clone(&read))),
+      ("provider", provider(at.clone(), words, Rc::clone(&read), Rc::clone(&dropped))),
       ("console", console()),
       ("files", world::files()),
       ("bash", world::bash()),
@@ -158,7 +171,7 @@ impl Lived {
       ("store", store),
     ]);
     let engine = Engine::boot(record, ears)?;
-    Ok(Lived { engine, at, read })
+    Ok(Lived { engine, at, read, dropped })
   }
 
   fn root(&self) -> String {
@@ -282,6 +295,33 @@ fn a_command_that_outlives_its_timeout_ends_with_no_code() {
   let with = verbs::Bash { timeout: Some(0.2), on: on(&lived.root()), ..Default::default() };
   let exit: Exit = block_on(lived.engine.bash("sleep 5 & sleep 5", with).unwrap()).unwrap();
   assert_eq!(exit.code, None);
+}
+
+#[test]
+fn the_provider_drops_the_turn_of_a_reply_that_a_cancel_ends() {
+  let mut lived = Lived::new("drops", &["hang"], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Prompt { message: Some("go".to_owned()), on: on(&root), ..Default::default() };
+  let asked = lived.engine.prompt(Object::string("int"), with).unwrap().id().to_owned();
+  assert!(lived.engine.get("reply1").unwrap().is_some());
+  assert!(lived.dropped.borrow().is_empty());
+  lived.engine.cancel(&asked).unwrap();
+  assert_eq!(*lived.dropped.borrow(), ["reply1"]);
+  assert_eq!(lived.settled("reply1").unwrap_err().name, "CancelledError");
+}
+
+#[test]
+fn a_command_that_does_not_start_is_closed_with_why_and_the_chain_is_told() {
+  let mut lived = Lived::new("unstarted", &[], true).unwrap();
+  let root = lived.root();
+  lived.engine.cd("nowhere", verbs::Cd { on: on(&root) }).unwrap();
+  let with = verbs::Bash { on: on(&root), ..Default::default() };
+  let no = block_on(lived.engine.bash("echo hi", with).unwrap()).unwrap_err();
+  assert_eq!(no.name, "Refused");
+  assert!(no.message().contains("\"echo hi\" did not start"), "{no}");
+  let told = lived.engine.turns(verbs::Turns { on: on(&root) }).unwrap();
+  let told = told.iter().map(|one| one.as_ref().py_repr()).collect::<Vec<_>>().join("\n");
+  assert!(told.contains("#bash1 closed"), "{told}");
 }
 
 #[test]

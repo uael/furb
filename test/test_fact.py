@@ -26,7 +26,7 @@ async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
   assert all(isinstance(one, tuple) and isinstance(one[0], str) for one in log)
-  assert {OPERATOR, WORLD, "gate", root, "record"} <= {one[2] for one in log}
+  assert {OPERATOR, WORLD, "gate", root, "journal"} <= {one[2] for one in log}
   kinds = {"chain", "module", "stand", "prompt", "rung", "reply", "gate", "started", "done", "ready", "run", "keep"}
   assert kinds <= {one[0] for one in log}
   assert {name: one[0] for name, one in acts(log).items()} == {
@@ -146,7 +146,9 @@ async def test_the_world_is_given_the_id_of_the_act_and_the_facts_about_the_act_
   act = engine.bash("echo hi", on=root)
   await settle()
   assert [one[1] for one in sand.calls if one[0] == "bash"] == [act]
-  assert {one[1] for one in log if one[0] in ("out", "exited", "started") and one[2] == WORLD} == {act}
+  assert {
+    one[1] for one in log[log.index(engine.get(act)) :] if one[0] in ("out", "done", "started") and one[2] == WORLD
+  } == {act}
   assert (await act).code == 0
 
 

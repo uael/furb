@@ -39,7 +39,7 @@ async def test_a_gate_is_the_question_of_whether_a_word_may_run() -> None:
 
 
 async def test_a_gate_carries_the_word_alone() -> None:
-  """A gate carries the word alone, and the gate reads the program of the chain before that rung when it takes the gate, and the word after it, so the Kernel keeps no ladder of its own, the record keeps no program, and a word of a program made again is read after the rungs that stand."""
+  """A gate carries the word alone, and the gate reads the program of the chain before that rung when it takes the gate, and the word after it, so the Kernel keeps no ladder of its own, the journal keeps no program, and a word of a program made again is read after the rungs that stand."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = [

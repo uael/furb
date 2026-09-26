@@ -20,7 +20,7 @@ from types import CoroutineType
 import furb
 import furb_monty
 from furb import engine, sheet
-from furb.engine import Act, Refused, site, under
+from furb.engine import Act, Refused, site
 
 type Kernel = Generator[tuple | None, tuple]
 """The Kernel, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
@@ -56,8 +56,10 @@ class Native:
     self.waits: dict[str, str] = {}
 
   def ended(self, run: str, got: BaseException | None) -> None:
-    """The word is over, and the run is done with what the word gave, as that run."""
+    """The word is over, and the run is done with what the word gave, as that run: its frame and the wants it
+    waits on are dropped, so no done that comes later carries a word that is gone."""
     self.frames.pop(run, None)
+    self.waits = {wants: one for wants, one in self.waits.items() if one != run}
     with site.set(run):
       engine.say("done", run, got)
 
@@ -81,12 +83,12 @@ class Native:
         given = engine.peek(got)
 
   def begin(self, run: str) -> None:
-    """A word begun as its rung: it is compiled in the module of its chain, a word that awaits nothing ends here,
-    and a rung that is done already begins no word."""
+    """A word begun as its rung: it is compiled in the module of its chain, and a word that awaits nothing ends
+    here. The run of a rung that is done already is done with CancelledError, since its word never begins."""
     self.taken.discard(run)
     _, _, _, chain, rung, word, _ = (str(x) for x in engine.get(run))
     if engine.peek(rung, ...) is not ...:
-      return None
+      return self.ended(run, CancelledError())
     try:
       # The compile stands inside, so a word the interpreter will not take is what the run came to and no more.
       with site.set(rung):
@@ -112,9 +114,9 @@ class Native:
           self.begin(run)
         case ("done", wants, _, value) if wants in self.waits:
           self.carry(self.waits.pop(wants), value)
-        case ("cancel" | "close", about, *_):
+        case ("cancel" | "close", *_) as control:
           # The frame of the word that says the close is mid step, and the CancelledError of close ends that one.
-          for one in [x for x in self.frames if under(str(engine.get(x)[4]), about)]:
+          for one in [x for x in self.frames if engine.covers(control, str(engine.get(x)[4]))]:
             if not self.frames[one].cr_running:
               self.frames[one].close()
               self.ended(one, CancelledError())
