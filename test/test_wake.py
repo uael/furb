@@ -77,12 +77,10 @@ async def test_wake_is_given_the_id_of_an_act_or_the_id_of_a_chain() -> None:
   sand.exits(one, 0)
   sand.exits(two, 0)
   await settle()
-  engine.wake(one)
-  await settle()
-  assert heads(engine.turns(on=root))[-2:] == [f"#{one} woke", f"#{one} exited 0"]
-  engine.wake(root)
-  await settle()
-  assert heads(engine.turns(on=root))[-2:] == [f"#{root} woke", f"#{two} exited 0"]
+  for woken, exited in ((one, one), (root, two)):
+    engine.wake(woken)
+    await settle()
+    assert heads(engine.turns(on=root))[-2:] == [f"#{woken} woke", f"#{exited} exited 0"]
 
 
 async def test_a_wake_lifts_the_pause_and_delivers_every_held_result() -> None:

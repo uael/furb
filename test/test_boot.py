@@ -14,10 +14,10 @@ from conftest import (
   born,
   gated,
   heads,
+  ids,
   keeping,
   life,
   lived,
-  outside,
   pair,
   paragraphs,
   plain,
@@ -30,18 +30,22 @@ from conftest import (
   world_says,
 )
 from furb import engine
-from furb.engine import HIDDEN, OPERATOR, Drift, Exit, Refused, Text, idle, take
-
-
-def made(log: list[tuple]) -> list[str]:
-  """The name of every act of a life, as the log of that life says them."""
-  return [a[1] for a in log if engine.question(a)]
+from furb.engine import HIDDEN, OPERATOR, Drift, Exit, Refused, Text, idle, site, take
 
 
 def ours(log: list[tuple]) -> dict[str, tuple]:
   """Every act of the life that the operator or an act made, under its name: the World asks its own questions again
   only when it needs them."""
   return {name: a for name, a in acts(log).items() if a[2] != WORLD}
+
+
+def outside(label: str = "outside") -> str:
+  """A chain the outside makes under a site of its own, which neither the operator nor an act is."""
+  token = site.set("outside")
+  try:
+    return engine.chain(label)
+  finally:
+    site.reset(token)
 
 
 def watching(root: str) -> Generator[tuple | None, tuple]:
@@ -83,8 +87,8 @@ async def test_the_kind_of_an_act_is_the_verb_that_made_the_act_or_the_kind_an_e
   """The kind of an act is the verb that made the act, or the kind an ear made it with."""
   _, log, _ = await lived()
   kinds = {"chain", "stand", "prompt", "rung", "reply", "gate", "run", "read", "bash", "wants", "merged"}
-  assert {engine.get(name)[0] for name in made(log)} == kinds and engine.get("merged1")[2] == WORLD
-  assert [name for name in made(log) if name.rstrip("0123456789") != engine.get(name)[0]] == []
+  assert {engine.get(name)[0] for name in ids(log)} == kinds and engine.get("merged1")[2] == WORLD
+  assert [name for name in ids(log) if name.rstrip("0123456789") != engine.get(name)[0]] == []
 
 
 async def test_an_act_says_who_made_it() -> None:
@@ -122,7 +126,7 @@ async def test_the_root_has_no_parent() -> None:
   """The root has no parent."""
   _, log, root = await lived()
   assert said(log, "chain")[0][2] == OPERATOR
-  assert [name for name in made(log) if name != root and engine.under(root, name)] == []
+  assert [name for name in ids(log) if name != root and engine.under(root, name)] == []
 
 
 async def test_a_question_goes_to_the_living_acts_of_the_engine_before_it_goes_to_the_world() -> None:
@@ -166,10 +170,10 @@ async def test_the_engine_derives_the_transcripts_the_turns_the_globals_and_the_
   """The engine derives the transcripts, the turns, the globals and the working directories from the record."""
   sand, _, root = await lived()
   await engine.rung("cd('/deep')", on=root)
-  held = [x for x in made(engine.transcript(root)) if engine.get(x)[2] != WORLD]
+  held = [x for x in ids(engine.transcript(root)) if engine.get(x)[2] != WORLD]
   told = paragraphs(engine.turns(on=root))
   _, over = await relived(Sand(), list(sand.record))
-  assert [x for x in made(engine.transcript(over)) if engine.get(x)[2] != WORLD] == [*held, "stand2"]
+  assert [x for x in ids(engine.transcript(over)) if engine.get(x)[2] != WORLD] == [*held, "stand2"]
   assert all(one in paragraphs(engine.turns(on=over)) for one in told)
   assert engine.module(over)["k"] == 2 and engine.cwd(on=over) == "/deep"
 
@@ -537,7 +541,7 @@ async def test_one_said_again_takes_the_name_it_had() -> None:
   one = engine.prompt(int, "more", on=over)
   assert [a[1] for a in said(log, "prompt")] == ["prompt1", "prompt2"]
   assert await one == 9 and one == "prompt3"
-  assert one not in made(log)
+  assert one not in ids(log)
 
 
 async def test_a_boot_is_a_life_a_second_boot_is_a_second_life_and_the_first_is_gone() -> None:

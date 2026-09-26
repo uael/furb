@@ -1,13 +1,12 @@
 """actor, the default actor of the chain."""
 
-from conftest import STANDS, born
+from conftest import born
 from furb import engine
 
 
 async def test_actor_is_the_default_actor_of_the_chain_bound_from_the_standing() -> None:
   """actor is the default actor of the chain, bound from the standing."""
   _, _, root = born()
-  assert STANDS[2] == "m/low"
   assert engine.module(root)["actor"] == "m/low"
   assert await engine.rung("close(actor)", on=root) == "m/low"
 

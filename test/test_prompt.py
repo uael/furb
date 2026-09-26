@@ -2,12 +2,9 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, WORLD, Sand, born, dones, heads, lived, paragraphs, plain, ran, relived, said, settle
+from conftest import COST, STANDS, WORLD, Sand, born, dones, heads, lived, paragraphs, plain, ran, relived, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Act, Exit, Refused, Text
-
-COST = (80000, 0, 0, 0, 1.5)
-"""One answer of a model: a dollar and a half, and a fifth of the window of the actor the suite stands on."""
 
 
 async def test_a_prompt_it_makes_the_rung_of_one_turn_of_its_model() -> None:

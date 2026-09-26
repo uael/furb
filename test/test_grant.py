@@ -2,12 +2,10 @@
 
 from asyncio import CancelledError
 
-from conftest import born, heads, paragraphs, ran, rows, said, settle
+from conftest import COST, born, heads, paragraphs, ran, rows, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
-COST = (80000, 0, 0, 0, 1.5)
-"""One answer of a model: a dollar and a half, and a fifth of the window of the actor the suite stands on."""
 BOUND = "chain1: Act[object] = Act('chain1')\ngrant1: Act[None] = Act('grant1')\nprompt1: Act[int] = Act('prompt1')"
 """The rung the root writes at its first ask, which binds the acts its first turn opened: itself, a grant, a prompt."""
 

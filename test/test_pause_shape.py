@@ -2,12 +2,9 @@
 
 from asyncio import CancelledError
 
-from conftest import acts, born, heads, said, settle, stalled
+from conftest import COST, acts, born, heads, said, settle, stalled
 from furb import engine
 from furb.engine import OPERATOR, Refused
-
-COST = (80000, 0, 0, 0, 1.5)
-"""One answer of a model: a dollar and a half, and a fifth of the window of the actor the suite stands on."""
 
 
 async def test_while_a_pause_stands_nothing_that_the_pause_is_over_hears() -> None:

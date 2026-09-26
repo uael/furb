@@ -16,6 +16,7 @@ from conftest import (
   acts,
   born,
   heads,
+  ids,
   lasting,
   life,
   named,
@@ -32,11 +33,6 @@ from furb import engine
 from furb.engine import OPERATOR, Act, Refused, Text, take
 
 
-def made(held: list[tuple]) -> list[str]:
-  """The name of every act among the facts, which is the name the life holds an act under."""
-  return [a[1] for a in held if engine.question(a) and engine.get(a[1]) is not None]
-
-
 def binding(id: str, of: str = "object") -> str:
   """The statement that binds the name of an act to the act, as a paragraph shows it."""
   return f"{id}: Act[{of}] = Act({id!r})"
@@ -50,11 +46,6 @@ def opened(id: str, text: str) -> str:
 def steps(log: list[tuple], by: str) -> list[str]:
   """The rungs that one act made, in the order the life made them."""
   return [a[1] for a in said(log, "rung") if a[2] == by]
-
-
-def notes(held: list[tuple], id: str) -> list[list[object]]:
-  """The notes of every tell of a transcript about one act, in order."""
-  return [a[3] for a in held if a[0] == "tell" and a[1] == id]
 
 
 def on(a: tuple) -> str:
@@ -173,14 +164,11 @@ async def test_a_chain_given_a_source_stands_on_that_one() -> None:
 async def test_a_prompt_to_an_actor_its_roster_does_not_hold_it_closes_with_the_refusal() -> None:
   """A prompt to an actor its roster does not hold it closes with the refusal."""
   _, _, root = born()
-  one = engine.prompt(int, "hi", to="ghost", on=root)
-  await settle()
-  got = engine.peek(one)
-  assert isinstance(got, Refused) and str(got) == "ghost no actor"
-  wrong = engine.prompt(int, "hi", to="n/high", on=root)
-  await settle()
-  shut = engine.peek(wrong)
-  assert isinstance(shut, Refused) and str(shut) == "n/high no actor"
+  for to in ("ghost", "n/high"):
+    one = engine.prompt(int, "hi", to=to, on=root)
+    await settle()
+    got = engine.peek(one)
+    assert isinstance(got, Refused) and str(got) == f"{to} no actor"
 
 
 async def test_a_chain_that_the_word_of_a_rung_opens_is_a_scope_of_its_own() -> None:
@@ -299,7 +287,7 @@ async def test_the_transcript_of_a_chain_is_the_facts_on_it_in_the_order_it_hear
   await settle()
   held = engine.transcript(root)
   assert all(on(a) == root for a in held)
-  assert made(held) == ["stand1", one, *steps(log, one), "rung2", "reply1", "run1", "gate1", "run2"]
+  assert ids(held) == ["stand1", one, *steps(log, one), "rung2", "reply1", "run1", "gate1", "run2"]
   facts, log = lasting(held), lasting(log)
   heard = [log.index(a) for a in facts if not engine.question(a)]
   assert heard == sorted(heard) and [a for a in facts if a not in log] == []
@@ -661,11 +649,11 @@ async def test_the_acts_of_the_prefix_of_a_chain_with_a_source_keep_the_ids_they
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   held = engine.transcript(root)
-  was = made(held)
+  was = ids(held)
   twin = engine.chain("twin", source=root)
   await settle()
   now = engine.transcript(twin)
-  assert made(now)[: len(was)] == was
+  assert ids(now)[: len(was)] == was
 
 
 async def test_the_globals_of_a_chain_with_a_source_are_those_of_a_module_of_its_own() -> None:
@@ -834,8 +822,8 @@ async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin(
   held, theirs = engine.transcript(twin), engine.transcript(root)
   asked = [a for a in theirs if a[0] == "reply"]
   assert command in held and [a[1] for a in held if a[0] == "prompt"] == [one]
-  assert made(held[: held.index(("started", twin, twin))]) == [one, command[2], asked[0][1], command[1]]
-  assert notes(held, root) == [[f"#{root} root", binding(root)], rows(root)]
+  assert ids(held[: held.index(("started", twin, twin))]) == [one, command[2], asked[0][1], command[1]]
+  assert [a[3] for a in said(held, "tell") if a[1] == root] == [[f"#{root} root", binding(root)], rows(root)]
   assert [a for a in held if a[0] == "reply"] == asked[:1] and len(asked) == 2
   assert [a[1] for a in held if a[0] == "done" and a[1] in (asked[0][1], asked[1][1])] == [asked[0][1]]
   got = engine.turns(on=twin)

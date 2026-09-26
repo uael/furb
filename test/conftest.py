@@ -31,22 +31,14 @@ ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
-MONTY_SKIPS: dict[str, str] = {
-  "test_an_ear_is_any_generator_of_that_shape": (
-    "the test boots on a Kernel of this interpreter, and the engine of monty holds its own"
-  ),
-  "test_boot_gives_the_root_as_an_act_of_never_and_the_root_never_completes": (
-    "the test boots on a Kernel of this interpreter, and the engine of monty holds its own"
-  ),
-  "test_a_run_names_the_rung_that_the_word_retells": (
-    "the test boots on a Kernel of this interpreter, and the engine of monty holds its own"
-  ),
-  "test_a_rung_that_retells_is_done_with_nothing": (
-    "the test boots on a Kernel of this interpreter, and the engine of monty holds its own"
-  ),
+MONTY_SKIPS = {
+  "test_an_ear_is_any_generator_of_that_shape",
+  "test_boot_gives_the_root_as_an_act_of_never_and_the_root_never_completes",
+  "test_a_run_names_the_rung_that_the_word_retells",
+  "test_a_rung_that_retells_is_done_with_nothing",
 }
-"""MONTY_SKIPS names the tests the engine of monty does not run, each with why: what the test reads is a fact of one
-interpreter, which the boundary does not carry."""
+"""MONTY_SKIPS names the tests the engine of monty does not run, for the one reason the skip gives: what the test reads
+is a fact of one interpreter, which the boundary does not carry."""
 
 type World = Generator[tuple | None, tuple]
 """The World, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
@@ -57,7 +49,13 @@ WORLD = "world"
 """WORLD is the name that the World of the suite is heard by, and that it says its facts by."""
 
 STANDS: list = [[[OPERATOR, [], 200000], ["m", ["low", "high"], 400000], ["n", ["low"], 200000]], "/w", "m/low"]
-"""A standing of three actors, a directory and a default actor, which a test takes when it needs a roster."""
+"""A standing of three actors, a directory and a default actor, which a World of the suite stands on."""
+
+LATER: list = [[[OPERATOR, [], 200000], ["o", ["low"], 200000]], "/z", "o/low"]
+"""What a later World offers: another roster, another directory and another default actor."""
+
+COST = (80000, 0, 0, 0, 1.5)
+"""One answer of a model: a dollar and a half, and a fifth of the window of the actor the suite stands on."""
 
 WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nclose((await x).code)"
 """A word of a rung that reads a file, starts a command and gives back what the command came to."""
@@ -438,15 +436,6 @@ def world_says(kind: str, about: str, *words: object) -> tuple:
     site.reset(token)
 
 
-def outside(label: str = "outside") -> str:
-  """A chain the outside makes under a site of its own, which neither the operator nor an act is."""
-  token = site.set("outside")
-  try:
-    return engine.chain(label)
-  finally:
-    site.reset(token)
-
-
 async def settle(n: int = 80) -> None:
   """Room for the loop to do what it still owes, so that finding nothing done means something."""
   for _ in range(n):
@@ -543,6 +532,11 @@ def said(log: Sequence[tuple], kind: str) -> list[tuple]:
   return [a for a in log if a[0] == kind]
 
 
+def ids(facts: Sequence[tuple]) -> list[str]:
+  """The id of every act among the facts, in the order they were said."""
+  return [a[1] for a in facts if engine.question(a)]
+
+
 def acts(log: Sequence[tuple]) -> dict[str, tuple]:
   """Every act that was said in the life, under its name, as the life holds it."""
   return {a[1]: a for a in log if engine.question(a)}
@@ -632,22 +626,10 @@ def engine_of(request: pytest.FixtureRequest) -> Generator[str]:
   """The engine a test runs on, bound under every name the suite reads it by for the length of the test."""
   which = getattr(request, "param", "python")
   if which == "monty" and request.node.originalname in MONTY_SKIPS:
-    pytest.skip(MONTY_SKIPS[request.node.originalname])
+    pytest.skip("the test boots on a Kernel of this interpreter, and the engine of monty holds its own")
   swapped(ENGINES[which])
   yield which
   swapped(furb.python)
-
-
-@pytest.fixture
-def sand() -> Sand:
-  """A World in memory of its own for one test."""
-  return Sand()
-
-
-@pytest.fixture
-def py() -> Py:
-  """A Kernel that is python of its own for one test."""
-  return Py()
 
 
 # pytest loads this file as its plugin under a name of its own; the tests and the probe import it as conftest. One

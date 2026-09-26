@@ -37,7 +37,6 @@ async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_
 
 async def test_a_standing_holds_no_source() -> None:
   """A standing holds no source: the engine is one file the model imports, and a record made by another engine is a drift."""
-  assert len(STANDS) == 3
   sand, _, root = born("x = bash('echo hi')\nclose(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()

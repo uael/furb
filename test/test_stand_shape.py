@@ -2,12 +2,9 @@
 
 import pytest
 
-from conftest import STANDS, WORLD, Sand, born, paragraphs, plain, relived, rows, said, settle, takes, tip
+from conftest import LATER, STANDS, WORLD, Sand, born, paragraphs, plain, relived, rows, said, settle, takes, tip
 from furb import engine
 from furb.engine import OPERATOR, Refused
-
-LATER = [[["operator", [], 200000], ["o", ["low"], 200000]], "/z", "o/low"]
-"""What a later World offers: another roster, another directory and another default actor."""
 
 
 async def test_a_stand_is_the_question_of_what_the_chains_stand_on() -> None:

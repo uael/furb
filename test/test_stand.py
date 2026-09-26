@@ -1,11 +1,8 @@
 """stand, the question of what the chains stand on."""
 
-from conftest import STANDS, Sand, born, relived, said, settle
+from conftest import LATER, STANDS, Sand, born, relived, said, settle
 from furb import engine
 from furb.engine import OPERATOR
-
-LATER = [[["operator", [], 200000], ["o", ["low"], 200000]], "/z", "o/low"]
-"""What a later World offers: another roster, another directory and another default actor."""
 
 
 async def test_stand_asks_the_world_what_the_chains_stand_on_and_gives_the_answer() -> None:

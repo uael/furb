@@ -19,7 +19,6 @@ async def test_the_working_directory_of_a_chain_is_the_closest_cd_back_in_its_tr
 async def test_the_working_directory_of_a_chain_is_the_directory_of_the_standing_it_stands_on() -> None:
   """The working directory of a chain is the directory of the standing it stands on while no cd stands in its transcript, so a later standing moves no chain that a cd moved."""
   sand, _, root = born()
-  assert STANDS[1] == "/w"
   assert engine.cwd(on=root) == "/w"
   two = engine.chain("two")
   await engine.rung("cd('/deep')", on=two)
