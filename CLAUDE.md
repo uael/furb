@@ -33,8 +33,8 @@ The TypeScript side is a bun workspace at the root, with two packages:
   holds the demo session and its scripted answers. `tui/README.md` says what the TUI does, and
   `docs/tui.md` shows each screen. The gallery and the animation come from `tui/script/`.
 
-`docs/developer-guide.md` is the guide for a person who changes the repository. It says the same things as this
-file, in the order in which a person needs them.
+`docs/developer-guide.md` is the guide for a person who changes the repository: the tools to install, how a word
+runs, and the files of the TUI. For everything else, it links to this file.
 
 ## The contract
 
