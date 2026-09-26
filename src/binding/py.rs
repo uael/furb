@@ -22,6 +22,7 @@ use pyo3::{
 
 use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step, Voice,
+  ear::{Call, Spoken},
   engine::Hosted,
   value::{IS, entry, field, marked},
   world,
@@ -374,9 +375,12 @@ impl NativeEar {
     let python = door.made().python.bind(py);
     let (site, say) = (python.getattr("site")?, python.getattr("say")?);
     for one in said {
-      let saying = to_python(py, door.made(), one.saying.0.as_ref())?;
       let token = site.call_method1("set", (one.by,))?;
-      let got = say.call1(saying.cast::<PyTuple>()?);
+      let got = match one.spoken {
+        Spoken::Saying(saying) => to_python(py, door.made(), saying.0.as_ref())
+          .and_then(|saying| say.call1(saying.cast::<PyTuple>()?)),
+        Spoken::Verb(call) => verb_said(py, &door, &call),
+      };
       site.call_method1("reset", (token,))?;
       got?;
     }
@@ -983,4 +987,17 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(kept, module)?)?;
   module.add_function(wrap_pyfunction!(gate, module)?)?;
   Ok(())
+}
+
+/// One verb that the work of an ear of the crate said, said to the engine of this interpreter with its words, and
+/// what it gave.
+fn verb_said<'py>(py: Python<'py>, door: &Door, call: &Call) -> PyResult<Bound<'py, PyAny>> {
+  let made = door.made();
+  let args = call.args.iter().map(|one| to_python(py, made, one.as_ref()));
+  let args = PyTuple::new(py, args.collect::<PyResult<Vec<_>>>()?)?;
+  let kwargs = PyDict::new(py);
+  for (key, one) in &call.kwargs {
+    kwargs.set_item(key, to_python(py, made, one.as_ref())?)?;
+  }
+  made.python.bind(py).getattr(call.verb.as_str())?.call(args, Some(&kwargs))
 }

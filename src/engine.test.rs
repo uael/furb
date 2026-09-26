@@ -469,3 +469,63 @@ fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
   assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
   assert_eq!(second.settled(&id).unwrap().as_ref().as_int(), Some(2));
 }
+
+/// An ear that takes each wait and ends it from its own thread: it pauses the chain of the wait by its voice, then
+/// says the wait done; or, when told to hush, it hushes the wait before its thread speaks, and says the done itself.
+fn pauser(hushes: bool) -> Box<dyn Ear> {
+  ear(move |co, voice| async move {
+    loop {
+      let a = hear(&co).await;
+      if a.kind() != "wait" || !a.question() {
+        continue;
+      }
+      let (about, on) = (a.about().to_owned(), a.on().to_owned());
+      say(&co, Fact::says("started", &about, [])).await;
+      if hushes {
+        voice.call(&about, "pause", vec![Object::string(&on)], vec![]);
+        voice.hush(&about);
+        say(&co, done(&about, Object::none())).await;
+        continue;
+      }
+      let voice = voice.clone();
+      thread::spawn(move || {
+        voice.call(&about, "pause", vec![Object::string(on)], vec![]);
+        voice.say("done", &about, [Object::none()]);
+      });
+    }
+  })
+}
+
+/// A life on the provider of the test and on the ear that pauses.
+fn paused(yard: &str, hushes: bool) -> Engine {
+  let at = std::env::temp_dir().join(format!("furb-engine-{yard}"));
+  let words = Rc::new(RefCell::new(VecDeque::new()));
+  let ears = [("provider", provider(at, words, Rc::default())), ("pauser", pauser(hushes))];
+  Engine::boot(Vec::<Object>::new(), ears).unwrap()
+}
+
+#[test]
+fn the_work_of_an_ear_says_a_verb_by_its_voice_in_its_turn_and_under_its_name() {
+  let mut engine = paused("uttered", false);
+  let root = engine.root().to_owned();
+  let act = engine.wait(verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap();
+  let id = act.id().to_owned();
+  block_on(act).unwrap();
+  let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let said: Vec<(String, String)> = facts
+    .iter()
+    .filter(|one| one.by() == "pauser")
+    .map(|one| (one.kind().to_owned(), one.about().to_owned()))
+    .collect();
+  let expected = [("started", &id), ("pause", &root), ("done", &id)];
+  assert_eq!(said, expected.map(|(kind, about)| (kind.to_owned(), about.clone())));
+}
+
+#[test]
+fn a_hush_drops_a_verb_that_the_work_of_an_ear_has_not_yet_said() {
+  let mut engine = paused("unuttered", true);
+  let root = engine.root().to_owned();
+  block_on(engine.wait(verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap()).unwrap();
+  let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  assert!(facts.iter().all(|one| one.kind() != "pause"), "the hushed verb was never said");
+}

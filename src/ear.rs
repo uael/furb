@@ -15,7 +15,7 @@
 //! of python: [`hear`], [`say`] and [`call`] read like the ears of the engine.
 //!
 //! The work an ear begins, a command, a wait, outlives the hearing that began it, and speaks later by its Voice,
-//! under the name of the ear, from any thread.
+//! under the name of the ear, from any thread: it says a saying, or a verb of the engine.
 
 use std::{
   collections::{HashSet, VecDeque},
@@ -190,10 +190,18 @@ pub async fn call(
   }
 }
 
-/// One saying that the work of an ear said once its hearing was over: who says it, and the saying.
+/// One thing that the work of an ear said once its hearing was over: who says it, the act the work is about, and what
+/// it says.
 pub(crate) struct Said {
   pub by: String,
-  pub saying: Fact,
+  pub about: String,
+  pub spoken: Spoken,
+}
+
+/// What the work of an ear says: a saying, or a verb of the engine with its words.
+pub(crate) enum Spoken {
+  Saying(Fact),
+  Verb(Call),
 }
 
 /// What an engine drains of the voices of its ears: the sayings not yet heard, the acts whose work is hushed, and
@@ -229,12 +237,25 @@ impl Voice {
 
   /// One saying: its kind, the act it is about, and its words, which the bus makes whole under the name of the ear.
   pub fn say(&self, kind: &str, about: &str, words: impl IntoIterator<Item = Object>) {
+    self.spoken(about, Spoken::Saying(Fact::says(kind, about, words)));
+  }
+
+  /// One verb of the engine, said with its words by the work of this ear about an act, under the name of the ear
+  /// and in its turn among what the ear says, as the ear says a verb while it hears. A control that the work of an
+  /// ear must say before a done, such as a pause, is said so.
+  pub fn call(&self, about: &str, verb: &str, args: Vec<Object>, kwargs: Vec<(&str, Object)>) {
+    let kwargs = kwargs.into_iter().map(|(key, one)| (key.to_owned(), one)).collect();
+    self.spoken(about, Spoken::Verb(Call { verb: verb.to_owned(), args, kwargs }));
+  }
+
+  /// What the work of this ear about an act says, held until the engine is driven, unless that work is hushed.
+  fn spoken(&self, about: &str, spoken: Spoken) {
     let waker = {
       let Ok(mut held) = self.held.lock() else { return };
       if held.hushed.contains(&(self.by.clone(), about.to_owned())) {
         return;
       }
-      held.said.push_back(Said { by: self.by.clone(), saying: Fact::says(kind, about, words) });
+      held.said.push_back(Said { by: self.by.clone(), about: about.to_owned(), spoken });
       held.waker.take()
     };
     if let Some(waker) = waker {
@@ -247,7 +268,7 @@ impl Voice {
   pub fn hush(&self, about: &str) {
     let Ok(mut held) = self.held.lock() else { return };
     let by = self.by.clone();
-    held.said.retain(|one| one.by != by || one.saying.about() != about);
+    held.said.retain(|one| one.by != by || one.about != about);
     held.hushed.insert((by, about.to_owned()));
   }
 

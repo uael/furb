@@ -23,7 +23,7 @@ use monty_types::{MontyUuid, NamedValues};
 
 use crate::{
   ENGINE, KERNEL, PREAMBLE, SHEET,
-  ear::{Ear, Heard, Step, Voice},
+  ear::{Call, Ear, Heard, Spoken, Step, Voice},
   fact::Fact,
   gate::checked,
   sand::{Sand, id, object},
@@ -268,10 +268,24 @@ impl Engine {
         return Ok(());
       }
       for one in said {
-        let inputs = vec![("__by", Object::string(one.by)), ("__saying", one.saying.0)];
-        self.run("said(__engine, __ears, __by, __saying)", inputs)?;
+        match one.spoken {
+          Spoken::Saying(saying) => {
+            let inputs = vec![("__by", Object::string(one.by)), ("__saying", saying.0)];
+            self.run("said(__engine, __ears, __by, __saying)", inputs)?;
+          }
+          Spoken::Verb(call) => self.uttered(&one.by, call)?,
+        }
       }
     }
+  }
+
+  /// One verb that the work of an ear said, said under the name of that ear, as the ear says a verb while it hears.
+  fn uttered(&mut self, by: &str, call: Call) -> Result<(), Fault> {
+    let before = self.site(Some(by))?;
+    let kwargs = call.kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
+    let got = self.verb(&call.verb, call.args, kwargs);
+    self.site(Some(&before))?;
+    got.map(drop)
   }
 
   /// An engine, opened from the record, on these ears, each under the name the engine hears it by, in the order
@@ -395,7 +409,6 @@ impl Engine {
   }
 
   /// Who speaks in the life, and who speaks from now on when a value is given: `site`, read and set where it stands.
-  #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
   pub(crate) fn site(&mut self, value: Option<&str>) -> Result<String, Fault> {
     let value = value.map_or_else(Object::none, Object::string);
     let got = self.run("spoken(__engine, __value)", vec![("__value", value)])?;
