@@ -4,11 +4,11 @@ import { join, resolve } from "node:path";
 import type { Models, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { bash, Engine, files, kept, type NativeEar, store, time } from "../index.cjs";
-import { Activity } from "./activity.js";
+import { Activity, WORK } from "./activity.js";
 import { FileChanges } from "./changes.js";
 import { Console, type ConsoleOptions } from "./console.js";
 import { driving, type Ear } from "./ears.js";
-import { attachImage, type ImageAttachment, ImageCache } from "./images.js";
+import { attachImage, type ImageAttachment } from "./images.js";
 import { furbDirectory, saveFile } from "./project.js";
 import { type Answer, Provider } from "./provider.js";
 import { type Entry, type Fact, modelNamed } from "./types.js";
@@ -17,9 +17,6 @@ import { type Entry, type Fact, modelNamed } from "./types.js";
 function* silent(): Ear {
   for (;;) yield null;
 }
-
-/** The kinds of act whose work the record may show begun and not done, which waits for a wake. */
-const PENDING = ["prompt", "rung", "bash", "wait"];
 
 export interface SessionOptions {
   /** Replay a record for inspection without owning it or starting outside work. */
@@ -69,7 +66,6 @@ export class Session extends EventEmitter {
   opened = 0;
   /** The engine, once the session opened it. */
   engine?: Engine;
-  private readonly images = new ImageCache();
   private readonly options: SessionOptions;
   private stopped = false;
   /** How many of the facts the session has given its host. */
@@ -106,7 +102,7 @@ export class Session extends EventEmitter {
       effort: options.effort,
       roster: named.roster,
       answer: options.answer,
-      images: this.imaging(),
+      imageDirectory: this.imageDirectory,
       readOnly: options.readOnly,
       changed,
       fault,
@@ -114,10 +110,6 @@ export class Session extends EventEmitter {
     for (const [id, stream] of saved?.streams ?? []) this.provider.streams.set(id, stream);
     this.console = new Console({ operator: options.operator, changed, fault });
     this.changes = new FileChanges(this.record, options.readOnly);
-  }
-
-  private imaging() {
-    return { directory: () => this.imageDirectory, cache: this.images };
   }
 
   get imageDirectory(): string {
@@ -161,7 +153,7 @@ export class Session extends EventEmitter {
       // The journal said the whole record again before boot returned, so every act that is not done now is one the
       // record showed begun and not done.
       for (const act of this.activity.acts.values())
-        if (PENDING.includes(act.kind) && !act.done && !act.paused) this.pending.set(act.id, act.kind);
+        if (WORK.includes(act.kind) && !act.done && !act.paused) this.pending.set(act.id, act.kind);
       this.save();
       return engine;
     } catch (error) {
@@ -238,7 +230,6 @@ export class Session extends EventEmitter {
       this.engine?.dispose();
       this.provider.dispose();
       this.console.dispose();
-      this.images.clear();
       this.removeAllListeners();
       this.changes.dispose();
     }

@@ -1,12 +1,11 @@
 import type { Engine } from "../index.cjs";
 import { decodeRecord } from "../index.cjs";
-import { type Ear, fault, speaking } from "./ears.js";
-import { type Fact, isQuestion, marked, type OperatorPrompt, shapes } from "./types.js";
+import { type Ear, fault, over, speaking } from "./ears.js";
+import { type Fact, float, isQuestion, marked, type OperatorPrompt, shapes } from "./types.js";
 
-/** A value the operator gives, in the shape its prompt wants: a whole number crosses as an int, so a float prompt
- * takes it marked as a float. */
+/** A value the operator gives, in the shape its prompt wants: a number goes to a float prompt as a float. */
 function shaped(shape: string, value: unknown): unknown {
-  return shape === "float" && typeof value === "number" ? { is: "float", args: [String(value)] } : value;
+  return shape === "float" && typeof value === "number" ? float(value) : value;
 }
 
 export interface ConsoleOptions {
@@ -54,7 +53,7 @@ export class Console {
   /** A prompt put to the operator, closed later as the console with what the operator answered. */
   private async asked(id: string, shape: string, message: string): Promise<void> {
     const engine = this.engine;
-    if (!engine || engine.disposed || engine.outcome(id).done) return;
+    if (!engine || over(engine, id)) return;
     let value: unknown;
     try {
       if (this.options.operator)
@@ -67,11 +66,10 @@ export class Console {
           this.options.changed?.();
         });
     } catch (error) {
-      if (engine.disposed || engine.outcome(id).done) return;
+      if (over(engine, id)) return;
       value = fault(error);
     }
-    if (!engine.disposed && !engine.outcome(id).done)
-      speaking(engine, "console", () => engine.close(value, { id }));
+    if (!over(engine, id)) speaking(engine, "console", () => engine.close(value, { id }));
   }
 
   /** What the operator typed, as the answer of the prompt it names, read in the shape the prompt wants. */

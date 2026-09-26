@@ -105,6 +105,10 @@ export function marked(plain: unknown, decoded: unknown = plain): unknown {
   );
   return "is" in plain ? { is: "dict", args: [pairs] } : Object.fromEntries(pairs);
 }
+/** A number as python takes a float: a whole number crosses as an int, so a float crosses marked, as its digits. */
+export function float(value: number): { is: string; args: string[] } {
+  return { is: "float", args: [String(value)] };
+}
 export function display(value: unknown): string {
   if (typeof value === "string") return value;
   return JSON.stringify(unmarked(value), null, 2) ?? "None";

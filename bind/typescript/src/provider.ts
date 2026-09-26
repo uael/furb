@@ -11,11 +11,10 @@ import {
   type ModelThinkingLevel,
   type ThinkingLevel,
 } from "@earendil-works/pi-ai";
-import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { Engine } from "../index.cjs";
-import { type Ear, speaking } from "./ears.js";
-import { type ImageCache, turnImages } from "./images.js";
-import { actorParts, type Fact, isQuestion, modelNamed, type Turn, zeroUsage } from "./types.js";
+import { type Ear, isFault, over, speaking } from "./ears.js";
+import { ImageCache, turnImages } from "./images.js";
+import { actorParts, type Fact, float, isQuestion, modelNamed, type Turn, zeroUsage } from "./types.js";
 
 let prompt: string | undefined;
 /** The system prompt of every model: the engine minified in layout alone, which `bun run build` writes beside the
@@ -41,14 +40,14 @@ export type Answer = (
 export interface ProviderOptions {
   /** The directory the life stands on, which each chain stands in until it goes elsewhere. */
   directory: string;
-  models?: Models;
+  models: Models;
   /** The model a prompt goes to when it names none; none puts every prompt to the operator. */
   model?: string;
   effort?: ModelThinkingLevel;
   roster?: string[];
   answer?: Answer;
-  /** Where the images a turn names are, and the cache of their content. */
-  images: { directory: () => string; cache: ImageCache };
+  /** The directory of the images a turn names. */
+  imageDirectory: string;
   /** Whether it may ask no model, as an inspection of a record may not. */
   readOnly?: boolean;
   /** Told when what a model writes changes. */
@@ -80,13 +79,15 @@ export class Provider {
   private readonly controller = new AbortController();
   /** Keys the conversations of this life at a provider, since the ids of chains repeat in every life. */
   private readonly conversations = randomUUID();
+  /** The content of each image a turn names, read once while its file stays the same. */
+  private readonly images = new ImageCache();
 
   constructor(options: ProviderOptions) {
     this.options = options;
     this.directory = options.directory;
     const roster = options.roster ?? [];
-    this.models = options.models ?? builtinModels();
-    this.model = options.model ?? roster[0];
+    this.models = options.models;
+    this.model = options.model;
     this.roster = [...new Set([this.model, ...roster])].filter((name) => name !== undefined);
     this.actors = this.roster.map((name): Actor => {
       const model = this.route(name);
@@ -144,34 +145,28 @@ export class Provider {
     turns: Turn[],
   ): Promise<void> {
     const engine = this.engine;
-    if (!engine || engine.disposed || engine.outcome(id).done) return;
+    if (!engine || over(engine, id)) return;
     let said: unknown;
     try {
       const turn = await this.reply(id, rung, chain, actor, turns);
       this.mute.delete(chain);
       // A cost that is whole stays a float for python.
       said = Array.isArray(turn[2])
-        ? [
-            turn[0],
-            turn[1],
-            turn[2].map((part, at) => (at === 4 ? { is: "float", args: [String(part)] } : part)),
-            turn[3],
-          ]
+        ? [turn[0], turn[1], turn[2].map((part, at) => (at === 4 ? float(part) : part)), turn[3]]
         : turn;
     } catch (error) {
-      if (engine.disposed || engine.outcome(id).done) return;
+      if (over(engine, id)) return;
       if (this.mute.get(chain) === actor) speaking(engine, "provider", () => engine.pause(chain));
       this.mute.set(chain, actor);
       const why =
         error instanceof Error
           ? `${error.name}: ${error.message}`
-          : error && typeof error === "object" && "is" in error && "args" in error
-            ? `${error.is}: ${Array.isArray(error.args) ? error.args.map(String).join(", ") : String(error.args)}`
+          : isFault(error)
+            ? `${error.is}: ${error.args.map(String).join(", ")}`
             : `Refused: ${String(error)}`;
       said = { is: "Refused", args: [`${actor} answered nothing: ${why}`] };
     }
-    if (!engine.disposed && !engine.outcome(id).done)
-      speaking(engine, "provider", () => engine.say("done", id, [said]));
+    if (!over(engine, id)) speaking(engine, "provider", () => engine.say("done", id, [said]));
   }
 
   /** One turn of a model for a reply, streamed under the rung the reply asks for; the done of the reply ends the
@@ -193,7 +188,6 @@ export class Provider {
           this.options.changed?.();
         });
       const model = this.route(actor);
-      const images = this.options.images;
       // The engine phrases every turn as python, so the provider renders nothing: a user turn goes as the python the
       // engine wrote, and one that holds nothing goes not at all, and an assistant turn as the blocks its provider
       // gave.
@@ -208,7 +202,7 @@ export class Provider {
           return [blocks as AssistantMessage];
         if (role === "user") {
           if (!python) return [];
-          const found = turnImages(images.directory(), python, images.cache);
+          const found = turnImages(this.options.imageDirectory, python, this.images);
           if (found.length && !model.input.includes("image"))
             throw new Error(`${model.name} does not accept images.`);
           return [
@@ -286,8 +280,9 @@ export class Provider {
     }
   }
 
-  /** Every request it makes ends. */
+  /** Every request it makes ends, and the images it read go. */
   dispose(): void {
     this.controller.abort();
+    this.images.clear();
   }
 }

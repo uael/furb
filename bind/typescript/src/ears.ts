@@ -32,9 +32,20 @@ export function speaking<T>(engine: Engine, name: string, action: () => T): T {
   }
 }
 
+/** Whether the work an ear began for an act has nothing more to say: the engine is gone, or the act is done. */
+export function over(engine: Engine, id: string): boolean {
+  return engine.disposed || engine.outcome(id).done;
+}
+
+/** Whether a value is a fault as the engine reads one: a map that names its class under `is`, and holds the list it
+ * was made with under `args`. */
+export function isFault(value: unknown): value is { is: string; args: unknown[] } {
+  const held = (value ?? {}) as { is?: unknown; args?: unknown };
+  return typeof held.is === "string" && Array.isArray(held.args);
+}
+
 /** What a host threw, as the engine reads a fault: a map that names its class, or a refusal of its message. */
 export function fault(error: unknown): { is: string; args: unknown[] } {
-  if (error && typeof error === "object" && "is" in error && "args" in error)
-    return error as { is: string; args: unknown[] };
+  if (isFault(error)) return error;
   return { is: "Refused", args: [error instanceof Error ? error.message : String(error)] };
 }
