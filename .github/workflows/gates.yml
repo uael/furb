@@ -50,33 +50,10 @@ jobs:
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
-      # The type check and the suite are gates of their own below, and no hook runs them a second time here.
+      # The suite is a gate of its own below, on two systems, and no hook runs it a second time here.
       - run: uv run pre-commit run --all-files --show-diff-on-failure
         env:
-          SKIP: ty,pytest
-
-  types:
-    name: the types
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
-        with:
-          version: ${{ env.UV_VERSION }}
-          enable-cache: true
-          cache-python: true
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
-        with:
-          cache-key: >-
-            ${{ hashFiles('.github/workflows/gates.yml', '.pre-commit-config.yaml', 'bind/python/pyproject.toml') }}
-          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: false
-      - run: uv python install
-      - run: uv sync --locked
-      - run: uv run ty check --error-on-warning
+          SKIP: pytest
 
   suite:
     # The engine speaks to a machine through the World, and a machine answers as itself: the suite runs on both,
@@ -155,8 +132,7 @@ jobs:
       - run: cargo test --features typescript
       - run: bun run build
       - run: bun run docs
-      - run: git diff --exit-code -- bind/typescript/index.d.cts
-      - run: git diff --exit-code -- tui/README.md
+      - run: git diff --exit-code -- bind/typescript/index.d.cts tui/README.md
       - run: bun run check
       - run: bun run lint
       - run: bun test bind/typescript/test tui/test
