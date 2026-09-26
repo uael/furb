@@ -23,6 +23,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@types/bun": "latest",
     "@types/upng-js": "2.1.5",
+    "gifenc": "1.0.3",
     "typescript": "~5.9.3",
     "upng-js": "2.1.0"
   }
