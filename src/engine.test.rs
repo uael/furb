@@ -390,6 +390,36 @@ fn what_is_fed_to_a_command_before_a_wake_starts_it_in_a_later_life_reaches_its_
 }
 
 #[test]
+fn a_command_an_earlier_life_did_not_end_runs_once_at_the_wake_and_its_door_holds_what_it_said() {
+  let line = "printf x >> count; [ -e done ] || { printf ready; exec sleep 30; }";
+  let (id, at) = {
+    let mut first = Lived::new("rerun", &[], true).unwrap();
+    let root = first.root();
+    let id = first.engine.bash(line, verbs::Bash { on: on(&root), ..Default::default() }).unwrap();
+    let id = id.id().to_owned();
+    let door = || verbs::Read { on: on(&root), ..Default::default() };
+    let waker = Waker::from(Arc::new(Parked(thread::current())));
+    while first.engine.read(&format!("{id}/stdout"), door()).unwrap().content != "ready" {
+      first.engine.pump(&waker).unwrap();
+      thread::park_timeout(Duration::from_millis(20));
+    }
+    (id, first.at.clone())
+  };
+  fs::write(at.join("done"), "").unwrap();
+  let mut second = Lived::new("rerun", &[], false).unwrap();
+  let root = second.root();
+  let door = || verbs::Read { on: on(&root), ..Default::default() };
+  assert_eq!(fs::read_to_string(at.join("count")).unwrap(), "x", "a life that opens runs nothing");
+  assert_eq!(second.engine.read(&format!("{id}/stdout"), door()).unwrap().content, "ready");
+  second.engine.wake(&root).unwrap();
+  let exit = Exit::of(second.settled(&id).unwrap().as_ref()).expect("the command came to its exit");
+  assert_eq!((exit.code, exit.stdout.content.as_str()), (Some(0), ""));
+  second.engine.wake(&root).unwrap();
+  second.settled(&id).unwrap();
+  assert_eq!(fs::read_to_string(at.join("count")).unwrap(), "xx", "a second wake runs nothing");
+}
+
+#[test]
 fn a_wait_that_a_wake_starts_again_says_nothing_after_a_cancel() {
   {
     let mut first = Lived::new("hushed", &[], true).unwrap();

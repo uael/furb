@@ -170,3 +170,7 @@ pub(crate) fn decoded(value: &serde_json::value::RawValue, depth: usize) -> Resu
     _ => serde_json::from_str(raw).map_err(invalid)?,
   })
 }
+
+#[cfg(test)]
+#[path = "wire.test.rs"]
+mod test;
