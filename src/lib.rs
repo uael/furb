@@ -3,9 +3,9 @@
 //! The engine is one python file, `src/furb/engine.py`, which this crate runs inside monty, a python interpreter
 //! written in rust for untrusted code. [`Engine`] is one life of it: its methods are the verbs of the contract, made
 //! from the contract when the crate is built, and an act is awaited as an [`Act`]. [`Ear`] is what the engine hears
-//! by, a coroutine that [`ear::ear`] makes, and [`world`] holds the ears the crate writes: files, commands, time
-//! and the store of the record. The Kernel and the gate are the crate's, and [`PREAMBLE`] stands in for the ears of
-//! the host inside the sandbox.
+//! by, a coroutine that [`ear::ear`] makes, and [`world`] holds the ears the crate writes: files, commands, time,
+//! the store of the record, and the provider of models. The Kernel and the gate are the crate's, and [`PREAMBLE`]
+//! stands in for the ears of the host inside the sandbox.
 
 pub mod ear;
 pub mod engine;
