@@ -34,11 +34,11 @@ serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 indexmap = { version = "2", features = ["serde"] }
 # The chance of the World, drawn by the system.
 getrandom = "0.3"
-# The one interface of the models of the provider. Its providers of the network take a TLS of rig, which a host turns
-# on as a feature of this same version.
+# The one interface of the models of the provider, which the claude command line answers too. Its providers of the
+# network take a TLS of rig, which a host turns on as a feature of this same version.
 rig-core = { version = "=0.42.0", default-features = false }
-# The runtime that each call of a model runs on.
-tokio = { version = "1", features = ["rt-multi-thread"] }
+# The runtime that each call of a model runs on, and the processes of the claude command line.
+tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "time", "sync"] }
 futures = "0.3"
 pyo3 = { version = "0.29.2", features = ["generate-import-lib"], optional = true }
 napi = { version = "3", default-features = false, features = ["napi6", "serde-json", "dyn-symbols"], optional = true }

@@ -1,9 +1,11 @@
 //! The provider of models: the ear of the World that answers what the chains stand on, and takes each reply, which a
 //! model of rig answers with its turn.
 //!
-//! A model is any completion model of rig, which the host names in the roster with its efforts and its window. A
-//! call of a model runs on a runtime of its own, off the thread that drives the engine, and says what it came to by
-//! the voice of the ear.
+//! A model is any completion model of rig, which the host names in the roster with its efforts and its window, and
+//! [`claude`] makes the claude command line one of them. A call of a model runs on a runtime of its own, off the
+//! thread that drives the engine, and says what it came to by the voice of the ear.
+
+pub mod claude;
 
 use std::{
   collections::HashMap,
@@ -324,7 +326,7 @@ fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, Completi
   Ok(Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]))
 }
 
-/// A new random id, a uuid of version 4.
+/// A new random id, a uuid of version 4, as the claude command line takes one for a conversation.
 fn uuid() -> String {
   let mut bytes = [0u8; 16];
   let _ = getrandom::fill(&mut bytes);

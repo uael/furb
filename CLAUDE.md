@@ -11,8 +11,8 @@ API of its own:
 - `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build.rs`
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes: the files, the commands, time, the store of the
-  record, and the provider of models, which asks any completion model of rig. A host names its models, and adds its
-  own ears, such as the console of its operator.
+  record, and the provider of models, which asks any completion model of rig and holds the claude command line as
+  one. A host names its models, and adds its own ears, such as the console of its operator.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate is the type checker of monty. It reads a word on the sheet of the engine,

@@ -1,5 +1,5 @@
-//! The provider of models in a life of the real engine: models of rig that answer from a script, and a model that
-//! never answers.
+//! The provider of models in a life of the real engine: models of rig that answer from a script, a model that never
+//! answers, and the claude command line of the tests.
 
 use std::{
   fs,
@@ -240,4 +240,35 @@ fn a_cancel_over_a_reply_ends_the_call_of_its_model_and_the_ear_says_nothing_mor
   );
   let dones = said(&mut engine).into_iter().filter(|(kind, ..)| kind == "done").count();
   assert_eq!(dones, 0, "the provider said no done of the reply a control ended");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line() {
+  use super::claude::test::Yard;
+  let yard = Yard::new("chain");
+  let claude = yard.claude(10_000);
+  let (mut engine, _) = life("claude", claude.models());
+  let root = engine.root().to_owned();
+  let mut answer = |message: &str| {
+    let with = verbs::Prompt { message: Some(message.into()), on: on(&root), ..Default::default() };
+    let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
+    block_on(act).map(|got| got.py_repr())
+  };
+  assert_eq!(answer("first task").expect("the first prompt"), "'reply 1'");
+  assert_eq!(answer("second task").expect("the second prompt"), "'reply 2'");
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 1, "one process holds the conversation of the chain");
+  let args = yard.args(&pids[0]);
+  let after = |flag: &str| args.iter().position(|one| one == flag).map(|at| args[at + 1].as_str());
+  assert_eq!((after("--model"), after("--effort")), (Some("fable"), Some("low")));
+  assert_eq!(after("--system-prompt"), Some(SYSTEM));
+  let heard = yard.heard();
+  assert_eq!(heard.len(), 2);
+  assert!(heard[1].contains("second task") && !heard[1].contains("first task"), "{}", heard[1]);
+  drop((engine, claude));
+  assert!(
+    super::claude::test::gone(&pids[0]),
+    "the process ends with the last hold of the command line"
+  );
 }
