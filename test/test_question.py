@@ -1,14 +1,13 @@
 """question, whether a fact is a question."""
 
-from conftest import life, said, settle, sown
+from conftest import born, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Text
 
 
 async def test_whether_a_fact_is_a_question_which_its_name_says() -> None:
   """Whether a fact is a question, which its name says: a question is about itself, and its name is under its kind."""
-  sand = sown()
-  log, root = life(sand)
+  _, log, root = born()
   act = engine.bash("echo hi", on=root)
   assert (await act).code == 0
   await settle()

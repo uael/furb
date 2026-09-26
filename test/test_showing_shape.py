@@ -1,6 +1,6 @@
 """Showing, a text a note shows and the show of it."""
 
-from conftest import STANDS, Sand, life, of, paragraphs, said, settle, world_says
+from conftest import born, of, paragraphs, said, settle, world_says
 from furb import engine
 from furb.engine import TAIL, Text, span
 
@@ -8,16 +8,9 @@ THREE = "one\ntwo\nthree\n"
 """A text of three lines."""
 
 
-def sown() -> Sand:
-  """A World with a text of three lines and the roster of the suite."""
-  return Sand(files={"/w/n.txt": THREE}, stands=STANDS)
-
-
 async def test_a_text_a_note_shows_and_the_show_of_it() -> None:
   """A text a note shows, and the show of it, which is what a tell of a text carries and what the fold of the turns makes comments of."""
-  sand = sown()
-  log, root = life(sand)
-  sand.script[root] = ["read('n.txt', span(2, 3))\nclose(1)"]
+  _, log, root = born("read('n.txt', span(2, 3))\nclose(1)", files={"/w/n.txt": THREE})
   assert await engine.prompt(int, "read it", on=root) == 1
   carried = [a[3] for a in said(log, "tell") if a[3][0] == "#read n.txt"]
   assert [len(notes) for notes in carried] == [2]
@@ -28,8 +21,7 @@ async def test_a_text_a_note_shows_and_the_show_of_it() -> None:
 
 async def test_the_paragraph_of_an_exited_command_holds_one_showing_for_each_text_told() -> None:
   """The paragraph of an exited command holds one showing for each text told."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
+  _, log, root = born()
   both = engine.bash("echo hi", show_err=TAIL, on=root)
   assert (await both).code == 0
   merged = engine.bash("echo two", on=root)
@@ -48,9 +40,7 @@ async def test_the_paragraph_of_an_exited_command_holds_one_showing_for_each_tex
 
 async def test_a_showing_stands_as_a_comment_of_the_path_of_its_text_and_of_how_many_lines_the_chain_knows() -> None:
   """A showing stands as a comment of the path of its text and of how many of the lines the show picked the chain knows, then a comment for each other line it picked, with its number."""
-  sand = sown()
-  _, root = life(sand)
-  sand.script[root] = ["read('n.txt', span(2, 2))\nread('n.txt', grep('^t'))\nclose(1)"]
+  _, _, root = born("read('n.txt', span(2, 2))\nread('n.txt', grep('^t'))\nclose(1)", files={"/w/n.txt": THREE})
   assert await engine.prompt(int, "grep it", on=root) == 1
   assert of(engine.turns(on=root), "read") == [
     "#read n.txt\n# /w/n.txt, 0 known\n# 2 two",
@@ -60,19 +50,14 @@ async def test_a_showing_stands_as_a_comment_of_the_path_of_its_text_and_of_how_
 
 async def test_the_engine_applies_a_show_before_it_writes_a_line() -> None:
   """The engine applies a show before it writes a line, so the paragraph holds the picked lines alone."""
-  sand = sown()
-  _, root = life(sand)
-  sand.script[root] = ["read('n.txt', span(2, 2))\nclose(1)"]
+  _, _, root = born("read('n.txt', span(2, 2))\nclose(1)", files={"/w/n.txt": THREE})
   assert await engine.prompt(int, "read one line", on=root) == 1
   assert engine.turns(on=root)[-1][1] == "#read n.txt\n# /w/n.txt, 0 known\n# 2 two\n\n#prompt1 closed 1"
 
 
 async def test_a_show_applies_to_a_text_or_to_a_stream() -> None:
   """A show applies to a text or to a stream."""
-  sand = sown()
-  sand.auto = False
-  log, root = life(sand)
-  sand.script[root] = ["read('n.txt', span(1, 1))\nclose(1)"]
+  sand, log, root = born("read('n.txt', span(1, 1))\nclose(1)", files={"/w/n.txt": THREE}, auto=False)
   assert await engine.prompt(int, "read it", on=root) == 1
   act = engine.bash("many", show=span(1, 1), on=root)
   await settle()
@@ -88,10 +73,9 @@ async def test_a_show_applies_to_a_text_or_to_a_stream() -> None:
 
 async def test_a_line_told_once_on_a_chain_is_known_there() -> None:
   """A line told once on a chain is known there, by its path, its number and its content."""
-  sand = sown()
-  sand.files["/w/m.txt"] = THREE
-  _, root = life(sand)
-  sand.script[root] = ["read('n.txt')\nclose(1)", "read('n.txt')\nread('m.txt')\nclose(2)"]
+  sand, _, root = born(
+    "read('n.txt')\nclose(1)", "read('n.txt')\nread('m.txt')\nclose(2)", files={"/w/n.txt": THREE, "/w/m.txt": THREE}
+  )
   assert await engine.prompt(int, "read it", on=root) == 1
   sand.files["/w/n.txt"] = "two\none\nthree\n"
   assert await engine.prompt(int, "read it again", on=root) == 2
@@ -104,9 +88,7 @@ async def test_a_line_told_once_on_a_chain_is_known_there() -> None:
 
 async def test_read_tells_a_line_again_after_the_content_of_the_line_changed() -> None:
   """read tells a line again after the content of the line changed."""
-  sand = sown()
-  _, root = life(sand)
-  sand.script[root] = ["read('n.txt')\nclose(1)"]
+  sand, _, root = born("read('n.txt')\nclose(1)", files={"/w/n.txt": THREE})
   assert await engine.prompt(int, "read it", on=root) == 1
   sand.files["/w/n.txt"] = "one\nTWO\nthree\n"
   sand.script[root] = ["read('n.txt')\nclose(2)"]
@@ -119,9 +101,9 @@ async def test_read_tells_a_line_again_after_the_content_of_the_line_changed() -
 
 async def test_a_text_costs_its_size_once_on_a_chain() -> None:
   """A text costs its size once on a chain."""
-  sand = sown()
-  _, root = life(sand)
-  sand.script[root] = ["read('n.txt', span(1, 2))\nread('n.txt')\nread('n.txt', grep('^t'))\nclose(1)"]
+  _, _, root = born(
+    "read('n.txt', span(1, 2))\nread('n.txt')\nread('n.txt', grep('^t'))\nclose(1)", files={"/w/n.txt": THREE}
+  )
   assert await engine.prompt(int, "read it thrice", on=root) == 1
   told = of(engine.turns(on=root), "read")
   assert told == [
@@ -134,9 +116,7 @@ async def test_a_text_costs_its_size_once_on_a_chain() -> None:
 
 async def test_a_second_read_of_a_text_tells_the_model_no_line_that_an_earlier_read_told() -> None:
   """A second read of a text tells the model no line that an earlier read of the chain told."""
-  sand = sown()
-  _, root = life(sand)
-  sand.script[root] = ["read('n.txt', span(1, 2))\nread('n.txt')\nclose(1)"]
+  _, _, root = born("read('n.txt', span(1, 2))\nread('n.txt')\nclose(1)", files={"/w/n.txt": THREE})
   assert await engine.prompt(int, "read it twice", on=root) == 1
   assert of(engine.turns(on=root), "read") == [
     "#read n.txt\n# /w/n.txt, 0 known\n# 1 one\n# 2 two",
@@ -146,9 +126,9 @@ async def test_a_second_read_of_a_text_tells_the_model_no_line_that_an_earlier_r
 
 async def test_a_tell_shows_each_showing_it_holds_and_each_other_note_stands_as_it_is() -> None:
   """A tell shows each showing it holds, and each other note stands as it is."""
-  sand = sown()
-  _, root = life(sand)
-  sand.script[root] = ["tell('found', 'x', '# as it is', (Text('p', 'a\\nb\\n'), TAIL))\nclose(1)"]
+  _, _, root = born(
+    "tell('found', 'x', '# as it is', (Text('p', 'a\\nb\\n'), TAIL))\nclose(1)", files={"/w/n.txt": THREE}
+  )
   assert await engine.prompt(int, "tell a note", on=root) == 1
   await settle()
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#found ")] == [

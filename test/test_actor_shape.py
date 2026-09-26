@@ -1,6 +1,6 @@
 """Actor, an actor the World offers."""
 
-from conftest import STANDS, Sand, heads, life, paragraphs, said, settle
+from conftest import STANDS, born, heads, paragraphs, said, settle
 from furb import engine
 from furb.engine import Refused
 
@@ -11,8 +11,7 @@ async def test_an_actor_the_world_offers() -> None:
   name, efforts, window = one
   assert (name, efforts, window) == ("m", ["low", "high"], 400000)
   assert one in STANDS[0]
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  _, _, root = born()
   assert paragraphs(engine.turns(on=root)) == [
     "#chain1 root\nchain1: Act[object] = Act('chain1')",
     "#chain1 roster [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
@@ -26,9 +25,7 @@ async def test_the_window_that_a_roster_entry_leaves_unsaid_is_the_window_that_t
   assert engine.WINDOW == 200000
   ledgers = []
   for roster in ([["plain", [], 0]], [["plain", [], 400000]]):
-    sand = Sand(stands=[roster, "/w", "plain"], cost=(100000, 0, 0, 0, 0.0))
-    _, root = life(sand)
-    sand.script[root] = ["close(1)"]
+    _, _, root = born("close(1)", stands=[roster, "/w", "plain"], cost=(100000, 0, 0, 0, 0.0))
     engine.grant(share=0.9, on=root)
     assert await engine.prompt(int, "count", on=root) == 1
     await settle()
@@ -41,8 +38,7 @@ async def test_the_window_that_a_roster_entry_leaves_unsaid_is_the_window_that_t
 
 async def test_what_a_prompt_names_is_one_of_these_names_and_one_effort_of_that_range() -> None:
   """What a prompt names is one of these names and one effort of that range."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
+  _, log, root = born()
   right = engine.prompt(int, "hi", to="m/high", on=root)
   await settle()
   assert engine.peek(right) is None and [a[4] for a in said(log, "reply")] == ["m/high"]
@@ -55,8 +51,7 @@ async def test_what_a_prompt_names_is_one_of_these_names_and_one_effort_of_that_
 
 async def test_an_actor_takes_an_effort_of_its_own_and_any_actor_takes_the_effort_that_is_not_named() -> None:
   """An actor takes an effort of its own, and any actor takes the effort that is not named."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
+  sand, log, root = born()
   for to in ("m/low", "m/high", "m", "n"):
     sand.script[root] = ["close(1)"]
     assert await engine.prompt(int, "hi", to=to, on=root) == 1

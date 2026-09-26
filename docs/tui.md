@@ -1,17 +1,19 @@
 # furb terminal workspace
 
 Keys use the marks of macOS: ⌃ is Control, ⌥ is Option or Alt, and ⇧ is Shift. These captures come from the real
-OpenTUI renderer and native engine. The demo World supplies scripted model
-answers, temporary files, and real local commands. Run `bun run screenshots` from the repository root to capture
-them again, and `bun run animation` to record the animation below. The generators are in `tui/script/`.
+OpenTUI renderer and native engine, with a scripted provider of the answers of the model, temporary files, and real
+local commands. Run `bun run screenshots` from the repository root to capture them again, and `bun run animation` to
+record the animation below: it types, clicks, and waits in a real session, and keeps each picture that changed. The
+generators are in `tui/script/`.
 
 ![The furb TUI in action](furb.gif)
 
 ## Welcome
 
 An empty feed shows the logo of furb, what it does, the project and the model, three ways to start, and the keys
-to know. A click on a way to start puts its prompt in the input. The top line names the session and the chain, and
-the toggle at its right switches the views. GitHub Dark is the default.
+to know. A click on a way to start puts its prompt in the input. The top line names the session, the chain, and the
+directory of the chain, and the toggle at its right switches the three views of the chain. The footer says what the
+session does, and each key that it offers is a button. GitHub Dark is the default.
 
 ![Welcome](screenshots/01-welcome.png)
 
@@ -19,13 +21,17 @@ the toggle at its right switches the views. GitHub Dark is the default.
 
 Your message stands in a panel. Each rung shows the numbered Python that the model wrote, and the acts that it
 made stand under it with a preview of their output. The answer comes under the name of the model that gave it.
+An act that no turn tells yet, such as a command that you started, stands at the end of the feed until a turn tells
+it. A rung opens while it runs, and folds to its mark, its name, and its first line when it completes. A click on its
+heading, or ⌥D, opens or folds it, and the fold stays the same across views and after a reopen. `/autocollapse` turns
+the automatic fold off, and on again. A right click on an act inspects it, edits its program, or branches after it.
 The sidebar shows the chains, the context and the cost, and the workspaces.
 
 ![Feed](screenshots/02-feed.png)
 
 ## Transcript
 
-The exact text that the built-in World sends to the model, turn by turn.
+The exact text that the provider sends to the model, turn by turn.
 
 ![Transcript](screenshots/03-transcript.png)
 
@@ -52,8 +58,8 @@ The model picker names the current model and the window of each. ⇧Tab chooses 
 
 ## A question for you
 
-A question that a model asks you stands in the feed with a yellow bar. The input takes its answer, or ⌃A opens
-a dialog for it.
+A question that a model asks you stands in the feed with a yellow bar, and your answer follows it. The input takes
+its answer, or ⌃A opens a dialog for it.
 
 ![Operator question](screenshots/08-operator-question.png)
 
@@ -61,6 +67,8 @@ a dialog for it.
 
 ## Python input
 
+The input grows as you type, and its bar and the line under it name the mode: Prompt, Python, Answer, or Edit
+program. Each part of that line is a button: the mode, the chain, the model, the effort, and the type of the answer.
 ⌃R writes Python with the same gate as the model. The bar and the line under the input take the color of
 Python.
 
@@ -68,7 +76,8 @@ Python.
 
 ## Value inspector
 
-⌃G, or a ⌃click on a name, opens its value, its fields, and its definition.
+The pointer on a name shows its current value. ⌃G, or a ⌃click on a name, opens its value, its fields, and its
+definition.
 
 ![Value inspector](screenshots/11-value-inspector.png)
 
@@ -84,13 +93,18 @@ Paper is light, and Midnight and Forest are dark. ⌃T opens the themes, each wi
 
 ## Chains
 
-⌃B lists the chains, each with its state and the chain it branched from.
+⌃B lists the chains, each with its state and the chain it branched from. Each chain has its own feed and module. The
+sidebar lists the root chain, the chain on screen, and each chain that is not at rest, and the other chains fold
+under Finished.
 
 ![Chains](screenshots/15-chains.png)
 
 ## Keys, marks, and commands
 
-F1 lists the chords that the terminal in use sends, what each mark means, and every slash command.
+One mark means one state in every view, dialog, and sidebar: a spinner for work that runs, `◉` for a chain or a
+session at work, `◆` for a question that waits for you, `◌` for paused work, `✓` for a done act, `✗` for a failure,
+`●` for a chain you started or a session that finished while you were away, and `○` for rest. F1 lists the chords
+that the terminal in use sends, what each mark means, and every slash command.
 
 ![Help](screenshots/16-help.png)
 
@@ -111,19 +125,18 @@ refuses shows the line and the reason.
 
 ![Gate findings](screenshots/20-gate-findings.png)
 
-## Paused work and saved sessions
+## Paused work
 
-A session that opens with unfinished work stays paused until you resume it. ⌃O lists the saved sessions of the
-workspace, with their state, the time since their last save, their cost, and their size.
+A session that opens with unfinished work stays paused until you resume it.
 
 ![Paused resume](screenshots/21-paused-resume.png)
-
-![Saved sessions](screenshots/22-sessions.png)
 
 ## Rewind
 
 Escape twice opens the rewind tree in the feed. Each act stands under the act that made it, and each branch under
-the point it starts from. Enter on a message gives it back to the input on a new branch.
+the point it starts from. Up and Down move the pointer, Left and Right fold a branch, and a click points at a row.
+Enter on a message gives it back to the input on a new branch, and Enter on another act makes a new branch that reads
+the chain through that act. The module and the files keep their state.
 
 ![Rewind tree](screenshots/23-rewind-tree.png)
 
@@ -142,10 +155,13 @@ that cannot load offers to read it again.
 
 ## Workspaces
 
-The sidebar groups sessions under project folders, and its list scrolls on its own. Status dots come from live work
-and saved records. Open sessions keep running while another is selected. A rung folds its program to one line and
-keeps its acts, a workspace folds to its name, and ⌃\ hides the sidebar. ⌃W opens the workspaces and sessions
-picker.
+The sidebar groups sessions under project folders, and its list scrolls on its own. A click on a workspace folds its
+sessions, and a click on a session opens it. Open sessions keep running while another is selected. A dot shows the
+state of each session and workspace, from live work and saved records: blue for work, yellow for input needed or
+paused work, green for an unread completion, and red for an error. An open grey dot means ready or saved, and a click
+on a completed session clears its unread mark. A rung folds its program to one line and
+keeps its acts, a workspace folds to its name, and ⌃\ hides the sidebar. ⌃W lists the workspaces and their
+sessions, each with its state, the time since its last save, its cost, and its size.
 
 ![Workspace tree](screenshots/28-workspace-tree.png)
 
@@ -159,7 +175,7 @@ picker.
 
 ## Session tree
 
-`/tree` opens the same tree as rewind, with the pointer on the chain shown.
+`/tree` opens the same tree as rewind, with the pointer on the chain shown. Enter on a chain opens it.
 
 ![Session tree](screenshots/33-session-tree.png)
 

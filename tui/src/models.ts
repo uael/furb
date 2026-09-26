@@ -1,12 +1,13 @@
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import type { WorldOptions } from "@furb/engine";
+import type { SessionOptions } from "@furb/engine";
 import { type ClaudeOptions, claudeProvider } from "@furb/engine/claude";
 
 /** The model a session of the TUI asks when neither the operator nor its record names one. */
 export const defaultModel = "claude-cli:sonnet";
 
-/** What a session asks of its worker, as plain data: the options of its World, and the Claude CLI it reaches. */
-export type EngineOptions = Omit<WorldOptions, "models"> & { demo?: boolean; claude?: ClaudeOptions };
+/** What a session asks of its worker, as plain data: the options of the session in it, and the Claude CLI it
+ * reaches. */
+export type EngineOptions = Omit<SessionOptions, "models"> & { demo?: boolean; claude?: ClaudeOptions };
 
 /** The models of the TUI: every provider of pi-ai, with the Claude CLI added to them as a provider of its own. */
 export function hostModels(claude?: ClaudeOptions) {

@@ -1,6 +1,6 @@
 """unquoted, what a word is as python."""
 
-from conftest import STANDS, Sand, life, ran, said
+from conftest import born, ran, said
 from furb import engine
 
 
@@ -8,8 +8,7 @@ async def test_what_a_word_is_as_python() -> None:
   """What a word is as python: each quote in it bound as a string."""
   assert engine.unquoted("<S1>\nhello\n</S1>\nx = S1") == "S1 = 'hello\\n'\n\n\nx = S1"
   assert engine.unquoted("x = 1") == "x = 1"
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  _, _, root = born()
   assert await engine.rung("<S1>\nhello\n</S1>\nx = S1", on=root) is None
   assert engine.module(root)["x"] == "hello\n"
 
@@ -20,8 +19,7 @@ async def test_a_quote_is_a_string_a_word_writes_between_two_marks() -> None:
   assert engine.unquoted(f"<S12>{text}</S12>") == f"S12 = {text!r}"
   assert engine.unquoted(" <S1>x</S1>") == " <S1>x</S1>"
   assert engine.unquoted("<Sx>y</Sx>") == "<Sx>y</Sx>"
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  _, _, root = born()
   assert await engine.rung(f"<S12>\n{text}\n</S12>\nk = S12", on=root) is None
   assert engine.module(root)["k"] == f"{text}\n"
 
@@ -45,8 +43,7 @@ async def test_a_quote_becomes_sn_bound_to_its_value_on_the_line_of_the_open_mar
   """A quote becomes Sn bound to its value as python writes it, on the line of the open mark, and each other line of the quote becomes an empty line, so every line after it keeps its number."""
   word = "a = 1\n<S1>\none\ntwo\n</S1>\nb = nowhere"
   assert engine.unquoted(word).split("\n") == ["a = 1", "S1 = 'one\\ntwo\\n'", "", "", "", "b = nowhere"]
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  _, _, root = born()
   assert [one.split(":")[0] for one in engine.gate(word, on=root)] == ["line 6"]
 
 
@@ -54,16 +51,14 @@ async def test_an_open_mark_that_has_no_close_mark_stays_as_it_is() -> None:
   """An open mark that has no close mark stays as it is, and the gate reads it as the python it is not."""
   word = "<S1>\nhello"
   assert engine.unquoted(word) == word
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  _, _, root = born()
   found = engine.gate(word, on=root)
   assert len(found) == 1 and found[0].startswith("line 1: ")
 
 
 async def test_the_engine_unquotes_a_word_before_the_gate_reads_it_and_before_the_kernel_runs_it() -> None:
   """The engine unquotes a word before the gate reads it and before the Kernel runs it, and the door of a ladder and the turns keep the quotes as the word wrote them."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
+  sand, log, root = born()
   word = "<S1>\nhi\n</S1>\nclose(len(S1))"
   sand.script[root] = [word]
   asking = engine.prompt(int, "count", on=root)

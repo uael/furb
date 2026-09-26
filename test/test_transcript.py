@@ -1,14 +1,12 @@
 """transcript, the facts on a chain."""
 
-from conftest import STANDS, Sand, heads, lasting, life, paragraphs, said, settle
+from conftest import born, heads, lasting, paragraphs, said, settle
 from furb import engine
 
 
 async def test_transcript_gives_the_facts_on_a_chain() -> None:
   """transcript gives the facts on a chain, each of which the life adds when it is said, so a chain reads at once what it said itself."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  sand, log, root = born("close(1)")
   one = engine.prompt(int, "count", on=root)
   assert await one == 1
   await settle()
@@ -21,8 +19,7 @@ async def test_transcript_gives_the_facts_on_a_chain() -> None:
 
 async def test_transcript_gives_a_new_list_at_each_call() -> None:
   """transcript gives a new list at each call, so a word that changes the list it was given changes no transcript."""
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  _, _, root = born()
   before = engine.transcript(root)
   word = "n = 0\nfor x in transcript():\n  n += 1\n  debug(t'{n}')\ntranscript().clear()\nclose(n)"
   counted = await engine.rung(word, on=root)
@@ -34,8 +31,7 @@ async def test_transcript_gives_a_new_list_at_each_call() -> None:
 
 async def test_the_transcript_is_the_whole_state_of_a_chain() -> None:
   """The transcript is the whole state of a chain: its module, its program, its working directory and its turns are read off it, and the standing is read off the transcript of the root."""
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  _, _, root = born()
   await engine.rung("k = 1\ncd('/x')", on=root)
   held = engine.transcript(root)
   assert engine.module(root) == [a[3] for a in held if a[0] == "module"][-1]
@@ -47,7 +43,6 @@ async def test_the_transcript_is_the_whole_state_of_a_chain() -> None:
 
 async def test_a_name_of_no_chain_gives_no_fact() -> None:
   """A name of no chain gives no fact."""
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  _, _, root = born()
   one = engine.bash("echo hi", on=root)
   assert engine.transcript("chain9") == [] and engine.transcript(one) == []

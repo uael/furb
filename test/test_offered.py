@@ -1,6 +1,6 @@
 """offered, the window an actor reads."""
 
-from conftest import STANDS, Sand, life, settle
+from conftest import STANDS, born, settle
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -13,8 +13,7 @@ async def test_the_window_an_actor_reads() -> None:
   assert engine.offered(STANDS[0], OPERATOR) == 200000
   assert engine.offered(STANDS[0], "n/high") is None
   assert engine.offered(STANDS[0], "ghost") is None
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  _, _, root = born()
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
   assert isinstance(engine.peek(ghost), Refused)

@@ -66,3 +66,13 @@ export function ago(time: number, now = Date.now()): string {
   if (minutes < 60 * 24 * 7) return say(Math.floor(minutes / 60 / 24), "day");
   return new Date(time).toLocaleDateString();
 }
+
+/** The provider and the id of a model by its name, provider:id. A name with no provider is an id alone. */
+export function modelName(name: string): { provider: string; id: string } {
+  const at = name.indexOf(":");
+  return at < 0 ? { provider: "", id: name } : { provider: name.slice(0, at), id: name.slice(at + 1) };
+}
+
+/** A text that HTML and XML read as the text itself, with no mark of either. */
+export const escaped = (value: string) =>
+  value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");

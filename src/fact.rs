@@ -42,11 +42,6 @@ impl Fact {
     self.at(2)
   }
 
-  /// The words of the fact, which follow who said it.
-  pub fn words(&self) -> Vec<ObjectRef<'_>> {
-    self.0.as_ref().items().unwrap_or_default().into_iter().skip(3).collect()
-  }
-
   /// One word of the fact, by its place after who said it.
   pub fn word(&self, at: usize) -> Option<ObjectRef<'_>> {
     entry(&self.0.as_ref(), 3 + at)
@@ -67,11 +62,5 @@ impl Fact {
 
   fn at(&self, i: usize) -> &str {
     entry(&self.0.as_ref(), i).and_then(|one| one.as_str()).unwrap_or_default()
-  }
-}
-
-impl PartialEq for Fact {
-  fn eq(&self, other: &Self) -> bool {
-    self.0.py_repr() == other.0.py_repr()
   }
 }

@@ -1,6 +1,6 @@
 """commented, a text as comments."""
 
-from conftest import STANDS, Sand, life
+from conftest import born
 from furb import engine
 
 
@@ -9,8 +9,7 @@ async def test_the_text_as_comments() -> None:
   assert engine.commented("a\n\nb") == "# a\n#\n# b"
   assert engine.commented(3) == "# 3"
   assert engine.commented("") == "#"
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
+  _, _, root = born()
   word = engine.commented("raise ValueError('boom')\n\nk = 1")
   assert await engine.rung(word, on=root) is None
   assert "k" not in engine.module(root)

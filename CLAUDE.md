@@ -1,22 +1,24 @@
 # furb
 
 The engine is `src/furb/engine.py`, one file. It depends only on the python interpreter and on the ears of the outside
-that boot is given, each a generator under a name: the World, the Kernel and the gate among them. It is derived from the
-contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/CLAUDE.md` holds the technical names of
-the engine and the laws that no test can hold. `script/CLAUDE.md` says how to run the DeepSWE rig.
+that boot is given, each a generator under a name: the ears of the World, the Kernel and the gate among them. It is
+derived from the contract, `src/furb/engine.pyi`, and the suite in `test/` proves it. `src/furb/CLAUDE.md` holds the
+technical names of the engine and the laws that no test can hold. `script/CLAUDE.md` says how to run the DeepSWE rig.
 
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
 
-- `src/lib.rs` says what the crate gives: `Life`, whose methods are the verbs of the contract, and `World`, the one
-  trait that a host writes.
+- `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build.rs`
+  makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
+- `src/world/` holds the ears of the World that the crate writes: the files, the commands, time, and the store of the
+  record. A host adds its own, such as the provider of its models and the console of its operator.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
-- The Kernel and the gate are the crate's. The gate is the type checker of monty. It reads a word on the sheet of
-  the engine, `src/furb/sheet.py`, against the typeshed of the sandbox. The gate of the python package reads
-  through it too.
-- `src/binding/py.rs`, behind the `python` feature, is the door to python. `bind/python` is the package
-  `furb-monty`. Its module `furb_monty.engine` gives every name of the contract over one life in the sandbox, and
-  `FURB_ENGINE=monty` makes `from furb import engine` give it.
+- The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
+  names of its engine. The gate is the type checker of monty. It reads a word on the sheet of the engine,
+  `src/furb/sheet.py`, against the typeshed of the sandbox. The gate of the python package reads through it too.
+- `src/binding/py.rs`, behind the `python` feature, is the door to python: an `Engine` that says each name of the
+  contract by its name, and the ears of the crate. `bind/python` is the package `furb-monty`. Its module `furb_monty.engine` gives every name of the
+  contract over one life in the sandbox, and `FURB_ENGINE=monty` makes `from furb import engine` give it.
 
 The suite runs on both engines. `test/outside/test_monty.py` proves what the door carries that no sentence of the
 contract says.
@@ -24,15 +26,15 @@ contract says.
 The TypeScript side is a bun workspace at the root, with two packages:
 
 - `bind/typescript` is the crate through N-API. Its views, its queries and its controls are synchronous, and an
-  act that is answered later can be awaited. It includes a World with pi-ai models, files, commands, and records.
-  `bind/typescript/README.md` says how to use it. The TUI imports its build in `bind/typescript/dist`, which
-  `bun run build` makes again.
-- `tui` is the OpenTUI application on that package. The engine and its World run in a worker, `tui/src/worker.ts`,
-  which also holds the demo World and its scripted answers. `tui/README.md` says what the TUI does, and
+  act that is answered later can be awaited. It includes a `Session`: an engine on the ears of the crate, on a
+  provider of pi-ai models, and on a console of the operator. `bind/typescript/README.md` says how to use it. The
+  TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
+- `tui` is the OpenTUI application on that package. The session runs in a worker, `tui/src/worker.ts`, which also
+  holds the demo session and its scripted answers. `tui/README.md` says what the TUI does, and
   `docs/tui.md` shows each screen. The gallery and the animation come from `tui/script/`.
 
-`docs/developer-guide.md` is the guide for a person who changes the repository. It says the same things as this
-file, in the order in which a person needs them.
+`docs/developer-guide.md` is the guide for a person who changes the repository: the tools to install, how a word
+runs, and the files of the TUI. For everything else, it links to this file.
 
 ## The contract
 
@@ -74,11 +76,13 @@ the whole file again.
 The suite drives the engine through its public API alone, end to end, from the module the operator gives.
 
 - `test/conftest.py` is the harness. `Sand` is a World in memory: files by path, scripted words by chain id, the calls
-  it performed, the entries it kept, and what it fed its commands. `Dead` refuses every question but the standing, and
-  `Where` asks the chain where it stands at every path. `Py` is a Kernel that is python, with the gate of the crate,
-  which refuses a word that is not python or that names what nothing binds, such as `BAD`. `life` boots a life on them,
-  `settle` gives the loop room, `plain` sends a record through the wire and back, `said` reads the facts, and
-  `paragraphs` and `heads` read the turns, which are python.
+  it performed, the entries it kept, and what it fed its commands. It stands on `STANDS`, and a World of one test
+  overrides its `hear` for the facts it does otherwise. `Dead` refuses every question but the standing, and `Where`
+  asks the chain where it stands at every path. `Py` is the Kernel of `furb.kernel` on the engine of this
+  interpreter, with the gate of the crate, which refuses a word that is not python or that names what nothing binds,
+  such as `BAD`. `life` boots a life on them, `born` boots a life on the World of the suite, which holds one file,
+  with the words its models answer the root with, `settle` gives the loop room, `plain` sends a record through the
+  wire and back, `said` reads the facts, and `paragraphs` and `heads` read the turns, which are python.
 - One test file per definition of the contract: `test_<name>.py` for a function, a global or a type alias,
   `test_<class>_<method>.py` for a method, in lower case, with dunder underscores stripped. A capitalized definition
   whose lower-case name is another definition's, `Bash` beside `bash`, has `test_<name>_shape.py`.
@@ -120,8 +124,8 @@ Run every command from the root of the repository.
   indentation, 120 columns.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`.
 - `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test`: the gates of the crate. The
-  tests of a module stand beside it, `src/life.test.rs` beside `src/life.rs`, and those of the life drive the real
-  engine on a World in rust.
+  tests of a module stand beside it, `src/engine.test.rs` beside `src/engine.rs`, and those of the engine drive the
+  real engine on ears in rust.
 - `uv run pre-commit run --all-files`: every gate the commit hook runs.
 - `uv run python script/smoke.py`: one real life on opus/low through the claude command line on PATH, or the one
   `FURB_CLAUDE_BIN` names. It is no test of the suite and spends one prompt.
@@ -132,7 +136,7 @@ Run every command from the root of the repository.
 - `bun run check`, `bun run lint` and `bun test bind/typescript/test tui/test`: the type check, the lint, and the
   tests of the TypeScript side. As root, the test of a folder that cannot be read fails, since root reads every
   folder.
-- `bun run demo` and `bun run tui`: the TUI on the demo World, which asks no model, or on a real life.
+- `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the

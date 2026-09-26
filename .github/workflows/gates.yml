@@ -155,7 +155,7 @@ jobs:
       - run: cargo test --features typescript
       - run: bun run build
       - run: bun run docs
-      - run: git diff --exit-code -- bind/typescript/index.cjs bind/typescript/index.d.cts
+      - run: git diff --exit-code -- bind/typescript/index.d.cts
       - run: git diff --exit-code -- tui/README.md
       - run: bun run check
       - run: bun run lint

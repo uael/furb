@@ -16,8 +16,6 @@ test("the view of the host takes more facts than one call takes as arguments", (
     directory: "/tmp",
     imageDirectory: "/tmp/images",
     actor: "operator",
-    effort: "low",
-    roster: [],
     facts: new Array<Fact>(count).fill(["done", "x", "world", null]),
     prompts: [],
     streams: [],
@@ -27,7 +25,7 @@ test("the view of the host takes more facts than one call takes as arguments", (
   expect(view.facts).toHaveLength(count);
 });
 
-test("the view of the host counts the file changes of the World", () => {
+test("the view of the host counts the file changes of the session", () => {
   const view = new HostView(async () => null);
   view.update({
     completed: 0,
@@ -35,8 +33,6 @@ test("the view of the host counts the file changes of the World", () => {
     directory: "/tmp",
     imageDirectory: "/tmp/images",
     actor: "operator",
-    effort: "low",
-    roster: [],
     facts: [],
     prompts: [],
     streams: [],
@@ -68,7 +64,7 @@ await openEngine({ cwd: ${JSON.stringify(directory)}, record: ${JSON.stringify(r
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-}, 30000);
+});
 
 /** Every module that an entry loads, by its own imports and those of its packages, and the file that names each one. */
 function importsOf(entry: string): Map<string, string> {
@@ -101,4 +97,4 @@ test("no worker of the TUI loads OpenTUI, so its native library stays with the t
     expect(named.size).toBeGreaterThan(1);
     expect([...named].filter(([path]) => path.startsWith("@opentui/"))).toEqual([]);
   }
-}, 30000);
+});

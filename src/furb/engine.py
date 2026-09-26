@@ -9,7 +9,6 @@ from typing import Any
 
 WINDOW = 200000
 OPERATOR = "operator"
-WORLD = "world"
 TIMEOUT = 600.0
 ROOT = "chain1"
 site = ContextVar("site", default=OPERATOR)

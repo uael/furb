@@ -1,24 +1,6 @@
 """furb against a DeepSWE task: seed a checkout, let one life work in it, grade it with the task's own verifier.
 
-  uv run python script/deepswe.py tools
-  uv run python script/deepswe.py validate <task>
-  uv run python script/deepswe.py run <task> --to opus/low --ceiling 8
-  uv run python script/deepswe.py turns <task>
-
-A model is told the task and the shape of its answer, and nothing else. Its system prompt is the engine, minified,
-which is every word it is given about what it is and what it may do; the message of the prompt is the instruction
-of the task, as the task wrote it, and one line that asks it to close with how sure it is that the task is
-complete. Under the confidence the rig wants, the operator says so and asks it to go on, which is the one other
-word the model ever reads. No rule of this rig reaches the model.
-
-A task is fetched as a codeload tarball at its base commit and stood up as a one-commit git repo, so what is
-graded is the upstream tree byte for byte, with no clone. The checkout the life works in is a copy of that base,
-and the grade always runs on a fresh copy with the submission applied, never on the tree the life left behind.
-
-`validate` grades the task's own reference solution and is the control: a rig that scores that solution under 1
-is measuring itself and not the life. Everything stands under $DEEPSWE_WORK/<task>, which is /tmp/furb-deepswe by
-default: `base` is the pristine checkout with the dependencies of the task, `app` is the checkout the life works
-in, and `.run` holds the record, the numbers, the frozen submission and the reward.
+`script/CLAUDE.md` says how to run it: its verbs, its one law, and where everything stands.
 """
 
 import argparse
@@ -44,9 +26,11 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from real import ready
+
 from furb import engine
-from furb.cli import lived, say
-from furb.provider.claude import BIN, cool
+from furb.cli import lived, say, turned
+from furb.provider.claude import cool
 from furb.world import answered, kept
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -141,20 +125,16 @@ def ran(args: Sequence[str], where: Path | None = None, env: Mapping[str, str] |
   return got.returncode
 
 
-def spoke(args: Sequence[str], where: Path | None = None) -> str:
-  """One short step whose answer is the point, and nothing at all when the step failed."""
-  got = subprocess.run(list(args), cwd=where, capture_output=True, text=True, check=False)  # noqa: S603
-  return got.stdout.strip() if got.returncode == 0 else ""
+def captured(args: Sequence[str]) -> subprocess.CompletedProcess[bytes]:
+  """One short step whose answer stands out of the log of the operator: its code, and its stdout as the bytes the
+  tool wrote."""
+  return subprocess.run(list(args), capture_output=True, check=False)  # noqa: S603
 
 
-def quiet(args: Sequence[str]) -> int:
-  """A probe of what this host can do, whose answer stands out of the log of the operator."""
-  return subprocess.run(list(args), capture_output=True, check=False).returncode  # noqa: S603
-
-
-def bytes_of(args: Sequence[str]) -> bytes:
-  """One short step whose answer is bytes, kept exactly as the tool wrote them."""
-  return subprocess.run(list(args), capture_output=True, check=False).stdout  # noqa: S603
+def spoke(args: Sequence[str]) -> str:
+  """One short step whose answer is the point, as text, and nothing at all when the step failed."""
+  got = captured(args)
+  return got.stdout.decode(errors="replace").strip() if got.returncode == 0 else ""
 
 
 def gits(tree: Path) -> list[str]:
@@ -507,7 +487,7 @@ def whole(base: Path, seal: Path, sha: str) -> bool:
   so a seed that stopped halfway leaves none, and the reaper takes it with the rest.
   """
   said = seal.read_text(encoding="utf-8") if seal.is_file() else ""
-  return said == sha and quiet([*gits(base), "diff", "--quiet", "--diff-filter=D", "HEAD", "--"]) == 0
+  return said == sha and captured([*gits(base), "diff", "--quiet", "--diff-filter=D", "HEAD", "--"]).returncode == 0
 
 
 def seeded(task: str, *, keep_app: bool = False) -> tuple[Path, Path, Mapping[str, str], str]:
@@ -527,7 +507,7 @@ def seeded(task: str, *, keep_app: bool = False) -> tuple[Path, Path, Mapping[st
   )
   syn = spoke([*gits(base), "rev-parse", "HEAD"])
   say(f"[deepswe] base {syn[:10]}, whose tree is upstream {meta['base_commit_hash'][:10]}")
-  if keep_app and quiet([*gits(app), "rev-parse", "--verify", "-q", "HEAD"]) == 0:
+  if keep_app and captured([*gits(app), "rev-parse", "--verify", "-q", "HEAD"]).returncode == 0:
     say(f"[deepswe] keeping the checkout as it stands ({spoke([*gits(app), 'rev-parse', '--short', 'HEAD'])})")
   else:
     say("[deepswe] seeding the checkout from the base")
@@ -541,7 +521,7 @@ def frozen(app: Path, syn: str, into: Path) -> None:
     git("add", "-A", where=app)
     named = ["-c", "user.email=deepswe@local", "-c", "user.name=deepswe"]
     git(*named, "commit", "-q", "-m", "submission", "--no-verify", where=app)
-  said = bytes_of([*gits(app), "diff", "--binary", syn, "HEAD"])
+  said = captured([*gits(app), "diff", "--binary", syn, "HEAD"]).stdout
   into.write_bytes(said)
   say(f"[deepswe] submission frozen: {len(said)} bytes into {into}")
 
@@ -551,9 +531,9 @@ def mode() -> str:
   told = os.environ.get("DEEPSWE_GRADE")
   if told:
     return told
-  if shutil.which("unshare") and quiet(["unshare", "-m", "true"]) == 0:
+  if shutil.which("unshare") and captured(["unshare", "-m", "true"]).returncode == 0:
     return "unshare"
-  return "docker" if shutil.which("docker") and quiet(["docker", "info"]) == 0 else "local"
+  return "docker" if shutil.which("docker") and captured(["docker", "info"]).returncode == 0 else "local"
 
 
 def pristine(base: Path, syn: str, into: Path) -> None:
@@ -656,20 +636,13 @@ def read_json(path: Path) -> Mapping[str, object]:
   return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
 
 
-def dollars(numbers: Mapping[str, object]) -> float:
-  """What a run of the rig spent, as a number, however the record of it was read back."""
-  got = numbers.get("usd")
-  return float(got) if isinstance(got, (int, float)) else 0.0
-
-
-def numbered(record: Path, root: str, began: float, got: object) -> Mapping[str, object]:
+def numbered(record: Path, began: float) -> dict[str, float]:
   """What the life did and what it cost, read off the record it kept."""
   entries = kept(record) if record.is_file() else []
   kinds = [entry[0][0] for entry in entries]
   answers = [one[3] for one in answered(entries)]
   usage = [one[2] for one in answers if one[2]]
   return {
-    "value": got,
     "facts": len(entries),
     "answers": len(answers),
     # The journal keeps a rung that the operator wrote, and of a rung that a prompt made, only its reply.
@@ -683,7 +656,6 @@ def numbered(record: Path, root: str, began: float, got: object) -> Mapping[str,
     "cache_read": sum(one[2] for one in usage),
     "usd": sum(one[4] for one in usage),
     "wall_seconds": round(time.monotonic() - began, 1),
-    "root": root,
   }
 
 
@@ -716,30 +688,22 @@ def archived(task: str, run_dir: Path, meta: Mapping[str, object]) -> None:
   say(f"[deepswe] archived into traces/{name}.result.json")
 
 
-def counted(numbers: Mapping[str, object], name: str) -> int:
-  """One count a reading of the record holds, as a number."""
-  got = numbers.get(name)
-  return int(got) if isinstance(got, int) else 0
-
-
-def watched(record: Path, root: str, began: float, mark: dict[str, int]) -> str:
+def watched(record: Path, root: str, began: float, mark: dict[str, float]) -> str:
   """Say how the life is doing, and why it is going nowhere when it is.
 
   A chain past the ceiling of its grant is paused and buys nothing more, and nothing here wakes it, so the run is
-  over the moment the pause stands; the turns say it, since a control tells a header of its own name. A life that
-  buys answers and does nothing with them is wedged, which the mark of the last thing it did says.
+  over the moment the pause stands. A life that buys answers and does nothing with them is wedged, which the mark of
+  the last thing it did says.
   """
-  numbers = numbered(record, root, began, None)
+  numbers = numbered(record, began)
   say(
     f"[deepswe] {numbers['wall_seconds']}s: answers={numbers['answers']} commands={numbers['commands']} "
-    f"reads={numbers['reads']} writes={numbers['writes']} ${dollars(numbers):.4f}"
+    f"reads={numbers['reads']} writes={numbers['writes']} ${numbers['usd']:.4f}"
   )
-  heads = [line.split()[1:2] for turn in engine.turns(on=root) for line in turn[1].split("\n") if line[1:2].isalnum()]
-  held = [one for (one,) in filter(None, heads) if one in ("paused", "woke")]
-  if held[-1:] == ["paused"]:
+  if engine.paused(root):
     return "a pause stands over the chain, which buys nothing more"
-  did = sum(counted(numbers, name) for name in ("commands", "reads", "writes"))
-  answers = counted(numbers, "answers")
+  did = sum(numbers[name] for name in ("commands", "reads", "writes"))
+  answers = numbers["answers"]
   if did > mark["did"]:
     mark.update(did=did, answers=answers)
   elif answers - mark["answers"] >= STUCK:
@@ -755,12 +719,11 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
   """
   record = run_dir / "record.jsonl"
   world, root, held = lived(record, app, args.to, keeps=True)
-  del world
   say(f"[deepswe] life on {app}, root {root}, {len(held)} facts kept")
   if args.ceiling:
     engine.grant(usd=args.ceiling, on=root)
   stopped, got, looks, message = "", None, 0, told + ASKED
-  mark = {"did": 0, "answers": 0}
+  mark: dict[str, float] = {"did": 0, "answers": 0}
   began = time.monotonic()
   try:
     while True:
@@ -783,6 +746,7 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
   except Exception as no:
     stopped = f"the task was refused: {no!r}"
   finally:
+    world.end()
     await cool()
   if stopped:
     say(f"[deepswe] {stopped}")
@@ -791,9 +755,7 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
 
 def run(args: argparse.Namespace) -> int:
   """Seed, let one life work the task, freeze what it left, grade it, and keep the whole of it."""
-  if shutil.which(os.environ.get(BIN) or "claude") is None:
-    say("[deepswe] no claude on PATH, so no model can be asked")
-    raise SystemExit(1)
+  ready()
   work, task, meta, syn = seeded(args.task, keep_app=args.resume)
   app, run_dir = work / "app", work / ".run"
   # A fresh checkout takes a fresh record: a record beside a tree it never wrote is no run at all.
@@ -811,11 +773,13 @@ def run(args: argparse.Namespace) -> int:
   say(f"[deepswe] run {args.task}: to={args.to} ceiling={args.ceiling} timeout={args.timeout or 'none'}s")
   began = time.monotonic()
   got, stopped, record = asyncio.run(worked(told, app, run_dir, args))
-  numbers = numbered(record, args.task, began, got)
-  (run_dir / "numbers.json").write_text(json.dumps(numbers, indent=2, default=repr) + "\n", encoding="utf-8")
+  numbers = numbered(record, began)
+  (run_dir / "numbers.json").write_text(
+    json.dumps({"value": got, **numbers, "root": args.task}, indent=2, default=repr) + "\n", encoding="utf-8"
+  )
   say(
     f"[deepswe] answers={numbers['answers']} commands={numbers['commands']} reads={numbers['reads']} "
-    f"writes={numbers['writes']} | ${dollars(numbers):.4f} | {numbers['wall_seconds']}s"
+    f"writes={numbers['writes']} | ${numbers['usd']:.4f} | {numbers['wall_seconds']}s"
   )
   patch = run_dir / "model.patch"
   frozen(app, syn, patch)
@@ -841,25 +805,12 @@ def validate(args: argparse.Namespace) -> int:
 
 
 def turns(args: argparse.Namespace) -> int:
-  """Every turn of the root of a run, as the model read them, which is how a friction is found.
-
-  The life that folds them keeps no record of its own: a World given the record it is reading would append to it,
-  and a run is read many times where it is only ever run once.
-  """
+  """Every turn of the root of a run, as the model read them, which is how a friction is found."""
   record = WORK / args.task / ".run" / "record.jsonl"
   if not record.is_file():
     say(f"[deepswe] no record at {record}")
     raise SystemExit(1)
-
-  async def folded() -> None:
-    """The life again on the record of the run, booted as the run was, which stands whole when boot returns."""
-    root = lived(record, WORK / args.task / "app", args.to, keeps=False)[1]
-    for n, (role, py, _, _) in enumerate(engine.turns(on=root)):
-      say(f"{'=' * 100}\n[{n} {role}]")
-      say(py)
-    await cool()
-
-  asyncio.run(folded())
+  asyncio.run(turned(record, WORK / args.task / "app", args.to))
   return 0
 
 

@@ -1,14 +1,13 @@
 """Cd, the question that answers with its path."""
 
-from conftest import STANDS, Sand, life, said
+from conftest import born, said
 from furb import engine
 from furb.engine import OPERATOR
 
 
 async def test_a_cd_is_a_question_that_answers_with_its_path_which_the_chain_holds() -> None:
   """A cd is a question that answers with its path, which the chain holds."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
+  sand, log, root = born()
   assert engine.cd("/x", on=root) == "/x"
   held = engine.transcript(root)
   word = next(a for a in held if a[0] == "cd")

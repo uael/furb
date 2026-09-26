@@ -11,11 +11,13 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from furb import engine
+import furb_monty
+from furb import engine, python, sheet
 from furb.engine import Act
-from furb.kernel import Native, gating
+from furb.kernel import kernel
 from furb.provider.claude import ACTOR, cool
-from furb.world import Live, kept
+from furb.world import Live, entries, kept
+from furb_monty import _monty
 
 SHAPES: dict[str, type | None] = {"none": None, "str": str, "int": int, "float": float, "bool": bool, "list": list}
 """SHAPES is every shape a prompt of the command line takes, by the name it is given on the line."""
@@ -28,16 +30,23 @@ def say(text: str) -> None:
 
 
 def lived(record: Path | None, cwd: Path, actor: str, *, keeps: bool) -> tuple[Live, str, list[tuple]]:
-  """One life on the loop that runs: its World on the record, the Kernel of this interpreter, and its root.
+  """One life on the loop that runs: its World, the ears of the crate, the Kernel, the gate of the crate, and its root.
 
-  The life is made again from what the record holds, and it keeps what it says to the record when it keeps. A
-  life that only reads a record keeps nothing, since a World given the record it reads appends to it: every life
-  stands as it opens, and a life that keeps keeps that stand. The journal says the whole record again before boot
-  returns, so the life stands whole on its record when this gives the root.
+  The life is made again from what the record holds, and it keeps what it says to the record when it keeps, through
+  the store of the crate, which holds the lease of the record until the World ends. A life that only reads a record
+  keeps nothing, since every life stands as it opens, and a life that keeps keeps that stand. The journal says the
+  whole record again before boot returns, so the life stands whole on its record when this gives the root.
   """
-  held = kept(record) if record is not None and record.is_file() else []
-  world = Live(str(cwd.absolute()), record if keeps else None, actor)
-  root = engine.boot(held, world=world.hears(), kernel=Native().kernel(), gate=gating())
+  world = Live(str(cwd.absolute()), actor)
+  world.ears = {"files": _monty.files(), "bash": _monty.bash(), "time": _monty.time()}
+  if keeps and record is not None:
+    record.parent.mkdir(parents=True, exist_ok=True)
+    stored, world.ears["store"] = _monty.store(str(record))
+    held = entries(stored)
+  else:
+    held = kept(record) if record is not None and record.is_file() else []
+  gate = sheet.gating(vars(python), furb_monty.gate)
+  root = engine.boot(held, world=world.hears(), kernel=kernel(vars(python)), gate=gate, **world.ears)
   return world, root, held
 
 
@@ -57,32 +66,36 @@ def again(held: Sequence[tuple], root: str, shape: type | None, message: str, to
 
 async def prompted(record: Path | None, cwd: Path, shape: type | None, message: str, to: str) -> object:
   """One prompt of the operator on the root of a life, awaited for the shape it asks for."""
-  _, root, held = lived(record, cwd, ACTOR, keeps=True)
+  world, root, held = lived(record, cwd, ACTOR, keeps=True)
   try:
     if name := again(held, root, shape, message, to):
       return await Act(name)
     return await engine.prompt(shape, message, to, on=root)
   finally:
     # Nothing the life warmed outlives the life, so every process of the provider dies with the command.
+    world.end()
     await cool()
 
 
-async def turned(record: Path, cwd: Path) -> None:
-  """The turns of the root of a life made again from its record, each as the python a model reads of it."""
-  root = lived(record, cwd, ACTOR, keeps=False)[1]
+async def turned(record: Path, cwd: Path, actor: str = ACTOR) -> None:
+  """The turns of the root of a life made again from its record, on the actor that life stood on, each as the
+  python a model reads of it."""
+  world, root, _ = lived(record, cwd, actor, keeps=False)
   try:
     for role, py, _, _ in engine.turns(on=root):
       say(f"[{role}] {py}")
   finally:
+    world.end()
     await cool()
 
 
 async def running(record: Path | None, cwd: Path, word: str) -> object:
   """One word its caller wrote, run as a rung on the root of a life, awaited for what the word gave."""
-  root = lived(record, cwd, ACTOR, keeps=True)[1]
+  world, root, _ = lived(record, cwd, ACTOR, keeps=True)
   try:
     return await engine.rung(word, on=root)
   finally:
+    world.end()
     await cool()
 
 

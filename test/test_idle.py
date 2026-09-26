@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Sand, life, said
+from conftest import born, said
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -13,8 +13,7 @@ async def test_idle_hears_every_fact_and_says_nothing_of_its_own() -> None:
   assert next(hears) is None
   assert hears.send(("tell", "chain://one", OPERATOR, [])) is None
   assert hears.send(("done", "rung://operator.2.1", OPERATOR, 1)) is None
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
+  _, log, root = born()
   act = engine.wait(0, on=root)
   assert (await act) is None
   assert [one for one in said(log, "tell") if one[1] == act] == []

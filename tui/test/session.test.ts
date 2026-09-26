@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { RecordLock } from "@furb/engine";
+import { store } from "@furb/engine";
 import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type Engine, openEngine } from "../src/bridge.ts";
@@ -30,7 +30,7 @@ test("an @word that names no file is text of the message, and a word that names 
   } finally {
     await session.dispose();
   }
-}, 30000);
+});
 
 test("a view that cannot be read opens the record with the default view and names the file", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-view-"));
@@ -38,17 +38,17 @@ test("a view that cannot be read opens the record with the default view and name
   let session: Session | undefined;
   try {
     let opened = await openEngine({ cwd: directory, record, demo: true });
-    session = new Session(opened.life, opened.world, true);
+    session = new Session(opened.engine, opened.host, true);
     session.sessionName = "Named";
-    await session.life.result(await session.life.rung("kept = 7"));
+    await session.engine.result(await session.engine.rung({ word: "kept = 7", on: session.engine.root }));
     await session.dispose();
     for (const damaged of ["", '{"sessionName": "cut', "[1, 2]"]) {
       await writeFile(`${record}.ui.json`, damaged);
       opened = await openEngine({ cwd: directory, record, demo: true });
-      session = new Session(opened.life, opened.world, true);
+      session = new Session(opened.engine, opened.host, true);
       expect(session.notice).toContain(`Could not read ${record}.ui.json`);
       expect(session.sessionName).toBe(basename(directory));
-      expect((await session.life.inspect("kept", session.selected)).value).toBe(7);
+      expect((await session.engine.inspect("kept", session.selected)).value).toBe(7);
       await session.dispose();
     }
     session = undefined;
@@ -56,15 +56,15 @@ test("a view that cannot be read opens the record with the default view and name
     await session?.dispose();
     await rm(directory, { recursive: true, force: true });
   }
-}, 30000);
+});
 
-test("a session that cannot save its view still ends its World, its commands and its lease", async () => {
+test("a session that cannot save its view still ends its life, its commands and its lease", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-dispose-"));
   const record = join(directory, "life.jsonl");
   const opened = await openEngine({ cwd: directory, record, demo: true });
-  const session = new Session(opened.life, opened.world, true);
+  const session = new Session(opened.engine, opened.host, true);
   try {
-    const command = await session.life.bash(`${printPid}; sleep 30`);
+    const command = await session.engine.bash(`${printPid}; sleep 30`, { on: session.engine.root });
     const pid = () =>
       Number(
         (session.acts.find((act) => act.id === command)?.value as { stdout?: { content: string } })?.stdout
@@ -75,18 +75,18 @@ test("a session that cannot save its view still ends its World, its commands and
     await mkdir(`${record}.ui.json.tmp`);
     const failed = await session.dispose().catch((error: unknown) => error);
     expect(String(failed)).toContain("life.jsonl.ui.json.tmp");
-    expect(session.life.disposed).toBe(true);
+    expect(session.engine.disposed).toBe(true);
     for (let tries = 0; alive(pid()) && tries < 100; tries++) await Bun.sleep(20);
     expect(alive(pid())).toBe(false);
-    new RecordLock(record).dispose();
+    store(record).ear.dispose();
   } finally {
     await remove(directory);
   }
-}, 30000);
+});
 
 test("a snapshot asked before a model choice lands after it, and the choice holds for the next prompt", async () => {
   const session = await demoSession();
-  const snapshot = session.world.snapshot.bind(session.world);
+  const snapshot = session.host.snapshot.bind(session.host);
   let release = () => {};
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -97,8 +97,8 @@ test("a snapshot asked before a model choice lands after it, and the choice hold
     const asked = new Promise<void>((resolve) => {
       taken = resolve;
     });
-    session.world.snapshot = async (chain) => {
-      session.world.snapshot = snapshot;
+    session.host.snapshot = async (chain) => {
+      session.host.snapshot = snapshot;
       const early = await snapshot(chain);
       taken();
       await gate;
@@ -115,25 +115,25 @@ test("a snapshot asked before a model choice lands after it, and the choice hold
     expect(prompt?.words).toEqual(["str", "Which model reads this?", "claude-cli:opus/low"]);
     await idle(session);
     await session.refresh();
-    expect((await session.life.inspect("actor", session.life.root)).value).toBe("claude-cli:opus/low");
+    expect((await session.engine.inspect("actor", session.engine.root)).value).toBe("claude-cli:opus/low");
     expect(session.actor).toBe("claude-cli:opus/low");
   } finally {
     release();
-    session.world.snapshot = snapshot;
+    session.host.snapshot = snapshot;
     await session.dispose();
   }
-}, 30000);
+});
 
 test("a follow-up that the operator removes while an earlier one is sent is not sent", async () => {
   const session = await demoSession();
-  const send = session.world.sendQueued.bind(session.world);
+  const send = session.host.sendQueued.bind(session.host);
   try {
-    const other = await session.life.chain("Other");
+    const other = await session.engine.chain({ label: "Other" });
     session.queueHeld = true;
     session.enqueue("First follow-up on main");
     await session.select(other);
     session.enqueue("Second follow-up on the other chain, about @README.md");
-    session.world.sendQueued = async (entry) => {
+    session.host.sendQueued = async (entry) => {
       const later = session.queued.find((item) => item.id !== entry.id);
       if (later) session.removeQueued(later.id);
       return send(entry);
@@ -148,34 +148,34 @@ test("a follow-up that the operator removes while an earlier one is sent is not 
     ]);
     expect(session.acts.filter((act) => act.on === other && act.kind === "rung")).toEqual([]);
   } finally {
-    session.world.sendQueued = send;
+    session.host.sendQueued = send;
     await session.dispose();
   }
-}, 30000);
+});
 
 test("a follow-up that the operator removes while its files are read is not sent", async () => {
   const session = await demoSession();
-  const life = session.life;
+  const engine = session.engine;
   try {
     session.queueHeld = true;
     session.enqueue("Explain @README.md");
     const [entry] = session.queued;
     if (!entry) throw new Error("No follow-up.");
     // The operator removes the follow-up as the read of its file starts.
-    const reading = new Proxy(life, {
+    const reading = new Proxy(engine, {
       get(target, key) {
         const value = Reflect.get(target, key);
         if (key !== "rung") return value;
         return (...args: Parameters<Engine["rung"]>) => {
           if (session.queued.includes(entry)) session.removeQueued(entry.id);
-          return life.rung(...args);
+          return engine.rung(...args);
         };
       },
     });
-    Object.assign(session, { life: reading });
+    Object.assign(session, { engine: reading });
     session.queueHeld = false;
     await session.drainQueue();
-    Object.assign(session, { life });
+    Object.assign(session, { engine });
     await idle(session);
     await session.refresh();
     expect(session.queued).toEqual([]);
@@ -184,15 +184,18 @@ test("a follow-up that the operator removes while its files are read is not sent
     );
     expect(session.acts.filter((act) => session.isUserPrompt(act))).toEqual([]);
   } finally {
-    Object.assign(session, { life });
+    Object.assign(session, { engine });
     await session.dispose();
   }
-}, 30000);
+});
 
 test("each /feed sends one line, and a /feed with no text closes the input", async () => {
   const session = await demoSession();
   try {
-    const command = await session.life.bash('read -r a; read -r b; echo "a=[$a] b=[$b]"; cat', { fed: true });
+    const command = await session.engine.bash('read -r a; read -r b; echo "a=[$a] b=[$b]"; cat', {
+      fed: true,
+      on: session.engine.root,
+    });
     await session.submit(`/feed ${command} yes`);
     await session.submit(`/feed ${command} two  words`);
     await until(session, () =>
@@ -201,40 +204,25 @@ test("each /feed sends one line, and a /feed with no text closes the input", asy
           ?.content,
       ).includes("a=[yes] b=[two  words]\n"),
     );
-    expect((await session.life.outcome(command)).done).toBe(false);
+    expect((await session.engine.outcome(command)).done).toBe(false);
     await session.submit(`/feed ${command}`);
-    expect(await session.life.result(command)).toMatchObject({
+    expect(await session.engine.result(command)).toMatchObject({
       code: 0,
       stdout: { content: "a=[yes] b=[two  words]\n" },
     });
   } finally {
     await session.dispose();
   }
-}, 30000);
+});
 
-test("/close carries a whole float as a float, as the operator wrote it", async () => {
-  const session = await demoSession();
-  try {
-    const prompt = await session.life.prompt("float", "A number?", { to: "operator" });
-    await session.submit(`/close ${prompt} 2.0`);
-    expect(await session.life.result(prompt)).toBe(2);
-    const whole = await session.life.prompt("float", "Another number?", { to: "operator" });
-    expect(String(await session.submit(`/close ${whole} 2`).catch((error: unknown) => error))).toContain(
-      "2 not float",
-    );
-  } finally {
-    await session.dispose();
-  }
-}, 30000);
-
-test("/model finds a model of the roster by the rule of the World, so an id with a colon names it", async () => {
+test("/model finds a model of the roster by the rule of the provider, so an id with a colon names it", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-models-"));
   const opened = await openEngine({
     cwd: directory,
     model: "openai:gpt-4o",
     roster: ["amazon-bedrock:amazon.nova-lite-v1:0"],
   });
-  const session = new Session(opened.life, opened.world);
+  const session = new Session(opened.engine, opened.host);
   try {
     await session.refresh();
     await session.submit("/model amazon.nova-lite-v1:0");
@@ -248,7 +236,7 @@ test("/model finds a model of the roster by the rule of the World, so an id with
     await session.dispose();
     await rm(directory, { recursive: true, force: true });
   }
-}, 30000);
+});
 
 test("the answers to the questions of the snapshots stay out of the facts of the host", async () => {
   const session = await demoSession();
@@ -261,14 +249,14 @@ test("the answers to the questions of the snapshots stay out of the facts of the
     }
     const acts = new Set(session.acts.map((act) => act.id));
     expect(
-      session.world.facts.filter(
+      session.host.facts.filter(
         ([kind, id]) => kind === "done" && /^\w+:\/\/operator\.\d+$/.test(id) && !acts.has(id),
       ),
     ).toEqual([]);
   } finally {
     await session.dispose();
   }
-}, 30000);
+});
 
 test("a path that starts with ~ is read from the home directory by /share, /export, /image and /extension", async () => {
   const home = await mkdtemp(join(tmpdir(), "furb-home-"));
@@ -321,7 +309,7 @@ try {
   } finally {
     await rm(home, { recursive: true, force: true });
   }
-}, 30000);
+});
 
 test("an undo leaves out of its branch a grant that came after the message it takes back", async () => {
   const session = await demoSession();

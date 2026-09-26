@@ -35,7 +35,8 @@ async def answered(yard: Path, message: str = "say a word") -> Path:
         break
     assert await waits == 7
     await settle()
-    assert world.record == record
+    assert "store" in world.ears
+    world.end()
   return record
 
 
@@ -69,19 +70,21 @@ async def test_a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it(ya
   assert world.directory == str(yard)
   assert [fact[0] for fact, *_ in kept(record)] == [*[fact[0] for fact, *_ in said], "stand", "done"]
   assert any(fact[0] == "prompt" for fact, *_ in said)
+  world.end()
 
 
 async def test_a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again(yard: Path) -> None:
   """A pin: the engine matches nothing the operator says again, so a life stood up on its own record would open a
   second prompt beside the one that record stands on, and ask a model for what it was answered once."""
   record = await answered(yard)
-  _world, root, said = lived(record, yard, "opus/low", keeps=True)
+  world, root, said = lived(record, yard, "opus/low", keeps=True)
   name = again(said, root, int, "say a word", OPERATOR)
   assert name == "prompt1"
   assert await Act(name) == 7
   assert again(said, root, int, "another word", OPERATOR) == ""
   assert again(said, root, str, "say a word", OPERATOR) == ""
   assert again([], root, int, "say a word", OPERATOR) == ""
+  world.end()
 
 
 async def test_a_prompt_of_the_operator_gives_what_the_record_answered(

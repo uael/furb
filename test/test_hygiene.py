@@ -1,13 +1,4 @@
-"""The contract and the suite agree, sentence for sentence.
-
-A sentence is one line of the docstring of a definition in engine.pyi: a function, a class, a method, or a
-module-level name, whose docstring is the string literal after its assignment. A constructor and a property are no
-definitions of their own: what a constructor takes and what a property gives are the class's sentences. Each
-sentence has exactly one test, in the file of its definition, whose docstring is that sentence; each test carries
-such a sentence; each definition has a file of its own and at least one sentence; and the module docstring, the
-work queue, is empty. The engine itself fits its token budget, minified in layout alone, and binds no name again
-beneath a scope that already binds it.
-"""
+"""The hygiene laws, which CLAUDE.md says: the contract and the suite agree, sentence for sentence."""
 
 import ast
 import re
@@ -15,9 +6,9 @@ from collections import Counter
 from pathlib import Path
 
 import tiktoken
-from python_minifier import minify
 
 from furb import engine
+from furb.world import SYSTEM
 
 PY = Path(engine.__file__)
 PYI = PY.with_suffix(".pyi")
@@ -27,24 +18,6 @@ TESTS = PYI.parents[2] / "test"
 BUDGET = 6_000
 DEFS = (ast.FunctionDef, ast.AsyncFunctionDef)
 SCOPE = (ast.Module, ast.ClassDef, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, *DEFS)
-
-
-def source() -> str:
-  """The engine as the model reads it: layout is all the minifier may take, so what is read is what runs."""
-  return minify(
-    PY.read_text(encoding="utf-8"),
-    remove_annotations=False,
-    remove_pass=False,
-    combine_imports=False,
-    hoist_literals=False,
-    rename_locals=False,
-    rename_globals=False,
-    remove_object_base=False,
-    convert_posargs_to_args=False,
-    remove_explicit_return_none=False,
-    remove_builtin_exception_brackets=False,
-    constant_folding=False,
-  )
 
 
 def normal(sentence: str) -> str:
@@ -157,13 +130,13 @@ def test_the_module_docstring_is_empty() -> None:
 
 
 def test_the_engine_fits_the_window_it_is_meant_to_be_read_in() -> None:
-  spent = len(tiktoken.get_encoding("o200k_base").encode(source()))
+  spent = len(tiktoken.get_encoding("o200k_base").encode(SYSTEM))
   assert spent < BUDGET, f"the engine the model reads costs {spent} tokens, over the {BUDGET} budget"
 
 
 def test_the_engine_the_model_reads_is_the_engine_that_runs() -> None:
   """Whatever the minifier takes, it may not be meaning: what the model is handed parses to the program on disk."""
-  assert ast.dump(ast.parse(source())) == ast.dump(ast.parse(PY.read_text(encoding="utf-8")))
+  assert ast.dump(ast.parse(SYSTEM)) == ast.dump(ast.parse(PY.read_text(encoding="utf-8")))
 
 
 def binds(scope: ast.AST) -> set[str]:

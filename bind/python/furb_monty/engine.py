@@ -1,19 +1,10 @@
 """The engine in monty, with every name of engine.pyi.
 
-The engine of this interpreter is `furb.python`, and this module gives the same names over one life of that engine
-running in the sandbox of monty with the Kernel of the crate. A name that reads no life is the engine's own: a
-constant, a class, a show or a filter, and the pure functions. A verb says itself in the sandbox by its name with
-its words, and what it gave comes back as the instance of `furb.python` it is, which is how `get`, `peek` and
-`transcript` read the life too, and `site` says who speaks there. An act is awaited for what it comes to, which
-the life says once, when it is done.
-
-A generator of this interpreter, which a World is, is heard from the sandbox on a thread of its own, since a World
-reads the engine while it answers and nothing may call into a life that stands waiting for it: a verb the thread
-says is said by its name to the sandbox, which says it on the thread's behalf and answers. A callable of this
-interpreter is called back from the sandbox by name, and a callable the engine made is called back by its handle,
-so a show crosses either way as itself. A class a word defined is a type of this interpreter, one per class,
-derived from the type its base is here, whose call makes the instance in the sandbox by the handle of the class,
-and an instance of one is an object of that type holding its fields, which goes back in made from them.
+This module gives the names of `furb.python` over one life of that engine in the sandbox of monty. A name that reads
+no life is the engine's own. A verb is the method of the engine of the crate that says it, and any other name says
+itself in the sandbox, and what it gave comes back as the instance of `furb.python` it is. An act is awaited for what
+it comes to. A generator of this interpreter is heard on a thread of its own, since it may say a verb while it hears,
+and a verb it says is a call it yields to the sandbox.
 """
 
 import ast
@@ -69,6 +60,13 @@ def living() -> Living:
   return LIFE
 
 
+def held_engine() -> _monty.Engine:
+  """The engine of the crate that the life this process holds lives in."""
+  engine = living().engine
+  assert engine is not None
+  return engine
+
+
 def call(name: str, args: tuple, kwargs: dict[str, object]) -> object:
   """One verb of the engine, said by its name with its words, and what it gave.
 
@@ -78,50 +76,53 @@ def call(name: str, args: tuple, kwargs: dict[str, object]) -> object:
   held = getattr(LOCAL, "crossing", None)
   if held is not None:
     return held.calls(name, list(args), dict(kwargs))
-  life = living().life
+  engine = held_engine()
   while FORGOTTEN:
-    life.forget(FORGOTTEN.pop())
+    engine.forget(FORGOTTEN.pop())
+
   if (who := SPEAKER.get()) is None:
-    return life.verb(name, list(args), dict(kwargs))
-  before = life.site(who)
+    return engine.verb(name, args, kwargs)
+  before = engine.site(who)
   try:
-    return life.verb(name, list(args), dict(kwargs))
+    return engine.verb(name, args, kwargs)
   finally:
-    life.site(before)
+    engine.site(before)
 
 
 def speaks(value: str | None) -> str:
   """Who speaks in the life, and who speaks from now on when a value is given."""
   held = getattr(LOCAL, "crossing", None)
-  got = held.calls("spoken", [value], {}) if held is not None else living().life.site(value)
+  got = held.calls("spoken", [value], {}) if held is not None else held_engine().site(value)
   assert isinstance(got, str)
   return got
 
 
 class Crossing:
-  """One generator of this interpreter, heard from the sandbox on a thread of its own.
+  """One generator of this interpreter, heard from the sandbox on a thread of its own through a generator that the
+  engine of the crate steps as it steps any: sent what the generator hears, and thrown in what a verb it said raised.
 
-  The generator is primed where it is made, on the thread of the loop, since a World reads the running loop at its
-  first step, and what that step gave stands for its birth in the sandbox. From then, every fact the sandbox gives
-  it goes through its inbox to the thread, and what the generator did with it comes back through its outbox: a
-  saying, nothing, its end, or what it raised. A verb the generator says goes the other way through the same two
-  doors, and its value wakes the thread.
+  The generator is primed where it is made, on the thread of the loop, since an ear of the World reads the running
+  loop at its first step, and what that step gave stands for its birth in the sandbox. From then, every fact the
+  sandbox gives it goes through its inbox to the thread, and what the generator did with it comes back through its
+  outbox: a saying, nothing, its end, or what it raised. A verb the generator says goes the other way through the
+  same two doors, as a call it yields, and the value of the verb, or what it raised, wakes the thread.
   """
 
-  def __init__(self, name: str, gen: Generator[tuple | None, tuple]) -> None:
+  def __init__(self, name: str | None, gen: Generator[tuple | None, tuple]) -> None:
     self.name = name
     self.gen = gen
     self.inbox: queue.Queue[object] = queue.Queue()
     self.outbox: queue.Queue[object] = queue.Queue()
-    # A generator that was started already stands at a yield, and so does its stand-in.
     started = inspect.getgeneratorstate(gen) != inspect.GEN_CREATED
-    self.first = None if started else self.stepped(None)
-    self.born = False
+    self.first = ("step", None) if started else self.stepped(None)
     threading.Thread(target=self.serve, daemon=True).start()
+    self.ear = self.stepping()
+    # A generator that was started already stands at a yield, and so does the generator that crosses for it.
+    if started:
+      next(self.ear)
 
-  def stepped(self, sent: object) -> object:
-    """One step of the generator with what it was given, as the ear it hears by, and what came of it, as the
-    sandbox reads a reply."""
+  def stepped(self, sent: object) -> tuple:
+    """One step of the generator with what it was given, as the ear it hears by, and what came of it."""
     token = SPEAKER.set(self.name)
     try:
       out = self.gen.send(sent) if isinstance(sent, tuple) else next(self.gen)
@@ -131,7 +132,7 @@ class Crossing:
       return ("raised", no)
     finally:
       SPEAKER.reset(token)
-    return None if out is None else ("say", tuple(out))
+    return ("step", None if out is None else tuple(out))
 
   def serve(self) -> None:
     """The thread of the generator: every fact from the inbox stepped, and what came of it put in the outbox."""
@@ -139,19 +140,31 @@ class Crossing:
     while (got := self.inbox.get()) is not END:
       self.outbox.put(self.stepped(got))
 
-  def channel(self, said: object) -> object:
-    """What the sandbox gave this generator, and what the generator did with it: at its birth the sandbox gives
-    it nothing, and what the priming step gave stands for that."""
-    if not self.born:
-      self.born = True
-      return self.first
-    self.inbox.put(said)
-    return self.outbox.get()
-
-  def answered(self, value: object) -> object:
-    """The value of the verb the generator said, which wakes its thread, and what the generator did next."""
-    self.inbox.put(("answered", value))
-    return self.outbox.get()
+  def stepping(self) -> Generator[object, object]:
+    """The generator that crosses for this one: it yields what this one did, a saying, nothing, or a call of a
+    verb, and ends or raises as it did. At its birth it yields what the priming step gave. It is sent a fact, or the
+    value of the verb this one said, and it is thrown in what that verb raised."""
+    got = self.first
+    while True:
+      match got:
+        case ("over",):
+          return
+        case ("raised", BaseException() as no):
+          raise no
+        case ("calls", str(name), list(args), dict(kwargs)):
+          calling, step = True, {"verb": name, "args": args, "kwargs": kwargs}
+        case _:
+          assert isinstance(got, tuple)
+          calling, step = False, got[1]
+      try:
+        sent = yield step
+      except GeneratorExit:
+        raise
+      except BaseException as no:
+        self.inbox.put(("raised", no))
+      else:
+        self.inbox.put(("value", sent) if calling else sent)
+      got = self.outbox.get()
 
   def calls(self, name: str, args: list, kwargs: dict[str, object]) -> object:
     """One verb of the engine, said from the thread of the generator: the sandbox is told, and its value wakes
@@ -162,7 +175,7 @@ class Crossing:
       why = "the life this generator was heard in is over"
       raise RuntimeError(why)
     assert isinstance(got, tuple)
-    _, (kind, value) = got
+    kind, value = got
     if kind == "raised":
       assert isinstance(value, BaseException)
       raise value
@@ -174,45 +187,27 @@ class Crossing:
 
 
 class Living:
-  """One life of the engine in the sandbox, and the ears of this interpreter it hears, by name."""
+  """One life of the engine in the sandbox, and the generators of this interpreter it hears on threads of their
+  own."""
 
-  def __init__(self, outside: dict[str, Generator[tuple | None, tuple]]) -> None:
-    self.crossings = {name: Crossing(name, gen) for name, gen in outside.items()}
-    self.callables: dict[str, Callable[..., object]] = {}
-    self.life: _monty.Life | None = None
+  def __init__(self) -> None:
+    self.crossings: list[Crossing] = []
+    self.engine: _monty.Engine | None = None
 
-  def ear(self, gen: Generator[tuple | None, tuple]) -> tuple[str, bool]:
-    """A generator of this interpreter, heard from now on under a name of its own: its name, and whether it was
-    started already, so that its stand-in stands where it stands. The door makes the mark the engine reads."""
-    name = f"ear:{len(self.crossings)}"
-    started = inspect.getgeneratorstate(gen) != inspect.GEN_CREATED
-    self.crossings[name] = Crossing(name, gen)
-    return name, started
-
-  def callable(self, fn: Callable[..., object]) -> str:
-    """A callable of this interpreter, called back from now on under a name of its own, which it gives. The door
-    makes the mark the engine reads."""
-    name = f"callable:{len(self.callables)}"
-    self.callables[name] = fn
-    return name
-
-  def called(self, name: str, args: tuple, kwargs: dict[str, object]) -> object:
-    """One callable of this interpreter, called back by its name with what the sandbox gave it, and what it gave,
-    which the door carries in as it carries any value: a generator as an ear, since a callable given to an act
-    gives its ear."""
-    return self.callables[name](*args, **kwargs)
-
-  def hears(self, name: str, fact: object) -> object:
-    """One fact, heard by the ear of this name, or nothing at its birth, and what the ear did with it."""
-    return self.crossings[name].channel(fact)
-
-  def answered(self, name: str, value: object) -> object:
-    """The value of the verb the ear of this name said, and what the ear did next."""
-    return self.crossings[name].answered(value)
+  def crossed(self, name: str | None, ear: object) -> object:
+    """An ear given under this name, as the engine of the crate hears it: a generator on a thread of its own, whose
+    work speaks by that name, and an ear of the crate as itself."""
+    if not isinstance(ear, Generator):
+      return ear
+    self.crossings.append(one := Crossing(name, ear))
+    return one.ear
 
   def end(self) -> None:
-    """The end of the life, which ends the thread of every generator it heard."""
-    for one in self.crossings.values():
+    """The end of the life, with its ears: the thread of every generator it heard ends, and so does every ear of the
+    crate."""
+    if self.engine is not None:
+      self.engine.dispose()
+    for one in self.crossings:
       one.end()
 
 
@@ -222,7 +217,7 @@ def calling(n: int, args: tuple[object, ...], kwargs: dict[str, object]) -> obje
   held = getattr(LOCAL, "crossing", None)
   if held is not None:
     return held.calls("made", [n, list(args), dict(kwargs)], {})
-  return living().life.made(n, list(args), dict(kwargs))
+  return held_engine().made(n, list(args), dict(kwargs))
 
 
 def made(n: int) -> Callable[..., object]:
@@ -290,7 +285,7 @@ class Act[T = object](str):
       if not done.done():
         done.set_result(value)
 
-    living().life.watch(str(self), told)
+    held_engine().watch(str(self), told)
     got = await done
     if isinstance(got, BaseException):
       raise got
@@ -311,12 +306,12 @@ class Site:
     speaks(previous)
 
 
-def boot(record: Iterable[object] = (), **outside: Generator[tuple | None, tuple]) -> Act:
+def boot(record: Iterable[object] = (), **outside: object) -> Act:
   """A life of the engine in the sandbox, opened from the record and on the ears given, which gives the root.
 
-  The Kernel and the gate are the crate's, so a generator under either name is refused as the engine refuses one
-  under a name of its own ears. A second boot is a second life, and the first is gone with the threads of its
-  generators.
+  An ear is a generator of this interpreter or an ear of the crate. The Kernel and the gate are the crate's, so an
+  ear under either name is refused as the engine refuses one under a name of its own ears. A second boot is a
+  second life, and the first is gone with its ears.
   """
   asyncio.get_running_loop()
   for name in ("kernel", "gate"):
@@ -326,21 +321,42 @@ def boot(record: Iterable[object] = (), **outside: Generator[tuple | None, tuple
   global LIFE  # noqa: PLW0603
   if LIFE is not None:
     LIFE.end()
-  LIFE = Living(outside)
-  LIFE.life = _monty.Life(LIFE, list(outside), list(record))
-  if (no := LIFE.life.raised) is not None:
+  LIFE = living = Living()
+  ears = [(name, living.crossed(name, ear)) for name, ear in outside.items()]
+  living.engine = _monty.Engine.boot(list(record), ears)
+  if (no := living.engine.raised) is not None:
     raise no
-  return Act(LIFE.life.root)
+  return Act(living.engine.root)
+
+
+def ours(making: object) -> bool:
+  """Whether a callable is one of this interpreter: no name of the engine, and no callable the engine made, which go
+  back in as themselves."""
+  return callable(making) and not hasattr(making, "__monty__") and all(making is not one for one in NAMES.values())
+
+
+def eared(name: str, args: tuple) -> tuple:
+  """The words of a name of the engine that takes an ear, with each ear as the engine of the crate hears it.
+
+  A generator is heard on a thread of its own, under the name drive gives it. A function that makes an ear is given
+  the name of that ear, which is how an act brings its ear to life, so the ear it makes is heard on a thread of its
+  own under that name. Either way the work of the ear speaks by its name.
+  """
+  match name, args:
+    case ("drive" | "lives", (Generator() as g, *rest)):
+      return (living().crossed(str(rest[0]) if name == "drive" else None, g), *rest)
+    case ("act", (kind, on, making, *rest)) if ours(making):
+      return (kind, on, lambda act: living().crossed(act, making(act)), *rest)
+    case ("pausing" | "ending", (making, *rest)) if ours(making):
+      return (lambda act: living().crossed(act, making(act)), *rest)
+  return args
 
 
 def worded(name: str) -> Callable[..., object]:
   """One verb of the engine, said by its name in the sandbox with the words it was given."""
 
   def verb(*args: object, **kwargs: object) -> object:
-    got = call(name, args, kwargs)
-    if name == "drive":
-      # The generator hears by the name drive gave it, so its work speaks by that name.
-      next(one for one in living().crossings.values() if one.gen is args[0]).name = str(args[1])
+    got = call(name, eared(name, args), kwargs)
     return Act(got) if name in ACTS and isinstance(got, str) else got
 
   verb.__name__ = verb.__qualname__ = name

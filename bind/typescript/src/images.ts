@@ -4,6 +4,9 @@ import { basename, join } from "node:path";
 import type { ImageContent } from "@earendil-works/pi-ai";
 import { opens, paragraphs, questionKind } from "./types.js";
 
+/** The most bytes an image may hold: 20 MiB. */
+const LARGEST = 20 * 1024 * 1024;
+
 export interface ImageAttachment {
   name: string;
   uri: string;
@@ -24,8 +27,7 @@ export function imageType(data: Uint8Array): { mimeType: string; extension: stri
 }
 export function attachImage(directory: string, path: string): ImageAttachment {
   const info = statSync(path);
-  if (!info.isFile() || info.size > 20 * 1024 * 1024)
-    throw new Error("An image must be a file of at most 20 MiB.");
+  if (!info.isFile() || info.size > LARGEST) throw new Error("An image must be a file of at most 20 MiB.");
   const bytes = readFileSync(path);
   const { mimeType, extension } = imageType(bytes);
   const digest = createHash("sha256").update(bytes).digest("hex");
@@ -58,18 +60,19 @@ export function imageReferences(message: string): { text: string; name: string; 
 }
 export function imageContent(directory: string, uri: string): ImageContent {
   const { path, digest } = imagePath(directory, uri);
-  if (statSync(path).size > 20 * 1024 * 1024) throw new Error("The saved image is too large.");
+  if (statSync(path).size > LARGEST) throw new Error("The saved image is too large.");
   const bytes = readFileSync(path);
   if (createHash("sha256").update(bytes).digest("hex") !== digest)
     throw new Error("The saved image attachment has changed.");
   return { type: "image", data: bytes.toString("base64"), mimeType: imageType(bytes).mimeType };
 }
+/** The content of each image, which it reads once while the file stays the same: the read checks the file, so a
+ * file that did not change is not checked again. */
 export class ImageCache {
   private readonly entries = new Map<string, { stamp: string; content: ImageContent }>();
   get(directory: string, uri: string): ImageContent {
     const { path } = imagePath(directory, uri);
     const info = statSync(path);
-    if (info.size > 20 * 1024 * 1024) throw new Error("The saved image is too large.");
     const stamp = `${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
     let entry = this.entries.get(path);
     if (!entry || entry.stamp !== stamp) {
@@ -84,10 +87,10 @@ export class ImageCache {
 }
 /** The images that the prompts told in the python of a user turn attach, each once: a prompt tells its message
  * in its paragraph, and an image reference of anything else attaches nothing. */
-export function turnImages(directory: string, python: string, cache?: ImageCache): ImageContent[] {
+export function turnImages(directory: string, python: string, cache: ImageCache): ImageContent[] {
   const uris = new Set<string>();
   for (const paragraph of paragraphs(python))
     if (questionKind(paragraph.name) === "prompt" && opens(paragraph))
       for (const reference of imageReferences(paragraph.text)) uris.add(reference.uri);
-  return [...uris].map((uri) => (cache ? cache.get(directory, uri) : imageContent(directory, uri)));
+  return [...uris].map((uri) => cache.get(directory, uri));
 }

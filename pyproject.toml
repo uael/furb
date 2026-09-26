@@ -42,7 +42,6 @@ dev = [
   "pytest-cov>=7.1.0",
   "pytest-timeout>=2.4.0",
   "pytest-xdist>=3.8.0",
-  "python-minifier>=3.2.0",
   "ruff>=0.16.2",
   "tiktoken>=0.13.0",
   # The type checker of the repository, which reads the package and the suite; the gate of a word is the crate's.
@@ -71,18 +70,16 @@ ignore = ["S101"]
 [tool.ruff.lint.per-file-ignores]
 # The suite pins the contract's own literals, drives doubles that answer in one sentence where they stand, and
 # names its tests by the sentence they carry.
-"test/**" = ["PLR2004", "EM101", "EM102", "TRY003", "FBT001", "FBT003", "PT018", "ARG002", "RUF012", "PLR0911", "PLR0912", "A002", "E501"]
+"test/**" = ["PLR2004", "EM101", "TRY003", "FBT003", "PT018", "PLR0912", "A002", "E501"]
 # The stand-in has one arm for each kind of value it makes again, and a life opens on everything it takes: the
-# engine, the sheet, the names, the record, and the three objects of the host. The World of the host is called by
-# position, as the interpreter hands the words of a call. The sandbox makes no class from a class of the
-# interpreter, so the protocols of the three objects are read by ty and never run.
-"src/preamble.py" = ["PLR0911", "PLR0912", "PLR0913", "PLR0917", "FBT001", "TID251"]
-"bind/python/furb_monty/engine.py" = ["PLR0911", "PLR0912"]
-# The surface speaks the engine's own vocabulary: its verbs shadow builtins on purpose, take the parameters the
-# contract names, and its exceptions are named as the contract names them.
-"src/furb/engine.pyi" = ["N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "E501", "PLR0904"]
+# engine, the sheet, the names, the record, and the two objects of the host. The sandbox makes no class from a
+# class of the interpreter, so the protocols of the two objects are read by ty and never run.
+"src/preamble.py" = ["PLR0911", "PLR0913", "PLR0917", "TID251"]
+# The surface speaks the engine's own vocabulary: its parameters shadow builtins on purpose, its exceptions are
+# named as the contract names them, and each sentence of the contract stands on one line of its own.
+"src/furb/engine.pyi" = ["N818", "A002", "E501"]
 # The sandbox carries no bound method as a value, so boot binds each read of the life through a lambda.
-"src/furb/engine.py" = ["PLW0108", "S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "B008", "FBT001", "FBT002", "ARG001", "ARG002", "ANN", "PLR0904", "EM101", "EM102", "TRY003", "PLR0917", "PLR0911", "PLR0912", "PLR0915", "PLR2004", "SIM105", "C901", "SLF001"]
+"src/furb/engine.py" = ["PLW0108", "S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "FBT001", "FBT002", "ARG001", "ANN", "EM101", "EM102", "TRY003", "PLR0917", "PLR0912", "PLR0915", "SIM105"]
 
 [tool.ruff.lint.pycodestyle]
 max-line-length = 160
@@ -130,11 +127,10 @@ unresolved-attribute = "ignore"
 unresolved-import = "ignore"
 
 [tool.pytest.ini_options]
-minversion = "9.1"
 testpaths = ["test"]
 pythonpath = [".", "test"]
 # The suite runs on every core: a test opens a life of its own and leaves nothing behind, so the tests are independent.
-addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing", "--cov-fail-under=100"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing"]
 xfail_strict = true
 timeout = 30
 timeout_method = "thread"

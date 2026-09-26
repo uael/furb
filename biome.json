@@ -1,7 +1,7 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.6/schema.json",
   "files": {
-    "includes": ["**", "!**/dist", "!**/*.node", "!bind/typescript/index.cjs", "!bind/typescript/index.d.cts"]
+    "includes": ["**", "!**/dist", "!**/*.node", "!bind/typescript/index.d.cts"]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 110 },
   "linter": { "enabled": true, "rules": { "recommended": true } }

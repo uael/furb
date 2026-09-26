@@ -25,7 +25,6 @@ export const CLAUDE = "claude-cli";
 
 export function claudeBinary(): string {
   if (process.env.FURB_CLAUDE_BIN) return process.env.FURB_CLAUDE_BIN;
-  if (process.env.DIRT_CLI_BIN) return process.env.DIRT_CLI_BIN;
   const name = process.platform === "win32" ? "claude.exe" : "claude";
   const candidates = (process.env.PATH ?? "")
     .split(delimiter)
@@ -477,11 +476,15 @@ class Session {
   }
 }
 
+/** How many conversations keep a CLI process at most. */
+const WARM = 8;
+/** How many conversations the pool holds at most. */
+const HELD = 64;
+/** How many milliseconds a conversation with no request keeps its CLI process. */
+const IDLE = 300000;
+
 export interface ClaudeOptions {
   bin?: string;
-  maxWarm?: number;
-  maxSessions?: number;
-  idleMs?: number;
   stallMs?: number;
 }
 export function claudeProvider(options: ClaudeOptions = {}): { provider: Provider; dispose(): void } {
@@ -492,17 +495,14 @@ export function claudeProvider(options: ClaudeOptions = {}): { provider: Provide
       .sort((a, b) => a[1].used - b[1].used);
     let warm = [...sessions.values()].filter((session) => session.child).length;
     for (const [key, session] of idle) {
-      if (
-        session.child &&
-        (warm > (options.maxWarm ?? 8) || Date.now() - session.used > (options.idleMs ?? 300000))
-      ) {
+      if (session.child && (warm > WARM || Date.now() - session.used > IDLE)) {
         session.stop();
         warm--;
       }
-      if (!session.child && sessions.size > (options.maxSessions ?? 64)) sessions.delete(key);
+      if (!session.child && sessions.size > HELD) sessions.delete(key);
     }
   };
-  const reaper = setInterval(sweep, options.idleMs ?? 300000);
+  const reaper = setInterval(sweep, IDLE);
   reaper.unref();
   const stream = (model: Model<Api>, context: TranscriptContext, settings: SimpleStreamOptions = {}) => {
     const output = createAssistantMessageEventStream();

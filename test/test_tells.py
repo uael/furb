@@ -2,14 +2,13 @@
 
 import pytest
 
-from conftest import life, said, settle, sown
+from conftest import born, said, settle
 from furb import engine
 
 
 async def test_whether_an_act_tells() -> None:
   """Whether an act tells: a rung that its chain made tells nothing, neither its word nor what its word does, since what it would tell stands told already."""
-  sand = sown()
-  log, root = life(sand)
+  _, log, root = born()
   step = engine.rung("t = read('a.txt')\nraise ValueError('boom')", on=root)
   with pytest.raises(ValueError, match="boom"):
     await step

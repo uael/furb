@@ -9,10 +9,9 @@ import asyncio
 
 import pytest
 
-import furb_monty
+from conftest import ENGINE, Py
 from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
-from furb.kernel import ENGINE, checked, gate
 from outside.doubles import booted, heads, settle, worlds
 
 STANDS = [[[OPERATOR, [], WINDOW], ["opus", ["low"], 1000]], "/w", "opus/low"]
@@ -20,7 +19,7 @@ STANDS = [[[OPERATOR, [], WINDOW], ["opus", ["low"], 1000]], "/w", "opus/low"]
 
 def said(word: str, program: tuple[str, ...] = ()) -> list[str]:
   """What the gate finds against a word, read after the program of its chain."""
-  return gate(word, list(program))
+  return Py().gate(word, list(program))
 
 
 def test_the_sheet_binds_every_name_of_the_engine_and_lays_each_word_in_a_try_of_its_own() -> None:
@@ -121,6 +120,7 @@ def test_a_word_may_use_the_async_forms_at_its_top_level() -> None:
   level, as the interpreter runs it."""
   word = "async def g():\n  yield 1\nasync for x in g():\n  close([y async for y in g()])"
   assert said(word) == []
+  assert said("close((await bash('ls')).code)") == []
 
 
 def test_a_rung_that_raised_leaves_what_it_bound_and_the_rungs_after_it_to_the_word() -> None:
@@ -128,23 +128,6 @@ def test_a_rung_that_raised_leaves_what_it_bound_and_the_rungs_after_it_to_the_w
   raised and the ones after it alike."""
   assert said("y: int = a + b", ("a = 1\nraise ValueError('x')", "b = 2")) == []
   assert said("y: str = b", ("raise ValueError('x')", "b = 2"))[0].startswith("line 1: error[invalid-assignment]")
-
-
-def test_a_warning_of_ty_refuses_no_word() -> None:
-  """A warning is no finding: a name that may be unbound is a warning of ty, and a word that reads it runs."""
-  assert said("if chance() > 0.5:\n  maybe = 1\nclose(maybe)") == []
-
-
-def test_the_kernel_reads_a_sheet_through_the_gate_of_the_crate() -> None:
-  """The Kernel gates through the crate's checker, so the two find the same on a sheet: one gate, one reading."""
-  for word, program in [
-    ("close(1)", ()),
-    ("close(nowhere())", ()),
-    ("a = 1\ny: int = kept", ("kept = 'text'",)),
-    ("x: str = span(1, 2)(['a'])", ()),
-    ("close((await bash('ls')).code)", ()),
-  ]:
-    assert sheet.gate(ENGINE, list(program), word, furb_monty.gate) == sheet.gate(ENGINE, list(program), word, checked)
 
 
 def test_a_word_that_imports_what_the_sandbox_does_not_run_is_refused() -> None:

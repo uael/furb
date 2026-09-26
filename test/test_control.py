@@ -1,13 +1,12 @@
 """control, the one way a pause, a wake, a cancel or a close is said over an act."""
 
-from conftest import STANDS, Sand, heads, life, said, settle
+from conftest import born, heads, said, settle
 from furb import engine
 
 
 async def test_a_control_said_over_the_act_it_names_with_a_header_of_its_name() -> None:
   """A control said over the act it names, with a header of its name headed with that act, which is how pause, wake, cancel and close say theirs."""
-  sand = Sand(stands=STANDS, auto=False)
-  log, root = life(sand)
+  _, log, root = born(auto=False)
   act = engine.bash("slow", on=root)
   await settle()
   engine.control("pause", "paused", act)
@@ -19,9 +18,7 @@ async def test_a_control_said_over_the_act_it_names_with_a_header_of_its_name() 
 
 async def test_the_call_gives_the_control_as_the_life_made_it_whole() -> None:
   """The call gives the control as the life made it whole, so a close that named no act reads which act it is over."""
-  sand = Sand(stands=STANDS, auto=False)
-  log, root = life(sand)
-  sand.script[root] = ["b = bash('slow')\nk = control('pause', 'paused', b)\nclose(3)"]
+  _, log, root = born("b = bash('slow')\nk = control('pause', 'paused', b)\nclose(3)", auto=False)
   act = engine.prompt(int, "count", on=root)
   assert await act == 3
   await settle()
@@ -32,9 +29,7 @@ async def test_the_call_gives_the_control_as_the_life_made_it_whole() -> None:
 
 async def test_a_control_is_said_while_it_is_over_an_act_that_is_not_done() -> None:
   """A control is said while the act it names is not done, and a wake while it is paused too, so a control that reaches nothing says nothing."""
-  sand = Sand(stands=STANDS, auto=False)
-  log, root = life(sand)
-  sand.script[root] = ["x = bash('slow')\nclose(7)"]
+  sand, log, root = born("x = bash('slow')\nclose(7)", auto=False)
   act = engine.prompt(int, "go", on=root)
   assert await act == 7
   command = said(log, "bash")[0][1]

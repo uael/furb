@@ -4,19 +4,22 @@ The suite proves the contract on both engines, sentence for sentence. What is pr
 ear of this interpreter that says a verb from its thread and is answered with what the verb raised, a show the
 engine made that an ear calls back from its thread, a class a word defined held as a type of this interpreter
 and its instances as objects of it, both ways, the Kernel of this interpreter refused, since the engine of monty
-holds its own, and a gate that accepts a builtin or a name of a module exactly when the sandbox runs it.
+holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, and an ear the
+crate writes, which serves a life of either engine. What the ears of the crate do, the crate proves.
 """
 
 import builtins
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 
 import furb
 import furb_monty.engine
 from conftest import OPERATOR, STANDS, Dead, Py, Sand, settle, swapped
-from furb import engine, kernel
+from furb import engine
 from furb.engine import Refused
+from furb_monty import _monty
 
 
 @pytest.fixture(autouse=True)
@@ -162,7 +165,7 @@ async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_r
   # seconds. One word holds every name, one on each line, and the line of a finding is the name it refuses.
   word = "\n".join(f"got = {name}" for name in names)
   found = engine.gate(word, on=root)
-  assert kernel.gate(word, []) == found
+  assert Py().gate(word, []) == found
   refused = sorted({names[int(one.split(":")[0].removeprefix("line ")) - 1] for one in found})
   probe = (
     f"ran = []\nfor name in {refused!r}:\n  try:\n    eval(compile('got = ' + name, 'probe', 'exec'), dict(globals()))\n"
@@ -186,3 +189,36 @@ async def test_the_gate_of_the_sandbox_finds_what_the_run_finds_of_a_name_the_pr
   assert engine.gate("close(read('a'))", on=root)[0].startswith("line 1: error[call-non-callable]")
   with pytest.raises(Refused):
     await engine.rung("close(read('a'))", on=root)
+
+
+async def test_an_ear_of_the_crate_serves_a_life_of_this_interpreter_and_what_it_says_from_a_thread_drives_it() -> None:
+  """An ear of the crate crosses to the boot of the door beside the generators the contract says, and what it says
+  from a thread of its own drives the life from the loop: time ends a wait from its thread."""
+  root = furb_monty.engine.boot((), time=_monty.time(), world=Dead(stands=STANDS).hears())
+  assert await engine.wait(0.01, on=root) is None
+
+
+async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_generator_of_its_own(
+  tmp_path: Path,
+) -> None:
+  """The engine of this interpreter steps an ear of the crate as it steps a generator: a verb the ear says is said to
+  that engine, what the work of the ear says from a thread drives the life, and the record the store keeps reads
+  back as the values it held."""
+  swapped(furb.python)
+  path = str(tmp_path / "record.jsonl")
+  stored, store = _monty.store(path)
+  assert stored == []
+  ears = {"files": _monty.files(), "bash": _monty.bash(), "time": _monty.time(), "store": store}
+  world = Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
+  root = furb.python.boot((), kernel=Py().kernel(), gate=Py().gating(), **ears, world=world)
+  furb.python.write(furb.python.Text("a.txt", "one\n"), on=root)
+  assert furb.python.read("a.txt", on=root).content == "one\n"
+  ran = await furb.python.bash("printf hi; sleep 0.1; printf there", on=root)
+  assert (ran.code, ran.stdout.content) == (0, "hithere")
+  assert await furb.python.wait(0.01, on=root) is None
+  for one in ears.values():
+    one.dispose()
+  kept = [fact for (fact,) in _monty.kept(path)]
+  assert [fact[3] for fact in kept if fact[:2] == ["done", "read1"]] == [
+    furb.python.Text(str(tmp_path / "a.txt"), "one\n")
+  ]

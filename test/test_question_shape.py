@@ -1,14 +1,13 @@
 """Question, a fact that takes a name of its own and is answered."""
 
-from conftest import STANDS, Sand, acts, life, said, settle, sown
+from conftest import Sand, acts, born, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Act, Text
 
 
 async def test_a_fact_that_takes_a_name_of_its_own_when_it_is_said_and_is_answered() -> None:
   """A fact that takes a name of its own when it is said and is answered, which is an act: answered now with a done, or later, with a started now and a done after it."""
-  sand = sown()
-  log, root = life(sand)
+  _, log, root = born()
   act = engine.bash("echo hi", on=root)
   assert engine.get(act) == said(log, "bash")[0] and [a[1] for a in said(log, "started")][-1] == act
   assert (await act).code == 0
@@ -20,8 +19,7 @@ async def test_a_fact_that_takes_a_name_of_its_own_when_it_is_said_and_is_answer
 
 async def test_a_question_is_a_fact_whose_about_is_its_own_name_and_whose_first_word_is_the_chain() -> None:
   """A question is a fact whose about is its own name and whose first word is the chain it is on."""
-  sand = sown()
-  log, root = life(sand)
+  _, log, root = born()
   act = engine.bash("echo hi", on=root)
   engine.read("a.txt", on=root)
   made, asked = said(log, "bash")[0], said(log, "read")[0]
@@ -32,8 +30,7 @@ async def test_a_question_is_a_fact_whose_about_is_its_own_name_and_whose_first_
 
 async def test_every_question_takes_a_name() -> None:
   """Every question takes a name, what is answered now as well as what is answered later."""
-  sand = sown()
-  log, root = life(sand)
+  _, log, root = born()
   act = engine.bash("echo hi", on=root)
   engine.read("a.txt", on=root)
   assert act == "bash1"
@@ -42,8 +39,7 @@ async def test_every_question_takes_a_name() -> None:
 
 async def test_a_question_is_named_by_its_kind() -> None:
   """A question is named by its kind, so a fact is a question when the act it is about is named under its kind, which is what question says."""
-  sand = sown()
-  log, root = life(sand)
+  _, log, root = born()
   act = engine.bash("echo hi", on=root)
   assert (await act).code == 0
   await settle()
@@ -55,9 +51,7 @@ async def test_a_question_is_named_by_its_kind() -> None:
 
 async def test_the_name_of_an_act() -> None:
   """The name of an act is its kind and how many acts of that kind the life has made with it, so the root is chain1, the first command is bash1 and the first prompt is prompt1, and python binds each name as it is."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\ny = bash('echo ho')\nclose(1)", "close(bash1 + bash2 == 'bash1bash2')"]
+  _, log, root = born("x = bash('echo hi')\ny = bash('echo ho')\nclose(1)", "close(bash1 + bash2 == 'bash1bash2')")
   asking = engine.prompt(int, "run it", on=root)
   assert await asking == 1
   await settle()
@@ -76,15 +70,14 @@ async def test_the_name_of_an_act() -> None:
 
 async def test_a_read_takes_its_number_as_a_command_does() -> None:
   """A read takes its number as a command does, so the first read is read1, whoever made it."""
-  sand = sown()
-  log, root = life(sand)
+  sand, log, root = born()
   engine.read("a.txt", on=root)
   sand.script[root] = ["x = bash('echo hi')\nt = read('a.txt')\nclose(len(t.lines))"]
   asking = engine.prompt(int, "read it", on=root)
   assert await asking == 2
   await settle()
   assert [(a[1], a[2]) for a in said(log, "read")] == [("read1", OPERATOR), ("read2", "rung1")]
-  later = Sand(stands=STANDS)
+  later = Sand()
   again, _ = life(later, list(sand.record))
   await settle(300)
   assert [a[1] for a in said(again, "read")] == ["read1", "read2"] and engine.peek("prompt1") == 2
@@ -93,9 +86,7 @@ async def test_a_read_takes_its_number_as_a_command_does() -> None:
 
 async def test_the_generator_that_settles_an_await_is_named_after_that_act() -> None:
   """The generator that settles an await of an act from outside a run is named after that act and the task that awaits it, which is the name of no question."""
-  sand = sown()
-  log, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\nclose(1)"]
+  _, log, root = born("x = bash('echo hi')\nclose(1)")
   asking = engine.prompt(int, "run it", on=root)
   assert await asking == 1
   assert [a for a in log if "waits" in a[1]] == []
