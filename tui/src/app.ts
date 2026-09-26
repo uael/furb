@@ -35,8 +35,8 @@ import { conversation } from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import type { Extensions } from "./extensions.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
-import { clip, count, dollars, elapsed, graphemes, kibibytes, share } from "./format.ts";
-import { chords, keys } from "./keys.ts";
+import { clip, count, dollars, elapsed, graphemes, kibibytes, modelName, share } from "./format.ts";
+import { type Action, bindings, chords, keys, presses, shown } from "./keys.ts";
 import { loadParsers } from "./parsers.ts";
 import {
   type ActRow,
@@ -117,7 +117,6 @@ interface Choice {
   label: string;
   detail: string;
   run(): void | Promise<void>;
-  toggle?: () => void;
   /** The color of the label, for a choice whose label is a state. */
   color?: RGBA;
   /** The colors that a choice of a theme shows before its detail. */
@@ -131,6 +130,16 @@ interface Choice {
   /** The state of a session or a chain that the choice names, which its mark shows. */
   status?: SessionStatus;
   /** The title of the part of the list that the choice opens, which the list shows above it. */
+  heading?: string;
+}
+/** A value that the first argument of a command may take: what it means, whether it is the current one, whether the
+ * command takes more after it, and the label and the heading that a picker shows it under. */
+interface Value {
+  value: string;
+  detail: string;
+  current?: boolean;
+  more?: boolean;
+  label?: string;
   heading?: string;
 }
 /** One suggestion for the token before the cursor: the text that Tab puts in its place, and what Enter does when it
@@ -177,26 +186,6 @@ export function follow(renderer: CliRenderer, options: AppOptions): () => App {
   return () => app;
 }
 
-/** The commands whose first argument takes a value that the TUI knows, which the suggestions offer as it is typed. */
-const valued = new Set([
-  "model",
-  "effort",
-  "shape",
-  "theme",
-  "read",
-  "image",
-  "extension",
-  "cd",
-  "workspace",
-  "edit",
-  "pause",
-  "wake",
-  "cancel",
-  "feed",
-  "close",
-  "grant",
-  "context",
-]);
 /** The commands whose value is a path of the project, which the suggestions wait for. */
 const pathCommands = new Set(["read", "image", "extension", "cd"]);
 /** What each effort of a model does, which the picker of the effort says beside it. */
@@ -3131,20 +3120,26 @@ export class App {
               detail: "Fold it under Archived. Its record stays, and a click opens it again.",
               run: () => void library.archive(entry).catch(this.report),
             },
-        {
-          label: "Move to trash",
-          color: c.danger,
-          detail: "Stop this session and move its saved record to the trash",
-          run: async () => {
-            await library.delete(entry);
-          },
-        },
+        this.trash(entry),
         { label: "Keep", detail: "Return without changes", run() {} },
       ],
-      0,
-      "",
-      `The trash is ${shortenHome(join(group.directory, ".furb", "trash"))}, where you can get it back.`,
+      { note: `The trash is ${this.trashOf(group)}, where you can get it back.` },
     );
+  }
+  /** The choice that stops a session and moves its saved record to the trash of its workspace. */
+  private trash(entry: SessionEntry): Choice {
+    return {
+      label: "Move to trash",
+      color: c.danger,
+      detail: "Stop this session and move its saved record to the trash",
+      run: async () => {
+        await this.options.workspaces.delete(entry);
+      },
+    };
+  }
+  /** Where the trash of a workspace is, as a dialog names it. */
+  private trashOf(group: Workspace): string {
+    return shortenHome(join(group.directory, ".furb", "trash"));
   }
   /** What names a session or a workspace for as long as it lives: the path of its record, or its folder. */
   private itemKey(item: SessionEntry | Workspace): string {
@@ -3187,9 +3182,7 @@ export class App {
         },
         { label: "Keep", detail: "Return without changes", run() {} },
       ],
-      0,
-      "",
-      `The folder is ${shortenHome(item.directory)}.`,
+      { note: `The folder is ${shortenHome(item.directory)}.` },
     );
   }
   /** The menu that a right click on the row of a session or a workspace opens, at the pointer. */
@@ -3219,7 +3212,7 @@ export class App {
               run: () => library.delete(item).then(() => {}),
             },
           ];
-    this.openPalette(item.name, choices, 0, "", "", false, { x, y });
+    this.openPalette(item.name, choices, { at: { x, y } });
     this.menuItem = item;
     this.render();
   }
@@ -3258,9 +3251,7 @@ export class App {
               },
             ]),
           ],
-          0,
-          "",
-          "Open sessions keep running while you work in another one.",
+          { note: "Open sessions keep running while you work in another one." },
         ),
       )
       .catch(this.report);
@@ -3331,20 +3322,8 @@ export class App {
             run: () =>
               this.openPalette(
                 `Delete the session “${entry.name}”?`,
-                [
-                  { label: "Keep session", detail: "Return without changes", run() {} },
-                  {
-                    label: "Move to trash",
-                    color: c.danger,
-                    detail: "Stop this session and move its saved record to the trash",
-                    run: async () => {
-                      await library.delete(entry);
-                    },
-                  },
-                ],
-                0,
-                "",
-                `It goes to ${shortenHome(join(group.directory, ".furb", "trash"))}, where you can get it back.`,
+                [{ label: "Keep session", detail: "Return without changes", run() {} }, this.trash(entry)],
+                { note: `It goes to ${this.trashOf(group)}, where you can get it back.` },
               ),
           })),
         ),
@@ -3467,9 +3446,7 @@ export class App {
             ]),
         })),
       ],
-      0,
-      "",
-      "Sent in turn after the current work. Choose one to edit or remove it.",
+      { note: "Sent in turn after the current work. Choose one to edit or remove it." },
     );
   };
   private shared = (path: string, markdown: string): void => {
@@ -3509,9 +3486,7 @@ export class App {
           },
         },
       ],
-      0,
-      "",
-      `The page is ${shortenHome(path)}.`,
+      { note: `The page is ${shortenHome(path)}.` },
     );
   };
   private action(command: string): void {
@@ -3576,7 +3551,9 @@ export class App {
       },
     ]);
   }
-  /** Every action in one list: each with its label, the slash command that does it, what it does, and its keys. */
+  /** Every action in one list: each with its label, the slash command that does it, what it does, and its keys. The
+   * table of keys gives the chord of each command, and each action that has keys and no command, which stands before
+   * the command that it goes with. */
   palette(): void {
     const kitty = this.renderer.capabilities?.kitty_keyboard === true;
     const views_: Record<View, string> = {
@@ -3584,33 +3561,31 @@ export class App {
       transcript: "The exact text that the model reads",
       changes: "The diff of each file that the life wrote",
     };
-    const shortcuts: Partial<Record<keyof typeof commands, string>> = {
-      exit: "⌃Q",
-      workspace: "⌃W",
-      sidebar: "⌃\\",
-      rewind: "Esc Esc",
-      editor: "⌥E",
-      files: "@",
-      queue: "⌥Enter",
-      image: "⌃V",
-      details: "⌥D",
-      chain: "⌃N",
-      model: kitty ? "⌃M" : "⌥M",
-      effort: "⇧Tab",
-      theme: "⌃T",
-      inspect: "⌃G",
-      bash: "!",
-      edit: "⌃L",
-    };
+    const keysOf = new Map<string, string>();
+    const before = new Map<string, Choice>();
+    for (const { key, binding } of bindings) {
+      if (binding.command) keysOf.set(binding.command, shown(key, binding, kitty));
+      const { choice, run } = binding;
+      if (choice && run)
+        before.set(choice.before, {
+          label: choice.label,
+          detail: choice.detail,
+          command: "",
+          keys: shown(key, binding, kitty),
+          run: () => void this.actions[run](),
+        });
+    }
     const choices: Choice[] = [
       { label: "New session", detail: commands.new[2], command: "/new", run: () => this.action("/new") },
     ];
+    // One key names the three views, as 1-3.
+    const toggle = bindings.find(({ binding }) => binding.run === "view");
     for (const [index, view] of views.entries())
       choices.push({
         label: `${viewLabels[view]} view`,
         detail: views_[view],
         command: "",
-        keys: `${kitty ? "⌃" : "⌥"}${index + 1}`,
+        keys: toggle && shown(toggle.key, toggle.binding, kitty).replace("1-3", String(index + 1)),
         run: () => this.showView(view),
       });
     for (const [name, command] of this.options.extensions?.commands ?? [])
@@ -3620,57 +3595,19 @@ export class App {
         command: `/${name}`,
         run: () => this.action(`/${name}`),
       });
-    // The actions that have keys and no command stand beside the commands they go with.
-    const beside: Record<string, Choice> = {
-      chain: {
-        label: "Switch chain",
-        detail: "Go to any chain of this session",
-        command: "",
-        keys: "⌃B",
-        run: () => this.chains(),
-      },
-      run: {
-        label: "Python input",
-        detail: "Write code with the same gate as the model",
-        command: "",
-        keys: "⌃R",
-        run: () => this.toggleMode(),
-      },
-      files: {
-        label: "Stash the input",
-        detail: "Put the input aside, or bring it back",
-        command: "",
-        keys: "⌃S",
-        run: () => this.stash(),
-      },
-      grant: {
-        label: "Filter the view",
-        detail: "Show only what holds a text",
-        command: "",
-        keys: "⌃F",
-        run: () => this.openSearch(),
-      },
-      exit: {
-        label: "Help",
-        detail: "Keys, marks, and slash commands",
-        command: "",
-        keys: "F1",
-        run: () => this.help(),
-      },
-    };
     for (const [name, [label, argument, detail]] of Object.entries(commands)) {
       if (name === "new") continue;
-      const before = beside[name];
-      if (before) choices.push(before);
+      const aside = before.get(name);
+      if (aside) choices.push(aside);
       choices.push({
         label,
         detail,
         command: `/${name}${argument ? ` ${argument}` : ""}`,
-        keys: shortcuts[name as keyof typeof commands],
+        keys: keysOf.get(name),
         run: this.command(name, argument),
       });
     }
-    this.openPalette("Commands", choices, 0, "", "", true);
+    this.openPalette("Commands", choices, { rich: true });
   }
   /** How a command runs when it is picked from a list: one that needs its argument waits for it in the input. */
   private command(name: string, argument: string): () => void {
@@ -3692,7 +3629,7 @@ export class App {
     if (slash) return { kind: "/", text: slash[1] ?? "" };
     // The first word after a command whose values are known is a value, which the suggestions complete.
     const value = before.match(/^\/([\w-]+) (\S*)$/);
-    if (value && valued.has(value[1] ?? ""))
+    if (value && Object.hasOwn(this.values, value[1] ?? ""))
       return { kind: "value", text: value[2] ?? "", command: value[1] ?? "" };
     const at = before.match(/(?:^|\s)@([^\s"']*)$/);
     if (at && this.session.mode === "prompt" && !this.session.editing)
@@ -3724,104 +3661,112 @@ export class App {
     }
     return this.files.paths;
   }
-  /** The values that the first argument of a command may take, each with what it means, or nothing for a command
-   * whose argument is free text. A value of a command that takes more after it completes, and a value of any other
-   * command runs the command when it is chosen. */
-  private argumentValues(command: string): { value: string; detail: string; more?: boolean }[] | undefined {
-    const w = this.session;
-    const current = (yes: boolean) => (yes ? "   current" : "");
-    const files = () => this.projectPaths() ?? [];
-    switch (command) {
-      case "model": {
-        const roster = w.roster.filter(([name]) => name !== "operator");
-        const short = (name: string) => (name.includes(":") ? name.slice(name.indexOf(":") + 1) : name);
-        return roster.map(([name, , window]) => ({
-          // A model goes by its name alone, unless two providers offer a model of that name.
-          value: roster.filter(([other]) => short(other) === short(name)).length > 1 ? name : short(name),
-          detail: `${count(window)} tokens of context${current(name === w.actorChoice.model)}`,
-        }));
-      }
-      case "effort": {
-        const { model, effort } = w.actorChoice;
-        return (w.roster.find(([name]) => name === model)?.[1] ?? []).map((name) => ({
-          value: name,
-          detail: `${efforts[name] ?? ""}${current(name === effort)}`,
-        }));
-      }
-      case "shape":
-        return shapes.map((shape) => ({
-          value: shape,
-          detail: `The answer is a ${shape}${current(shape === w.shape)}`,
-        }));
-      case "theme":
-        return (Object.keys(palettes) as ThemeName[]).map((name) => ({
-          value: name,
-          detail: `${themeLabels[name].join(", ")}${current(name === this.theme)}`,
-        }));
-      case "read":
-        return files().map((path) => ({ value: path, detail: "" }));
-      case "image":
-        return files()
-          .filter((path) => /\.(png|jpe?g|gif|webp)$/i.test(path))
-          .map((path) => ({ value: path, detail: "" }));
-      case "extension":
-        return files()
-          .filter((path) => /\.(ts|js|mts|mjs)$/.test(path))
-          .map((path) => ({ value: path, detail: "" }));
-      case "cd":
-        return [
-          ...new Set(
-            files().flatMap((path) => (path.includes("/") ? [path.slice(0, path.lastIndexOf("/"))] : [])),
+  /** The values that the first argument of a command may take, for each command whose values the TUI knows. A value
+   * of a command that takes more after it completes, and a value of any other command runs the command when it is
+   * chosen. */
+  private readonly values: Partial<Record<string, () => Value[]>> = {
+    model: () => {
+      const w = this.session;
+      const roster = w.roster.filter(([name]) => name !== "operator");
+      return roster.map(([name, , window]) => {
+        const { provider, id } = modelName(name);
+        return {
+          // A model goes by its id alone, unless two providers offer a model of that id.
+          value: roster.filter(([other]) => modelName(other).id === id).length > 1 ? name : id,
+          detail: `${count(window)} tokens of context`,
+          current: name === w.actorChoice.model,
+          label: id,
+          heading: provider || undefined,
+        };
+      });
+    },
+    effort: () => {
+      const { model, effort } = this.session.actorChoice;
+      return (this.session.roster.find(([name]) => name === model)?.[1] ?? []).map((name) => ({
+        value: name,
+        detail: efforts[name] ?? "",
+        current: name === effort,
+      }));
+    },
+    shape: () =>
+      shapes.map((shape) => ({
+        value: shape,
+        detail: `The answer is a ${shape}`,
+        current: shape === this.session.shape,
+      })),
+    theme: () =>
+      (Object.keys(palettes) as ThemeName[]).map((name) => ({
+        value: name,
+        detail: themeLabels[name].join(", "),
+        current: name === this.theme,
+      })),
+    read: () => (this.projectPaths() ?? []).map((path) => ({ value: path, detail: "" })),
+    image: () =>
+      (this.projectPaths() ?? [])
+        .filter((path) => /\.(png|jpe?g|gif|webp)$/i.test(path))
+        .map((path) => ({ value: path, detail: "" })),
+    extension: () =>
+      (this.projectPaths() ?? [])
+        .filter((path) => /\.(ts|js|mts|mjs)$/.test(path))
+        .map((path) => ({ value: path, detail: "" })),
+    cd: () =>
+      [
+        ...new Set(
+          (this.projectPaths() ?? []).flatMap((path) =>
+            path.includes("/") ? [path.slice(0, path.lastIndexOf("/"))] : [],
           ),
-        ]
-          .sort()
-          .map((path) => ({ value: path, detail: "" }));
-      case "workspace":
-        return this.options.workspaces.groups.map((group) => ({
-          value: shortenHome(group.directory),
-          detail: group.name,
-        }));
-      case "edit":
-        return w.activity
-          .filter((act) => w.isUserPrompt(act))
-          .map((act) => ({
-            value: act.id,
-            detail: clip(String(act.words[1] ?? "").split("\n")[0] ?? "", 48),
-          }));
-      case "pause":
-      case "wake":
-        return w.chains.map((chain) => ({
-          value: chain.id,
-          detail: `${w.labelOf(chain.id)}${current(chain.id === w.selected)}`,
-        }));
-      case "cancel":
-        return w.activity
-          .filter((act) => working(act))
-          .map((act) => ({
-            value: act.id,
-            detail: `${act.kind}  ${clip(String(act.words[act.kind === "prompt" ? 1 : 0] ?? ""), 40)}`,
-          }));
-      case "feed":
-        return w.activity
-          .filter((act) => act.kind === "bash" && !act.done && act.words[1] === true)
-          .map((act) => ({ value: act.id, detail: clip(String(act.words[0] ?? ""), 48), more: true }));
-      case "close":
-        return w.activity
-          .filter((act) => !act.done && act.kind !== "chain")
-          .map((act) => ({ value: act.id, detail: act.kind, more: true }));
-      case "grant":
-        return ["1", "2", "5", "10", "20"].map((value) => ({
-          value,
-          detail: `Pause this chain at ${dollars(Number(value))}`,
-        }));
-      case "context":
-        return ["0.5", "0.7", "0.8", "0.9"].map((value) => ({
-          value,
-          detail: `Pause this chain at ${share(Number(value))}`,
-        }));
-      default:
-        return undefined;
-    }
+        ),
+      ]
+        .sort()
+        .map((path) => ({ value: path, detail: "" })),
+    workspace: () =>
+      this.options.workspaces.groups.map((group) => ({
+        value: shortenHome(group.directory),
+        detail: group.name,
+      })),
+    edit: () =>
+      this.session.activity
+        .filter((act) => this.session.isUserPrompt(act))
+        .map((act) => ({
+          value: act.id,
+          detail: clip(String(act.words[1] ?? "").split("\n")[0] ?? "", 48),
+        })),
+    pause: () => this.chainValues(),
+    wake: () => this.chainValues(),
+    cancel: () =>
+      this.session.activity
+        .filter((act) => working(act))
+        .map((act) => ({
+          value: act.id,
+          detail: `${act.kind}  ${clip(String(act.words[act.kind === "prompt" ? 1 : 0] ?? ""), 40)}`,
+        })),
+    feed: () =>
+      this.session.activity
+        .filter((act) => act.kind === "bash" && !act.done && act.words[1] === true)
+        .map((act) => ({ value: act.id, detail: clip(String(act.words[0] ?? ""), 48), more: true })),
+    close: () =>
+      this.session.activity
+        .filter((act) => !act.done && act.kind !== "chain")
+        .map((act) => ({ value: act.id, detail: act.kind, more: true })),
+    grant: () =>
+      ["1", "2", "5", "10", "20"].map((value) => ({
+        value,
+        detail: `Pause this chain at ${dollars(Number(value))}`,
+      })),
+    context: () =>
+      ["0.5", "0.7", "0.8", "0.9"].map((value) => ({
+        value,
+        detail: `Pause this chain at ${share(Number(value))}`,
+      })),
+  };
+  /** The chains of the session as the values of a command, which pause and wake take. */
+  private chainValues(): Value[] {
+    const w = this.session;
+    return w.chains.map((chain) => ({
+      value: chain.id,
+      detail: w.labelOf(chain.id),
+      current: chain.id === w.selected,
+    }));
   }
   private suggest = (): void => {
     const token = this.token();
@@ -3862,7 +3807,7 @@ export class App {
       const command = token.command ?? "";
       const wanted = token.text.toLowerCase();
       // A value that starts with what is typed comes first, then a value that holds it.
-      this.suggestions = (this.argumentValues(command) ?? [])
+      this.suggestions = (this.values[command]?.() ?? [])
         .filter(({ value }) => value.toLowerCase().includes(wanted))
         .sort(
           (one, other) =>
@@ -3870,9 +3815,9 @@ export class App {
             Number(one.value.toLowerCase().startsWith(wanted)),
         )
         .slice(0, 50)
-        .map(({ value, detail, more }) => ({
+        .map(({ value, detail, current, more }) => ({
           label: value,
-          detail,
+          detail: `${detail}${current ? "   current" : ""}`,
           text: `${value} `,
           ...(more
             ? {}
@@ -3982,45 +3927,30 @@ export class App {
   private current(yes: boolean): Part {
     return yes ? [`${glyph.done} `, c.accent] : ["  "];
   }
-  /** The models of the roster under their providers, with the one the chain uses marked. */
-  models = (): void => {
-    const roster = this.session.roster.filter(([name]) => name !== "operator");
-    const current = this.session.actorChoice.model;
+  /** The values of a command in a picker, with the current one marked and selected, which runs the command on the
+   * value that is chosen. */
+  private pick(command: string, label: string, note: string): void {
+    const values = this.values[command]?.() ?? [];
     this.openPalette(
-      "Model",
-      roster.map(([name, , window]) => {
-        const [provider, model] = name.includes(":")
-          ? [name.slice(0, name.indexOf(":")), name.slice(name.indexOf(":") + 1)]
-          : ["", name];
-        return {
-          label: model,
-          detail: `${count(window)} tokens of context`,
-          mark: this.current(name === current),
-          heading: provider || undefined,
-          run: () => this.action(`/model ${name}`),
-        };
-      }),
-      roster.findIndex(([name]) => name === current),
-      "",
-      "The chain sends its next prompt to this model.",
-    );
-  };
-  effortPicker = (): void => {
-    const { model, effort } = this.session.actorChoice;
-    const offered = this.session.roster.find(([name]) => name === model)?.[1] ?? [];
-    this.openPalette(
-      `Effort of ${this.model(model).name}`,
-      offered.map((name) => ({
-        label: name,
-        detail: efforts[name] ?? "",
-        mark: this.current(name === effort),
-        run: () => this.action(`/effort ${name}`),
+      label,
+      values.map((one) => ({
+        label: one.label ?? one.value,
+        detail: one.detail,
+        heading: one.heading,
+        mark: this.current(Boolean(one.current)),
+        run: () => this.action(`/${command} ${one.value}`),
       })),
-      offered.indexOf(effort),
-      "",
+      { selected: values.findIndex((one) => one.current), note },
+    );
+  }
+  /** The models of the roster under their providers, with the one the chain uses marked. */
+  models = (): void => this.pick("model", "Model", "The chain sends its next prompt to this model.");
+  effortPicker = (): void =>
+    this.pick(
+      "effort",
+      `Effort of ${modelName(this.session.actorChoice.model).id}`,
       "More effort thinks longer and costs more. ⇧Tab moves to the next.",
     );
-  };
   details = (): void => {
     this.openPalette(
       "Details",
@@ -4058,9 +3988,7 @@ export class App {
           },
         };
       }),
-      names.indexOf(this.theme),
-      "",
-      "Every session shares this choice.",
+      { selected: names.indexOf(this.theme), note: "Every session shares this choice." },
     );
   }
   shapes(): void {
@@ -4449,9 +4377,7 @@ export class App {
           heading: headings[group],
           run: () => this.inspect(key),
         })),
-      0,
-      "",
-      "Enter reads the live value of the name, its type, and its fields.",
+      { note: "Enter reads the live value of the name, its type, and its fields." },
     );
   }
   private async completeNames(): Promise<void> {
@@ -4485,9 +4411,10 @@ export class App {
           run: () => this.action(`/edit ${act.id}`),
         };
       }),
-      Math.max(0, prompts.length - 1),
-      "",
-      "The program is the Python the model wrote for the prompt. An edit replays it.",
+      {
+        selected: Math.max(0, prompts.length - 1),
+        note: "The program is the Python the model wrote for the prompt. An edit replays it.",
+      },
     );
   }
   /** The rewind tree in the feed, with the pointer on the last message of the chain: Enter then gives that message
@@ -4898,24 +4825,27 @@ export class App {
           run: () => w.select(chain.id),
         };
       }),
-      Math.max(
-        0,
-        chains.findIndex((chain) => chain.id === w.selected),
-      ),
-      "",
-      "Each chain has its own transcript and module. /tree shows the branches.",
+      {
+        selected: Math.max(
+          0,
+          chains.findIndex((chain) => chain.id === w.selected),
+        ),
+        note: "Each chain has its own transcript and module. /tree shows the branches.",
+      },
     );
   }
-  /** A dialog of choices, which a filter narrows. At a point, it is a menu as wide as its labels need, which stands
-   * under the point, or over it where the rows under it cannot hold it, and leaves the screen behind it as it is. */
+  /** A dialog of choices, which a filter narrows: with the choice that it selects first, a note under its title, and
+   * the rows of a rich choice. At a point, it is a menu as wide as its labels need, which stands under the point, or
+   * over it where the rows under it cannot hold it, and leaves the screen behind it as it is. */
   openPalette(
     label: string,
     choices: Choice[],
-    selected = 0,
-    query = "",
-    note = "",
-    rich = false,
-    at?: { x: number; y: number },
+    {
+      selected = 0,
+      note = "",
+      rich = false,
+      at,
+    }: { selected?: number; note?: string; rich?: boolean; at?: { x: number; y: number } } = {},
   ): void {
     // A dialog or a menu takes the keys, so a name that a row takes ends first, and is kept.
     this.endRename(true);
@@ -5005,7 +4935,7 @@ export class App {
         ),
       );
     // A short list shows its filter only once the operator types in it, and until then the filter takes no row.
-    const quiet = choices.length <= 5 && !query;
+    const quiet = choices.length <= 5;
     this.paletteInputRow = this.box({
       flexDirection: "row",
       height: quiet ? 0 : space.bar,
@@ -5062,9 +4992,8 @@ export class App {
         .sort((one, other) => one.rank - other.rank || one.index - other.index)
         .map(({ choice }) => choice);
     };
-    this.filtered = filter(query);
+    this.filtered = filter("");
     this.selection = Math.max(0, selected);
-    this.paletteInput.value = query;
     this.paletteInput.on(InputRenderableEvents.INPUT, (value: string) => {
       prompt.visible = !quiet || value !== "";
       if (this.paletteInputRow) this.paletteInputRow.height = prompt.visible ? space.bar : 0;
@@ -5153,9 +5082,6 @@ export class App {
       const block = this.box({
         backgroundColor: selected ? c.selected : c.raised,
         marginTop: offset && this.rich ? gap : 0,
-        onMouseDown: (event) => {
-          if (event.button === 2 && choice.toggle) choice.toggle();
-        },
         onMouseUp: this.click(() => {
           this.selection = index;
           this.choose();
@@ -5341,9 +5267,7 @@ export class App {
             run: () => {},
           })),
         ),
-      0,
-      "",
-      "The chords that this terminal sends, what each mark means, and every command.",
+      { note: "The chords that this terminal sends, what each mark means, and every command." },
     );
   }
   private key = (key: KeyEvent): void => {
@@ -5432,69 +5356,17 @@ export class App {
       else this.session.notice = exitNotice;
       return;
     }
-    if (!this.overlay && key.ctrl && key.name === "v") {
-      key.preventDefault();
-      void clipboardImage((path) => this.session.attachImage(path)).catch(this.report);
-      return;
-    }
-    if (!this.overlay && key.ctrl && key.name === "s") {
-      key.preventDefault();
-      this.stash();
-      return;
-    }
-    if (!this.overlay && key.meta && key.name === "e") {
-      key.preventDefault();
-      void this.editDraft().catch(this.report);
-      return;
-    }
-    if (!this.overlay && key.meta && key.name === "d") {
-      key.preventDefault();
-      this.details();
-      return;
-    }
-    if (!this.overlay && key.meta && ["return", "enter"].includes(key.name)) {
-      key.preventDefault();
-      // The queue holds messages to a model. Python input and a program under edit run when Enter sends them.
-      if (this.session.mode === "python" || this.session.editing) {
-        this.session.notice = "Only a message can wait in the queue. Enter runs this Python now.";
+    // A key of the table runs its action. While a dialog is open, only a key that acts always runs it.
+    for (const { binding } of bindings)
+      if (
+        binding.run &&
+        (binding.always || !this.overlay) &&
+        presses(binding, key) &&
+        this.actions[binding.run](key) !== false
+      ) {
+        key.preventDefault();
         return;
       }
-      this.session.enqueue(this.composer.plainText);
-      this.composer.setText("");
-      return;
-    }
-    if (key.ctrl && key.name === "w" && !this.overlay) {
-      key.preventDefault();
-      void this.workspacePicker();
-      return;
-    }
-    if (key.ctrl && key.name === "\\" && !this.overlay) {
-      key.preventDefault();
-      this.toggleSidebar();
-      return;
-    }
-    // ⌃Tab rolls to the next chain and ⇧⌃Tab to the one before it. ⌘Tab does the same where the system and the
-    // terminal pass it, which macOS does not, since it keeps ⌘Tab to switch applications.
-    if (!this.overlay && key.name === "tab" && (key.ctrl || key.super)) {
-      key.preventDefault();
-      this.rollChain(key.shift ? -1 : 1);
-      return;
-    }
-    if (!this.overlay && key.name === "tab" && key.shift) {
-      key.preventDefault();
-      this.effortPicker();
-      return;
-    }
-    if (key.ctrl && ["pageup", "pagedown"].includes(key.name) && this.session.view === "changes") {
-      key.preventDefault();
-      this.changePage(key.name === "pageup" ? -1 : 1);
-      return;
-    }
-    if (key.meta && key.ctrl && key.name === "left" && !this.overlay) {
-      key.preventDefault();
-      void this.back().catch(this.report);
-      return;
-    }
     // Up on an empty input takes back the last message queued on the chain, and Up and Down at the first and the last
     // line of the input walk the history of what it sent, as a shell does. Alt+Up and Alt+Down walk it from any line.
     if (
@@ -5544,22 +5416,12 @@ export class App {
       );
       return;
     }
-    if (key.meta && ["[", "]", "p", "n"].includes(key.name) && !this.overlay) {
-      key.preventDefault();
-      this.jumpMessage(["]", "n"].includes(key.name) ? 1 : -1);
-      return;
-    }
     if (key.ctrl && key.name === "c") {
       key.preventDefault();
       if (this.overlay) this.closeOverlay();
       else if (this.tree) this.closeTree();
       else if (this.composer.plainText) this.composer.replaceText("");
       else this.action("/cancel");
-      return;
-    }
-    if (key.ctrl && key.name === "q") {
-      key.preventDefault();
-      void this.options.quit();
       return;
     }
     if (key.name === "escape") {
@@ -5593,11 +5455,6 @@ export class App {
       return;
     }
     if (this.overlay) {
-      if (["left", "right"].includes(key.name) && this.filtered[this.selection]?.toggle) {
-        key.preventDefault();
-        this.filtered[this.selection]?.toggle?.();
-        return;
-      }
       if (this.questionDocument && ["pageup", "pagedown"].includes(key.name)) {
         key.preventDefault();
         this.questionDocument.scrollBy(key.name === "pageup" ? -8 : 8);
@@ -5609,59 +5466,60 @@ export class App {
         this.selection = Math.max(0, Math.min(this.filtered.length - 1, this.selection + step));
         this.renderChoices();
       }
-      return;
     }
-    // A chord with ⌃ needs the kitty keyboard protocol, and the same chord with ⌥ reaches every terminal.
-    if ((key.ctrl || key.meta) && /^[1-3]$/.test(key.name)) {
-      key.preventDefault();
-      this.showView(views[Number(key.name) - 1] ?? "feed");
-    } else if (key.name === "f1") {
-      key.preventDefault();
-      this.help();
-    } else if (key.ctrl && key.name === "p") {
-      key.preventDefault();
-      this.palette();
-    } else if (key.ctrl && key.name === "b") {
-      key.preventDefault();
-      this.chains();
-    } else if ((key.ctrl || key.meta) && key.name === "m") {
-      key.preventDefault();
-      this.models();
-    } else if (key.ctrl && key.name === "t") {
-      key.preventDefault();
-      this.themes();
-    } else if (key.ctrl && key.name === "a" && this.session.operatorPrompt) {
-      key.preventDefault();
+  };
+  /** What each action of the table of keys does. An action that does not apply now gives false, and its key goes on
+   * to the input. */
+  private readonly actions: Record<Action, (key?: KeyEvent) => unknown> = {
+    queue: () => {
+      // The queue holds messages to a model. Python input and a program under edit run when Enter sends them.
+      if (this.session.mode === "python" || this.session.editing) {
+        this.session.notice = "Only a message can wait in the queue. Enter runs this Python now.";
+        return;
+      }
+      this.session.enqueue(this.composer.plainText);
+      this.composer.setText("");
+    },
+    stash: () => this.stash(),
+    view: (key) => this.showView(views[Number(key?.name) - 1] ?? "feed"),
+    // ⌘Tab rolls the chains too where the system and the terminal pass it, which macOS does not, since it keeps ⌘Tab
+    // to switch applications.
+    roll: (key) => this.rollChain(key?.shift ? -1 : 1),
+    palette: () => this.palette(),
+    chains: () => this.chains(),
+    newChain: () => this.insert("/chain "),
+    models: () => this.models(),
+    effort: () => this.effortPicker(),
+    themes: () => this.themes(),
+    sessions: () => void this.sessionPicker(),
+    workspaces: () => void this.workspacePicker(),
+    sidebar: () => this.options.workspaces.toggle(),
+    details: () => this.details(),
+    editor: () => void this.editDraft().catch(this.report),
+    image: () => void clipboardImage((path) => this.session.attachImage(path)).catch(this.report),
+    search: () => this.openSearch(),
+    scroll: (key) =>
+      this.scroll.scrollBy((key?.name === "pageup" ? -1 : 1) * Math.max(1, this.scroll.viewport.height - 2)),
+    python: () => this.toggleMode(),
+    complete: () => void this.completeNames().catch(this.report),
+    ladders: () => this.ladders(),
+    answer: () => {
+      if (!this.session.operatorPrompt) return false;
       this.question();
-    } else if (key.ctrl && key.name === "g") {
-      key.preventDefault();
-      void this.names().catch(this.report);
-    } else if (key.ctrl && key.name === "l") {
-      key.preventDefault();
-      this.ladders();
-    } else if (key.ctrl && key.name === "r") {
-      key.preventDefault();
-      this.toggleMode();
-    } else if (key.ctrl && key.name === "y") {
-      key.preventDefault();
+    },
+    names: () => void this.names().catch(this.report),
+    copy: () => {
       const selection = this.renderer.getSelection()?.getSelectedText();
       if (selection) this.renderer.copyToClipboardOSC52(selection);
-    } else if (key.ctrl && key.name === "space") {
-      key.preventDefault();
-      void this.completeNames().catch(this.report);
-    } else if (key.ctrl && key.name === "n") {
-      key.preventDefault();
-      this.insert("/chain ");
-    } else if (key.ctrl && key.name === "o") {
-      key.preventDefault();
-      void this.sessionPicker();
-    } else if (key.ctrl && key.name === "f") {
-      key.preventDefault();
-      this.openSearch();
-    } else if (key.name === "pageup" || key.name === "pagedown") {
-      key.preventDefault();
-      this.scroll.scrollBy((key.name === "pageup" ? -1 : 1) * Math.max(1, this.scroll.viewport.height - 2));
-    }
+    },
+    back: () => void this.back().catch(this.report),
+    jump: (key) => this.jumpMessage(["]", "n"].includes(key?.name ?? "") ? 1 : -1),
+    page: (key) => {
+      if (this.session.view !== "changes") return false;
+      this.changePage(key?.name === "pageup" ? -1 : 1);
+    },
+    help: () => this.help(),
+    quit: () => void this.options.quit(),
   };
   /** The view shown, with the rewind tree closed. */
   showView(view: View): void {
@@ -5690,9 +5548,6 @@ export class App {
     if (!this.session.editing) return;
     this.session.editing = undefined;
     this.render();
-  }
-  private toggleSidebar(): void {
-    this.options.workspaces.toggle();
   }
   /** The input put aside, or brought back: the input and the text put aside for its draft trade places. */
   stash(): void {
