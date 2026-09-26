@@ -135,4 +135,4 @@ jobs:
       - run: git diff --exit-code -- bind/typescript/index.d.cts tui/README.md
       - run: bun run check
       - run: bun run lint
-      - run: bun test bind/typescript/test tui/test
+      - run: bun run test

@@ -134,9 +134,9 @@ Run every command from the root of the repository.
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/CLAUDE.md` says how to run.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
-- `bun run check`, `bun run lint` and `bun test bind/typescript/test tui/test`: the type check, the lint, and the
-  tests of the TypeScript side. As root, the test of a folder that cannot be read fails, since root reads every
-  folder.
+- `bun run check`, `bun run lint` and `bun run test`: the type check, the lint, and the tests of the TypeScript
+  side, each of which has thirty seconds. As root, the test of a folder that cannot be read fails, since root reads
+  every folder.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.
