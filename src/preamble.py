@@ -226,6 +226,10 @@ def crossing(name: str, ears: Ears, names: Names, *, started: bool = False) -> E
         return
       case _:
         a = yield
+    # The engine steps an ear with nothing after its birth only under the name of its journal, which boot refuses
+    # to an ear of the outside, so an ear of the host hears facts alone and waits for the next.
+    while a is None:
+      a = yield
     reply = ears.hears(name, outward(a, names))
 
 
@@ -401,7 +405,7 @@ def opened(engine: Names, sheet: Names, record: object, gate: Gate, ears: Ears, 
   MADE.clear()
   kept = again(record, engine, ears)
   assert isinstance(kept, list)
-  entries = [(tuple(e[0]), *e[1:]) for e in kept]
+  entries = [(tuple(one),) for (one,) in kept]
   outside = {name: crossing(name, ears, engine) for name in names}
   try:
     root = verb(engine, "boot")(entries, kernel=kernel(engine), gate=gating(gate, sheet, engine), **outside)

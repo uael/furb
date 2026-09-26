@@ -1007,7 +1007,7 @@ async def test_a_chain_with_a_source_reads_what_its_origin_stands_on_as_it_stand
   _, over = await relived(later, list(sand.record))
   again = engine.chain("again", source=over)
   await settle()
-  assert engine.standing() == later.stands == engine.standing()
+  assert engine.standing() == later.stands and engine.cwd(on=again) == "/z"
   assert engine.module(again)["actor"] == "operator"
 
 

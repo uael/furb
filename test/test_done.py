@@ -85,5 +85,4 @@ async def test_a_kind_that_ends_when_it_is_told_to() -> None:
   engine.cancel(gone)
   await settle()
   assert isinstance(engine.peek(gone), CancelledError)
-  assert isinstance(engine.peek(gone), CancelledError)
   assert said(log, "bash") == []

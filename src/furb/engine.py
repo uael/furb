@@ -263,7 +263,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       yield told(id, f"roster {roster!r}", headed(id, f"cwd {where}"), headed(id, f"actor {actor}"))
 
     def replay(of="", words="", writer=""):
-      yield "module", id, {**globals(), "__name__": id, "actor": last and last[2]}
+      yield "module", id, {**globals(), "__name__": id, "actor": last[2] if last else ""}
       for whose, said in rungs.items():
         donor = get(whose)[5] or whose
         if under(donor, of):
