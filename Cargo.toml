@@ -51,7 +51,8 @@ windows-sys = { version = "0.61", features = ["Win32_System_Console"], optional 
 
 [build-dependencies]
 napi-build = { version = "2", optional = true }
-# The contract is read at the build, and every verb of it becomes a method of the engine and of each door.
+# The contract is read at the build, and every verb of it becomes a method of the engine and of each door. The
+# engine is read too, and written again in layout alone, which is the system prompt.
 ruff_python_parser = "0.0.9"
 ruff_python_ast = "0.0.9"
 ruff_text_size = "0.0.9"

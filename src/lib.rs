@@ -31,6 +31,11 @@ pub use crate::{
 /// reads are one thing.
 pub const ENGINE: &str = include_str!("furb/engine.py");
 
+/// The system prompt of every model: the engine minified in layout alone, and nothing else.
+///
+/// The build makes it from [`ENGINE`], and stops unless it is the same program.
+pub const SYSTEM: &str = include_str!(concat!(env!("OUT_DIR"), "/system.py"));
+
 /// The sheet the gate reads a word on, which the Kernel of the sandbox writes the same way the python package does.
 pub const SHEET: &str = include_str!("furb/sheet.py");
 
@@ -45,5 +50,13 @@ mod tests {
   #[test]
   fn the_stand_in_carries_the_one_mark_of_the_crossing() {
     assert!(super::PREAMBLE.contains(&format!("IS = {:?}", super::value::IS)));
+  }
+
+  #[test]
+  fn the_system_prompt_is_the_engine_in_a_layout_of_its_own() {
+    let lines = super::SYSTEM.lines().collect::<Vec<_>>();
+    assert!(super::SYSTEM.len() < super::ENGINE.len());
+    assert!(lines.iter().all(|one| !one.is_empty() && !one.starts_with(' ')));
+    assert!(lines.contains(&"def pause(id:str)->None:control(\"pause\",\"paused\",id)"));
   }
 }
