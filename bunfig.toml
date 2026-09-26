@@ -1,4 +1,3 @@
 [test]
-# Every test of the workspace has thirty seconds, since a test drives real lives and the runners of CI differ in
-# speed by more than twice from one run to the next.
-timeout = 30000
+# Bun reads no budget of a test here, so a file it loads first sets the budget.
+preload = ["./bind/typescript/test/budget.ts"]

@@ -1,0 +1,5 @@
+import { setDefaultTimeout } from "bun:test";
+
+// Every test of the workspace has thirty seconds, since a test drives real lives and the runners of CI differ in
+// speed by more than twice from one run to the next. bunfig.toml loads this before every test file.
+setDefaultTimeout(30000);
