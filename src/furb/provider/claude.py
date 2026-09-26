@@ -73,9 +73,7 @@ STOP: Mapping[str, FinishReason] = {
   "max_tokens": "length",
   "refusal": "content_filter",
 }
-PROFILE = ModelProfile(
-  supports_tools=False, supports_json_schema_output=False, supports_json_object_output=False, supports_thinking=True
-)
+PROFILE = ModelProfile(supports_tools=False, supports_json_schema_output=False, supports_json_object_output=False)
 
 
 class Settings(ModelSettings, total=False):
