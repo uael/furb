@@ -80,7 +80,8 @@ The suite drives the engine through its public API alone, end to end, from the m
   overrides its `hear` for the facts it does otherwise. `Dead` refuses every question but the standing, and `Where`
   asks the chain where it stands at every path. `Py` is a Kernel that is python, with the gate of the crate, which
   refuses a word that is not python or that names what nothing binds, such as `BAD`. `life` boots a life on them,
-  `settle` gives the loop room, `plain` sends a record through the wire and back, `said` reads the facts, and
+  `born` boots a life on the World of the suite, which holds one file, with the words its models answer the root
+  with, `settle` gives the loop room, `plain` sends a record through the wire and back, `said` reads the facts, and
   `paragraphs` and `heads` read the turns, which are python.
 - One test file per definition of the contract: `test_<name>.py` for a function, a global or a type alias,
   `test_<class>_<method>.py` for a method, in lower case, with dunder underscores stripped. A capitalized definition

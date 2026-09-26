@@ -1,6 +1,6 @@
 """showing, what a paragraph shows of what a door answered."""
 
-from conftest import life, settle, sown
+from conftest import born, settle
 from furb import engine
 from furb.engine import HEAD, Text
 
@@ -25,9 +25,7 @@ async def test_what_a_paragraph_shows_of_what_a_door_answered() -> None:
   assert engine.showing([1, 2], HEAD) == ["# [1, 2]"]
   assert engine.showing(None, HEAD) == ["# None"]
   assert engine.showing("a\n\nb", HEAD) == ["# 'a\\n\\nb'"]
-  sand = sown()
-  _, root = life(sand)
-  sand.script[root] = [NUMS]
+  _, _, root = born(NUMS)
   assert await engine.prompt(int, "a door of my own", on=root) == 1
   await settle()
   assert engine.turns(on=root)[-1][1] == "#read nums://a\n# [1, 2]\n\n#prompt1 closed 1"

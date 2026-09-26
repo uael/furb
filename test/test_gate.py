@@ -2,15 +2,14 @@
 
 import pytest
 
-from conftest import BAD, Sand, bindings, findings, gated, gatings, life, paragraphs, ran, relived, said, settle
+from conftest import BAD, Sand, bindings, born, findings, gated, gatings, paragraphs, ran, relived, said, settle
 from furb import engine
 from furb.engine import Refused
 
 
 async def test_whether_the_word_of_a_rung_may_run() -> None:
   """Whether the word of a rung may run: the gate reads it after the program of its chain, and it finds nothing when the word may run."""
-  sand = Sand()
-  log, root = life(sand)
+  sand, log, root = born()
   await engine.rung("k = 1", on=root)
   sand.script[root] = ["close(k + 1)"]
   act = engine.prompt(int, "count", on=root)
@@ -22,8 +21,7 @@ async def test_whether_the_word_of_a_rung_may_run() -> None:
 
 async def test_the_word_of_a_rung_runs_only_if_the_gate_accepts_the_word_or_if_the_chain_wrote_it() -> None:
   """The word of a rung runs only if the gate accepts the word, or if the chain wrote it."""
-  sand = Sand()
-  log, root = life(sand)
+  sand, log, root = born()
   with pytest.raises(Refused):
     await engine.rung("k = BAD", on=root)
   assert findings(log) == [[BAD]]
@@ -41,8 +39,7 @@ async def test_the_word_of_a_rung_runs_only_if_the_gate_accepts_the_word_or_if_t
 
 async def test_the_gate_checks_the_word_of_a_rung_against_the_rungs_before_it_in_record_order() -> None:
   """The gate checks the word of a rung against the rungs before it in record order."""
-  sand = Sand()
-  log, root = life(sand)
+  _, log, root = born()
   await engine.rung("a = 1", on=root)
   await engine.rung("b = a + 1", on=root)
   with pytest.raises(Refused):
@@ -61,9 +58,7 @@ async def test_the_gate_checks_the_word_of_a_rung_against_the_rungs_before_it_in
 
 async def test_a_response_that_is_not_python_is_a_finding_like_any_other() -> None:
   """A response that is not python is a finding like any other."""
-  sand = Sand()
-  log, root = life(sand)
-  sand.script[root] = ["this is no python at all", "close(1)"]
+  _, log, root = born("this is no python at all", "close(1)")
   act = engine.prompt(int, "try", on=root)
   assert await act == 1
   await settle()
@@ -81,8 +76,7 @@ async def test_a_response_that_is_not_python_is_a_finding_like_any_other() -> No
 
 async def test_the_gate_gives_no_finding_when_the_gate_accepts_the_rung() -> None:
   """The gate gives no finding when the gate accepts the rung."""
-  sand = Sand()
-  _, root = life(sand)
+  _, _, root = born()
   assert engine.gate("k = 1", on=root) == []
   assert engine.gate("close(1)", on=root) == []
   assert engine.gate("k = BAD", on=root) == [BAD]
@@ -90,9 +84,7 @@ async def test_the_gate_gives_no_finding_when_the_gate_accepts_the_rung() -> Non
 
 async def test_the_journal_keeps_what_the_gate_found() -> None:
   """The journal keeps what the gate found, since the gate is of the outside, so a later life reads the same findings and asks the gate nothing again."""
-  sand = Sand()
-  log, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  sand, log, root = born("close(1)")
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   assert gated(log) == ["close(1)"] and findings(log) == [[]]

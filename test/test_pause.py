@@ -1,14 +1,12 @@
 """pause, which holds what the acts it is over hear until the wake."""
 
-from conftest import Sand, heads, life, paragraphs, ran, rows, said, settle, world_says
+from conftest import born, heads, paragraphs, ran, rows, said, settle, world_says
 from furb import engine
 
 
 async def test_a_pause_while_it_stands_nothing_it_is_over_hears() -> None:
   """A pause: while it stands, nothing it is over hears, and what is said meanwhile waits for the wake."""
-  sand = Sand(auto=False)
-  log, root = life(sand)
-  sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]
+  sand, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
   act = engine.prompt(int, "go", on=root)
   await settle()
   command = said(log, "bash")[0][1]
@@ -23,8 +21,7 @@ async def test_a_pause_while_it_stands_nothing_it_is_over_hears() -> None:
 
 async def test_a_control_tells_a_header_of_its_own_name() -> None:
   """A control tells a header of its own name, so a model reads what was done to its work."""
-  sand = Sand()
-  _, root = life(sand)
+  _, _, root = born()
   act = engine.bash("echo hi", on=root)
   engine.pause(act)
   assert heads(engine.turns(on=root)) == [f"#{root} root", rows(root)[0], f"#{act} echo hi", f"#{act} paused"]
@@ -32,8 +29,7 @@ async def test_a_control_tells_a_header_of_its_own_name() -> None:
 
 async def test_pause_is_given_the_id_of_a_pending_act_or_the_id_of_a_chain() -> None:
   """pause is given the id of a pending act or the id of a chain."""
-  sand = Sand(auto=False)
-  _, root = life(sand)
+  sand, _, root = born(auto=False)
   one = engine.bash("one", on=root)
   engine.pause(one)
   sand.exits(one, 0)
@@ -52,9 +48,7 @@ async def test_pause_is_given_the_id_of_a_pending_act_or_the_id_of_a_chain() -> 
 
 async def test_a_pause_stops_no_reply_in_flight_the_reply_returns() -> None:
   """A pause stops no reply in flight: the reply returns."""
-  sand = Sand()
-  log, root = life(sand)
-  sand.script[root] = ["close(7)"]
+  _, log, root = born("close(7)")
   act = engine.prompt(int, "count", on=root)
   engine.pause(root)
   await settle()
@@ -67,9 +61,7 @@ async def test_a_pause_stops_no_reply_in_flight_the_reply_returns() -> None:
 
 async def test_a_paused_chain_goes_quiet_as_its_in_flight_work_returns() -> None:
   """A paused chain goes quiet as its in-flight work returns."""
-  sand = Sand()
-  log, root = life(sand)
-  sand.script[root] = ["a = 1", "close(a + 1)"]
+  _, log, root = born("a = 1", "close(a + 1)")
   act = engine.prompt(int, "count", on=root)
   engine.pause(root)
   await settle()
@@ -82,8 +74,7 @@ async def test_a_paused_chain_goes_quiet_as_its_in_flight_work_returns() -> None
 
 async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
   """A kind a pause stops: it starts its ear, and while a pause over it stands the ear hears nothing, and at the wake it hears everything that was said meanwhile, in order."""
-  sand = Sand(auto=False)
-  _, root = life(sand)
+  sand, _, root = born(auto=False)
   act = engine.bash("slow", on=root)
   await settle()
   assert [one[1] for one in sand.calls if one[0] == "bash"] == [act]
@@ -101,8 +92,7 @@ async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
 
 async def test_an_act_made_in_that_time_it_hears_at_once() -> None:
   """An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, so a paused rung takes the wants of its run."""
-  sand = Sand(auto=False)
-  log, root = life(sand)
+  sand, log, root = born(auto=False)
   act = engine.bash("slow", on=root)
   await settle()
   engine.pause(act)
@@ -121,8 +111,7 @@ async def test_an_act_made_in_that_time_it_hears_at_once() -> None:
 
 async def test_a_pause_stands_over_what_is_made_after_it_until_the_wake() -> None:
   """A pause stands over what is made after it, until the wake."""
-  sand = Sand(auto=False)
-  _, root = life(sand)
+  sand, _, root = born(auto=False)
   engine.pause(root)
   act = engine.bash("slow", on=root)
   sand.exits(act, 0)
@@ -135,8 +124,7 @@ async def test_a_pause_stands_over_what_is_made_after_it_until_the_wake() -> Non
 
 async def test_a_control_is_on_the_scope_of_what_it_is_over() -> None:
   """A control is on the scope of what it is over, so it takes no chain of its own."""
-  sand = Sand(auto=False)
-  log, root = life(sand)
+  _, log, root = born(auto=False)
   two = engine.chain("two")
   await settle()
   act = engine.bash("slow", on=two)

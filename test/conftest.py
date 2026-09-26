@@ -13,7 +13,7 @@ import re
 import sys
 from asyncio import CancelledError
 from collections.abc import Coroutine, Generator, Sequence
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import partial
 from pathlib import Path
 
@@ -453,18 +453,26 @@ async def settle(n: int = 80) -> None:
     await asyncio.sleep(0)
 
 
-def sown() -> Sand:
-  """A World with one file and the roster of the suite."""
-  return Sand(files={"/w/a.txt": "one\ntwo\n"}, stands=STANDS)
+def sown(**world: object) -> Sand:
+  """The World of the suite: one file and the roster of the suite, with what else a test gives it by keyword."""
+  return replace(Sand(files={"/w/a.txt": "one\ntwo\n"}), **world)
 
 
-async def lived(sand: Sand) -> tuple[list[tuple], str]:
-  """A life that reads a file, runs a command and returns what it came to."""
+def born(*script: str, **world: object) -> tuple[Sand, list[tuple], str]:
+  """A life on the World of the suite, which a test changes by keyword, whose models answer the root with the words
+  of the script: the World, what was said in the life, and the root."""
+  sand = sown(**world)
   log, root = life(sand)
-  sand.script[root] = [WORD, "close(None)"]
+  sand.script[root] = [*script]
+  return sand, log, root
+
+
+async def lived() -> tuple[Sand, list[tuple], str]:
+  """A life that reads a file, runs a command and returns what it came to: the World, what was said and the root."""
+  sand, log, root = born(WORD, "close(None)")
   assert await engine.prompt(int, "read and run", on=root) == 0
   await settle()
-  return log, root
+  return sand, log, root
 
 
 async def relived(sand: Sand, record: Sequence[tuple]) -> tuple[list[tuple], str]:

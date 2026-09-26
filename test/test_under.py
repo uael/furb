@@ -1,21 +1,20 @@
 """under, whether one act is another or was made by it."""
 
-from conftest import WORLD, Sand, life, said
+from conftest import WORLD, born, said
 from furb import engine
 from furb.engine import OPERATOR
 
 
-async def made(sand: Sand) -> tuple[str, str, str, str]:
+async def lineage() -> tuple[str, str, str, str]:
   """A life whose prompt makes a rung, whose word starts a command: the chain, the prompt, the rung and the command."""
-  log, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\nclose(1)"]
+  _, log, root = born("x = bash('echo hi')\nclose(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   return root, said(log, "prompt")[0][1], said(log, "rung")[0][1], said(log, "bash")[0][1]
 
 
 async def test_whether_one_act_is_another_or_was_made_by_it_which_the_life_says() -> None:
   """Whether one act is another or was made by it, which the life says, since every question says who made it."""
-  _, asking, step, command = await made(Sand())
+  _, asking, step, command = await lineage()
   assert engine.under(asking, asking)
   assert engine.under(step, asking) and engine.under(command, step)
   assert not engine.under(asking, step)
@@ -24,7 +23,7 @@ async def test_whether_one_act_is_another_or_was_made_by_it_which_the_life_says(
 
 async def test_an_act_is_under_every_ancestor_of_the_act() -> None:
   """An act is under every ancestor of the act, which the maker of each says in turn, up to the operator or an ear of the outside."""
-  _, asking, step, command = await made(Sand())
+  _, asking, step, command = await lineage()
   assert (asking, step, command) == ("prompt1", "rung1", "bash1")
   assert engine.under(command, step) and engine.under(command, asking) and engine.under(command, command)
   assert engine.get(asking)[2] == OPERATOR and engine.under(command, OPERATOR)
@@ -34,7 +33,7 @@ async def test_an_act_is_under_every_ancestor_of_the_act() -> None:
 
 async def test_an_act_is_under_its_chain_only_when_the_chain_made_it() -> None:
   """An act is under its chain only when the chain made it: the rung of a prompt the operator made is under that prompt, and on the chain, so the maker of an act says who made it and never where it stands."""
-  where, asking, step, _ = await made(Sand())
+  where, asking, step, _ = await lineage()
   assert engine.under(step, asking) and not engine.under(step, where)
   held = engine.transcript(where)
   assert [a[3] for a in held if a[0] == "rung" and a[1] == step] == [where]
@@ -42,7 +41,7 @@ async def test_an_act_is_under_its_chain_only_when_the_chain_made_it() -> None:
 
 async def test_nothing_is_under_a_name_of_nothing() -> None:
   """Nothing is under a name of nothing."""
-  _, _, _, command = await made(Sand())
+  _, _, _, command = await lineage()
   assert not engine.under(command, "")
   assert not engine.under("bash9", "bash9x")
   assert not engine.under("", "")

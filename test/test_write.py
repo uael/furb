@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import Dead, Sand, World, life, of, paragraphs, said, settle, sown
+from conftest import Dead, Sand, World, born, life, of, paragraphs, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Refused, Text
 
@@ -50,8 +50,7 @@ class Firm(Sand):
 
 async def test_a_write_whoever_serves_the_path_of_the_text_takes_its_content() -> None:
   """A write: whoever serves the path of the text takes its content."""
-  sand = Sand()
-  _, root = life(sand)
+  sand, _, root = born(files={})
   assert engine.write(Text("b.txt", "one\n"), on=root) == Text("/w/b.txt", "one\n")
   assert sand.files == {"/w/b.txt": "one\n"}
   act = engine.prompt(int, "count", to=OPERATOR, on=root)
@@ -64,8 +63,7 @@ async def test_a_write_whoever_serves_the_path_of_the_text_takes_its_content() -
 
 async def test_write_is_given_a_text_and_gives_the_text_as_it_is_on_disk_after_the_write() -> None:
   """write is given a text, and gives the text as it is on disk after the write."""
-  sand = Sand()
-  _, root = life(sand)
+  sand, _, root = born()
   assert engine.write(Text("b.txt", "one\n"), on=root) == Text("/w/b.txt", "one\n")
   assert engine.write(Text("b.txt", "two\n"), on=root) == Text("/w/b.txt", "two\n")
   assert sand.files["/w/b.txt"] == "two\n"
@@ -78,8 +76,7 @@ async def test_write_is_given_a_text_and_gives_the_text_as_it_is_on_disk_after_t
 
 async def test_a_write_that_the_world_refuses_raises_refused_in_the_caller() -> None:
   """A write that the World refuses raises Refused in the caller."""
-  dead = Dead()
-  _, root = life(dead)
+  _, root = life(Dead())
   with pytest.raises(Refused, match="a dead World answers no write"):
     engine.write(Text("b.txt", "one\n"), on=root)
   word = "try:\n  write(Text('b.txt', 'one\\n'))\nexcept Refused as no:\n  close(str(no))"
@@ -93,17 +90,14 @@ async def test_the_engine_tells_of_a_write_of_a_text_only_the_lines_that_differ(
   assert await engine.rung("write(Text('b.txt', 'one\\ntwo\\n'))", on=root) is None
   assert sand.files == {"b.txt": "one\ntwo\nEND\n"}
   assert of(engine.turns(on=root), "write") == ["#write b.txt\n# b.txt, 0 known\n# 3 END"]
-  other = sown()
-  _, two = life(other)
-  other.script[two] = [KEPT]
+  _, _, two = born(KEPT)
   assert await engine.prompt(int, "a door of my own", on=two) == 7
   assert of(engine.turns(on=two), "write") == ["#write nums://a\n# 7"]
 
 
 async def test_a_write_takes_no_show() -> None:
   """A write takes no show, since what a write would show the word of the model already said: it tells the lines of what came back that differ from what it asked for, and of those, the lines the model has not seen, so a write that the disk took as it was asked tells nothing at all."""
-  sand = Sand()
-  _, root = life(sand)
+  _, _, root = born()
   assert await engine.rung("write(Text('b.txt', 'one\\ntwo\\n'))", on=root) is None
   assert of(engine.turns(on=root), "write") == []
   held = engine.transcript(root)
@@ -122,8 +116,7 @@ async def test_a_door_that_answers_a_write_with_more_than_it_was_asked_for() -> 
 
 async def test_a_write_to_the_door_of_a_prompt_edits_the_program_of_its_ladder() -> None:
   """A write to the door of a prompt edits the program of its ladder, so the door and the verb are one act."""
-  sand = sown()
-  log, root = life(sand)
+  _, log, root = born()
   act = engine.prompt(int, "count", to=OPERATOR, on=root)
   got = engine.write(Text(act, "k = 21"), on=root)
   await settle()
@@ -144,8 +137,7 @@ async def test_a_write_to_the_door_of_a_prompt_edits_the_program_of_its_ladder()
 
 async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_the_text_it_took() -> None:
   """The chain answers a write of the door of one of its prompts with the text it took, and makes its rungs again from it."""
-  sand = sown()
-  log, root = life(sand)
+  sand, log, root = born()
   act = engine.prompt(int, "count", to=OPERATOR, on=root)
   got = engine.write(Text(act, "k = 21"), on=root)
   await settle()
@@ -161,14 +153,12 @@ async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_
 
 async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_of_that_rung_out() -> None:
   """A write of a door that a rung of that ladder says leaves the word of that rung out, and that rung is no rung of the chain after it."""
-  sand = Sand()
-  log, root = life(sand)
-  sand.script[root] = [
+  _, log, root = born(
     "k = 1",
     "ok = BAD",
     "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))",
     "close((k, ok, read(get(acting())[2]).content))",
-  ]
+  )
   act = engine.prompt(object, "fix it", on=root)
   assert await act == (1, 2, "k = 1\nok = 2")
   await settle()
@@ -190,8 +180,7 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
 
 async def test_a_new_file_is_a_write_of_a_text_made_of_its_path_and_its_content() -> None:
   """A new file is a write of a Text made of its path and its content."""
-  sand = Sand()
-  _, root = life(sand)
+  sand, _, root = born()
   assert "/w/new.txt" not in sand.files
   assert engine.write(Text("new.txt", "one\n"), on=root) == Text("/w/new.txt", "one\n")
   assert sand.files["/w/new.txt"] == "one\n"

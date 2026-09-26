@@ -4,7 +4,7 @@ from collections.abc import Generator
 
 import pytest
 
-from conftest import Sand, keeping, kernel, life, paragraphs, plain, relived, said, settle, sown, watched
+from conftest import Sand, born, keeping, kernel, paragraphs, plain, relived, said, settle, watched
 from furb import engine
 from furb.engine import HIDDEN, OPERATOR, TIMEOUT, Act, Exit, Refused, Text, take
 
@@ -36,8 +36,7 @@ def taking(kind: str) -> Generator[tuple | None, tuple]:
 
 async def test_the_way_to_make_a_question() -> None:
   """The way to make a question: it takes a name when it is made, it is put to the ears, its ear, when it has one, is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it."""
-  sand = sown()
-  log, root = life(sand)
+  _, log, root = born()
   heard: list[object] = []
   one = engine.act("note", root, noting(heard), "one")
   assert isinstance(one, Act) and one == "note1"
@@ -51,8 +50,7 @@ async def test_the_way_to_make_a_question() -> None:
 
 async def test_an_act_is_put_to_every_ear_of_the_engine_the_acts_first() -> None:
   """An act is put to every ear of the engine, the acts first, and a busy one hears it once it is done speaking, at its place among what was said."""
-  sand = sown()
-  _, root = life(sand)
+  _, _, root = born()
   heard: list[tuple] = []
   made: list[str] = []
 
@@ -73,9 +71,7 @@ async def test_an_act_is_put_to_every_ear_of_the_engine_the_acts_first() -> None
 
 async def test_its_own_ear_is_born_after_the_ears_of_the_engine_heard_it() -> None:
   """Its own ear is born after the ears of the engine heard it, so the acts that ear makes stand after it."""
-  sand = sown()
-  _, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  _, _, root = born("close(1)")
   asked = engine.prompt(int, "one", on=root)
   assert await asked == 1
   kinds = [(a[0], a[1]) for a in engine.transcript(root) if engine.get(a[1]) == a]
@@ -96,8 +92,7 @@ async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes
 
 async def test_to_take_an_act_is_to_say_a_started_or_a_done_about_it() -> None:
   """To take an act is to say a started or a done about it: a done settles it now, and a started says that its done comes later."""
-  sand = Sand(files={"/w/a.txt": "one\n"}, auto=False)
-  log, root = life(sand)
+  _, log, root = born(files={"/w/a.txt": "one\n"}, auto=False)
   read = engine.act("read", root, None, "a.txt")
   assert said(log, "done")[-1] == ("done", read, "world", Text("/w/a.txt", "one\n")) and engine.peek(read) == Text(
     "/w/a.txt", "one\n"
@@ -108,8 +103,7 @@ async def test_to_take_an_act_is_to_say_a_started_or_a_done_about_it() -> None:
 
 async def test_an_act_that_no_ear_takes_is_refused() -> None:
   """An act that no ear takes and that the record does not hold is refused: the life says it done with a refusal that names its kind."""
-  sand = Sand()
-  log, root = life(sand)
+  _, log, root = born()
   one = engine.act("note", root, noting([], takes=False))
   got = engine.peek(one)
   assert isinstance(got, Refused) and str(got) == "nothing takes note"
@@ -120,8 +114,7 @@ async def test_an_act_that_no_ear_takes_is_refused() -> None:
 
 async def test_an_act_said_it_is_begun_and_what_the_call_gives_is_its_name() -> None:
   """An act said: it is begun, and what the call gives is its name, which is awaited for what the act comes to."""
-  sand = Sand()
-  _, root = life(sand)
+  _, _, root = born()
   one = engine.bash("echo hi", on=root)
   assert isinstance(one, Act) and engine.peek(one) is None
   assert paragraphs(engine.turns(on=root))[-1] == "#bash1 echo hi\nbash1: Act[Exit] = Act('bash1')"
@@ -130,8 +123,7 @@ async def test_an_act_said_it_is_begun_and_what_the_call_gives_is_its_name() -> 
 
 async def test_an_act_said_twice_under_one_name_is_one_act() -> None:
   """An act said twice under one name is one act, and the second saying brings no second ear and gives the name back."""
-  sand = Sand()
-  log, root = life(sand)
+  sand, log, root = born()
   first = engine.rung("close(bash('echo hi'))", on=root)
   again = engine.rung("close(bash('echo hi'))", retells=first, on=root)
   assert (await first) == "bash1" and (await again) is None
@@ -141,8 +133,7 @@ async def test_an_act_said_twice_under_one_name_is_one_act() -> None:
 
 async def test_two_acts_that_say_the_same_words_under_one_name_are_one_act() -> None:
   """Two acts that say the same words under one name are one act."""
-  sand = Sand()
-  _, root = life(sand)
+  sand, _, root = born()
   first = engine.rung("close(bash('echo hi'))", on=root)
   again = engine.rung("close(bash('echo hi'))", retells=first, on=root)
   one = await first
@@ -157,8 +148,7 @@ async def test_two_acts_that_say_the_same_words_under_one_name_are_one_act() -> 
 
 async def test_the_engine_refuses_an_act_said_from_outside_a_run_that_names_no_chain() -> None:
   """The engine refuses an act said from outside a run that names no chain, a chain apart."""
-  sand = Sand()
-  log, _ = life(sand)
+  _, log, _ = born()
   heard: list[object] = []
   with pytest.raises(Refused, match="no chain"):
     engine.act("note", "", noting(heard))
@@ -168,8 +158,7 @@ async def test_the_engine_refuses_an_act_said_from_outside_a_run_that_names_no_c
 
 async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
   """The chain an act is on is the chain named to the call, or the scope of the one that made it when the call names none."""
-  sand = Sand()
-  _, root = life(sand)
+  sand, _, root = born()
   two = engine.chain("two")
   heard: list[object] = []
   named = engine.act("note", two, noting(heard), "one")
@@ -181,8 +170,7 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
 
 async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fact_said_after_its_birth() -> None:
   """The ear of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a saying."""
-  sand = Sand()
-  _, root = life(sand)
+  _, _, root = born()
   heard: list[object] = []
   one = engine.act("note", root, noting(heard, "spoke"), "one")
   two = engine.bash("echo hi", on=root)
@@ -198,8 +186,7 @@ async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fa
 
 async def test_an_act_carries_the_words_of_its_kind() -> None:
   """An act carries the words of its kind, which are the plain arguments the verb was given, in the order of the verb, and a show or a filter is none of them."""
-  sand = Sand()
-  _, root = life(sand)
+  sand, _, root = born()
   one = engine.bash("echo hi", True, 5.0, HIDDEN, HIDDEN, on=root)
   assert engine.get(one) == ("bash", one, OPERATOR, root, "echo hi", True, 5.0)
   two = engine.chain("two", source=root, filter=take(root))

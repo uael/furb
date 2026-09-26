@@ -1,14 +1,13 @@
 """Entry, one entry of the record."""
 
-from conftest import Dead, Sand, acts, life, lived, plain, relived, said, settle, sown
+from conftest import Dead, acts, born, lived, plain, relived, said, settle, sown
 from furb import engine
 from furb.engine import Text
 
 
 async def test_one_entry_of_the_record_the_fact() -> None:
   """One entry of the record: the fact, an act among them, and the answer of an act after it, as every other fact about it."""
-  sand = sown()
-  await lived(sand)
+  sand, _, _ = await lived()
   assert all(len(e) == 1 for e in sand.record)
   facts = [e[0] for e in sand.record]
   read = next(i for i, a in enumerate(facts) if a[0] == "read")
@@ -17,9 +16,7 @@ async def test_one_entry_of_the_record_the_fact() -> None:
 
 async def test_the_order_of_the_record_is_what_puts_an_entry_back_in_its_place() -> None:
   """The order of the record is what puts an entry back in its place in a later life."""
-  sand = Sand()
-  log, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  sand, log, root = born("close(1)")
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   again, over = await relived(Dead(), list(sand.record))
@@ -33,8 +30,7 @@ async def test_the_order_of_the_record_is_what_puts_an_entry_back_in_its_place()
 
 async def test_the_world_keeps_each_entry_as_the_journal_says_it_plain_or_not() -> None:
   """The World keeps each entry as the journal says it, plain or not."""
-  sand = sown()
-  log, root = await lived(sand)
+  sand, log, root = await lived()
   assert [one[3] for one in said(log, "keep")] == sand.record
   kept = plain(sand.record)
   assert kept != list(sand.record)
@@ -44,8 +40,7 @@ async def test_the_world_keeps_each_entry_as_the_journal_says_it_plain_or_not() 
 
 async def test_the_record_is_a_sequence_of_entries_about_acts() -> None:
   """The record is a sequence of entries about acts."""
-  sand = sown()
-  log, _ = await lived(sand)
+  sand, log, _ = await lived()
   assert all(isinstance(e, tuple) for e in sand.record)
   assert all(e[0][1] in acts(log) for e in sand.record)
   kinds = ["chain", "stand", "done", "prompt", "reply", "started", "done", "gate", "done", "read", "done"]

@@ -1,6 +1,6 @@
 """Usage, what one answer of a model cost."""
 
-from conftest import STANDS, Sand, heads, life, relived, said, settle, world_says
+from conftest import STANDS, Sand, born, heads, relived, said, settle, world_says
 from furb import engine
 
 COST = (80000, 30, 200, 10, 1.5)
@@ -18,17 +18,14 @@ def test_what_one_answer_of_a_model_cost() -> None:
 
 async def test_a_usage_holds_the_token_counts_and_the_dollars_of_one_model_response() -> None:
   """A usage holds the token counts and the dollars of one model response."""
-  sand = Sand(cost=COST)
-  _, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  _, _, root = born("close(1)", cost=COST)
   assert await engine.prompt(int, "count", on=root) == 1
   assert [usage for _, _, usage, _ in engine.turns(on=root)] == [None, COST, None]
 
 
 async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_the_window_of_the_actor() -> None:
   """The share of the window it filled is the words it read against the window of the actor its rung names, in the standing where the answer lands, so no word of it says the share."""
-  sand = Sand(cost=COST)
-  log, root = life(sand)
+  sand, log, root = born(cost=COST)
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
   sand.script[root] = ["a = 1", "close(2)"]
@@ -41,17 +38,14 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   assert engine.offered(STANDS[0], "m/low") == 400000 and COST[0] / 400000 == 0.2
   assert len(COST) == 5
   engine.cancel(ceiling)
-  rebound = Sand(cost=COST)
-  _, root = life(rebound)
-  rebound.script[root] = ["close(2)"]
+  _, _, root = born("close(2)", cost=COST)
   asked = engine.prompt(int, "count", on=root)
   engine.rung("actor = 'n/low'", on=root)
   later = engine.grant(usd=10.0, on=root)
   assert await asked == 2
   assert [line.split("filled=")[1] for line in heads(engine.turns(on=root)) if " ledger " in line] == ["0.2"]
   engine.cancel(later)
-  first = Sand(cost=COST)
-  _, root = life(first)
+  first, _, root = born(cost=COST)
   engine.prompt(int, "count", on=root)
   await settle()
   wider: list = [[STANDS[0][0], ["m", ["low"], 800000]], "/w", "m/low"]

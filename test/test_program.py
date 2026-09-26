@@ -1,14 +1,13 @@
 """program, the words of the rungs that run on a chain."""
 
-from conftest import bindings, life, said, settle, sown
+from conftest import bindings, born, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Text
 
 
 async def test_program_gives_the_program_of_a_chain() -> None:
   """program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of that rung, in order, as the runs of its transcript say."""
-  sand = sown()
-  log, root = life(sand)
+  sand, log, root = born()
   mine = engine.rung("mine = 1", on=root)
   await mine
   sand.script[root] = ["<S1>\nhi\n</S1>\na = S1", "b = BAD", "close(len(a))"]
