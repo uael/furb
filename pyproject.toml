@@ -23,9 +23,6 @@ dependencies = [
     "python-minifier>=3.3.0",
 ]
 
-[project.scripts]
-furb = "furb.cli:main"
-
 [project.urls]
 Source = "https://github.com/uael/furb"
 Issues = "https://github.com/uael/furb/issues"

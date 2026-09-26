@@ -1,4 +1,4 @@
-"""The harness for the four modules around the engine: the World, the Kernel, the provider and the command line.
+"""The harness for the three modules around the engine: the World, the Kernel and the provider.
 
 The engine's own laws are proved in test/, against engine.pyi, sentence for sentence. What is proved here is what
 stands outside it: a claude that answers from a script, a model of pydantic_ai that answers from one, a World that
