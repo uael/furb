@@ -5,7 +5,7 @@ import type { Engine, SessionOptions, Turn } from "@furb/engine";
 import { Act, engineSource, modelNamed, Session } from "@furb/engine";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, hostModels } from "./models.ts";
-import { queueDispatches, queueEvent, queueHash } from "./queue.ts";
+import { queueDispatches, queueHash } from "./queue.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
 
@@ -25,8 +25,6 @@ const state = () => {
     directory: owner.directory,
     imageDirectory: owner.imageDirectory,
     actor: owner.provider.actor,
-    effort: owner.provider.effort,
-    roster: owner.provider.roster,
     record: owner.record,
     facts: owner.facts.slice(sentFacts),
     prompts: [...owner.console.prompts.values()].map(({ id, shape, message }) => ({ id, shape, message })),
@@ -142,10 +140,6 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     session = opened;
     engine = opened.open();
     snapshots = new Snapshots(engine, opened);
-    // The tail of the record as the life before left it.
-    const tail = opened.entries[opened.opened - 1]?.[0];
-    const event = tail && queueEvent(tail);
-    if (tail && event?.step === "begin") engine.say("queue", tail[1], ["aborted", event.key]);
     opened.on("fault", (error) =>
       self.postMessage({ fault: error instanceof Error ? error.message : String(error) }),
     );

@@ -41,6 +41,7 @@ import { loadParsers } from "./parsers.ts";
 import {
   type ActRow,
   cancelled,
+  type Exit,
   failed,
   type Scroll,
   type Session,
@@ -65,7 +66,7 @@ import {
   type ThemeName,
   themeLabels,
 } from "./theme.ts";
-import { bold, italic, lineCounts, logo, mix, type Part, plain, styled } from "./ui.ts";
+import { bold, italic, lineCounts, logo, mix, type Part, plain, styled, underline } from "./ui.ts";
 import type { SessionEntry, Workspace, Workspaces } from "./workspaces.ts";
 
 const exitNotice = "Press ⌃D again to exit.";
@@ -74,8 +75,9 @@ const rewindNotice = "Press Escape again to rewind.";
 const twice = 800;
 /** The name of each view as the toggle and the commands show it. */
 const viewLabels: Record<View, string> = { feed: "Feed", transcript: "Transcript", changes: "Changes" };
-/** Whether an act is a question to the operator: a prompt whose actor is the operator. */
+/** A text with its first letter in upper case. */
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+/** Whether an act is a question to the operator: a prompt whose actor is the operator. */
 const asksOperator = (act: ActRow) => act.kind === "prompt" && act.words[2] === "operator";
 /** What an act is doing: the word that says it, the glyph that shows it, and their color. */
 type State = { word: string; mark: string; color: RGBA };
@@ -124,7 +126,6 @@ interface BlockOptions {
   heading?: boolean;
   group?: string;
   separate?: boolean;
-  prompt?: boolean;
   preview?: (box: BoxRenderable) => void;
   act?: ActRow;
   /** The label again, which the tick reads while the label moves with time. */
@@ -987,8 +988,7 @@ export class App {
     const w = this.session;
     const pending = w.operatorPrompt;
     const { model, effort } = w.actorChoice;
-    const name = model.includes(":") ? model.slice(model.indexOf(":") + 1) : model;
-    const provider = model.includes(":") ? model.slice(0, model.indexOf(":")) : "";
+    const { provider, id: name } = modelName(model);
     const stash = w.stashes[w.draftKey];
     const prompt = w.mode === "prompt" && !w.editing && !pending;
     // The line spans the input but its bar and its padding.
@@ -1161,11 +1161,12 @@ export class App {
               ["⌃P", "commands", () => this.palette()],
               ["F1", "help", () => this.help()],
             ];
-    const hints = keys.flatMap(([key, action], index): Part[] => [
+    const buttons = keys.map(([chord, action], index): Part[] => [
       [index ? "   " : "", c.faint],
-      [key, c.muted],
+      [chord, c.muted],
       [` ${action}`, c.faint],
     ]);
+    const hints = buttons.flat();
     const notice = w.error ? "" : w.notice;
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
     // beside the keys.
@@ -1186,17 +1187,12 @@ export class App {
     this.statusKey = key;
     this.status.content = styled(state);
     this.clear(this.hints);
-    for (const [index, [chord, action, run]] of keys.entries())
+    for (const [index, [, , run]] of keys.entries())
       this.hints.add(
-        this.text(
-          [
-            [index ? "   " : "", c.faint],
-            [chord, c.muted],
-            [` ${action}`, c.faint],
-          ],
-          c.faint,
-          { height: space.bar, ...(run ? { onMouseUp: this.click(run) } : {}) },
-        ),
+        this.text(buttons[index] ?? [], c.faint, {
+          height: space.bar,
+          ...(run ? { onMouseUp: this.click(run) } : {}),
+        }),
       );
   }
 
@@ -2016,18 +2012,19 @@ export class App {
         marginTop: space.section,
       }),
     );
+    const model = modelName(w.actorChoice.model).id;
     column.add(
       this.whole(
         this.text(
           [
             [clip(shortenHome(w.workingDirectory), 40, "end"), c.faint],
             ["   ", c.faint],
-            [w.actorChoice.model.replace(/^[^:]*:/, ""), c.faint],
+            [model, c.faint],
           ],
           c.faint,
           { truncate: true },
         ),
-        () => `${shortenHome(w.workingDirectory)}   ${w.actorChoice.model.replace(/^[^:]*:/, "")}`,
+        () => `${shortenHome(w.workingDirectory)}   ${model}`,
       ),
     );
     // Each way to start is a card of two lines that a click puts in the composer. The cards are as wide as their
@@ -2119,7 +2116,7 @@ export class App {
     }
     // A command shows the tail of its output while it runs, and folds to its heading once it is over.
     if (act.kind === "bash" && !act.done && act.value && typeof act.value === "object") {
-      const exit = act.value as { stdout?: { content: string }; stderr?: { content: string } };
+      const exit = act.value as Exit;
       const output = [exit.stdout?.content, exit.stderr?.content].filter(Boolean).join("\n");
       if (output) return (box) => this.excerpt(box, output, true);
     }
@@ -2237,7 +2234,7 @@ export class App {
       actor || this.session.actor,
       this.session.roster.map(([name]) => name),
     );
-    return { name: model.includes(":") ? model.slice(model.indexOf(":") + 1) : model, effort };
+    return { name: modelName(model).id, effort };
   }
   /** Who sent a prompt that is not a message of the operator, and to which model: a chain tells its model that an
    * act it waits on is done, and a rung asks a model a question. */
@@ -2316,7 +2313,6 @@ export class App {
   /** What a command printed, and under it its name and how it ended. The command says its line in its heading. What it
    * printed to stderr takes the color of a failure, and each stream is named only when the command printed to both. */
   private commandDetails(details: BoxRenderable, act: ActRow): void {
-    type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
     const exit = (act.value && typeof act.value === "object" ? act.value : {}) as Exit;
     const both = Boolean(exit.stdout?.content && exit.stderr?.content);
     const shown: TextRenderable[] = [];
@@ -2363,25 +2359,17 @@ export class App {
       }, this.report);
   }
 
-  private numbered(word: string, findings: string[] = []): LineNumberRenderable {
-    const lines = new LineNumberRenderable(this.renderer, {
+  private numbered(word: string): LineNumberRenderable {
+    return new LineNumberRenderable(this.renderer, {
       target: this.code(word),
       fg: c.faint,
       minWidth: 3,
       paddingRight: space.inset,
     });
-    for (const finding of findings) {
-      const line = Number(finding.match(/line (\d+)/)?.[1] ?? 0) - 1;
-      if (line >= 0) {
-        lines.setLineColor(line, { gutter: c.removed, content: c.removed });
-        lines.setLineSign(line, { before: "!", beforeColor: c.danger });
-      }
-    }
-    return lines;
   }
 
   private reference(label: string, value: string): TextRenderable {
-    const node = this.text(label, c.link, { attributes: 8 });
+    const node = this.text(label, c.link, { attributes: underline });
     node.onMouseDown = () => {
       void this.follow(value).catch(this.report);
     };

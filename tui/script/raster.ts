@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { CapturedFrame, RGBA } from "@opentui/core";
 import { Resvg } from "@resvg/resvg-js";
 import UPNG from "upng-js";
+import { escaped } from "../src/format.ts";
 
 /** The pixels of a cell, the size of the text, and the gap from the top of a row to its baseline, at one scale. */
 const cell = 9,
@@ -27,8 +28,6 @@ const hex = (value: RGBA) =>
     .slice(0, 3)
     .map((part) => part.toString(16).padStart(2, "0"))
     .join("")}`;
-const xml = (value: string) =>
-  value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 /** A block or a line of a box, which a terminal draws to the edges of its cell and a font leaves short of them: the
  * blocks it fills, as parts of the cell, and the path of the line through the center of the cell, with the weight of
@@ -163,7 +162,7 @@ function terminal(frame: CapturedFrame): string {
         if (run.trim()) {
           const width = Bun.stringWidth(run) * cell;
           parts.push(
-            `<text x="${start * cell}" y="${y + baseline}" font-family="${family}" font-size="${size}" font-weight="${span.attributes & 1 ? 700 : 400}" font-style="${span.attributes & 4 ? "italic" : "normal"}" fill="${color}" textLength="${width}" lengthAdjust="spacing" xml:space="preserve">${xml(run)}</text>`,
+            `<text x="${start * cell}" y="${y + baseline}" font-family="${family}" font-size="${size}" font-weight="${span.attributes & 1 ? 700 : 400}" font-style="${span.attributes & 4 ? "italic" : "normal"}" fill="${color}" textLength="${width}" lengthAdjust="spacing" xml:space="preserve">${escaped(run)}</text>`,
           );
           if (span.attributes & 8)
             parts.push(
@@ -254,7 +253,7 @@ export function pixels(
     `<rect x="${margin}" y="${margin}" width="${window.width}" height="${window.height}" rx="12" fill="${palette.background}" filter="url(#shadow)"/>`,
     `<g clip-path="url(#window)">`,
     lights,
-    `<text x="${margin + window.width / 2}" y="${margin + bar / 2 + 4.5}" text-anchor="middle" font-family="${family}" font-size="13" fill="${palette.muted}">${xml(title)}</text>`,
+    `<text x="${margin + window.width / 2}" y="${margin + bar / 2 + 4.5}" text-anchor="middle" font-family="${family}" font-size="13" fill="${palette.muted}">${escaped(title)}</text>`,
     `<g transform="translate(${margin + inset} ${margin + bar})">${terminal(frame)}</g>`,
     `</g>`,
     `<rect x="${margin + 0.5}" y="${margin + 0.5}" width="${window.width - 1}" height="${window.height - 1}" rx="11.5" fill="none" stroke="${palette.border}" stroke-opacity="0.9"/>`,

@@ -29,6 +29,8 @@ export type View = (typeof views)[number];
 /** An act as the views read it. A command that printed more than a row carries holds the tail of each stream, and
  * the length of all it printed; the view reads the whole act when it shows the output. */
 export type ActRow = LiveAct & { output?: number };
+/** What a command gave: what it printed to each stream, and its exit code once it is over. */
+export type Exit = { stdout?: { content: string }; stderr?: { content: string }; code?: number };
 /** A change of a file, with the patch that shows it. */
 export type ShownChange = FileChange & { patch: string };
 
@@ -155,7 +157,6 @@ export class Session extends EventEmitter {
   roster: [string, string[], number][] = [];
   findings: string[] = [];
   rejectedWord = "";
-  rejectedAct = "";
   queued: FollowUp[] = [];
   dispatched: string[] = [];
   images: Record<string, ImageAttachment[]> = {};
@@ -315,7 +316,6 @@ export class Session extends EventEmitter {
           .at(-1);
         this.findings = lastWord ? refusal(this.turns, lastWord.id) : [];
         this.rejectedWord = this.findings.length ? String(lastWord?.words[0] ?? "") : "";
-        this.rejectedAct = this.findings.length ? (lastWord?.id ?? "") : "";
         this.emit("change");
       } while (this.dirty && !this.closed);
     })().finally(() => {
@@ -461,17 +461,6 @@ export class Session extends EventEmitter {
   actOf(path: string): ActRow | undefined {
     const [name] = path.split("/");
     return this.acts.find((act) => act.id === name);
-  }
-  /** How many acts made an act, one under the other, up to the operator or the outside. */
-  depth(act: ActRow): number {
-    let depth = 0;
-    for (
-      let maker = this.acts.find((one) => one.id === act.by);
-      maker;
-      maker = this.acts.find((one) => one.id === maker?.by)
-    )
-      depth++;
-    return depth;
   }
   async attachImage(path: string): Promise<void> {
     if (!(await this.host.route(this.actor)).input.includes("image"))
@@ -839,7 +828,6 @@ export class Session extends EventEmitter {
         if (!Object.hasOwn(palettes, argument))
           throw new Error(`Choose ${Object.keys(palettes).join(", ")}.`);
         this.theme = argument as ThemeName;
-        this.preferences.save(this.theme);
         break;
       case "bash":
         this.track(await this.engine.bash(argument, { on: this.selected }));

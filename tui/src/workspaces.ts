@@ -389,15 +389,20 @@ export class Workspaces extends EventEmitter {
     await this.opening.get(entry.path);
     const group = this.groupOf(entry);
     if (!group) throw new Error("This session has no workspace.");
+    await this.leave(entry, group);
+    if (await this.release(entry)) entry.status = "saved";
+    entry.archived = true;
+    this.save({ directory: group.directory, add: entry.path, archive: entry.path });
+    this.emit("change");
+  }
+  /** When a session is the current one, the current session moves to the first other session of its workspace that
+   * opens, and to a new one when none does. A session that does not open keeps its error on its row. */
+  private async leave(entry: SessionEntry, group: Workspace): Promise<void> {
     for (const next of group.sessions.filter((other) => other !== entry && !other.archived)) {
       if (this.current !== entry) break;
       await this.select(next).catch(() => {});
     }
     if (this.current === entry) await this.create(group);
-    if (await this.release(entry)) entry.status = "saved";
-    entry.archived = true;
-    this.save({ directory: group.directory, add: entry.path, archive: entry.path });
-    this.emit("change");
   }
   /** Close the open session of an entry, and tell whether it was open. */
   private async release(entry: SessionEntry): Promise<boolean> {
@@ -455,13 +460,7 @@ export class Workspaces extends EventEmitter {
     await this.opening.get(entry.path);
     const group = this.groupOf(entry);
     if (!group) throw new Error("This session has no workspace.");
-    // The current session moves to the first other session that opens, and to a new one when none does. A session
-    // that does not open keeps its error on its row.
-    for (const next of group.sessions.filter((other) => other !== entry && !other.archived)) {
-      if (this.current !== entry) break;
-      await this.select(next).catch(() => {});
-    }
-    if (this.current === entry) await this.create(group);
+    await this.leave(entry, group);
     await this.release(entry);
     // The lock file moves with the record while this store holds it, and a process that locked it meanwhile opens
     // the path again.

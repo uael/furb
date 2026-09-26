@@ -392,7 +392,6 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     session = new Session(opened.engine, opened.host, true);
     await session.refresh();
     expect(session.queued).toHaveLength(1);
-    expect(await readFile(record, "utf8")).toContain('"aborted"');
     const manual = await session.engine.prompt(entry.shape, {
       message: entry.text,
       on: entry.chain,

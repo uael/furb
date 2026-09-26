@@ -33,60 +33,53 @@ export type Engine = {
     ? (...args: A) => Promise<Returned<R>>
     : Native[K];
 };
-/** What the session in the worker holds, as the host reads it. */
-export interface HostState {
+/** A question that waits for the operator. */
+type Prompt = { id: string; shape: string; message: string };
+/** What a model writes while it answers a rung, on the chain of the rung. */
+type Stream = { chain: string; text: string; thinking: string };
+/** What the session in the worker holds that the host keeps as it comes. */
+interface Plain {
   completed: number;
   cost: number;
   directory: string;
   imageDirectory: string;
   actor: string;
-  effort: Owner["provider"]["effort"];
-  roster: string[];
+  /** The path of the record, when the session keeps one. */
   record?: string;
-  facts: Fact[];
-  prompts: { id: string; shape: string; message: string }[];
-  streams: [string, { chain: string; text: string; thinking: string }][];
-  pending: [string, string][];
   /** How many file changes the session holds. */
   changes: number;
 }
+/** What the session in the worker holds, as it sends it to the host: the facts that the host has not heard yet. */
+export interface HostState extends Plain {
+  facts: Fact[];
+  prompts: Prompt[];
+  streams: [string, Stream][];
+  pending: [string, string][];
+}
 
 /** The session in the worker, as the host sees it: what it holds, and the requests the host makes of it. */
-export class HostView extends EventEmitter {
+export class HostView extends EventEmitter implements Plain {
   completed = 0;
   cost = 0;
   directory = "";
   imageDirectory = "";
   actor = "";
-  effort: Owner["provider"]["effort"] = "low";
-  roster: string[] = [];
-  /** The path of the record, when the session keeps one. */
   record?: string;
-  facts: Fact[] = [];
-  prompts = new Map<string, { id: string; shape: string; message: string }>();
-  streams = new Map<string, { chain: string; text: string; thinking: string }>();
-  pending = new Map<string, string>();
-  /** How many file changes the session holds. */
   changes = 0;
+  facts: Fact[] = [];
+  prompts = new Map<string, Prompt>();
+  streams = new Map<string, Stream>();
+  pending = new Map<string, string>();
   constructor(private request: (target: string, method: string, args: unknown[]) => Promise<unknown>) {
     super();
   }
-  update(state: HostState): void {
-    this.completed = state.completed;
-    this.cost = state.cost;
-    this.directory = state.directory;
-    this.imageDirectory = state.imageDirectory;
-    this.actor = state.actor;
-    this.effort = state.effort;
-    this.roster = state.roster;
-    this.record = state.record;
-    const incoming = state.facts;
-    for (const fact of incoming) this.facts.push(fact);
-    this.prompts = new Map(state.prompts.map((prompt) => [prompt.id, prompt]));
-    this.streams = new Map(state.streams);
-    this.pending = new Map(state.pending);
-    this.changes = state.changes;
-    if (incoming.length) this.emit("facts", incoming);
+  update({ facts, prompts, streams, pending, ...plain }: HostState): void {
+    Object.assign(this, plain);
+    for (const fact of facts) this.facts.push(fact);
+    this.prompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
+    this.streams = new Map(streams);
+    this.pending = new Map(pending);
+    if (facts.length) this.emit("facts", facts);
     this.emit("change");
   }
   route(actor: string): Promise<ReturnType<Owner["provider"]["route"]>> {

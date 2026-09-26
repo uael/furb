@@ -1,7 +1,7 @@
 import { type Engine, type Fact, isQuestion, type LiveAct, questionKind, type Session } from "@furb/engine";
 import type { Snapshot } from "./bridge.ts";
 import { queueDispatches } from "./queue.ts";
-import type { ActRow } from "./session.ts";
+import type { ActRow, Exit } from "./session.ts";
 
 /** What a snapshot knows of one chain. A value it must read again is undefined. */
 interface ChainView {
@@ -17,8 +17,7 @@ const TAIL = 2000;
 
 /** An act as a row of a snapshot: a command that printed more than a tail carries the tail of each stream. */
 function row(act: LiveAct): ActRow {
-  const exit =
-    act.kind === "bash" ? (act.value as { stdout?: { content: string }; stderr?: { content: string } }) : {};
+  const exit: Exit = act.kind === "bash" ? (act.value as Exit) : {};
   const streams = [exit?.stdout?.content ?? "", exit?.stderr?.content ?? ""];
   if (streams.every((content) => content.length <= TAIL)) return act;
   const tail = (stream?: { content: string }) =>

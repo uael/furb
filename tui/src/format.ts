@@ -72,3 +72,7 @@ export function modelName(name: string): { provider: string; id: string } {
   const at = name.indexOf(":");
   return at < 0 ? { provider: "", id: name } : { provider: name.slice(0, at), id: name.slice(at + 1) };
 }
+
+/** A text that HTML and XML read as the text itself, with no mark of either. */
+export const escaped = (value: string) =>
+  value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");

@@ -4,11 +4,10 @@ import { join } from "node:path";
 import { display, imageContent, imageReferences } from "@furb/engine";
 import { Marked } from "marked";
 import { conversation } from "./conversation.ts";
+import { escaped } from "./format.ts";
 import type { Session } from "./session.ts";
 import { palettes } from "./theme.ts";
 
-const escaped = (value: string) =>
-  value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 const markdown = new Marked({
   gfm: true,
   renderer: {
