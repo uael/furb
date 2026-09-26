@@ -20,9 +20,9 @@ a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.sessio
 `.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory
 too when the session has image attachments. An unfinished session opens paused and offers a resume choice. The
 native engine replays completed work from the record.
-The picker shows state, save time, cost, and record size. It reads unfinished work through native replay
-without locking or changing the saved record. The record shows what remains unfinished. The list shows at once,
-and each saved session shows its state when its replay ends.
+⌃W lists the workspaces and their sessions, each with its state, save time, cost, and record size. It reads
+unfinished work through native replay without locking or changing the saved record. The record shows what remains
+unfinished. The list shows at once, and each saved session shows its state when its replay ends.
 
 ![The furb TUI in action](../docs/furb.gif)
 
@@ -64,7 +64,6 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌃B / ⌃N | Switch / create a chain |
 | ⌃M or ⌥M | Choose a model |
 | ⇧Tab / ⌃T | Choose an effort / a theme |
-| ⌃O | Saved sessions |
 | ⌃W / ⌃\\ | Workspaces and sessions / show or hide the sidebar |
 | ⌥D / ⌥E | Fold or expand details / external editor |
 | ⌃V | Paste a clipboard image |

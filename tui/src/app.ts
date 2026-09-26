@@ -35,7 +35,7 @@ import { conversation } from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import type { Extensions } from "./extensions.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
-import { clip, count, dollars, elapsed, graphemes, kibibytes, modelName, share } from "./format.ts";
+import { ago, clip, count, dollars, elapsed, graphemes, kibibytes, modelName, share } from "./format.ts";
 import { type Action, bindings, chords, keys, presses, shown } from "./keys.ts";
 import { loadParsers } from "./parsers.ts";
 import {
@@ -51,7 +51,6 @@ import {
   views,
   working,
 } from "./session.ts";
-import { sessionChoices } from "./sessions.ts";
 import { publishShare } from "./share.ts";
 import {
   theme as c,
@@ -190,6 +189,20 @@ export interface AppOptions {
   quit(): void | Promise<void>;
   workspaces: Workspaces;
   extensions?: Extensions;
+}
+
+/** What the picker of the workspaces says of a session: its state, whether it is the current one, the time since
+ * its record was saved, its cost, and the size of its record. */
+export function sessionDetail(entry: SessionEntry, current: boolean): string {
+  return [
+    statusLabels[entry.status],
+    current ? "current" : "",
+    entry.modified ? ago(entry.modified) : "",
+    dollars(entry.cost ?? 0),
+    entry.size === undefined ? "" : kibibytes(entry.size),
+  ]
+    .filter(Boolean)
+    .join("   ");
 }
 
 /** An App on the session that the library selects, which a new App replaces for each session that the library
@@ -3136,7 +3149,7 @@ export class App {
             ...library.groups.flatMap((group) => [
               ...group.sessions.map((entry) => ({
                 label: entry.name,
-                detail: `${statusLabels[entry.status]}${library.current === entry ? "   current" : ""}`,
+                detail: sessionDetail(entry, library.current === entry),
                 status: entry.status,
                 heading: `${group.name}   ${shortenHome(group.directory)}`,
                 run: () => library.select(entry),
@@ -5364,7 +5377,6 @@ export class App {
     models: () => this.models(),
     effort: () => this.effortPicker(),
     themes: () => this.themes(),
-    sessions: () => void this.sessionPicker(),
     workspaces: () => void this.workspacePicker(),
     sidebar: () => this.options.workspaces.toggle(),
     details: () => this.details(),
@@ -5444,26 +5456,6 @@ export class App {
     w.save();
     this.render();
   }
-  /** The saved sessions of the workspace of the session, in a palette, which opens once the workspaces are read
-   * again. */
-  sessionPicker = (): Promise<void> => {
-    const library = this.options.workspaces;
-    return library
-      .refresh()
-      .then(() =>
-        this.openPalette(
-          "Sessions",
-          sessionChoices(
-            library.groupOf(),
-            (entry) => library.select(entry),
-            async () => {
-              await library.create();
-            },
-          ),
-        ),
-      )
-      .catch(this.report);
-  };
   /** The feed scrolled to the message of the operator before or after the top of the view. */
   private jumpMessage(step: number): void {
     const w = this.session;

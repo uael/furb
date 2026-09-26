@@ -96,12 +96,11 @@ export const keys = [
       { on: ["ctrl+t"], run: "themes", chord: "⌃T", command: "theme" },
     ],
   },
-  { chord: "⌃O", action: "Saved sessions", bindings: [{ on: ["ctrl+o"], run: "sessions" }] },
   {
     chord: "⌃W / ⌃\\",
     action: "Workspaces and sessions / show or hide the sidebar",
     bindings: [
-      { on: ["ctrl+w"], run: "workspaces", chord: "⌃W", command: "workspace" },
+      { on: ["ctrl+w", "ctrl+o"], run: "workspaces", chord: "⌃W", command: "workspace" },
       { on: ["ctrl+\\"], run: "sidebar", chord: "⌃\\", command: "sidebar" },
     ],
   },

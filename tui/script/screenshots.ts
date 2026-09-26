@@ -200,9 +200,6 @@ try {
   await show(session);
   await capture("21-paused-resume");
   app().closeOverlay();
-  await app().sessionPicker();
-  await capture("22-sessions");
-  app().closeOverlay();
   await session.host.resume();
   await session.refresh();
   app().rewind();

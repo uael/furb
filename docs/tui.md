@@ -125,14 +125,11 @@ refuses shows the line and the reason.
 
 ![Gate findings](screenshots/20-gate-findings.png)
 
-## Paused work and saved sessions
+## Paused work
 
-A session that opens with unfinished work stays paused until you resume it. ⌃O lists the saved sessions of the
-workspace, with their state, the time since their last save, their cost, and their size.
+A session that opens with unfinished work stays paused until you resume it.
 
 ![Paused resume](screenshots/21-paused-resume.png)
-
-![Saved sessions](screenshots/22-sessions.png)
 
 ## Rewind
 
@@ -163,8 +160,8 @@ sessions, and a click on a session opens it. Open sessions keep running while an
 state of each session and workspace, from live work and saved records: blue for work, yellow for input needed or
 paused work, green for an unread completion, and red for an error. An open grey dot means ready or saved, and a click
 on a completed session clears its unread mark. A rung folds its program to one line and
-keeps its acts, a workspace folds to its name, and ⌃\ hides the sidebar. ⌃W opens the workspaces and sessions
-picker.
+keeps its acts, a workspace folds to its name, and ⌃\ hides the sidebar. ⌃W lists the workspaces and their
+sessions, each with its state, the time since its last save, its cost, and its size.
 
 ![Workspace tree](screenshots/28-workspace-tree.png)
 

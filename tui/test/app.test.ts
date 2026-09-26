@@ -3,13 +3,12 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { App } from "../src/app.ts";
+import { App, sessionDetail } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
-import { sessionChoices } from "../src/sessions.ts";
-import { Workspaces } from "../src/workspaces.ts";
+import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
 import { composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
@@ -317,14 +316,11 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
   await library.refresh();
   // The replay of a saved record comes after the list, and the picker shows its state once it lands.
   await until(library, () => library.groups[0]?.sessions[0]?.status === "paused");
-  const choices = sessionChoices(
-    library.groups[0],
-    async () => {},
-    async () => {},
-  );
-  expect(choices[1]?.detail).toContain("KiB");
-  expect(choices[1]?.detail).toContain("Paused");
-  expect(choices).toHaveLength(2);
+  const saved = library.groups[0]?.sessions ?? [];
+  expect(saved).toHaveLength(1);
+  const detail = sessionDetail(saved[0] as SessionEntry, false);
+  expect(detail).toContain("KiB");
+  expect(detail).toContain("Paused");
   await library.dispose();
   const opened = await openEngine({ record, demo: true });
   const second = new Session(opened.engine, opened.host, true);
