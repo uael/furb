@@ -144,7 +144,7 @@ impl JsLife {
       .map(inward)
       .collect::<Result<Vec<_>, _>>()
       .map_err(error)?;
-    let life = crate::Life::open(Host { env, callback: callback.create_ref()? }, names)
+    let life = crate::Life::open_on(Host { env, callback: callback.create_ref()? }, names)
       .boot(record)
       .map_err(error)?;
     let root = life.root().to_owned();

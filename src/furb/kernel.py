@@ -22,7 +22,7 @@ import furb_monty
 from furb import engine, sheet
 from furb.engine import Act, Refused, site, under
 
-type Kernel = Generator[None, tuple]
+type Kernel = Generator[tuple | None, tuple]
 """The Kernel, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
 
 ENGINE = vars(furb.python)

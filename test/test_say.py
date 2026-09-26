@@ -25,7 +25,7 @@ MINE = "def read(path, **kw):\n  return ask('read', __name__, 'mine.txt')"
 
 
 async def test_the_way_to_say_a_fact_from_what_is_no_ear() -> None:
-  """The one way to say a fact, for every speaker: an ear while it hears, a word through its verbs, the operator, and the work an ear began, which speaks from its own loop; the fact is said to the living, whole as the bus made it, and given back."""
+  """The way to say a fact from what is no ear: a word through its verbs, the operator, and the work an ear began, which speaks from its own loop; the fact is said to the living, whole as the bus made it, and given back."""
   sand = sown()
   log, root = life(sand)
   made = engine.say("tell", root, ["#chain1 noted"])
@@ -123,7 +123,7 @@ async def test_the_bus_makes_every_fact_whole_from_what_it_is_given() -> None:
 
 
 async def test_every_generator_the_acts_first_then_those_of_the_engine_then_those_from_the_outside() -> None:
-  """Every ear hears in one order, the ears of acts first, then the ears of the life in the order they came to life, since the engine settles what it knows before the outside reads it or acts on it, and it asks the outside for nothing it can answer itself."""
+  """Every generator, the acts first, then those of the engine, then those the life was given from the outside, since the engine settles what it knows before the outside reads it or acts on it, and it asks the outside for nothing it can answer itself."""
   sand = sown()
   log, root = await lived(sand)
   _, command, *_ = said(log, "bash")[0]
@@ -139,7 +139,7 @@ async def test_every_generator_the_acts_first_then_those_of_the_engine_then_thos
 
 
 async def test_every_generator_hears_every_fact_it_has_not_heard_in_order_until_none_is_left() -> None:
-  """Every ear hears every fact it has not heard, in order, until none is left, and a question only as act offers it."""
+  """Every generator hears every fact it has not heard, in order, until none is left, and each act as act puts it."""
   sand = sown()
   log, root = life(sand)
   heard: list[tuple] = []

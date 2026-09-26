@@ -49,10 +49,8 @@ test("record inspection derives pending work without taking its lock, writing fi
     };
     const lock = await locked();
     // The World holds the lease while the inspection runs, so an inspection that took it would be refused.
-    // The prompt tells its open when it is made again, and the record holds the wait with no fact, so the table
-    // learns of the prompt first, and of the wait when the life is open.
     const first = await inspectRecord(record);
-    expect(first.pending.map(([id]) => id)).toEqual([prompt, waiting]);
+    expect(first.pending.map(([id]) => id)).toEqual([waiting, prompt]);
     expect(await readFile(record, "utf8")).toBe(before);
     expect(await readFile(`${record}.world.json`, "utf8")).toBe(metadata);
     expect(await locked()).toEqual(lock);
@@ -91,7 +89,7 @@ test("the act table holds an act paused while the last pause or wake that covers
     expect(world.isPaused(life.wait(60, two).id)).toBe(false);
     // An act of a kind the file does not make is a row of the table, which a pause holds as it holds any other.
     await life.rung(
-      'def takes(id):\n  say("started", id)\n  while True:\n    yield\nnote = act("note", "", takes)',
+      'def takes(id):\n  yield "started", id\n  while True:\n    yield\nnote = act("note", "", takes)',
       {
         on: two,
       },
@@ -526,14 +524,10 @@ test("host ears yield nested bus calls and host shows remain callable", () => {
     world: (function* (): Ear {
       for (;;) {
         const fact = (yield null) as Fact;
-        if (fact?.[0] === "stand")
-          yield { verb: "say", args: ["done", fact[1], [[["operator", [], 200000]], "/tmp", "operator"]] };
+        if (fact?.[0] === "stand") yield ["done", fact[1], [[["operator", [], 200000]], "/tmp", "operator"]];
         if (fact?.[0] === "read") {
           const cwd = yield { verb: "cwd", kwargs: { on: fact[3] } };
-          yield {
-            verb: "say",
-            args: ["done", fact[1], { is: "Text", path: `${cwd}/file`, content: "one\ntwo\n" }],
-          };
+          yield ["done", fact[1], { is: "Text", path: `${cwd}/file`, content: "one\ntwo\n" }];
         }
       }
     })(),
@@ -749,7 +743,7 @@ test("an act that never ends by design holds nothing, and a close of the World l
     "  while True:",
     "    match (yield):",
     "      case ('read', qid, _, _, path) if path.startswith('note://'):",
-    "        say('done', qid, Text(path, 'kept'))",
+    "        yield 'done', qid, Text(path, 'kept')",
     "",
     "act('note', '', note)",
     "close(1)",

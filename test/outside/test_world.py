@@ -710,13 +710,13 @@ async def test_the_plain_form_of_a_whole_record_is_a_fixed_point_of_json(yard: P
   assert json.loads(json.dumps(plain)) == plain
 
 
-def note(kept_: list[tuple]) -> Generator[None, tuple]:
+def note(kept_: list[tuple]) -> Generator[tuple | None, tuple]:
   """An ear of the outside that answers a read of a door of its own, and keeps every fact it hears."""
   while True:
     match a := (yield):
       case ("read", qid, _, _, path) if path.startswith("note://"):
         kept_.append(a)
-        engine.say("done", qid, Text(path, "kept"))
+        yield "done", qid, Text(path, "kept")
       case (_, _, _, *_):
         kept_.append(a)
 

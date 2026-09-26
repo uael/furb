@@ -1,24 +1,24 @@
 """act, the way to make a question."""
 
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 
 import pytest
 
-from conftest import STANDS, Sand, kernel, life, paragraphs, plain, redacting, relived, said, settle, sown, watched
+from conftest import STANDS, Sand, keeping, kernel, life, paragraphs, plain, relived, said, settle, sown, watched
 from furb import engine
-from furb.engine import HIDDEN, OPERATOR, TIMEOUT, WORLD, Act, Exit, Refused, Text, take
+from furb.engine import HIDDEN, OPERATOR, TIMEOUT, Act, Exit, Refused, Text, take
 
 
 def noting(heard: list[object], how: str = "", *, takes: bool = True):  # noqa: ANN201
   """A life of the suite: it keeps the name it is given and every fact it hears, takes its act when it is told to,
-  and says one fact by saying it when it is given a way."""
+  and says one fact by yielding it when it is given a way."""
 
-  def lives(id: str) -> Generator[None, tuple | None]:
+  def lives(id: str) -> Generator[tuple | None, tuple]:
     heard.append(id)
     if takes:
-      engine.say("started", id)
+      yield "started", id
     if how:
-      engine.say("tell", id, [f"#{id} {how} by say"])
+      yield "tell", id, [f"#{id} {how} by yield"]
     while True:
       if (a := (yield)) is not None:
         heard.append(a)
@@ -26,35 +26,16 @@ def noting(heard: list[object], how: str = "", *, takes: bool = True):  # noqa: 
   return lives
 
 
-def listening(order: list[str], takes: str = "") -> Callable[[str], Generator[None, tuple | None]]:
-  """Ears of the suite, each under the name it is given: the ear of an act takes that act at its birth, and every
-  one of them notes its name at its birth and each time an act of the kind seen is offered to it, and takes one whose
-  words name the one it is told to."""
-
-  def ear(name: str) -> Generator[None, tuple | None]:
-    order.append(name)
-    if engine.get(name) is not None:
-      engine.say("started", name)
-    while True:
-      match a := (yield):
-        case ("seen", about, _, _, *words) if engine.get(about) == a:
-          order.append(name)
-          if takes and takes in words:
-            engine.say("done", about, takes)
-
-  return ear
-
-
-def boxing() -> Generator[None, tuple | None]:
-  """An ear of the suite that takes every command before the World and answers it as a box would."""
+def taking(kind: str) -> Generator[tuple | None, tuple]:
+  """An ear of the outside that takes every act of one kind it is put, and hears every other fact."""
   while True:
-    match (yield):
-      case ("bash", about, _, _, command, *_):
-        engine.say("done", about, Exit(0, Text(f"{about}/stdout", f"boxed {command}\n"), Text(f"{about}/stderr")))
+    match a := (yield):
+      case (str(one), about, *_) if one == kind and engine.get(about) == a:
+        yield "started", about
 
 
 async def test_the_way_to_make_a_question() -> None:
-  """The way to make a question: it takes a name when it is made, its ear, when it has one, is brought to life under that name and given the name, it is offered to the other ears, and the name is given back, which is the act to whoever holds it."""
+  """The way to make a question: it takes a name when it is made, it is put to the ears, its ear, when it has one, is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it."""
   sand = sown()
   log, root = life(sand)
   heard: list[object] = []
@@ -68,41 +49,32 @@ async def test_the_way_to_make_a_question() -> None:
   assert engine.peek(two) == Text("/w/a.txt", "one\ntwo\n")
 
 
-async def test_an_act_is_offered_in_turn_until_one_ear_takes_it() -> None:
-  """An act is offered in turn until one ear takes it: to its own ear at the birth of that ear, then to the ears of acts, then to the ears of the life, each in the order it came to life, and no ear after the one that takes it hears it."""
-  sand = Sand(stands=STANDS)
-  order: list[str] = []
-  hear = listening(order)
-  root = engine.boot(
-    (),
-    **kernel(),
-    one=hear("one"),
-    two=listening(order, "two")("two"),
-    box=boxing(),
-    three=hear("three"),
-    world=sand.hears(),
-  )
-  engine.drive(hear("later"), "later")
-  notes = [engine.act("note", root, hear) for _ in range(2)]
-  del order[:]
-  seen = engine.act("seen", root, None, "two")
-  assert order == [*notes, "one", "two"] and engine.peek(seen) == "two"
-  del order[:]
-  own = engine.act("seen", root, hear)
-  assert order == [own] and engine.peek(own, ...) is ...
-  got = await engine.bash("ls", on=root)
-  assert got.stdout.content == "boxed ls\n" and said(sand.calls, "bash") == []
-  assert paragraphs(engine.turns(on=root))[-1] == "#bash1 exited 0\n# bash1/stdout, 0 known\n# 1 boxed ls"
-
-
-async def test_its_own_ear_is_born_before_any_other_ear_is_offered_it() -> None:
-  """Its own ear is born before any other ear is offered it, since an act with an ear of its own belongs to that ear when the ear takes it at its birth, and the acts that ear makes stand after it."""
+async def test_an_act_is_put_to_every_ear_of_the_engine_the_acts_first() -> None:
+  """An act is put to every ear of the engine, the acts first, and a busy one hears it once it is done speaking, at its place among what was said."""
   sand = sown()
-  log, root = life(sand)
-  order: list[str] = []
-  engine.drive(listening(order, "two")("two"), "two")
-  own = engine.act("seen", root, listening(order), "two")
-  assert order == ["two", own] and said(log, "started")[-1] == ("started", own, own) and engine.peek(own, ...) is ...
+  _, root = life(sand)
+  heard: list[tuple] = []
+  made: list[str] = []
+
+  def asking() -> Generator[tuple | None, tuple]:
+    while True:
+      heard.append(a := (yield))
+      if a[0] == "tell" and not made:
+        made.append(engine.act("read", root, None, "a.txt"))
+        yield "tell", root, ["#chain1 asked"]
+
+  engine.drive(asking(), "asking")
+  engine.say("tell", root, ["#chain1 hello"])
+  kinds = [(a[0], a[1]) for a in heard if a[0] != "keep"]
+  assert kinds[:4] == [("tell", root), ("read", made[0]), ("done", made[0]), ("tell", root)]
+  engine.bash("echo hi", on=root)
+  assert ("bash", "bash1") not in kinds and [a[1] for a in heard if a[0] == "bash"] == ["bash1"]
+
+
+async def test_its_own_ear_is_born_after_the_ears_of_the_engine_heard_it() -> None:
+  """Its own ear is born after the ears of the engine heard it, so the acts that ear makes stand after it."""
+  sand = sown()
+  _, root = life(sand)
   sand.script[root] = ["close(1)"]
   asked = engine.prompt(int, "one", on=root)
   assert await asked == 1
@@ -110,15 +82,16 @@ async def test_its_own_ear_is_born_before_any_other_ear_is_offered_it() -> None:
   assert kinds.index(("prompt", asked)) < kinds.index(("rung", "rung1"))
 
 
-async def test_an_ear_that_speaks_while_an_act_is_offered_is_passed_over() -> None:
-  """An ear that speaks while an act is offered is passed over, so a question that an ear asks goes to the other ears."""
-  sand = Sand(files={"/w/k.secret": "hunter2"}, stands=STANDS)
+async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes_it() -> None:
+  """It is then put to the ears of the outside in turn, until one takes it, and no ear of the outside after that one hears it."""
+  sand = Sand(stands=STANDS)
   log: list[tuple] = []
-  root = engine.boot((), **kernel(), probe=watched(log), redact=redacting(), world=sand.hears())
-  assert engine.read("k.secret", show=HIDDEN, on=root) == Text("/w/k.secret", "xxxxxxx")
-  assert said(sand.calls, "read") == [("read", "read2", "redact", root, "k.secret")]
-  owners = [(a[1], a[2]) for a in said(log, "done") if engine.question(("read", a[1]))]
-  assert owners == [("read2", WORLD), ("read1", "redact")]
+  after: list[tuple] = []
+  root = engine.boot((), **kernel(), probe=watched(log), taker=taking("note"), after=keeping(after), world=sand.hears())
+  one = engine.act("note", root, noting([], takes=False))
+  assert engine.peek(one, ...) is ... and [a for a in after if a[0] == "note"] == []
+  two = engine.act("seen", root, None)
+  assert [a for a in after if a[0] == "seen"] == [engine.get(two)]
 
 
 async def test_to_take_an_act_is_to_say_a_started_or_a_done_about_it() -> None:
@@ -207,7 +180,7 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
 
 
 async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fact_said_after_its_birth() -> None:
-  """The ear of an act is given the name of the act and hears every fact said after its birth, and it speaks by say."""
+  """The ear of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a saying."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   heard: list[object] = []
@@ -216,7 +189,7 @@ async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fa
   await settle()
   assert heard[0] == one and ("bash", two, OPERATOR, root, "echo hi", False, TIMEOUT) in heard[1:]
   assert paragraphs(engine.turns(on=root))[2:] == [
-    "#note1 spoke by say",
+    "#note1 spoke by yield",
     "#bash1 echo hi\nbash1: Act[Exit] = Act('bash1')",
     "#bash1 exited 0\n# bash1/stdout, 0 known\n# 1 ran echo hi",
   ]

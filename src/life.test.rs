@@ -2,14 +2,13 @@
 //!
 //! Every other test of the crate holds one piece against a double. This holds the whole of it against the engine
 //! itself: a life is opened, an operator says verbs, a model answers a prompt, the Kernel gates the word it wrote
-//! and runs it, a command runs on this machine and speaks through the Voice of its ear from its own thread, a wait
-//! ends, the operator answers a prompt, and the record the ear kept opens a second life.
+//! and runs it, a command runs on this machine and speaks through the Voice from its own thread, a wait ends, the
+//! operator answers a prompt, and the record the World kept opens a second life.
 //!
-//! The one double is [`Yard`], the World of this machine as one ear, small enough to read.
+//! The one double is [`Yard`], a World of this machine small enough to read.
 
 use std::{
   cell::RefCell,
-  collections::VecDeque,
   fs,
   future::Future,
   path::PathBuf,
@@ -21,37 +20,12 @@ use std::{
   time::Duration,
 };
 
-use crate::{Ears, Exit, Fact, Fault, Life, Object, ObjectRef, Reply, Text, Voice, value::entry};
+use crate::{
+  Actor, Command, Exit, Fault, Later, Life, Object, ObjectRef, Running, Standing, Text, Voice,
+  World,
+};
 
-/// What the yard does with the answer of a verb it said: given the fact it heard, the words of the verb, and the
-/// answer.
-type Then = fn(&mut Yard, &Fact, &[Object], ObjectRef<'_>);
-
-/// One verb the yard says while it hears a fact, and what it does with the answer.
-struct Step {
-  name: &'static str,
-  args: Vec<Object>,
-  kwargs: Vec<(String, Object)>,
-  then: Then,
-}
-
-/// One fact said by say, whose answer the yard does not read, and then what it does once it is said.
-fn say(kind: &str, about: &str, words: impl IntoIterator<Item = Object>, then: Then) -> Step {
-  let mut args = vec![Object::string(kind), Object::string(about)];
-  args.extend(words);
-  Step { name: "say", args, kwargs: vec![], then }
-}
-
-/// Nothing to do with an answer.
-fn nothing(_: &mut Yard, _: &Fact, _: &[Object], _: ObjectRef<'_>) {}
-
-/// The chain a question is on, as the keyword of a view.
-fn on(fact: &Fact) -> Vec<(String, Object)> {
-  vec![("on".to_owned(), Object::string(fact.on()))]
-}
-
-/// The World of this machine, for the tests, as the one ear of the host: a directory, a model that answers by a
-/// script, and real commands.
+/// A World of this machine, for the tests: a directory, a model that answers by a script, and real commands.
 struct Yard {
   at: PathBuf,
   words: Rc<RefCell<Vec<String>>>,
@@ -61,13 +35,7 @@ struct Yard {
   kept: Rc<RefCell<Vec<Object>>>,
   /// Every command it was told to end before its time, shared with the test.
   slain: Rc<RefCell<Vec<String>>>,
-  /// The voice its work speaks with once a hearing is over.
-  voice: Voice,
-  /// The commands it runs, by their acts.
-  running: Vec<String>,
-  /// The verbs it has still to say while it hears the fact it hears.
-  steps: VecDeque<Step>,
-  hearing: Option<Fact>,
+  voice: Option<Voice>,
 }
 
 impl Yard {
@@ -78,186 +46,121 @@ impl Yard {
       read: Rc::default(),
       kept: Rc::default(),
       slain: Rc::default(),
-      voice: Voice::default(),
-      running: Vec::new(),
-      steps: VecDeque::new(),
-      hearing: None,
-    }
-  }
-
-  /// What a chain stands on: the operator and one model, the directory of the yard, and that model.
-  fn standing(&self) -> Object {
-    let actor = |name: &str, efforts: &[&str]| {
-      Object::list([
-        Object::string(name),
-        Object::list(efforts.iter().map(|one| Object::string(*one))),
-        Object::int(200_000),
-      ])
-    };
-    Object::list([
-      Object::list([actor("operator", &[]), actor("m", &["low"])]),
-      Object::string(self.at.display().to_string()),
-      Object::string("m/low"),
-    ])
-  }
-
-  /// The verbs the yard says of one fact: it answers what is its own at once, and takes a reply, a command, a wait
-  /// and a prompt to the operator with a started, whose done its work says later.
-  fn heard(&mut self, fact: &Fact) -> Vec<Step> {
-    let id = fact.about().to_owned();
-    match fact.kind() {
-      "stand" => vec![say("done", &id, [self.standing()], nothing)],
-      "clock" | "chance" => vec![say("done", &id, [Object::float(0.5)], nothing)],
-      "read" | "write" => {
-        vec![Step { name: "cwd", args: vec![], kwargs: on(fact), then: Yard::served }]
-      }
-      "keep" => {
-        self.kept.borrow_mut().push(fact.word(0).map_or_else(Object::none, |one| one.to_owned()));
-        vec![]
-      }
-      "reply" => vec![
-        say("started", &id, [], nothing),
-        Step { name: "turns", args: vec![], kwargs: on(fact), then: Yard::answers },
-      ],
-      "bash" => vec![
-        say("started", &id, [], nothing),
-        Step { name: "cwd", args: vec![], kwargs: on(fact), then: Yard::runs },
-      ],
-      "wait" => vec![say("started", &id, [], |yard, fact, _, _| {
-        yard.voice.say("done", fact.about(), [Object::none()]);
-      })],
-      "prompt" => vec![say("started", &id, [], |yard, fact, _, _| {
-        let shape = fact.word(1).and_then(|one| one.as_str()).unwrap_or_default();
-        let answer = if shape == "int" {
-          Object::int(3)
-        } else {
-          Fault::refused(format!("the yard answers no {shape}")).object()
-        };
-        yard.voice.verb("close", vec![answer, Object::string(fact.about())]);
-      })],
-      "cancel" | "close" => self
-        .running
-        .iter()
-        .map(|command| Step {
-          name: "covers",
-          args: vec![fact.0.clone(), Object::string(command.clone())],
-          kwargs: vec![],
-          then: Yard::slays,
-        })
-        .collect(),
-      "done" => {
-        self.running.retain(|one| *one != id);
-        vec![]
-      }
-      _ => vec![],
-    }
-  }
-
-  /// A read or a write, served at the directory the chain stands in.
-  fn served(yard: &mut Yard, fact: &Fact, _: &[Object], here: ObjectRef<'_>) {
-    let here = PathBuf::from(here.as_str().unwrap_or_default());
-    let got = if fact.kind() == "read" {
-      let at = here.join(fact.word(1).and_then(|one| one.as_str()).unwrap_or_default());
-      fs::read_to_string(&at)
-        .map(|content| Text::new(at.display().to_string(), content).object())
-        .unwrap_or_else(|_| Fault::refused(format!("no file at {}", at.display())).object())
-    } else {
-      let text = fact.word(1).and_then(Text::of).expect("a write carries a text");
-      let at = here.join(&text.path);
-      match fs::write(&at, &text.content) {
-        Ok(()) => Text::new(at.display().to_string(), text.content).object(),
-        Err(no) => Fault::refused(no.to_string()).object(),
-      }
-    };
-    yard.steps.push_back(say("done", fact.about(), [got], nothing));
-  }
-
-  /// A reply, answered with the next word of the script, which the work of the yard says later.
-  fn answers(yard: &mut Yard, fact: &Fact, _: &[Object], turns: ObjectRef<'_>) {
-    yard.read.borrow_mut().push(turns.py_repr());
-    let word = {
-      let mut words = yard.words.borrow_mut();
-      if words.is_empty() { "close(None)".to_owned() } else { words.remove(0) }
-    };
-    let turn = Object::tuple([
-      Object::string("assistant"),
-      Object::string(word),
-      Object::none(),
-      Object::list([]),
-    ]);
-    yard.voice.say("done", fact.about(), [turn]);
-  }
-
-  /// A command, run on a thread of its own in the directory the chain stands in, which says what it wrote and what
-  /// it came to through the voice of the yard.
-  fn runs(yard: &mut Yard, fact: &Fact, _: &[Object], here: ObjectRef<'_>) {
-    let (voice, about) = (yard.voice.clone(), fact.about().to_owned());
-    let command = fact.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
-    let here = here.as_str().unwrap_or_default().to_owned();
-    yard.running.push(about.clone());
-    thread::spawn(move || {
-      let got =
-        std::process::Command::new("sh").arg("-c").arg(&command).current_dir(&here).output();
-      let stream = |name: &str, text: &str| Text::new(format!("{about}/{name}"), text);
-      let exit = match got {
-        Ok(out) => {
-          let (stdout, stderr) =
-            (String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
-          voice.say("out", &about, [Object::string(&*stdout), Object::string("stdout")]);
-          if !stderr.is_empty() {
-            voice.say("out", &about, [Object::string(&*stderr), Object::string("stderr")]);
-          }
-          let code = out.status.code().map(i64::from);
-          Exit { code, stdout: stream("stdout", &stdout), stderr: stream("stderr", &stderr) }
-        }
-        Err(_) => Exit { code: None, stdout: stream("stdout", ""), stderr: stream("stderr", "") },
-      };
-      voice.say("done", &about, [exit.object()]);
-    });
-  }
-
-  /// A command a control is over, ended before its time.
-  fn slays(yard: &mut Yard, _: &Fact, args: &[Object], covers: ObjectRef<'_>) {
-    let command =
-      args.get(1).and_then(|one| one.as_ref().as_str().map(str::to_owned)).unwrap_or_default();
-    if covers.as_bool() == Some(true) {
-      yard.running.retain(|one| *one != command);
-      yard.slain.borrow_mut().push(command);
-    }
-  }
-
-  /// The next verb the yard says, or nothing when it is done hearing.
-  fn next(&self) -> Reply {
-    match self.steps.front() {
-      Some(step) => Reply::Calls {
-        name: step.name.to_owned(),
-        args: step.args.clone(),
-        kwargs: step.kwargs.clone(),
-      },
-      None => Reply::Nothing,
+      voice: None,
     }
   }
 }
 
-impl Ears for Yard {
+/// A command of the yard, which cannot be fed and ends on its own, and which notes that it was told to end.
+struct Ran {
+  about: String,
+  slain: Rc<RefCell<Vec<String>>>,
+}
+
+impl Running for Ran {
+  fn feed(&mut self, _text: Option<String>) {}
+  fn slay(&mut self) {
+    self.slain.borrow_mut().push(self.about.clone());
+  }
+}
+
+impl World for Yard {
   fn opened(&mut self, voice: Voice) {
-    self.voice = voice.of("world");
+    self.voice = Some(voice);
   }
 
-  fn hears(&mut self, _name: &str, fact: Option<&Fact>) -> Reply {
-    let Some(fact) = fact else { return Reply::Nothing };
-    self.steps = self.heard(fact).into();
-    self.hearing = Some(fact.clone());
-    self.next()
-  }
-
-  fn answered(&mut self, _name: &str, got: ObjectRef<'_>) -> Reply {
-    if let (Some(step), Some(fact)) = (self.steps.pop_front(), self.hearing.clone())
-      && let Some(value) = entry(&got, 1)
-    {
-      (step.then)(self, &fact, &step.args, value);
+  fn stand(&mut self) -> Standing {
+    Standing {
+      roster: vec![
+        Actor { name: "operator".to_owned(), efforts: vec![], window: 200_000 },
+        Actor { name: "m".to_owned(), efforts: vec!["low".to_owned()], window: 200_000 },
+      ],
+      directory: self.at.display().to_string(),
+      actor: "m/low".to_owned(),
     }
-    self.next()
+  }
+
+  fn read(&mut self, here: &str, path: &str) -> Result<Text, Fault> {
+    let at = PathBuf::from(here).join(path);
+    fs::read_to_string(&at)
+      .map(|content| Text::new(at.display().to_string(), content))
+      .map_err(|_| Fault::refused(format!("no file at {}", at.display())))
+  }
+
+  fn write(&mut self, here: &str, path: &str, content: &str) -> Result<Text, Fault> {
+    let at = PathBuf::from(here).join(path);
+    fs::write(&at, content).map_err(|no| Fault::refused(no.to_string()))?;
+    Ok(Text::new(at.display().to_string(), content))
+  }
+
+  fn clock(&mut self) -> f64 {
+    0.5
+  }
+
+  fn chance(&mut self) -> f64 {
+    0.5
+  }
+
+  fn keep(&mut self, entry: ObjectRef<'_>) {
+    self.kept.borrow_mut().push(entry.to_owned());
+  }
+
+  fn reply(
+    &mut self,
+    _about: &str,
+    _on: &str,
+    _actor: &str,
+    turns: ObjectRef<'_>,
+  ) -> Later<Object> {
+    self.read.borrow_mut().push(turns.py_repr());
+    let word = {
+      let mut words = self.words.borrow_mut();
+      if words.is_empty() { "close(None)".to_owned() } else { words.remove(0) }
+    };
+    Box::pin(async move {
+      Object::tuple([
+        Object::string("assistant"),
+        Object::string(word),
+        Object::none(),
+        Object::list([]),
+      ])
+    })
+  }
+
+  fn run(&mut self, command: Command) -> Box<dyn Running> {
+    let voice = self.voice.clone().expect("a yard is opened before a command runs");
+    let ran = Ran { about: command.about.clone(), slain: Rc::clone(&self.slain) };
+    thread::spawn(move || {
+      let got = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&command.command)
+        .current_dir(&command.here)
+        .output();
+      match got {
+        Ok(out) => {
+          voice.out(&command.about, &String::from_utf8_lossy(&out.stdout), "stdout");
+          if !out.stderr.is_empty() {
+            voice.out(&command.about, &String::from_utf8_lossy(&out.stderr), "stderr");
+          }
+          voice.exited(&command.about, out.status.code().map(i64::from));
+        }
+        Err(_) => voice.exited(&command.about, None),
+      }
+    });
+    Box::new(ran)
+  }
+
+  fn wait(&mut self, _seconds: f64) -> Later<()> {
+    Box::pin(async {})
+  }
+
+  fn prompt(&mut self, _about: &str, shape: &str, _message: &str) -> Later<Result<Object, Fault>> {
+    let answer = if shape == "int" {
+      Ok(Object::int(3))
+    } else {
+      Err(Fault::refused(format!("the yard answers no {shape}")))
+    };
+    Box::pin(async move { answer })
   }
 }
 
@@ -302,7 +205,7 @@ impl Lived {
     let world = Yard::new(at.clone(), words);
     let (read, kept, slain) =
       (Rc::clone(&world.read), Rc::clone(&world.kept), Rc::clone(&world.slain));
-    let life = Life::open(world, ["world"]).boot(record)?;
+    let life = Life::boot(world, record)?;
     Ok(Lived { life, at, read, kept, slain })
   }
 

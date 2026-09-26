@@ -10,12 +10,12 @@ async def test_standing_gives_what_the_chains_stand_on() -> None:
   """standing gives what the chains stand on: the answer of the last stand that the transcript of the root holds, and an empty standing before the first."""
   seen: list[object] = []
 
-  def world() -> Generator[None, tuple]:
+  def world() -> Generator[tuple | None, tuple]:
     while True:
       a = yield
       if a[0] == "stand":
         seen.append(engine.standing())
-        engine.say("done", a[1], STANDS)
+        yield "done", a[1], STANDS
 
   engine.boot((), **kernel(), world=world())
   assert seen == [[]] and engine.standing() == STANDS == engine.peek("stand1")

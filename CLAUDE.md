@@ -8,8 +8,8 @@ the engine and the laws that no test can hold. `script/CLAUDE.md` says how to ru
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
 
-- `src/lib.rs` says what the crate gives: `Life`, whose methods are the verbs of the contract, and `Ears`, the ears
-  of a host by name, the World among them, which is all that a host writes.
+- `src/lib.rs` says what the crate gives: `Life`, whose methods are the verbs of the contract, and `World`, the one
+  trait that a host writes.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
 - The Kernel and the gate are the crate's. The gate is the type checker of monty. It reads a word on the sheet of
   the engine, `src/furb/sheet.py`, against the typeshed of the sandbox. The gate of the python package reads

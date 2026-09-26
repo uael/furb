@@ -186,29 +186,29 @@ def wait(seconds: float = 0.0, on: str = "") -> Act[None]:
 
 def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Act:
   def ear(id):
-    say("started", id)
+    yield "started", id
     if word:
       if tells(id):
-        told(id, "", word)
-      say("ready", id, word)
+        yield told(id, "", word)
+      yield "ready", id, word
     while True:
       match (yield):
         case ("done", about, _, value) if question(("reply", about)) and get(about)[2] == id:
           if isinstance(value, BaseException):
-            say("done", id, value)
+            yield "done", id, value
             return
-          say("ready", id, value[1])
+          yield "ready", id, value[1]
         case ("wants", about, by, _, call) if get(by)[4] == id:
-          say("started", about)
+          yield "started", about
           while (yield)[:2] != ("done", call):
             pass
-          say("done", about, peek(call))
+          yield "done", about, peek(call)
         case ("done", about, _, value) if question(("run", about)) and get(about)[4] == id:
           if retells and isinstance(value, CancelledError):
             value = None
           if isinstance(value, BaseException) and tells(id):
-            told(id, "raised " + re.sub(r"^[\w.]*\.", "", repr(value)))
-          say("done", id, value)
+            yield told(id, "raised " + re.sub(r"^[\w.]*\.", "", repr(value)))
+          yield "done", id, value
           return
 
   if not (word or actor):
@@ -222,8 +222,8 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
 
   def ear(id):
     if actor != OPERATOR:
-      say("started", id)
-    told(id, message, bound(id, named))
+      yield "started", id
+    yield told(id, message, bound(id, named))
     while actor != OPERATOR:
       asking = rung(actor=actor)
       while (yield)[:2] != ("done", asking):
@@ -243,10 +243,10 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 
     def takes(now):
       module(id)["actor"] = now[2]
-      told(id, f"roster {now[0]!r}", headed(id, f"cwd {now[1]}"), headed(id, f"actor {now[2]}"))
+      yield told(id, f"roster {now[0]!r}", headed(id, f"cwd {now[1]}"), headed(id, f"actor {now[2]}"))
 
     def replay(of="", words="", writer=""):
-      say("module", id, {**globals(), "__name__": id, "actor": last and last[2]})
+      yield "module", id, {**globals(), "__name__": id, "actor": last and last[2]}
       for whose, said in rungs.items():
         donor = get(whose)[5] or whose
         if under(donor, of):
@@ -267,28 +267,30 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       picked += [x for x in theirs if x[0] == "reply" and any(under(one[1], x[2]) for one in picked)]
       heard += [it for it in theirs if it[1] == source or any(under(one[1], it[1]) for one in picked)]
       rungs.update(program(source))
-    say("started", id)
-    told(id, f"{label} from {source}".strip() if source else label, bound(id))
-    replay()
+    yield "started", id
+    yield told(id, f"{label} from {source}".strip() if source else label, bound(id))
+    yield from replay()
     if last and not source:
-      takes(last)
+      yield from takes(last)
     while True:
       a = yield
       if a[0] == "done" and question(("stand", a[1])) and scope(a[1]) == ROOT and a[3] != last:
-        takes(last := a[3])
+        yield from takes(last := a[3])
       if scope(a[1]) != id:
         continue
       match a:
         case ("read", about, by, _, path) if question(("prompt", path)) and scope(path) == id:
-          say(
-            "done", about, Text(path, "\n".join(w for x, w in rungs.items() if x != by and under(get(x)[5] or x, path)))
+          yield (
+            "done",
+            about,
+            Text(path, "\n".join(w for x, w in rungs.items() if x != by and under(get(x)[5] or x, path))),
           )
         case ("write", about, by, _, Text(path, content) as text) if question(("prompt", path)) and scope(path) == id:
-          replay(path, content, by)
-          say("done", about, text)
+          yield from replay(path, content, by)
+          yield "done", about, text
         case ("cd", about, *_, path):
-          say("done", about, path)
-        case ("started", rid, *_) if question(("rung", rid)) and not get(rid)[4]:
+          yield "done", about, path
+        case ("rung", rid, _, _, "", *_):
           waiting[rid] = a
         case ("ready", rid, _, word):
           waiting.pop(rid, None)
@@ -296,7 +298,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           if not tells(rid):
             found = get(rid)[5] in refused
           elif found := gate(word, id):
-            told(rid, "refused", commented("\n".join(found)))
+            yield told(rid, "refused", commented("\n".join(found)))
           if found:
             refused.add(rid)
             close(Refused(), rid)
@@ -315,7 +317,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         if offered(last[0], to := get(asking)[6]) is None:
           close(Refused(f"{to} no actor"), maker if question(("prompt", maker)) else asking)
         else:
-          told(asking, f"advance on {maker}")
+          yield told(asking, f"advance on {maker}")
           if binds := "\n".join(re.findall(r"(?m)^\w+: Act\[.*\] = Act\('\w+'\)$", turns(id)[-1][1])):
             rung(binds)
           with site.set(asking):
@@ -336,13 +338,13 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
   def ear(id):
     here = scope(id)
     if not (usd or share) or (usd or 0) < 0 or not 0 <= (share or 0) <= 1:
-      say("done", id, Refused(f"{usd}/{share} no ceiling"))
+      yield "done", id, Refused(f"{usd}/{share} no ceiling")
       return
-    say("started", id)
+    yield "started", id
     spent = 0.0
     for old in [x[1] for x in transcript(here) if x[0] == "grant" and x[3] == here and x[1] != id]:
       close(None, old)
-    told(id, f"usd={usd} share={share}", bound(id, "None"))
+    yield told(id, f"usd={usd} share={share}", bound(id, "None"))
     while True:
       match (yield):
         case ("done", about, _, (_, _, (tokens, *_, dollars), _)) if (
@@ -350,7 +352,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
         ):
           spent += dollars
           filled = tokens / (offered(standing()[0], get(about)[4]) or WINDOW)
-          told(get(about)[2], f"ledger spent={spent} filled={filled}")
+          yield told(get(about)[2], f"ledger spent={spent} filled={filled}")
           if (usd is not None and spent >= usd) or (share is not None and filled >= share):
             pause(here)
 
@@ -367,20 +369,20 @@ def bash(
 ) -> Act[Exit]:
   def ear(id):
     streams, mute = {x: Text(x) for x in (f"{id}/stdout", f"{id}/stderr")}, "" if fed else "not fed"
-    told(id, "" if show is HIDDEN else command, bound(id, "Exit"))
+    yield told(id, "" if show is HIDDEN else command, bound(id, "Exit"))
     while True:
       match (yield):
         case ("merged", qid, _, _, about) if about == id:
-          say("done", qid, show_err is None)
+          yield "done", qid, show_err is None
         case ("read", qid, _, _, path) if path in streams:
-          say("done", qid, streams[path])
+          yield "done", qid, streams[path]
         case ("write", qid, _, _, Text(path, text) as took) if path == f"{id}/stdin":
           if mute:
             took = Refused(mute)
           else:
-            say("feed", id, text or None)
+            yield "feed", id, text or None
             mute = "" if text else "closed"
-          say("done", qid, took)
+          yield "done", qid, took
         case _ if mute == "ended":
           continue
         case ("out", about, _, text, stream) if about == id:
@@ -391,14 +393,14 @@ def bash(
           if isinstance(got, Exit):
             streams = dict(zip(streams, (got.stdout, got.stderr), strict=True))
             if show is not HIDDEN:
-              told(
+              yield told(
                 id,
                 f"exited {got.code}",
                 *[x for x in zip(streams.values(), (show, show_err), strict=True) if x[1] not in (None, HIDDEN)],
               )
         case ("cancel" | "close", *_) as a if covers(a, id):
           mute = "ended"
-          say("done", id, ended(a, id))
+          yield "done", id, ended(a, id)
 
   return act("bash", on, pausing(ear), command, fed, timeout)
 
@@ -509,7 +511,7 @@ def tells(id):
 
 
 def told(id, text="", *notes):
-  return say("tell", id, [headed(id, text), *notes])
+  return "tell", id, [headed(id, text), *notes]
 
 
 def control(kind, name, id, *words):
@@ -580,7 +582,8 @@ def idle(id):
 
 def lives(g, a):
   try:
-    g.send(a)
+    while (a := g.send(a)) is not None:
+      a = say(*a)
   except StopIteration:
     return False
   return True
@@ -613,7 +616,7 @@ def ending(ear):
       if peek(id, ...) is not ...:
         return
       if a[0] in ("cancel", "close") and covers(a, id):
-        say("done", id, ended(a, id))
+        yield "done", id, ended(a, id)
         return
 
   return lived
@@ -626,14 +629,11 @@ def boot(record=(), **outside):
 
   def journal():
     kept, due = {e[1]: e for (e,) in record if question(e)}, [*reversed(record)]
-    for x in kept.values():
-      if x[2] in alive:
-        born.setdefault(x[0], {})[x[1]] = x[1]
 
     def keep(one):
       if one not in kept:
         kept[one] = known[one]
-        say("keep", "", (kept[one],))
+        yield "keep", "", (kept[one],)
 
     while True:
       while due and not log:
@@ -641,7 +641,7 @@ def boot(record=(), **outside):
           case ((kind, name, by, on, *words),) if question((kind, name)):
             if name in known:
               continue
-            if by in alive or by in kept or scope(on) != on:
+            if by in outside or by in kept or scope(on) != on:
               born.setdefault(kind, {})[name] = name
               continue
             if not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+?\d+", by):
@@ -649,21 +649,23 @@ def boot(record=(), **outside):
             with site.set(by):
               verb(*words, on=on)
           case ((kind, about, _, *words) as f,) if kind != "started" and first.get(about) is not f and scope(about):
-            say(kind, about, *words)
+            yield kind, about, *words
       match a := (yield):
-        case (_, about, by, *_) if x := known.get(about):
-          if x[4:] != kept.get(about, x)[4:]:
-            raise Drift(f"{about} drifts")
-          if by != "record" and (by not in known or x[2] not in known):
-            keep(about)
-            if by not in known and a is not x:
-              say("keep", "", (a,))
+        case (_, _, "record", *_):
+          pass
+        case (_, name, by, _, *words) if a is known.get(name):
+          if words != [*kept.get(name, a)[4:]]:
+            raise Drift(f"{name} drifts")
+          if by not in known:
+            yield from keep(name)
+        case (_, about, by, *_) if about in known and by not in known:
+          yield from keep(about)
+          yield "keep", "", (a,)
       if a and a[0] == "wake" and a[2] != "record":
-        for name in [*holding]:
-          if covers(a, name) and peek(name, ...) is ...:
-            holding.remove(name)
-            taken.discard(name)
-            offers(known[name])
+        for name in [x for x in holding if covers(a, x) and peek(x, ...) is ...]:
+          holding.remove(name)
+          taken.discard(name)
+          offers(known[name])
 
   def says(kind, about, *words):
     a = (kind, about, site.get(), *words)
@@ -672,7 +674,7 @@ def boot(record=(), **outside):
       if kind == "done":
         done.setdefault(about, words[0])
     held.get(scope(about), []).append(a)
-    log.append(a)
+    log.append((a, ()))
     dispatch()
     return a
 
@@ -683,18 +685,23 @@ def boot(record=(), **outside):
     a = (kind, f"{kind}@{by}.{made[speaker, kind]}", by, on or scope(speaker), *words)
     if not a[3] and kind != "chain":
       raise Refused(f"no chain for {kind}")
-    names, n = born.setdefault(kind, {}), 1
-    while f"{kind}{n}" in names.values():
-      n += 1
-    a = (kind, name := names.setdefault(a[1], f"{kind}{n}"), *a[2:])
+    names = born.setdefault(kind, {})
+    a = (kind, name := names.setdefault(a[1], f"{kind}{len(names) + 1}"), *a[2:])
     if known.setdefault(name, a) is a:
       busy.add(id(a))
       try:
         held.get(a[3], []).append(a)
         if kind == "chain":
           held[name] = []
+        at, heard = len(log), [*outside]
+        for n, g in ears():
+          if not (ear or n in heard or n == "record" or n in busy or name in taken):
+            hears(n, g, a)
+            heard.append(n)
+        log.insert(at, (a, heard))
         if ear:
-          live(ear(name), name)
+          alive[name] = g = ear(name)
+          hears(name, g, None)
         if name not in taken and (f := first.get(name)):
           if f[0] == "done":
             with site.set("record"):
@@ -703,6 +710,9 @@ def boot(record=(), **outside):
             taken.add(name)
             holding.append(name)
         offers(a)
+        if name not in taken:
+          with site.set(name):
+            says("done", name, Refused(f"nothing takes {kind}"))
       finally:
         busy.discard(id(a))
       dispatch()
@@ -710,14 +720,11 @@ def boot(record=(), **outside):
 
   def offers(a):
     for n, g in ears():
-      if n != a[1] and a[1] not in taken:
+      if n in outside and a[1] not in taken:
         hears(n, g, a)
-    if a[1] not in taken:
-      with site.set(a[1]):
-        says("done", a[1], Refused(f"nothing takes {a[0]}"))
 
   def ears():
-    return sorted(alive.items(), key=lambda pair: pair[0] not in known)
+    return sorted(alive.items(), key=lambda pair: (pair[0] not in known, pair[0] in outside))
 
   def dispatch():
     while not busy:
@@ -726,9 +733,9 @@ def boot(record=(), **outside):
           hears("record", g, None)
         if not log:
           return
-        left.extend(ears()[::-1])
+        left.extend([x for x in ears() if x[0] not in log[0][1]][::-1])
       name, g = left.pop()
-      hears(name, g, log[0] if left else log.pop(0))
+      hears(name, g, log[0][0] if left else log.pop(0)[0])
 
   def hears(name, g, a):
     if name in busy or alive.get(name) is not g:
@@ -743,7 +750,7 @@ def boot(record=(), **outside):
         living or alive.pop(name)
 
   def live(g, name):
-    if name in alive or name == OPERATOR:
+    if name in alive:
       raise Refused(f"{name} hears")
     alive[name] = g
     hears(name, g, None)
@@ -757,7 +764,7 @@ def boot(record=(), **outside):
     peek=lambda at, waiting=None: done.get(at, waiting),
     transcript=lambda on="": held.get(on or scope(site.get()), []),
   )
-  for who, hearer in [*outside.items(), ("record", journal())]:
+  for who, hearer in [(OPERATOR, idle(OPERATOR)), *outside.items(), ("record", journal())]:
     live(hearer, who)
   root = Act(ROOT) if known else chain("root")
   stand()

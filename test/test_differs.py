@@ -8,7 +8,7 @@ GROWS = (
   "  while True:\n"
   "    match (yield):\n"
   "      case ('write', qid, _, _, Text(path=path, content=content)) if path.startswith('note://'):\n"
-  "        say('done', qid, Text(path, 'one\\n' + content))\n"
+  "        yield 'done', qid, Text(path, 'one\\n' + content)\n"
   "\n"
   "act('note', '', kept)\n"
   "close(write(Text('note://a', 'two\\n')).content)\n"

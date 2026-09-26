@@ -9,7 +9,7 @@ NUMS = (
   "  while True:\n"
   "    match (yield):\n"
   "      case ('read', qid, _, _, path) if path.startswith('nums://'):\n"
-  "        say('done', qid, [1, 2])\n"
+  "        yield 'done', qid, [1, 2]\n"
   "\n"
   "act('nums', '', kept)\n"
   "read('nums://a')\n"

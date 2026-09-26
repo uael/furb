@@ -6,7 +6,7 @@ from furb.engine import WORLD, Act, Exit
 
 
 async def test_what_an_ear_says_to_take_an_act_whose_done_comes_later() -> None:
-  """What an ear says while it is offered an act, to take the act when its done comes after the offer, and which no ear after it hears."""
+  """What an ear says to take an act whose done comes later, and which no ear after it hears."""
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
   act = engine.bash("slow", on=root)

@@ -81,41 +81,39 @@ Pass `answer` to replace only model requests, or `operator` to supply operator a
 the models that `answer` stands in for, and a World given `answer` and no model is refused, since every prompt
 would go to the operator. With no `operator`, questions stand in `world.prompts`; call `world.answer(id, text)`
 to parse and validate an answer. `world` emits `change` and `facts`; `fault` reports a failure to deliver an
-outside result. `world.facts` holds every fact of the life, and every act before the first fact about it: an ear
-hears a question only while it is offered it, so the ear that keeps them reads an act it was not offered whole from
-the life, and when the life opens, each act the record holds started and not done. A view reads the life and says
-nothing, so a listener that reads the life hears no change of its own. A failed outside act carries its refusal in
-the record. A `Keep` writes and syncs one complete record entry before it returns. The engine phrases every turn as python, so the World renders nothing. A turn is its role,
+outside result. `world.facts` holds every fact of the life, every act among them, since the World drives the
+ear that keeps them as an ear of the engine. A view reads the life and says nothing, so a listener that reads the
+life hears no change of its own. A failed outside act carries its refusal in the record. A `Keep` writes and syncs one complete record entry
+before it returns. The engine phrases every turn as python, so the World renders nothing. A turn is its role,
 its python, its usage and the blocks of its provider, as `life.turns(chain)` gives it. The World hands a
 provider the python of each user turn as it is, and no user turn that holds nothing, and the `answer` callback
 receives the same turns.
 
-Pass `ears` to `boot` to open the life on ears of your own, the World among them, in place of the built-in World.
-An ear is a synchronous `function*`, `Generator<Call | null, void, unknown>`, under the name it hears by, and `boot`
-gives them to the engine in that order, which is the order the engine offers them a question. An ear is resumed
-with nothing at its birth, then with each fact of the life, and with each question while it is offered it. It
-yields `null` to wait for what it hears next. While it hears, it speaks by yielding a call `{verb, args, kwargs}`,
-`say` and `act` among them, as `{verb: "say", args: ["done", id, value]}`, and the call is answered before the ear
-goes on. It takes a question by saying `started` or `done` about it while it is offered it. The work it begins, a
-command, a wait, a model's turn, speaks later as the ear: it sets `life.site(name)`, says its fact with `life.say`,
-and sets the site back. An ear never waits on anything but its own calls, so an `async function*` is no ear.
+Pass `world` to `boot` to replace the whole World. It receives these operations:
 
-```ts
-import { boot, type Call, type Ear, type Fact } from "@furb/engine";
+| Operation | Arguments | Answer |
+| --- | --- | --- |
+| Stand | none | `[roster, directory, actor]` |
+| Read | directory, path | `{path, content}` |
+| Write | directory, path, content | `{path, content}` |
+| Clock, Chance | none | number |
+| Keep | entry | nothing |
+| Reply | reply id, rung, chain, actor, turns | Promise of a turn |
+| Run | `{id, here, command, fed, timeout, merged}` | nothing; say out later, then `exited` |
+| Feed | command id, text or null | nothing |
+| Slay | command id | nothing |
+| Wait | seconds, act id | Promise that resolves when time passes |
+| Prompt | id, shape, message | Promise of an operator answer |
 
-const say = (...args: unknown[]): Call => ({ verb: "say", args });
-function* world(): Ear {
-  for (;;) {
-    const fact = (yield null) as Fact | null;
-    if (fact?.[0] === "stand") yield say("done", fact[1], [[["operator", [], 200000]], "/tmp", "operator"]);
-    if (fact?.[0] === "clock") yield say("done", fact[1], { is: "float", args: [String(Date.now() / 1000)] });
-  }
-}
-const session = boot({ ears: { world: world() } });
-```
-
-`Ears.callable` carries a JavaScript show or filter into the engine, from the `Ears` the life boots on:
-`world.ears` for the supplied World, and `session.ears` from `boot`. `Life.call` reaches every public engine verb beyond the named methods.
+Stand, Read, Write, Clock, Chance, Keep, Run, Feed, and Slay answer synchronously. They must not call back
+into the same life. The World takes a reply, a command, a wait and a prompt to the operator with a started, and
+says each done when it ends. A command says what it writes through `session.adapter.say("out", id, [text,
+stream])`, and its end through `session.adapter.exited(id, code)`, which says it done with the Exit of the
+streams it heard. For a World that needs nested engine queries, use `Ears`: its generators yield a saying
+`[kind, id, ...words]`, a call `{verb, args, kwargs}`, or nothing. A yielded call is answered before the ear
+continues, as in the Python binding. `Ears.callable` carries a JavaScript show or filter into the engine,
+from the `Ears` the life boots on: `world.ears` for the supplied World, and `session.ears` from `boot`.
+`Life.call` reaches every public engine verb beyond the named methods.
 
 Values use the Python record form. Text and Exit carry `is` plus their fields. Faults carry `is` and `args`.
 Lists and tuples cross as arrays, and maps keep their order. Every value of the engine crosses to JavaScript,

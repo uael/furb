@@ -1,6 +1,14 @@
 export * from "../index.cjs";
 export { Activity, type LiveAct, type RunState } from "./activity.js";
-export { type Call, type Ear, Ears } from "./ears.js";
+export {
+  type Call,
+  type Ear,
+  Ears,
+  type Saying,
+  WorldAdapter,
+  type WorldHandler,
+  type WorldRequest,
+} from "./ears.js";
 export {
   type ImageAttachment,
   imageContent,

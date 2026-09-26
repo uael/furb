@@ -1,13 +1,15 @@
-//! One life of the engine: the sandbox it runs in, the ears of the host it reaches, and the verbs a host says.
+//! One life of the engine: the sandbox it runs in, the World and the ears it reaches, and the verbs a host says.
 //!
 //! A life is driven from one thread. A verb is one call: it runs in the sandbox, the engine does what it does,
-//! every fact it says reaches the ears, and what the verb gave comes back. An act is awaited: the future drives the
-//! life until the act is done, which means it says into the engine what the work of the ears said once their
-//! hearing was over. Nothing polls: what a Voice says wakes whoever awaits.
+//! every fact it says reaches the World and the ears, and what the verb gave comes back. An act is awaited: the
+//! future drives the life until the act is done, which means it drains what the World said unasked, drives the
+//! work the World gave back as futures, and says each result into the engine as the fact the engine waits for.
+//! Nothing polls: what the World says wakes whoever awaits, and so does the work it finishes.
 //!
-//! The host reaches the sandbox as two objects the stand-in holds: the gate, which reads a sheet, and the ears,
-//! which hear every ear of the host by name. A call of a method of one of them comes here with the id of the
-//! object, and is answered on the thread of the life, inside the call.
+//! The host reaches the sandbox as three objects the stand-in holds: the World, whose methods it calls as the
+//! engine asks of a World; the gate, which reads a sheet; and the ears, which hear every other ear by name. A
+//! call of a method of one of them comes here with the id of the object, and is answered on the thread of the
+//! life, inside the call.
 
 use std::{
   collections::HashMap,
@@ -21,12 +23,16 @@ use monty_types::{MontyUuid, NamedValues, ResourceLimits};
 
 use crate::{
   ENGINE, PREAMBLE, SHEET,
-  ear::{Ears, Reply, Voice},
+  ear::{Ears, Reply},
   fact::Fact,
   gate::checked,
   sand::{Sand, id, object},
   value::{Exit, Fault, Object, ObjectRef, Text, entry, inward},
+  world::{Command, Later, Running, Said, Voice, World},
 };
+
+/// The name the engine hears the World by, which is the name whose facts the journal keeps.
+pub const WORLD: &str = "world";
 
 /// The prefix of the name a callable of the host crosses in under: `call:` and its number.
 const CALL: &str = "call:";
@@ -37,19 +43,40 @@ type Callable = Box<dyn FnMut(Vec<Object>) -> Result<Object, Fault>>;
 /// What a host does when an act is done, given what it came to.
 type Watcher = Box<dyn FnMut(&Object)>;
 
-/// The two objects of the host the stand-in holds, by their ids.
-mod objects {
-  /// The gate, which reads a sheet.
-  pub const GATE: u8 = 1;
-  /// The ears, which hear every ear of the host by name.
-  pub const EARS: u8 = 2;
+/// One piece of work the World gave back as a future, and the fact its result becomes.
+enum Work {
+  /// The turn of a model, which answers a reply.
+  Reply { about: String, later: Later<Object> },
+  /// A wait, done when its time is up.
+  Wait { about: String, later: Later<()> },
+  /// A prompt of the operator, closed with what the operator answered.
+  Prompt { about: String, later: Later<Result<Object, Fault>> },
 }
 
-/// The host, as the sandbox reaches it: its ears, the Voice their work speaks with, and its callables. The gate is
-/// the thread's.
+/// The three objects of the host the stand-in holds, by their ids.
+mod objects {
+  /// The World, whose methods the stand-in calls as the engine asks of a World.
+  pub const WORLD: u8 = 1;
+  /// The gate, which reads a sheet.
+  pub const GATE: u8 = 2;
+  /// The ears, which hear every other ear by name.
+  pub const EARS: u8 = 3;
+}
+
+/// The World of a life: the typed one a Rust host writes, or none, when the host hands its World over as an ear
+/// among its ears, which a host that is python does.
+enum Worldly {
+  Typed(Box<dyn World>),
+  Heard,
+}
+
+/// The host, as the sandbox reaches it: the World, the ears, and everything in flight. The gate is the thread's.
 struct Hosting {
-  ears: Box<dyn Ears>,
+  world: Worldly,
+  ears: Option<Box<dyn Ears>>,
   voice: Voice,
+  later: Vec<Work>,
+  running: HashMap<String, Box<dyn Running>>,
   calls: Vec<Callable>,
 }
 
@@ -78,7 +105,9 @@ impl Hosting {
       })));
     }
     if on == id(objects::EARS) {
-      let ears = &mut self.ears;
+      let Some(ears) = self.ears.as_mut() else {
+        return Err(Fault::refused("no ears of the host hear"));
+      };
       let ear = text(args.first().map(Object::as_ref));
       let reply = match name {
         "hears" => ears.hears(&ear, args.get(1).and_then(|one| Fact::of(one.as_ref())).as_ref()),
@@ -100,7 +129,91 @@ impl Hosting {
       };
       return Ok(replied(reply));
     }
+    if on == id(objects::WORLD) {
+      let Hosting { world, later, running, .. } = self;
+      let Worldly::Typed(world) = world else {
+        return Err(Fault::refused("the World of the host is heard among its ears"));
+      };
+      return worldly(world.as_mut(), later, running, name, args);
+    }
     Err(Fault::refused(format!("{on} is no object of the host")))
+  }
+}
+
+/// One method of the World, as the stand-in calls it: what takes time joins the work in flight, and a command
+/// joins the ones running.
+fn worldly(
+  world: &mut dyn World,
+  later: &mut Vec<Work>,
+  running: &mut HashMap<String, Box<dyn Running>>,
+  name: &str,
+  args: Vec<Object>,
+) -> Result<Object, Fault> {
+  let at = |i: usize| args.get(i).map(Object::as_ref);
+  let word = |i: usize| text(at(i));
+  Ok(match name {
+    "stand" => world.stand().object(),
+    "clock" => Object::float(world.clock()),
+    "chance" => Object::float(world.chance()),
+    "read" => answered(world.read(&word(0), &word(1))),
+    "write" => answered(world.write(&word(0), &word(1), &word(2))),
+    "keep" => {
+      if let Some(entry) = at(0) {
+        world.keep(entry);
+      }
+      Object::none()
+    }
+    "reply" => {
+      let turns = at(3).map_or_else(|| Object::list([]), |one| one.to_owned());
+      let answer = world.reply(&word(0), &word(1), &word(2), turns.as_ref());
+      later.push(Work::Reply { about: word(0), later: answer });
+      Object::none()
+    }
+    "run" => {
+      let command = Command {
+        about: word(0),
+        here: word(1),
+        command: word(2),
+        fed: at(3).and_then(|one| one.as_bool()).unwrap_or_default(),
+        timeout: at(4).and_then(number).unwrap_or_default(),
+        merged: at(5).and_then(|one| one.as_bool()).unwrap_or_default(),
+      };
+      let about = command.about.clone();
+      let run = world.run(command);
+      running.insert(about, run);
+      Object::none()
+    }
+    "wait" => {
+      let done = world.wait(at(1).and_then(number).unwrap_or_default());
+      later.push(Work::Wait { about: word(0), later: done });
+      Object::none()
+    }
+    "prompt" => {
+      let closed = world.prompt(&word(0), &word(1), &word(2));
+      later.push(Work::Prompt { about: word(0), later: closed });
+      Object::none()
+    }
+    "feed" => {
+      if let Some(run) = running.get_mut(&word(0)) {
+        run.feed(at(1).and_then(|one| one.as_str().map(str::to_owned)));
+      }
+      Object::none()
+    }
+    "slay" => {
+      if let Some(mut run) = running.remove(&word(0)) {
+        run.slay();
+      }
+      Object::none()
+    }
+    _ => return Err(Fault::refused(format!("the World of the host has no {name}"))),
+  })
+}
+
+/// What the World answered, as the engine reads it: the text, or the refusal.
+fn answered(got: Result<Text, Fault>) -> Object {
+  match got {
+    Ok(text) => text.object(),
+    Err(fault) => fault.object(),
   }
 }
 
@@ -108,6 +221,7 @@ impl Hosting {
 fn replied(reply: Reply) -> Object {
   match reply {
     Reply::Nothing => Object::none(),
+    Reply::Say(fact) => Object::tuple([Object::string("say"), fact.0]),
     Reply::Raised(fault) => Object::tuple([Object::string("raised"), fault.object()]),
     Reply::Over => Object::tuple([Object::string("over")]),
     Reply::Calls { name, args, kwargs } => Object::tuple([
@@ -122,6 +236,11 @@ fn replied(reply: Reply) -> Object {
 /// The text a word of a call is, or nothing.
 fn text(got: Option<ObjectRef<'_>>) -> String {
   got.and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default()
+}
+
+/// The number a word of a call is, whether the engine said it whole or not.
+fn number(got: ObjectRef<'_>) -> Option<f64> {
+  got.as_float().or_else(|| got.as_int().map(|n| n as f64))
 }
 
 /// The sandbox and the host it reaches, which is what a life holds.
@@ -175,29 +294,77 @@ impl Inner {
     Ok(())
   }
 
-  /// The life driven as far as it goes without the host: everything the work of an ear said once its hearing was
-  /// over is said into the engine, under the name of that ear, in the order it was said.
+  /// One thing the World said, said into the engine.
+  fn deliver(&mut self, said: &Said) -> Result<(), Fault> {
+    self.run("said(__engine, __ears, __one)", vec![("__one", said.object())]).map(|_| ())
+  }
+
+  /// The life driven as far as it goes without the host: everything the World said unasked is said into the
+  /// engine, and every piece of work the World finished is said as the fact the engine waits for.
   fn pump(&mut self, cx: &mut Context<'_>) -> Result<(), Fault> {
     loop {
-      let said = self.host.voice.drained(cx.waker());
-      if said.is_empty() {
-        return Ok(());
+      let mut moved = false;
+      for said in self.host.voice.drained(cx.waker()) {
+        self.deliver(&said)?;
+        moved = true;
       }
-      for one in said {
-        self.run("said(__engine, __ears, __one)", vec![("__one", one.object())])?;
+      let mut i = 0;
+      while i < self.host.later.len() {
+        let done = match &mut self.host.later[i] {
+          Work::Reply { about, later } => match later.as_mut().poll(cx) {
+            Poll::Ready(turn) => Some(Said::Fact(Fact::says("done", about, [turn]))),
+            Poll::Pending => None,
+          },
+          Work::Wait { about, later } => match later.as_mut().poll(cx) {
+            Poll::Ready(()) => Some(Said::Fact(Fact::says("done", about, [Object::none()]))),
+            Poll::Pending => None,
+          },
+          Work::Prompt { about, later } => match later.as_mut().poll(cx) {
+            Poll::Ready(Ok(value)) => Some(Said::Closed { id: about.clone(), value }),
+            Poll::Ready(Err(fault)) => {
+              Some(Said::Closed { id: about.clone(), value: fault.object() })
+            }
+            Poll::Pending => None,
+          },
+        };
+        match done {
+          Some(said) => {
+            self.host.later.remove(i);
+            self.deliver(&said)?;
+            moved = true;
+          }
+          None => i += 1,
+        }
+      }
+      if !moved {
+        return Ok(());
       }
     }
   }
 }
 
-/// A life being opened: the ears the host gives it, and the names they hear by.
+/// A life being opened: the World it runs on, and the ears the host gives it.
 pub struct Opening {
-  ears: Box<dyn Ears>,
+  world: Worldly,
+  ears: Option<Box<dyn Ears>>,
   names: Vec<String>,
   limits: ResourceLimits,
 }
 
 impl Opening {
+  /// The ears of the host, and the names they hear by, in the order the engine hears them. A host that has no
+  /// typed World names `world` among them.
+  #[must_use]
+  pub fn ears(
+    mut self,
+    ears: impl Ears + 'static,
+    names: impl IntoIterator<Item = impl Into<String>>,
+  ) -> Self {
+    self.ears = Some(Box::new(ears));
+    self.names.extend(names.into_iter().map(Into::into));
+    self
+  }
+
   /// The limits of the sandbox: how much memory a life may hold, how long it may run.
   #[must_use]
   pub fn limits(mut self, limits: ResourceLimits) -> Self {
@@ -205,21 +372,26 @@ impl Opening {
     self
   }
 
-  /// The life, opened from what the ears of the host kept of the life before it.
+  /// The life, opened from what a World kept of the life before it.
   ///
-  /// The record is the entries that were kept, each one fact. The stand-in runs first in a module of its own, then
-  /// the engine, and `boot` is given the Kernel and the gate of the crate, then one generator for each ear of the
-  /// host, in the order of their names.
+  /// The record is the entries the World kept, each one fact. The stand-in runs first in a module of its own, then the engine, and
+  /// `boot` is given the Kernel of the crate and one generator for the World and for each ear.
   pub fn boot(self, record: impl IntoIterator<Item = Object>) -> Result<Life, Fault> {
-    let Opening { mut ears, names, limits } = self;
+    let Opening { mut world, ears, mut names, limits } = self;
     let voice = Voice::default();
-    ears.opened(voice.clone());
-    let host = Hosting { ears, voice, calls: Vec::new() };
+    if let Worldly::Typed(world) = &mut world {
+      world.opened(voice.clone());
+      names.insert(0, WORLD.to_owned());
+    }
+    let typed = matches!(world, Worldly::Typed(_));
+    let host =
+      Hosting { world, ears, voice, later: Vec::new(), running: HashMap::new(), calls: Vec::new() };
     let mut inner = Inner { sand: Sand::new(limits), host, watchers: HashMap::new() };
     inner.ran(PREAMBLE, vec![])?;
-    // The two objects of the host and the two modules are bound as names of the session, which every later piece
-    // of code of the stand-in reads.
-    let opening = "__engine = loaded(__source, {**MODULE})\n__sheet = loaded(__sheet_source, {})\n__gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __record, __gate, __ears, __names)\n(__root, __raised)";
+    // The three objects of the host and the two modules are bound as names of the session, which every later
+    // piece of code of the stand-in reads.
+    let opening = "__engine = loaded(__source, {**MODULE})\n__sheet = loaded(__sheet_source, {})\n__world, __gate, __ears = __given\n__root, __raised = opened(__engine, __sheet, __record, __world, __gate, __ears, __names)\n(__root, __raised)";
+    let world = if typed { object("World", id(objects::WORLD)) } else { Object::none() };
     let got = inner.ran(
       opening,
       vec![
@@ -228,7 +400,11 @@ impl Opening {
         ("__record", Object::list(record)),
         (
           "__given",
-          Object::tuple([object("Gate", id(objects::GATE)), object("Ears", id(objects::EARS))]),
+          Object::tuple([
+            world,
+            object("Gate", id(objects::GATE)),
+            object("Ears", id(objects::EARS)),
+          ]),
         ),
         ("__names", Object::list(names.into_iter().map(Object::string))),
       ],
@@ -252,16 +428,36 @@ pub struct Life {
 }
 
 impl Life {
-  /// A life being opened on the ears of a host, which hear by these names, in this order.
-  pub fn open(
+  /// A life being opened on this World.
+  pub fn open(world: impl World + 'static) -> Opening {
+    Opening {
+      world: Worldly::Typed(Box::new(world)),
+      ears: None,
+      names: Vec::new(),
+      limits: ResourceLimits::default(),
+    }
+  }
+
+  /// A life being opened on the ears of a host alone, the World among them by name.
+  pub fn open_on(
     ears: impl Ears + 'static,
     names: impl IntoIterator<Item = impl Into<String>>,
   ) -> Opening {
     Opening {
-      ears: Box::new(ears),
-      names: names.into_iter().map(Into::into).collect(),
+      world: Worldly::Heard,
+      ears: None,
+      names: Vec::new(),
       limits: ResourceLimits::default(),
     }
+    .ears(ears, names)
+  }
+
+  /// A life on this World, opened from the record.
+  pub fn boot(
+    world: impl World + 'static,
+    record: impl IntoIterator<Item = Object>,
+  ) -> Result<Life, Fault> {
+    Life::open(world).boot(record)
   }
 
   /// The root chain of the life, which is the first act of any record.
@@ -353,8 +549,8 @@ impl Life {
     )
   }
 
-  /// The life driven as far as it goes without the host: what the work of its ears said, said into the engine.
-  /// An awaited act drives the life itself; this is for a host that awaits nothing.
+  /// The life driven as far as it goes without the host: what the World said unasked and the work it finished,
+  /// said into the engine. An awaited act drives the life itself; this is for a host that awaits nothing.
   pub async fn drive(&mut self) -> Result<(), Fault> {
     std::future::poll_fn(|cx| Poll::Ready(self.held.pump(cx))).await
   }
@@ -587,8 +783,8 @@ impl Came for Text {
 
 /// One act of a life, awaited for what it comes to.
 ///
-/// It borrows the life for as long as it is awaited, since awaiting it drives the life: what the work of the ears
-/// said is said into the engine until the act is done. An act that completed with an exception
+/// It borrows the life for as long as it is awaited, since awaiting it drives the life: what the World said and
+/// the work it finished is said into the engine until the act is done. An act that completed with an exception
 /// gives that fault. Dropping it leaves the act living; the life holds what it comes to under its name.
 pub struct Act<'a, T> {
   life: &'a mut Life,

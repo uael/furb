@@ -18,7 +18,7 @@ import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { decodeRecord, type Life } from "../index.cjs";
 import { Activity, type RunState } from "./activity.js";
 import { FileChanges } from "./changes.js";
-import { type Call, type Ear, Ears, fault } from "./ears.js";
+import { type Ears, WorldAdapter, type WorldHandler, type WorldRequest } from "./ears.js";
 import { attachImage, type ImageAttachment, ImageCache, turnImages } from "./images.js";
 import { furbDirectory, saveFile } from "./project.js";
 import { RecordFile } from "./record.js";
@@ -27,7 +27,6 @@ import {
   actorParts,
   type Entry,
   type Fact,
-  isQuestion,
   marked,
   modelNamed,
   type OperatorPrompt,
@@ -48,8 +47,6 @@ function system(): string {
 
 /** The kinds of act whose work the record may show begun and not done, which waits for a wake. */
 const PENDING = ["prompt", "rung", "bash", "wait"];
-/** The questions that are new work of the World, which a World that inspects a record does not do. */
-const WORK = ["read", "write", "clock", "chance", "reply", "bash", "wait", "prompt"];
 /** The longest delay that one timer holds, in milliseconds. */
 const LONGEST = 2 ** 31 - 1;
 
@@ -64,14 +61,6 @@ function at(time: number, action: () => void): () => void {
   if (Number.isFinite(time)) wait();
   return () => clearTimeout(timer);
 }
-
-/** One fact the World says while it hears, by the call of say. */
-const say = (kind: string, id: string, ...words: unknown[]): Call => ({
-  verb: "say",
-  args: [kind, id, ...words],
-});
-/** A number, marked as a float, since a whole number crosses as an int. */
-const float = (value: number) => ({ is: "float", args: [String(value)] });
 
 /** A value the operator gives, in the shape its prompt wants: a whole number crosses as an int, so a float prompt
  * takes it marked as a float. */
@@ -121,16 +110,12 @@ interface Command {
   command: string;
   fed: boolean;
   timeout: number | null;
-}
-/** A command the World took: whether its stderr goes with its stdout, its two streams as they came, which the World
- * answers the command with when it ends, and its process once it runs. */
-interface Running {
   merged: boolean;
-  stdout: string;
-  stderr: string;
-  child?: ChildProcessWithoutNullStreams;
-  cancel?(): void;
-  stop?(): void;
+}
+interface Running {
+  child: ChildProcessWithoutNullStreams;
+  cancel(): void;
+  stop(): void;
 }
 
 /** Files, processes, pi-ai models, and durable records. The engine and its order remain native. */
@@ -152,21 +137,14 @@ export class World extends EventEmitter {
    * kind: the engine starts none of them until a wake that this life says, which resume says. One that a pause of
    * the operator holds waits for the wake of the operator. */
   readonly pending = new Map<string, string>();
-  /** The ears the life boots on: the World itself, and the observer that keeps every fact for the host. Their
-   * callable carries a show or a filter of the host into the life. */
+  /** The ears of the life, whose callable carries a show or a filter of the host into it. */
   readonly ears: Ears;
   private life?: Life;
+  private readonly adapter: WorldAdapter;
   private readonly controller = new AbortController();
   /** The model request of each rung that a reply of the World asks for, which a done of that rung ends. */
   private readonly replies = new Map<string, AbortController>();
-  /** The commands the World took, by their acts. */
   private readonly commands = new Map<string, Running>();
-  /** The actor whose last reply on each chain answered nothing, so a second such reply in a row pauses the chain. */
-  private readonly mute = new Map<string, string>();
-  /** The name of every act the observer holds whole, and of every name a fact was about that is no act. */
-  private readonly seen = new Set<string>();
-  /** Whether the observer will give its host the facts it heard. */
-  private queued = false;
   private readonly options: WorldOptions;
   /** The roster with the efforts and the window of each actor, which the standing of every chain gives. */
   private readonly actors: Actor[];
@@ -224,7 +202,17 @@ export class World extends EventEmitter {
       changes?.dispose();
       throw error;
     }
-    this.ears = new Ears({ world: this.hears(), observer: this.observer() });
+    this.adapter = new WorldAdapter(
+      this.handle,
+      this.hear,
+      (error) => this.emit("fault", error),
+      (fact) => {
+        if (this.stopped) return;
+        this.facts.push(fact);
+        return this.activity.hear(fact);
+      },
+    );
+    this.ears = this.adapter.ears;
   }
 
   /** The model an actor names, with or without its effort, and nothing when the World holds no such model. */
@@ -253,18 +241,18 @@ export class World extends EventEmitter {
   open(): Life {
     if (this.life) throw new Error("This World already owns a life.");
     try {
-      this.life = this.ears.boot(this.records.entries);
+      this.life = this.adapter.boot(this.records.entries);
       // A life that drifted keeps nothing more, so this World refuses to open on it.
       const raised = this.life.raised;
       if (raised) throw new Error(`${raised.is}: ${raised.args.map(String).join(" ")}`);
       // The journal said the whole record again before boot returned, so every act that is not done now is one the
-      // record showed begun and not done, which the observer reads whole when no ear heard it.
-      this.held(this.life);
+      // record showed begun and not done.
       for (const act of this.activity.acts.values())
         if (PENDING.includes(act.kind) && !act.done && !act.paused) this.pending.set(act.id, act.kind);
       this.save();
       return this.life;
     } catch (error) {
+      this.adapter.stopped = true;
       this.life?.dispose();
       this.records.dispose();
       this.changes.dispose();
@@ -274,294 +262,113 @@ export class World extends EventEmitter {
     }
   }
 
-  /** The World as the ear of the life. It answers a stand, a clock, a chance, a read and a write at once, each path
-   * resolved against the directory its chain stands in. It takes a reply, a command, a wait and a prompt to the
-   * operator with a started, and its work says each done later. It feeds its commands and ends every one a control
-   * is over, and it keeps what the journal says to keep. A World that inspects a record does no new work. */
-  private *hears(): Ear {
-    for (;;) {
-      const fact = (yield null) as Fact | null;
-      if (!fact) continue;
-      const [kind, id, by, ...words] = fact;
-      if (this.options.readOnly && WORK.includes(kind)) {
-        yield say("done", id, fault(new Error("Record inspection cannot do new work of the World.")));
-        continue;
+  handle = ({ kind, args }: WorldRequest): unknown => {
+    // An inspection says no wake, so the engine starts nothing, and a World that inspects does nothing new.
+    if (
+      this.options.readOnly &&
+      ["Read", "Write", "Clock", "Chance", "Reply", "Run", "Wait", "Prompt"].includes(kind)
+    )
+      throw new Error("Record inspection cannot do new work of the World.");
+    switch (kind) {
+      case "Stand":
+        return [[...this.actors, ["operator", [], 200000]], this.directory, this.actor];
+      case "Clock":
+        return Date.now() / 1000;
+      case "Chance":
+        return Math.random();
+      case "Keep":
+        this.records.keep(args[0] as Entry);
+        return null;
+      case "Read": {
+        const path = this.path(String(args[0]), String(args[1]));
+        let info: ReturnType<typeof statSync>;
+        try {
+          info = statSync(path);
+        } catch (error) {
+          // A path that names nothing is said in plain words, which the model and the operator both read.
+          if ((error as NodeJS.ErrnoException).code === "ENOENT")
+            throw new Error(`There is no file at ${path}.`);
+          throw error;
+        }
+        if (!info.isFile() || info.size > 524288)
+          throw new Error(`Read needs a text file at most 524288 bytes: ${path}`);
+        return {
+          path,
+          content: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(readFileSync(path)),
+        };
       }
-      switch (kind) {
-        case "stand":
-          yield say("done", id, [[...this.actors, ["operator", [], 200000]], this.directory, this.actor]);
-          break;
-        case "clock":
-          yield say("done", id, float(Date.now() / 1000));
-          break;
-        case "chance":
-          yield say("done", id, float(Math.random()));
-          break;
-        case "read":
-        case "write": {
-          const here = String(yield { verb: "cwd", kwargs: { on: words[0] } });
-          let value: unknown;
-          try {
-            const text = words[1] as { path: string; content: string };
-            value = {
-              is: "Text",
-              ...(kind === "read"
-                ? this.read(here, String(words[1]))
-                : this.write(here, text.path, text.content)),
-            };
-          } catch (error) {
-            value = fault(error);
-          }
-          yield say("done", id, value);
-          break;
+      case "Write": {
+        const path = this.path(String(args[0]), String(args[1]));
+        let before = "";
+        try {
+          before = readFileSync(path, "utf8");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         }
-        case "keep":
-          this.records.keep(words[0] as Entry);
-          break;
-        case "reply": {
-          yield say("started", id);
-          const [chain, actor] = [String(words[0]), String(words[1])];
-          const turns = (yield { verb: "turns", kwargs: { on: chain } }) as Turn[];
-          this.later(
-            id,
-            () => this.reply(id, by, chain, actor, turns),
-            (turn) => {
-              this.mute.delete(chain);
-              const [role, python, usage, blocks] = turn;
-              const cost = usage ? [...usage.slice(0, 4), float(usage[4])] : usage;
-              if (!this.life?.outcome(id).done) this.life?.say("done", id, [[role, python, cost, blocks]]);
-            },
-            (error) => {
-              if (this.mute.get(chain) === actor) this.life?.pause(chain);
-              this.mute.set(chain, actor);
-              const why =
-                error instanceof Error
-                  ? `${error.name}: ${error.message}`
-                  : error && typeof error === "object" && "is" in error && "args" in error
-                    ? `${error.is}: ${Array.isArray(error.args) ? error.args.map(String).join(", ") : String(error.args)}`
-                    : `Refused: ${String(error)}`;
-              this.life?.say("done", id, [{ is: "Refused", args: [`${actor} answered nothing: ${why}`] }]);
-            },
-          );
-          break;
-        }
-        case "bash": {
-          yield say("started", id);
-          const [on, command, fed, timeout] = words;
-          const here = String(yield { verb: "cwd", kwargs: { on } });
-          const merged = Boolean(yield { verb: "ask", args: ["merged", on, id] });
-          const held: Running = { merged, stdout: "", stderr: "" };
-          this.commands.set(id, held);
-          try {
-            this.run(
-              { id, here, command: String(command), fed: Boolean(fed), timeout: timeout as number | null },
-              held,
-            );
-          } catch (error) {
-            this.commands.delete(id);
-            yield say("done", id, fault(error));
-          }
-          break;
-        }
-        case "wait":
-          yield say("started", id);
-          this.later(
-            id,
-            () => this.wait(id, words[1]),
-            () => {
-              if (!this.life?.outcome(id).done) this.life?.say("done", id, [null]);
-            },
-            (error) => this.life?.say("done", id, [fault(error)]),
-          );
-          break;
-        case "prompt":
-          yield say("started", id);
-          this.later(
-            id,
-            () => this.prompt(id, String(words[1]), String(words[2])),
-            (value) => this.life?.close(value, id),
-            (error) => this.life?.close(fault(error), id),
-          );
-          break;
-        case "out": {
-          const held = this.commands.get(id);
-          if (held) held[held.merged || words[1] === "stdout" ? "stdout" : "stderr"] += String(words[0]);
-          break;
-        }
-        case "feed":
-          this.feed(id, words[0] === null ? null : String(words[0]));
-          break;
-        case "cancel":
-        case "close":
-          for (const [running, held] of [...this.commands])
-            if (yield { verb: "covers", args: [fact, running] }) {
-              held.stop?.();
-              this.feeds.delete(running);
-              this.commands.delete(running);
-            }
-          break;
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, String(args[2]));
+        this.changes.append({ path, before, after: String(args[2]) });
+        // A listener may ask the life, which no ear may do while it speaks, so the host hears of it after the ear.
+        queueMicrotask(() => this.emit("change"));
+        return { path, content: readFileSync(path, "utf8") };
       }
-    }
-  }
-
-  /** The observer: an ear that says nothing and keeps every fact it hears for the host, and before a fact the act it
-   * is about when it holds no such act, since an ear hears a question only while it is offered it. */
-  private *observer(): Ear {
-    for (;;) {
-      const fact = (yield null) as Fact | null;
-      if (fact && !this.stopped) yield* this.observe(fact);
-    }
-  }
-
-  /** One fact the observer keeps, and before it the act it is about, read whole from the life at the first fact
-   * about an act it was not offered; the host hears of them after the ear, since a listener may ask the life. */
-  private *observe(fact: Fact): Generator<Call, void, unknown> {
-    const [kind, id] = fact;
-    if (!this.seen.has(id)) {
-      this.seen.add(id);
-      const made = isQuestion(kind, id) ? null : ((yield { verb: "get", args: [id] }) as Fact | null);
-      if (made) yield* this.observe(made);
-    }
-    this.facts.push(fact);
-    yield* this.activity.hear(fact);
-    if (this.queued) return;
-    this.queued = true;
-    queueMicrotask(() => {
-      this.queued = false;
-      this.hear();
-    });
-  }
-
-  /** The acts of the record that are neither done nor heard when the life opens: the record holds an act the World
-   * started and did not end with no fact, so no ear heard it, and the observer reads each whole from the life, the
-   * calls of its hearing said as the operator. */
-  private held(life: Life): void {
-    for (const [[kind, id]] of this.records.entries) {
-      const made =
-        isQuestion(kind, id) && !this.seen.has(id) ? (life.call("get", [id], {}) as Fact | null) : null;
-      if (!made || life.outcome(id).done) continue;
-      const hearing = this.observe(made);
-      for (let next = hearing.next(); !next.done; )
-        next = hearing.next(life.call(next.value.verb, next.value.args ?? [], next.value.kwargs ?? {}));
-    }
-  }
-
-  /** The text at a path, resolved from where the chain stands. */
-  private read(here: string, path: string): { path: string; content: string } {
-    const at = this.path(here, path);
-    let info: ReturnType<typeof statSync>;
-    try {
-      info = statSync(at);
-    } catch (error) {
-      // A path that names nothing is said in plain words, which the model and the operator both read.
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error(`There is no file at ${at}.`);
-      throw error;
-    }
-    if (!info.isFile() || info.size > 524288)
-      throw new Error(`Read needs a text file at most 524288 bytes: ${at}`);
-    return {
-      path: at,
-      content: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(readFileSync(at)),
-    };
-  }
-
-  /** The content onto a path, resolved from where the chain stands, and the text as it stands after. */
-  private write(here: string, path: string, content: string): { path: string; content: string } {
-    const at = this.path(here, path);
-    let before = "";
-    try {
-      before = readFileSync(at, "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    mkdirSync(dirname(at), { recursive: true });
-    writeFileSync(at, content);
-    this.changes.append({ path: at, before, after: content });
-    // A listener may ask the life, which no ear may do while it speaks, so the host hears of it after the ear.
-    queueMicrotask(() => this.emit("change"));
-    return { path: at, content: readFileSync(at, "utf8") };
-  }
-
-  /** A wait of the seconds a wait carries, which a wait that an earlier World started ends when it would have
-   * ended then. */
-  private wait(id: string, seconds: unknown): Promise<null> {
-    if (typeof seconds !== "number") throw new Error(`A wait needs a number of seconds, not ${seconds}.`);
-    const deadline = this.deadlines.get(id) ?? Date.now() + seconds * 1000;
-    this.deadlines.set(id, deadline);
-    this.save();
-    return new Promise((resolve, reject) => {
-      const signal = this.controller.signal;
-      const abort = () => {
-        cancel();
-        reject(signal.reason);
-      };
-      const cancel = at(deadline, () => {
-        signal.removeEventListener("abort", abort);
-        this.deadlines.delete(id);
+      case "Reply":
+        return this.reply(
+          String(args[0]),
+          String(args[1]),
+          String(args[2]),
+          String(args[3]),
+          args[4] as Turn[],
+        );
+      case "Wait": {
+        const [seconds, id] = [args[0], String(args[1])];
+        if (typeof seconds !== "number") throw new Error(`A wait needs a number of seconds, not ${seconds}.`);
+        // A wait that an earlier World started ends when it would have ended then.
+        const deadline = this.deadlines.get(id) ?? Date.now() + seconds * 1000;
+        this.deadlines.set(id, deadline);
         this.save();
-        resolve(null);
-      });
-      if (signal.aborted) abort();
-      else signal.addEventListener("abort", abort, { once: true });
-    });
-  }
-
-  /** One text into the stdin of a command, and nothing to close it, kept until the command runs. */
-  private feed(id: string, text: string | null): void {
-    const child = this.commands.get(id)?.child;
-    if (!child) this.feeds.set(id, [...(this.feeds.get(id) ?? []), text]);
-    else if (text === null) child.stdin.end();
-    else child.stdin.write(text);
-  }
-
-  /** Work of the World that takes time, begun once the ear is done hearing, whose end the World says into the life
-   * as its own, unless the life is over or the act is done. */
-  private later<T>(
-    id: string,
-    work: () => Promise<T>,
-    done: (value: T) => void,
-    fail: (error: unknown) => void,
-  ): void {
-    queueMicrotask(() => {
-      if (this.closed) return;
-      Promise.resolve()
-        .then(work)
-        .then((value) => {
-          if (!this.closed) this.speak(() => done(value));
-        })
-        .catch((error) => {
-          if (this.closed || this.life?.outcome(id).done) return;
-          try {
-            this.speak(() => fail(error));
-          } catch (failure) {
-            this.emit("fault", failure);
-          }
+        return new Promise((resolve, reject) => {
+          const signal = this.controller.signal;
+          const abort = () => {
+            cancel();
+            reject(signal.reason);
+          };
+          const cancel = at(deadline, () => {
+            signal.removeEventListener("abort", abort);
+            this.deadlines.delete(id);
+            this.save();
+            resolve(null);
+          });
+          if (signal.aborted) abort();
+          else signal.addEventListener("abort", abort, { once: true });
         });
-    });
-  }
-
-  private get closed(): boolean {
-    return this.stopped || this.life?.disposed === true;
-  }
-
-  /** What the work of the World says, said under its name. */
-  private speak(action: () => void): void {
-    if (!this.life || this.closed) return;
-    const previous = this.life.site("world");
-    try {
-      action();
-    } finally {
-      if (!this.life.disposed) this.life.site(previous);
+      }
+      case "Run":
+        this.run(args[0] as Command);
+        return null;
+      case "Feed": {
+        const id = String(args[0]);
+        const child = this.commands.get(id)?.child;
+        if (!child)
+          this.feeds.set(id, [...(this.feeds.get(id) ?? []), args[1] === null ? null : String(args[1])]);
+        else if (args[1] === null) child.stdin.end();
+        else child.stdin.write(String(args[1]));
+        return null;
+      }
+      case "Slay":
+        this.commands.get(String(args[0]))?.stop();
+        this.feeds.delete(String(args[0]));
+        return null;
+      case "Prompt":
+        return this.prompt(String(args[0]), String(args[1]), String(args[2]));
     }
-  }
+  };
 
   private path(here: string, path: string): string {
     if (path.includes("://")) throw new Error(`No file at ${path}.`);
     return resolve(this.directory, here, path);
   }
 
-  /** The facts the observer kept since the host last heard of them, given to the host, and the work of each act
-   * that is done let go. */
   private hear = (): void => {
     if (this.stopped) return;
     const facts = this.facts.slice(this.emitted);
@@ -785,9 +592,8 @@ export class World extends EventEmitter {
       });
   }
 
-  /** A command, run in the directory its chain stands in: it says what it writes as it writes it, and its end. */
-  private run(command: Command, held: Running): void {
-    const child = spawn(shell, ["-c", held.merged ? `exec 2>&1\n${command.command}` : command.command], {
+  private run(command: Command): void {
+    const child = spawn(shell, ["-c", command.merged ? `exec 2>&1\n${command.command}` : command.command], {
       cwd: resolve(this.directory, command.here),
       stdio: "pipe",
       detached: process.platform !== "win32",
@@ -815,7 +621,7 @@ export class World extends EventEmitter {
         stop();
       },
     );
-    Object.assign(held, { child, cancel, stop });
+    this.commands.set(command.id, { child, cancel, stop });
     if (!command.fed) child.stdin.end();
     child.stdin.on("error", () => {});
     for (const text of this.feeds.get(command.id) ?? []) {
@@ -826,34 +632,19 @@ export class World extends EventEmitter {
     for (const name of ["stdout", "stderr"] as const) {
       child[name].setEncoding("utf8");
       child[name].on("data", (text: string) =>
-        this.deliver(() => this.speak(() => this.life?.say("out", command.id, [text, name]))),
+        this.deliver(() => this.adapter.say("out", command.id, [text, name])),
       );
     }
     child.on("error", (error) => {
       cancel();
-      this.deliver(() => this.exited(command.id, [{ is: "Refused", args: [error.message] }]));
+      this.commands.delete(command.id);
+      this.deliver(() => this.adapter.say("done", command.id, [{ is: "Refused", args: [error.message] }]));
     });
     child.on("close", (code) => {
       cancel();
-      this.deliver(() => this.exited(command.id, late ? null : code));
+      this.commands.delete(command.id);
+      this.deliver(() => this.adapter.exited(command.id, late ? null : code));
     });
-  }
-
-  /** A command ended, with its code, or with none at its timeout, or with the refusal of its process: the World says
-   * it done with the Exit of the streams it heard, unless a control ended it first. */
-  private exited(id: string, code: number | null | unknown[]): void {
-    const held = this.commands.get(id);
-    if (!held) return;
-    this.commands.delete(id);
-    const text = (stream: "stdout" | "stderr") => ({
-      is: "Text",
-      path: `${id}/${stream}`,
-      content: held[stream],
-    });
-    const exit = Array.isArray(code)
-      ? code
-      : [{ is: "Exit", code, stdout: text("stdout"), stderr: text("stderr") }];
-    this.speak(() => this.life?.say("done", id, exit));
   }
 
   /** Save what the next life needs, then end the life whatever the save came to. */
@@ -863,13 +654,14 @@ export class World extends EventEmitter {
     try {
       this.save();
     } finally {
+      this.adapter.stopped = true;
       this.life?.dispose();
       this.controller.abort();
       for (const request of this.prompts.values()) request.reject(new Error("The World was disposed."));
       this.prompts.clear();
       for (const command of this.commands.values()) {
-        command.cancel?.();
-        command.stop?.();
+        command.cancel();
+        command.stop();
       }
       this.commands.clear();
       this.images.clear();
@@ -906,23 +698,28 @@ export async function inspectRecord(
 export interface Session {
   life: Life;
   world?: World;
+  /** The adapter a World that replaces the supplied one speaks through: what a command writes and how it ends. */
+  adapter?: WorldAdapter;
   /** The ears of the life, whose callable carries a show or a filter of the host into it. */
   ears: Ears;
   dispose(): Promise<void>;
 }
-/** Use the built-in World, or open the life on ears of your own, the World among them, in the order the engine
- * offers them a question. */
+/** Use the built-in World, or replace it with a host callback. */
 export function boot(
-  options: WorldOptions & {
-    ears?: Record<string, Ear>;
-    entries?: Entry[];
-    onFacts?: (facts: Fact[]) => void;
-  } = {},
+  options: WorldOptions & { world?: WorldHandler; entries?: Entry[]; onFacts?: (facts: Fact[]) => void } = {},
 ): Session {
-  if (options.ears) {
-    const ears = new Ears(options.ears);
-    const life = ears.boot(options.entries);
-    return { life, ears, dispose: async () => life.dispose() };
+  if (options.world) {
+    const adapter = new WorldAdapter(options.world, options.onFacts);
+    const life = adapter.boot(options.entries);
+    return {
+      life,
+      adapter,
+      ears: adapter.ears,
+      dispose: async () => {
+        adapter.stopped = true;
+        life.dispose();
+      },
+    };
   }
   const world = new World(options);
   if (options.onFacts) world.on("facts", options.onFacts);

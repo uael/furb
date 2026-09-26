@@ -100,7 +100,7 @@ async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
 
 
 async def test_an_act_made_in_that_time_it_hears_at_once() -> None:
-  """An act made in that time it hears at once, since an act is offered to the ears while it is made and to no ear after the one that takes it, so a paused rung takes the wants of its run."""
+  """An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, so a paused rung takes the wants of its run."""
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
   act = engine.bash("slow", on=root)

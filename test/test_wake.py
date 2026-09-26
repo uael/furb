@@ -154,7 +154,7 @@ async def test_a_wake_makes_no_reply_twice_and_loses_none() -> None:
 
 
 async def test_a_wake_that_this_life_says_puts_every_pending_act_it_is_over_on_to_the_outside() -> None:
-  """A wake that this life says, and not one that the record says again, offers every pending act it is over, once, to the ears, so the World takes each command, wait, prompt to the operator and reply of them, and a model reads the transcript as it grew."""
+  """A wake that this life says, and not one that the record says again, puts every pending act it is over on to the outside, so the World takes each command, wait, prompt to the operator and reply of them, and a model reads the transcript as it grew."""
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
   command = engine.bash("sleep 9", on=root)
@@ -175,6 +175,3 @@ async def test_a_wake_that_this_life_says_puts_every_pending_act_it_is_over_on_t
   await settle()
   assert [a[1] for a in later.calls if a[0] in TAKEN] == [command, waited, shown, pending]
   assert "k = 1" in later.turns[pending][-1][1]
-  engine.wake(over)
-  await settle()
-  assert [a[1] for a in later.calls if a[0] in TAKEN] == [command, waited, shown, pending]

@@ -1,5 +1,14 @@
 import { afterEach, expect, test } from "bun:test";
-import { type Call, decodeRecord, type Ear, Ears, type Entry, type Fact, type Life } from "../src/index.ts";
+import {
+  decodeRecord,
+  type Ear,
+  Ears,
+  type Entry,
+  type Fact,
+  type Life,
+  WorldAdapter,
+  type WorldRequest,
+} from "../src/index.ts";
 import { display } from "../src/world.ts";
 
 const lives: Life[] = [];
@@ -9,105 +18,53 @@ afterEach(async () => {
 
 async function open(record: unknown[] = [], answer = 'close("hello")') {
   const entries: unknown[] = [];
-  const facts: Fact[] = [];
+  const facts: unknown[] = [];
   const files = new Map<string, string>([["a", "one\ntwo\n"]]);
   // A wait of no seconds is over at once; any other is over when the test says so, and never by the clock.
   const waits: (() => void)[] = [];
   let replies = 0;
-  let life: Life | undefined;
-  /** What the work of the World says once its hearing is over, said under its name. */
-  const speak = (kind: string, id: string, words: unknown[]) => {
-    const previous = life?.site("world") ?? "operator";
-    try {
-      life?.say(kind, id, words);
-    } finally {
-      life?.site(previous);
+  const world = ({ kind, args }: WorldRequest): unknown => {
+    switch (kind) {
+      case "Stand":
+        return [
+          [
+            ["model", ["low"], 200000],
+            ["operator", [], 200000],
+          ],
+          "/tmp",
+          "model/low",
+        ];
+      case "Keep":
+        entries.push(args[0]);
+        return null;
+      case "Clock":
+        return 123.5;
+      case "Chance":
+        return 0.25;
+      case "Read":
+        if (!files.has(String(args[1]))) throw new Error("missing file");
+        return { path: args[1], content: files.get(String(args[1])) };
+      case "Write":
+        files.set(String(args[1]), String(args[2]));
+        return { path: args[1], content: args[2] };
+      case "Reply":
+        replies++;
+        return Promise.resolve(["assistant", answer, [20, 8, 0, 0, 0.001], null]);
+      case "Wait":
+        return Number(args[0]) === 0 ? null : new Promise((resolve) => waits.push(() => resolve(null)));
+      case "Prompt":
+        return "operator answer";
+      default:
+        return null;
     }
   };
-  const later = (then: () => void) => queueMicrotask(then);
-  const say = (kind: string, id: string, ...words: unknown[]): Call => ({
-    verb: "say",
-    args: [kind, id, ...words],
-  });
-  // The World of the test as the one ear of the host: it keeps every fact it hears, answers what is its own at once,
-  // and takes a reply, a command, a wait and a prompt to the operator with a started.
-  const world = (function* (): Ear {
-    for (;;) {
-      const fact = (yield null) as Fact | null;
-      if (!fact) continue;
-      facts.push(fact);
-      const [kind, id, , ...words] = fact;
-      switch (kind) {
-        case "stand":
-          yield say("done", id, [
-            [
-              ["model", ["low"], 200000],
-              ["operator", [], 200000],
-            ],
-            "/tmp",
-            "model/low",
-          ]);
-          break;
-        case "keep":
-          entries.push(words[0]);
-          break;
-        case "clock":
-          yield say("done", id, 123.5);
-          break;
-        case "chance":
-          yield say("done", id, 0.25);
-          break;
-        case "read":
-          yield say(
-            "done",
-            id,
-            files.has(String(words[1]))
-              ? { is: "Text", path: words[1], content: files.get(String(words[1])) }
-              : { is: "Refused", args: ["missing file"] },
-          );
-          break;
-        case "write": {
-          const { path, content } = words[1] as { path: string; content: string };
-          files.set(path, content);
-          yield say("done", id, { is: "Text", path, content });
-          break;
-        }
-        case "reply":
-          yield say("started", id);
-          replies++;
-          later(() => speak("done", id, [["assistant", answer, [20, 8, 0, 0, 0.001], null]]));
-          break;
-        case "wait":
-          yield say("started", id);
-          if (Number(words[1]) === 0) later(() => speak("done", id, [null]));
-          else waits.push(() => speak("done", id, [null]));
-          break;
-        case "prompt":
-          yield say("started", id);
-          // The operator answers a prompt of a string the test did not close first, and the World refuses any other.
-          later(() => {
-            if (life?.outcome(id).done) return;
-            const previous = life?.site("world") ?? "operator";
-            const shape = String(words[1]);
-            life?.close(
-              shape === "str" ? "operator answer" : { is: "Refused", args: [`no answer of ${shape}`] },
-              id,
-            );
-            life?.site(previous);
-          });
-          break;
-        case "bash":
-          yield say("started", id);
-          break;
-      }
-    }
-  })();
-  life = new Ears({ world }).boot(record as Entry[]);
+  const adapter = new WorldAdapter(world, (batch) => facts.push(...batch));
+  const life = adapter.boot(record as Entry[]);
   lives.push(life);
   const release = () => {
     for (const done of waits.splice(0)) done();
   };
-  return { life, speak, entries, facts, release, files, replies: () => replies };
+  return { life, adapter, entries, facts, release, files, replies: () => replies };
 }
 
 test("native queries are synchronous and acts await the real engine and async World", async () => {
@@ -155,7 +112,7 @@ test("pause holds a model response until wake and cancel rejects a native await"
 });
 
 test("text, command results, and engine callables cross N-API", async () => {
-  const { life, speak } = await open();
+  const { life, adapter } = await open();
   expect(await life.read<Record<string, string>>("a")).toEqual({
     is: "Text",
     path: "a",
@@ -166,11 +123,8 @@ test("text, command results, and engine callables cross N-API", async () => {
   expect(await life.made<number[]>(show.id, [["one", "two"]], {})).toEqual([1]);
   await life.forget(show.id);
   const command = life.bash("fake", { fed: true }).id;
-  speak("out", command, ["hello\n", "stdout"]);
-  const stream = (name: string, content: string) => ({ is: "Text", path: `${command}/${name}`, content });
-  speak("done", command, [
-    { is: "Exit", code: 0, stdout: stream("stdout", "hello\n"), stderr: stream("stderr", "") },
-  ]);
+  adapter.say("out", command, ["hello\n", "stdout"]);
+  adapter.exited(command, 0);
   const exit = await life.result(command);
   expect(exit).toMatchObject({ is: "Exit", code: 0, stdout: { is: "Text", content: "hello\n" } });
 });
@@ -251,7 +205,7 @@ test("every ear hears a fact whose values have no plain form, and each value cro
 test("a record keeps a value with no plain form, so a later life makes the same act again", async () => {
   const first = await open();
   await first.life.rung(
-    "def takes(id):\n  say('started', id)\n  while True:\n    yield\nnote = act('note', '', takes, {1: 'a'}, 2**70, float('inf'))",
+    "def takes(id):\n  yield 'started', id\n  while True:\n    yield\nnote = act('note', '', takes, {1: 'a'}, 2**70, float('inf'))",
   );
   const note = first.life.inspect("note").value as string;
   // The operator speaks of the act, so the record keeps the act with its words.
@@ -302,10 +256,9 @@ test("the World reads the turns of a chain when it takes a reply, which carries 
   const world = (function* (): Ear {
     for (;;) {
       const fact = (yield null) as Fact;
-      if (fact?.[0] === "stand")
-        yield { verb: "say", args: ["done", fact[1], [[["model", ["low"], 200000]], "/tmp", "model/low"]] };
+      if (fact?.[0] === "stand") yield ["done", fact[1], [[["model", ["low"], 200000]], "/tmp", "model/low"]];
       if (fact?.[0] === "reply") {
-        yield { verb: "say", args: ["started", fact[1]] };
+        yield ["started", fact[1]];
         read.push(fact, yield { verb: "turns", kwargs: { on: fact[3] } });
       }
     }

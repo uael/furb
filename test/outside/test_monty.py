@@ -31,7 +31,7 @@ async def test_an_ear_that_says_a_verb_the_world_refuses_is_answered_with_the_re
   """A verb an ear says from its thread raises in the ear what it raised in the life, where the ear said it."""
   caught: list[str] = []
 
-  def asking() -> Generator[None, tuple | None]:
+  def asking() -> Generator[tuple | None, tuple | None]:
     while True:
       if (a := (yield)) is not None and a[0] == "poke":
         try:
@@ -50,7 +50,7 @@ async def test_a_show_the_engine_made_is_called_back_from_the_thread_of_an_ear()
   sand = Sand(files={"/w/n.txt": "one\ntwo\n"}, stands=STANDS)
   picked: list[list[int]] = []
 
-  def looking() -> Generator[None, tuple | None]:
+  def looking() -> Generator[tuple | None, tuple | None]:
     while True:
       if (a := (yield)) is not None and a[0] == "tell":
         picked.extend(show(text.lines) for note in a[3] if isinstance(note, tuple) for text, show in [note])

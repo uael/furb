@@ -11,7 +11,16 @@ use crate::value::{Object, ObjectRef, entry};
 pub struct Fact(pub Object);
 
 impl Fact {
-  /// One fact from an object, which must be a tuple whose kind and about are text.
+  /// A saying: a kind, what it is about, and its words, with no slot for who said it, since the bus says that.
+  /// It is what an ear yields and what a Voice says, and it is read by the engine and never by the host.
+  pub fn says(kind: &str, about: &str, words: impl IntoIterator<Item = Object>) -> Self {
+    let mut held = vec![Object::string(kind), Object::string(about)];
+    held.extend(words);
+    Fact(Object::tuple(held))
+  }
+
+  /// One fact or saying from an object, which must be a tuple whose kind and about are text: a fact has who said
+  /// it third, and a saying has its first word there.
   pub fn of(said: ObjectRef<'_>) -> Option<Fact> {
     let held = said.items()?;
     (held.len() >= 2 && held[..2].iter().all(|one| one.as_str().is_some()))
