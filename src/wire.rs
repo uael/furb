@@ -1,3 +1,8 @@
+//! The wire: a value of the sandbox as JSON, which is how the record keeps a fact and how TypeScript reads one.
+//!
+//! JSON holds plain data, and the wire keeps the rest whole: a value that JSON holds only in part crosses as a map
+//! that names its type under `is`, with what that type is made again from, so it comes back in as it went out.
+
 use crate::{Fault, Object, ObjectRef, Text, value::marked};
 use serde_json::{Value, json};
 
@@ -8,7 +13,7 @@ const SAFE: u64 = 9_007_199_254_740_991;
 /// fraction is a float; a whole number past the safe range is refused, since JavaScript holds it rounded. napi
 /// gives a whole number as an integer only within 32 bits, so the integer that reaches here past them is a BigInt,
 /// which is exact.
-pub fn inward(value: &Value) -> Result<Object, Fault> {
+pub(crate) fn inward(value: &Value) -> Result<Object, Fault> {
   Ok(match value {
     Value::Null => Object::none(),
     Value::Bool(value) => Object::bool(*value),
@@ -40,12 +45,13 @@ pub fn inward(value: &Value) -> Result<Object, Fault> {
 }
 
 /// A value of the sandbox, as JavaScript reads it. Every value crosses, so an ear hears every fact.
-pub fn outward(value: ObjectRef<'_>) -> Value {
+#[cfg(feature = "typescript")]
+pub(crate) fn outward(value: ObjectRef<'_>) -> Value {
   outward_at(value, 0, false)
 }
 
 /// A value of the sandbox, as the record keeps it: a whole float keeps its mark, so a later life reads a float.
-pub fn record(value: ObjectRef<'_>) -> Value {
+pub(crate) fn record(value: ObjectRef<'_>) -> Value {
   outward_at(value, 0, true)
 }
 
@@ -121,7 +127,7 @@ fn outward_at(value: ObjectRef<'_>, depth: usize, durable: bool) -> Value {
 }
 
 /// Read numbers from serde's raw values before JavaScript can round them or erase a decimal point.
-pub fn decoded(value: &serde_json::value::RawValue, depth: usize) -> Result<Value, Fault> {
+pub(crate) fn decoded(value: &serde_json::value::RawValue, depth: usize) -> Result<Value, Fault> {
   if depth > 64 {
     return Err(Fault::refused("the record exceeds 64 levels"));
   }

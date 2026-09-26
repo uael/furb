@@ -1,11 +1,9 @@
 """The stand-in: what stands inside the sandbox for a host that is not python.
 
-The engine takes the World, and any other generator of the outside, as an ear under the name it hears by. A host
-written in another language is no generator, so a generator here stands in its place. The World is the one ear
-every life has, and what the engine asks of it is known, so its stand-in asks the World of the host by method,
-`world.read(here, path)`, and says the answer back: it is the World's law, the same for every host, and it reads
-the engine itself for what a World reads, which is where a path resolves and whether a command is merged. Any
-other ear is heard by name through the ears of the host, which hear every fact and say what they will.
+The engine takes any generator of the outside as an ear, under the name it hears by. An ear of a host written in
+another language is no generator, so a generator here stands in its place: every fact it is given goes to the ears
+of the host by that name, and what comes back is what the ear did with it. The ears of the World are ears of the
+host like any other.
 
 The Kernel is here too, since the word of a rung runs where the engine runs, in the module of its chain, and so
 is the gate, an ear of its own, which reads a word with the checker of the host on the sheet of the engine.
@@ -14,8 +12,8 @@ What crosses, crosses as the interpreter carries it, but for the callables, whic
 instance of a class of the engine comes in as a map that names its class under `is`, with its fields, since the
 interpreter makes no instance of a class of the sandbox on a host's behalf, and so the instance is made here. A
 name of the engine crosses as its name, both ways, so a show of the engine is the same show on both sides. A
-callable the engine made goes out as a handle the host calls it back by, and a callable of the host comes in as a
-name the ears of the host call it back by. A class a word defined goes out by a handle too, with the class it
+callable the engine made goes out as a handle the host calls it back by, and a function of the host comes in as a
+function the interpreter calls back on the host. A class a word defined goes out by a handle too, with the class it
 was made with, which the host holds as a type of its own derived from the type that base is there, and the class
 comes back in by; an instance of one goes out with its fields under its class and comes back in made here from
 them, with no `__init__` run. An instance of a class that inherits `str` is a string, and crosses as one. A map
@@ -36,33 +34,17 @@ type Ear = Generator[tuple | None, tuple | None]
 """An ear, as the engine hears one."""
 
 
-# The three objects of the host, as the stand-in reaches them. The sandbox makes no class from a class of the
+# The two objects of the host, as the stand-in reaches them. The sandbox makes no class from a class of the
 # interpreter, so they are read here and never run.
 if TYPE_CHECKING:
   from typing import Protocol
 
-  class World(Protocol):
-    """The World of the host, as its stand-in asks it: what the engine asks of the machine, by method."""
-
-    def stand(self) -> object: ...
-    def clock(self) -> float: ...
-    def chance(self) -> float: ...
-    def read(self, here: str, path: str) -> object: ...
-    def write(self, here: str, path: str, content: str) -> object: ...
-    def reply(self, about: str, on: str, actor: str, turns: list) -> None: ...
-    def run(self, about: str, here: str, command: str, fed: bool, timeout: float | None, merged: bool) -> None: ...
-    def wait(self, about: str, seconds: float) -> None: ...
-    def prompt(self, about: str, shape: str, message: str) -> None: ...
-    def feed(self, about: str, text: str | None) -> None: ...
-    def slay(self, about: str) -> None: ...
-    def keep(self, entry: object) -> None: ...
-
   class Ears(Protocol):
-    """The ears of the host, by name: every ear that is no World, and the World too when the host has none."""
+    """The ears of the host, by the name the engine hears each by."""
 
+    def born(self, name: str, by: str) -> object: ...
     def hears(self, name: str, fact: object) -> object: ...
     def answered(self, name: str, got: object) -> object: ...
-    def called(self, name: str, args: object, kwargs: object) -> object: ...
 
   class Gate(Protocol):
     """The gate of the host, which reads a sheet and answers each finding by its line."""
@@ -83,9 +65,6 @@ MODULE: dict[str, object] = {
 word reads them in a chain as it reads them in python, and as the gate reads them. No loader made the module here, so
 it has no spec and no loader. Python binds `__debug__` among its builtins, and the sandbox binds it in its main module
 alone."""
-RUNNING: dict[str, list] = {}
-"""RUNNING holds each command the World runs, by its act: whether its stderr flows into its stdout, and its two
-streams as they came, of which the World makes the Exit it answers the command with when the host says it ended."""
 MADE: dict[int, object] = {}
 """MADE holds every callable the engine made and every class a word defined that crossed to the host, by its
 handle, which is its identity, for as long as the host holds the handle: the host says when it forgot one, and it
@@ -176,17 +155,11 @@ def again(x: object, names: Names, ears: Ears) -> object:
       assert isinstance(cls, type)
       return instance(cls, {str(k): again(v, names, ears) for k, v in fields.items()})
     case {"is": "ear", "name": str(name), "started": bool(started)}:
-      ear = crossing(name, ears, names)
+      ear = crossing(name, ears, names, started=started)
       # A generator that was started already stands at a yield, and so must its stand-in.
       if started:
         ear.send(None)
       return ear
-    # A callable of the host, called back through the ears by its name, with what it is given as it goes out,
-    # and what it gives back made again, as anything of the host is.
-    case {"is": "callable", "name": str(name)}:
-      return lambda *args, **kwargs: again(
-        ears.called(name, outward(list(args), names), outward(kwargs, names)), names, ears
-      )
     case {"is": "Templated", "interpolations": list(held)}:
       return Templated([Interpolated(again(value, names, ears), str(expression)) for value, expression in held])
     case {"is": str(name), **fields} if callable(maker := known(names, name)):
@@ -203,97 +176,57 @@ def again(x: object, names: Names, ears: Ears) -> object:
       return [again(v, names, ears) for v in x]
     case tuple():
       return tuple(again(v, names, ears) for v in x)
+  # What else is callable is a function of the host, the one callable that crosses in as itself.
+  if callable(x) and not isinstance(x, type):
+    return hosted(x, names, ears)
   return x
 
 
-def worldly(world: World, names: Names, ears: Ears) -> Ear:
-  """The World as the engine hears it, over the World as a host has it.
+def hosted(f: Callable[..., object], names: Names, ears: Ears) -> Callable[..., object]:
+  """A function of the host, as the engine calls it: what it is given goes out as any value goes out, and what it
+  gives comes in as any value comes in, so a function that gives an ear gives the generator that stands in for it."""
 
-  It answers where it can: what the chains stand on, the clock, a chance, a read and a write, each after asking the
-  chain where its paths resolve. It takes what takes time, a reply, a command, a wait, a prompt to the operator,
-  with a started, and the host says what it came to into the life later. It keeps the streams of a command, feeds
-  it and ends every command a control is over, and it keeps what the journal says to keep.
-  """
-  cwd, ask, covers, turns = verb(names, "cwd"), verb(names, "ask"), verb(names, "covers"), verb(names, "turns")
+  def called(*args: object, **kwargs: object) -> object:
+    got = f(*[outward(v, names) for v in args], **{k: outward(v, names) for k, v in kwargs.items()})
+    return again(got, names, ears)
 
-  def at(on: str) -> str:
-    here = cwd(on=on)
-    assert isinstance(here, str)
-    return here
-
-  while True:
-    match (yield):
-      case ("stand", qid, *_):
-        yield "done", qid, again(world.stand(), names, ears)
-      case ("clock", qid, *_):
-        yield "done", qid, world.clock()
-      case ("chance", qid, *_):
-        yield "done", qid, world.chance()
-      case ("read", qid, _, on, path):
-        yield "done", qid, again(world.read(at(on), path), names, ears)
-      case ("write", qid, _, on, text):
-        yield "done", qid, again(world.write(at(on), text.path, text.content), names, ears)
-      case ("reply", about, _, on, actor):
-        yield "started", about
-        now = turns(on=on)
-        assert isinstance(now, list)
-        world.reply(about, on, actor, now)
-      case ("bash", about, _, on, command, fed, timeout):
-        yield "started", about
-        merged = bool(ask("merged", on, about))
-        RUNNING[about] = [merged, "", ""]
-        world.run(about, at(on), command, fed, timeout, merged)
-      case ("wait", about, _, _, seconds):
-        yield "started", about
-        world.wait(about, seconds)
-      case ("prompt", about, _, _, shape, message, _):
-        yield "started", about
-        world.prompt(about, shape, message)
-      case ("out", about, _, text, stream) if about in RUNNING:
-        RUNNING[about][1 if RUNNING[about][0] or stream == "stdout" else 2] += text
-      case ("feed", about, _, text) if about in RUNNING:
-        world.feed(about, text)
-      case ("cancel" | "close", *_) as fact:
-        for one in [x for x in RUNNING if covers(fact, x)]:
-          RUNNING.pop(one)
-          world.slay(one)
-      case ("keep", _, _, entry):
-        world.keep(entry)
+  return called
 
 
-def crossing(name: str, ears: Ears, names: Names) -> Ear:
+def crossing(name: str, ears: Ears, names: Names, *, started: bool = False) -> Ear:
   """One ear of the host, heard under its name.
 
-  The ear is on the other side, so this stands in for it: every fact it is given goes to the ears of the host, and
-  what comes back is what the ear did with it. It said something, which this yields, and the bus hands back the
-  fact as it was said, which goes to the host next. It said nothing, so this waits for the next fact. It said a
-  verb, which is said here by its name and its value handed back. It is over, so this returns, and it raised, so
-  this raises.
+  The ear is on the other side, so this stands in for it. At its birth the ear is told the name it speaks by, and
+  then every fact it is given goes to the ears of the host, and what comes back is what the ear did with it. It said
+  something, which this yields, and the bus hands back the fact as it was said, which goes to the host next. It said
+  nothing, so this waits for the next fact. It said a verb, which is said here by its name and its value handed
+  back. It is over, so this returns, and it raised, so this raises. A generator that the host started before it
+  crossed was born there, so its stand-in begins where it waits.
   """
-  a = None
+  speaking = names["site"]
+  assert isinstance(speaking, ContextVar)
+  reply = None if started else ears.born(name, speaking.get())
   while True:
+    match reply:
+      case ("calls", str(which), list(args), dict(kwargs)):
+        # What the ear asked raised: the ear is answered with the raise, and never left waiting.
+        try:
+          got = ("value", outward(asked(names, ears, which, args, kwargs), names))
+        except BaseException as no:
+          got = ("raised", no)
+        reply = ears.answered(name, got)
+        continue
+      case ("raised", no):
+        raise fault(no, names, ears)
+      case ("say", tuple(saying)):
+        made = again(saying, names, ears)
+        assert isinstance(made, tuple)
+        a = yield made
+      case ("over",):
+        return
+      case _:
+        a = yield
     reply = ears.hears(name, outward(a, names))
-    while True:
-      match reply:
-        case ("calls", str(which), list(args), dict(kwargs)):
-          # What the ear asked raised: the ear is answered with the raise, on its own thread, and never left waiting.
-          try:
-            got = ("value", outward(asked(names, ears, which, args, kwargs), names))
-          except BaseException as no:
-            got = ("raised", no)
-          reply = ears.answered(name, got)
-        case ("raised", no):
-          raise fault(no, names, ears)
-        case ("say", tuple(saying)):
-          made = again(saying, names, ears)
-          assert isinstance(made, tuple)
-          a = yield made
-          break
-        case ("over",):
-          return
-        case _:
-          a = yield
-          break
 
 
 def fault(no: object, names: Names, ears: Ears) -> BaseException:
@@ -452,26 +385,18 @@ def loaded(source: str, held: dict[str, object]) -> dict[str, object]:
   return held
 
 
-def opened(
-  engine: Names, sheet: Names, record: object, world: World | None, gate: Gate, ears: Ears, names: list[str]
-) -> tuple:
-  """A life of that engine, opened from what a World kept of the life before it, on the ears of these names, in
+def opened(engine: Names, sheet: Names, record: object, gate: Gate, ears: Ears, names: list[str]) -> tuple:
+  """A life of that engine, opened from what the store kept of the life before it, on the ears of these names, in
   this order: the root it opened on, and what boot raised, if it raised.
 
-  The World of the host stands under the name `world` when the host has one; otherwise the ears of the host hear
-  that name too, as they hear every other. The Kernel and the gate are given first, so that the gate answers
-  before any ear hears it. The record is the entries as the World hands them: each the fact as a tuple, and for a query
-  of a run what it was answered.
+  The Kernel and the gate are given first, so that the gate answers before any ear hears it. The record is the
+  entries as the store hands them: each the fact as a tuple.
   """
   MADE.clear()
-  RUNNING.clear()
   kept = again(record, engine, ears)
   assert isinstance(kept, list)
   entries = [(tuple(e[0]), *e[1:]) for e in kept]
-  outside = {
-    name: worldly(world, engine, ears) if name == "world" and world is not None else crossing(name, ears, engine)
-    for name in names
-  }
+  outside = {name: crossing(name, ears, engine) for name in names}
   try:
     root = verb(engine, "boot")(entries, kernel=kernel(engine), gate=gating(gate, sheet, engine), **outside)
   except BaseException as no:
@@ -547,33 +472,12 @@ class Templated:
     self.interpolations = interpolations
 
 
-def debugged(engine: Names, ears: Ears, pairs: list) -> None:
-  """debug, said by the operator with what a host can say: each expression beside its value."""
-  verb(engine, "debug")(
-    Templated([Interpolated(again(value, engine, ears), str(expression)) for expression, value in pairs])
-  )
-
-
-def said(engine: Names, ears: Ears, one: object) -> None:
-  """One thing the World said unasked, said into the life: a fact as the World, the end of a command, which the
-  World answers with the Exit of the streams it kept, a close of an act, or a pause.
-
-  A saying has no slot for who said it: the World is the one that speaks.
-  """
+def said(engine: Names, ears: Ears, by: str, saying: object) -> None:
+  """One saying of the work of an ear, said into the life once the hearing that began that work is over, under the
+  name of that ear."""
   site = engine["site"]
   assert isinstance(site, ContextVar)
-  match again(one, engine, ears):
-    case ("fact", (str(kind), str(about), *words)):
-      with site.set("world"):
-        verb(engine, "say")(kind, about, *words)
-    case ("exited", str(about), code) if about in RUNNING:
-      _, out, err = RUNNING.pop(about)
-      text = verb(engine, "Text")
-      with site.set("world"):
-        verb(engine, "say")(
-          "done", about, verb(engine, "Exit")(code, text(f"{about}/stdout", out), text(f"{about}/stderr", err))
-        )
-    case ("close", str(id), value):
-      verb(engine, "close")(value, id)
-    case ("pause", str(id)):
-      verb(engine, "pause")(id)
+  made = again(saying, engine, ears)
+  assert isinstance(made, tuple)
+  with site.set(by):
+    verb(engine, "say")(*made)
