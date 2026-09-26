@@ -24,7 +24,7 @@ async def test_a_close_is_a_cancel_that_carries_what_the_act_it_names_is_done_wi
 
 
 async def test_a_close_is_over_the_act_it_names_and_the_words_running_under_it() -> None:
-  """A close is over the act it names and the words running under it, where a cancel is over everything under it."""
+  """A close is over the act it names, the words running under it and the replies that ask for those words, where a cancel is over everything under it."""
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
   sand.script[root] = ["x = bash('slow')\nclose((await x).code)"]

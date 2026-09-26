@@ -6,7 +6,7 @@ import pytest
 
 from conftest import STANDS, Sand, keeping, life, said, settle
 from furb import engine
-from furb.engine import Refused
+from furb.engine import OPERATOR, Refused
 
 
 def ends(mark: list[tuple]) -> Generator[tuple | None, tuple | None]:
@@ -60,6 +60,15 @@ async def test_one_that_raises_while_it_hears_is_broken_the_same_way() -> None:
   assert len(said(log, "bash")) == 2
   assert said(heard, "bash") == said(log, "bash") and said(after, "bash") == said(log, "bash")[1:]
   assert [e[0] for e in sand.record if e[0][0] == "bash"] == said(log, "bash")
+  sand.files["/w/a.txt"] = "one\n"
+  engine.drive(breaks(), "reader")
+  with pytest.raises(ValueError, match="boom"):
+    engine.read("a.txt", on=root)
+  assert engine.read("a.txt", on=root).content == "one\n"
+  assert [e[0][:3] for e in sand.record if e[0][0] == "read"] == [
+    ("read", "read1", OPERATOR),
+    ("read", "read2", OPERATOR),
+  ]
 
 
 async def test_a_generator_brought_to_life_under_a_name_and_nothing_more() -> None:

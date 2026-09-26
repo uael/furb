@@ -34,7 +34,7 @@ export const shapes = ["str", "None", "bool", "int", "float", "list", "dict"] as
 export type Turn = Awaited<ReturnType<Life["turns"]>>[number];
 export type Fact = Awaited<ReturnType<Life["say"]>>;
 /** One entry of the record: one fact, an act among them. */
-export type Entry = [Fact, unknown?];
+export type Entry = [Fact];
 export type Usage = NonNullable<Turn[2]>;
 export interface TextValue {
   is?: "Text";

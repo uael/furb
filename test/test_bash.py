@@ -73,7 +73,7 @@ async def test_the_commands_of_the_world_run_at_the_same_time() -> None:
 
 
 async def test_bash_is_given_a_command_a_fed_flag_a_timeout_and_a_show_for_each_stream() -> None:
-  """bash is given a command, a fed flag, a timeout, and a show for each stream, the plain words first, so the record replays it."""
+  """bash is given a command, a fed flag, a timeout, and a show for each stream, the plain words first, so the journal makes it again."""
   sand = Sand(stands=STANDS, auto=False)
   log, root = life(sand)
   engine.bash("echo hi", True, 5.0, HEAD, TAIL, on=root)

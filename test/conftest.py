@@ -22,7 +22,7 @@ import pytest
 import furb
 import furb_monty.engine
 from furb import engine, sheet
-from furb.engine import OPERATOR, WORLD, Act, Exit, Refused, Text, site, under
+from furb.engine import OPERATOR, WORLD, Act, Exit, Refused, Text, site
 from furb.kernel import ENGINE
 
 HERE = Path(__file__).resolve().parent
@@ -123,7 +123,7 @@ class Sand:
   `files` is its disk by path, `script` what its models answer by the id of the chain a reply is on, one word per
   reply, `record` what it keeps of the keep facts of the record, `fed` what was fed to its commands, `calls` every
   fact it answered or performed, in order, and `turns` the turns it read for each reply it took, by its name.
-  `stands` is what a chain stands on, `cost` the usage of one answer, and `auto` says whether a command tells a line
+  `stands` is what a chain stands on, or the refusal it answers a stand with, `cost` the usage of one answer, and `auto` says whether a command tells a line
   and exits at once. `tick` counts the readings of its clock and the chances it drew, so a later life reads what the
   life before it read. `outs` holds each command it runs: whether its stderr flows into its stdout, and its two
   streams as they came.
@@ -135,7 +135,7 @@ class Sand:
   fed: list[str | None] = field(default_factory=list)
   calls: list[tuple] = field(default_factory=list)
   auto: bool = True
-  stands: list | None = None
+  stands: list | Refused | None = None
   cost: tuple | None = None
   tick: int = 0
   turns: dict[str, list] = field(default_factory=dict)
@@ -144,6 +144,8 @@ class Sand:
   def exits(self, about: str, code: int | None) -> None:
     """The command ends with its code, and the World answers it with what it came to: its code and its streams as
     they came, from its own loop."""
+    if about not in self.outs:
+      return
     _, out, err = self.outs.pop(about)
     world_says("done", about, Exit(code, Text(f"{about}/stdout", out), Text(f"{about}/stderr", err)))
 
@@ -307,7 +309,7 @@ class Py:
         case ("gate", qid, _, on, word):
           yield "done", qid, self.gate(word, [*engine.program(on).values()])
 
-  def kernel(self) -> Kernel:
+  def kernel(self) -> Kernel:  # noqa: PLR0915
     """The Kernel as one generator for one life. It takes each run as that run, begins the word of it when it hears
     that it took it, which is after the step of the chain, and runs the word as its rung. When the word waits for an
     act that is not done, it makes a wants as the run, and carries the word forward at the done of that wants. It is
@@ -317,8 +319,11 @@ class Py:
     taken: set[str] = set()
 
     def ended(run: str, got: BaseException | None) -> None:
-      """The word is over, and the Kernel is done with its run with what the word gave, as that run."""
+      """The word is over, and the Kernel is done with its run with what the word gave, as that run: its frame and
+      the wants it waits on are dropped."""
       frames.pop(run, None)
+      for wants in [x for x, one in waits.items() if one == run]:
+        waits.pop(wants)
       with site.set(run):
         engine.say("done", run, got)
 
@@ -363,10 +368,12 @@ class Py:
           taken.discard(run)
           if engine.peek(str(engine.get(run)[4]), ...) is ...:
             begin(run)
+          else:
+            ended(run, CancelledError())
         case ("done", wants, _, value) if wants in waits:
           carry(waits.pop(wants), value)
-        case ("cancel" | "close", about, *_):
-          for one in [x for x in frames if under(str(engine.get(x)[4]), about)]:
+        case ("cancel" | "close", *_) as control:
+          for one in [x for x in frames if engine.covers(control, str(engine.get(x)[4]))]:
             if not getattr(frames[one], "cr_running", False):
               frames[one].close()
               ended(one, CancelledError())

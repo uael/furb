@@ -30,7 +30,7 @@ from furb import engine
 from furb.engine import OPERATOR, TIMEOUT, Exit, Refused, Text
 from furb.kernel import Native
 from furb.provider.claude import ACTOR, FAMILY, Claude, canon, limits
-from furb.world import CAP, SYSTEM, Command, Live, kept, truth, unwire, wire, worded
+from furb.world import CAP, SYSTEM, Command, Live, answered, kept, truth, unwire, wire, worded
 from outside.doubles import broken, heads, life, mute, scripted, settle, speaking, watched
 
 
@@ -154,6 +154,8 @@ async def test_a_command_the_machine_will_not_start_is_closed_with_the_refusal(y
   engine.cd(str(yard / "nowhere"), on=root)
   with pytest.raises(Refused, match="did not start"):
     await engine.bash("echo hi", on=root)
+  (closed,) = [head for head in heads(root) if head.startswith("#bash1 closed ")]
+  assert "did not start" in closed
 
 
 async def test_stderr_runs_into_stdout_unless_the_command_is_given_a_show_for_it(yard: Path) -> None:
@@ -456,6 +458,29 @@ async def test_a_reply_the_world_cannot_answer_is_done_with_the_refusal_and_aske
   assert mutes(root) == ["opus/low answered nothing: RuntimeError: the model was not there"]
 
 
+async def test_a_reply_that_another_ear_ends_asks_its_model_for_nothing_more(yard: Path) -> None:
+  """A reply that a cancel ends wants no turn, so the World stops asking the model and says nothing of it after."""
+  stopped: list[str] = []
+
+  async def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    del messages, info
+    try:
+      await asyncio.sleep(30)
+    except asyncio.CancelledError:
+      stopped.append("cancelled")
+      raise
+    return ModelResponse(parts=[TextPart("close(1)")])
+
+  live = world(yard, FunctionModel(turn))
+  root = life(live)
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  engine.cancel(act)
+  await settle()
+  dones = [a for a in engine.transcript(root) if a[0] == "done" and engine.question(("reply", a[1]))]
+  assert stopped == ["cancelled"] and [(a[2], type(a[3])) for a in dones] == [(dones[0][1], asyncio.CancelledError)]
+
+
 async def test_a_fault_that_stands_pauses_the_chain_so_no_rung_of_it_asks_again(yard: Path) -> None:
   """The same actor mute twice answers the same way twice: the World pauses the chain, so no rung of it asks again
   until a wake, and the prompt waits there."""
@@ -493,6 +518,20 @@ async def test_the_world_counts_a_row_of_mute_replies_by_what_it_was_answered_an
   assert [head for head in heads(root) if head.endswith(" paused")] == []
   assert len(mutes(root)) == 2
   assert engine.peek(act) == 3
+
+
+async def test_the_answers_a_record_holds_are_the_turns_its_replies_came_to(yard: Path) -> None:
+  """The answers a record holds are the done of each reply that came to a turn, and none of a reply that came to a
+  refusal."""
+  record = yard / "record.jsonl"
+  live = world(yard, faltering([None, "close(3)"]), record)
+  root = life(live)
+  assert await engine.prompt(int, "count", on=root) == 3
+  await settle()
+  said = kept(record)
+  replies = [fact[1] for (fact,) in said if fact[0] == "reply"]
+  assert len(replies) == 2
+  assert [(one[1], one[3][1]) for one in answered(said)] == [(replies[1], "close(3)")]
 
 
 def test_the_operator_answers_the_shapes_the_world_puts_to_it() -> None:
@@ -585,6 +624,11 @@ def test_a_torn_last_line_is_cut_away_and_a_blank_line_stands_for_no_entry(yard:
   with pytest.raises(ValueError, match="line 1 column"):
     kept(record)
   record.write_text(json.dumps([1, 2]) + "\n", encoding="utf-8")
+  with pytest.raises(engine.Drift, match="is no entry of the record"):
+    kept(record)
+  record.write_text(
+    json.dumps([["stand", "stand1", OPERATOR, "chain1"], [[], "/w", "opus/low"]]) + "\n", encoding="utf-8"
+  )
   with pytest.raises(engine.Drift, match="is no entry of the record"):
     kept(record)
 

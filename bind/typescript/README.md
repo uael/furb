@@ -52,7 +52,7 @@ which is the first of the roster when unsaid; a World given neither offers the o
 that names no actor goes to the operator. A name without its provider routes to the one model of that id, by
 the rule that `modelNamed(models, name)` gives a host. A
 reopened World offers what its host names now. It keeps the model and the effort that the host chose last, and
-takes that model when the host names none and the World holds it. The record keeps each stand and what the World
+takes that model when the host names none and the World holds it. The journal keeps each stand and what the World
 answered it, and every life stands again as it opens, so a later life tells the new standing on each chain whose
 standing changed. Configure an API provider through its pi-ai credentials.
 
@@ -141,8 +141,8 @@ when the process ends, so a lease of a process that ended never blocks an open. 
 with the record, and a process that locked the moved file opens the path again. On Windows the lock also refuses
 a read of the file by any other handle; the file holds no text, and nothing reads it. A torn final line is removed
 before an append; a damaged complete line fails.
-The record keeps a command, a wait, a prompt to the operator and a reply from the started of the World. What it
-shows started and not done is pending in a later life: the engine starts none of it until a wake that this life
+The journal keeps a command, a wait, a prompt to the operator and a reply from the started of the World. What the
+record shows started and not done is pending in a later life: the engine starts none of it until a wake that this life
 says. `world.pending` holds that work, and `world.resume()` says a wake of each
 chain that holds some. Work that a pause of the operator holds is not in `world.pending`, and it waits for the
 wake of the operator. A command that an earlier World started and did not end runs again at that wake, once;

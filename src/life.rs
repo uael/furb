@@ -53,6 +53,15 @@ enum Work {
   Prompt { about: String, later: Later<Result<Object, Fault>> },
 }
 
+impl Work {
+  /// The act the work answers.
+  fn about(&self) -> &str {
+    match self {
+      Work::Reply { about, .. } | Work::Wait { about, .. } | Work::Prompt { about, .. } => about,
+    }
+  }
+}
+
 /// The three objects of the host the stand-in holds, by their ids.
 mod objects {
   /// The World, whose methods the stand-in calls as the engine asks of a World.
@@ -203,6 +212,12 @@ fn worldly(
       if let Some(mut run) = running.remove(&word(0)) {
         run.slay();
       }
+      Object::none()
+    }
+    // Another ear ended the act, so its future is dropped, which is how a future of rust is cancelled.
+    "over" => {
+      let about = word(0);
+      later.retain(|work| work.about() != about);
       Object::none()
     }
     _ => return Err(Fault::refused(format!("the World of the host has no {name}"))),

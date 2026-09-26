@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     def prompt(self, about: str, shape: str, message: str) -> None: ...
     def feed(self, about: str, text: str | None) -> None: ...
     def slay(self, about: str) -> None: ...
+    def over(self, about: str) -> None: ...
     def keep(self, entry: object) -> None: ...
 
   class Ears(Protocol):
@@ -211,10 +212,12 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
 
   It answers where it can: what the chains stand on, the clock, a chance, a read and a write, each after asking the
   chain where its paths resolve. It takes what takes time, a reply, a command, a wait, a prompt to the operator,
-  with a started, and the host says what it came to into the life later. It keeps the streams of a command, feeds
-  it and ends every command a control is over, and it keeps what the journal says to keep.
+  with a started, and the host says what it came to into the life later. A reply, a wait or a prompt that another
+  ear says done wants nothing more of the host, which drops the work of it. It keeps the streams of a command,
+  feeds it and ends every command a control is over, and it keeps what the journal says to keep.
   """
   cwd, ask, covers, turns = verb(names, "cwd"), verb(names, "ask"), verb(names, "covers"), verb(names, "turns")
+  took: set[str] = set()
 
   def at(on: str) -> str:
     here = cwd(on=on)
@@ -235,6 +238,7 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
         yield "done", qid, again(world.write(at(on), text.path, text.content), names, ears)
       case ("reply", about, _, on, actor):
         yield "started", about
+        took.add(about)
         now = turns(on=on)
         assert isinstance(now, list)
         world.reply(about, on, actor, now)
@@ -245,10 +249,16 @@ def worldly(world: World, names: Names, ears: Ears) -> Ear:
         world.run(about, at(on), command, fed, timeout, merged)
       case ("wait", about, _, _, seconds):
         yield "started", about
+        took.add(about)
         world.wait(about, seconds)
       case ("prompt", about, _, _, shape, message, _):
         yield "started", about
+        took.add(about)
         world.prompt(about, shape, message)
+      case ("done", about, by, *_) if about in took:
+        took.discard(about)
+        if by != "world":
+          world.over(about)
       case ("out", about, _, text, stream) if about in RUNNING:
         RUNNING[about][1 if RUNNING[about][0] or stream == "stdout" else 2] += text
       case ("feed", about, _, text) if about in RUNNING:
@@ -345,8 +355,10 @@ class Running:
     self.taken.add(run)
 
   def ended(self, run: str, got: BaseException | None) -> None:
-    """The word is over, and the run is done with what the word gave, as that run."""
+    """The word is over, and the run is done with what the word gave, as that run: its frame and the wants it
+    waits on are dropped, so no done that comes later carries a word that is gone."""
     self.frames.pop(run, None)
+    self.waits = {wants: one for wants, one in self.waits.items() if one != run}
     with self.site.set(run):
       verb(self.names, "say")("done", run, got)
 
@@ -380,11 +392,11 @@ class Running:
 
   def begin(self, run: str) -> None:
     """A word begun as its rung: it runs in the globals of its chain, and one that awaits nothing is over where it
-    began. A rung that is done already begins no word."""
+    began. The run of a rung that is done already is done with CancelledError, since its word never begins."""
     _, _, _, chain, rung, word, *_ = self.of(run)
     self.taken.discard(run)
     if verb(self.names, "peek")(rung, ...) is not ...:
-      return None
+      return self.ended(run, self.cancelled())
     module = verb(self.names, "module")(chain)
     assert isinstance(module, dict)
     try:
@@ -397,15 +409,19 @@ class Running:
     self.frames[run] = ran
     return self.carry(run, None)
 
-  def dropped(self, about: str) -> None:
+  def cancelled(self) -> BaseException:
+    """The CancelledError of the engine, which a run is done with when its word is dropped or never begins."""
+    got = verb(self.names, "CancelledError")()
+    assert isinstance(got, BaseException)
+    return got
+
+  def dropped(self, control: tuple) -> None:
     """Every run whose rung a control is over, dropped: the frame of a word that is mid step is never closed."""
-    under = verb(self.names, "under")
-    for one in [x for x in self.frames if under(self.of(x)[4], about)]:
+    covers = verb(self.names, "covers")
+    for one in [x for x in self.frames if covers(control, self.of(x)[4])]:
       if not getattr(self.frames[one], "cr_running", False):
         self.frames[one].close()
-        got = verb(self.names, "CancelledError")()
-        assert isinstance(got, BaseException)
-        self.ended(one, got)
+        self.ended(one, self.cancelled())
 
 
 def gating(gate: Gate, sheet: Names, engine: Names) -> Ear:
@@ -441,8 +457,8 @@ def kernel(names: Names) -> Ear:
         held.begin(run)
       case ("done", wants, _, value) if wants in held.waits:
         held.carry(held.waits.pop(wants), value)
-      case ("cancel" | "close", about, *_):
-        held.dropped(about)
+      case ("cancel" | "close", *_) as control:
+        held.dropped(control)
 
 
 def loaded(source: str, held: dict[str, object]) -> dict[str, object]:
@@ -460,8 +476,7 @@ def opened(
 
   The World of the host stands under the name `world` when the host has one; otherwise the ears of the host hear
   that name too, as they hear every other. The Kernel and the gate are given first, so that the gate answers
-  before any ear hears it. The record is the entries as the World hands them: each the fact as a tuple, and for a query
-  of a run what it was answered.
+  before any ear hears it. The record is the entries as the World hands them: each the fact as a tuple.
   """
   MADE.clear()
   RUNNING.clear()

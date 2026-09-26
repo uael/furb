@@ -6,7 +6,7 @@ from furb.engine import TAIL
 
 
 async def test_the_streams_of_a_command_come_as_out_facts_while_the_command_runs() -> None:
-  """The streams of a command come as out facts while the command runs, which the record keeps."""
+  """The streams of a command come as out facts while the command runs, which the journal keeps."""
   sand = Sand(stands=STANDS, auto=False)
   _, root = life(sand)
   act = engine.bash("run", show_err=TAIL, on=root)

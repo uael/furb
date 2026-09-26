@@ -208,7 +208,7 @@ test("a record keeps a value with no plain form, so a later life makes the same 
     "def takes(id):\n  yield 'started', id\n  while True:\n    yield\nnote = act('note', '', takes, {1: 'a'}, 2**70, float('inf'))",
   );
   const note = first.life.inspect("note").value as string;
-  // The operator speaks of the act, so the record keeps the act with its words.
+  // The operator speaks of the act, so the journal keeps the act with its words.
   first.life.close(5, note);
   expect(JSON.stringify(first.entries)).toContain(
     '"chain1",{"is":"dict","args":[[[1,"a"]]]},{"is":"int","args":["1180591620717411303424"]},{"is":"float","args":["inf"]}]',

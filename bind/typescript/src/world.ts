@@ -142,7 +142,7 @@ export class World extends EventEmitter {
   private life?: Life;
   private readonly adapter: WorldAdapter;
   private readonly controller = new AbortController();
-  /** The model request of each rung that a reply of the World asks for, which a done of that rung ends. */
+  /** The model request of each reply the World takes, which the done of that reply ends, whoever says it. */
   private readonly replies = new Map<string, AbortController>();
   private readonly commands = new Map<string, Running>();
   private readonly options: WorldOptions;
@@ -178,7 +178,7 @@ export class World extends EventEmitter {
     try {
       this.models = options.models ?? builtinModels();
       // What the host names must route. The model a saved record names is a preference of the host, which a later
-      // World takes only while it holds that model: the record keeps what it was lived on, and the stand of the
+      // World takes only while it holds that model: the record holds what it was lived on, and the stand of the
       // later life tells each chain what it stands on now.
       const preferred = saved?.options.model;
       this.model = named.model ?? (preferred && this.offers(preferred) ? preferred : named.roster[0]);
@@ -392,12 +392,13 @@ export class World extends EventEmitter {
     this.emit("change");
   };
 
-  /** One turn of a model for a reply, streamed under the rung the reply asks for, whose done ends the request. */
+  /** One turn of a model for a reply, streamed under the rung the reply asks for; the done of the reply ends the
+   * request. */
   private async reply(id: string, rung: string, chain: string, actor: string, turns: Turn[]): Promise<Turn> {
     if (this.stopped) throw new Error("The World was disposed.");
     if (this.life?.outcome(id).done) throw new Error("The act is no longer pending.");
     const controller = new AbortController();
-    this.replies.set(rung, controller);
+    this.replies.set(id, controller);
     const signal = AbortSignal.any([this.controller.signal, controller.signal]);
     this.streams.set(rung, { chain, text: "", thinking: "" });
     this.emit("change");
@@ -499,7 +500,7 @@ export class World extends EventEmitter {
         JSON.parse(JSON.stringify(reply)),
       ];
     } finally {
-      this.replies.delete(rung);
+      this.replies.delete(id);
       this.streams.delete(rung);
       this.emit("change");
     }
@@ -638,7 +639,7 @@ export class World extends EventEmitter {
     child.on("error", (error) => {
       cancel();
       this.commands.delete(command.id);
-      this.deliver(() => this.adapter.say("done", command.id, [{ is: "Refused", args: [error.message] }]));
+      this.deliver(() => this.adapter.close(command.id, { is: "Refused", args: [error.message] }));
     });
     child.on("close", (code) => {
       cancel();

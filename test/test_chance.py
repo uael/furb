@@ -27,8 +27,8 @@ async def test_a_number_the_world_draws_at_least_zero_and_under_one() -> None:
     engine.chance(on=over)
 
 
-async def test_chance_is_a_question_the_world_answers_and_the_record_keeps_what_it_answered() -> None:
-  """chance is a question the World answers, and the record keeps what it answered, as it keeps every answer of the World."""
+async def test_chance_is_a_question_the_world_answers_and_the_journal_keeps_what_it_answered() -> None:
+  """chance is a question the World answers, and the journal keeps what it answered, as it keeps every answer of the World."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   sand.script[root] = ["close(chance())"]

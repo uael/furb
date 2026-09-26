@@ -35,6 +35,8 @@ struct Yard {
   kept: Rc<RefCell<Vec<Object>>>,
   /// Every command it was told to end before its time, shared with the test.
   slain: Rc<RefCell<Vec<String>>>,
+  /// Every reply whose turn the host dropped before it came, shared with the test.
+  dropped: Rc<RefCell<Vec<String>>>,
   voice: Option<Voice>,
 }
 
@@ -46,8 +48,21 @@ impl Yard {
       read: Rc::default(),
       kept: Rc::default(),
       slain: Rc::default(),
+      dropped: Rc::default(),
       voice: None,
     }
+  }
+}
+
+/// The turn of a model that never comes, which notes the reply it was for when the host drops it.
+struct Hung {
+  about: String,
+  dropped: Rc<RefCell<Vec<String>>>,
+}
+
+impl Drop for Hung {
+  fn drop(&mut self) {
+    self.dropped.borrow_mut().push(self.about.clone());
   }
 }
 
@@ -105,18 +120,19 @@ impl World for Yard {
     self.kept.borrow_mut().push(entry.to_owned());
   }
 
-  fn reply(
-    &mut self,
-    _about: &str,
-    _on: &str,
-    _actor: &str,
-    turns: ObjectRef<'_>,
-  ) -> Later<Object> {
+  fn reply(&mut self, about: &str, _on: &str, _actor: &str, turns: ObjectRef<'_>) -> Later<Object> {
     self.read.borrow_mut().push(turns.py_repr());
     let word = {
       let mut words = self.words.borrow_mut();
       if words.is_empty() { "close(None)".to_owned() } else { words.remove(0) }
     };
+    if word == "hang" {
+      let hung = Hung { about: about.to_owned(), dropped: Rc::clone(&self.dropped) };
+      return Box::pin(async move {
+        let _held = hung;
+        std::future::pending::<Object>().await
+      });
+    }
     Box::pin(async move {
       Object::tuple([
         Object::string("assistant"),
@@ -193,6 +209,7 @@ struct Lived {
   read: Rc<RefCell<Vec<String>>>,
   kept: Rc<RefCell<Vec<Object>>>,
   slain: Rc<RefCell<Vec<String>>>,
+  dropped: Rc<RefCell<Vec<String>>>,
 }
 
 impl Lived {
@@ -203,10 +220,14 @@ impl Lived {
     }
     fs::create_dir_all(&at).expect("a yard of the test");
     let world = Yard::new(at.clone(), words);
-    let (read, kept, slain) =
-      (Rc::clone(&world.read), Rc::clone(&world.kept), Rc::clone(&world.slain));
+    let (read, kept, slain, dropped) = (
+      Rc::clone(&world.read),
+      Rc::clone(&world.kept),
+      Rc::clone(&world.slain),
+      Rc::clone(&world.dropped),
+    );
     let life = Life::boot(world, record)?;
-    Ok(Lived { life, at, read, kept, slain })
+    Ok(Lived { life, at, read, kept, slain, dropped })
   }
 
   fn root(&self) -> String {
@@ -314,6 +335,27 @@ fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it
 }
 
 #[test]
+fn the_host_drops_the_turn_of_a_reply_that_a_cancel_ends() {
+  let mut lived = Lived::new("drops", &["hang"], vec![]).unwrap();
+  let root = lived.root();
+  let asked = lived.life.prompt("int", "go", "", &root).unwrap().id().to_owned();
+  lived.made("reply1");
+  block_on(lived.life.drive()).unwrap();
+  assert!(lived.dropped.borrow().is_empty());
+  lived.life.cancel(&asked).unwrap();
+  assert_eq!(*lived.dropped.borrow(), ["reply1"]);
+  assert_eq!(
+    lived
+      .life
+      .outcome("reply1")
+      .unwrap()
+      .and_then(|one| Fault::of(one.as_ref()))
+      .map(|one| one.name),
+    Some("CancelledError".to_owned())
+  );
+}
+
+#[test]
 fn a_wait_is_done_when_the_world_says_so() {
   let mut lived = Lived::new("waits", &[], vec![]).unwrap();
   let root = lived.root();
@@ -367,7 +409,7 @@ fn what_the_engine_raised_reaches_the_host_as_the_fault_it_is() {
 fn a_second_life_on_the_record_the_world_kept_makes_the_same_acts_again() {
   let mut first = Lived::new("again", &["close(len(read('a.txt').lines))"], vec![]).unwrap();
   let root = first.root();
-  // The file is put there by hand: a write of the operator is an act that the record keeps, and what this test
+  // The file is put there by hand: a write of the operator is an act that the journal keeps, and what this test
   // holds are the acts of a prompt alone.
   fs::write(first.at.join("a.txt"), "one\ntwo\n").unwrap();
   let act = first.life.prompt("int", "count", "", &root).unwrap();

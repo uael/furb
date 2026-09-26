@@ -54,7 +54,7 @@ async def test_cwd_gives_the_working_directory_that_the_paths_of_the_chain_resol
 
 
 async def test_cwd_reads_the_transcript_of_the_chain_and_asks_nothing() -> None:
-  """cwd reads the transcript of the chain and asks nothing, so no act is made and the record keeps nothing."""
+  """cwd reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   made, kept = list(acts(log)), list(sand.record)

@@ -1,13 +1,16 @@
 """Reply, the question of a turn of a model, which the World answers with that turn."""
 
 import asyncio
+from asyncio import CancelledError
 from dataclasses import dataclass
 from functools import partial
 
 from conftest import (
   STANDS,
   Sand,
+  Where,
   World,
+  dones,
   heads,
   life,
   paragraphs,
@@ -138,8 +141,42 @@ async def test_a_reply_the_world_cannot_answer_is_the_worlds_to_refuse() -> None
   assert [a[2] for a in said(log, "reply")] == [a[1] for a in said(log, "rung") if a[2] == one] == [first, "rung3"]
 
 
+async def test_the_life_refuses_a_reply_that_no_ear_owns() -> None:
+  """The life refuses a reply that no ear owns, and the chain that asks then pauses itself, since that fault stands until a wake."""
+  where = Where(stands=STANDS)
+  log, root = life(where)
+  asked = engine.prompt(int, "count", on=root)
+  await settle()
+  (reply,) = [a[1] for a in said(log, "reply")]
+  assert isinstance(got := engine.peek(reply), Refused) and str(got) == "nothing takes reply"
+  assert (
+    engine.paused(root) and engine.peek(asked, ...) is ... and heads(engine.turns(on=root))[-1] == f"#{root} paused"
+  )
+  engine.wake(root)
+  await settle()
+  assert len(said(log, "reply")) == 2 and engine.paused(root) and engine.peek(asked, ...) is ...
+
+
+async def test_a_reply_ends_as_a_wait_does() -> None:
+  """A reply ends as a wait does, so a cancel or a close over it ends it with a CancelledError."""
+  sand = Sand(stands=STANDS)
+  log, root = life(sand)
+  one = engine.prompt(int, "one", on=root)
+  await settle()
+  first = said(log, "reply")[-1][1]
+  engine.cancel(one)
+  await settle()
+  two = engine.prompt(int, "two", on=root)
+  await settle()
+  second = said(log, "reply")[-1][1]
+  engine.close(2, two)
+  await settle()
+  assert first != second and [type(a[3]) for a in dones(log, "reply")] == [CancelledError, CancelledError]
+  assert [a[1:3] for a in dones(log, "reply")] == [(first, first), (second, second)] and await two == 2
+
+
 async def test_the_world_reads_the_turns_of_the_chain_whole_when_it_takes_a_reply() -> None:
-  """The World reads the turns of the chain whole when it takes a reply, folded again for that reply, and the record keeps the answer and no turns."""
+  """The World reads the turns of the chain whole when it takes a reply, folded again for that reply, and the journal keeps the answer and no turns."""
   sand = Sand(stands=STANDS)
   log, root = life(sand)
   sand.script[root] = ["k = 1", "close(k + 1)"]
@@ -292,8 +329,8 @@ async def test_a_paused_chain_makes_no_new_reply_after_a_held_response() -> None
   assert len(said(log, "reply")) == 1 and engine.peek(one) is None
 
 
-async def test_no_model_is_asked_for_a_rung_the_record_answered() -> None:
-  """No model is asked for a rung the record answered, since a later life asks again for nothing it was answered once."""
+async def test_no_model_is_asked_for_a_rung_the_journal_answered() -> None:
+  """No model is asked for a rung the journal answered, since a later life asks again for nothing it was answered once."""
   sand = sown()
   _, root = life(sand)
   sand.script[root] = ["a = 1", "close(a + 1)", "close(None)"]

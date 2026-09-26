@@ -19,6 +19,19 @@ async def test_transcript_gives_the_facts_on_a_chain() -> None:
   assert [a for a in log if a in held and not engine.question(a)] == [a for a in held if not engine.question(a)]
 
 
+async def test_transcript_gives_a_new_list_at_each_call() -> None:
+  """transcript gives a new list at each call, so a word that changes the list it was given changes no transcript."""
+  sand = Sand(stands=STANDS)
+  _, root = life(sand)
+  before = engine.transcript(root)
+  word = "n = 0\nfor x in transcript():\n  n += 1\n  debug(t'{n}')\ntranscript().clear()\nclose(n)"
+  counted = await engine.rung(word, on=root)
+  held = engine.transcript(root)
+  assert isinstance(counted, int) and lasting(held[: len(before)]) == lasting(before)
+  assert len(before) < counted < len(held)
+  assert engine.transcript(root) == held and engine.transcript(root) is not held
+
+
 async def test_the_transcript_is_the_whole_state_of_a_chain() -> None:
   """The transcript is the whole state of a chain: its module, its program, its working directory and its turns are read off it, and the standing is read off the transcript of the root."""
   sand = Sand(stands=STANDS)

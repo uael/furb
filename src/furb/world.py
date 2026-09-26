@@ -150,11 +150,19 @@ def kept(record: Path) -> list[tuple]:
       if n < len(lines):
         raise
       break
-    if not (isinstance(got, list) and len(got) in (1, 2) and isinstance(got[0], list) and got[0]):
+    if not (isinstance(got, list) and len(got) == 1 and isinstance(got[0], list) and got[0]):
       why = f"line {n} of {record} is no entry of the record"
       raise Drift(why)
-    said.append((tuple(got[0]), *got[1:]))
+    said.append((tuple(got[0]),))
   return said
+
+
+def answered(entries: Sequence[tuple]) -> list[tuple]:
+  """Every answer of a model that the entries of a record hold: the done of each reply that came to a turn, which a
+  record gives back as a list, and none of a reply that came to a refusal."""
+  return [
+    one for one, *_ in entries if one[0] == "done" and engine.question(("reply", one[1])) and isinstance(one[3], list)
+  ]
 
 
 @dataclass
@@ -344,8 +352,8 @@ class Live:
         one.command, stdin=mouth, stdout=subprocess.PIPE, stderr=hiss, cwd=self.at(here), start_new_session=True
       )
     except OSError as no:
-      # The machine would not start it, so the command never runs and whoever waits for it hears why instead.
-      engine.say("done", one.id, Refused(f"{one.command!r} did not start: {no}"))
+      # The machine would not start it, so the World closes it with why, as it closes a prompt it cannot show.
+      engine.close(Refused(f"{one.command!r} did not start: {no}"), one.id)
       return
     one.stands(proc)
     if one.over:
@@ -437,14 +445,16 @@ class Live:
     answers the questions that are its own, feeds and ends its commands, and keeps what it is told.
     """
     running: dict[str, Command] = {}
+    replies: dict[str, Task[None]] = {}
     jobs: set[Task[None]] = set()
     loop = asyncio.get_running_loop()
 
-    def start(work: Coroutine[object, object, None]) -> None:
+    def start(work: Coroutine[object, object, None]) -> Task[None]:
       """One task of the World, held while it runs, so that nothing collects it before it is done."""
       job = loop.create_task(work)
       jobs.add(job)
       job.add_done_callback(jobs.discard)
+      return job
 
     while True:
       a = yield
@@ -464,7 +474,7 @@ class Live:
           start(self.show(about, shape, message))
         case ("reply", about, _, on, actor):
           yield "started", about
-          start(self.asked(about, on, actor, engine.turns(on=on)))
+          replies[about] = start(self.asked(about, on, actor, engine.turns(on=on)))
         case ("stand", qid, *_):
           yield "done", qid, [self.roster, self.directory, self.actor]
         case ("read", qid, _, on, path) if self.serves(path):
@@ -478,8 +488,11 @@ class Live:
             one.over = True
             one.slay()
             running.pop(one.id)
-        case ("done", about, *_):
+        case ("done", about, by, *_):
           running.pop(about, None)
+          # A reply that another ear ended wants no turn, so the model is asked for nothing more.
+          if (job := replies.pop(about, None)) is not None and by != engine.WORLD:
+            job.cancel()
         case ("keep", _, _, entry):
           self.keep(entry)
         case ("clock", qid, *_):

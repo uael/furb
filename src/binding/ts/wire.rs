@@ -44,7 +44,7 @@ pub fn outward(value: ObjectRef<'_>) -> Value {
   outward_at(value, 0, false)
 }
 
-/// A value of the sandbox, as the record keeps it: a whole float keeps its mark, so a later life reads a float.
+/// A value of the sandbox, as the record holds it: a whole float keeps its mark, so a later life reads a float.
 pub fn record(value: ObjectRef<'_>) -> Value {
   outward_at(value, 0, true)
 }

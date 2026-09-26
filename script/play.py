@@ -20,7 +20,7 @@ from furb import engine
 from furb.cli import lived, say
 from furb.engine import OPERATOR
 from furb.provider.claude import BIN, cool
-from furb.world import kept
+from furb.world import answered, kept
 
 TO = "opus/low"
 """TO is the actor the play asks, which is opus at the least effort it takes."""
@@ -73,23 +73,14 @@ async def settle(n: int = 400) -> None:
     await asyncio.sleep(0)
 
 
-def answers(facts: list[tuple]) -> list[tuple]:
-  """Every answer of a model among some facts, which is the done of a reply that came to a turn."""
-  return [
-    one
-    for one in facts
-    if one[0] == "done" and engine.question(("reply", one[1])) and isinstance(one[3], (list, tuple))
-  ]
-
-
-def answered(record: Path) -> list[tuple]:
-  """Every answer of a model that the record holds."""
-  return answers([entry[0] for entry in kept(record)] if record.is_file() else [])
+def bought(record: Path) -> list[tuple]:
+  """Every answer of a model that the record holds, and none before the record is written."""
+  return answered(kept(record)) if record.is_file() else []
 
 
 def spent(record: Path) -> float:
   """What every answer the record holds has cost so far."""
-  return sum(one[3][2][4] for one in answered(record) if one[3][2])
+  return sum(one[3][2][4] for one in bought(record) if one[3][2])
 
 
 async def watching(root: str, record: Path, name: str) -> None:
@@ -111,8 +102,8 @@ async def watching(root: str, record: Path, name: str) -> None:
       say(f"the play spent {spent(record):.4f} dollars, over its ceiling of {CEILING}, and ends the prompt")
       engine.cancel(name)
       return
-    if len(answered(record)) > TRIES:
-      say(f"the play bought {len(answered(record))} answers, over the {TRIES} it allows, and ends the prompt")
+    if len(bought(record)) > TRIES:
+      say(f"the play bought {len(bought(record))} answers, over the {TRIES} it allows, and ends the prompt")
       engine.cancel(name)
       return
     grown = record.stat().st_size if record.is_file() else 0
@@ -146,7 +137,7 @@ async def first(yard: Path, record: Path) -> list[object]:
   assert isinstance(got[6], str), got[6]
   theirs = engine.transcript(got[6])
   assert [one for one in theirs if one[0] == "prompt"], f"no prompt of the model stands on {got[6]}"
-  assert answers(theirs), f"no model answered on {got[6]}"
+  assert [one for one in engine.turns(on=got[6]) if one[0] == "assistant"], f"no model answered on {got[6]}"
 
   asked = [one for one in said if one[0] == "prompt" and one[6] == OPERATOR]
   assert len(asked) == 1, f"the model put {len(asked)} prompts to the operator"
@@ -214,7 +205,7 @@ def ledger(root: str, record: Path) -> float:
     say(str(word))
   say("")
   say("=== the ledger ===")
-  for one in answered(record):
+  for one in bought(record):
     if one[3][2] is not None:
       say(f"{one[1]} {one[3][2]}")
   say(f"the play spent {spent(record):.6f} dollars over {len(kept(record))} entries of record")

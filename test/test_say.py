@@ -55,8 +55,8 @@ async def test_every_verb_of_the_file_speaks_through_the_two_entries_of_the_bus(
   assert [a[1] for a in said(log, "note")] == ["note1"]
 
 
-async def test_a_fact_reaches_the_world_the_kernel_and_the_record_only_through_the_bus() -> None:
-  """A fact reaches the World, the Kernel and the record only through the bus."""
+async def test_a_fact_reaches_the_world_the_kernel_and_the_journal_only_through_the_bus() -> None:
+  """A fact reaches the World, the Kernel and the journal only through the bus."""
   sand = sown()
   log, root = life(sand)
   sand.script[root] = ["close(read('a.txt').content)"]

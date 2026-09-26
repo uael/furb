@@ -15,7 +15,7 @@ async def test_clock_gives_one_reading_of_the_wall_clock_of_the_world() -> None:
 
 
 async def test_clock_asks_the_world_for_a_reading_of_the_wall_clock() -> None:
-  """clock asks the World for a reading of the wall clock, and the record keeps what it answered."""
+  """clock asks the World for a reading of the wall clock, and the journal keeps what it answered."""
   sand = Sand(stands=STANDS)
   _, root = life(sand)
   assert engine.clock(on=root) == 1001.0

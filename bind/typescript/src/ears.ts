@@ -146,6 +146,11 @@ export class WorldAdapter {
     this.speak(() => this.life?.say(kind, id, words));
   }
 
+  /** One act closed as the World with a value, which is how the World ends a command it could not start. */
+  close(id: string, value: unknown): void {
+    this.speak(() => this.life?.close(value, id));
+  }
+
   /** A command ended, with its code, or with none at its timeout: the World says it done with the Exit of the
    * streams it heard, unless a control ended it first. */
   exited(id: string, code: number | null): void {
@@ -256,8 +261,9 @@ export class WorldAdapter {
         try {
           synchronous(this.handle({ kind: "Run", args: [{ id, here, command, fed, timeout, merged }] }));
         } catch (error) {
+          // The machine would not start it, so the World closes it with why, as it closes a prompt it cannot show.
           this.running.delete(id);
-          yield ["done", id, fault(error)];
+          yield { verb: "close", args: [fault(error), id] };
         }
       } else if (kind === "wait") {
         yield ["started", id];
