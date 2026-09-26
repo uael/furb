@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import type { Fact, ImageAttachment, LiveAct, Turn } from "@furb/engine";
+import type { Fact, FileChange, ImageAttachment, LiveAct, Turn } from "@furb/engine";
 import {
   actorParts,
   decodeRecord,
@@ -14,7 +14,6 @@ import {
   saveFile,
   shapes,
 } from "@furb/engine";
-import type { FileChange } from "@furb/engine/session";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView } from "./bridge.ts";
 import { refusal } from "./conversation.ts";

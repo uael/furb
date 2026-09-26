@@ -12,17 +12,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./native": {
-      "types": "./index.d.cts",
-      "default": "./index.cjs"
-    },
     "./claude": {
       "types": "./dist/providers/claude.d.ts",
       "import": "./dist/providers/claude.js"
-    },
-    "./session": {
-      "types": "./dist/session.d.ts",
-      "import": "./dist/session.js"
     }
   },
   "files": [

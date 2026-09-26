@@ -1,6 +1,13 @@
 import { EventEmitter } from "node:events";
-import type { Act, Fact, ImageAttachment, LiveAct, Engine as Native, Session as Owner } from "@furb/engine";
-import type { FileChange } from "@furb/engine/session";
+import type {
+  Act,
+  Fact,
+  FileChange,
+  ImageAttachment,
+  LiveAct,
+  Engine as Native,
+  Session as Owner,
+} from "@furb/engine";
 import type { EngineOptions } from "./models.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 

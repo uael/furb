@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import type { Models, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { bash, Engine, files, kept, type NativeEar, store, time } from "../index.cjs";
-import { Activity, type RunState } from "./activity.js";
+import { Activity } from "./activity.js";
 import { FileChanges } from "./changes.js";
 import { Console, type ConsoleOptions } from "./console.js";
 import { driving, type Ear } from "./ears.js";
@@ -12,9 +12,6 @@ import { attachImage, type ImageAttachment, ImageCache } from "./images.js";
 import { furbDirectory, saveFile } from "./project.js";
 import { type Answer, Provider } from "./provider.js";
 import { type Entry, type Fact, modelNamed } from "./types.js";
-
-export type { FileChange } from "./changes.js";
-export { display, opens, paragraphs, safeText, uncommented } from "./types.js";
 
 /** An ear that takes nothing and says nothing. */
 function* silent(): Ear {
@@ -249,9 +246,6 @@ export class Session extends EventEmitter {
 
   isPaused(id: string): boolean {
     return this.activity.acts.get(id)?.paused ?? false;
-  }
-  rungState(id: string): RunState {
-    return this.activity.acts.get(id)?.run ?? { status: "running", reason: "" };
   }
 }
 

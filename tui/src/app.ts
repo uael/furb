@@ -1,6 +1,13 @@
 import { join } from "node:path";
-import { actorParts, imageContent, imagePath, imageReferences, shapes } from "@furb/engine";
-import { display, safeText } from "@furb/engine/session";
+import {
+  actorParts,
+  display,
+  imageContent,
+  imagePath,
+  imageReferences,
+  safeText,
+  shapes,
+} from "@furb/engine";
 import {
   type BoxOptions,
   BoxRenderable,

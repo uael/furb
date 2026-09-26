@@ -69,7 +69,7 @@ It reads current pi-ai system messages, keeps a warm conversation for each sessi
 preserves text and thinking blocks, and reports the cost of each turn. The provider gives each chain of each life a
 session id of its own, since the ids of chains repeat in every life. It runs pure completions with CLI tools and
 MCP disabled. It finds the standalone CLI (`claude.exe` on Windows) or the CLI installed by Claude Desktop. Set
-`FURB_CLAUDE_BIN` to select a binary; `DIRT_CLI_BIN` is also accepted. Its pool belongs to the host that made the
+`FURB_CLAUDE_BIN` to select a binary. Its pool belongs to the host that made the
 provider, and its `dispose` stops it. No CLI process starts until a model is asked.
 
 ```ts
@@ -158,7 +158,7 @@ writing files, or starting a model or command. The TUI runs this inspection in i
 holds the state of every act a person follows, derived once from the facts as the life hears them, so a host reads
 it without asking the sandbox; the acts the engine asks on the way, such as a read, a run or a reply, are no rows of
 it. It asks the engine's `covers` which live acts a pause or a wake is over, one call for each act whose state
-the control would change. `Session.isPaused` and `Session.rungState` read it.
+the control would change. `Session.isPaused` reads it.
 
 `session.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type,
 size, and `furb-image://` reference. A session with no record copies it into `.furb/images` of its directory. The

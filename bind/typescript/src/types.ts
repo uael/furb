@@ -35,12 +35,6 @@ export type Turn = ReturnType<Engine["turns"]>[number];
 export type Fact = ReturnType<Engine["say"]>;
 /** One entry of the record: one fact, an act among them. */
 export type Entry = [Fact];
-export type Usage = NonNullable<Turn[2]>;
-export interface TextValue {
-  is?: "Text";
-  path: string;
-  content: string;
-}
 export interface OperatorPrompt {
   id: string;
   shape: string;

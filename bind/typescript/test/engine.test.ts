@@ -1,6 +1,14 @@
 import { afterEach, expect, test } from "bun:test";
-import { decodeRecord, type Ear, Engine, type Fact, files, isQuestion, speaking } from "../src/index.ts";
-import { display } from "../src/session.ts";
+import {
+  decodeRecord,
+  display,
+  type Ear,
+  Engine,
+  type Fact,
+  files,
+  isQuestion,
+  speaking,
+} from "../src/index.ts";
 
 const engines: Engine[] = [];
 afterEach(() => {
