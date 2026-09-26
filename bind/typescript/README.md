@@ -13,7 +13,7 @@ bun run build
 bun test bind/typescript/test
 ```
 
-`napi-rs` generates `index.cjs` and `index.d.cts` from `src/binding/ts.rs`. The optional `typescript` feature
+`napi-rs` builds `furb.node` and generates `index.d.cts` from `src/binding/ts.rs`, and `index.cjs` loads it. The optional `typescript` feature
 builds the binding in the existing crate. There is no Rust worker or second crate. The `Engine` of the package has
 one method for each verb of the contract, which the build of the crate makes from `src/furb/engine.pyi`, as it
 makes the methods of the crate: the words that the verb needs, in their order, then an object of the words that have
