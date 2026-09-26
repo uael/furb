@@ -37,21 +37,35 @@ module, and each answer of the model is a program that runs in it.
 ## Try it
 
 ```sh
-pip install furb                     # The engine and the furb command. It needs Python 3.14 or later.
+pip install furb                     # The engine, and furb, the command line. It needs Python 3.14 or later.
+```
+
+`furb` is a program of Rust. It runs the engine in monty, and it asks the models through the claude command line:
+
+```sh
+furb                                 # The TUI, when furb finds one.
+furb --mode rpc                      # A JSON-RPC on stdin and stdout, with no TUI.
+furb prompt "How many lines does a.txt hold?" --shape int
+furb run "close(1 + 1)"              # A Python word, run on the root chain.
+furb turns --record session.jsonl    # The turns of a record, as the model read them.
 ```
 
 The TUI runs from a clone of this repository. It needs uv, the Rust toolchain, and Bun 1.4.2 or later:
 
 ```sh
-uv sync                              # The Python environment, which the build reads.
+uv sync                              # The Python environment, with furb, which the build reads.
 bun install && bun run build         # The TUI, and the engine that it runs through the crate.
 bun run demo                         # A scripted life on a sample project. It asks no model.
 bun run tui                          # A real life, through the claude command line.
 ```
 
+Then `uv run furb` opens the TUI of the clone, and so does a `furb` built from it. A `furb` from anywhere else runs the
+program that `FURB_TUI` names, or the `furb-tui` on PATH.
+
 ## Learn more
 
 - [The TUI](tui/README.md): the views, the keys, the commands, and [a gallery of each screen](docs/tui.md).
+- [The JSON-RPC](docs/rpc.md): the commands and the events of `furb --mode rpc`.
 - [The developer guide](docs/developer-guide.md): the tools to install, how a word runs, and how to change the TUI.
 - [The contract](src/furb/engine.pyi): every law of the engine, one sentence per line.
 

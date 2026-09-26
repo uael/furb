@@ -24,7 +24,8 @@ API of its own:
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout
   it was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, as Pi does, which
   `docs/rpc.md` says. `prompt`, `turns` and `run` each open one life on the record they are given. Every life runs on
-  the ears of the crate, on the models of the claude command line, and on a console of the operator.
+  the ears of the crate, on the models of the claude command line, and on a console of the operator. The package
+  `furb` depends on the wheel of `furb-cli`, so `pip install furb` gives the command `furb`.
 
 The suite runs on both engines. `test/outside/test_monty.py` proves what the door carries that no sentence of the
 contract says.
@@ -121,7 +122,8 @@ The suite drives the engine through its public API alone, end to end, from the m
 Run every command from the root of the repository.
 
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
-  `furb-monty`. After a change of the crate, `uv sync --reinstall-package furb-monty` builds it again.
+  `furb-monty`, and the command line into the package `furb-cli`. After a change of the crate,
+  `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole but for the stubs of what boot binds, which the toml excludes with their reason.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
@@ -132,7 +134,7 @@ Run every command from the root of the repository.
   the gates of the crate and of the command line. The tests of a module stand beside it, `src/engine.test.rs` beside
   `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/furb.rs` runs `furb` as
   a process, on a claude command line that answers from a script.
-- `cargo run -p furb-cli -- <words>`: the command line, as `furb --help` says.
+- `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
 - `uv run pre-commit run --all-files`: every gate the commit hook runs.
 - `uv run python script/smoke.py`: one real life on opus/low through the claude command line on PATH, or the one
   `FURB_CLAUDE_BIN` names. It is no test of the suite and spends one prompt.

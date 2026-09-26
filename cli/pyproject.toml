@@ -1,0 +1,30 @@
+[project]
+name = "furb-cli"
+version = "0.1.0"
+description = "furb, the command line: the TUI, a JSON-RPC on stdin and stdout, and one command on one life."
+requires-python = ">=3.14"
+# The license of the repository stands over this too; maturin reads no file above its own directory, so the
+# distribution names the license and carries none of its own.
+license = "AGPL-3.0-only"
+authors = [{ name = "Abel Lucas", email = "uaelucas@gmail.com" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Rust",
+]
+
+[project.urls]
+Source = "https://github.com/uael/furb"
+Issues = "https://github.com/uael/furb/issues"
+
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+# The program furb, and no module of python: the wheel puts it among the scripts of the environment, so the package
+# furb, which depends on this one, gives the command furb.
+bindings = "bin"
+# The symbols of debugging are a third of the program, and no user of the wheel reads them.
+strip = true
