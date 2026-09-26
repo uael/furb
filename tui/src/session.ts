@@ -350,19 +350,41 @@ export class Session extends EventEmitter {
   get draftKey(): string {
     return `${this.selected}:${this.editing ?? this.mode}`;
   }
-  /** What the session is doing, over the acts of one chain or of every chain. */
+  /** What the session is doing, over the acts of the selected chain or of every chain: the view failed, the queue or
+   * a question waits for the operator, a reopened record holds work, or what the acts do. A pause of the chain holds
+   * it while none of its acts runs or asks. */
   status(chain?: string): SessionStatus {
-    const acts = this.acts.filter(
-      (act) => act.kind !== "chain" && act.kind !== "grant" && (!chain || act.on === chain),
-    );
     if (chain ? this.error : Object.values(this.errors).some(Boolean)) return "error";
     if (this.queueHeld && this.queued.length) return "blocked";
     if (this.host.pending.size) return "paused";
-    if (chain ? this.operatorPrompt : this.host.prompts.size) return "blocked";
+    if (!chain && this.host.prompts.size) return "blocked";
+    const state = this.actStatus(chain);
+    return this.paused && (state === "idle" || state === "error") ? "paused" : state;
+  }
+  /** What the acts of a chain do, or the acts of every chain: one asks the operator, one waits for the resume of a
+   * reopened record, one runs, a pause holds one, or the last act failed. */
+  private actStatus(chain?: string): SessionStatus {
+    const acts = this.acts.filter(
+      (act) => act.kind !== "chain" && act.kind !== "grant" && (!chain || act.on === chain),
+    );
+    if (acts.some((act) => this.host.prompts.has(act.id))) return "blocked";
+    if (acts.some((act) => this.host.pending.has(act.id))) return "paused";
     if (acts.some(working)) return "working";
-    if (this.paused || acts.some((act) => act.paused && !act.done)) return "paused";
+    if (acts.some((act) => act.paused && !act.done)) return "paused";
     const latest = acts.at(-1);
     return latest && failed(latest) ? "error" : "idle";
+  }
+  /** The state of a chain. A chain that the operator started, directly or by a word of their own, and that finished
+   * its work while another chain was shown, is finished and not yet seen until the operator opens it. */
+  chainStatus(id: string): SessionStatus {
+    const status = this.actStatus(id);
+    const before = this.phases.get(id);
+    this.phases.set(id, status);
+    const chain = this.acts.find((act) => act.id === id);
+    const mine = chain?.by === "operator" || this.actOf(chain?.by ?? "")?.by === "operator";
+    if (id === this.selected || status !== "idle") this.unread.delete(id);
+    else if (before === "working" && mine) this.unread.add(id);
+    return status === "idle" && this.unread.has(id) ? "done" : status;
   }
   /** A message or a word that the operator sends to a paused chain wakes the chain first, since the operator who
    * writes to it wants it to go on: work that a reopened record held starts again, and the pause over the chain ends.
@@ -377,8 +399,8 @@ export class Session extends EventEmitter {
   }
   /** The chains that the operator started and that finished their work while another chain was shown, which wait for
    * the operator to look at them, and the state that each chain had when the view last read it. */
-  readonly unread = new Set<string>();
-  readonly phases = new Map<string, SessionStatus>();
+  private readonly unread = new Set<string>();
+  private readonly phases = new Map<string, SessionStatus>();
   get chains(): ActRow[] {
     return this.acts.filter((act) => act.kind === "chain");
   }

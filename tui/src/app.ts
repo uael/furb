@@ -77,6 +77,16 @@ const viewLabels: Record<View, string> = { feed: "Feed", transcript: "Transcript
 /** Whether an act is a question to the operator: a prompt whose actor is the operator. */
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const asksOperator = (act: ActRow) => act.kind === "prompt" && act.words[2] === "operator";
+/** What an act is doing: the word that says it, the glyph that shows it, and their color. */
+type State = { word: string; mark: string; color: RGBA };
+/** The state of an act that failed, that a cancel ended, that is done, or that a pause holds. */
+const stateOf = (state: "failed" | "cancelled" | "done" | "held"): State =>
+  ({
+    failed: { word: "failed", mark: glyph.failed, color: c.danger },
+    cancelled: { word: "cancelled", mark: glyph.cancelled, color: c.faint },
+    done: { word: "", mark: glyph.done, color: c.success },
+    held: { word: "waits for resume", mark: glyph.held, color: c.warning },
+  })[state];
 /** A span of seconds as a wait says it: 1 second, 0.2 seconds. */
 const seconds = (value: number) => `${value} ${value === 1 ? "second" : "seconds"}`;
 /** A border that draws nothing, which a part of a border replaces. */
@@ -93,6 +103,15 @@ const noBorder = {
   rightT: " ",
   cross: " ",
 };
+/** The colors of an input on a ground: of its text, its placeholder, and its cursor. */
+const inputColors = (ground: RGBA) => ({
+  backgroundColor: ground,
+  focusedBackgroundColor: ground,
+  textColor: c.text,
+  focusedTextColor: c.text,
+  placeholderColor: c.faint,
+  cursorColor: c.accent,
+});
 /** The suggestions of an empty feed: what each says, and the prompt it puts in the composer. */
 const starters = [
   ["Explore a codebase", "Read the README and explain how this project works."],
@@ -241,7 +260,7 @@ export class App {
   /** The mode, the model, the effort, and the shape of the next message, under the input, each a button. */
   private readonly meta: BoxRenderable;
   /** The rows of half blocks above and below the composer, and its bar, which the mode colors. */
-  private readonly composeEdges: BoxRenderable[] = [];
+  private readonly composeEdges: BoxRenderable[];
   private readonly composeBox: BoxRenderable;
   private readonly queueBox: BoxRenderable;
   private readonly imageBox: BoxRenderable;
@@ -394,12 +413,7 @@ export class App {
       id: "search",
       flexGrow: 1,
       placeholder: "Filter this view",
-      backgroundColor: c.panel,
-      focusedBackgroundColor: c.panel,
-      textColor: c.text,
-      focusedTextColor: c.text,
-      placeholderColor: c.faint,
-      cursorColor: c.accent,
+      ...inputColors(c.panel),
     });
     this.search.on(InputRenderableEvents.INPUT, (value: string) => {
       session.search = value;
@@ -430,8 +444,6 @@ export class App {
       // The feed keeps a row of space under the top line, however far it scrolls.
       marginTop: space.section,
       contentOptions: { gap: space.stack, paddingBottom: space.section },
-      verticalScrollbarOptions: { visible: false },
-      horizontalScrollbarOptions: { visible: false },
     });
     // The ScrollBar constructor resets manual visibility; set it after construction.
     this.scroll.verticalScrollBar.visible = false;
@@ -460,51 +472,16 @@ export class App {
       backgroundColor: c.raised,
     });
     center.add(this.suggestionBox);
-    // The composer is a panel with a bar at its left, and half a row of the panel above and below its text.
-    const edge = (side: "top" | "bottom") => {
-      const bar = this.box({
-        height: space.bar,
-        border: ["left"],
-        borderColor: c.accent,
-        customBorderChars: { ...noBorder, vertical: side === "top" ? glyph.barTop : glyph.barBottom },
-      });
-      bar.add(
-        this.box({
-          height: space.bar,
-          flexGrow: 1,
-          border: [side === "top" ? "bottom" : "top"],
-          borderColor: c.panel,
-          customBorderChars: { ...noBorder, horizontal: side === "top" ? glyph.halfTop : glyph.halfBottom },
-        }),
-      );
-      this.composeEdges.push(bar);
-      return bar;
-    };
     this.modeBox = this.box({ flexDirection: "row", height: space.bar, flexShrink: 0 });
-    center.add(edge("top"));
-    this.composeBox = this.box({
-      id: "composer-box",
-      flexShrink: 0,
-      paddingLeft: space.between - space.inset,
-      paddingRight: space.inset,
-      border: ["left"],
-      borderColor: c.accent,
-      customBorderChars: { ...noBorder, vertical: glyph.bar },
-      backgroundColor: c.panel,
-    });
-    center.add(this.composeBox);
-    this.composeEdges.push(this.composeBox);
+    // The composer is a panel, whose three rows the mode colors.
+    this.composeBox = this.panel(center, c.accent, { id: "composer-box" });
+    this.composeEdges = center.getChildren().slice(-3) as BoxRenderable[];
     this.composer = new TextareaRenderable(renderer, {
       id: "composer",
       flexGrow: 1,
       minHeight: 1,
       placeholder: "What would you like to build?",
-      textColor: c.text,
-      placeholderColor: c.faint,
-      backgroundColor: c.panel,
-      focusedBackgroundColor: c.panel,
-      focusedTextColor: c.text,
-      cursorColor: c.accent,
+      ...inputColors(c.panel),
       keyBindings: [
         { name: "return", action: "submit" },
         { name: "return", shift: true, action: "newline" },
@@ -542,7 +519,6 @@ export class App {
     metaLine.add(this.text("   ", c.faint));
     metaLine.add(this.meta);
     this.composeBox.add(metaLine);
-    center.add(edge("bottom"));
     const footer = this.box({ height: space.bar, flexDirection: "row", gap: space.between });
     this.status = this.whole(
       this.text("", c.muted, { height: space.bar, truncate: true, flexGrow: 1, flexShrink: 1 }),
@@ -575,8 +551,6 @@ export class App {
       scrollX: false,
       backgroundColor: c.panel,
       contentOptions: { paddingBottom: space.section },
-      verticalScrollbarOptions: { visible: false },
-      horizontalScrollbarOptions: { visible: false },
     });
     this.railSpaces.verticalScrollBar.visible = false;
     this.railSpaces.horizontalScrollBar.visible = false;
@@ -696,8 +670,7 @@ export class App {
       if (cut && text) this.tip([[text, c.text]], event.x, event.y);
     };
     node.onMouseOut = () => {
-      this.hover?.destroyRecursively();
-      this.hover = undefined;
+      this.unhover();
     };
     return node;
   }
@@ -1150,15 +1123,7 @@ export class App {
     const status = loading ? "opening" : w.status(w.selected);
     const moving = status === "working" || status === "opening";
     this.statusMoves = moving;
-    const [mark, color] = moving
-      ? [spin(), c.accent]
-      : status === "blocked" || status === "paused"
-        ? [status === "blocked" ? glyph.asks : glyph.held, c.warning]
-        : status === "error"
-          ? [glyph.failed, c.danger]
-          : status === "done"
-            ? [glyph.dot, c.success]
-            : [glyph.ring, c.faint];
+    const [mark, color] = [moving ? spin() : this.statusDot(status), this.statusColor(status)];
     const label = loading
       ? "Loading"
       : status === "error"
@@ -1314,8 +1279,8 @@ export class App {
     this.label(card, heading);
     this.cards.set(id, card);
   }
-  /** A panel in a card: a bar of a color at its left, and half a row of the panel above and below what it holds. */
-  private panel(box: BoxRenderable, color: RGBA): BoxRenderable {
+  /** A panel in a box: a bar of a color at its left, and half a row of the panel above and below what it holds. */
+  private panel(box: BoxRenderable, color: RGBA, options: BoxOptions = {}): BoxRenderable {
     const edge = (side: "top" | "bottom") => {
       const bar = this.box({
         height: space.bar,
@@ -1341,6 +1306,7 @@ export class App {
       borderColor: color,
       customBorderChars: { ...noBorder, vertical: glyph.bar },
       backgroundColor: c.panel,
+      ...options,
     });
     box.add(edge("top"));
     box.add(inner);
@@ -1373,8 +1339,7 @@ export class App {
     };
     code.onMouseOut = () => {
       if (this.hoverTimer) clearTimeout(this.hoverTimer);
-      this.hover?.destroyRecursively();
-      this.hover = undefined;
+      this.unhover();
     };
     code.onMouseDown = (event) => {
       const name = nameAt(event.x, event.y);
@@ -2171,7 +2136,7 @@ export class App {
   }
   /** What an act is doing: the word that says it, the glyph that shows it, and their color. A done act says
    * nothing, since its glyph says it. */
-  private actState(act: ActRow): { word: string; mark: string; color: RGBA } {
+  private actState(act: ActRow): State {
     const w = this.session;
     const running = () => ({ word: `running ${this.progress(act.id)}`, mark: spin(), color: c.accent });
     if (act.kind === "grant")
@@ -2181,26 +2146,20 @@ export class App {
     // A rung that a pause holds waits for the wake, and says so, where it would otherwise seem to run.
     if (act.kind === "rung")
       return cancelled(act)
-        ? { word: "cancelled", mark: glyph.cancelled, color: c.faint }
+        ? stateOf("cancelled")
         : act.run?.status === "failed"
           ? this.retry(act)
             ? { word: `retried as ${this.retry(act)?.id}`, mark: glyph.failed, color: c.faint }
-            : { word: "failed", mark: glyph.failed, color: c.danger }
+            : stateOf("failed")
           : act.run?.status === "done"
-            ? { word: "", mark: glyph.done, color: c.success }
+            ? stateOf("done")
             : act.paused
-              ? { word: "waits for resume", mark: glyph.held, color: c.warning }
+              ? stateOf("held")
               : running();
-    if (act.done)
-      return failed(act)
-        ? { word: "failed", mark: glyph.failed, color: c.danger }
-        : cancelled(act)
-          ? { word: "cancelled", mark: glyph.cancelled, color: c.faint }
-          : { word: "", mark: glyph.done, color: c.success };
+    if (act.done) return stateOf(failed(act) ? "failed" : cancelled(act) ? "cancelled" : "done");
     if (w.host.pending.has(act.id)) return { word: "pending", mark: glyph.ring, color: c.faint };
     if (w.host.prompts.has(act.id)) return { word: "needs input", mark: glyph.asks, color: c.warning };
-    if (act.paused && act.kind !== "bash")
-      return { word: "waits for resume", mark: glyph.held, color: c.warning };
+    if (act.paused && act.kind !== "bash") return stateOf("held");
     return running();
   }
   /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
@@ -2215,23 +2174,15 @@ export class App {
   private actLabel(act: ActRow, closed = false, indent = 0, code?: string): Part[] {
     const { word, mark, color } = this.actState(act);
     const observation = act.kind === "prompt" && !this.session.isUserPrompt(act);
+    // A rung says its first line while it is folded, and a message of a chain names the act that it tells done.
     const subject =
-      act.kind === "prompt"
-        ? String(act.words[1]).replace(observation ? / done$/ : /$^/, "")
-        : act.kind === "grant"
-          ? [
-              act.words[0] === null ? "" : `${dollars(Number(act.words[0]))} ceiling`,
-              act.words[1] === null ? "" : share(Number(act.words[1])),
-            ]
-              .filter(Boolean)
-              .join("  ")
-          : act.kind === "wait"
-            ? seconds(Number(act.words[0]))
-            : act.kind === "rung"
-              ? closed
-                ? (String(code || this.session.program[act.id] || act.words[0] || "").split("\n")[0] ?? "")
-                : ""
-              : String(act.words[0] || "");
+      act.kind === "rung"
+        ? closed
+          ? ((code || this.subject(act)).split("\n")[0] ?? "")
+          : ""
+        : observation
+          ? this.subject(act).replace(/ done$/, "")
+          : this.subject(act);
     const name = act.kind === "rung" ? act.id : observation ? (subject.split("\n")[0] ?? "") : act.kind;
     // An open rung says who wrote it: the model of the prompt that made it, or the operator.
     const author =
@@ -2250,18 +2201,33 @@ export class App {
       [tail, color],
     ];
   }
+  /** What an act is about, whole: the message of a prompt, the program of a rung, the time of a wait, the ceilings of
+   * a grant, and the first word of any other act. */
+  private subject(act: ActRow): string {
+    if (act.kind === "prompt") return String(act.words[1] ?? "");
+    if (act.kind === "rung") return String(this.session.program[act.id] || act.words[0] || "");
+    if (act.kind === "wait") return seconds(Number(act.words[0]));
+    if (act.kind === "grant")
+      return [
+        act.words[0] === null ? "" : `${dollars(Number(act.words[0]))} ceiling`,
+        act.words[1] === null ? "" : share(Number(act.words[1])),
+      ]
+        .filter(Boolean)
+        .join("  ");
+    return String(act.words[0] || "");
+  }
   /** Where a message of the operator stands, which its panel says at its right: the type of the answer that it asks
    * for, and a mark and a word only when a cancel or a failure ended it, or a pause holds it. */
   private promptState(act: ActRow): Part[] {
     const shape: Part = [String(act.words[0] ?? ""), c.faint];
     const state = act.done
       ? failed(act)
-        ? { word: "failed", mark: glyph.failed, color: c.danger }
+        ? stateOf("failed")
         : cancelled(act)
-          ? { word: "cancelled", mark: glyph.cancelled, color: c.faint }
+          ? stateOf("cancelled")
           : undefined
       : act.paused || this.session.host.pending.has(act.id)
-        ? { word: "waits for resume", mark: glyph.held, color: c.warning }
+        ? stateOf("held")
         : undefined;
     return state ? [shape, [`   ${state.mark} ${state.word}`, state.color]] : [shape];
   }
@@ -2423,15 +2389,13 @@ export class App {
       void this.referenceHover(value, event.x, event.y);
     };
     node.onMouseOut = () => {
-      this.hover?.destroyRecursively();
-      this.hover = undefined;
+      this.unhover();
     };
     return node;
   }
 
   private async follow(value: string): Promise<void> {
-    this.hover?.destroyRecursively();
-    this.hover = undefined;
+    this.unhover();
     const act = this.session.actOf(value);
     if (value.startsWith("furb-image://")) this.imageActions(value);
     else if (act?.kind === "chain") await this.session.select(act.id);
@@ -2464,24 +2428,21 @@ export class App {
           ? `${act.kind}  ${act.done ? display(act.value) : "pending"}`
           : display(await this.referenced(value));
       if (this.closed || this.overlay) return;
-      this.hover?.destroyRecursively();
-      this.hover = this.box({
-        position: "absolute",
-        left: Math.max(1, Math.min(x, this.renderer.width - 60)),
-        top: Math.max(1, Math.min(y + 1, this.renderer.height - 8)),
-        width: Math.min(58, this.renderer.width - 4),
-        maxHeight: 8,
-        paddingX: space.between,
-        paddingY: space.inset,
-        backgroundColor: c.raised,
-        zIndex: 30,
-        onMouseDown: () => {
-          void this.follow(value).catch(this.report);
+      this.popup(
+        {
+          left: Math.max(1, Math.min(x, this.renderer.width - 60)),
+          top: Math.max(1, Math.min(y + 1, this.renderer.height - 8)),
+          width: Math.min(58, this.renderer.width - 4),
+          maxHeight: 8,
+          paddingX: space.between,
+          paddingY: space.inset,
+          onMouseDown: () => {
+            void this.follow(value).catch(this.report);
+          },
         },
-      });
-      this.hover.add(this.text(value, c.link, { attributes: bold }));
-      this.hover.add(this.text(detail.slice(0, 400), c.muted, { maxHeight: 4 }));
-      this.root.add(this.hover);
+        this.text(value, c.link, { attributes: bold }),
+        this.text(detail.slice(0, 400), c.muted, { maxHeight: 4 }),
+      );
     } catch {
       /* A path can have disappeared since the turn was written. */
     }
@@ -2531,8 +2492,7 @@ export class App {
     node.onMouseMove = (event) => {
       clearTimeout(this.hoverTimer);
       const value = target(event.x, event.y);
-      this.hover?.destroyRecursively();
-      this.hover = undefined;
+      this.unhover();
       if (value)
         this.hoverTimer = setTimeout(() => {
           if (value.reference) void this.referenceHover(value.value, event.x, event.y);
@@ -2541,8 +2501,7 @@ export class App {
     };
     node.onMouseOut = () => {
       clearTimeout(this.hoverTimer);
-      this.hover?.destroyRecursively();
-      this.hover = undefined;
+      this.unhover();
     };
     node.onMouseDown = (event) => {
       const value = target(event.x, event.y);
@@ -2552,32 +2511,6 @@ export class App {
     return node;
   }
 
-  /** What a chain is doing, read off its own acts, and nothing for a chain at rest. */
-  /** The state of a chain. A chain that the operator started, directly or by a word of their own, and that finished
-   * its work while another chain was shown, is finished and not yet seen until the operator opens it. */
-  private chainStatus(id: string): SessionStatus {
-    const w = this.session;
-    const acts = w.acts.filter((act) => act.on === id && act.kind !== "chain" && act.kind !== "grant");
-    const latest = acts.at(-1);
-    const status: SessionStatus = acts.some((act) => w.host.prompts.has(act.id))
-      ? "blocked"
-      : acts.some((act) => w.host.pending.has(act.id))
-        ? "paused"
-        : acts.some(working)
-          ? "working"
-          : acts.some((act) => act.paused && !act.done)
-            ? "paused"
-            : latest && failed(latest)
-              ? "error"
-              : "idle";
-    const before = w.phases.get(id);
-    w.phases.set(id, status);
-    const chain = w.acts.find((act) => act.id === id);
-    const mine = chain?.by === "operator" || w.actOf(chain?.by ?? "")?.by === "operator";
-    if (id === w.selected || status !== "idle") w.unread.delete(id);
-    else if (before === "working" && mine) w.unread.add(id);
-    return status === "idle" && w.unread.has(id) ? "done" : status;
-  }
   private renderRail(): void {
     if (!this.rail.visible) return;
     this.renderRailSession();
@@ -2596,7 +2529,7 @@ export class App {
         w.spend,
         window,
         width,
-        w.chains.map((chain) => [chain.id, w.labelOf(chain.id), this.chainStatus(chain.id)]),
+        w.chains.map((chain) => [chain.id, w.labelOf(chain.id), this.session.chainStatus(chain.id)]),
         grant?.words,
         this.showResting,
       ])
@@ -2630,29 +2563,18 @@ export class App {
     // The root chain, the chain that is shown, and a chain that has something to say stand in the list, and the other
     // finished chains fold under a row of their own, which a click opens. The list takes six rows at most, and the rest
     // wait behind a button that lists them all.
-    const states = new Map(w.chains.map((chain) => [chain.id, this.chainStatus(chain.id)]));
+    const states = new Map(w.chains.map((chain) => [chain.id, this.session.chainStatus(chain.id)]));
     const active = w.chains.filter(
       (chain) => chain.id === w.engine.root || chain.id === w.selected || states.get(chain.id) !== "idle",
     );
     const resting = w.chains.filter((chain) => !active.includes(chain));
+    // A row of a chain spans the sidebar past its padding.
+    const edge = { marginX: -space.between, paddingX: space.inset };
     const chainLine = (chain: ActRow) => {
       const selected = chain.id === w.selected;
       const status = states.get(chain.id) ?? "idle";
-      const line = this.hoverable(
-        this.box({
-          flexDirection: "row",
-          height: space.bar,
-          marginX: -space.between,
-          paddingX: space.inset,
-          backgroundColor: selected ? c.selected : c.panel,
-          onMouseUp: this.click(() => {
-            void w.select(chain.id).catch(w.fail);
-          }),
-        }),
-        selected ? c.selected : c.raised,
-      );
-      line.add(
-        this.text(
+      this.railSession.add(
+        this.railRow(
           [
             [selected ? glyph.mark : " ", c.accent],
             [" "],
@@ -2663,11 +2585,11 @@ export class App {
               selected ? bold : 0,
             ],
           ],
-          c.muted,
-          { truncate: true, flexShrink: 1 },
+          () => void w.select(chain.id).catch(w.fail),
+          edge,
+          selected,
         ),
       );
-      this.railSession.add(line);
     };
     const shown = active.length > 7 ? 6 : active.length;
     for (const chain of active.slice(0, shown)) chainLine(chain);
@@ -2682,33 +2604,21 @@ export class App {
     if (resting.length) {
       // The row of the finished chains stands as a chain row does: its fold mark in the column of the bar of the
       // selected chain, and its name where the names of the chains start.
-      const fold = this.hoverable(
-        this.box({
-          flexDirection: "row",
-          height: space.bar,
-          marginX: -space.between,
-          paddingX: space.inset,
-          backgroundColor: c.panel,
-          onMouseUp: this.click(() => {
-            this.showResting = !this.showResting;
-            this.render();
-          }),
-        }),
-        c.raised,
-      );
-      fold.add(
-        this.text(
+      this.railSession.add(
+        this.railRow(
           [
             [this.showResting ? glyph.open : glyph.closed, c.faint],
-            [" "],
+            [" ", c.faint],
             ["Finished", c.faint],
             [`  ${resting.length}`, c.faint],
           ],
-          c.faint,
-          { truncate: true, flexShrink: 1 },
+          () => {
+            this.showResting = !this.showResting;
+            this.render();
+          },
+          edge,
         ),
       );
-      this.railSession.add(fold);
       if (this.showResting) for (const chain of resting.slice(0, 12)) chainLine(chain);
     }
     target = this.railUsage;
@@ -2744,8 +2654,7 @@ export class App {
       add(cells, {
         onMouseOver: (event) => this.tip(tip, event.x, event.y),
         onMouseOut: () => {
-          this.hover?.destroyRecursively();
-          this.hover = undefined;
+          this.unhover();
         },
       });
       // The input is the whole prompt of the last answer, its system prompt included, which the share of the window
@@ -2764,8 +2673,7 @@ export class App {
               event.y,
             );
           shown.onMouseOut = () => {
-            this.hover?.destroyRecursively();
-            this.hover = undefined;
+            this.unhover();
           };
         }
         row("Output", count(spend.output));
@@ -2775,6 +2683,22 @@ export class App {
       row("Spent", dollars(spend.dollars));
       if (grant && grant.words[0] !== null) row("Ceiling", dollars(Number(grant.words[0])), c.muted);
     }
+  }
+  /** A row of the sidebar, whose click runs, which spans the sidebar so that the pointer and the selection show from
+   * edge to edge. It lights while the pointer is on it, and stays lit while it is selected. */
+  private railRow(parts: Part[], run: () => void, options: BoxOptions, selected = false): BoxRenderable {
+    const row = this.hoverable(
+      this.box({
+        flexDirection: "row",
+        height: space.bar,
+        backgroundColor: selected ? c.selected : c.panel,
+        onMouseUp: this.click(run),
+        ...options,
+      }),
+      selected ? c.selected : c.raised,
+    );
+    row.add(this.text(parts, c.muted, { truncate: true, flexGrow: 1, flexShrink: 1 }));
+    return row;
   }
   /** The composer holds a text in place of the draft that the session shows, and an undo gives the draft back. */
   private insert(text: string): void {
@@ -2832,31 +2756,16 @@ export class App {
       return;
     this.clear(this.railHeading);
     this.clear(this.railSpaces);
-    this.hover?.destroyRecursively();
-    this.hover = undefined;
+    this.unhover();
     const inner = width - space.between * 2;
     this.railHeading.add(this.text("Workspaces", c.text, { attributes: bold, flexGrow: 1 }));
     this.railHeading.add(
       this.text("⌃W", c.faint, { onMouseUp: this.click(() => void this.workspacePicker()) }),
     );
-    // A row of the list spans the sidebar, so that the pointer and the selection show from edge to edge.
-    const line = (parts: Part[], run: () => void, options: BoxOptions = {}, selected = false) => {
-      const row = this.hoverable(
-        this.box({
-          flexDirection: "row",
-          height: space.bar,
-          paddingLeft: space.inset,
-          paddingRight: space.between,
-          backgroundColor: selected ? c.selected : c.panel,
-          onMouseUp: this.click(run),
-          ...options,
-        }),
-        selected ? c.selected : c.raised,
+    const line = (parts: Part[], run: () => void, options: BoxOptions = {}) =>
+      this.railSpaces.add(
+        this.railRow(parts, run, { paddingLeft: space.inset, paddingRight: space.between, ...options }),
       );
-      row.add(this.text(parts, c.muted, { truncate: true, flexGrow: 1, flexShrink: 1 }));
-      this.railSpaces.add(row);
-      return row;
-    };
     if (library.notice) this.railSpaces.add(this.inset(space.between, this.text(library.notice, c.warning)));
     if (!library.groups.length)
       this.railSpaces.add(
@@ -2901,11 +2810,7 @@ export class App {
           flexGrow: 1,
           flexShrink: 1,
           value: renaming.value,
-          backgroundColor: c.background,
-          focusedBackgroundColor: c.background,
-          textColor: c.text,
-          focusedTextColor: c.text,
-          cursorColor: c.accent,
+          ...inputColors(c.background),
         });
         input.on(InputRenderableEvents.INPUT, (value: string) => {
           renaming.value = value;
@@ -2962,8 +2867,7 @@ export class App {
         remove.fg = event.target === remove ? c.danger : c.muted;
         // A name that its room cuts shows whole in a tip of its own.
         if (event.target === name) return;
-        this.hover?.destroyRecursively();
-        this.hover = undefined;
+        this.unhover();
         if (event.isDragging) return;
         const told: Part[] | undefined =
           event.target === rename
@@ -2986,8 +2890,7 @@ export class App {
         row.backgroundColor = ground;
         rename.fg = ground;
         remove.fg = ground;
-        this.hover?.destroyRecursively();
-        this.hover = undefined;
+        this.unhover();
       };
       this.railSpaces.add(row);
       return row;
@@ -3082,23 +2985,33 @@ export class App {
   /** A tip that stands under the pointer and ends at its left, or above it where the rows under it cannot hold it,
    * inside the screen. It never covers the row of the pointer, or the pointer would leave the text that shows it. */
   private tip(parts: Part[], x: number, y: number): void {
-    this.hover?.destroyRecursively();
     const size = Math.min(
       this.renderer.width - 2,
       Math.max(25, Bun.stringWidth(plain(parts)) + space.between),
     );
     const rows = Math.max(1, Math.ceil(Bun.stringWidth(plain(parts)) / Math.max(1, size - space.inset * 2)));
-    this.hover = this.box({
-      position: "absolute",
-      left: Math.max(1, Math.min(x - size, this.renderer.width - size - 1)),
-      top: y + 1 + rows <= this.renderer.height ? y + 1 : Math.max(0, y - rows),
-      width: size,
-      paddingX: space.inset,
-      backgroundColor: c.raised,
-      zIndex: 30,
-    });
-    this.hover.add(this.text(parts));
+    this.popup(
+      {
+        left: Math.max(1, Math.min(x - size, this.renderer.width - size - 1)),
+        top: y + 1 + rows <= this.renderer.height ? y + 1 : Math.max(0, y - rows),
+        width: size,
+        paddingX: space.inset,
+      },
+      this.text(parts),
+    );
+  }
+  /** A popup over the screen, in place of the one before it, which holds nodes until the pointer leaves what shows
+   * it. */
+  private popup(options: BoxOptions, ...nodes: Renderable[]): void {
+    this.unhover();
+    this.hover = this.box({ position: "absolute", backgroundColor: c.raised, zIndex: 30, ...options });
+    for (const node of nodes) this.hover.add(node);
     this.root.add(this.hover);
+  }
+  /** The popup gone, where one shows. */
+  private unhover(): void {
+    this.hover?.destroyRecursively();
+    this.hover = undefined;
   }
   /** Ask how to remove a session: archive it, which keeps its record under a row of its own, or move it to the trash.
    * An archived session offers to come back instead. */
@@ -4032,12 +3945,7 @@ export class App {
       for (const child of node.getChildren()) recolor(child);
     };
     recolor(this.root);
-    this.composer.backgroundColor = c.panel;
-    this.composer.focusedBackgroundColor = c.panel;
-    this.composer.textColor = c.text;
-    this.composer.focusedTextColor = c.text;
-    this.composer.placeholderColor = c.muted;
-    this.composer.cursorColor = c.accent;
+    Object.assign(this.composer, inputColors(c.panel), { placeholderColor: c.muted });
     this.clear(this.scroll);
     this.cards.clear();
     const previous = this.style;
@@ -4195,28 +4103,22 @@ export class App {
     try {
       const inspected = await this.session.engine.inspect(name, this.session.selected);
       if (this.closed || this.overlay) return;
-      this.hover?.destroyRecursively();
       const width = Math.min(58, this.renderer.width - 4);
-      this.hover = this.box({
-        position: "absolute",
-        left: Math.max(1, Math.min(x, this.renderer.width - width - 1)),
-        top: Math.max(1, Math.min(y + 1, this.renderer.height - 9)),
-        width,
-        maxHeight: 9,
-        paddingX: space.between,
-        paddingY: space.inset,
-        backgroundColor: c.raised,
-        zIndex: 30,
-        onMouseDown: () => this.inspect(name),
-      });
-      this.hover.add(
+      this.popup(
+        {
+          left: Math.max(1, Math.min(x, this.renderer.width - width - 1)),
+          top: Math.max(1, Math.min(y + 1, this.renderer.height - 9)),
+          width,
+          maxHeight: 9,
+          paddingX: space.between,
+          paddingY: space.inset,
+          onMouseDown: () => this.inspect(name),
+        },
         this.text([
           [name, c.text, bold],
           [`: ${inspected.kind}`, c.secondary],
         ]),
-      );
-      this.hover.add(this.text(inspected.representation.slice(0, 280), c.muted, { maxHeight: 4 }));
-      this.hover.add(
+        this.text(inspected.representation.slice(0, 280), c.muted, { maxHeight: 4 }),
         this.text([
           ["Click", c.muted],
           [" opens it   ", c.faint],
@@ -4224,16 +4126,13 @@ export class App {
           [" inspects a name", c.faint],
         ]),
       );
-      this.root.add(this.hover);
     } catch {
-      this.hover?.destroyRecursively();
-      this.hover = undefined;
+      this.unhover();
     }
   }
   /** The value a name holds in the module of the chain, shown once the life has read it. */
   inspect = (name: string): Promise<void> => {
-    this.hover?.destroyRecursively();
-    this.hover = undefined;
+    this.unhover();
     return this.session.engine
       .inspect(name, this.session.selected)
       .then((value) => {
@@ -4542,7 +4441,7 @@ export class App {
     const w = this.session;
     if (chain) {
       const current = act.id === w.selected;
-      const status = this.chainStatus(act.id);
+      const status = this.session.chainStatus(act.id);
       return {
         parts: [
           [`${this.statusDot(status)} `, this.statusColor(status)],
@@ -4571,15 +4470,7 @@ export class App {
         run: branch,
       };
     const { mark, color } = this.actState(act);
-    const subject = asksOperator(act)
-      ? String(act.words[1] ?? "")
-      : act.kind === "rung"
-        ? String(w.program[act.id] || act.words[0] || "")
-        : act.kind === "prompt"
-          ? String(act.words[1] ?? "")
-          : act.kind === "wait"
-            ? seconds(Number(act.words[0]))
-            : String(act.words[0] ?? "");
+    const subject = this.subject(act);
     const observation = act.kind === "prompt" && !asksOperator(act) && !w.isUserPrompt(act);
     const name = asksOperator(act) ? "question" : act.kind === "rung" ? act.id : act.kind;
     return {
@@ -4821,7 +4712,7 @@ export class App {
           ]
             .filter(Boolean)
             .join("   "),
-          status: this.chainStatus(chain.id),
+          status: this.session.chainStatus(chain.id),
           run: () => w.select(chain.id),
         };
       }),
@@ -4853,8 +4744,7 @@ export class App {
     this.rich = rich;
     this.paletteStart = 0;
     this.composer.blur();
-    this.hover?.destroyRecursively();
-    this.hover = undefined;
+    this.unhover();
     // The dialog is as wide as its longest label and detail need, from 80 columns to 110. It stands over the middle
     // of the feed when the feed holds it, so that it cuts no word of the sidebar, and over the middle of the screen
     // when it is wider, so that it cuts none of its own.
@@ -4948,12 +4838,7 @@ export class App {
       id: "palette-search",
       flexGrow: 1,
       placeholder: quiet ? "" : "Type to filter",
-      backgroundColor: c.raised,
-      focusedBackgroundColor: c.raised,
-      textColor: c.text,
-      focusedTextColor: c.text,
-      placeholderColor: c.faint,
-      cursorColor: c.accent,
+      ...inputColors(c.raised),
     });
     this.paletteInputRow.add(this.paletteInput);
     this.overlay.add(this.paletteInputRow);
