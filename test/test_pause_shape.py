@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import acts, born, heads, said, settle
+from conftest import acts, born, heads, said, settle, stalled
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -12,10 +12,7 @@ COST = (80000, 0, 0, 0, 1.5)
 
 async def test_while_a_pause_stands_nothing_that_the_pause_is_over_hears() -> None:
   """While a pause stands, nothing that the pause is over hears, and what is said meanwhile waits for the wake."""
-  sand, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
-  command = said(log, "bash")[0][1]
+  sand, _, root, act, _, command = await stalled()
   engine.pause(root)
   sand.exits(command, 0)
   await settle()
@@ -28,10 +25,7 @@ async def test_while_a_pause_stands_nothing_that_the_pause_is_over_hears() -> No
 
 async def test_a_control_is_a_fact_over_an_act() -> None:
   """A control is a fact over an act: over that act, over everything that act made, and over everything on a chain when the control names a chain."""
-  _, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
-  step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
+  _, _, root, act, step, command = await stalled()
   engine.cancel(act)
   await settle()
   assert [isinstance(engine.peek(one), CancelledError) for one in (act, step, command)] == [True, True, True]
@@ -43,10 +37,7 @@ async def test_a_control_is_a_fact_over_an_act() -> None:
 
 async def test_a_control_reaches_what_it_is_over_and_whatever_else_its_words_name() -> None:
   """A control reaches what it is over, and whatever else the words of the control name."""
-  _, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
-  step = said(log, "rung")[0][1]
+  _, log, _, act, step, _ = await stalled()
   engine.close(21, act)
   await settle()
   word = said(log, "close")[0]
@@ -70,10 +61,7 @@ async def test_a_control_is_no_act_it_takes_no_name_of_its_own() -> None:
 
 async def test_what_a_control_reaches() -> None:
   """What a control reaches: the act it names, everything that act made, and every act of the chain it names."""
-  _, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
-  step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
+  _, log, root, act, step, command = await stalled()
   engine.cancel(act)
   over = said(log, "cancel")[0]
   assert [engine.covers(over, one) for one in (act, step, command)] == [True, True, True]
@@ -117,10 +105,7 @@ async def test_a_control_carries_the_header_it_tells() -> None:
 
 async def test_a_pause_is_over_the_act_it_names_and_everything_under_it() -> None:
   """A pause is over the act it names and everything under it."""
-  sand, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
-  command = said(log, "bash")[0][1]
+  sand, _, root, act, _, command = await stalled()
   engine.pause(act)
   sand.exits(command, 0)
   await settle()

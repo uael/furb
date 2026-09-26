@@ -475,6 +475,28 @@ async def lived() -> tuple[Sand, list[tuple], str]:
   return sand, log, root
 
 
+async def stalled() -> tuple[Sand, list[tuple], str, Act[int], str, str]:
+  """A life whose prompt waits on a command that does not end: the World, what was said, the root, the prompt, the
+  rung of the prompt and the command."""
+  sand, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
+  act = engine.prompt(int, "go", on=root)
+  await settle()
+  return sand, log, root, act, said(log, "rung")[0][1], said(log, "bash")[0][1]
+
+
+async def counted() -> tuple[list[tuple], str, Act, Act[int], str, str]:
+  """A life whose prompt counts on what a rung its caller wrote bound: what was said, the root, that rung, the
+  prompt, the rung of the prompt, and the rung of the bindings that the chain wrote for it."""
+  _, log, root = born("close(k + 1)")
+  laid = engine.rung("k = 1", on=root)
+  await laid
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 2
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  (binding,) = [a[1] for a in said(log, "rung") if a[2] == root]
+  return log, root, laid, act, step, binding
+
+
 async def relived(sand: Sand, record: Sequence[tuple]) -> tuple[list[tuple], str]:
   """A later life on a kept record, with the World it is given."""
   log, root = life(sand, record)

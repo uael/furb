@@ -9,6 +9,7 @@ from conftest import (
   Py,
   acts,
   born,
+  counted,
   dones,
   gated,
   heads,
@@ -19,6 +20,7 @@ from conftest import (
   said,
   settle,
   sown,
+  stalled,
   takes,
   watched,
   world_says,
@@ -29,13 +31,7 @@ from furb.engine import Exit, Refused, Text
 
 async def test_the_run_of_a_word_on_a_chain() -> None:
   """The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is."""
-  sand, log, root = born()
-  laid = engine.rung("k = 1", on=root)
-  await laid
-  sand.script[root] = ["close(k + 1)"]
-  act = engine.prompt(int, "count", on=root)
-  assert await act == 2
-  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  log, root, laid, act, step, _ = await counted()
   assert [(a[1], a[2], a[3]) for a in said(log, "tell") if a[1] in (laid, step)] == [
     (laid, laid, [f"#{laid}", "k = 1"]),
     (step, root, [f"#{step} advance on {act}"]),
@@ -137,9 +133,7 @@ async def test_a_rung_that_retells_another_rung_names_its_acts_under_that_one() 
 
 async def test_a_cancel_of_a_rung_is_the_kernels_to_do() -> None:
   """A cancel of a rung is the Kernel's to do, since the Kernel is the one running the word."""
-  _, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
+  _, log, root, act, _, _ = await stalled()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   engine.cancel(step)
   await settle()
@@ -283,9 +277,7 @@ async def test_a_rung_with_a_word_completes_with_what_that_word_raises() -> None
 
 async def test_a_close_ends_the_rung_that_runs_in_a_prompt_at_its_next_await() -> None:
   """A close ends the rung that runs in a prompt at its next await."""
-  _, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
+  _, log, _, act, _, _ = await stalled()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   engine.close(21, act)
   await settle()
@@ -322,14 +314,7 @@ async def test_a_chain_with_a_source_awaits_what_its_origin_started() -> None:
 
 async def test_it_says_its_word_may_run_as_soon_as_it_holds_one() -> None:
   """It says its word may run as soon as it holds one, whichever way that word came, and what the chain makes of the word is the chain's."""
-  sand, log, root = born()
-  laid = engine.rung("k = 1", on=root)
-  await laid
-  sand.script[root] = ["close(k + 1)"]
-  act = engine.prompt(int, "count", on=root)
-  assert await act == 2
-  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  (binding,) = [a[1] for a in said(log, "rung") if a[2] == root]
+  log, root, laid, act, step, binding = await counted()
   wrote = f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"
   assert [a[1:] for a in said(log, "ready")] == [
     (laid, laid, "k = 1"),

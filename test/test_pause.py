@@ -1,15 +1,12 @@
 """pause, which holds what the acts it is over hear until the wake."""
 
-from conftest import born, heads, paragraphs, ran, rows, said, settle, world_says
+from conftest import born, heads, paragraphs, ran, rows, said, settle, stalled, world_says
 from furb import engine
 
 
 async def test_a_pause_while_it_stands_nothing_it_is_over_hears() -> None:
   """A pause: while it stands, nothing it is over hears, and what is said meanwhile waits for the wake."""
-  sand, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
-  command = said(log, "bash")[0][1]
+  sand, _, _, act, _, command = await stalled()
   engine.pause(act)
   sand.exits(command, 0)
   await settle()

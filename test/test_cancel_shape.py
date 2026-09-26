@@ -2,16 +2,13 @@
 
 from asyncio import CancelledError
 
-from conftest import born, said, settle, world_says
+from conftest import born, said, settle, stalled, world_says
 from furb import engine
 
 
 async def test_a_cancel_ends_everything_it_is_over() -> None:
   """A cancel ends everything it is over: each of them is done with CancelledError, and none of them says anything of its own again."""
-  _, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  one = engine.prompt(int, "go", on=root)
-  await settle()
-  step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
+  _, log, _, one, step, command = await stalled()
   engine.cancel(one)
   await settle()
   assert [type(engine.peek(x)).__name__ for x in (one, step, command)] == ["CancelledError"] * 3

@@ -5,7 +5,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import acts, born, heads, rows, said, settle
+from conftest import acts, born, heads, rows, said, settle, stalled
 from furb import engine
 from furb.engine import OPERATOR, Exit, Text
 
@@ -34,10 +34,7 @@ async def test_a_rung_that_awaits_an_act_reads_the_result_of_the_act() -> None:
 
 async def test_a_rung_awaits_an_act_and_nothing_else() -> None:
   """A rung awaits an act and nothing else."""
-  _, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  one = engine.prompt(int, "run it", on=root)
-  await settle()
-  command = said(log, "bash")[0][1]
+  _, log, _, one, _, command = await stalled()
   assert [a[4] for a in said(log, "wants")] == [command]
   assert {a[4] for a in said(log, "wants")} <= set(acts(log))
   engine.cancel(one)

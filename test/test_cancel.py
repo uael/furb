@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, heads, said, settle
+from conftest import born, heads, said, settle, stalled
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -27,10 +27,7 @@ async def test_a_cancel_of_that_prompt_reaches_the_acts_that_its_rungs_made_on_t
 
 async def test_a_cancel_is_over_the_act_it_names_and_everything_that_act_made() -> None:
   """A cancel is over the act it names and everything that act made, and each of them is done with CancelledError."""
-  _, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  one = engine.prompt(int, "go", on=root)
-  await settle()
-  step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
+  _, log, root, one, step, command = await stalled()
   engine.cancel(one)
   await settle()
   assert isinstance(engine.peek(one), CancelledError)
@@ -88,10 +85,7 @@ async def test_a_cancel_touches_nothing_else_on_the_chain() -> None:
 
 async def test_the_awaiter_of_a_cancelled_command_raises_cancellederror_in_its_step() -> None:
   """The awaiter of a cancelled command raises CancelledError in its step."""
-  _, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  one = engine.prompt(int, "go", on=root)
-  await settle()
-  step, command = said(log, "reply")[0][2], said(log, "bash")[0][1]
+  _, _, root, one, step, command = await stalled()
   engine.cancel(command)
   await settle()
   assert isinstance(engine.peek(step), CancelledError)

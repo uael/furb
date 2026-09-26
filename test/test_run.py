@@ -1,19 +1,12 @@
 """Run, the act of running the word of a rung."""
 
-from conftest import Py, Sand, born, kept, plain, ran, relived, said, settle, sown, watched
+from conftest import Py, Sand, born, counted, kept, plain, ran, relived, said, settle, sown, watched
 from furb import engine
 
 
 async def test_a_run_is_the_act_of_running_the_word_of_a_rung() -> None:
   """A run is the act of running the word of a rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs the word as the rung, and says the run done with what the word gave."""
-  sand, log, root = born()
-  laid = engine.rung("k = 1", on=root)
-  await laid
-  sand.script[root] = ["close(k + 1)"]
-  act = engine.prompt(int, "count", on=root)
-  assert await act == 2
-  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  (binding,) = [a[1] for a in said(log, "rung") if a[2] == root]
+  log, root, laid, act, step, binding = await counted()
   wrote = f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"
   assert [a[2:] for a in said(log, "run")] == [
     (root, root, laid, "k = 1", ""),

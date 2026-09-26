@@ -4,17 +4,14 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, heads, said, settle
+from conftest import born, heads, said, settle, stalled
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
 
 async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
   """An act ended from outside, by its name, with a value: it is done with it, and it ends what it made, since a close is a cancel that carries what the act it names is done with."""
-  _, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
-  step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
+  _, _, _, act, step, command = await stalled()
   engine.close(21, act)
   await settle()
   assert (await act) == 21
@@ -35,10 +32,7 @@ async def test_the_close_of_the_operator_enters_the_record_as_a_fact_of_its_own(
 
 async def test_a_close_ends_the_rung_of_a_prompt_at_its_next_await() -> None:
   """A close ends the rung of a prompt at its next await."""
-  _, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
-  step = said(log, "rung")[0][1]
+  _, _, _, act, step, _ = await stalled()
   engine.close(21, act)
   await settle()
   assert (await act) == 21 and isinstance(engine.peek(step), CancelledError)

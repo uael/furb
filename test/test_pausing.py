@@ -3,16 +3,13 @@
 from asyncio import CancelledError
 from collections.abc import Generator
 
-from conftest import born, dones, said, settle
+from conftest import born, dones, said, settle, stalled
 from furb import engine
 
 
 async def test_an_act_is_paused_while_the_last_control_in_record_order_that_is_over_it_is_a_pause() -> None:
   """An act is paused while the last control in record order that is over it is a pause."""
-  sand, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
-  command = said(log, "bash")[0][1]
+  sand, _, root, act, _, command = await stalled()
   engine.pause(root)
   engine.wake(root)
   engine.pause(root)
@@ -26,10 +23,7 @@ async def test_an_act_is_paused_while_the_last_control_in_record_order_that_is_o
 
 async def test_a_pause_holds_delivery_a_result_that_arrives_enters_the_record_and_waits() -> None:
   """A pause holds delivery: a result that arrives enters the record and waits."""
-  sand, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
-  command = said(log, "bash")[0][1]
+  sand, _, root, act, _, command = await stalled()
   engine.pause(root)
   sand.exits(command, 0)
   await settle()
@@ -74,9 +68,7 @@ async def test_the_engine_holds_the_response_of_a_reply_that_returns_on_a_paused
 
 async def test_a_rung_carries_on_only_while_its_own_chain_is_not_paused() -> None:
   """A rung carries on only while its own chain is not paused."""
-  sand, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
-  await settle()
+  sand, log, root, act, _, _ = await stalled()
   command = said(log, "bash")[0]
   engine.pause(root)
   sand.exits(command[1], 0)
