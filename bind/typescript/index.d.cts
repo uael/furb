@@ -9,7 +9,7 @@
  */
 export declare const __napiBindingTarget: 'native' | 'wasm32-wasi' | 'wasm32-wasip1'
 
-/** A named act. Keep its id for controls, or await the act for its outcome. */
+/** An act: its name, which a control takes, and what it comes to, which JavaScript awaits. */
 export declare class Act {
   get id(): string
   toString(): string
@@ -18,82 +18,121 @@ export declare class Act {
 }
 export type JsAct = Act
 
-export declare class Life {
-  /** Open on JavaScript ears, using the same call and reply protocol as the Python binding. */
-  static boot(callback: (request: unknown[]) => unknown, names: string[], record?: unknown[] | null): Life
+/** One engine, held on the thread of JavaScript. */
+export declare class Engine {
+  /**
+   * An engine, opened from the record, on these ears, each a generator of JavaScript or an ear of the crate under
+   * the name the engine hears it by, in the order the engine offers them a question.
+   */
+  static boot(record: unknown[], ears: Array<[string, Generator<unknown, unknown, unknown> | NativeEar]>): Engine
   get root(): string
   /** What boot raised, and nothing when it raised nothing. After a drift the life goes on, with nothing kept. */
   get raised(): { is: string; args: unknown[] } | null
   get disposed(): boolean
-  site(value?: string | undefined | null): string
-  /** Call any public engine verb, including verbs used by extensions. */
-  call<T = unknown>(name: string, args: unknown[], kwargs: Record<string, unknown>): T
-  /** Await one act. JavaScript continues to drive the World while the Promise waits. */
-  result<T = unknown>(id: string): Promise<T>
-  outcome(id: string): Outcome
-  made<T = unknown>(id: number, args: unknown[], kwargs: Record<string, unknown>): T
-  forget(id: number): void
-  prompt<T = unknown>(shape: string, message: string, options?: PromptOptions | undefined | null): Act & PromiseLike<T>
-  rung(word: string, options?: RungOptions | undefined | null): Act & PromiseLike<unknown>
   /**
-   * Read one name from the chain without calling it, with its Python type and representation. The value crosses
-   * as every value of the life does, through the stand-in, so a map that holds the key `is` crosses as its pairs.
+   * Who speaks in the life, and who speaks from now on when a name is given: the site of the contract, which the work
+   * an ear began sets to the name of that ear before it speaks.
+   */
+  site(value?: string | undefined | null): string
+  /** What an act comes to, which JavaScript awaits. */
+  result<T = unknown>(id: string): Promise<T>
+  /** What an act came to, and whether it is done. */
+  outcome(id: string): Outcome
+  /** One callable the engine made, called back by the handle it crossed under, with these words. */
+  made<T = unknown>(id: number, args: unknown[], kwargs: Record<string, unknown>): T
+  /** A callable the engine made, forgotten: JavaScript holds its handle no more. */
+  forget(id: number): void
+  /**
+   * One name of a chain, read without calling it, with its type and its representation in the sandbox. The value
+   * crosses as every value does, so a map that holds the key `is` crosses as its pairs.
    */
   inspect(name: string, chain?: string | undefined | null): Inspection
   /** Every name the module of a chain binds, in the order it bound them. */
   names(chain?: string | undefined | null): Array<string>
-  chain(label: string, source?: string | null, filter?: unknown, on?: string | null): Act & PromiseLike<never>
-  grant(options: GrantOptions): Act & PromiseLike<null>
-  bash(command: string, options?: BashOptions | undefined | null): Act & PromiseLike<ExitValue>
-  wait(seconds: number, chain?: string | undefined | null): Act & PromiseLike<null>
-  read<T = TextValue>(path: string, show?: unknown, chain?: string | null): T
-  write<T = TextValue>(text: TextValue, chain?: string | undefined | null): T
-  peek<T = unknown>(id: string): T | null
-  get(id: string): [string, string, string, string, ...unknown[]]
-  /** The turns of a chain, each the python a model reads, which the engine wrote. */
-  turns(chain?: string | undefined | null): Array<['user' | 'assistant', string, [number, number, number, number, number] | null, unknown]>
-  scope(id: string): string
-  cwd(chain?: string | undefined | null): string
-  cd(path: string, chain?: string | undefined | null): string
-  clock(chain?: string | undefined | null): number
-  chance(chain?: string | undefined | null): number
-  gate(word: string, chain?: string | undefined | null): Array<string>
+  /**
+   * The engine is gone, and every result JavaScript awaits of it is refused. Its ears go with it: a command of the
+   * crate ends, a wait ends, and the store lets its record go.
+   */
+  dispose(): void
+  /** The way to say a fact from what is no ear: a word through its verbs, the operator, and the work an ear began, which speaks from its own loop; the fact is said to the living, whole as the bus made it, and given back. */
+  say(kind: string, about: string, words?: unknown[]): [string, string, string, ...unknown[]]
+  /** The way to make a question: it takes a name when it is made, it is put to the ears, its ear, when it has one, is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it. */
+  act(kind: string, on: string, ear: unknown, words?: unknown[]): Act & PromiseLike<unknown>
+  /** The other way to speak: a generator is brought to life under a name, and from then it hears every fact that is said and says its own. */
+  drive(g: Generator<unknown, unknown, unknown> | NativeEar, name: string): void
+  /** transcript gives the facts on a chain, each of which the life adds when it is said, so a chain reads at once what it said itself. */
+  transcript(options?: { on?: string } | null): Array<[string, string, string, ...unknown[]]>
+  /** The way to put a question that is answered now: it makes the act, and gives back what the act came to. */
+  ask(kind: string, on: string, words?: unknown[]): unknown
+  /** span(lo, hi) is the show of the lines lo through hi, where a line under one is counted back from the end, so that span(1, 20) is the first twenty lines and span(-20, -1) is the last twenty. */
+  span(lo: number, hi: number): unknown
+  /** grep(pattern) is the show of the lines that the pattern matches, each with its number. */
+  grep(pattern: string): unknown
+  /** differs(lines) is the show of the lines that differ from the lines it holds, which is what a write shows of what came back. */
+  differs(old: string[]): unknown
+  /** take keeps the acts it names and everything they made. */
+  take(ids?: string[], options?: { inside?: boolean } | null): unknown
+  /** A read: whoever serves the path answers it with the text of it, which the read tells by the lines the model has not seen. */
+  read(path: string, options?: { show?: unknown; on?: string } | null): TextValue
+  /** A write: whoever serves the path of the text takes its content. */
+  write(text: TextValue, options?: { on?: string } | null): TextValue
+  /** What the act it is at came to, as the record stands where the call is made, which it gives and never raises. */
+  peek(at: string, options?: { waiting?: unknown } | null): unknown
+  /** The turns of a chain, folded from what it has heard. */
+  turns(options?: { on?: string } | null): Array<['user' | 'assistant', string, [number, number, number, number, number] | null, unknown]>
+  /** module gives the globals of a chain: the dict that the last module of its transcript carries, in which every rung of the chain runs. */
+  module(options?: { on?: string } | null): unknown
+  /** program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of that rung, in order, as the runs of its transcript say. */
+  program(options?: { on?: string } | null): unknown
+  /** standing gives what the chains stand on: the answer of the last stand that the transcript of the root holds, and an empty standing before the first. */
+  standing(): unknown
+  /** stand asks the World what the chains stand on and gives the answer, which boot does on the root at the tip of every life. */
+  stand(options?: { on?: string } | null): unknown
+  /** clock gives one reading of the wall clock of the World. */
+  clock(options?: { on?: string } | null): number
+  /** chance gives a number that is at least zero and under one. */
+  chance(options?: { on?: string } | null): number
+  /** Whether the word of a rung may run: the gate reads it after the program of its chain, and it finds nothing when the word may run. */
+  gate(word: string, options?: { on?: string } | null): string[]
+  /** A cd: the paths of its chain resolve against its path from then on, and it does nothing else. */
+  cd(path: string, options?: { on?: string } | null): string
+  /** The working directory of a chain is the closest cd back in its transcript. */
+  cwd(options?: { on?: string } | null): string
+  /** The act again, from its name: whoever holds the name of an act is given the act the life holds under it, whole as it stands. */
+  get(about: string): [string, string, string, ...unknown[]] | null
+  /** A pause: while it stands, nothing it is over hears, and what is said meanwhile waits for the wake. */
   pause(id: string): void
+  /** A wake: it ends the pause over the same act, and what waited is heard. */
   wake(id: string): void
+  /** A cancel of that prompt reaches the acts that its rungs made on the chain with a source. */
   cancel(id: string): void
-  close(value: unknown, id: string): void
-  /** Say one fact, from whoever the site names, and give it back as the life holds it. */
-  say(kind: string, about: string, words: Array<any>): [string, string, string, ...unknown[]]
-  span(lo: number, hi: number): { is: 'made'; id: number }
-  grep(pattern: string): { is: 'made'; id: number }
-  differs(lines: Array<string>): { is: 'made'; id: number }
-  take(ids: Array<string>, inside?: boolean | undefined | null): { is: 'made'; id: number }
-  /** Drop this sandbox and reject pending waits. The World must stop its own processes and timers. */
+  /** An act ended from outside, by its name, with a value: it is done with it, and it ends what it made, since a close is a cancel that carries what the act it names is done with. */
+  close(value: unknown, options?: { id?: string } | null): void
+  /** What a word tells of itself as it runs: each interpolation of a template, with its expression and its value. */
+  debug(template: Array<[string, unknown]>): void
+  /** A wait: the World takes it and says it is done when its seconds have passed, and it is over then. */
+  wait(options?: { seconds?: number; on?: string } | null): Act & PromiseLike<null>
+  /** The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is. */
+  rung(options?: { word?: string; retells?: string; actor?: string; on?: string } | null): Act & PromiseLike<unknown>
+  /** A prompt: it makes the rung of one turn of its model, makes another while the rung it made gives no value, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike. */
+  prompt(shape: unknown, options?: { message?: string; to?: string; on?: string } | null): Act & PromiseLike<unknown>
+  /** chain says what a chain does: how it is opened, what it tells, and what it answers for. */
+  chain(options?: { label?: string; source?: string; filter?: unknown; on?: string } | null): Act & PromiseLike<unknown>
+  /** A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells that ledger at each answer of a model, so no turn a reply has sent grows a line after it. */
+  grant(options?: { usd?: number; share?: number; on?: string } | null): Act & PromiseLike<null>
+  /** A command: its streams as they come, its exit, the door of its streams and of its stdin, and what it came to. */
+  bash(command: string, options?: { fed?: boolean; timeout?: number; show?: unknown; show_err?: unknown; on?: string } | null): Act & PromiseLike<ExitValue>
+}
+export type JsEngine = Engine
+
+/** An ear that the crate writes: given once, to the boot of an engine or to a verb that takes an ear. */
+export declare class NativeEar {
+  /** The ear is let go before any engine hears it, so what it holds goes: a store lets its record go. */
   dispose(): void
 }
-export type JsLife = Life
 
-/**
- * The lease of one record: a lock on the file beside the record, `<record>.lock`, which the process holds until
- * it disposes the lease or ends. The kernel ends the lease of a process that ends, whatever the process number
- * says after it. The holder may move or remove the file, as a delete of the record does.
- */
-export declare class RecordLock {
-  /** The lease of the record at this path, or the refusal when another holds it. */
-  constructor(path: string)
-  /** The record the lease is of. */
-  get path(): string
-  /** The lease ended: the lock is released, and another process may take it. */
-  dispose(): void
-}
-
-export interface BashOptions {
-  fed?: boolean
-  timeout?: number
-  show?: any
-  showErr?: any
-  on?: string
-}
+/** The ear of commands, which runs each in a shell of this machine. */
+export declare function bash(): NativeEar
 
 export declare function decodeRecord(line: string): unknown
 
@@ -105,11 +144,8 @@ export interface ExitValue {
   stderr: TextValue
 }
 
-export interface GrantOptions {
-  usd?: number
-  share?: number
-  on?: string
-}
+/** The ear of the files, which reads and writes a path. */
+export declare function files(): NativeEar
 
 export interface Inspection {
   name: string
@@ -117,6 +153,9 @@ export interface Inspection {
   representation: string
   value?: unknown
 }
+
+/** What the store kept at a path, read with no lease and changed in nothing. */
+export declare function kept(path: string): unknown[]
 
 /**
  * Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
@@ -132,18 +171,19 @@ export interface Outcome {
   value: unknown
 }
 
-export interface PromptOptions {
-  to?: string
-  on?: string
-}
+/** The POSIX shell that runs a command of this machine, which a host runs its own commands in too. */
+export declare function shell(): string
 
-export interface RungOptions {
-  retells?: string
-  actor?: string
-  on?: string
-}
+/**
+ * The record at a path, read under its lease, and the ear of the store, which keeps on it what the journal says to
+ * keep.
+ */
+export declare function store(path: string): { record: unknown[]; ear: NativeEar }
 
 export interface TextValue {
   path: string
   content: string
 }
+
+/** The ear of time, which reads the clock, draws a chance, and ends a wait. */
+export declare function time(): NativeEar

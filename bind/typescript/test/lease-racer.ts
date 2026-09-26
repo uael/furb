@@ -5,7 +5,7 @@
 // own, so that no move replaces a file that another contender holds open, which Windows can refuse.
 // The contenders start together: each says it is ready with a file, and waits for the file that says go.
 import { existsSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { RecordLock } from "../src/index.ts";
+import { type NativeEar, store } from "../src/index.ts";
 
 const [path = "", count = "0", role = ""] = process.argv.slice(2);
 writeFileSync(`${path}.ready.${process.pid}`, "");
@@ -15,9 +15,9 @@ const deadline = Date.now() + 20000;
 let taken = 0;
 while (taken < Number(count)) {
   if (Date.now() > deadline) throw new Error(`Took the lease ${taken} of ${count} times.`);
-  let lease: RecordLock;
+  let lease: NativeEar;
   try {
-    lease = new RecordLock(path);
+    lease = store(path).ear;
   } catch (error) {
     if (String(error).includes("Another process owns")) continue;
     throw error;

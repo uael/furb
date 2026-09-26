@@ -261,7 +261,7 @@ test("a slash command typed under edit runs as the command it names, and the pro
       await app.submit();
       expect(session.sessionName).toBe("renamed");
       expect(session.editing).toBe(editing);
-      const door = (await session.life.read(editing, undefined, session.selected)) as { content: string };
+      const door = (await session.engine.read(editing, { on: session.selected })) as { content: string };
       expect(door.content).toBe(program);
     },
     undefined,

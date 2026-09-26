@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { RecordLock } from "@furb/engine";
+import { type NativeEar, store } from "@furb/engine";
 import type { CapturedFrame, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
@@ -32,7 +32,7 @@ test("workspaces keep sessions alive, report background completion and input, an
     expect(alpha.sessions).toHaveLength(2);
     expect(beta.sessions).toHaveLength(1);
     if (!first.session || !second.session || !third.session) throw new Error("Sessions did not open.");
-    const worker = first.session.life;
+    const worker = first.session.engine;
     const command = await worker.bash("sleep 0.6; printf 'background finished'", { on: worker.root });
     await until(library, () => first.status === "working");
     expect(library.groupStatus(alpha)).toBe("working");
@@ -40,21 +40,25 @@ test("workspaces keep sessions alive, report background completion and input, an
     await worker.result(command);
     await until(library, () => first.status === "done");
     await library.select(first);
-    expect(first.session.life).toBe(worker);
+    expect(first.session.engine).toBe(worker);
     expect(first.status).toBe("idle");
     expect(first.unread).toBe(false);
 
-    const question = await second.session.life.prompt("str", "Name the release", { to: "operator" });
+    const question = await second.session.engine.prompt("str", {
+      message: "Name the release",
+      to: "operator",
+      on: second.session.engine.root,
+    });
     await until(library, () => second.status === "blocked");
     expect(library.groupStatus(alpha)).toBe("blocked");
-    await second.session.world.answer(question, "v1");
+    await second.session.host.answer(question, "v1");
     await until(library, () => second.status === "done");
 
     await first.session.submit("/pause");
     await until(library, () => first.status === "paused");
     await first.session.submit("/wake");
     await until(library, () => first.status === "idle");
-    const waiting = await first.session.life.wait(60);
+    const waiting = await first.session.engine.wait({ seconds: 60, on: first.session.engine.root });
     await until(library, () => first.status === "working");
     preferences.sidebar = false;
     preferences.save("paper");
@@ -77,8 +81,8 @@ test("workspaces keep sessions alive, report background completion and input, an
     if (!restored) throw new Error("The saved session is missing.");
     await library.select(restored);
     expect(restored.status).toBe("paused");
-    expect(restored.session?.world.pending.has(waiting)).toBe(true);
-    const metadata = JSON.parse(await readFile(`${record}.world.json`, "utf8"));
+    expect(restored.session?.host.pending.has(waiting)).toBe(true);
+    const metadata = JSON.parse(await readFile(`${record}.session.json`, "utf8"));
     expect(metadata.pending).toBeUndefined();
   } finally {
     await library.dispose();
@@ -96,23 +100,25 @@ test("deleting a session moves its record and state to trash, keeps other sessio
     const first = await library.create(group, "Remove me");
     const second = await library.create(group, "Keep me");
     if (!first.session || !second.session) throw new Error("Missing live sessions.");
-    await first.session.life.result(await first.session.life.rung("kept_value = 41"));
-    const otherLife = second.session.life;
+    await first.session.engine.result(
+      await first.session.engine.rung({ word: "kept_value = 41", on: first.session.engine.root }),
+    );
+    const otherEngine = second.session.engine;
     const trash = await library.delete(first);
     expect(library.current).toBe(second);
-    expect(second.session.life).toBe(otherLife);
-    await otherLife.result(await otherLife.rung("still_alive = 17"));
-    expect((await otherLife.inspect("still_alive", second.session.selected)).value).toBe(17);
+    expect(second.session.engine).toBe(otherEngine);
+    await otherEngine.result(await otherEngine.rung({ word: "still_alive = 17", on: otherEngine.root }));
+    expect((await otherEngine.inspect("still_alive", second.session.selected)).value).toBe(17);
     expect(await stat(first.path).catch(() => null)).toBeNull();
     expect(await stat(`${first.path}.lock`).catch(() => null)).toBeNull();
     const archived = join(trash, basename(first.path));
     expect((await stat(archived)).isFile()).toBe(true);
     expect((await stat(`${archived}.lock`)).isFile()).toBe(true);
     const restored = await library.import(archived, group);
-    expect((await restored.session?.life.inspect("kept_value", restored.session.selected))?.value).toBe(41);
+    expect((await restored.session?.engine.inspect("kept_value", restored.session.selected))?.value).toBe(41);
     const locked = join(group.directory, ".furb/sessions/locked.jsonl");
     const opened = await openEngine({ cwd: directory, record: locked, demo: true });
-    external = new Session(opened.life, opened.world, true, preferences);
+    external = new Session(opened.engine, opened.host, true, preferences);
     await library.refresh();
     const entry = group.sessions.find((entry) => entry.path === locked);
     if (!entry) throw new Error("The locked session was not listed.");
@@ -216,7 +222,8 @@ test("the list of saved sessions comes before their replays, and a row shows its
   let library = new Workspaces(preferences, { demo: true });
   try {
     const entry = await library.create(await library.add(directory), "Held");
-    await entry.session?.life.wait(60);
+    const engine = entry.session?.engine;
+    await engine?.wait({ seconds: 60, on: engine.root });
     await library.dispose();
     library = new Workspaces(preferences, { demo: true });
     const row = (await library.add(directory)).sessions.find((candidate) => candidate.path === entry.path);
@@ -257,14 +264,14 @@ test("deleting the current session moves to the next session that opens, and to 
   const directory = await mkdtemp(join(tmpdir(), "furb-delete-current-"));
   const preferences = new Preferences(join(directory, "config/ui.json"));
   let library = new Workspaces(preferences, { demo: true });
-  let lease: RecordLock | undefined;
+  let lease: NativeEar | undefined;
   try {
     const held = await library.create(await library.add(directory), "Held elsewhere");
     await library.dispose();
     library = new Workspaces(preferences, { demo: true });
     const group = await library.add(directory);
     const current = await library.create(group, "Delete me");
-    lease = new RecordLock(held.path);
+    lease = store(held.path).ear;
     const sibling = group.sessions.find((entry) => entry.path === held.path);
     expect(group.sessions.map((entry) => entry.name)).toEqual(["Delete me", "Held elsewhere"]);
     await library.delete(current);

@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, type Message } from "@earendil-works/pi-ai";
-import { World } from "../src/index.ts";
+import { Session } from "../src/index.ts";
 import { claudeProvider } from "../src/providers/claude.ts";
 import { executable } from "./executable.ts";
 import { remove } from "./processes.ts";
@@ -47,13 +47,16 @@ test("two lives on one provider keep a conversation each, though their chains sh
   const cli = claudeProvider({ bin, stallMs: 1000 });
   const models = createModels();
   models.setProvider(cli.provider);
-  const one = new World({ cwd, models, model: "claude-cli:sonnet" });
-  const two = new World({ cwd, models, model: "claude-cli:sonnet" });
+  const one = new Session({ cwd, models, model: "claude-cli:sonnet" });
+  const two = new Session({ cwd, models, model: "claude-cli:sonnet" });
   try {
     const [first, second] = [one.open(), two.open()];
     expect(first.root).toBe(second.root);
     expect(
-      await Promise.all([first.prompt<string>("str", "task"), second.prompt<string>("str", "task")]),
+      await Promise.all([
+        first.prompt("str", { message: "task", on: first.root }),
+        second.prompt("str", { message: "task", on: second.root }),
+      ]),
     ).toEqual(["reply 1", "reply 1"]);
     expect((await readFile(log, "utf8")).split("\n").filter((line) => line.includes('"pid"'))).toHaveLength(
       2,

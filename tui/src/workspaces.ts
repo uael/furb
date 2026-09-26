@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { mkdir, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { furbDirectory, RecordLock, saveFile } from "@furb/engine";
+import { furbDirectory, saveFile, store } from "@furb/engine";
 import { openEngine } from "./bridge.ts";
 import { expandHome } from "./files.ts";
 import type { EngineOptions } from "./models.ts";
@@ -262,7 +262,7 @@ export class Workspaces extends EventEmitter {
     this.emit("change");
   }
   adopt(session: Session, group: Workspace): SessionEntry {
-    const path = session.world.records.path;
+    const path = session.host.record;
     if (!path) throw new Error("A workspace session needs a record.");
     let entry = group.sessions.find((entry) => entry.path === path);
     if (!entry) {
@@ -272,10 +272,10 @@ export class Workspaces extends EventEmitter {
     if (entry.session && entry.session !== session) throw new Error("This session is already open.");
     entry.session = session;
     const row = entry;
-    let completed = session.world.completed;
+    let completed = session.host.completed;
     const changed = () => {
       const status = session.status();
-      const next = session.world.completed;
+      const next = session.host.completed;
       if (row !== this.current && next > completed) row.unread = true;
       completed = next;
       if (row === this.current) row.unread = false;
@@ -303,14 +303,13 @@ export class Workspaces extends EventEmitter {
       try {
         const demo = savedView(entry.path).view.demo ?? this.options.demo ?? false;
         opened = await openEngine({ ...this.options, cwd: group.directory, record: entry.path, demo });
-        const { life, world } = opened;
-        session = new Session(life, world, demo, this.preferences);
+        session = new Session(opened.engine, opened.host, demo, this.preferences);
         await session.refresh();
         if (this.closed) throw new Error("The workspace is closed.");
         return this.adopt(session, group);
       } catch (error) {
         if (session) await session.dispose();
-        else await opened?.world.dispose();
+        else await opened?.host.dispose();
         entry.status = "error";
         entry.error = error instanceof Error ? error.message : String(error);
         this.emit("change");
@@ -464,13 +463,13 @@ export class Workspaces extends EventEmitter {
     }
     if (this.current === entry) await this.create(group);
     await this.release(entry);
-    // The lock file moves with the record while this lease holds it, and a process that locked it meanwhile opens
+    // The lock file moves with the record while this store holds it, and a process that locked it meanwhile opens
     // the path again.
-    const lease = new RecordLock(entry.path);
+    const lease = store(entry.path).ear;
     const moved: [string, string][] = [];
     try {
       const directory = furbDirectory(group.directory, "trash", randomUUID());
-      for (const suffix of ["", ".ui.json", ".world.json", ".changes.jsonl", ".images", ".lock"]) {
+      for (const suffix of ["", ".ui.json", ".session.json", ".changes.jsonl", ".images", ".lock"]) {
         const source = `${entry.path}${suffix}`;
         if (!existsSync(source)) continue;
         const target = join(directory, basename(source));

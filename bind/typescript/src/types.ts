@@ -1,6 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 import type { ModelThinkingLevel, Usage as ModelUsage } from "@earendil-works/pi-ai";
-import type { Life } from "../index.cjs";
+import type { Engine } from "../index.cjs";
 
 export const efforts = [
   "off",
@@ -31,8 +31,8 @@ export function modelNamed<M extends { provider: string; id: string }>(
 }
 export const shapes = ["str", "None", "bool", "int", "float", "list", "dict"] as const;
 
-export type Turn = Awaited<ReturnType<Life["turns"]>>[number];
-export type Fact = Awaited<ReturnType<Life["say"]>>;
+export type Turn = ReturnType<Engine["turns"]>[number];
+export type Fact = ReturnType<Engine["say"]>;
 /** One entry of the record: one fact, an act among them. */
 export type Entry = [Fact, unknown?];
 export type Usage = NonNullable<Turn[2]>;

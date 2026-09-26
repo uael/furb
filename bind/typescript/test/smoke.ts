@@ -5,17 +5,18 @@ import { boot } from "../src/index.ts";
 
 const cwd = await mkdtemp(join(tmpdir(), "furb-ts-smoke-"));
 const session = boot({ cwd, model: "claude-cli:sonnet", effort: "low" });
-session.world?.on("fault", (error) => {
+const engine = session.engine;
+session.on("fault", (error) => {
   console.error(error);
-  session.life.cancel(session.life.root);
+  engine.cancel(engine.root);
 });
 try {
-  const answer = await session.life.prompt<string>(
-    "str",
-    "Return exactly the string: native TypeScript ready",
-  );
+  const answer = await engine.prompt("str", {
+    message: "Return exactly the string: native TypeScript ready",
+    on: engine.root,
+  });
   if (answer !== "native TypeScript ready") throw new Error(`Unexpected answer: ${JSON.stringify(answer)}`);
-  const turns = session.life.turns();
+  const turns = engine.turns({ on: engine.root });
   console.log(
     JSON.stringify({
       answer,

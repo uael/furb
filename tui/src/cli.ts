@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { efforts, furbDirectory, onConsoleEnd, type WorldOptions } from "@furb/engine";
+import { efforts, furbDirectory, onConsoleEnd, type SessionOptions } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
 import { App } from "./app.ts";
 import { demoDirectory, removeDemoDirectories } from "./demo.ts";
@@ -45,7 +45,7 @@ const preferences = new Preferences();
 const record = values.resume ?? values.record;
 const savedDirectory =
   record && !values.cwd
-    ? await readFile(`${resolve(record)}.world.json`, "utf8")
+    ? await readFile(`${resolve(record)}.session.json`, "utf8")
         .then((text) => JSON.parse(text)?.options?.cwd as string | undefined)
         .catch(() => undefined)
     : undefined;
@@ -54,15 +54,15 @@ const directory =
     ? await demoDirectory()
     : resolve(values.cwd ?? savedDirectory ?? process.cwd());
 if (values.demo) await mkdir(directory, { recursive: true });
-const worldOptions: EngineOptions = {
+const engineOptions: EngineOptions = {
   model: values.model,
-  effort: values.effort as WorldOptions["effort"],
+  effort: values.effort as SessionOptions["effort"],
   roster: values.roster,
   demo: values.demo,
 };
 const library = new Workspaces(
   preferences,
-  worldOptions,
+  engineOptions,
   values.demo ? join(furbDirectory(directory), "workspaces.json") : undefined,
 );
 const group = await library.add(directory);
@@ -75,7 +75,7 @@ const extensions = new Extensions(() => {
   const session = library.current?.session;
   if (!session) throw new Error("No session is selected.");
   return {
-    life: session.life,
+    engine: session.engine,
     chain: session.selected,
     directory: session.workingDirectory,
     notify: (message) => {

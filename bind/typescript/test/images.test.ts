@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { ImageCache } from "../src/images.ts";
-import { imageContent, imagePath, imageReference, imageReferences, World } from "../src/index.ts";
+import { imageContent, imagePath, imageReference, imageReferences, Session } from "../src/index.ts";
 import { claudeProvider } from "../src/providers/claude.ts";
 import { executable } from "./executable.ts";
 import { remove } from "./processes.ts";
@@ -22,15 +22,17 @@ test("image attachments reach pi-ai and the Claude CLI as image blocks and remai
   const log = join(directory, "cli.jsonl");
   const previous = process.env.FURB_FAKE_LOG;
   process.env.FURB_FAKE_LOG = log;
-  // The Claude CLI is a provider the host adds to the models of pi-ai, as a host of the World does.
+  // The Claude CLI is a provider the host adds to the models of pi-ai, as a host of a session does.
   const cli = claudeProvider({ bin });
   const models = builtinModels();
   models.setProvider(cli.provider);
-  let world = new World({ cwd: directory, record, models, roster: ["claude-cli:sonnet"] });
+  let session = new Session({ cwd: directory, record, models, roster: ["claude-cli:sonnet"] });
   try {
-    const image = world.attachImage(path);
-    const life = world.open();
-    expect(await life.prompt<string>("str", `Describe this pixel. ![pixel](${image.uri})`)).toBe("reply 1");
+    const image = session.attachImage(path);
+    const engine = session.open();
+    expect(
+      await engine.prompt("str", { message: `Describe this pixel. ![pixel](${image.uri})`, on: engine.root }),
+    ).toBe("reply 1");
     const requests = (await readFile(log, "utf8"))
       .trim()
       .split("\n")
@@ -41,24 +43,24 @@ test("image attachments reach pi-ai and the Claude CLI as image blocks and remai
       source: { type: "base64", media_type: "image/png", data },
     });
     expect(blocks.find((block: { type: string }) => block.type === "text").text).toContain(image.uri);
-    expect(imageContent(world.imageDirectory, image.uri).data).toBe(data);
+    expect(imageContent(session.imageDirectory, image.uri).data).toBe(data);
     const cache = new ImageCache();
-    const first = cache.get(world.imageDirectory, image.uri);
+    const first = cache.get(session.imageDirectory, image.uri);
     first.data = "a caller cannot change the cached bytes";
-    expect(cache.get(world.imageDirectory, image.uri).data).toBe(data);
-    const asset = join(world.imageDirectory, image.uri.slice("furb-image://".length));
+    expect(cache.get(session.imageDirectory, image.uri).data).toBe(data);
+    const asset = join(session.imageDirectory, image.uri.slice("furb-image://".length));
     const original = await readFile(asset);
     await writeFile(asset, Buffer.concat([original, Buffer.from("changed")]));
-    expect(() => cache.get(world.imageDirectory, image.uri)).toThrow("changed");
+    expect(() => cache.get(session.imageDirectory, image.uri)).toThrow("changed");
     await writeFile(asset, original);
-    await world.dispose();
+    await session.dispose();
     const before = await readFile(log, "utf8");
-    world = new World({ record, models });
-    world.open();
-    expect(imageContent(world.imageDirectory, image.uri).data).toBe(data);
+    session = new Session({ record, models });
+    session.open();
+    expect(imageContent(session.imageDirectory, image.uri).data).toBe(data);
     expect(await readFile(log, "utf8")).toBe(before);
   } finally {
-    await world.dispose();
+    await session.dispose();
     cli.dispose();
     if (previous === undefined) delete process.env.FURB_FAKE_LOG;
     else process.env.FURB_FAKE_LOG = previous;
@@ -78,23 +80,23 @@ test("an image attachment is written and read back by one grammar, and a bare ur
   expect(() => imagePath("/images", "furb-image://short.png")).toThrow("Invalid image attachment.");
 });
 
-test("a World with no record keeps its images in a .furb that keeps itself out of version control", async () => {
+test("a session with no record keeps its images in a .furb that keeps itself out of version control", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-images-"));
-  const world = new World({ cwd: directory });
+  const session = new Session({ cwd: directory });
   try {
     Bun.spawnSync(["git", "init", "-q"], { cwd: directory });
     const path = join(directory, "pixel.png");
     await writeFile(path, Buffer.from(pixel, "base64"));
-    const image = world.attachImage(path);
-    expect(imageContent(world.imageDirectory, image.uri).data).toBe(pixel);
-    expect(world.imageDirectory).toBe(join(directory, ".furb/images"));
+    const image = session.attachImage(path);
+    expect(imageContent(session.imageDirectory, image.uri).data).toBe(pixel);
+    expect(session.imageDirectory).toBe(join(directory, ".furb/images"));
     expect(await readFile(join(directory, ".furb/.gitignore"), "utf8")).toBe("*\n");
     const status = Bun.spawnSync(["git", "status", "--porcelain", "--untracked-files=all"], {
       cwd: directory,
     });
     expect(status.stdout.toString()).toBe("?? pixel.png\n");
   } finally {
-    await world.dispose();
+    await session.dispose();
     await rm(directory, { recursive: true, force: true });
   }
 });

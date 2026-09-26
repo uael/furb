@@ -1,35 +1,35 @@
 // The worker loads no module that loads OpenTUI, whose native library belongs to the thread that draws.
 import { dirname, join } from "node:path";
-import type { Life, Turn, WorldOptions } from "@furb/engine";
-import { Act, engineSource, modelNamed, World } from "@furb/engine";
-import type { WorldState } from "./bridge.ts";
+import type { Engine, SessionOptions, Turn } from "@furb/engine";
+import { Act, engineSource, modelNamed, Session } from "@furb/engine";
+import type { HostState } from "./bridge.ts";
 import { type EngineOptions, hostModels } from "./models.ts";
 import { queueDispatches, queueEvent, queueHash } from "./queue.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
 
 declare const self: Worker & { close(): void };
-let world: World | undefined;
-let life: Life | undefined;
+let session: Session | undefined;
+let engine: Engine | undefined;
 let snapshots: Snapshots | undefined;
 let host: ReturnType<typeof hostModels> | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let sentFacts = 0;
 const state = () => {
-  const owner = world;
+  const owner = session;
   if (!owner) return;
-  const snapshot: WorldState = {
+  const snapshot: HostState = {
     completed: owner.activity.completed,
     cost: owner.activity.cost,
     directory: owner.directory,
     imageDirectory: owner.imageDirectory,
-    actor: owner.actor,
-    effort: owner.effort,
-    roster: owner.roster,
-    path: owner.records.path,
+    actor: owner.provider.actor,
+    effort: owner.provider.effort,
+    roster: owner.provider.roster,
+    record: owner.record,
     facts: owner.facts.slice(sentFacts),
-    prompts: [...owner.prompts.values()].map(({ id, shape, message }) => ({ id, shape, message })),
-    streams: [...owner.streams],
+    prompts: [...owner.console.prompts.values()].map(({ id, shape, message }) => ({ id, shape, message })),
+    streams: [...owner.provider.streams],
     pending: [...owner.pending],
     changes: owner.changes.length,
   };
@@ -74,11 +74,12 @@ function reply(turn: string): [thinking: string, answer: string] {
       ];
 }
 
-function createDemoWorld(options: WorldOptions): World {
+/** A session whose models are the demo, which asks no model and answers each turn from the script above. */
+function demoSession(options: SessionOptions): Session {
   const { record, cwd } = options;
   const directory = cwd ?? (record ? dirname(record) : undefined);
-  if (!directory) throw new Error("A demo World needs a directory or a record.");
-  const world = new World({
+  if (!directory) throw new Error("A demo session needs a directory or a record.");
+  return new Session({
     ...options,
     cwd: directory,
     record: record ?? join(directory, "demo.jsonl"),
@@ -128,7 +129,6 @@ function createDemoWorld(options: WorldOptions): World {
       return ["assistant", code, [3240, 184, 2800, 0, 0.0024], null];
     },
   });
-  return world;
 }
 
 /** What a request of the session comes to. */
@@ -137,58 +137,66 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     const { demo, claude, ...options } = data.args[0] as EngineOptions;
     host = hostModels(claude);
     const given = { ...options, models: host.models, roster: options.roster ?? host.roster };
-    world = demo ? createDemoWorld(given) : new World(given);
-    // The tail of the record as the life before left it, since this life adds its stand as it opens.
-    const tail = world.records.entries.at(-1)?.[0];
-    life = world.open();
-    snapshots = new Snapshots(life, world);
+    const opened = demo ? demoSession(given) : new Session(given);
+    session = opened;
+    engine = opened.open();
+    snapshots = new Snapshots(engine, opened);
+    // The tail of the record as the life before left it.
+    const tail = opened.entries[opened.opened - 1]?.[0];
     const event = tail && queueEvent(tail);
-    if (tail && event?.step === "begin") life.say("queue", tail[1], ["aborted", event.key]);
-    world.on("fault", (error) =>
+    if (tail && event?.step === "begin") engine.say("queue", tail[1], ["aborted", event.key]);
+    opened.on("fault", (error) =>
       self.postMessage({ fault: error instanceof Error ? error.message : String(error) }),
     );
-    world.on("change", () => {
+    opened.on("change", () => {
       timer ??= setTimeout(() => {
         timer = undefined;
         state();
       }, 20);
     });
-    return life.root;
+    return engine.root;
   }
   if (data.target === "library" && data.method === "queue") {
-    if (!life || !world) throw new Error("The session is not open.");
+    if (!engine || !session) throw new Error("The session is not open.");
     const entry = data.args[0] as FollowUp;
-    const prior = queueDispatches(world.records.entries).get(entry.id);
+    const prior = queueDispatches(session.entries).get(entry.id);
     if (prior) return prior;
-    life.say("queue", entry.chain, [
+    engine.say("queue", entry.chain, [
       "begin",
       entry.id,
       queueHash(entry.chain, entry.shape, entry.text, entry.actor),
     ]);
-    const act = life.prompt(entry.shape, entry.text, { on: entry.chain, to: entry.actor });
-    life.say("queue", entry.chain, ["sent", entry.id, act.id]);
+    const act = engine.prompt(entry.shape, { message: entry.text, on: entry.chain, to: entry.actor });
+    engine.say("queue", entry.chain, ["sent", entry.id, act.id]);
     return act.id;
   }
   if (data.target === "library" && data.method === "model") {
-    const owner = world;
-    if (!owner) throw new Error("The session is not open.");
-    // A roster name is found by the rule the World finds every model by.
-    const offered = owner.roster.flatMap((name) => {
-      const model = owner.offers(name);
+    const provider = session?.provider;
+    if (!provider) throw new Error("The session is not open.");
+    // A roster name is found by the rule the provider finds every model by.
+    const offered = provider.roster.flatMap((name) => {
+      const model = provider.offers(name);
       return model ? [{ name, provider: model.provider, id: model.id }] : [];
     });
     return modelNamed(offered, String(data.args[0]))?.name ?? null;
   }
   if (data.target === "library" && data.method === "source") return engineSource();
   if (data.target === "library" && data.method === "changes")
-    return world?.changes.read(Number(data.args[0]), Number(data.args[1]));
+    return session?.changes.read(Number(data.args[0]), Number(data.args[1]));
   if (data.target === "library" && data.method === "act")
-    return world?.activity.acts.get(String(data.args[0]));
+    return session?.activity.acts.get(String(data.args[0]));
   if (data.target === "library" && data.method === "snapshot") {
     if (!snapshots) throw new Error("The session is not open.");
     return snapshots.take(String(data.args[0]), Number(data.args[1]));
   }
-  const target = data.target === "world" ? world : life;
+  const target =
+    data.target === "session"
+      ? session
+      : data.target === "provider"
+        ? session?.provider
+        : data.target === "console"
+          ? session?.console
+          : engine;
   if (!target) throw new Error("The session is not open.");
   const method = Reflect.get(target, data.method) as (...args: unknown[]) => unknown;
   if (typeof method !== "function") throw new Error(`Unknown ${data.target} method ${data.method}.`);
@@ -204,14 +212,14 @@ self.onmessage = async ({ data }) => {
     reply = { error: error instanceof Error ? error.message : String(error) };
   }
   if (data.method === "open" && !reply.error) state();
-  if (data.target !== "world" || data.method !== "dispose") {
+  if (data.target !== "session" || data.method !== "dispose") {
     self.postMessage({ id: data.id, ...reply });
     return;
   }
-  // A World whose save failed has ended its life, its commands and its lease all the same, so the worker ends too.
+  // A session whose save failed has ended its life, its commands and its lease all the same, so the worker ends too.
   if (timer) clearTimeout(timer);
-  world = undefined;
-  life = undefined;
+  session = undefined;
+  engine = undefined;
   snapshots = undefined;
   host?.dispose();
   host = undefined;

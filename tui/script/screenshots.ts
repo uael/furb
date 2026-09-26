@@ -27,7 +27,7 @@ if (!home) {
   await mkdir(gallery, { recursive: true });
   try {
     const child = Bun.spawn([process.execPath, import.meta.path], {
-      // The model of the demo writes slowly, so that its work stays in progress while a capture shows it. The World
+      // The model of the demo writes slowly, so that its work stays in progress while a capture shows it. The session
       // runs in a worker, which reads the environment once, as it starts.
       env: {
         ...process.env,
@@ -53,8 +53,8 @@ async function project(name: string): Promise<string> {
 }
 /** A new demo session in the project that the conversation of the gallery is about. */
 async function demoSession(): Promise<Session> {
-  const { life, world } = await openEngine({ demo: true, cwd: await project("fieldnotes") });
-  const opened = new Session(life, world, true);
+  const { engine, host } = await openEngine({ demo: true, cwd: await project("fieldnotes") });
+  const opened = new Session(engine, host, true);
   await opened.refresh();
   return opened;
 }
@@ -69,7 +69,7 @@ const test = await createTestRenderer({ width: 152, height: 46 });
 let app!: App;
 let library!: Workspaces;
 const extensions = new Extensions(() => ({
-  life: session.life,
+  engine: session.engine,
   chain: session.selected,
   directory: session.directory,
   notify(message) {
@@ -104,9 +104,9 @@ const followSelection = () =>
   });
 async function mount(next: Session): Promise<void> {
   session = next;
-  if (session.sessionName === basename(session.world.directory)) await session.command("/name Session 1");
+  if (session.sessionName === basename(session.host.directory)) await session.command("/name Session 1");
   library = new Workspaces(session.preferences, { demo: true });
-  const group = await library.add(session.world.directory);
+  const group = await library.add(session.host.directory);
   const entry = library.adopt(session, group);
   await library.select(entry);
   library.preferences.sidebar = true;
@@ -132,7 +132,7 @@ async function settle(): Promise<void> {
     if (!pending.length && !session.queued.length) break;
     // A queue that waits on no act sends its next message in a moment.
     if (!pending.length) await new Promise((done) => setTimeout(done, 100));
-    await Promise.all(pending.map((act) => session.life.result(act.id).catch(() => {})));
+    await Promise.all(pending.map((act) => session.engine.result(act.id).catch(() => {})));
     await session.refresh();
   }
 }
@@ -169,14 +169,14 @@ try {
   await capture("02-feed");
   session.show("transcript");
   await capture("03-transcript");
-  const written = session.world.changes;
-  await session.life.result(
-    await session.life.rung(
-      'write(read("README.md").append("\\n## Keyboard\\nPress Ctrl+K to find a note.\\n"))',
-      { on: session.selected },
-    ),
+  const written = session.host.changes;
+  await session.engine.result(
+    await session.engine.rung({
+      word: 'write(read("README.md").append("\\n## Keyboard\\nPress Ctrl+K to find a note.\\n"))',
+      on: session.selected,
+    }),
   );
-  await until(session.world, () => session.world.changes > written);
+  await until(session.host, () => session.host.changes > written);
   session.show("changes");
   await capture("04-changes");
   session.show("feed");
@@ -189,18 +189,19 @@ try {
   app.effortPicker();
   await capture("07-effort");
   app.closeOverlay();
-  const question = await session.life.prompt("bool", "Apply the search shortcut to the main chain?", {
+  const question = await session.engine.prompt("bool", {
+    message: "Apply the search shortcut to the main chain?",
     on: session.selected,
     to: "operator",
   });
-  await until(session.world, () => session.world.prompts.has(question));
+  await until(session.host, () => session.host.prompts.has(question));
   await session.refresh();
   await capture("08-operator-question");
   app.question();
   await capture("09-operator-dialog");
   app.closeOverlay();
-  await session.world.answer(session.operatorPrompt?.id ?? "", "yes");
-  await until(session.world, () => !session.world.prompts.size);
+  await session.host.answer(session.operatorPrompt?.id ?? "", "yes");
+  await until(session.host, () => !session.host.prompts.size);
   app.toggleMode();
   app.composer.setText('notes = read("README.md")\nprint(notes.content)');
   await capture("10-python-input");
@@ -226,12 +227,12 @@ try {
   test.resize(152, 46);
   app.toggleMode();
   app.composer.setText("");
-  const command = await session.life.bash(
+  const command = await session.engine.bash(
     "printf 'Building the search index...\\n'; sleep 1; printf '3 notes indexed.\\n'",
     { on: session.selected },
   );
-  await until(session.world, () =>
-    session.world.facts.some((fact) => fact[0] === "out" && fact[1] === command),
+  await until(session.host, () =>
+    session.host.facts.some((fact) => fact[0] === "out" && fact[1] === command),
   );
   await session.refresh();
   app.render();
@@ -245,24 +246,27 @@ try {
   await rest();
   app.scroll.scrollTo(app.scroll.scrollHeight);
   await capture("18-live-command");
-  await session.life.result(command);
-  const progress = await session.life.prompt("str", "show live progress", { on: session.selected });
+  await session.engine.result(command);
+  const progress = await session.engine.prompt("str", {
+    message: "show live progress",
+    on: session.selected,
+  });
   // The model has written part of its word, and writes the rest.
-  await until(session.world, () =>
-    [...session.world.streams.values()].some((stream) => stream.text.length > 70),
+  await until(session.host, () =>
+    [...session.host.streams.values()].some((stream) => stream.text.length > 70),
   );
   await session.refresh();
   await capture("19-model-progress");
-  await session.life.result(progress);
+  await session.engine.result(progress);
   await session.submit("/run this is invalid python !!!").catch(session.fail);
   await capture("20-gate-findings");
-  const record = session.world.records.path;
+  const record = session.host.record;
   if (!record) throw new Error("The demo session has no record.");
-  await session.life.wait(60);
+  await session.engine.wait({ seconds: 60, on: session.engine.root });
   app.dispose();
   await library.dispose();
   const resumed = await openEngine({ record, demo: true });
-  session = new Session(resumed.life, resumed.world, true);
+  session = new Session(resumed.engine, resumed.host, true);
   await session.refresh();
   await mount(session);
   await capture("21-paused-resume");
@@ -270,7 +274,7 @@ try {
   app.openPalette("Sessions", await options().sessions());
   await capture("22-sessions");
   app.closeOverlay();
-  await session.world.resume();
+  await session.host.resume();
   await session.refresh();
   app.rewind();
   await capture("23-rewind-tree");
@@ -287,14 +291,14 @@ try {
   await capture("24-empty-results");
   test.mockInput.pressEscape();
   // A chain that opens while its turns are read shows that it loads.
-  const opened = await session.life.chain("Notes");
+  const opened = await session.engine.chain({ label: "Notes" });
   await session.refresh();
-  const snapshot = session.world.snapshot.bind(session.world);
+  const snapshot = session.host.snapshot.bind(session.host);
   let release = () => {};
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
-  session.world.snapshot = async (...read) => {
+  session.host.snapshot = async (...read) => {
     await held;
     return snapshot(...read);
   };
@@ -302,13 +306,16 @@ try {
   await capture("25-loading");
   release();
   await opening;
-  session.world.snapshot = snapshot;
-  await session.select(session.life.root);
+  session.host.snapshot = snapshot;
+  await session.select(session.engine.root);
   await session.submit("/read missing-file.txt");
   await until(session, () => session.acts.some((act) => act.run?.status === "failed"));
   await capture("26-error");
-  await session.life.write({ path: "preview.txt", content: "A change to inspect.\n" });
-  const journal = `${session.world.records.path}.changes.jsonl`;
+  await session.engine.write(
+    { path: "preview.txt", content: "A change to inspect.\n" },
+    { on: session.engine.root },
+  );
+  const journal = `${session.host.record}.changes.jsonl`;
   const savedJournal = await readFile(journal);
   await writeFile(journal, "{ damaged journal }");
   session.show("changes");
@@ -327,7 +334,7 @@ try {
     cwd: atlas,
     record: join(atlas, ".furb/sessions/archive.jsonl"),
   });
-  const archive = new Session(archived.life, archived.world, true, preferences);
+  const archive = new Session(archived.engine, archived.host, true, preferences);
   await archive.command("/name Archive");
   await archive.dispose();
   library = new Workspaces(preferences, { demo: true });
@@ -341,12 +348,21 @@ try {
   if (!main.session || !checks.session || !review.session || !changelog.session || !research.session)
     throw new Error("The workspace fixtures did not open.");
   await seedDemo(main.session);
-  await checks.session.life.bash("printf 'Checking the project...\\n'; sleep 60");
-  await review.session.life.prompt("bool", "Apply the new navigation?", { to: "operator" });
-  await changelog.session.life.result(
-    await changelog.session.life.rung('summary = "Release notes are ready"'),
+  await checks.session.engine.bash("printf 'Checking the project...\\n'; sleep 60", {
+    on: checks.session.engine.root,
+  });
+  await review.session.engine.prompt("bool", {
+    message: "Apply the new navigation?",
+    to: "operator",
+    on: review.session.engine.root,
+  });
+  await changelog.session.engine.result(
+    await changelog.session.engine.rung({
+      word: 'summary = "Release notes are ready"',
+      on: changelog.session.engine.root,
+    }),
   );
-  await research.session.life.wait(60);
+  await research.session.engine.wait({ seconds: 60, on: research.session.engine.root });
   await research.session.submit("/pause");
   await library.select(main);
   session = main.session;
@@ -401,7 +417,7 @@ try {
     (act) => act.kind === "prompt" && String(act.words[1]).startsWith("Review the layout"),
   );
   if (!imagePrompt) throw new Error("The image prompt was not submitted.");
-  await session.life.result(imagePrompt.id);
+  await session.engine.result(imagePrompt.id);
   await session.refresh();
   await session.submit("/share");
   await capture("37-share-conversation");

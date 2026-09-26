@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { actorParts, imageContent, imagePath, imageReferences, shapes } from "@furb/engine";
-import { display, safeText } from "@furb/engine/world";
+import { display, safeText } from "@furb/engine/session";
 import {
   type BoxOptions,
   BoxRenderable,
@@ -616,7 +616,7 @@ export class App {
         void this.highlightEditor();
       })
       .catch(session.fail);
-    if (session.world.pending.size) this.resume();
+    if (session.host.pending.size) this.resume();
   }
 
   private box(options: BoxOptions = {}): BoxRenderable {
@@ -941,7 +941,7 @@ export class App {
   /** The top line: the session and the chain at its left, each a button, and the toggle of the views at its right. */
   private renderTop(): void {
     const w = this.session;
-    const changes = w.world.changes;
+    const changes = w.host.changes;
     const shown = this.tree ? "feed" : w.view;
     const kitty = this.renderer.capabilities?.kitty_keyboard === true;
     const directory = shortenHome(w.workingDirectory);
@@ -1510,14 +1510,14 @@ export class App {
         listed.flatMap((item) => (item.type === "python" ? [item.rung?.id] : [item.act?.id])).filter(Boolean),
       );
       // A rung whose model has not begun to write has no stream yet, and its card waits as the card of a stream does.
-      const writing = [...w.world.streams].filter(([, stream]) => stream.chain === w.selected);
+      const writing = [...w.host.streams].filter(([, stream]) => stream.chain === w.selected);
       for (const act of w.activity)
         if (
           act.kind === "rung" &&
           working(act) &&
           !told.has(act.id) &&
           !w.program[act.id] &&
-          !w.world.streams.has(act.id)
+          !w.host.streams.has(act.id)
         )
           writing.push([act.id, { chain: w.selected, text: "", thinking: "" }]);
       const waiting = new Set(writing.map(([id]) => id));
@@ -1605,7 +1605,7 @@ export class App {
           const message = String(act.words[1] ?? "");
           if (!matches(message)) continue;
           items++;
-          const waiting = w.world.prompts.has(act.id);
+          const waiting = w.host.prompts.has(act.id);
           add(
             item.key,
             `${message}\n${waiting}`,
@@ -1877,12 +1877,12 @@ export class App {
         );
       });
     } else if (w.view === "changes") {
-      if (w.world.changes > 20)
+      if (w.host.changes > 20)
         add("change-pages", String(w.changePage), [], (box) => {
           const row = this.box({ flexDirection: "row", gap: space.between, height: space.bar });
           row.add(
             this.text(
-              `Writes ${w.changePage * 20 + 1} to ${Math.min((w.changePage + 1) * 20, w.world.changes)} of ${w.world.changes}`,
+              `Writes ${w.changePage * 20 + 1} to ${Math.min((w.changePage + 1) * 20, w.host.changes)} of ${w.host.changes}`,
               c.muted,
             ),
           );
@@ -1899,7 +1899,7 @@ export class App {
             );
           box.add(row);
         });
-      const root = w.world.directory;
+      const root = w.host.directory;
       for (const [index, change] of w.changes.entries())
         if (matches(change.path)) {
           items++;
@@ -2193,8 +2193,8 @@ export class App {
         : cancelled(act)
           ? { word: "cancelled", mark: glyph.cancelled, color: c.faint }
           : { word: "", mark: glyph.done, color: c.success };
-    if (w.world.pending.has(act.id)) return { word: "pending", mark: glyph.ring, color: c.faint };
-    if (w.world.prompts.has(act.id)) return { word: "needs input", mark: glyph.asks, color: c.warning };
+    if (w.host.pending.has(act.id)) return { word: "pending", mark: glyph.ring, color: c.faint };
+    if (w.host.prompts.has(act.id)) return { word: "needs input", mark: glyph.asks, color: c.warning };
     if (act.paused && act.kind !== "bash")
       return { word: "waits for resume", mark: glyph.held, color: c.warning };
     return running();
@@ -2256,7 +2256,7 @@ export class App {
         : cancelled(act)
           ? { word: "cancelled", mark: glyph.cancelled, color: c.faint }
           : undefined
-      : act.paused || this.session.world.pending.has(act.id)
+      : act.paused || this.session.host.pending.has(act.id)
         ? { word: "waits for resume", mark: glyph.held, color: c.warning }
         : undefined;
     return state ? [shape, [`   ${state.mark} ${state.word}`, state.color]] : [shape];
@@ -2384,7 +2384,7 @@ export class App {
     details.add(meta);
     // The row holds the tail of what the command printed, and the card reads the whole of it once it opens.
     if (act.output !== undefined)
-      void this.session.world.act(act.id).then((whole) => {
+      void this.session.host.act(act.id).then((whole) => {
         const streams = whole?.value as Exit | undefined;
         const contents = [streams?.stdout?.content, streams?.stderr?.content].filter(Boolean) as string[];
         for (const [index, node] of shown.entries())
@@ -2436,9 +2436,10 @@ export class App {
       this.showValue(
         value,
         (
-          (await this.session.life.read(value, { is: "name", name: "HIDDEN" }, this.session.selected)) as {
-            content: string;
-          }
+          await this.session.engine.read(value, {
+            show: { is: "name", name: "HIDDEN" },
+            on: this.session.selected,
+          })
         ).content,
       );
   }
@@ -2451,13 +2452,10 @@ export class App {
         : act
           ? `${act.kind}  ${act.done ? display(act.value) : "pending"}`
           : (
-              (await this.session.life.read(
-                value,
-                { is: "name", name: "HIDDEN" },
-                this.session.selected,
-              )) as {
-                content: string;
-              }
+              await this.session.engine.read(value, {
+                show: { is: "name", name: "HIDDEN" },
+                on: this.session.selected,
+              })
             ).content;
       if (this.closed || this.overlay) return;
       this.hover?.destroyRecursively();
@@ -2555,9 +2553,9 @@ export class App {
     const w = this.session;
     const acts = w.acts.filter((act) => act.on === id && act.kind !== "chain" && act.kind !== "grant");
     const latest = acts.at(-1);
-    const status: SessionStatus = acts.some((act) => w.world.prompts.has(act.id))
+    const status: SessionStatus = acts.some((act) => w.host.prompts.has(act.id))
       ? "blocked"
-      : acts.some((act) => w.world.pending.has(act.id))
+      : acts.some((act) => w.host.pending.has(act.id))
         ? "paused"
         : acts.some(working)
           ? "working"
@@ -2628,7 +2626,7 @@ export class App {
     // wait behind a button that lists them all.
     const states = new Map(w.chains.map((chain) => [chain.id, this.chainStatus(chain.id)]));
     const active = w.chains.filter(
-      (chain) => chain.id === w.life.root || chain.id === w.selected || states.get(chain.id) !== "idle",
+      (chain) => chain.id === w.engine.root || chain.id === w.selected || states.get(chain.id) !== "idle",
     );
     const resting = w.chains.filter((chain) => !active.includes(chain));
     const chainLine = (chain: ActRow) => {
@@ -3361,8 +3359,8 @@ export class App {
     return false;
   }
   private imageActions(uri: string): void {
-    const content = imageContent(this.session.world.imageDirectory, uri);
-    const file = imagePath(this.session.world.imageDirectory, uri).path;
+    const content = imageContent(this.session.host.imageDirectory, uri);
+    const file = imagePath(this.session.host.imageDirectory, uri).path;
     const pending = this.session.images[this.session.selected]?.find((image) => image.uri === uri);
     this.openPalette(pending?.name ?? "Image attachment", [
       {
@@ -3392,7 +3390,7 @@ export class App {
       this.renderer,
       this.composer.plainText,
       this.session.mode === "python" || Boolean(this.session.editing),
-      this.session.directory || this.session.world.directory,
+      this.session.directory || this.session.host.directory,
     );
     // An editor ends a file with a line end, which the draft leaves out.
     if (!this.closed) {
@@ -4180,13 +4178,13 @@ export class App {
     return elapsed(Date.now() - (this.session.started[id] ?? Date.now()));
   }
   private resume = (): void => {
-    const pending = this.session.world.pending;
+    const pending = this.session.host.pending;
     this.openPalette("Saved work is paused", [
       {
         label: "Resume saved work",
         detail: `${pending.size} unfinished ${pending.size === 1 ? "act starts" : "acts start"} again.`,
         run: async () => {
-          await this.session.world.resume();
+          await this.session.host.resume();
           await this.session.refresh();
         },
       },
@@ -4205,12 +4203,12 @@ export class App {
         {
           label: "Yes",
           detail: "",
-          run: () => this.session.world.answer(question.id, "yes").then(() => {}),
+          run: () => this.session.host.answer(question.id, "yes").then(() => {}),
         },
         {
           label: "No",
           detail: "",
-          run: () => this.session.world.answer(question.id, "no").then(() => {}),
+          run: () => this.session.host.answer(question.id, "no").then(() => {}),
         },
       ]);
       this.showQuestionText(question.message);
@@ -4230,7 +4228,7 @@ export class App {
     input.removeAllListeners(InputRenderableEvents.INPUT);
     input.removeAllListeners(InputRenderableEvents.ENTER);
     input.on(InputRenderableEvents.ENTER, () => {
-      void this.session.world
+      void this.session.host
         .answer(question.id, input.value)
         .then(() => this.closeOverlay())
         .catch((failure) => {
@@ -4262,7 +4260,7 @@ export class App {
   }
   private async showHover(name: string, x: number, y: number): Promise<void> {
     try {
-      const inspected = await this.session.life.inspect(name, this.session.selected);
+      const inspected = await this.session.engine.inspect(name, this.session.selected);
       if (this.closed || this.overlay) return;
       this.hover?.destroyRecursively();
       const width = Math.min(58, this.renderer.width - 4);
@@ -4303,7 +4301,7 @@ export class App {
   inspect = (name: string): Promise<void> => {
     this.hover?.destroyRecursively();
     this.hover = undefined;
-    return this.session.life
+    return this.session.engine
       .inspect(name, this.session.selected)
       .then((value) => {
         this.showValue(`${name}: ${value.kind}`, value.value ?? value.representation, name);
@@ -4334,7 +4332,7 @@ export class App {
           label: "Engine definition",
           detail: `Find ${name} in the engine source`,
           run: async () => {
-            const lines = (await this.session.world.source()).split("\n");
+            const lines = (await this.session.host.source()).split("\n");
             const at = lines.findIndex((line) =>
               new RegExp(`^(?:(?:async )?def |class )?${name}\\b`).test(line),
             );
@@ -4396,8 +4394,8 @@ export class App {
         detail: value,
         run: () => {
           if (act.kind === "chain") return this.session.select(act.id);
-          void this.session.life
-            .read(value, undefined, this.session.selected)
+          void this.session.engine
+            .read(value, { on: this.session.selected })
             .then((text) => this.showValue(value, text))
             .catch(this.report);
         },
@@ -4416,7 +4414,7 @@ export class App {
   }
   async names(): Promise<void> {
     const w = this.session;
-    const names = (await w.life.names(w.selected)).filter((name) => !name.startsWith("_"));
+    const names = (await w.engine.names(w.selected)).filter((name) => !name.startsWith("_"));
     // The names that the words of this chain bind come first, then the acts of the chain, then what the engine gives.
     const identifier = "[\\p{L}_][\\p{L}\\p{N}_]*";
     // A name is bound by an assignment, a def or a class, a for loop, an import, or an as.
@@ -4453,7 +4451,7 @@ export class App {
     );
   }
   private async completeNames(): Promise<void> {
-    const names = await this.session.life.names(this.session.selected);
+    const names = await this.session.engine.names(this.session.selected);
     const prefix = this.beforeCursor().match(/[\p{L}_][\p{L}\p{N}_]*$/u)?.[0] ?? "";
     this.openPalette(
       "Complete Python name",
@@ -4496,7 +4494,7 @@ export class App {
         {
           label: "Resume chain",
           detail: "Then choose the point that the new branch starts from.",
-          run: () => (this.session.world.pending.size ? this.resume() : this.action("/wake")),
+          run: () => (this.session.host.pending.size ? this.resume() : this.action("/wake")),
         },
       ]);
       return;
@@ -5765,7 +5763,7 @@ export class App {
   private changePage(step: number): void {
     this.session.changePage = Math.max(
       0,
-      Math.min(Math.ceil(this.session.world.changes / 20) - 1, this.session.changePage + step),
+      Math.min(Math.ceil(this.session.host.changes / 20) - 1, this.session.changePage + step),
     );
     void this.session.refresh().catch(this.session.fail);
   }

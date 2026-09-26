@@ -44,10 +44,10 @@ test("a view opens at the offset it was left at, after a shorter view, in a new 
   } finally {
     app.dispose();
   }
-  const record = session.world.records.path;
+  const record = session.host.record;
   await session.dispose();
   const opened = await openEngine({ record, demo: true });
-  const reopened = new Session(opened.life, opened.world, true);
+  const reopened = new Session(opened.engine, opened.host, true);
   await reopened.refresh();
   app = new App(screen.renderer, reopened, { quit() {} });
   try {
@@ -70,7 +70,7 @@ test("a command that printed more than a row holds sends the tail and its length
     await session.submit("/bash seq 1 3000");
     const command = session.activity.find((act) => act.kind === "bash");
     if (!command) throw new Error("No command.");
-    await session.life.result(command.id);
+    await session.engine.result(command.id);
     await session.refresh();
     const row = session.acts.find((act) => act.id === command.id);
     const printed = Array.from({ length: 3000 }, (_, index) => `${index + 1}\n`).join("");
@@ -103,15 +103,15 @@ test("the views say each quantity one way, read a page of changes once, and set 
   const screen = await createTestRenderer({ width: 150, height: 40 });
   const app = new App(screen.renderer, session, { quit() {} });
   const reads: number[] = [];
-  const readChanges = session.world.readChanges.bind(session.world);
-  session.world.readChanges = (start, count) => {
+  const readChanges = session.host.readChanges.bind(session.host);
+  session.host.readChanges = (start, count) => {
     reads.push(start);
     return readChanges(start, count);
   };
   try {
     // The sidebar says the ceiling of the grant that holds now: a share of the context, then a sum of dollars.
     await session.submit("/context 0.3");
-    await session.life.result(await session.life.rung("counted = 1"));
+    await session.engine.result(await session.engine.rung({ word: "counted = 1", on: session.engine.root }));
     await session.refresh();
     app.render();
     await screen.flush();
@@ -137,20 +137,24 @@ test("the views say each quantity one way, read a page of changes once, and set 
     app.render();
     await screen.flush();
     expect(heading.content).toBe(content);
-    await session.life.result(await session.life.rung('write(Text("note.txt", "one\\n"))'));
-    await until(session.world, () => session.world.changes === 1);
+    await session.engine.result(
+      await session.engine.rung({ word: 'write(Text("note.txt", "one\\n"))', on: session.engine.root }),
+    );
+    await until(session.host, () => session.host.changes === 1);
     session.show("changes");
     await session.refresh();
     await session.refresh();
     expect(reads).toEqual([0]);
     expect(session.changes[0]?.patch).toContain("+one");
-    await session.life.result(await session.life.rung('write(Text("note.txt", "two\\n"))'));
-    await until(session.world, () => session.world.changes === 2);
+    await session.engine.result(
+      await session.engine.rung({ word: 'write(Text("note.txt", "two\\n"))', on: session.engine.root }),
+    );
+    await until(session.host, () => session.host.changes === 2);
     await session.refresh();
     expect(reads).toEqual([0, 0]);
     expect(session.changes[1]?.patch).toContain("+two");
   } finally {
-    session.world.readChanges = readChanges;
+    session.host.readChanges = readChanges;
     app.dispose();
     screen.renderer.destroy();
     await session.dispose();
@@ -160,7 +164,7 @@ test("the views say each quantity one way, read a page of changes once, and set 
 test("a relative path that the operator types is read from the directory of the selected chain", async () => {
   const session = await demoSession();
   try {
-    const directory = join(session.world.directory, "sub");
+    const directory = join(session.host.directory, "sub");
     await mkdir(directory);
     const pixel =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
@@ -188,7 +192,7 @@ test("the standing of a chain is no card of the conversation, though its turns h
     await session.refresh();
     app.render();
     await screen.flush();
-    const root = session.life.root;
+    const root = session.engine.root;
     const told = session.turns.flatMap(([role, python]) => (role === "user" ? python.split("\n") : []));
     const at = told.findIndex((line) => line.startsWith(`#${root} roster `));
     expect(told.slice(at, at + 3).map((line) => line.split(" ", 2))).toEqual([
@@ -229,7 +233,7 @@ test("a card that the view goes to, or that Details expands, is in view once the
   try {
     for (let i = 0; i < 24; i++) await session.command(`/run v${i} = ${i}`);
     await session.command("/run target = 1");
-    // A rung the World has not run yet stands in the program once it runs.
+    // A rung the Kernel has not run yet stands in the program once it runs.
     await until(session, () => Object.values(session.program).includes("target = 1"));
     const rung = Object.entries(session.program).find(([, word]) => word === "target = 1")?.[0];
     if (!rung) throw new Error("No rung in the program.");
@@ -439,9 +443,9 @@ test("the root chain stands in the list of chains when it rests, and the other r
   const screen = await createTestRenderer({ width: 140, height: 30 });
   const app = new App(screen.renderer, session, { quit() {} });
   try {
-    const { life } = session;
-    const side = await life.chain("Side", life.root);
-    await life.chain("Notes", life.root);
+    const { engine } = session;
+    const side = await engine.chain({ label: "Side", source: engine.root });
+    await engine.chain({ label: "Notes", source: engine.root });
     await session.refresh();
     await session.select(side);
     app.render();

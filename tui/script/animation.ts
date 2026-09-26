@@ -43,8 +43,8 @@ const columns = 138,
 const output = resolve(process.env.FURB_ANIMATION_OUT ?? "docs/furb.gif");
 const directory = join(home, "fieldnotes");
 await seedDemoFiles(directory);
-const { life, world } = await openEngine({ demo: true, cwd: directory });
-const session = new Session(life, world, true);
+const { engine, host } = await openEngine({ demo: true, cwd: directory });
+const session = new Session(engine, host, true);
 await session.refresh();
 await session.command("/name Explore project");
 const library = new Workspaces(session.preferences, { demo: true });

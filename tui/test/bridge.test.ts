@@ -27,7 +27,7 @@ test("the view of the host takes more facts than one call takes as arguments", (
   expect(view.facts).toHaveLength(count);
 });
 
-test("the view of the host counts the file changes of the World", () => {
+test("the view of the host counts the file changes of the session", () => {
   const view = new HostView(async () => null);
   view.update({
     completed: 0,

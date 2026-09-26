@@ -1,14 +1,7 @@
 export * from "../index.cjs";
 export { Activity, type LiveAct, type RunState } from "./activity.js";
-export {
-  type Call,
-  type Ear,
-  Ears,
-  type Saying,
-  WorldAdapter,
-  type WorldHandler,
-  type WorldRequest,
-} from "./ears.js";
+export { Console, type ConsoleOptions } from "./console.js";
+export { type Call, driving, type Ear, fault, type Saying, speaking } from "./ears.js";
 export {
   type ImageAttachment,
   imageContent,
@@ -18,7 +11,8 @@ export {
   imageType,
 } from "./images.js";
 export { furbDirectory, saveFile } from "./project.js";
-export { shell } from "./shell.js";
+export { type Answer, Provider, type ProviderOptions } from "./provider.js";
+export { boot, inspectRecord, Session, type SessionOptions } from "./session.js";
 export type { Entry, Fact, OperatorPrompt, Paragraph, Turn, Usage } from "./types.js";
 export {
   actorParts,
@@ -33,4 +27,3 @@ export {
   uncommented,
   unmarked,
 } from "./types.js";
-export { boot, inspectRecord, type Session, World, type WorldOptions } from "./world.js";

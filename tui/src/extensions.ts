@@ -4,7 +4,7 @@ import type { Engine } from "./bridge.ts";
 import { commands } from "./commands.ts";
 
 export interface ExtensionContext {
-  life: Engine;
+  engine: Engine;
   chain: string;
   directory: string;
   notify(message: string): void;

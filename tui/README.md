@@ -1,6 +1,7 @@
 # furb TUI
 
-An OpenTUI application built on `@furb/engine`. The TUI owns a Bun worker for each open life and its World.
+An OpenTUI application built on `@furb/engine`. The TUI owns a Bun worker for each open session: its life and its
+ears.
 Rendering, input, and syntax coloring stay responsive while the sandbox gates and runs Python. The TUI needs Bun
 1.4.2 or later. On Windows, Bun 1.3 crashes the TUI when it calls into OpenTUI.
 
@@ -16,7 +17,7 @@ bun run tui -- --resume .furb/sessions/example.jsonl
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
 a new life. Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
 a `.gitignore` that keeps it out of version control. Keep the `.jsonl`,
-`.world.json`, `.changes.jsonl`, and `.ui.json` files together. The last file saves the selected chain, view, prompt
+`.session.json`, `.changes.jsonl`, and `.ui.json` files together. The last file saves the selected chain, view, prompt
 shape, drafts, rung folds, queued follow-ups, and scroll positions. Keep its `.images` directory too when
 the session has image attachments. An unfinished session opens paused and offers a resume
 choice. The native engine replays completed work from the record.
@@ -179,11 +180,11 @@ command. ⌥E or `/editor` edits the current draft with `VISUAL`, then `EDITOR`,
 that runs commands; configure the editor to wait until the file is saved and closed.
 `/image path` attaches a PNG, JPEG, GIF, or WebP file. ⌃V or bare `/image` pastes an image through macOS
 AppKit, Windows PowerShell, Wayland `wl-paste`, or X11 `xclip`. Attachments have a limit of 20 MiB each and are
-copied beside the record. The built-in World sends them as pi-ai image blocks, with their references kept in the
-prompt.
+copied beside the record. The provider of the session sends them as pi-ai image blocks, with their references kept
+in the prompt.
 Click the attachment row to open or remove an image from the draft.
 `/model` and `/effort` open separate pickers. `/model name` takes `provider:model` or the model's id alone, by
-the rule of the World. Each model offers the efforts in its pi-ai metadata, saved in
+the rule of the provider. Each model offers the efforts in its pi-ai metadata, saved in
 the chain's roster. A model change keeps the current effort if the new model offers it.
 
 The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
@@ -207,11 +208,11 @@ keeps the structured JSON export. `/context` sets the context ceiling.
 
 Load a local command extension with `--extension <path>` or `/extension <path>`. An extension exports a setup
 function that receives `ExtensionAPI` and registers commands with a label, description, and `run` function.
-Its context gives the current chain, directory, life, message submission, and notices. Extensions are loaded
+Its context gives the current chain, directory, engine, message submission, and notices. Extensions are loaded
 only when named by the user. See [the example](examples/project-summary.ts); loaded commands join the palette
 and slash completion.
 
 `bun run screenshots` captures the real rendered views through OpenTUI's test renderer. The screenshots use
-a scripted World, real native engine, temporary files, and real local commands. See [the gallery](../docs/tui.md).
+a scripted provider, real native engine, temporary files, and real local commands. See [the gallery](../docs/tui.md).
 `bun run animation` records the animation at the top of this file the same way: it types, clicks, and waits in a
 real session, and writes each picture that changed into `docs/furb.gif`.

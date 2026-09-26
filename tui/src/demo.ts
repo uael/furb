@@ -48,24 +48,24 @@ export async function removeDemoDirectories(): Promise<void> {
 }
 
 export async function demoSession(seed = false, preferences?: Preferences): Promise<Session> {
-  const { life, world } = await openEngine({ demo: true, cwd: await demoDirectory() });
-  const session = new Session(life, world, true, preferences);
+  const { engine, host } = await openEngine({ demo: true, cwd: await demoDirectory() });
+  const session = new Session(engine, host, true, preferences);
   await session.refresh();
   if (seed) await seedDemo(session);
   return session;
 }
 
 export async function seedDemo(session: Session): Promise<void> {
-  const { life } = session;
-  await life.grant({ usd: 2, on: life.root });
-  const prompt = await life.prompt(
-    "str",
-    "Explore this project, run its checks, and suggest a useful next step.",
-    { on: life.root },
-  );
-  await life.result(prompt);
-  const fork = await life.chain("Search shortcut", life.root);
-  await life.result(await life.rung('shortcut = "Ctrl+K"\nquery = "small ideas"', { on: fork }));
-  await life.chain("Review notes");
+  const { engine } = session;
+  const on = engine.root;
+  await engine.grant({ usd: 2, on });
+  const prompt = await engine.prompt("str", {
+    message: "Explore this project, run its checks, and suggest a useful next step.",
+    on,
+  });
+  await engine.result(prompt);
+  const fork = await engine.chain({ label: "Search shortcut", source: on });
+  await engine.result(await engine.rung({ word: 'shortcut = "Ctrl+K"\nquery = "small ideas"', on: fork }));
+  await engine.chain({ label: "Review notes" });
   await session.refresh();
 }

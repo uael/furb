@@ -14,7 +14,7 @@ import {
   saveFile,
   shapes,
 } from "@furb/engine";
-import type { FileChange } from "@furb/engine/world";
+import type { FileChange } from "@furb/engine/session";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
@@ -178,16 +178,16 @@ export class Session extends EventEmitter {
   /** The actor the operator chose for each chain, which the session shows until the rung that sets it has run. */
   private readonly choices = new Map<string, { actor: string; rung?: string }>();
   constructor(
-    readonly life: Engine,
-    readonly world: HostView,
+    readonly engine: Engine,
+    readonly host: HostView,
     readonly demo = false,
     preferences?: Preferences,
   ) {
     super();
-    this.selected = life.root;
-    this.actor = world.actor;
-    this.sessionName = basename(world.directory);
-    const path = world.records.path;
+    this.selected = engine.root;
+    this.actor = host.actor;
+    this.sessionName = basename(host.directory);
+    const path = host.record;
     this.preferences =
       preferences ?? new Preferences(demo && path ? join(dirname(path), "ui-preferences.json") : undefined);
     if (path) {
@@ -200,9 +200,9 @@ export class Session extends EventEmitter {
     }
     // A view that an older release saved, and that this release has no more, opens as the feed.
     if (!views.includes(this.view)) this.view = "feed";
-    world.on("change", this.changed);
-    world.on("facts", this.factsChanged);
-    world.on("fault", this.fail);
+    host.on("change", this.changed);
+    host.on("facts", this.factsChanged);
+    host.on("fault", this.fail);
     this.save();
   }
   private changed = () => {
@@ -273,7 +273,7 @@ export class Session extends EventEmitter {
       do {
         this.dirty = false;
         const selected = this.selected;
-        const { acts, count, ...snapshot } = await this.world.snapshot(selected, this.counted);
+        const { acts, count, ...snapshot } = await this.host.snapshot(selected, this.counted);
         if (this.selected !== selected) {
           this.dirty = true;
           continue;
@@ -301,10 +301,10 @@ export class Session extends EventEmitter {
           }
           this.save();
         }
-        const page = `${this.changePage}:${this.world.changes}`;
+        const page = `${this.changePage}:${this.host.changes}`;
         if (this.view === "changes" && page !== this.changesRead) {
           this.changesRead = page;
-          this.changes = (await this.world.readChanges(this.changePage * 20, 20)).map((change) => ({
+          this.changes = (await this.host.readChanges(this.changePage * 20, 20)).map((change) => ({
             ...change,
             patch: createTwoFilesPatch(change.path, change.path, change.before, change.after),
           }));
@@ -337,9 +337,9 @@ export class Session extends EventEmitter {
       this.fileList = { directory, read: projectFiles(directory) };
     return this.fileList.read;
   }
-  /** The directory that the paths of the selected chain resolve against, as the World resolves them. */
+  /** The directory that the paths of the selected chain resolve against, as the files resolve them. */
   get workingDirectory(): string {
-    return resolve(this.world.directory, this.directory);
+    return resolve(this.host.directory, this.directory);
   }
   /** A path that the operator typed, with a leading `~` read as the home directory, against the directory of the
    * selected chain. */
@@ -358,8 +358,8 @@ export class Session extends EventEmitter {
     );
     if (chain ? this.error : Object.values(this.errors).some(Boolean)) return "error";
     if (this.queueHeld && this.queued.length) return "blocked";
-    if (this.world.pending.size) return "paused";
-    if (chain ? this.operatorPrompt : this.world.prompts.size) return "blocked";
+    if (this.host.pending.size) return "paused";
+    if (chain ? this.operatorPrompt : this.host.prompts.size) return "blocked";
     if (acts.some(working)) return "working";
     if (this.paused || acts.some((act) => act.paused && !act.done)) return "paused";
     const latest = acts.at(-1);
@@ -370,9 +370,9 @@ export class Session extends EventEmitter {
    * It says whether the chain was paused. */
   async wakeForInput(): Promise<boolean> {
     if (!this.paused) return false;
-    if (this.world.pending.size) await this.world.resume();
+    if (this.host.pending.size) await this.host.resume();
     await this.refresh();
-    if (this.paused) await this.life.wake(this.selected);
+    if (this.paused) await this.engine.wake(this.selected);
     await this.refresh();
     return true;
   }
@@ -429,7 +429,7 @@ export class Session extends EventEmitter {
     );
   }
   get operatorPrompt() {
-    return [...this.world.prompts.values()].find(
+    return [...this.host.prompts.values()].find(
       (prompt) => this.acts.find((act) => act.id === prompt.id)?.on === this.selected,
     );
   }
@@ -453,9 +453,9 @@ export class Session extends EventEmitter {
     return depth;
   }
   async attachImage(path: string): Promise<void> {
-    if (!(await this.world.route(this.actor)).input.includes("image"))
+    if (!(await this.host.route(this.actor)).input.includes("image"))
       throw new Error("Choose a model that accepts images before attaching one.");
-    const image = await this.world.attachImage(this.path(path));
+    const image = await this.host.attachImage(this.path(path));
     const images = this.images[this.selected] ?? [];
     this.images[this.selected] = images;
     if (!images.some((current) => current.uri === image.uri)) images.push(image);
@@ -466,7 +466,7 @@ export class Session extends EventEmitter {
     return [text, ...(this.images[this.selected] ?? []).map(imageReference)].join("\n");
   }
   labelOf(id: string): string {
-    return id === this.life.root
+    return id === this.engine.root
       ? "Main"
       : String(this.chains.find((chain) => chain.id === id)?.words[0] || "Chain");
   }
@@ -489,7 +489,7 @@ export class Session extends EventEmitter {
   }
 
   private track(id: string): void {
-    void this.life
+    void this.engine
       .result(id)
       .then(
         () => {},
@@ -497,7 +497,7 @@ export class Session extends EventEmitter {
           if (this.closed) return;
           this.notice = "";
           // A finished act carries its failure in the record and in the feed.
-          if (!(await this.life.outcome(id)).done) throw error;
+          if (!(await this.engine.outcome(id)).done) throw error;
           if (error instanceof Error && error.message.startsWith("CancelledError"))
             this.notice = "Work cancelled.";
         },
@@ -522,7 +522,7 @@ export class Session extends EventEmitter {
     void this.drainQueue().catch(this.fail);
   }
   async drainQueue(): Promise<void> {
-    if (this.closed || this.draining || this.queueHeld || this.world.pending.size || !this.queued.length)
+    if (this.closed || this.draining || this.queueHeld || this.host.pending.size || !this.queued.length)
       return;
     this.draining = true;
     // The queue is read again before each send, since the operator may remove or take back a follow-up meanwhile.
@@ -544,7 +544,7 @@ export class Session extends EventEmitter {
         passed.add(entry.id);
         await this.attachFiles(entry.text, entry.chain);
         if (!queued(entry)) continue;
-        this.track(await this.world.sendQueued(entry));
+        this.track(await this.host.sendQueued(entry));
         this.queued = this.queued.filter((item) => item.id !== entry.id);
         this.save();
         await this.refresh();
@@ -573,9 +573,9 @@ export class Session extends EventEmitter {
     this.notice = "Follow-up removed.";
   }
   private async attachFiles(text: string, chain = this.selected): Promise<void> {
-    const directory = resolve(this.world.directory, await this.life.cwd(chain));
+    const directory = resolve(this.host.directory, await this.engine.cwd({ on: chain }));
     for (const path of await fileReferences(text, directory))
-      await this.life.result(await this.life.rung(`read(${JSON.stringify(path)})`, { on: chain }));
+      await this.engine.result(await this.engine.rung({ word: `read(${JSON.stringify(path)})`, on: chain }));
   }
   /** The name of a new branch of this chain: its name and the first number that no chain takes, as Main 2. */
   private branchLabel(): string {
@@ -590,13 +590,11 @@ export class Session extends EventEmitter {
   async branch(label: string, omitted: string[]): Promise<string> {
     const source = this.selected;
     const filter = `take(${[...omitted.map((id) => JSON.stringify(id)), "inside=False"].join(", ")})`;
-    const rung = await this.life.rung(
-      `chain(${JSON.stringify(label)}, ${JSON.stringify(source)}, ${filter})`,
-      {
-        on: source,
-      },
-    );
-    await this.life.result(rung);
+    const rung = await this.engine.rung({
+      word: `chain(${JSON.stringify(label)}, ${JSON.stringify(source)}, ${filter})`,
+      on: source,
+    });
+    await this.engine.result(rung);
     await this.refresh();
     const chain = this.chains.find((chain) => chain.by === rung);
     if (!chain) throw new Error("The rung made no chain.");
@@ -629,7 +627,7 @@ export class Session extends EventEmitter {
   private async restore(text: string): Promise<void> {
     let message = text;
     for (const reference of imageReferences(message)) {
-      const image = await this.world.attachImage(imagePath(this.world.imageDirectory, reference.uri).path);
+      const image = await this.host.attachImage(imagePath(this.host.imageDirectory, reference.uri).path);
       image.name = reference.name || image.name;
       this.images[this.selected] ??= [];
       this.images[this.selected]?.push(image);
@@ -656,7 +654,7 @@ export class Session extends EventEmitter {
     this.choices.set(chain, choice);
     this.actor = actor;
     try {
-      choice.rung = await this.life.rung(`actor = ${JSON.stringify(actor)}`, { on: chain });
+      choice.rung = await this.engine.rung({ word: `actor = ${JSON.stringify(actor)}`, on: chain });
     } catch (error) {
       if (this.choices.get(chain) === choice) this.choices.delete(chain);
       throw error;
@@ -672,8 +670,9 @@ export class Session extends EventEmitter {
     // No program of Python starts with a slash, so a slash command is a command under edit too, as it is in Python.
     if (text.startsWith("/")) await this.command(text);
     else if (this.editing) {
-      await this.life.result(
-        await this.life.rung(`write(Text(${JSON.stringify(this.editing)}, ${JSON.stringify(input)}))`, {
+      await this.engine.result(
+        await this.engine.rung({
+          word: `write(Text(${JSON.stringify(this.editing)}, ${JSON.stringify(input)}))`,
           on: this.selected,
         }),
       );
@@ -682,12 +681,13 @@ export class Session extends EventEmitter {
     } else if (text.startsWith("!")) await this.command(`/bash ${text.slice(1).trimStart()}`);
     else {
       const pending = this.operatorPrompt;
-      if (pending) await this.world.answer(pending.id, input);
+      if (pending) await this.host.answer(pending.id, input);
       else {
         await this.attachFiles(input);
         this.redo = [];
-        const pending = this.world.pending.size > 0;
-        const id = await this.life.prompt(this.shape, this.withImages(input), {
+        const pending = this.host.pending.size > 0;
+        const id = await this.engine.prompt(this.shape, {
+          message: this.withImages(input),
           on: this.selected,
           to: this.actor,
         });
@@ -706,30 +706,32 @@ export class Session extends EventEmitter {
     const argument = space < 0 ? "" : text.slice(space + 1).trim();
     switch (command) {
       case "name":
-        this.sessionName = argument || basename(this.world.directory);
+        this.sessionName = argument || basename(this.host.directory);
         this.save();
         break;
       case "pause":
-        await this.life.pause(argument || this.selected);
+        await this.engine.pause(argument || this.selected);
         this.notice = "Paused. In-flight work can finish.";
         break;
       case "wake":
-        if (this.world.pending.size) {
+        if (this.host.pending.size) {
           this.emit("resume");
           break;
         }
-        await this.life.wake(argument || this.selected);
+        await this.engine.wake(argument || this.selected);
         this.notice = "Work resumed.";
         break;
       case "cancel":
-        await this.life.cancel(argument || this.selected);
+        await this.engine.cancel(argument || this.selected);
         this.notice = "Work cancelled.";
         break;
       case "chain":
-        await this.select(await this.life.chain(argument || "New chain"));
+        await this.select(await this.engine.chain({ label: argument || "New chain" }));
         break;
       case "fork":
-        await this.select(await this.life.chain(argument || `${this.label} fork`, this.selected));
+        await this.select(
+          await this.engine.chain({ label: argument || `${this.label} fork`, source: this.selected }),
+        );
         break;
       case "undo":
         await this.undo();
@@ -757,8 +759,8 @@ export class Session extends EventEmitter {
         const amount = Number(argument);
         if (!argument || !Number.isFinite(amount) || amount < 0)
           throw new Error("Use /grant followed by a dollar amount.");
-        const id = await this.life.grant({ usd: amount, on: this.selected });
-        const got = await this.life.outcome(id);
+        const id = await this.engine.grant({ usd: amount, on: this.selected });
+        const got = await this.engine.outcome(id);
         if (got.done) throw new Error(JSON.stringify(got.value));
         this.notice = `Budget set to ${dollars(amount)}. Use /wake if paused.`;
         break;
@@ -767,12 +769,12 @@ export class Session extends EventEmitter {
         const amount = Number(argument);
         if (!argument || !Number.isFinite(amount) || amount < 0 || amount > 1)
           throw new Error("Use /context with a number from 0 to 1.");
-        await this.life.grant({ share: amount, on: this.selected });
+        await this.engine.grant({ share: amount, on: this.selected });
         break;
       }
       case "model": {
         if (!argument) throw new Error("Use /model followed by a model name.");
-        const name = await this.world.model(argument);
+        const name = await this.host.model(argument);
         const entry = this.roster.find(([candidate]) => candidate === name);
         if (!entry)
           throw new Error(
@@ -797,11 +799,11 @@ export class Session extends EventEmitter {
       }
       case "run": {
         this.findings = [];
-        const id = await this.life.rung(argument, { on: this.selected });
+        const id = await this.engine.rung({ word: argument, on: this.selected });
         this.view = "feed";
-        if ((await this.life.outcome(id)).done) {
+        if ((await this.engine.outcome(id)).done) {
           try {
-            await this.life.result(id);
+            await this.engine.result(id);
           } catch {
             await this.refresh();
           }
@@ -819,16 +821,16 @@ export class Session extends EventEmitter {
         this.preferences.save(this.theme);
         break;
       case "bash":
-        this.track(await this.life.bash(argument, { on: this.selected }));
+        this.track(await this.engine.bash(argument, { on: this.selected }));
         this.view = "feed";
         break;
       case "read": {
-        this.track(await this.life.rung(`read(${JSON.stringify(argument)})`, { on: this.selected }));
+        this.track(await this.engine.rung({ word: `read(${JSON.stringify(argument)})`, on: this.selected }));
         this.view = "feed";
         break;
       }
       case "cd":
-        this.track(await this.life.rung(`cd(${JSON.stringify(argument)})`, { on: this.selected }));
+        this.track(await this.engine.rung({ word: `cd(${JSON.stringify(argument)})`, on: this.selected }));
         break;
       case "edit": {
         // The latest prompt with a program: one of its rungs holds a word the gate let run on this chain.
@@ -842,7 +844,7 @@ export class Session extends EventEmitter {
                 this.activity.some((rung) => rung.by === act.id && Object.hasOwn(this.program, rung.id)),
             )?.id;
         if (!id) throw new Error("There is no prompt program to edit.");
-        const got = (await this.life.read(id, undefined, this.selected)) as { content: string };
+        const got = await this.engine.read(id, { on: this.selected });
         this.editing = id;
         this.emit("compose", this.drafts[this.draftKey] ?? got.content);
         this.notice = "Edit the Python program, then submit to replay it.";
@@ -854,7 +856,7 @@ export class Session extends EventEmitter {
         const text = space < 0 ? "" : argument.slice(space + 1);
         if (!id) throw new Error("Use /feed followed by an act id and text.");
         // A fed text is one line of input, and no text closes the input.
-        await this.life.write({ path: `${id}/stdin`, content: text && `${text}\n` }, this.selected);
+        await this.engine.write({ path: `${id}/stdin`, content: text && `${text}\n` }, { on: this.selected });
         break;
       }
       case "close": {
@@ -862,7 +864,7 @@ export class Session extends EventEmitter {
         if (split < 0) throw new Error("Use /close followed by an act id and a JSON value.");
         // The record reader keeps what JSON.parse loses: 2.0 stays a float, and a whole number past the safe range
         // is refused.
-        await this.life.close(decodeRecord(argument.slice(split + 1)), argument.slice(0, split));
+        await this.engine.close(decodeRecord(argument.slice(split + 1)), { id: argument.slice(0, split) });
         break;
       }
       case "export": {
@@ -879,7 +881,7 @@ export class Session extends EventEmitter {
       case "share": {
         const path = argument
           ? this.path(argument)
-          : join(furbDirectory(this.world.directory, "shares"), `${Date.now()}.html`);
+          : join(furbDirectory(this.host.directory, "shares"), `${Date.now()}.html`);
         await mkdir(dirname(path), { recursive: true });
         await writeFile(path, shareHtml(this), { flag: "wx", mode: 0o600 });
         this.notice = `Conversation saved to ${shortenHome(path)}.`;
@@ -892,11 +894,11 @@ export class Session extends EventEmitter {
   }
 
   get cost(): number {
-    return Math.max(this.savedCost, this.world.cost);
+    return Math.max(this.savedCost, this.host.cost);
   }
   save(): void {
     this.preferences.save(this.theme);
-    const record = this.world.records.path;
+    const record = this.host.record;
     if (!record) return;
     const path = `${record}.ui.json`;
     this.savedCost = this.cost;
@@ -906,18 +908,18 @@ export class Session extends EventEmitter {
     };
     saveFile(path, JSON.stringify(view));
   }
-  /** Save the view, then end the World whatever the save came to. */
+  /** Save the view, then end the session whatever the save came to. */
   async dispose(): Promise<void> {
     clearTimeout(this.noticeTimer);
     this.closed = true;
-    this.world.off("change", this.changed);
-    this.world.off("fault", this.fail);
-    this.world.off("facts", this.factsChanged);
+    this.host.off("change", this.changed);
+    this.host.off("fault", this.fail);
+    this.host.off("facts", this.factsChanged);
     try {
       this.save();
     } finally {
       await this.refreshTask?.catch(() => {});
-      await this.world.dispose();
+      await this.host.dispose();
     }
   }
 }

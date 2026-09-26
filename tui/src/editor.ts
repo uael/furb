@@ -16,7 +16,7 @@ export async function externalEditor(
   renderer.suspend();
   try {
     const editor = process.env.VISUAL || process.env.EDITOR || "vi";
-    const child = Bun.spawn([shell, "-c", `exec ${editor} "$1"`, "furb-editor", path], {
+    const child = Bun.spawn([shell(), "-c", `exec ${editor} "$1"`, "furb-editor", path], {
       cwd,
       stdin: "inherit",
       stdout: "inherit",

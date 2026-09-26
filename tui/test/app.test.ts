@@ -119,8 +119,8 @@ test("model and effort change independently, a model is named by its id alone, a
     await first.submit("/theme paper");
     second = await demoSession(false, new Preferences(first.preferences.path));
     expect(second.theme).toBe("paper");
-    expect(second.world.records.path).not.toBe(first.world.records.path);
-    expect(first.preferences.path).toBe(join(dirname(first.world.records.path ?? ""), "ui-preferences.json"));
+    expect(second.host.record).not.toBe(first.host.record);
+    expect(first.preferences.path).toBe(join(dirname(first.host.record ?? ""), "ui-preferences.json"));
     first.roster.push(["claude-cli:org/plain", [], 1000], ["claude-cli:org/high", [], 1000]);
     first.actor = "claude-cli:org/plain";
     expect(first.actorChoice).toEqual({ model: "claude-cli:org/plain", effort: "off" });
@@ -142,7 +142,7 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
   const session = await demoSession(true);
   const screen = await createTestRenderer({ width: 120, height: 40 });
   const app = new App(screen.renderer, session, { quit() {} });
-  const snapshot = session.world.snapshot.bind(session.world);
+  const snapshot = session.host.snapshot.bind(session.host);
   let release = () => {};
   try {
     await idle(session);
@@ -153,7 +153,7 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    session.world.snapshot = async (chain) => {
+    session.host.snapshot = async (chain) => {
       await gate;
       return snapshot(chain);
     };
@@ -164,7 +164,7 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
     expect(app.scroll.getChildren().map((node) => [node.id, node.y])).toEqual(before);
     release();
     await reading;
-    session.world.snapshot = snapshot;
+    session.host.snapshot = snapshot;
 
     await session.submit("/read missing-review-file.txt");
     await session.refresh();
@@ -188,7 +188,7 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
     await screen.flush();
     expect(app.scroll.scrollTop).toBeGreaterThan(0);
 
-    session.world.snapshot = async () => {
+    session.host.snapshot = async () => {
       throw new Error("Snapshot unavailable");
     };
     await session.refresh().catch(session.fail);
@@ -200,7 +200,7 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
     expect(screen.captureCharFrame()).toContain("Refresh view");
   } finally {
     release();
-    session.world.snapshot = snapshot;
+    session.host.snapshot = snapshot;
     app.dispose();
     screen.renderer.destroy();
     await session.dispose();
@@ -219,12 +219,12 @@ test("every view shows an empty result, loading, and an error in its feed", asyn
       app.render();
       await screen.flush();
       expect(screen.captureCharFrame()).toContain("Nothing matches “nothing matches this”");
-      const snapshot = session.world.snapshot.bind(session.world);
+      const snapshot = session.host.snapshot.bind(session.host);
       let release = () => {};
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
-      session.world.snapshot = async (chain) => {
+      session.host.snapshot = async (chain) => {
         await gate;
         return snapshot(chain);
       };
@@ -234,7 +234,7 @@ test("every view shows an empty result, loading, and an error in its feed", asyn
       expect(screen.captureCharFrame()).toContain(`Loading the ${view}`);
       release();
       await loading;
-      session.world.snapshot = snapshot;
+      session.host.snapshot = snapshot;
       session.fail(new Error(`Could not load ${view}`));
       app.render();
       await screen.flush();
@@ -254,14 +254,18 @@ test("operator answers and program edits act through the binding", async () => {
   const test = await createTestRenderer({ width: 120, height: 40, exitOnCtrlC: false });
   const app = new App(test.renderer, session, { quit() {} });
   try {
-    const id = await session.life.prompt("bool", "Continue with the change?", { to: "operator" });
-    await until(session.world, () => session.world.prompts.has(id));
+    const id = await session.engine.prompt("bool", {
+      message: "Continue with the change?",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.prompts.has(id));
     await session.refresh();
     app.render();
     await test.flush();
     expect(test.captureCharFrame()).toContain("Continue with the change?");
     await session.submit("yes");
-    expect(await session.life.result(id)).toBe(true);
+    expect(await session.engine.result(id)).toBe(true);
     await seedDemo(session);
     await session.command("/edit");
     expect(app.composer.plainText).toContain("close(");
@@ -287,11 +291,11 @@ test("operator answers and program edits act through the binding", async () => {
 test("resume preserves chains, programs, theme, and input drafts while unfinished work stays paused", async () => {
   const first = await demoSession(true);
   let library = new Workspaces(first.preferences, { demo: true });
-  const group = await library.add(first.world.directory);
+  const group = await library.add(first.host.directory);
   library.adopt(first, group);
   const screen = await createTestRenderer({ width: 120, height: 40 });
   const app = new App(screen.renderer, first, { quit() {} });
-  const fork = first.chains.find((chain) => chain.id !== first.life.root);
+  const fork = first.chains.find((chain) => chain.id !== first.engine.root);
   if (!fork) throw new Error("No fork in the fixture.");
   await first.select(fork.id);
   first.mode = "python";
@@ -299,10 +303,10 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
   first.view = "transcript";
   app.render();
   app.composer.setText('draft = "keep this"');
-  const pending = await first.life.wait(10, fork.id);
+  const pending = await first.engine.wait({ seconds: 10, on: fork.id });
   const ids = first.chains.map((chain) => chain.id);
   const program = { ...first.program };
-  const record = first.world.records.path;
+  const record = first.host.record;
   app.dispose();
   screen.renderer.destroy();
   await library.dispose();
@@ -321,7 +325,7 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
   expect(choices).toHaveLength(2);
   await library.dispose();
   const opened = await openEngine({ record, demo: true });
-  const second = new Session(opened.life, opened.world, true);
+  const second = new Session(opened.engine, opened.host, true);
   await second.refresh();
   const next = await createTestRenderer({ width: 120, height: 40 });
   const view = new App(next.renderer, second, { quit() {} });
@@ -332,8 +336,8 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
     expect(second.theme).toBe("paper");
     expect(second.mode).toBe("python");
     expect(view.composer.plainText).toBe('draft = "keep this"');
-    expect(second.world.pending.has(pending)).toBe(true);
-    expect((await second.life.outcome(pending)).done).toBe(false);
+    expect(second.host.pending.has(pending)).toBe(true);
+    expect((await second.engine.outcome(pending)).done).toBe(false);
   } finally {
     view.dispose();
     next.renderer.destroy();
@@ -360,10 +364,10 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
   // settles.
   while (session.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)))
     await new Promise((resolve) => session.once("change", resolve));
-  const original = await transcriptOf(session.life, source);
+  const original = await transcriptOf(session.engine, source);
   let rewound = "";
   let transcript: string[] = [];
-  const record = session.world.records.path;
+  const record = session.host.record;
   try {
     const message = session.activity.findLast((act) => session.isUserPrompt(act));
     app.rewind();
@@ -387,11 +391,11 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
     // The message returns to the input once the branch is made.
     await until(session, () => app.composer.plainText !== "");
     expect(app.composer.plainText).toBe(String(message?.words[1] ?? ""));
-    const continued = await transcriptOf(session.life, source);
+    const continued = await transcriptOf(session.engine, source);
     expect(continued.join("\n")).toContain(original.join("\n"));
     expect(session.turns.length).toBeGreaterThan(0);
     rewound = session.selected;
-    transcript = await transcriptOf(session.life, rewound);
+    transcript = await transcriptOf(session.engine, rewound);
     const maker = session.chains.find((chain) => chain.id === rewound)?.by;
     expect(session.acts.find((act) => act.id === maker)?.kind).toBe("rung");
   } finally {
@@ -401,9 +405,9 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
   }
   const reopened = await openEngine({ record, demo: true });
   try {
-    expect(await transcriptOf(reopened.life, rewound)).toEqual(transcript);
+    expect(await transcriptOf(reopened.engine, rewound)).toEqual(transcript);
   } finally {
-    await reopened.world.dispose();
+    await reopened.host.dispose();
   }
 }, 30000);
 
@@ -412,7 +416,7 @@ test("a progress tick keeps an in-flight act's card and body in place", async ()
   const screen = await createTestRenderer({ width: 120, height: 40 });
   const app = new App(screen.renderer, session, { quit() {} });
   try {
-    const id = await session.life.wait(60);
+    const id = await session.engine.wait({ seconds: 60, on: session.engine.root });
     await session.refresh();
     app.render();
     await screen.flush();
@@ -439,7 +443,7 @@ test("a name inside a transcript tag opens the same live inspector as Python cod
   const screen = await createTestRenderer({ width: 120, height: 44, useMouse: true });
   const app = new App(screen.renderer, session, { quit() {} });
   try {
-    await session.life.result(await session.life.rung("answer = 17"));
+    await session.engine.result(await session.engine.rung({ word: "answer = 17", on: session.engine.root }));
     await session.refresh();
     session.show("transcript");
     app.render();
@@ -461,9 +465,9 @@ test("a name inside a transcript tag opens the same live inspector as Python cod
 test("a delayed snapshot cannot restore the chain selected before a switch", async () => {
   const session = await demoSession();
   try {
-    const child = await session.life.chain("next");
+    const child = await session.engine.chain({ label: "next" });
     await session.refresh();
-    const original = session.world.snapshot.bind(session.world);
+    const original = session.host.snapshot.bind(session.host);
     let release = () => {};
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -473,7 +477,7 @@ test("a delayed snapshot cannot restore the chain selected before a switch", asy
       entered = resolve;
     });
     let first = true;
-    session.world.snapshot = async (chain) => {
+    session.host.snapshot = async (chain) => {
       if (first) {
         first = false;
         const before = await original(chain);
@@ -501,14 +505,14 @@ test("editing a prompt program is a durable operator rung", async () => {
   if (!prompt) throw new Error("No prompt in the fixture.");
   await first.command(`/edit ${prompt.id}`);
   await first.submit('saved_edit = 42\nclose("edited")');
-  expect((await first.life.inspect("saved_edit")).value).toBe(42);
-  const record = first.world.records.path;
+  expect((await first.engine.inspect("saved_edit")).value).toBe(42);
+  const record = first.host.record;
   await first.dispose();
   const opened = await openEngine({ record, demo: true });
-  const second = new Session(opened.life, opened.world, true);
+  const second = new Session(opened.engine, opened.host, true);
   try {
     await second.refresh();
-    expect((await second.life.inspect("saved_edit")).value).toBe(42);
+    expect((await second.engine.inspect("saved_edit")).value).toBe(42);
   } finally {
     await second.dispose();
   }
