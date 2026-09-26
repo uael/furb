@@ -67,9 +67,10 @@ async def prompted(record: Path | None, cwd: Path, shape: type | None, message: 
     await cool()
 
 
-async def turned(record: Path, cwd: Path) -> None:
-  """The turns of the root of a life made again from its record, each as the python a model reads of it."""
-  root = lived(record, cwd, ACTOR, keeps=False)[1]
+async def turned(record: Path, cwd: Path, actor: str = ACTOR) -> None:
+  """The turns of the root of a life made again from its record, on the actor that life stood on, each as the
+  python a model reads of it."""
+  root = lived(record, cwd, actor, keeps=False)[1]
   try:
     for role, py, _, _ in engine.turns(on=root):
       say(f"[{role}] {py}")

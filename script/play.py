@@ -9,18 +9,18 @@ without asking a model, and then takes one prompt more.
 """
 
 import asyncio
-import os
-import shutil
 import sys
 import tempfile
 import time
 from pathlib import Path
 
+from real import bought, ready, spent
+
 from furb import engine
 from furb.cli import lived, say
 from furb.engine import OPERATOR
-from furb.provider.claude import BIN, cool
-from furb.world import answered, kept
+from furb.provider.claude import cool
+from furb.world import kept
 
 TO = "opus/low"
 """TO is the actor the play asks, which is opus at the least effort it takes."""
@@ -33,7 +33,8 @@ TRIES = 40
 STALL = 1800.0
 """STALL is the seconds the play waits for one prompt, since a chain that went quiet would wait for ever."""
 SETTLE = 2.0
-"""SETTLE is the seconds the operator waits between two looks at the transcript, since each look is a read."""
+"""SETTLE is the seconds the operator gives the life before it looks at the life or acts on it again, since each
+look is a read."""
 SAID = "windlass"
 """SAID is the word the operator answers the model with, which the model holds and gives back."""
 ITEMS = 7
@@ -65,22 +66,6 @@ def heads(root: str, name: str) -> list[str]:
     for line in py.split("\n")
     if line[1:2].isalnum() and name in [line.split()[0][1:], *line.split()[1:2]]
   ]
-
-
-async def settle(n: int = 400) -> None:
-  """Room for the loop to do what it still owes, so that finding nothing done means something."""
-  for _ in range(n):
-    await asyncio.sleep(0)
-
-
-def bought(record: Path) -> list[tuple]:
-  """Every answer of a model that the record holds, and none before the record is written."""
-  return answered(kept(record)) if record.is_file() else []
-
-
-def spent(record: Path) -> float:
-  """What every answer the record holds has cost so far."""
-  return sum(one[3][2][4] for one in bought(record) if one[3][2])
 
 
 async def watching(root: str, record: Path, name: str) -> None:
@@ -171,7 +156,7 @@ async def first(yard: Path, record: Path) -> list[object]:
 async def second(yard: Path, record: Path, got: list[object]) -> float:
   """The life on the record of the first: it asks no model for what the record holds, and takes one prompt more."""
   world, root, held = lived(record, yard, TO, keeps=True)
-  await settle()
+  await asyncio.sleep(SETTLE)
   replies = [one for one in world.calls if one[0] == "reply"]
   assert replies == [], f"the resumed life asked a model {len(replies)} times for what its record holds"
   assert held, "the resumed life was opened on nothing"
@@ -181,7 +166,7 @@ async def second(yard: Path, record: Path, got: list[object]) -> float:
   if [entry for entry in held if entry[0][0] == "pause" and entry[0][1] == root]:
     say("the record holds a pause of the root, said by the World, so the operator wakes the chain")
     engine.wake(root)
-    await settle()
+    await asyncio.sleep(SETTLE)
   message = "How many items did you give back? Close with the number and nothing else."
   try:
     more = await asyncio.wait_for(engine.prompt(int, message, TO, on=root), STALL)
@@ -214,9 +199,7 @@ def ledger(root: str, record: Path) -> float:
 
 def main() -> int:
   """The two lives, in a directory of their own, and everything the play has to show for them."""
-  if shutil.which(os.environ.get(BIN) or "claude") is None:
-    say("no claude on PATH, so no model can be asked and the play stops here.")
-    return 1
+  ready()
   yard = Path(tempfile.mkdtemp(prefix="furb-play-"))
   record = yard / "record.jsonl"
   say(f"the directory of the play is {yard}")
