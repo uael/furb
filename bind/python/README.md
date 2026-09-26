@@ -8,7 +8,7 @@ the engine in the sandbox of monty, with the Kernel of the crate, so it needs no
 python gives, as the engine of this interpreter takes them. It also gives the ears of the World that the crate
 writes: `files()`, `bash()`, `time()`, and `store(path)`, which gives the record at the
 path and the ear that keeps it. Each is a `NativeEar`, which `furb_monty.engine.boot` takes beside the generators
-of this interpreter:
+of this interpreter, and which the engine of this interpreter, `furb.python`, steps as a generator of its own:
 
 ```python
 from furb_monty import _monty, engine

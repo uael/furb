@@ -92,10 +92,10 @@ def blind() -> Words:
         yield "done", qid, []
 
 
-def booted(said: Words, record: Sequence[tuple] = (), *, gated: bool = True) -> str:
-  """A life on a World, with the Kernel of this interpreter and its gate when it is gated, and the id of its root; a
-  life that is not gated reads every word with a gate that finds nothing, so it refuses no word."""
-  return engine.boot(record, kernel=Native().kernel(), world=said, gate=gating() if gated else blind())
+def booted(said: Words, record: Sequence[tuple] = (), *, gated: bool = True, **ears: Words) -> str:
+  """A life on a World and these ears, with the Kernel of this interpreter and its gate when it is gated, and the id
+  of its root; a life that is not gated reads every word with a gate that finds nothing, so it refuses no word."""
+  return engine.boot(record, kernel=Native().kernel(), world=said, gate=gating() if gated else blind(), **ears)
 
 
 def life(world: Live, record: Sequence[tuple] = ()) -> str:

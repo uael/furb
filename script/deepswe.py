@@ -719,7 +719,6 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
   """
   record = run_dir / "record.jsonl"
   world, root, held = lived(record, app, args.to, keeps=True)
-  del world
   say(f"[deepswe] life on {app}, root {root}, {len(held)} facts kept")
   if args.ceiling:
     engine.grant(usd=args.ceiling, on=root)
@@ -747,6 +746,7 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
   except Exception as no:
     stopped = f"the task was refused: {no!r}"
   finally:
+    world.end()
     await cool()
   if stopped:
     say(f"[deepswe] {stopped}")

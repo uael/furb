@@ -5,11 +5,12 @@ ear of this interpreter that says a verb from its thread and is answered with wh
 engine made that an ear calls back from its thread, a class a word defined held as a type of this interpreter
 and its instances as objects of it, both ways, the Kernel of this interpreter refused, since the engine of monty
 holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, and an ear the
-crate writes, which serves a life of this interpreter. What the ears of the crate do, the crate proves.
+crate writes, which serves a life of either engine. What the ears of the crate do, the crate proves.
 """
 
 import builtins
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 
@@ -195,3 +196,29 @@ async def test_an_ear_of_the_crate_serves_a_life_of_this_interpreter_and_what_it
   from a thread of its own drives the life from the loop: time ends a wait from its thread."""
   root = furb_monty.engine.boot((), time=_monty.time(), world=Dead(stands=STANDS).hears())
   assert await engine.wait(0.01, on=root) is None
+
+
+async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_generator_of_its_own(
+  tmp_path: Path,
+) -> None:
+  """The engine of this interpreter steps an ear of the crate as it steps a generator: a verb the ear says is said to
+  that engine, what the work of the ear says from a thread drives the life, and the record the store keeps reads
+  back as the values it held."""
+  swapped(furb.python)
+  path = str(tmp_path / "record.jsonl")
+  stored, store = _monty.store(path)
+  assert stored == []
+  ears = {"files": _monty.files(), "bash": _monty.bash(), "time": _monty.time(), "store": store}
+  world = Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
+  root = furb.python.boot((), kernel=Py().kernel(), gate=Py().gating(), **ears, world=world)
+  furb.python.write(furb.python.Text("a.txt", "one\n"), on=root)
+  assert furb.python.read("a.txt", on=root).content == "one\n"
+  ran = await furb.python.bash("printf hi; sleep 0.1; printf there", on=root)
+  assert (ran.code, ran.stdout.content) == (0, "hithere")
+  assert await furb.python.wait(0.01, on=root) is None
+  for one in ears.values():
+    one.dispose()
+  kept = [fact for (fact,) in _monty.kept(path)]
+  assert [fact[3] for fact in kept if fact[:2] == ["done", "read1"]] == [
+    furb.python.Text(str(tmp_path / "a.txt"), "one\n")
+  ]

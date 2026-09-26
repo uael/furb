@@ -102,7 +102,7 @@ async def watching(root: str, record: Path, name: str) -> None:
 
 async def first(yard: Path, record: Path) -> list[object]:
   """The life that does the work, and everything the play holds it to when the work is done."""
-  _world, root, held = lived(record, yard, TO, keeps=True)
+  world, root, held = lived(record, yard, TO, keeps=True)
   assert held == [], "the first life is opened on no record"
   engine.grant(usd=CEILING, on=root)
   waits = engine.prompt(list, MESSAGE, TO, on=root)
@@ -149,6 +149,7 @@ async def first(yard: Path, record: Path) -> list[object]:
   say(f"the operator was asked {asked[0][5]!r} and answered {SAID!r}")
   say(f"the working directory moved to {got[5]}")
   say(f"the first life gave {got!r}")
+  world.end()
   await cool()
   return got
 
@@ -174,6 +175,7 @@ async def second(yard: Path, record: Path, got: list[object]) -> float:
     say(f"the resumed life answered {more!r} for the length of that list")
     return ledger(root, record)
   finally:
+    world.end()
     await cool()
 
 

@@ -7,15 +7,22 @@ it back. A generator of this interpreter crosses as an ear, an ear of the crate 
 the sandbox calls back.
 """
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Generator, Iterable
 from typing import final
 
 @final
-class NativeEar:
-  """An ear that the crate writes: given once, to the boot of an engine or to a verb that takes an ear."""
+class NativeEar(Generator[tuple | None, tuple]):
+  """An ear that the crate writes: given once, to the boot of an engine or to a verb that takes an ear. The engine of
+  monty hears it as itself, and the engine of this interpreter steps it as a generator of its own."""
 
   def dispose(self) -> None:
-    """The ear is let go before any engine hears it, so what it holds goes: a store lets its record go."""
+    """The ear is let go before any engine hears it, or after the life it heard in, so what it holds goes: a command
+    ends, a wait ends, and a store lets its record go."""
+
+  def send(self, value: tuple | None, /) -> tuple | None: ...
+  def throw(self, *args: object) -> tuple | None: ...
+  def pump(self) -> None:
+    """What the work of the ear said since, said into the engine of this interpreter under the name of the ear."""
 
 @final
 class Engine:
@@ -66,11 +73,11 @@ def bash() -> NativeEar:
 def time() -> NativeEar:
   """The ear of time, which reads the clock, draws a chance, and ends a wait."""
 
-def store(path: str) -> tuple[list[object], NativeEar]:
+def store(path: str) -> tuple[list[list[list[object]]], NativeEar]:
   """The record at a path, read under its lease, and the ear of the store, which keeps on it what the journal says
   to keep."""
 
-def kept(path: str) -> list[object]:
+def kept(path: str) -> list[list[list[object]]]:
   """What the store kept at a path, read with no lease and changed in nothing."""
 
 def gate(sheet: str) -> list[tuple[int, str]]:

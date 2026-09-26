@@ -29,9 +29,10 @@ impl Text {
     Text { path: path.into(), content: content.into() }
   }
 
-  /// The text an object is, when it is an instance of `Text`.
+  /// The text an object is, when it is an instance of `Text`, or a map that names it, as a text of the engine of
+  /// python goes in.
   pub fn of(said: ObjectRef<'_>) -> Option<Text> {
-    if said.type_name() != "Text" {
+    if said.type_name() != "Text" && field(&said, IS).and_then(|one| one.as_str()) != Some("Text") {
       return None;
     }
     Some(Text {

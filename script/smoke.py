@@ -52,6 +52,7 @@ async def first(yard: Path, record: Path) -> None:
       say(f"the chain is paused: the grant of {CEILING} dollars holds it at its ceiling")
     raise
   finally:
+    world.end()
     await cool()
   say(f"the first life gave {got!r}, after {len(replies(world.calls))} reply(s)")
   for one in answered(kept(record)):
@@ -70,6 +71,7 @@ async def second(yard: Path, record: Path) -> None:
   try:
     got = await asyncio.wait_for(Act(name), STALL)
   finally:
+    world.end()
     await cool()
   say(f"the second life gave {got!r}, after {len(replies(world.calls))} reply(s), from {name}")
   assert got == LINES, f"the journal answered {got!r} and not {LINES}"
