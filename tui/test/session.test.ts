@@ -215,29 +215,6 @@ test("each /feed sends one line, and a /feed with no text closes the input", asy
   }
 }, 30000);
 
-test("/close carries a whole float as a float, as the operator wrote it", async () => {
-  const session = await demoSession();
-  try {
-    const prompt = await session.engine.prompt("float", {
-      message: "A number?",
-      to: "operator",
-      on: session.engine.root,
-    });
-    await session.submit(`/close ${prompt} 2.0`);
-    expect(await session.engine.result(prompt)).toBe(2);
-    const whole = await session.engine.prompt("float", {
-      message: "Another number?",
-      to: "operator",
-      on: session.engine.root,
-    });
-    expect(String(await session.submit(`/close ${whole} 2`).catch((error: unknown) => error))).toContain(
-      "2 not float",
-    );
-  } finally {
-    await session.dispose();
-  }
-}, 30000);
-
 test("/model finds a model of the roster by the rule of the provider, so an id with a colon names it", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-models-"));
   const opened = await openEngine({

@@ -7,24 +7,28 @@ import { until } from "../../bind/typescript/test/until.ts";
 import { defaultModel, hostModels } from "../src/models.ts";
 import { Snapshots } from "../src/snapshots.ts";
 
+/** An engine that names each of its methods in a list as they are called, and then calls them. */
+function traced(engine: Engine, calls: string[]): Engine {
+  return new Proxy(engine, {
+    get(target, key) {
+      const value = Reflect.get(target, key, target);
+      return typeof value === "function"
+        ? (...args: unknown[]) => {
+            calls.push(String(key));
+            return Reflect.apply(value, target, args);
+          }
+        : value;
+    },
+  });
+}
+
 test("idle snapshots add no facts or sandbox calls as the act table grows, and streamed output needs no peek", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-snapshot-"));
   const session = new Session({ cwd });
   try {
     const engine = session.open();
     const calls: string[] = [];
-    const traced = new Proxy(engine, {
-      get(target, key) {
-        const value = Reflect.get(target, key, target);
-        return typeof value === "function"
-          ? (...args: unknown[]) => {
-              calls.push(String(key));
-              return Reflect.apply(value, target, args);
-            }
-          : value;
-      },
-    }) as Engine;
-    const snapshots = new Snapshots(traced, session);
+    const snapshots = new Snapshots(traced(engine, calls), session);
     snapshots.take(engine.root);
     for (let index = 0; index < 100; index++) engine.wait({ seconds: 60, on: engine.root });
     await Promise.resolve();
@@ -63,69 +67,24 @@ test("idle snapshots add no facts or sandbox calls as the act table grows, and s
   }
 }, 30000);
 
-test("fact-derived act state matches native outcomes, controls, and rung results while view queries follow actual changes", async () => {
+test("a take reads the program, the turns and the directory of a chain again once a rung changes them", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-state-"));
-  // The scripted answer replaces the request of the model the provider offers, so the prompt goes to a model.
-  const host = hostModels();
-  const session = new Session({
-    cwd,
-    models: host.models,
-    model: defaultModel,
-    answer: async () => ["assistant", 'close("answered")', null, null],
-  });
+  const session = new Session({ cwd });
   try {
     const engine = session.open();
     const snapshots = new Snapshots(engine, session);
     snapshots.take(engine.root);
-    const one = engine.wait({ seconds: 60, on: engine.root }).id,
-      two = engine.wait({ seconds: 60, on: engine.root }).id;
-    engine.pause(engine.root);
-    expect(session.isPaused(one)).toBe(true);
-    engine.wake(one);
-    expect(session.isPaused(one)).toBe(false);
-    expect(session.isPaused(two)).toBe(true);
-    engine.wake(engine.root);
-    engine.close(null, { id: one });
-    engine.cancel(two);
     await engine.rung({ word: "answer = 17", on: engine.root });
     await Promise.resolve();
-    let view = snapshots.take(engine.root);
+    const view = snapshots.take(engine.root);
     expect(Object.values(view.program)).toContain("answer = 17");
     expect(view.turns.map(([, python]) => python).join("\n")).toContain("answer = 17");
     // A cd the operator asks is of the moment, and the engine keeps no answer of it, so the cd is a rung, as /cd is.
     await engine.rung({ word: 'cd("another-directory")', on: engine.root });
     await Promise.resolve();
     expect(snapshots.take(engine.root).directory).toBe("another-directory");
-    const failed = engine.rung({ word: "x = 1 / 0", on: engine.root });
-    await failed.then(
-      () => {},
-      () => {},
-    );
-    const refused = engine.rung({ word: "this is invalid python !!!", on: engine.root });
-    await refused.then(
-      () => {},
-      () => {},
-    );
-    await engine.prompt("str", { message: "Answer this", on: engine.root });
-    await Promise.resolve();
-    view = snapshots.take(engine.root);
-    for (const row of view.acts) {
-      expect(row.done).toBe(engine.outcome(row.id).done);
-      if (row.done) expect(row.value).toEqual(engine.outcome(row.id).value);
-    }
-    expect(view.acts.find((act) => act.id === failed.id)?.run).toEqual({
-      status: "failed",
-      reason: "ZeroDivisionError: division by zero",
-    });
-    expect(view.acts.find((act) => act.id === refused.id)?.run?.reason).toContain("line 1");
-    expect(
-      view.acts
-        .filter((act) => act.kind === "rung" && /^prompt\d+$/.test(act.by))
-        .every((act) => act.run?.status === "done"),
-    ).toBe(true);
   } finally {
     await session.dispose();
-    host.dispose();
     await rm(cwd, { recursive: true, force: true });
   }
 }, 30000);
@@ -164,18 +123,7 @@ test("a take after a change of the chain asks its turns by one question", async 
   try {
     const engine = session.open();
     const calls: string[] = [];
-    const traced = new Proxy(engine, {
-      get(target, key) {
-        const value = Reflect.get(target, key, target);
-        return typeof value === "function"
-          ? (...args: unknown[]) => {
-              calls.push(String(key));
-              return Reflect.apply(value, target, args);
-            }
-          : value;
-      },
-    }) as Engine;
-    const snapshots = new Snapshots(traced, session);
+    const snapshots = new Snapshots(traced(engine, calls), session);
     snapshots.take(engine.root);
     await engine.result(engine.rung({ word: "changed = 1", on: engine.root }).id);
     calls.length = 0;

@@ -1,44 +1,14 @@
 import { afterAll, expect, setDefaultTimeout, test } from "bun:test";
-import { createTestRenderer, setRendererCapabilities } from "@opentui/core/testing";
+import { setRendererCapabilities } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { App } from "../src/app.ts";
-import { demoSession, removeDemoDirectories } from "../src/demo.ts";
-import type { Session } from "../src/session.ts";
+import { removeDemoDirectories } from "../src/demo.ts";
+import { composing } from "./composing.ts";
+import { idle } from "./idle.ts";
 
 // Each test opens a demo session, with its worker and its record, as the tests of the App do, and so has their time:
 // a Windows runner has run such a test four times slower than usual, past the five seconds that bun gives by default.
 setDefaultTimeout(30000);
 afterAll(removeDemoDirectories);
-
-/** A demo session in an App on a test terminal, which a test uses and which ends after it. */
-async function composing(
-  use: (context: {
-    session: Session;
-    app: App;
-    screen: Awaited<ReturnType<typeof createTestRenderer>>;
-    frame: () => Promise<string>;
-  }) => Promise<void>,
-  options: Parameters<typeof createTestRenderer>[0] = { width: 120, height: 44 },
-  seed = false,
-): Promise<void> {
-  const session = await demoSession(seed);
-  const screen = await createTestRenderer(options);
-  const app = new App(screen.renderer, session, { quit() {} });
-  const frame = async () => {
-    app.render();
-    await screen.flush();
-    return screen.captureCharFrame();
-  };
-  try {
-    await screen.flush();
-    app.composer.focus();
-    await use({ session, app, screen, frame });
-  } finally {
-    app.dispose();
-    screen.renderer.destroy();
-    await session.dispose();
-  }
-}
 
 test("a terminal with no kitty keyboard protocol reaches each action by a chord it sends, and the help names those chords", () =>
   composing(
@@ -144,10 +114,7 @@ test("a sent text leaves its draft at once, and a program under edit opens from 
   composing(
     async ({ session, app, screen, frame }) => {
       // /edit opens the latest prompt with a program, so the demo settles first: its last prompt may still run.
-      await until(
-        session,
-        () => !session.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)),
-      );
+      await idle(session);
       const prompt = session.draftKey;
       await screen.mockInput.typeText("/edit");
       await frame();
@@ -316,10 +283,7 @@ test("Ctrl+S puts the input aside, the line under the input shows it, and Ctrl+S
 test("Escape twice opens the rewind tree in the feed, which keys move, fold, and close", () =>
   composing(
     async ({ session, app, screen, frame }) => {
-      await until(
-        session,
-        () => !session.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)),
-      );
+      await idle(session);
       await frame();
       screen.mockInput.pressEscape();
       expect(await frame()).toContain("Press Escape again to rewind.");
@@ -502,10 +466,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     await app.submit();
     await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
     await session.submit("/cancel");
-    await until(
-      session,
-      () => !session.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)),
-    );
+    await idle(session);
     app.composer.setText("A second message.");
     await app.submit();
     await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
@@ -531,10 +492,7 @@ test("a word that the gate refused and that a later word of the same prompt repl
       await until(session, () =>
         session.turns.some((turn) => turn[0] === "assistant" && turn[1].includes("plain Python")),
       );
-      await until(
-        session,
-        () => !session.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)),
-      );
+      await idle(session);
       await session.refresh();
       const shown = await frame();
       expect(shown).toMatch(/▸ ✗ rung\d+ .*retried as rung\d+/);
