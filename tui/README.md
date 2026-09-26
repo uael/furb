@@ -14,6 +14,9 @@ bun run tui                  # Claude CLI through pi-ai.
 bun run tui -- --resume .furb/sessions/example.jsonl
 ```
 
+`furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, and the words
+after `--`.
+
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
 a new life. Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
 a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.session.json`, `.changes.jsonl`, and

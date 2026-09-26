@@ -1,0 +1,23 @@
+[package]
+name = "furb-cli"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+description = "furb, the command line: the TUI, and one command of the operator on one life."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+
+[[bin]]
+name = "furb"
+path = "src/main.rs"
+
+[dependencies]
+# The engine, the ears of the World and the provider of models, at the version of this program.
+furb = { path = "..", version = "0.1.0" }
+clap = { version = "4.6", features = ["derive"] }
+# The protocol: one command or one event per line, as JSON, whose value is read before anything rounds it.
+serde_json = { version = "1", features = ["raw_value"] }
+
+[target.'cfg(windows)'.dependencies]
+# The console of Windows, whose Ctrl+C and Ctrl+Break the TUI handles while furb waits for it.
+windows-sys = { version = "0.61", features = ["Win32_System_Console"] }

@@ -42,19 +42,19 @@ repos:
         pass_filenames: false
       - id: fmt
         name: fmt
-        entry: cargo fmt --check
+        entry: cargo fmt --all --check
         language: system
         types_or: [rust]
         pass_filenames: false
       - id: clippy
         name: clippy
-        entry: cargo clippy --all-targets -- -D warnings
+        entry: cargo clippy --workspace --all-targets -- -D warnings
         language: system
         types_or: [rust]
         pass_filenames: false
       - id: cargo-test
         name: cargo test
-        entry: cargo test
+        entry: cargo test --workspace
         language: system
         types_or: [rust, python, toml]
         pass_filenames: false

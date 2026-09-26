@@ -20,6 +20,10 @@ API of its own:
 - `src/binding/py.rs`, behind the `python` feature, is the door to python: an `Engine` that says each name of the
   contract by its name, and the ears of the crate. `bind/python` is the package `furb-monty`. Its module `furb_monty.engine` gives every name of the
   contract over one life in the sandbox, and `FURB_ENGINE=monty` makes `from furb import engine` give it.
+- `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
+  command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout
+  it was built from. `prompt`, `turns` and `run` each open one life on the record they are given. Every life runs on
+  the ears of the crate, on the models of the claude command line, and on a console of the operator.
 
 The suite runs on both engines. `test/outside/test_monty.py` proves what the door carries that no sentence of the
 contract says.
@@ -35,7 +39,7 @@ The TypeScript side is a bun workspace at the root, with two packages:
   `docs/tui.md` shows each screen. The gallery and the animation come from `tui/script/`.
 
 `docs/developer-guide.md` is the guide for a person who changes the repository: the tools to install, how a word
-runs, and the files of the TUI. For everything else, it links to this file.
+runs, and the files of the TUI and of the command line. For everything else, it links to this file.
 
 ## The contract
 
@@ -124,9 +128,11 @@ Run every command from the root of the repository.
 - `uv run ruff format src test script` then `uv run ruff check src test script`: format and lint. Two spaces of
   indentation, 120 columns.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`.
-- `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test`: the gates of the crate. The
-  tests of a module stand beside it, `src/engine.test.rs` beside `src/engine.rs`, and those of the engine drive the
-  real engine on ears in rust.
+- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`:
+  the gates of the crate and of the command line. The tests of a module stand beside it, `src/engine.test.rs` beside
+  `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/furb.rs` runs `furb` as
+  a process, on a claude command line that answers from a script.
+- `cargo run -p furb-cli -- <words>`: the command line, as `furb --help` says.
 - `uv run pre-commit run --all-files`: every gate the commit hook runs.
 - `uv run python script/smoke.py`: one real life on opus/low through the claude command line on PATH, or the one
   `FURB_CLAUDE_BIN` names. It is no test of the suite and spends one prompt.

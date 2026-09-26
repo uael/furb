@@ -7,6 +7,10 @@ description = "The core of an AI harness: the engine in a sandbox, behind an asy
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
 
+[workspace]
+# The command line is a program of its own on this crate, so the library takes none of its dependencies.
+members = ["cli"]
+
 [lib]
 name = "furb"
 path = "src/lib.rs"
