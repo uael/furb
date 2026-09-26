@@ -19,8 +19,8 @@ class NativeEar:
 
 @final
 class Engine:
-  """One engine, held on the thread of python. Its verbs are the verbs of the contract, one method each, and none
-  given to a word that has a default leaves the default of the engine. A verb that makes an act gives its name."""
+  """One engine, held on the thread of python, which says each name of the contract by its name. A verb that makes an
+  act gives its name."""
 
   @staticmethod
   def boot(record: Iterable[object], ears: Iterable[tuple[str, object]]) -> Engine:
@@ -40,7 +40,7 @@ class Engine:
     """Who speaks in the life, and who speaks from now on when a name is given."""
 
   def verb(self, name: str, args: Iterable[object], kwargs: dict[str, object]) -> object:
-    """One name of the engine that is no verb, said by its name with these words, and what it gave."""
+    """One name of the engine, said by its name with these words, and what it gave."""
 
   def made(self, n: int, args: Iterable[object], kwargs: dict[str, object]) -> object:
     """One callable the engine made, called back by the handle it crossed under, with these words."""
@@ -56,9 +56,6 @@ class Engine:
 
   def dispose(self) -> None:
     """The engine is gone, and its ears with it."""
-
-  def __getattr__(self, verb: str) -> Callable[..., object]:
-    """One method for each verb of the contract, which the build makes from engine.pyi, with its signature."""
 
 def files() -> NativeEar:
   """The ear of the files, which reads and writes a path."""

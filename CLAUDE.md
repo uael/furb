@@ -16,8 +16,8 @@ API of its own:
 - The Kernel and the gate are the crate's. The gate is the type checker of monty. It reads a word on the sheet of
   the engine, `src/furb/sheet.py`, against the typeshed of the sandbox. The gate of the python package reads
   through it too.
-- `src/binding/py.rs`, behind the `python` feature, is the door to python: an `Engine` with the same methods, and the
-  ears of the crate. `bind/python` is the package `furb-monty`. Its module `furb_monty.engine` gives every name of the
+- `src/binding/py.rs`, behind the `python` feature, is the door to python: an `Engine` that says each name of the
+  contract by its name, and the ears of the crate. `bind/python` is the package `furb-monty`. Its module `furb_monty.engine` gives every name of the
   contract over one life in the sandbox, and `FURB_ENGINE=monty` makes `from furb import engine` give it.
 
 The suite runs on both engines. `test/outside/test_monty.py` proves what the door carries that no sentence of the

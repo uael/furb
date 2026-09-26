@@ -4,9 +4,9 @@ furb for python, with the engine in monty. `furb_monty.engine` gives every name 
 the engine in the sandbox of monty, with the Kernel of the crate, so it needs no Kernel of its own.
 `furb_monty.gate` is the gate of the crate, which the Kernel of the package `furb` reads a word with too.
 
-`furb_monty._monty` is the door itself. Its `Engine` has one method for each verb of the contract, as the `Engine`
-of the crate has, and none given to a word with a default leaves the default of the engine. It also gives the ears
-of the World that the crate writes: `files()`, `bash()`, `time()`, and `store(path)`, which gives the record at the
+`furb_monty._monty` is the door itself. Its `Engine` says each name of the contract by its name, with the words
+python gives, as the engine of this interpreter takes them. It also gives the ears of the World that the crate
+writes: `files()`, `bash()`, `time()`, and `store(path)`, which gives the record at the
 path and the ear that keeps it. Each is a `NativeEar`, which `furb_monty.engine.boot` takes beside the generators
 of this interpreter:
 

@@ -1,4 +1,5 @@
-//! The build: the contract is read here, and every verb of it becomes a method of the engine and of each door.
+//! The build: the contract is read here, and every verb of it becomes a method of the engine and of the door to
+//! TypeScript.
 //!
 //! A verb is a function that `src/furb/engine.pyi` gives before its classes, which is what a model or an operator
 //! says; the functions after them are the engine's own. A verb that the contract gives only as overloads is the last
@@ -6,8 +7,7 @@
 //!
 //! The method of a verb takes the parameters that have no default, in their order, then a list for its star
 //! parameter, then one struct of the rest, named after the verb, whose fields are none until a host gives them, so
-//! the engine keeps its own defaults. The door to TypeScript takes the same, with an object of options for the struct,
-//! and the door to python takes the signature of the contract, where none leaves the default of the engine.
+//! the engine keeps its own defaults. The door to TypeScript takes the same, with an object of options for the struct.
 //! What each annotation is, in rust and in TypeScript, is the table of [`Kind::of`] and [`Answer::of`], and an
 //! annotation that the tables do not hold stops the build, so no verb of the contract goes without its method.
 
@@ -443,52 +443,6 @@ fn scripted(verbs: &[Verb]) -> String {
   out
 }
 
-/// The methods of the engine that the door to python gives, one per verb.
-fn pythonic(verbs: &[Verb]) -> String {
-  let mut out = String::from("#[pymethods]\nimpl PyEngine {\n");
-  for verb in verbs {
-    let mut signature: Vec<String> = verb.needed().map(|one| one.name.clone()).collect();
-    let mut given: Vec<String> =
-      verb.needed().map(|one| format!(", {}: Bound<'py, PyAny>", one.name)).collect();
-    let rest = match &verb.rest {
-      Some(rest) => {
-        signature.push(format!("*{}", rest.name));
-        given.push(format!(", {}: Bound<'py, PyTuple>", rest.name));
-        format!("Some({})", rest.name)
-      }
-      None => "None".to_owned(),
-    };
-    for one in verb.defaults() {
-      signature.push(format!("{}=None", one.name));
-      given.push(format!(", {}: Option<Bound<'py, PyAny>>", one.name));
-    }
-    let needed: Vec<&str> = verb.needed().map(|one| one.name.as_str()).collect();
-    let named: Vec<String> =
-      verb.defaults().map(|one| format!("({:?}, {})", one.name, one.name)).collect();
-    let _ = writeln!(out, "  /// {}", verb.doc);
-    // The method takes each word of the contract as python gives it, however many the verb takes.
-    if given.len() > 5 {
-      let _ = writeln!(out, "  #[allow(clippy::too_many_arguments)]");
-    }
-    let _ = writeln!(out, "  #[pyo3(signature = ({}))]", signature.join(", "));
-    let _ = writeln!(
-      out,
-      "  fn {}<'py>(&mut self, py: Python<'py>{}) -> PyResult<Bound<'py, PyAny>> {{",
-      verb.name,
-      given.concat()
-    );
-    let _ = writeln!(
-      out,
-      "    self.said(py, {:?}, vec![{}], {rest}, vec![{}])\n  }}\n",
-      verb.name,
-      needed.join(", "),
-      named.join(", ")
-    );
-  }
-  out.push_str("}\n");
-  out
-}
-
 fn main() {
   #[cfg(feature = "typescript")]
   napi_build::setup();
@@ -503,5 +457,4 @@ fn main() {
   written("methods.rs", methods(&verbs));
   written("verbs.rs", structs(&verbs));
   written("ts.rs", scripted(&verbs));
-  written("py.rs", pythonic(&verbs));
 }

@@ -296,30 +296,6 @@ impl PyEngine {
     let got = self.call(py, |engine| call(engine, args, named))?;
     to_python(py, self.door.made(), got.as_ref())
   }
-
-  /// One verb said with the words python gave, and what it gave, as python holds it.
-  fn said<'py>(
-    &mut self,
-    py: Python<'py>,
-    name: &str,
-    given: Vec<Bound<'py, PyAny>>,
-    rest: Option<Bound<'py, PyTuple>>,
-    named: Vec<(&str, Option<Bound<'py, PyAny>>)>,
-  ) -> PyResult<Bound<'py, PyAny>> {
-    let mut args =
-      given.iter().map(|one| of_python(&self.door, one)).collect::<PyResult<Vec<_>>>()?;
-    for one in rest.iter().flat_map(|held| held.iter()) {
-      args.push(of_python(&self.door, &one)?);
-    }
-    let mut kwargs = Vec::new();
-    for (key, one) in named {
-      if let Some(one) = one {
-        kwargs.push((key, of_python(&self.door, &one)?));
-      }
-    }
-    let got = self.call(py, |engine| engine.verb(name, args, kwargs))?;
-    to_python(py, self.door.made(), got.as_ref())
-  }
 }
 
 #[pymethods]
@@ -379,7 +355,7 @@ impl PyEngine {
     self.call(py, |engine| engine.site(value))
   }
 
-  /// One name of the engine that is no verb, said by its name with these words, and what it gave.
+  /// One name of the engine, said by its name with these words, and what it gave.
   fn verb<'py>(
     &mut self,
     py: Python<'py>,
@@ -437,9 +413,6 @@ impl PyEngine {
     self.door.0.hosted.clear();
   }
 }
-
-// The verbs of the contract, one method each, which the build makes from the contract.
-include!(concat!(env!("OUT_DIR"), "/py.rs"));
 
 /// The ear of the files, which reads and writes a path.
 #[pyfunction]

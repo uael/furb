@@ -34,7 +34,7 @@ serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 indexmap = { version = "2", features = ["serde"] }
 # The chance of the World, drawn by the system.
 getrandom = "0.3"
-pyo3 = { version = "0.29.2", features = ["generate-import-lib", "multiple-pymethods"], optional = true }
+pyo3 = { version = "0.29.2", features = ["generate-import-lib"], optional = true }
 napi = { version = "3", default-features = false, features = ["napi6", "serde-json", "dyn-symbols"], optional = true }
 napi-derive = { version = "3", optional = true }
 # The identity of a file on every system: the device and inode on Unix, and the volume serial number and file index

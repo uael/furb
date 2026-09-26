@@ -31,9 +31,6 @@ PURE = frozenset({
 """PURE are the callables of the engine that read no life, so the engine of this interpreter answers them."""
 ACTS = frozenset({"wait", "rung", "prompt", "chain", "grant", "bash", "act"})
 """ACTS are the verbs that give an act, whose name comes back as the act it names."""
-VERBS = frozenset(NAMES) & frozenset(vars(_monty.Engine)) - {"boot", "site", "raised"}
-"""VERBS are the verbs of the contract, each of which the engine of the crate says by a method of its own. Boot opens
-an engine, and the site and what boot raised are read where they stand, which no word says."""
 END = object()
 """END is what a thread of a generator is given when the life it was heard in is over."""
 LOCAL = threading.local()
@@ -83,16 +80,11 @@ def call(name: str, args: tuple, kwargs: dict[str, object]) -> object:
   while FORGOTTEN:
     engine.forget(FORGOTTEN.pop())
 
-  def said() -> object:
-    if name in VERBS:
-      return getattr(engine, name)(*args, **kwargs)
-    return engine.verb(name, args, kwargs)
-
   if (who := SPEAKER.get()) is None:
-    return said()
+    return engine.verb(name, args, kwargs)
   before = engine.site(who)
   try:
-    return said()
+    return engine.verb(name, args, kwargs)
   finally:
     engine.site(before)
 
