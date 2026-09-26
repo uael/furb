@@ -6,6 +6,7 @@ from functools import partial
 
 from conftest import (
   STANDS,
+  WORLD,
   Sand,
   World,
   heads,
@@ -21,7 +22,7 @@ from conftest import (
   world_says,
 )
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Refused
+from furb.engine import OPERATOR, Refused
 
 
 @dataclass

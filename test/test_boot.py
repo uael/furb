@@ -8,6 +8,7 @@ from conftest import (
   DOOR,
   STANDS,
   WORD,
+  WORLD,
   Dead,
   Sand,
   acts,
@@ -28,7 +29,7 @@ from conftest import (
   world_says,
 )
 from furb import engine
-from furb.engine import HIDDEN, OPERATOR, WORLD, Drift, Exit, Refused, Text, idle, take
+from furb.engine import HIDDEN, OPERATOR, Drift, Exit, Refused, Text, idle, take
 
 
 def made(log: list[tuple]) -> list[str]:

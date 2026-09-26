@@ -2,9 +2,9 @@
 
 import pytest
 
-from conftest import STANDS, Sand, life, paragraphs, said, settle
+from conftest import STANDS, WORLD, Sand, life, paragraphs, said, settle
 from furb import engine
-from furb.engine import WORLD, Refused
+from furb.engine import Refused
 
 
 async def test_a_wait_the_world_takes_it_and_says_it_is_done_when_its_seconds_have_passed() -> None:

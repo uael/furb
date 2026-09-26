@@ -1,8 +1,8 @@
 """Clock, the question of a reading of the wall clock."""
 
-from conftest import STANDS, Sand, life, said
+from conftest import STANDS, WORLD, Sand, life, said
 from furb import engine
-from furb.engine import OPERATOR, WORLD
+from furb.engine import OPERATOR
 
 
 async def test_a_clock_is_the_question_of_a_reading_of_the_wall_clock() -> None:

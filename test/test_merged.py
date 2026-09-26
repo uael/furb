@@ -1,8 +1,8 @@
 """Merged, the question of whether the stderr of a command flows into its stdout."""
 
-from conftest import STANDS, Sand, acts, life, said, settle
+from conftest import STANDS, WORLD, Sand, acts, life, said, settle
 from furb import engine
-from furb.engine import TAIL, WORLD
+from furb.engine import TAIL
 
 
 async def test_a_merged_is_the_question_of_whether_the_stderr_of_a_command_flows_into_its_stdout() -> None:

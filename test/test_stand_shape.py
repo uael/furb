@@ -1,8 +1,8 @@
 """Stand, what a chain stands on."""
 
-from conftest import STANDS, Sand, life, paragraphs, plain, relived, rows, said, settle, sown, takes, tip
+from conftest import STANDS, WORLD, Sand, life, paragraphs, plain, relived, rows, said, settle, sown, takes, tip
 from furb import engine
-from furb.engine import OPERATOR, WORLD
+from furb.engine import OPERATOR
 
 LATER = [[["operator", [], 200000], ["o", ["low"], 200000]], "/z", "o/low"]
 """What a later World offers: another roster, another directory and another default actor."""

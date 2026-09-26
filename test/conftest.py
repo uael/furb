@@ -22,7 +22,7 @@ import pytest
 import furb
 import furb_monty.engine
 from furb import engine, sheet
-from furb.engine import OPERATOR, WORLD, Act, Exit, Refused, Text, site, under
+from furb.engine import OPERATOR, Act, Exit, Refused, Text, site, under
 from furb.kernel import ENGINE
 
 HERE = Path(__file__).resolve().parent
@@ -52,6 +52,9 @@ type World = Generator[tuple | None, tuple]
 """The World, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
 type Kernel = Generator[tuple | None, tuple]
 """The Kernel, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
+
+WORLD = "world"
+"""WORLD is the name that the World of the suite is heard by, and that it says its facts by."""
 
 STANDS: list = [[[OPERATOR, [], 200000], ["m", ["low", "high"], 400000], ["n", ["low"], 200000]], "/w", "m/low"]
 """A standing of three actors, a directory and a default actor, which a test takes when it needs a roster."""

@@ -1,8 +1,8 @@
 """under, whether one act is another or was made by it."""
 
-from conftest import STANDS, Sand, life, said
+from conftest import STANDS, WORLD, Sand, life, said
 from furb import engine
-from furb.engine import OPERATOR, WORLD
+from furb.engine import OPERATOR
 
 
 async def made(sand: Sand) -> tuple[str, str, str, str]:

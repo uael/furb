@@ -2,9 +2,9 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, life, said, settle, world_says
+from conftest import STANDS, WORLD, Sand, life, said, settle, world_says
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Exit
+from furb.engine import OPERATOR, Exit
 
 
 async def test_what_an_act_came_to_a_done_settles_the_act_it_names() -> None:

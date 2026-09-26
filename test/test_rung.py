@@ -6,6 +6,7 @@ import pytest
 
 from conftest import (
   STANDS,
+  WORLD,
   Py,
   Sand,
   acts,
@@ -25,7 +26,7 @@ from conftest import (
   world_says,
 )
 from furb import engine
-from furb.engine import WORLD, Exit, Refused, Text
+from furb.engine import Exit, Refused, Text
 
 
 async def test_the_run_of_a_word_on_a_chain() -> None:

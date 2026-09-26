@@ -1,8 +1,8 @@
 """Chance, the question the World draws a number for."""
 
-from conftest import STANDS, Sand, life, said
+from conftest import STANDS, WORLD, Sand, life, said
 from furb import engine
-from furb.engine import OPERATOR, WORLD
+from furb.engine import OPERATOR
 
 
 async def test_a_chance_is_the_question_of_a_number_the_world_draws() -> None:

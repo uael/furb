@@ -4,9 +4,24 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import MANY, STANDS, Sand, Where, acts, dones, life, paragraphs, plain, relived, said, settle, world_says
+from conftest import (
+  MANY,
+  STANDS,
+  WORLD,
+  Sand,
+  Where,
+  acts,
+  dones,
+  life,
+  paragraphs,
+  plain,
+  relived,
+  said,
+  settle,
+  world_says,
+)
 from furb import engine
-from furb.engine import HEAD, HIDDEN, OPERATOR, TAIL, WORLD, Act, Exit, Refused, Text, grep, span
+from furb.engine import HEAD, HIDDEN, OPERATOR, TAIL, Act, Exit, Refused, Text, grep, span
 
 
 def door(one: str, part: str) -> str:

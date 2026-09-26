@@ -1,8 +1,8 @@
 """Fact, what everything said in a life is."""
 
-from conftest import STANDS, Sand, acts, dones, life, said, settle, world_says
+from conftest import STANDS, WORLD, Sand, acts, dones, life, said, settle, world_says
 from furb import engine
-from furb.engine import OPERATOR, WORLD
+from furb.engine import OPERATOR
 
 
 async def test_a_fact_is_a_tuple_its_kind_the_act_it_is_about_who_said_it_and_its_words() -> None:

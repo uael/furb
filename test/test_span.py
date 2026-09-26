@@ -1,8 +1,8 @@
 """span, the show of the lines lo through hi."""
 
-from conftest import STANDS, Sand, dones, heads, life, said, settle
+from conftest import STANDS, WORLD, Sand, dones, heads, life, said, settle
 from furb import engine
-from furb.engine import HIDDEN, WORLD, Text, span
+from furb.engine import HIDDEN, Text, span
 
 LINES = Text("/w/n.txt", "".join(f"line {i}\n" for i in range(1, 31))).lines
 """The lines of a text of thirty lines."""

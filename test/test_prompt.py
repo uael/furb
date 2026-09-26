@@ -2,9 +2,9 @@
 
 from asyncio import CancelledError
 
-from conftest import STANDS, Sand, dones, heads, life, lived, paragraphs, plain, ran, relived, said, settle, sown
+from conftest import STANDS, WORLD, Sand, dones, heads, life, lived, paragraphs, plain, ran, relived, said, settle, sown
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Act, Exit, Refused, Text
+from furb.engine import OPERATOR, Act, Exit, Refused, Text
 
 COST = (80000, 0, 0, 0, 1.5)
 """One answer of a model: a dollar and a half, and a fifth of the window of the actor the suite stands on."""

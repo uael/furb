@@ -1,8 +1,8 @@
 """acting, the run a word speaks from."""
 
-from conftest import STANDS, Sand, life, said
+from conftest import STANDS, WORLD, Sand, life, said
 from furb import engine
-from furb.engine import OPERATOR, WORLD, site
+from furb.engine import OPERATOR, site
 
 
 async def test_the_run_a_word_speaks_from() -> None:

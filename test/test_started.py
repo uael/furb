@@ -1,8 +1,8 @@
 """Started, what an ear says to take an act whose done comes later."""
 
-from conftest import STANDS, Sand, life, plain, relived, said, settle
+from conftest import STANDS, WORLD, Sand, life, plain, relived, said, settle
 from furb import engine
-from furb.engine import WORLD, Act, Exit
+from furb.engine import Act, Exit
 
 
 async def test_what_an_ear_says_to_take_an_act_whose_done_comes_later() -> None:

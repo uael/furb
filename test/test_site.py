@@ -3,9 +3,9 @@
 import asyncio
 from collections.abc import Generator
 
-from conftest import keeping, life, said, settle, sown
+from conftest import WORLD, keeping, life, said, settle, sown
 from furb import engine
-from furb.engine import OPERATOR, WORLD
+from furb.engine import OPERATOR
 
 
 async def test_who_is_speaking_is_the_site_which_every_fact_is_said_from() -> None:

@@ -3,6 +3,7 @@
 from conftest import (
   DOOR,
   STANDS,
+  WORLD,
   Dead,
   Sand,
   findings,
@@ -19,7 +20,7 @@ from conftest import (
   world_says,
 )
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Exit, Text
+from furb.engine import OPERATOR, Exit, Text
 
 MINE = "def read(path, **kw):\n  return ask('read', __name__, 'mine.txt')"
 

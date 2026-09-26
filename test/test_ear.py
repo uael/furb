@@ -5,9 +5,9 @@ from asyncio import CancelledError
 from collections.abc import Generator
 from functools import partial
 
-from conftest import STANDS, Py, Sand, Where, World, dones, life, ran, said, settle, sown, world_says
+from conftest import STANDS, WORLD, Py, Sand, Where, World, dones, life, ran, said, settle, sown, world_says
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Exit, Refused, Text
+from furb.engine import OPERATOR, Exit, Refused, Text
 
 PING = "def ping(id):\n  while True:\n    yield\n\nclose(await act('ping', '', ping))\n"
 
@@ -36,7 +36,7 @@ class Knows(Sand):
 
 
 async def test_the_world_hears_every_fact() -> None:
-  """The World hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model."""
+  """The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model."""
   sand = Sand(files={"/w/a.txt": "one\n"}, stands=STANDS, auto=False)
   log, root = life(sand)
   assert engine.cwd(on=root) == "/w"
