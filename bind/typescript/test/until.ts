@@ -1,7 +1,8 @@
 import type { EventEmitter } from "node:events";
 
 /** The moment a condition holds, heard on the event that can change it: no test waits for time to pass. The
- * deadline comes before the thirty seconds that budget.ts gives a test, so the failure names what it waited for. */
+ * deadline comes before the thirty seconds that `bun run test` gives a test, so the failure names what it waited
+ * for. */
 export function until(emitter: EventEmitter, ready: () => boolean, event = "change"): Promise<void> {
   if (ready()) return Promise.resolve();
   return new Promise((resolve, reject) => {
