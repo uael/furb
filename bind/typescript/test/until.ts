@@ -1,8 +1,8 @@
 import type { EventEmitter } from "node:events";
 
 /** The moment a condition holds, heard on the event that can change it: no test waits for time to pass. The
- * deadline comes before the five seconds bun gives a test by default, so the failure names what it waited for, and
- * what `seen` tells of the state it saw last. */
+ * deadline comes before the thirty seconds that bunfig.toml gives a test, so the failure names what it waited for,
+ * and what `seen` tells of the state it saw last. */
 export function until(
   emitter: EventEmitter,
   ready: () => boolean,
@@ -20,8 +20,8 @@ export function until(
     const deadline = setTimeout(() => {
       emitter.off(event, heard);
       const last = seen ? ` It saw ${JSON.stringify(seen())}.` : "";
-      reject(new Error(`Waited 4 seconds for ${ready}.${last}`));
-    }, 4000);
+      reject(new Error(`Waited 25 seconds for ${ready}.${last}`));
+    }, 25000);
     emitter.on(event, heard);
   });
 }

@@ -60,6 +60,9 @@ MODULE: dict[str, object] = {
 word reads them in a chain as it reads them in python, and as the gate reads them. No loader made the module here, so
 it has no spec and no loader. Python binds `__debug__` among its builtins, and the sandbox binds it in its main module
 alone."""
+OUT: list[object] = [None, None]
+"""OUT holds the last fact that went out to the host and what it went out as, since every ear of the host hears the
+same fact in turn, so it goes out once."""
 MADE: dict[int, object] = {}
 """MADE holds every callable the engine made and every class a word defined that crossed to the host, by its
 handle, which is its identity, for as long as the host holds the handle: the host says when it forgot one, and it
@@ -111,6 +114,8 @@ def outward(x: object, names: Names) -> object:
       return tuple(outward(v, names) for v in x)
     case str():
       return x
+  if x is None or type(x) in (int, float, bool):
+    return x
   if (name := named(x, names)) is not None and callable(x):
     return {IS: "name", "name": name}
   if isinstance(x, type):
@@ -225,7 +230,9 @@ def crossing(name: str, ears: Ears, names: Names, *, started: bool = False) -> E
     # to an ear of the outside, so an ear of the host hears facts alone and waits for the next.
     while a is None:
       a = yield
-    reply = ears.hears(name, outward(a, names))
+    if OUT[0] is not a:
+      OUT[:] = [a, outward(a, names)]
+    reply = ears.hears(name, OUT[1])
 
 
 def fault(no: object, names: Names, ears: Ears) -> BaseException:
