@@ -11,7 +11,6 @@ import {
   imagePath,
   imageReference,
   imageReferences,
-  ROOT,
   saveFile,
   shapes,
   WINDOW,
@@ -750,8 +749,8 @@ export class Session extends EventEmitter {
         this.notice = "Work cancelled.";
         break;
       case "extensions": {
-        const enabled = this.host.facts.filter(([kind, about]) => kind === "enable" && about === ROOT);
-        const each = enabled.map(([, , , name, , life]) => (life ? `${name} with ${life}` : String(name)));
+        const enabled = await this.engine.extensions();
+        const each = enabled.map(({ name, life }) => (life ? `${name} with ${life}` : name));
         this.notice = each.length
           ? `This life runs ${each.join(", ")}. Run a word of one with /run.`
           : "This life runs no extension.";

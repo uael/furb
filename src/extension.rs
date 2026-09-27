@@ -48,6 +48,7 @@ const IMPORTS: [&str; 3] = ["from furb ", "from furb.", "import furb"];
 
 /// An extension: its name, its word, and its life word, which is empty when it has none.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "typescript", napi_derive::napi(object))]
 pub struct Extension {
   pub name: String,
   pub word: String,

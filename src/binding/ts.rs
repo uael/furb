@@ -26,8 +26,9 @@ use host::{Door, Held, Word, refused};
 
 use crate::{
   Ear, Engine, Fault, Object,
+  extension::{self, Extension},
   life::Opening,
-  wire,
+  verbs, wire,
   world::{self, images},
 };
 
@@ -381,6 +382,15 @@ impl JsEngine {
         value: Some(wire::outward(value.as_ref())).filter(|value| !value.is_null()),
         name,
       })
+    })
+  }
+
+  /// The extensions that the life runs, in the order it enabled them, as the transcript of its root holds them.
+  #[napi]
+  pub fn extensions(&self) -> napi::Result<Vec<Extension>> {
+    self.held.call(|engine| {
+      let on = Some(engine.root().to_owned());
+      Ok(extension::enabled(&engine.transcript(verbs::Transcript { on })?))
     })
   }
 

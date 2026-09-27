@@ -43,6 +43,8 @@ export declare class Engine {
    * crosses as every value does, so a map that holds the key `is` crosses as its pairs.
    */
   inspect(name: string, chain?: string | undefined | null): Inspection
+  /** The extensions that the life runs, in the order it enabled them, as the transcript of its root holds them. */
+  extensions(): Array<Extension>
   /** Every name the module of a chain binds, in the order it bound them. */
   names(chain?: string | undefined | null): Array<string>
   /**
@@ -147,6 +149,13 @@ export interface ExitValue {
   code?: number
   stdout: TextValue
   stderr: TextValue
+}
+
+/** An extension: its name, its word, and its life word, which is empty when it has none. */
+export interface Extension {
+  name: string
+  word: string
+  life: string
 }
 
 /** The ear of the files, which reads and writes a path. */
