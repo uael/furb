@@ -15,7 +15,6 @@ from real import again, lived, ready, say, spent
 
 from furb import engine
 from furb.engine import Act
-from furb.provider.claude import cool
 from furb.world import answered, kept
 
 MESSAGE = "How many lines does the file a.txt hold?"
@@ -24,8 +23,8 @@ HELD = "one\ntwo\nthree\n"
 """HELD is what the file holds."""
 LINES = len(HELD.splitlines())
 """LINES is how many lines the file holds, which is what the model must answer."""
-TO = "opus/low"
-"""TO is the actor the smoke asks, which is opus at the least effort it takes."""
+TO = "claude-cli:opus/low"
+"""TO is the actor the smoke asks, which is opus of the claude command line at the least effort it takes."""
 STALL = 300.0
 """STALL is the seconds the smoke waits for a prompt, since a chain the World paused would wait for ever."""
 CEILING = 1.0
@@ -52,7 +51,6 @@ async def first(yard: Path, record: Path) -> None:
     raise
   finally:
     world.end()
-    await cool()
   say(f"the first life gave {got!r}, after {len(replies(world.calls))} reply(s)")
   for one in answered(kept(record)):
     _, word, usage, _ = one[3]
@@ -71,7 +69,6 @@ async def second(yard: Path, record: Path) -> None:
     got = await asyncio.wait_for(Act(name), STALL)
   finally:
     world.end()
-    await cool()
   say(f"the second life gave {got!r}, after {len(replies(world.calls))} reply(s), from {name}")
   assert got == LINES, f"the journal answered {got!r} and not {LINES}"
   assert replies(world.calls) == [], "the second life asked a model for what the record holds"

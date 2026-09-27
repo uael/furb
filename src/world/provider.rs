@@ -1,28 +1,39 @@
 //! The provider of models: the ear of the World that answers what the chains stand on, and takes each reply, which a
-//! model of rig answers with its turn.
+//! model answers with its turn.
 //!
-//! A model is any completion model of rig, which the host names in the roster with its efforts and its window, and
-//! [`claude`] makes the claude command line one of them. A call of a model runs on a runtime of its own, off the
-//! thread that drives the engine, and says what it came to by the voice of the ear.
+//! A model is any completion model of rig, which the [`catalog`] makes of the models of the providers of the network
+//! and of the claude command line, or a function of the host that answers a request with a turn. A call of a model
+//! runs on a runtime of its own, off the thread that drives the engine. It streams, and the host is told what the
+//! model writes as it writes it; what the reply came to it says by the voice of the ear.
 
+pub mod catalog;
 pub mod claude;
+mod clients;
+pub mod images;
+mod pi;
 
 use std::{
-  collections::HashMap,
+  collections::{HashMap, HashSet},
   future::Future,
+  path::PathBuf,
   pin::Pin,
-  sync::{Arc, OnceLock},
+  sync::{
+    Arc, OnceLock,
+    atomic::{AtomicBool, Ordering},
+  },
   task::{Context, Poll},
 };
 
-use futures::future::BoxFuture;
+use futures::{StreamExt, future::BoxFuture};
 use rig_core::{
   completion::{CompletionError, CompletionModel, CompletionRequest, CompletionResponse},
   message::{AssistantContent, Message, Text, UserContent},
+  streaming::{StreamFinal, StreamedAssistantContent, StreamingCompletionResponse},
 };
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 use tokio::{runtime::Runtime, task::JoinHandle};
 
+use self::images::Images;
 use crate::{
   SYSTEM,
   ear::{Ear, Voice, call, ear, hear, say},
@@ -35,20 +46,61 @@ use crate::{
 /// gives it.
 const OPERATOR: (&str, i64) = ("operator", 200_000);
 
-/// What asks a model of rig for one response, whatever model it is.
-type Answers = Arc<
-  dyn Fn(CompletionRequest) -> BoxFuture<'static, Result<CompletionResponse, CompletionError>>
+/// What a turn of a model tells as it streams: what it added to its text, and what it added to its thought.
+pub type Told = Arc<dyn Fn(&str, &str) + Send + Sync>;
+
+/// What the host is told while a model writes: the rung it writes for, the chain of that rung, and what it added to
+/// its text and to its thought. It is no fact, and the turn that the reply is done with holds all of it.
+pub type Writes = Arc<dyn Fn(&str, &str, &str, &str) + Send + Sync>;
+
+/// A function of the host that stands in for a model: it is given a request, as JSON, and what it tells as it
+/// writes, and it answers with the turn of the model, or with why it gives none.
+pub type Hosted =
+  Arc<dyn Fn(Value, Told) -> BoxFuture<'static, Result<Object, String>> + Send + Sync>;
+
+/// What streams one response of a model of rig, whatever model it is.
+type Streams = Arc<
+  dyn Fn(
+      CompletionRequest,
+    ) -> BoxFuture<'static, Result<StreamingCompletionResponse, CompletionError>>
     + Send
     + Sync,
 >;
 
-/// A model the provider offers: its name, the window it reads, the efforts it spends, and the model of rig that
-/// answers it.
+/// The streams of a model of rig.
+fn streams<M: CompletionModel + 'static>(model: M) -> Streams {
+  let model = Arc::new(model);
+  Arc::new(move |request| {
+    let model = Arc::clone(&model);
+    Box::pin(async move { model.stream(request).await })
+  })
+}
+
+/// One turn asked of a model: the actor and the chain it answers, the request, and what it tells as it streams.
+struct Asked {
+  actor: String,
+  chain: String,
+  request: CompletionRequest,
+  told: Told,
+}
+
+/// What a model answers a turn with: the response of a model of rig, or the turn that a function of the host gave.
+enum Answer {
+  Response(Box<CompletionResponse>),
+  Turn(Object),
+}
+
+/// What asks a model for one turn.
+type Answers =
+  Arc<dyn Fn(Asked) -> BoxFuture<'static, Result<Answer, CompletionError>> + Send + Sync>;
+
+/// A model the provider offers: its name, the window it reads, the efforts it spends, what it costs, whether it takes
+/// an image, and what answers it.
 ///
 /// An actor names it as its name alone, or as its name and one of its efforts after a slash. The provider tells an
-/// effort to the model of rig as the settings that effort adds to the request, since each provider of rig reads an
-/// effort its own way. A model that says what a turn cost says it as the number `cost` of its raw record, and the
-/// price of a model counts the cost of one that says none.
+/// effort to the model as the settings that effort adds to the request, since each provider reads an effort its own
+/// way. A model that says what a turn cost says it as the number `cost` of its raw record, and the price of a model
+/// counts the cost of one that says none.
 #[derive(Clone)]
 pub struct Model {
   name: String,
@@ -56,6 +108,11 @@ pub struct Model {
   efforts: Vec<(String, Map<String, Value>)>,
   conversation: Option<String>,
   price: Option<[f64; 4]>,
+  images: bool,
+  /// Whether it counts what it read of the cache apart from the rest of what it read, as Anthropic does.
+  apart: bool,
+  /// The most it writes in one turn, which a provider that asks for it is told.
+  tokens: Option<u64>,
   answers: Answers,
 }
 
@@ -65,10 +122,19 @@ impl Model {
   where
     M: CompletionModel + 'static,
   {
-    let model = Arc::new(model);
-    let answers: Answers = Arc::new(move |request| {
-      let model = Arc::clone(&model);
-      Box::pin(async move { model.completion(request).await })
+    let streams = streams(model);
+    Model::lazy(name, window, move || Ok(Arc::clone(&streams)))
+  }
+
+  /// A model of rig that is made when it is first asked, or the reason it cannot be.
+  fn lazy(
+    name: impl Into<String>,
+    window: u64,
+    made: impl Fn() -> Result<Streams, CompletionError> + Send + Sync + 'static,
+  ) -> Model {
+    let answers: Answers = Arc::new(move |asked| {
+      let made = made();
+      Box::pin(async move { Ok(Answer::Response(Box::new(streamed(made?, asked).await?))) })
     });
     Model {
       name: name.into(),
@@ -76,6 +142,9 @@ impl Model {
       efforts: Vec::new(),
       conversation: None,
       price: None,
+      images: false,
+      apart: false,
+      tokens: None,
       answers,
     }
   }
@@ -104,6 +173,54 @@ impl Model {
     self
   }
 
+  /// The model takes the images that a turn names.
+  pub fn images(mut self) -> Model {
+    self.images = true;
+    self
+  }
+
+  /// The same model, whose turns a function of the host answers in place of the model.
+  pub fn hosted(mut self, host: Hosted) -> Model {
+    self.answers = Arc::new(move |asked| {
+      let Asked { actor, chain, request, told } = asked;
+      let settings = request.additional_params.unwrap_or_else(|| json!({}));
+      let request = json!({
+        "actor": actor,
+        "chain": chain,
+        "messages": request.chat_history,
+        "settings": settings,
+      });
+      let got = host(request, told);
+      Box::pin(async move { got.await.map(Answer::Turn).map_err(CompletionError::ProviderError) })
+    });
+    self
+  }
+
+  /// The name an actor names the model by.
+  pub fn name(&self) -> &str {
+    &self.name
+  }
+
+  /// The window the model reads, in tokens.
+  pub fn window(&self) -> u64 {
+    self.window
+  }
+
+  /// The efforts the model spends, from least to most.
+  pub fn efforts(&self) -> Vec<&str> {
+    self.efforts.iter().map(|(name, _)| name.as_str()).collect()
+  }
+
+  /// Whether the model takes the images that a turn names.
+  pub fn sees(&self) -> bool {
+    self.images
+  }
+
+  /// What the model costs, in dollars for a million tokens: read, written, read from the cache, and written to it.
+  pub fn priced(&self) -> Option<[f64; 4]> {
+    self.price
+  }
+
   /// The settings of an actor that names this model: none for its name alone, and those of its effort for its name
   /// and an effort it spends.
   fn settings(&self, actor: &str) -> Option<Map<String, Value>> {
@@ -115,82 +232,121 @@ impl Model {
   }
 }
 
-/// The ear of the provider: it answers a stand with the standing, the roster of its models and the operator, the
-/// directory the life stands on, and the default actor; and it takes a reply, which the model of its actor answers.
-///
-/// The default actor is the one given, or the first model at its first effort, or the operator when there is no
-/// model. A reply reads the turns of its chain: the system prompt is the engine, a user turn goes as its python, and
-/// an assistant turn as the blocks its provider gave. It is done with the turn of the model, or with a refusal, and
-/// a second refusal in a row of the same actor on a chain pauses the chain first. A done of a reply that the ear did
-/// not say ends the call of its model.
-pub fn provider(
-  directory: impl Into<String>,
+/// The provider: the directory the life stands on, the models it offers, the default actor, the directory of the
+/// images that a turn names, and whom it tells what a model writes.
+pub struct Provider {
+  directory: String,
   models: Vec<Model>,
   actor: Option<String>,
-) -> Box<dyn Ear> {
-  let directory = directory.into();
-  let actor = actor.unwrap_or_else(|| match models.first() {
-    Some(model) => match model.efforts.first() {
-      Some((effort, _)) => format!("{}/{effort}", model.name),
-      None => model.name.clone(),
-    },
-    None => OPERATOR.0.to_owned(),
-  });
-  ear(move |co, voice| async move {
-    // The ids of chains repeat in every life, so a conversation of this life is keyed by the life too.
-    let life = uuid();
-    let mut replies: HashMap<String, Reply> = HashMap::new();
-    // The actor whose last reply on each chain the ear refused.
-    let mut mute: HashMap<String, String> = HashMap::new();
-    loop {
-      let a = hear(&co).await;
-      let about = a.about().to_owned();
-      match a.kind() {
-        "stand" if a.question() => {
-          say(&co, Fact::says("done", &about, [standing(&models, &directory, &actor)])).await;
-        }
-        "reply" if a.question() => {
-          say(&co, Fact::says("started", &about, [])).await;
-          let chain = a.on().to_owned();
-          let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
-          let turns = call(&co, "turns", vec![], vec![("on", Object::string(&chain))]).await?;
-          let asked = requested(&models, &actor, turns.as_ref(), &format!("{life}/{chain}"));
-          let again = mute.get(&chain) == Some(&actor);
-          let said = Said { voice: voice.clone(), id: about.clone(), chain: chain.clone() };
-          let call = spawned(answered(said, actor.clone(), again, asked));
-          replies.insert(about, Reply { chain, actor, call });
-        }
-        "done" => {
-          let Some(Reply { chain, actor, call }) = replies.remove(&about) else { continue };
-          drop(call);
-          voice.hush(&about);
-          // A done that the ear said of its own reply ends the row of refusals on the chain with a turn, or adds to
-          // it with a refusal, which is what the ear says when it says no turn; a done that a control said leaves
-          // the row as it is.
-          let turned = a
-            .word(0)
-            .and_then(|one| one.items())
-            .is_some_and(|turn| turn.len() == 4 && turn[0].as_str() == Some("assistant"));
-          if a.by() == about {
-            continue;
-          }
-          if turned {
-            mute.remove(&chain);
-          } else {
-            mute.insert(chain, actor);
-          }
-        }
-        _ => {}
-      }
-    }
-  })
+  images: Option<PathBuf>,
+  writes: Option<Writes>,
 }
 
-/// A reply the ear took: its chain, its actor, and the call of its model, which ends when the reply goes.
+impl Provider {
+  /// A provider of these models, on a directory.
+  pub fn new(directory: impl Into<String>, models: Vec<Model>) -> Provider {
+    Provider { directory: directory.into(), models, actor: None, images: None, writes: None }
+  }
+
+  /// The actor a prompt goes to when it names none, which is the first model at its first effort when none is
+  /// given, and the operator when there is no model.
+  pub fn actor(mut self, actor: Option<String>) -> Provider {
+    self.actor = actor;
+    self
+  }
+
+  /// The directory of the images that a turn names.
+  pub fn images(mut self, directory: impl Into<PathBuf>) -> Provider {
+    self.images = Some(directory.into());
+    self
+  }
+
+  /// Whom the provider tells what a model writes, as it writes it.
+  pub fn writes(mut self, writes: Writes) -> Provider {
+    self.writes = Some(writes);
+    self
+  }
+
+  /// The ear of the provider: it answers a stand with the standing, the roster of its models and the operator, the
+  /// directory the life stands on, and the default actor; and it takes a reply, which the model of its actor
+  /// answers.
+  ///
+  /// A reply reads the turns of its chain: the system prompt is the engine, a user turn goes as its python and the
+  /// images that the prompts it opens name, and an assistant turn as the blocks its provider gave. It is done with
+  /// the turn of the model, or with a refusal, and a second refusal in a row of the same actor on a chain pauses the
+  /// chain first. A done of a reply that the ear did not say ends the call of its model.
+  pub fn ear(self) -> Box<dyn Ear> {
+    let Provider { directory, models, actor, images, writes } = self;
+    let actor = actor.unwrap_or_else(|| match models.first() {
+      Some(model) => match model.efforts.first() {
+        Some((effort, _)) => format!("{}/{effort}", model.name),
+        None => model.name.clone(),
+      },
+      None => OPERATOR.0.to_owned(),
+    });
+    let mut images = Images::new(images);
+    ear(move |co, voice| async move {
+      // The ids of chains repeat in every life, so a conversation of this life is keyed by the life too.
+      let life = uuid();
+      let mut replies: HashMap<String, Reply> = HashMap::new();
+      // The actor whose last reply on each chain the ear refused.
+      let mut mute: HashMap<String, String> = HashMap::new();
+      loop {
+        let a = hear(&co).await;
+        let about = a.about().to_owned();
+        match a.kind() {
+          "stand" if a.question() => {
+            say(&co, Fact::says("done", &about, [standing(&models, &directory, &actor)])).await;
+          }
+          "reply" if a.question() => {
+            say(&co, Fact::says("started", &about, [])).await;
+            let chain = a.on().to_owned();
+            let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
+            let turns = call(&co, "turns", vec![], vec![("on", Object::string(&chain))]).await?;
+            let over = Arc::new(AtomicBool::new(false));
+            let told = told(writes.as_ref(), a.by(), &chain, &over);
+            let key = format!("{life}/{chain}");
+            let asked = requested(&models, &actor, &chain, turns.as_ref(), &key, &mut images, told);
+            let again = mute.get(&chain) == Some(&actor);
+            let said = Said { voice: voice.clone(), id: about.clone(), chain: chain.clone() };
+            let call = spawned(answered(said, actor.clone(), again, asked));
+            replies.insert(about, Reply { chain, actor, call, over });
+          }
+          "done" => {
+            let Some(Reply { chain, actor, call, over }) = replies.remove(&about) else { continue };
+            drop(call);
+            over.store(true, Ordering::SeqCst);
+            voice.hush(&about);
+            // A done that the ear said of its own reply ends the row of refusals on the chain with a turn, or adds
+            // to it with a refusal, which is what the ear says when it says no turn; a done that a control said
+            // leaves the row as it is.
+            let turned = a
+              .word(0)
+              .and_then(|one| one.items())
+              .is_some_and(|turn| turn.len() == 4 && turn[0].as_str() == Some("assistant"));
+            if a.by() == about {
+              continue;
+            }
+            if turned {
+              mute.remove(&chain);
+            } else {
+              mute.insert(chain, actor);
+            }
+          }
+          _ => {}
+        }
+      }
+    })
+  }
+}
+
+/// A reply the ear took: its chain, its actor, the call of its model, which ends when the reply goes, and whether it
+/// went, after which the host is told nothing more of what a model writes for it.
 struct Reply {
   chain: String,
   actor: String,
   call: Spawned<()>,
+  over: Arc<AtomicBool>,
 }
 
 /// Who says what a reply came to: the voice of the ear, the reply, and the chain it is on.
@@ -198,6 +354,18 @@ struct Said {
   voice: Voice,
   id: String,
   chain: String,
+}
+
+/// What a turn tells as it streams, told to the host under the rung it writes for and the chain of that rung, until
+/// its reply is over.
+fn told(writes: Option<&Writes>, rung: &str, chain: &str, over: &Arc<AtomicBool>) -> Told {
+  let Some(writes) = writes.cloned() else { return Arc::new(|_, _| {}) };
+  let (rung, chain, over) = (rung.to_owned(), chain.to_owned(), Arc::clone(over));
+  Arc::new(move |text, thinking| {
+    if !over.load(Ordering::SeqCst) {
+      writes(&rung, &chain, text, thinking);
+    }
+  })
 }
 
 /// What the chains stand on: the models and the operator, the directory, and the default actor.
@@ -213,14 +381,17 @@ fn standing(models: &[Model], directory: &str, actor: &str) -> Object {
   Object::list([roster, Object::string(directory), Object::string(actor)])
 }
 
-/// The model an actor names, and the request of its reply: the engine as the system prompt, the turns of the chain,
-/// the settings of the effort, and the conversation where the model takes one.
+/// The model an actor names, and what a reply asks it: the engine as the system prompt, the turns of the chain,
+/// the settings of the effort, the conversation where the model takes one, and whom it tells what it writes.
 fn requested(
   models: &[Model],
   actor: &str,
+  chain: &str,
   turns: ObjectRef<'_>,
   conversation: &str,
-) -> Result<(Model, CompletionRequest), CompletionError> {
+  images: &mut Images,
+  told: Told,
+) -> Result<(Model, Asked), CompletionError> {
   let found =
     models.iter().find_map(|model| model.settings(actor).map(|settings| (model, settings)));
   let Some((model, mut settings)) = found else {
@@ -232,38 +403,89 @@ fn requested(
   let request = CompletionRequest {
     model: None,
     preamble: Some(SYSTEM.to_owned()),
-    chat_history: messages(turns),
+    chat_history: messages(turns, model, images)?,
     documents: Vec::new(),
     tools: Vec::new(),
     temperature: None,
-    max_tokens: None,
+    max_tokens: model.tokens,
     tool_choice: None,
     additional_params: (!settings.is_empty()).then_some(Value::Object(settings)),
     output_schema: None,
     record_telemetry_content: false,
   };
-  Ok((model.clone(), request))
+  let asked = Asked { actor: actor.to_owned(), chain: chain.to_owned(), request, told };
+  Ok((model.clone(), asked))
 }
 
 /// The turns of a chain as messages of rig. The engine phrases every turn as python and the provider renders
-/// nothing: a user turn goes as its python, and one that holds nothing goes not at all, and an assistant turn goes as
-/// the blocks its provider gave, or as its python when a provider of another kind gave them.
-fn messages(turns: ObjectRef<'_>) -> Vec<Message> {
-  let turns = turns.items().unwrap_or_default();
-  let each = turns.iter().filter_map(|turn| {
-    let role = entry(turn, 0)?.as_str()?;
-    let python = entry(turn, 1).and_then(|one| one.as_str()).unwrap_or_default();
+/// nothing: a user turn goes as its python and the images that the prompts it opens name, and one that holds
+/// nothing goes not at all; an assistant turn goes as the blocks its provider gave, or as its python when a
+/// provider of another kind gave them. A model that takes no image refuses a turn that names one.
+fn messages(
+  turns: ObjectRef<'_>,
+  model: &Model,
+  images: &mut Images,
+) -> Result<Vec<Message>, CompletionError> {
+  let mut messages = Vec::new();
+  for turn in turns.items().unwrap_or_default() {
+    let Some(role) = entry(&turn, 0).and_then(|one| one.as_str()) else { continue };
+    let python = entry(&turn, 1).and_then(|one| one.as_str()).unwrap_or_default();
     if role == "assistant" {
-      let blocks = entry(turn, 3)
+      let blocks = entry(&turn, 3)
         .and_then(|one| serde_json::from_value::<Vec<AssistantContent>>(wire::record(one)).ok())
         .filter(|blocks| !blocks.is_empty())
         .unwrap_or_else(|| vec![AssistantContent::text(python)]);
-      return Some(Message::Assistant { id: None, content: blocks });
+      messages.push(Message::Assistant { id: None, content: blocks });
+      continue;
     }
-    (!python.is_empty())
-      .then(|| Message::User { content: vec![UserContent::Text(Text::new(python))] })
-  });
-  each.collect()
+    if python.is_empty() {
+      continue;
+    }
+    let seen = images.named(python).map_err(CompletionError::ProviderError)?;
+    if !seen.is_empty() && !model.images {
+      return Err(CompletionError::ProviderError(format!(
+        "{} does not accept images.",
+        model.name
+      )));
+    }
+    let content = [UserContent::Text(Text::new(python))].into_iter().chain(seen);
+    messages.push(Message::User { content: content.collect() });
+  }
+  Ok(messages)
+}
+
+/// One response of a model of rig, streamed: what it writes is told as it comes, and the response holds it whole,
+/// with the raw record of its end, where a model says what the turn cost.
+async fn streamed(streams: Streams, asked: Asked) -> Result<CompletionResponse, CompletionError> {
+  let Asked { request, told, .. } = asked;
+  let mut stream = streams(request).await?;
+  // A thought whose parts streamed is told already, and a thought that came whole is told as it comes.
+  let mut thought = HashSet::new();
+  while let Some(part) = stream.next().await {
+    match part? {
+      StreamedAssistantContent::Text(text) => told(&text.text, ""),
+      StreamedAssistantContent::ReasoningDelta { id, reasoning, .. } => {
+        told("", &reasoning);
+        thought.insert(id);
+      }
+      StreamedAssistantContent::Reasoning { reasoning, id } if !thought.contains(&id) => {
+        told("", &reasoning.display_text());
+      }
+      _ => {}
+    }
+  }
+  let raw = stream.response.as_ref().map(|end| end.raw.clone()).unwrap_or_default();
+  Ok(CompletionResponse::from(stream).with_raw(raw))
+}
+
+/// The terminal record of a stream of a provider, from a response of it that came whole.
+fn ended(provider: &str, response: CompletionResponse) -> StreamFinal {
+  let mut record = StreamFinal::new(provider, response.usage);
+  record.finish_reason = response.finish_reason();
+  record.response_id = response.response_id;
+  record.model = response.model;
+  record.raw = response.raw;
+  record
 }
 
 /// What a reply came to, said by the voice of the ear: the turn of the model, or the refusal of an actor that
@@ -272,12 +494,14 @@ async fn answered(
   said: Said,
   actor: String,
   again: bool,
-  asked: Result<(Model, CompletionRequest), CompletionError>,
+  asked: Result<(Model, Asked), CompletionError>,
 ) {
   let got = match asked {
-    Ok((model, request)) => {
-      (model.answers)(request).await.and_then(|response| turn(&model, &response))
-    }
+    Ok((model, asked)) => match (model.answers)(asked).await {
+      Ok(Answer::Response(response)) => turn(&model, &response),
+      Ok(Answer::Turn(turn)) => hosted(turn.as_ref()),
+      Err(no) => Err(no),
+    },
     Err(no) => Err(no),
   };
   let Said { voice, id, chain } = said;
@@ -295,7 +519,8 @@ async fn answered(
 /// The turn of a model: its text, which is the word of the rung, what it read and wrote, and the blocks it gave.
 ///
 /// A model speaks python alone, so a fence or prose around the code stays in the word, for the gate to refuse. What
-/// it read is every token of its input, the cache among them, which rig counts as its total less what it wrote.
+/// it read is every token of its input, the cache among them, and what it wrote is the rest of its total, its
+/// thought among it.
 fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, CompletionError> {
   let text: String = response
     .choice
@@ -306,12 +531,10 @@ fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, Completi
     })
     .collect();
   let spent = response.usage;
-  let (read, wrote, output) =
-    (spent.cached_input_tokens, spent.cache_creation_input_tokens, spent.output_tokens);
-  let input = match spent.total_tokens.checked_sub(output) {
-    Some(input) if input > 0 => input,
-    _ => spent.input_tokens + read + wrote,
-  };
+  let (read, wrote) = (spent.cached_input_tokens, spent.cache_creation_input_tokens);
+  let input = spent.input_tokens + if model.apart { read + wrote } else { 0 };
+  let output =
+    spent.total_tokens.checked_sub(input).filter(|one| *one > 0).unwrap_or(spent.output_tokens);
   let priced = model.price.map(|[fresh, out, cached, cache]| {
     let fresh = input.saturating_sub(read + wrote) as f64 * fresh;
     (fresh + output as f64 * out + read as f64 * cached + wrote as f64 * cache) / 1e6
@@ -324,6 +547,31 @@ fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, Completi
   let usage =
     Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)]);
   Ok(Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]))
+}
+
+/// The turn that a function of the host gave, as a turn of a model: its role, its python, its usage, whose dollars
+/// are a float however the host wrote them, and its blocks.
+fn hosted(turn: ObjectRef<'_>) -> Result<Object, CompletionError> {
+  let part = |at: usize| entry(&turn, at).map(|one| one.to_owned()).unwrap_or_else(Object::none);
+  let (role, python) = (entry(&turn, 0), entry(&turn, 1));
+  let whole = turn.items().is_some_and(|items| items.len() == 4)
+    && role.and_then(|one| one.as_str()) == Some("assistant")
+    && python.is_some_and(|one| one.as_str().is_some());
+  if !whole {
+    let why = format!(
+      "a host answers with a turn: ('assistant', python, usage, blocks), not {}",
+      turn.py_repr()
+    );
+    return Err(CompletionError::ResponseError(why));
+  }
+  let usage = entry(&turn, 2).and_then(|one| one.items()).map(|usage| {
+    let each = usage.into_iter().enumerate().map(|(at, one)| match (at, one.as_int()) {
+      (4, Some(whole)) => Object::float(whole as f64),
+      _ => one.to_owned(),
+    });
+    Object::tuple(each)
+  });
+  Ok(Object::tuple([part(0), part(1), usage.unwrap_or_else(Object::none), part(3)]))
 }
 
 /// A new random id, a uuid of version 4, as the claude command line takes one for a conversation.

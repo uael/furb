@@ -1,13 +1,5 @@
 import { EventEmitter } from "node:events";
-import type {
-  Act,
-  Fact,
-  FileChange,
-  ImageAttachment,
-  LiveAct,
-  Engine as Native,
-  Session as Owner,
-} from "@furb/engine";
+import type { Act, Fact, FileChange, ImageAttachment, LiveAct, Engine as Native, Stream } from "@furb/engine";
 import type { EngineOptions } from "./models.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 
@@ -35,8 +27,6 @@ export type Engine = {
 };
 /** A question that waits for the operator. */
 type Prompt = { id: string; shape: string; message: string };
-/** What a model writes while it answers a rung, on the chain of the rung. */
-type Stream = { chain: string; text: string; thinking: string };
 /** What the session in the worker holds that the host keeps as it comes. */
 interface Plain {
   completed: number;
@@ -82,10 +72,15 @@ export class HostView extends EventEmitter implements Plain {
     if (facts.length) this.emit("facts", facts);
     this.emit("change");
   }
-  route(actor: string): Promise<ReturnType<Owner["provider"]["route"]>> {
-    return this.request("provider", "route", [actor]) as Promise<ReturnType<Owner["provider"]["route"]>>;
+  /** Whether the model of an actor takes an image, as the catalog of the crate says. */
+  sees(actor: string): Promise<boolean> {
+    return this.request("library", "sees", [actor]) as Promise<boolean>;
   }
-  /** The name in the roster of the model that a name gives, and nothing when it gives none. */
+  /** The models the catalog of the crate offers, each as its name, its efforts and its window. */
+  catalog(): Promise<[string, string[], number][]> {
+    return this.request("library", "catalog", []) as Promise<[string, string[], number][]>;
+  }
+  /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
   model(name: string): Promise<string | null> {
     return this.request("library", "model", [name]) as Promise<string | null>;
   }

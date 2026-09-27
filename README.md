@@ -40,7 +40,8 @@ module, and each answer of the model is a program that runs in it.
 pip install furb                     # The engine, and furb, the command line. It needs Python 3.14 or later.
 ```
 
-`furb` is a program of Rust. It runs the engine in monty, and it asks the models through the claude command line:
+`furb` is a program of Rust. It runs the engine in monty. It asks the models of the claude command line, and the models
+of each provider whose credential, such as `ANTHROPIC_API_KEY`, stands in the environment:
 
 ```sh
 furb                                 # The TUI, when furb finds one.

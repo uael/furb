@@ -2,7 +2,8 @@
 ask, and what the answers of a record cost.
 
 The scripts run the engine of CPython, as the DeepSWE rig needs, on the World of `furb.world`, the ears of the crate,
-the Kernel and the gate of the crate. The command line `furb` runs the engine of the crate; the scripts do not.
+the provider of the crate among them, and the Kernel and the gate of the crate. The command line `furb` runs the
+engine of the crate; the scripts do not.
 """
 
 import os
@@ -14,9 +15,12 @@ from pathlib import Path
 import furb_monty
 from furb import engine, python, sheet
 from furb.kernel import kernel
-from furb.provider.claude import ACTOR, BIN, cool
 from furb.world import Live, answered, entries, kept
 from furb_monty import _monty
+
+ACTOR = "claude-cli:opus/low"
+"""ACTOR is the actor a script asks when it names none, which is opus of the claude command line at the least effort
+it takes."""
 
 
 def say(text: str) -> None:
@@ -27,7 +31,7 @@ def say(text: str) -> None:
 
 def ready() -> None:
   """Stop the script at once when no claude stands on PATH, since no model can be asked then."""
-  if shutil.which(os.environ.get(BIN) or "claude") is None:
+  if shutil.which(os.environ.get("FURB_CLAUDE_BIN") or "claude") is None:
     say("no claude on PATH, so no model can be asked and the script stops here")
     raise SystemExit(1)
 
@@ -49,6 +53,7 @@ def lived(record: Path | None, cwd: Path, actor: str, *, keeps: bool) -> tuple[L
   else:
     held = kept(record) if record is not None and record.is_file() else []
   gate = sheet.gating(vars(python), furb_monty.gate)
+  world.provider()
   root = engine.boot(held, world=world.hears(), kernel=kernel(vars(python)), gate=gate, **world.ears)
   return world, root, held
 
@@ -76,7 +81,6 @@ async def turned(record: Path, cwd: Path, actor: str = ACTOR) -> None:
       say(f"[{role}] {py}")
   finally:
     world.end()
-    await cool()
 
 
 def bought(record: Path) -> list[tuple]:

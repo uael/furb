@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Engine, Session } from "@furb/engine";
 import { until } from "../../bind/typescript/test/until.ts";
-import { defaultModel, hostModels } from "../src/models.ts";
+import { defaultModel } from "../src/models.ts";
 import { Snapshots } from "../src/snapshots.ts";
 
 /** An engine that names each of its methods in a list as they are called, and then calls them. */
@@ -171,8 +171,7 @@ test("a take carries the acts that changed after the count it is given, and ever
 
 test("a new standing drops the roster, the directory and the actor that the view of a chain read", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-standing-"));
-  const host = hostModels();
-  const session = new Session({ cwd, models: host.models, model: defaultModel });
+  const session = new Session({ cwd, model: defaultModel });
   try {
     const engine = session.open();
     const snapshots = new Snapshots(engine, session);

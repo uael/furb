@@ -242,6 +242,31 @@ test("the sidebar tree groups sessions, switches by mouse, collapses and toggles
     expect(app().composer.plainText).toBe("keep this draft");
   }));
 
+test("a model of the catalog that the roster does not hold joins the session, which opens again on it", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-workspaces-"));
+  // A claude command line that the session names is one the catalog offers, and no model is asked.
+  const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), {
+    claude: join(directory, "claude"),
+  });
+  try {
+    const entry = await library.create(await library.add(directory), "Models");
+    const first = entry.session;
+    expect(first?.roster.map(([name]) => name)).toEqual(["claude-cli:sonnet", "operator"]);
+    await until(library, () => first?.catalog.some(([name]) => name === "claude-cli:opus") ?? false);
+    await first?.submit("/model opus");
+    await until(library, () => entry.session !== first && entry.session?.actor === "claude-cli:opus/low");
+    expect(entry.session?.roster.map(([name]) => name)).toEqual([
+      "claude-cli:sonnet",
+      "claude-cli:opus",
+      "operator",
+    ]);
+    expect(entry.session?.models).toEqual(["claude-cli:opus"]);
+  } finally {
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("the list of saved sessions comes before their replays, and a row shows its state when its replay lands", () =>
   withLibrary(async ({ directory, open }) => {
     let library = open();

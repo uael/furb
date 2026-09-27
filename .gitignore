@@ -13,6 +13,4 @@ target/
 *.pyd
 *.node
 node_modules/
-# The system prompt the TypeScript World sends: the engine minified, made by `bun run build`, never source.
-bind/typescript/system.json
 .furb/

@@ -191,6 +191,16 @@ fn a_prompt_of_the_operator_is_answered_at_the_terminal() {
 }
 
 #[test]
+fn the_life_of_a_prompt_offers_the_model_of_the_actor_it_names() {
+  let yard = Yard::new("to");
+  yard.words(&["close('hi')"]);
+  assert_eq!(
+    printed(yard.furb(&["prompt", "hi", "--to", "sonnet/high", "--shape", "str"]), ""),
+    "'hi'\n"
+  );
+}
+
+#[test]
 fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
   let yard = Yard::new("again");
   let asked = ["prompt", "say a number", "--to", "operator", "--shape", "int"];
@@ -222,7 +232,10 @@ fn a_prompt_the_world_paused_ends_its_command_with_why_and_goes_on_when_it_is_ta
   let mut missing = yard.kept(&counted);
   missing.env("FURB_CLAUDE_BIN", yard.at.join("missing"));
   let said = refused(missing, "");
-  assert!(said.contains("furb: prompt1 is paused: opus/low answered nothing: "), "{said}");
+  assert!(
+    said.contains("furb: prompt1 is paused: claude-cli:opus/low answered nothing: "),
+    "{said}"
+  );
   assert!(said.contains("A wake from the TUI or from `furb --mode rpc` makes it go on."), "{said}");
   yard.words(&[COUNT]);
   assert_eq!(printed(yard.kept(&counted), ""), "3\n", "the command wakes the prompt it takes up");
@@ -241,8 +254,13 @@ struct Client {
 impl Client {
   /// furb serving a life on the record of the yard.
   fn new(yard: &Yard) -> Client {
+    Client::with(yard, &[])
+  }
+
+  /// furb serving a life on the record of the yard, with more words.
+  fn with(yard: &Yard, words: &[&str]) -> Client {
     let mut child = yard
-      .kept(&["--mode", "rpc"])
+      .kept(&[&["--mode", "rpc"], words].concat())
       .stdin(Stdio::piped())
       .stdout(Stdio::piped())
       .spawn()
@@ -374,7 +392,7 @@ fn a_prompt_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
     (&state["root"], &state["paused"], &state["acts"]),
     (&json!("chain1"), &json!(false), &json!(["prompt1"]))
   );
-  assert_eq!(state["standing"][2], "opus/low");
+  assert_eq!(state["standing"][2], "claude-cli:opus/low");
   let wrong = client.asked("3", json!({"type": "close", "act": "prompt2", "value": "seven"}));
   assert_eq!(wrong["success"], false, "a close of the wrong shape is refused: {wrong}");
   client.data("4", json!({"type": "close", "act": "prompt2", "value": 7}));
@@ -404,6 +422,33 @@ fn a_prompt_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
     refusal,
     "an exception closes a prompt with that exception"
   );
+}
+
+#[test]
+fn a_life_offers_the_model_of_its_default_actor_and_the_models_it_names_and_no_more() {
+  let yard = Yard::new("rpc-roster");
+  let names = |client: &mut Client| {
+    let state = client.data("1", json!({"type": "state"}));
+    let roster = state["standing"][0].as_array().cloned().unwrap_or_default();
+    let names: Vec<String> =
+      roster.iter().filter_map(|one| one[0].as_str().map(str::to_owned)).collect();
+    (names, state["standing"][2].clone())
+  };
+  let mut first = Client::new(&yard);
+  let (roster, actor) = names(&mut first);
+  assert!(first.ended(), "the record is free for the next life");
+  assert_eq!(
+    (roster, actor),
+    (vec!["claude-cli:opus".to_owned(), "operator".to_owned()], json!("claude-cli:opus/low"))
+  );
+  let mut client = Client::with(&yard, &["--model", "sonnet/high", "--roster", "haiku"]);
+  let (roster, actor) = names(&mut client);
+  assert_eq!(roster, ["claude-cli:sonnet", "claude-cli:haiku", "operator"]);
+  assert_eq!(actor, "claude-cli:sonnet/high");
+  let refused =
+    client.data("2", json!({"type": "prompt", "message": "hi", "shape": "str", "to": "opus"}));
+  let prompt = refused["act"].as_str().expect("the act").to_owned();
+  assert_eq!(client.done(&prompt)["raised"]["is"], "Refused", "the roster holds no opus");
 }
 
 #[test]
@@ -476,11 +521,15 @@ fn furb_hands_the_terminal_to_the_tui_with_the_words_it_takes() {
   let yard = Yard::new("tui");
   let tui = yard.at.join("tui");
   program(&tui, "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 3\n");
-  let mut command =
-    yard.furb(&["--demo", "--record", "r.jsonl", "--cwd", "there", "--", "--model", "m"]);
+  let mut command = yard.furb(&[
+    "--demo", "--record", "r.jsonl", "--cwd", "there", "--model", "m", "--roster", "n", "--",
+    "--effort", "high",
+  ]);
   command.env("FURB_TUI", &tui);
   let output = ran(command, "");
   assert_eq!(output.status.code(), Some(3), "furb ends with the code of the TUI");
   let words = String::from_utf8_lossy(&output.stdout);
-  assert_eq!(words, "--demo\n--record\nr.jsonl\n--cwd\nthere\n--model\nm\n");
+  let expected =
+    "--demo\n--record\nr.jsonl\n--cwd\nthere\n--model\nm\n--roster\nn\n--effort\nhigh\n";
+  assert_eq!(words, expected);
 }

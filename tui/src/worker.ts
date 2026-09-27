@@ -2,9 +2,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, SessionOptions, Turn } from "@furb/engine";
-import { Act, engineSource, modelNamed, Session } from "@furb/engine";
+import { Act, actorParts, engineSource, model, models, Session } from "@furb/engine";
 import type { HostState } from "./bridge.ts";
-import { type EngineOptions, hostModels } from "./models.ts";
+import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
@@ -13,7 +13,9 @@ declare const self: Worker & { close(): void };
 let session: Session | undefined;
 let engine: Engine | undefined;
 let snapshots: Snapshots | undefined;
-let host: ReturnType<typeof hostModels> | undefined;
+/** The claude command line that the session names, which the catalog offers, and whether the session is the demo. */
+let claude: string | undefined;
+let demo = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let sentFacts = 0;
 const state = () => {
@@ -24,11 +26,11 @@ const state = () => {
     cost: owner.activity.cost,
     directory: owner.directory,
     imageDirectory: owner.imageDirectory,
-    actor: owner.provider.actor,
+    actor: owner.actor,
     record: owner.record,
     facts: owner.facts.slice(sentFacts),
     prompts: [...owner.console.prompts.values()].map(({ id, shape, message }) => ({ id, shape, message })),
-    streams: [...owner.provider.streams],
+    streams: [...owner.streams],
     pending: [...owner.pending],
     changes: owner.changes.length,
   };
@@ -80,34 +82,25 @@ function scriptedSession(options: SessionOptions): Session {
   if (!directory) throw new Error("A demo session needs a directory or a record.");
   return new Session({
     ...options,
+    roster: roster({ ...options, demo: true }),
     cwd: directory,
     record: record ?? join(directory, "demo.jsonl"),
-    answer: async (_actor, _chain, turns, signal, write): Promise<Turn> => {
+    answer: async ({ messages }, write): Promise<Turn> => {
       const pause = (milliseconds: number) =>
-        new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(resolve, milliseconds);
-          signal.addEventListener(
-            "abort",
-            () => {
-              clearTimeout(timer);
-              reject(new Error("cancelled"));
-            },
-            { once: true },
-          );
-        });
+        new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+      const last = JSON.stringify(messages.at(-1));
       // Only the turn that asks for live progress is slow, and not every later turn of its chain: it thinks, then
       // writes its word a few words at a time, as a model streams it. FURB_DEMO_STREAM=1 makes every turn so, for a
       // recording of the demo.
-      const slow =
-        process.env.FURB_DEMO_STREAM === "1" || JSON.stringify(turns.at(-1)).includes("show live progress");
+      const slow = process.env.FURB_DEMO_STREAM === "1" || last.includes("show live progress");
       await pause(slow ? 300 : 180);
-      const first = turns.filter((turn) => turn[0] === "assistant").length === 0;
+      const first = !messages.some((message) => (message as { role?: string }).role === "assistant");
       const [thinking, answer] = first
         ? ["I read the README and run the checks before I answer.", ""]
-        : reply(JSON.stringify(turns.at(-1)));
+        : reply(last);
       // A message that asks for an answer in a fence gets one, as a model sometimes writes it, which the gate refuses,
       // and the model answers again once it reads the refusal.
-      const fenced = !first && JSON.stringify(turns.at(-1)).includes("an answer in a fence");
+      const fenced = !first && last.includes("an answer in a fence");
       const code = fenced
         ? '```python\nclose("Here is the answer, in a fence.")\n```'
         : first
@@ -133,10 +126,10 @@ function scriptedSession(options: SessionOptions): Session {
 /** What a request of the session comes to. */
 async function answer(data: { target: string; method: string; args: unknown[] }): Promise<unknown> {
   if (data.method === "open") {
-    const { demo, claude, ...options } = data.args[0] as EngineOptions;
-    host = hostModels(claude);
-    const given = { ...options, models: host.models, roster: options.roster ?? host.roster };
-    const opened = demo ? scriptedSession(given) : new Session(given);
+    const { demo: scripted, ...options } = data.args[0] as EngineOptions;
+    claude = options.claude;
+    demo = scripted ?? false;
+    const opened = demo ? scriptedSession(options) : new Session({ ...options, roster: roster(options) });
     session = opened;
     engine = opened.open();
     snapshots = new Snapshots(engine, opened);
@@ -165,15 +158,22 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     engine.say("queue", entry.chain, ["sent", entry.id, act.id]);
     return act.id;
   }
-  if (data.target === "library" && data.method === "model") {
-    const provider = session?.provider;
-    if (!provider) throw new Error("The session is not open.");
-    // A roster name is found by the rule the provider finds every model by.
-    const offered = provider.roster.flatMap((name) => {
-      const model = provider.offers(name);
-      return model ? [{ name, provider: model.provider, id: model.id }] : [];
-    });
-    return modelNamed(offered, String(data.args[0]))?.name ?? null;
+  // The demo asks no model, so it offers its roster and nothing of the catalog of this machine.
+  if (data.target === "library" && data.method === "catalog")
+    return demo ? [] : models(claude).map(({ name, efforts, window }) => [name, efforts, window]);
+  if (data.target === "library" && (data.method === "model" || data.method === "sees")) {
+    if (!engine) throw new Error("The session is not open.");
+    const [standing] = engine.standing() as [[string][]];
+    const names = standing.map(([name]) => name);
+    // A name of the roster is found by the rule the catalog finds every model by, and an actor by its model.
+    const name =
+      data.method === "sees" ? actorParts(String(data.args[0]), names).model : String(data.args[0]);
+    const found = model(name);
+    if (data.method === "sees") return found?.images ?? false;
+    const held = found?.name ?? name;
+    // A model that the roster does not hold is one the operator may add from the catalog, which offers it.
+    const offered = names.includes(held) || (!demo && models(claude).some((one) => one.name === held));
+    return offered ? held : null;
   }
   if (data.target === "library" && data.method === "source") return engineSource();
   if (data.target === "library" && data.method === "changes")
@@ -194,14 +194,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     if (!snapshots) throw new Error("The session is not open.");
     return snapshots.take(String(data.args[0]), Number(data.args[1]));
   }
-  const target =
-    data.target === "session"
-      ? session
-      : data.target === "provider"
-        ? session?.provider
-        : data.target === "console"
-          ? session?.console
-          : engine;
+  const target = data.target === "session" ? session : data.target === "console" ? session?.console : engine;
   if (!target) throw new Error("The session is not open.");
   const method = Reflect.get(target, data.method) as (...args: unknown[]) => unknown;
   if (typeof method !== "function") throw new Error(`Unknown ${data.target} method ${data.method}.`);
@@ -226,8 +219,6 @@ self.onmessage = async ({ data }) => {
   session = undefined;
   engine = undefined;
   snapshots = undefined;
-  host?.dispose();
-  host = undefined;
   setTimeout(() => {
     self.postMessage({ id: data.id, ...reply, disposed: true });
     self.close();

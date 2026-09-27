@@ -26,10 +26,9 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from real import lived, ready, say, turned
+from real import ACTOR, lived, ready, say, turned
 
 from furb import engine
-from furb.provider.claude import cool
 from furb.world import answered, kept
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -746,7 +745,6 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
     stopped = f"the task was refused: {no!r}"
   finally:
     world.end()
-    await cool()
   if stopped:
     say(f"[deepswe] {stopped}")
   return got, stopped, record
@@ -867,10 +865,10 @@ def main() -> None:
   verbs.add_parser("grade", parents=[named], help=grade.__doc__).set_defaults(go=grade)
   verbs.add_parser("validate", parents=[named], help=validate.__doc__).set_defaults(go=validate)
   reading = verbs.add_parser("turns", parents=[named], help=turns.__doc__)
-  reading.add_argument("--to", default="opus/low", help="The actor the folded life stands on.")
+  reading.add_argument("--to", default=ACTOR, help="The actor the folded life stands on.")
   reading.set_defaults(go=turns)
   doing = verbs.add_parser("run", parents=[named], help=run.__doc__)
-  doing.add_argument("--to", default="opus/low", help="The actor the task is put to, as model/effort.")
+  doing.add_argument("--to", default=ACTOR, help="The actor the task is put to, as provider:model/effort.")
   doing.add_argument("--ceiling", type=float, default=8.0, help="Dollars the life may spend; 0 is no ceiling.")
   doing.add_argument("--timeout", type=float, default=1800.0, help="Seconds the run may take; 0 is no cap.")
   doing.add_argument("--resume", action="store_true", help="Go on with the checkout and the record that stand.")

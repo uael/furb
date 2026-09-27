@@ -11,6 +11,7 @@ import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import { externalEditor, opener } from "../src/editor.ts";
 import { Extensions } from "../src/extensions.ts";
 import { fileReferences, projectFiles } from "../src/files.ts";
+import { defaultModel } from "../src/models.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
 import { composing } from "./composing.ts";
@@ -242,17 +243,13 @@ test("a model request failure shows in the feed as the failure of an act, and no
     const opened = await openEngine({
       cwd: directory,
       record: join(directory, "session.jsonl"),
-      claude: {
-        bin: executable(
-          join(import.meta.dir, "../../bind/typescript/test/fake-claude.ts"),
-          directory,
-          "claude",
-        ),
-      },
+      // A claude command line that does not start fails every request, as a model that is not there does.
+      claude: join(directory, "missing"),
+      roster: [defaultModel],
     });
     await composing(
       async ({ session, frame }) => {
-        await session.submit("FAIL");
+        await session.submit("Say something.");
         // The chain pauses at the second failure in a row, and no work runs after that.
         await until(session, () => session.paused);
         await session.refresh();

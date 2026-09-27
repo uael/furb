@@ -35,54 +35,50 @@ try {
 }
 ```
 
-A `Session` opens an engine on the ears of the World: the files, the commands, time, and the store of the record,
-which the crate writes and the package gives as `files()`, `bash()`, `time()` and `store(path)`, and the provider
-of models and the console of the operator, which this package writes. The files read and write a path against the
-directory where its chain stands. The commands stream what a command writes, feed its stdin, and end it at its
-timeout. Time gives the clock and a chance, and ends a wait. The provider knows no provider of models of its own: it
-asks the pi-ai collection it is given in `models`, the built-in providers when it is given none, and it preserves
-provider response blocks in the record. The host names what the provider offers in `roster`, as
-`provider:model`, and the default actor in `model`, which is the first of the roster when unsaid; a provider given
-neither offers the operator alone, and a prompt that names no actor goes to the operator. A name without its
-provider routes to the one model of that id, by the rule that `modelNamed(models, name)` gives a host. A reopened
-session offers what its host names now. It keeps the model and the effort that the host chose last, and takes that
-model when the host names none and the provider holds it. The journal keeps each stand and what the provider
-answered it, and every life stands again as it opens, so a later life tells the new standing on each chain whose
-standing changed. Configure an API provider through its pi-ai credentials.
+A `Session` opens an engine on the ears of the World that the crate writes, which the package gives as `files()`,
+`bash()`, `time()`, `store(path)` and `provider(options)`, and on the console of the operator, which this package
+writes. The files read and write a path against the directory where its chain stands. The commands stream what a command
+writes, feed its stdin, and end it at its timeout. Time gives the clock and a chance, and ends a wait. The provider asks
+the models of the catalog of the crate, which `models(claude?)` lists and `model(name)` finds, and it preserves provider
+response blocks in the record. The catalog offers the models of a provider when a credential of it stands in the
+environment, such as `ANTHROPIC_API_KEY`, and the models of the claude command line when it finds the program. The host
+names what the provider offers beside the model of the default actor in `roster`, as `provider:id`, and the default
+actor in `model` and `effort`: the first of the roster, and `low`, when unsaid. The standing of every chain tells the
+roster, so a session offers the models it names and not the whole catalog. The effort moves to the nearest one the model
+takes, among `levels()`. A session given neither offers the operator alone, and a prompt that names no actor goes to the
+operator. A name without its provider names the one model of that id. A reopened session offers what its host names now.
+It keeps the model and the effort that the host chose last, and takes that model when the host names none and the
+catalog knows it. The journal keeps each stand and what the provider answered it, and every life stands again as it
+opens, so a later life tells the new standing on each chain whose standing changed.
 
-The Claude CLI provider, `claudeProvider` from `@furb/engine/claude`, is a pi-ai provider that a host adds to
-its collection at run time. It follows the pooled session design in [dirt](https://github.com/uael/dirt/tree/main/packages/cli/src/providers).
-It reads current pi-ai system messages, keeps a warm conversation for each session id, sends only new messages,
-preserves text and thinking blocks, and reports the cost of each turn. The provider gives each chain of each life a
-session id of its own, since the ids of chains repeat in every life. It runs pure completions with CLI tools and
-MCP disabled. It finds the standalone CLI (`claude.exe` on Windows) or the CLI installed by Claude Desktop. Set
-`FURB_CLAUDE_BIN` to select a binary. Its pool belongs to the host that made the provider, and its `dispose` stops
-it. No CLI process starts until a model is asked.
+The claude command line is the provider `claude-cli` of the catalog, with the models `opus`, `sonnet`, `haiku` and
+`fable`. It follows the pooled session design in [dirt](https://github.com/uael/dirt/tree/main/packages/cli/src/providers).
+It keeps a warm conversation for each chain of each life, sends only new messages, preserves text and thinking
+blocks, and reports the cost of each turn. It runs pure completions with CLI tools and MCP disabled. It finds the
+program that `claude` names in the options, then the one `FURB_CLAUDE_BIN` names, then the standalone CLI on PATH
+or the CLI installed by Claude Desktop. No process starts until a model is asked, and each one ends with the life.
 
 ```ts
-import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import { Session } from "@furb/engine";
-import { claudeProvider } from "@furb/engine/claude";
+import { models, Session } from "@furb/engine";
 
-const claude = claudeProvider();
-const models = builtinModels();
-models.setProvider(claude.provider);
-const roster = claude.provider.getModels().map((model) => `${model.provider}:${model.id}`);
-const session = new Session({ models, roster });
+// The models the catalog offers, which a host names as its default actor and in its roster.
+const [first, ...others] = models().map((model) => model.name);
+const session = new Session({ model: first, effort: "high", roster: others.slice(0, 2) });
 ```
 
-Pass `answer` to replace only model requests, or `operator` to supply operator answers. The host still names
-the models that `answer` stands in for, and a session given `answer` and no model is refused, since every prompt
-would go to the operator. With no `operator`, questions stand in `session.console.prompts`; call
-`session.console.answer(id, text)` to parse and validate an answer. `session` emits `change` and `facts`, and
-`fault` tells what the life refused when the provider or the console said what an act came to. `session.facts`
-holds every fact of the life, every act among them, since the session drives the ear that keeps them as an ear of
-the engine. A view reads the life and says nothing, so a listener that reads the life hears no change of its own. A
-failed outside act carries its refusal in the record. The store writes and syncs one complete record entry for
-each keep of the journal. The engine phrases every turn as python, so the provider renders nothing. A turn is its
-role, its python, its usage and the blocks of its provider, as `engine.turns({ on })` gives it. The provider hands a
-model the python of each user turn as it is, and no user turn that holds nothing, and the `answer` callback
-receives the same turns.
+Pass `answer` to replace only model requests, or `operator` to supply operator answers. `answer` gets the actor,
+the chain, the messages and the settings of the effort as the provider would send them, and a `write` that tells
+what it writes as it writes it, and gives a turn. The host still names the models that `answer` stands in for. With
+no `operator`, questions stand in `session.console.prompts`; call `session.console.answer(id, text)` to parse and
+validate an answer. `session` emits `change` and `facts`, and `fault` tells what the life refused when the console
+said what an act came to. `session.streams` holds what a model writes for each rung, until the done of its reply.
+`session.facts` holds every fact of the life, every act among them, since the session drives the ear that keeps
+them as an ear of the engine. A view reads the life and says nothing, so a listener that reads the life hears no
+change of its own. A failed outside act carries its refusal in the record. The store writes and syncs one complete
+record entry for each keep of the journal. The engine phrases every turn as python, so the provider renders
+nothing. A turn is its role, its python, its usage and the blocks of its provider, as `engine.turns({ on })` gives
+it. The provider hands a model the python of each user turn as it is, and no user turn that holds nothing, and the
+`answer` callback receives the same messages.
 
 An ear is a generator of JavaScript or an ear of the crate, a `NativeEar`, and `Engine.boot(record, ears)` takes
 them under the names the engine hears them by, in the order the engine offers them a question. A generator hears
@@ -125,7 +121,7 @@ model wrote in part live in the record's `.session.json` companion. File snapsho
 save that fails throws an error that names the file, with the error of the system as its cause. The TUI saves its
 own files with it.
 
-`inspectRecord(path, models)` reads pending work through the same native replay without taking a record lock,
+`inspectRecord(path)` reads pending work through the same native replay without taking a record lock,
 writing files, or starting a model or command. `session.activity` holds the state of every act a person follows,
 and `session.isPaused(id)` reads it.
 
@@ -135,5 +131,5 @@ size, and `furb-image://` reference. A session with no record copies it into `.f
 Put that reference in the prompt as a Markdown image,
 `![design](furb-image://...)`, which `imageReference(image)` writes and `imageReferences(message)` reads. The
 provider hands the python of the turn as it is, and adds each image that the message of a prompt of that turn
-references as a pi-ai image block. The stored bytes are checked against their digest before use. PNG, JPEG, GIF,
+references, to a model that takes images. The stored bytes are checked against their digest before use. PNG, JPEG, GIF,
 and WebP are supported, with a 20 MiB limit per image. Keep `.images` with the record when moving a session.

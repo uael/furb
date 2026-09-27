@@ -6,18 +6,26 @@ the engine in the sandbox of monty, with the Kernel that the crate loads there, 
 
 `furb_monty._monty` is the door itself. Its `Engine` says each name of the contract by its name, with the words
 python gives, as the engine of this interpreter takes them. It also gives the ears of the World that the crate
-writes: `files()`, `bash()`, `time()`, and `store(path)`, which gives the record at the
-path and the ear that keeps it. Each is a `NativeEar`, which `furb_monty.engine.boot` takes beside the generators
-of this interpreter, and which the engine of this interpreter, `furb.python`, steps as a generator of its own:
+writes: `files()`, `bash()`, `time()`, `store(path)`, which gives the record at the path and the ear that keeps it,
+and `provider(directory)`, which answers what the chains stand on and asks the models of the catalog of the crate.
+Each is a `NativeEar`, which `furb_monty.engine.boot` takes beside the generators of this interpreter, and which the
+engine of this interpreter, `furb.python`, steps as a generator of its own:
 
 ```python
 from furb_monty import _monty, engine
 
 record, store = _monty.store("life.jsonl")
 ears = {"files": _monty.files(), "bash": _monty.bash(), "time": _monty.time(), "store": store}
-# `world` is an ear of the host that answers the rest, the stand and the replies of the models among it.
-root = engine.boot(record, **ears, world=world)
+provider = _monty.provider(".", actor="claude-cli:opus/low")
+# `world` is an ear of the host that answers the rest, a prompt to the operator among it.
+root = engine.boot(record, world=world, provider=provider, **ears)
 ```
+
+`provider` offers the model of its `actor` and the models of its `roster`, or the first model the catalog offers
+when it names neither. Its `answer`, a function, answers each request in place of the models, which the suite of
+furb does. Its `stream`, a function, is told what a model writes as it writes it, and `images` is the directory of
+the images that a message names. `_monty.SYSTEM` is the system prompt of every model:
+the engine, minified in layout alone.
 
 A generator of this interpreter is heard on a thread of its own, so it may say a verb while it hears, as an ear of
 the engine of python does.

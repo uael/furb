@@ -85,8 +85,24 @@ def gate(sheet: str) -> list[tuple[int, str]]:
   sheet, each error by its line, and no warning. It raises when the checker could not read the sheet."""
 
 def provider(
-  directory: str, actor: str | None = None, claude: str | None = None, stall: float | None = None
+  directory: str,
+  roster: list[str] | None = None,
+  actor: str | None = None,
+  answer: Callable[[dict, Callable[..., None]], tuple] | None = None,
+  claude: str | None = None,
+  stall: float | None = None,
+  images: str | None = None,
+  stream: Callable[[str, str, str, str], None] | None = None,
 ) -> NativeEar:
-  """The ear of the provider of models, whose models are those of the claude command line at the path `claude`: it
-  answers a stand with the standing of the directory and the default actor, and takes each reply, which a model
-  answers with its turn, or refuses when a turn makes no progress for `stall` seconds."""
+  """The ear of the provider of models, which answers a stand with the standing of the directory and the default
+  actor, and takes each reply, which a model answers with its turn. The catalog of the crate makes the model of the
+  actor and the models of the roster, each named `provider:id` or by an id that one model alone holds, or the first
+  model it offers when neither is said. `answer`, when given, answers each request in place of the models: it is
+  called on a thread of its own with the request, as JSON reads it, and a function `write(text="", thinking="")`,
+  and gives the turn. `claude` is the path of the claude command line, whose turn is refused when it makes no
+  progress for `stall` seconds. `images` is the directory of the images that a turn names. `stream` is told what a
+  model writes as it writes it, on a thread of the models: the rung it writes for, the chain of that rung, and what
+  it added to its text and to its thought."""
+
+SYSTEM: str
+"""The system prompt of every model: the engine, minified in layout alone, and nothing else."""
