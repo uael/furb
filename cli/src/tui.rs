@@ -13,6 +13,8 @@ use std::{
   process::Command,
 };
 
+use furb::world;
+
 use crate::{Place, Stand, life};
 
 /// How to get a TUI when none is found.
@@ -68,7 +70,7 @@ fn found(named: Option<OsString>, path: &OsStr, checkout: &Path) -> Result<Vec<O
   if let Some(named) = named.filter(|one| !one.is_empty()) {
     return Ok(vec![named]);
   }
-  if let Some(tui) = program("furb-tui", path) {
+  if let Some(tui) = world::program("furb-tui", env::split_paths(path)) {
     return Ok(vec![tui.into()]);
   }
   let cli = checkout.join("tui/src/cli.ts");
@@ -76,7 +78,7 @@ fn found(named: Option<OsString>, path: &OsStr, checkout: &Path) -> Result<Vec<O
     return Err(NONE.to_owned());
   }
   let at = checkout.display();
-  let Some(bun) = program("bun", path) else {
+  let Some(bun) = world::program("bun", env::split_paths(path)) else {
     return Err(format!(
       "the TUI of {at} runs on bun 1.4.2 or later, and no bun is on PATH: see https://bun.sh"
     ));
@@ -85,29 +87,6 @@ fn found(named: Option<OsString>, path: &OsStr, checkout: &Path) -> Result<Vec<O
     return Err(format!("the TUI of {at} is not built: run `bun install && bun run build` there"));
   }
   Ok(vec![bun.into(), "run".into(), cli.into()])
-}
-
-/// The first program of a name on a PATH, with the extensions of a program on Windows.
-fn program(name: &str, path: &OsStr) -> Option<PathBuf> {
-  let names: &[&str] = if cfg!(windows) { &[".exe", ".cmd", ""] } else { &[""] };
-  env::split_paths(path)
-    .filter(|dir| !dir.as_os_str().is_empty())
-    .flat_map(|dir| names.iter().map(move |end| dir.join(format!("{name}{end}"))))
-    .find(|one| runs(one))
-}
-
-/// Whether a path is a program that this machine runs.
-fn runs(path: &Path) -> bool {
-  let Ok(info) = path.metadata() else { return false };
-  #[cfg(unix)]
-  {
-    use std::os::unix::fs::PermissionsExt;
-    info.is_file() && info.permissions().mode() & 0o111 != 0
-  }
-  #[cfg(not(unix))]
-  {
-    info.is_file()
-  }
 }
 
 /// The TUI given the terminal: furb becomes it, so it holds the terminal and its signals alone.

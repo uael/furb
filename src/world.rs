@@ -19,7 +19,7 @@ mod time;
 
 use std::path::{Component, Path, PathBuf};
 
-pub use bash::{SHELL, bash};
+pub use bash::{SHELL, bash, program};
 pub use files::files;
 pub use operator::{SHAPES, answered};
 pub use provider::{
