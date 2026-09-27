@@ -17,6 +17,7 @@ use furb::{
   ear::{ear, hear},
   engine::OPERATOR,
   extension::{self, Extension},
+  fact,
   life::Opening,
   verbs,
   world::Catalog,
@@ -56,7 +57,7 @@ impl Quiet {
   /// What one more fact says.
   fn heard(&mut self, a: &Fact) {
     let watched = self.acts.iter().any(|one| one == a.about());
-    let reply = a.about().strip_prefix("reply").is_some_and(|n| n.parse::<u64>().is_ok());
+    let reply = fact::named(a.about(), "reply");
     match a.kind() {
       "pause" | "wake" if watched => self.paused = a.kind() == "pause",
       "done" if reply => {
