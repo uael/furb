@@ -508,7 +508,7 @@ def acting():
 
 
 def question(a):
-  return bool(re.fullmatch(rf"{a[0]}\d+", a[1]))
+  return bool(re.fullmatch(a[0] + r"\d+", a[1]))
 
 
 def scope(name):
