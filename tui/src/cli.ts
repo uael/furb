@@ -3,12 +3,11 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { efforts, furbDirectory, onConsoleEnd, type SessionOptions } from "@furb/engine";
+import { efforts, furbDirectory, onConsoleEnd } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
 import { follow } from "./app.ts";
 import { demoDirectory, removeDemoDirectories } from "./demo.ts";
-import { Extensions } from "./extensions.ts";
-import { defaultModel, type EngineOptions } from "./models.ts";
+import type { EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { palettes } from "./theme.ts";
 import { Workspaces } from "./workspaces.ts";
@@ -24,7 +23,6 @@ const { values } = parseArgs({
     record: { type: "string" },
     resume: { type: "string" },
     roster: { type: "string", multiple: true },
-    extension: { type: "string", multiple: true },
   },
 });
 if (values.help) {
@@ -34,8 +32,9 @@ if (values.help) {
 Enter sends a prompt. ⌃J (Control J) adds a line, and so does ⇧Enter (Shift Enter) in a terminal with the kitty
 keyboard protocol. ⌃P opens actions. F1 shows all keys that the terminal sends. ⌃ is Control, ⌥ is Option or Alt,
 and ⇧ is Shift.
-The default model is ${defaultModel}, through your Claude CLI subscription.
-Other providers use pi-ai and its environment credentials.`);
+The default model is the one that the catalog offers first: opus, through your Claude CLI subscription, when this
+machine holds the claude command line. A session offers it and the models of --roster. /model lists them, and every model of a provider whose credentials stand in the environment, such as
+ANTHROPIC_API_KEY, each named as provider:model. A model of that list joins the session when you choose it.`);
   process.exit(0);
 }
 if (values.effort && !efforts.some((effort) => effort === values.effort)) throw new Error("Invalid effort.");
@@ -55,7 +54,7 @@ const directory =
 if (values.demo) await mkdir(directory, { recursive: true });
 const engineOptions: EngineOptions = {
   model: values.model,
-  effort: values.effort as SessionOptions["effort"],
+  effort: values.effort,
   roster: values.roster,
   demo: values.demo,
 };
@@ -70,17 +69,6 @@ if (record) await library.import(record, group);
 else await library.create(group);
 const initial = library.current?.session;
 if (!initial) throw new Error("The session did not open.");
-const extensions = new Extensions(() => {
-  const session = library.current?.session;
-  if (!session) throw new Error("No session is selected.");
-  return session;
-});
-try {
-  for (const path of values.extension ?? []) await extensions.load(resolve(path));
-} catch (error) {
-  await library.dispose();
-  throw error;
-}
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
   // The TUI ends on a signal by its own quit, since the view saves its draft before the renderer goes.
@@ -98,7 +86,6 @@ const quit = async () => {
   for (const step of [
     () => app().dispose(),
     () => renderer.destroy(),
-    () => extensions.dispose(),
     () => library.dispose(),
     () => removeDemoDirectories(),
   ])
@@ -110,7 +97,7 @@ const quit = async () => {
   for (const error of failures) console.error(error);
   if (failures.length) process.exitCode = 1;
 };
-const app = follow(renderer, { quit, workspaces: library, extensions });
+const app = follow(renderer, { quit, workspaces: library });
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)
   process.once(signal, () => void quit().finally(() => process.exit()));
 // The runtime gives no signal for Ctrl+Break or for the close of the console of Windows, and ends the process at once.

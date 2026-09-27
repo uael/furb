@@ -13,15 +13,23 @@ use std::{
   process::Command,
 };
 
-use crate::Place;
+use furb::world;
+
+use crate::{Place, Stand, life};
 
 /// How to get a TUI when none is found.
 const NONE: &str = "no TUI is found: set FURB_TUI to the program of the furb TUI, put furb-tui on PATH, or run furb \
                     from a checkout of furb after `bun install && bun run build`; `furb --mode rpc` needs no TUI";
 
 /// The TUI, run with the words it takes, in the place of furb: on the demo session, on the record and in the
-/// directory furb is given, and with the words after `--`.
-pub fn launch(demo: bool, place: &Place, more: &[String]) -> Result<Infallible, String> {
+/// directory furb is given, on the default actor and the roster furb is given, and with the words after `--`. The
+/// TUI takes the model and the effort of the actor apart.
+pub fn launch(
+  demo: bool,
+  place: &Place,
+  stand: &Stand,
+  more: &[String],
+) -> Result<Infallible, String> {
   let path = env::var_os("PATH").unwrap_or_default();
   let mut words = found(env::var_os("FURB_TUI"), &path, &checkout())?;
   if demo {
@@ -32,6 +40,17 @@ pub fn launch(demo: bool, place: &Place, more: &[String]) -> Result<Infallible, 
   }
   if let Some(cwd) = &place.cwd {
     words.extend(["--cwd".into(), cwd.into()]);
+  }
+  if let Some(to) = &stand.model {
+    let actor = life::actor(to);
+    let model = life::model(to).unwrap_or_else(|| actor.clone());
+    words.extend(["--model".into(), model.as_str().into()]);
+    if let Some(effort) = actor.strip_prefix(&format!("{model}/")) {
+      words.extend(["--effort".into(), effort.into()]);
+    }
+  }
+  for one in &stand.roster {
+    words.extend(["--roster".into(), one.into()]);
   }
   words.extend(more.iter().map(OsString::from));
   let mut command = Command::new(&words[0]);
@@ -51,7 +70,7 @@ fn found(named: Option<OsString>, path: &OsStr, checkout: &Path) -> Result<Vec<O
   if let Some(named) = named.filter(|one| !one.is_empty()) {
     return Ok(vec![named]);
   }
-  if let Some(tui) = program("furb-tui", path) {
+  if let Some(tui) = world::program("furb-tui", env::split_paths(path)) {
     return Ok(vec![tui.into()]);
   }
   let cli = checkout.join("tui/src/cli.ts");
@@ -59,7 +78,7 @@ fn found(named: Option<OsString>, path: &OsStr, checkout: &Path) -> Result<Vec<O
     return Err(NONE.to_owned());
   }
   let at = checkout.display();
-  let Some(bun) = program("bun", path) else {
+  let Some(bun) = world::program("bun", env::split_paths(path)) else {
     return Err(format!(
       "the TUI of {at} runs on bun 1.4.2 or later, and no bun is on PATH: see https://bun.sh"
     ));
@@ -68,29 +87,6 @@ fn found(named: Option<OsString>, path: &OsStr, checkout: &Path) -> Result<Vec<O
     return Err(format!("the TUI of {at} is not built: run `bun install && bun run build` there"));
   }
   Ok(vec![bun.into(), "run".into(), cli.into()])
-}
-
-/// The first program of a name on a PATH, with the extensions of a program on Windows.
-fn program(name: &str, path: &OsStr) -> Option<PathBuf> {
-  let names: &[&str] = if cfg!(windows) { &[".exe", ".cmd", ""] } else { &[""] };
-  env::split_paths(path)
-    .filter(|dir| !dir.as_os_str().is_empty())
-    .flat_map(|dir| names.iter().map(move |end| dir.join(format!("{name}{end}"))))
-    .find(|one| runs(one))
-}
-
-/// Whether a path is a program that this machine runs.
-fn runs(path: &Path) -> bool {
-  let Ok(info) = path.metadata() else { return false };
-  #[cfg(unix)]
-  {
-    use std::os::unix::fs::PermissionsExt;
-    info.is_file() && info.permissions().mode() & 0o111 != 0
-  }
-  #[cfg(not(unix))]
-  {
-    info.is_file()
-  }
 }
 
 /// The TUI given the terminal: furb becomes it, so it holds the terminal and its signals alone.

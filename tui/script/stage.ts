@@ -5,7 +5,6 @@ import { type CliRenderer, CodeRenderable, type Renderable } from "@opentui/core
 import type { createTestRenderer } from "@opentui/core/testing";
 import { type App, follow } from "../src/app.ts";
 import { demoLibrary } from "../src/demo.ts";
-import type { Extensions } from "../src/extensions.ts";
 import type { Session } from "../src/session.ts";
 import type { Workspaces } from "../src/workspaces.ts";
 
@@ -41,12 +40,11 @@ export async function home(name: string, environment: Record<string, string> = {
 export async function mount(
   session: Session,
   renderer: CliRenderer,
-  extensions?: Extensions,
 ): Promise<{ library: Workspaces; app: () => App }> {
   const library = await demoLibrary(session);
   library.preferences.sidebar = true;
   library.preferences.save();
-  return { library, app: follow(renderer, { quit() {}, workspaces: library, extensions }) };
+  return { library, app: follow(renderer, { quit() {}, workspaces: library }) };
 }
 
 /** The highlights of each block of code under a node, which a parser colors off the main thread. */
@@ -67,4 +65,14 @@ export function find(
   const row = rows.findIndex((line) => line.indexOf(text, from) >= 0);
   if (row < 0) throw new Error(`The screen shows no ${text}.`);
   return [(rows[row] ?? "").indexOf(text, from), row];
+}
+
+/** A click on the first place of the screen that shows a text, at or after a column. */
+export async function click(
+  screen: Awaited<ReturnType<typeof createTestRenderer>>,
+  text: string,
+  from = 0,
+): Promise<void> {
+  const [column, row] = find(screen, text, from);
+  await screen.mockMouse.click(column + 1, row);
 }

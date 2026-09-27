@@ -1,13 +1,12 @@
 """control, the one way a pause, a wake, a cancel or a close is said over an act."""
 
-from conftest import born, heads, said, settle
+from conftest import born, heads, said, settle, slow
 from furb import engine
 
 
 async def test_a_control_said_over_the_act_it_names_with_a_header_of_its_name() -> None:
   """A control said over the act it names, with a header of its name headed with that act, which is how pause, wake, cancel and close say theirs."""
-  _, log, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  _, log, _, act = slow()
   await settle()
   engine.control("pause", "paused", act)
   engine.wake(act)

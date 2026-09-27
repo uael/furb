@@ -15,12 +15,14 @@ import { Session, savedView } from "../src/session.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
 
 /** A library in the sidebar of an App on a test terminal: the terminal, the App that shows the session that the
- * library selects now, the first column of the sidebar, and the rows of the frame that the App draws anew. */
+ * library selects now, the first column of the sidebar, the rows of the frame that the App draws anew, and the row of
+ * the sidebar that names a workspace or a session in the frame that the terminal shows now. */
 interface Sidebar {
   screen: Awaited<ReturnType<typeof createTestRenderer>>;
   app: () => App;
   left: number;
   frame: () => Promise<string[]>;
+  row: (name: string) => number;
 }
 
 /** A test in a temporary directory of its own, with the list of the workspaces of the TUI in it. `open` reads the
@@ -44,15 +46,21 @@ async function withLibrary(
   const sidebar = async (library: Workspaces): Promise<Sidebar> => {
     const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true });
     const app = follow(screen.renderer, { quit() {}, workspaces: library });
+    const left = 152 - library.preferences.sidebarWidth;
     const shown = {
       screen,
       app,
-      left: 152 - library.preferences.sidebarWidth,
+      left,
       frame: async () => {
         app().render();
         await screen.flush();
         return screen.captureCharFrame().split("\n");
       },
+      row: (name: string) =>
+        screen
+          .captureCharFrame()
+          .split("\n")
+          .findIndex((line) => new RegExp(` ${name}\\b`).test(line.slice(left))),
     };
     sidebars.push(shown);
     await screen.flush();
@@ -68,6 +76,17 @@ async function withLibrary(
     for (const library of libraries) await library.dispose();
     await rm(directory, { recursive: true, force: true });
   }
+}
+
+/** A library with the workspace `project`, which holds the open sessions `foo` and `bar`. */
+async function fooAndBar(directory: string, open: () => Workspaces) {
+  await mkdir(join(directory, "project"));
+  const library = open();
+  const group = await library.add(join(directory, "project"));
+  const first = await library.create(group, "foo");
+  const second = await library.create(group, "bar");
+  if (!first.session || !second.session) throw new Error("The session did not open.");
+  return { library, group, first, second };
 }
 
 test("workspaces keep sessions alive, report background completion and input, and reopen saved records paused", () =>
@@ -183,25 +202,19 @@ test("deleting a session moves its record and state to trash, keeps other sessio
 
 test("the sidebar tree groups sessions, switches by mouse, collapses and toggles without losing a draft", () =>
   withLibrary(async ({ directory, open, sidebar }) => {
-    await mkdir(join(directory, "project"));
-    const library = open();
-    const group = await library.add(join(directory, "project"));
-    const first = await library.create(group, "foo");
-    const second = await library.create(group, "bar");
-    if (!first.session || !second.session) throw new Error("The session did not open.");
-    const { screen, app, left } = await sidebar(library);
+    const { library, group, first, second } = await fooAndBar(directory, open);
+    const { screen, app, left, row } = await sidebar(library);
     app().composer.setText("keep this draft");
     await screen.flush();
-    const lines = screen.captureCharFrame().split("\n");
-    const projectRow = lines.findIndex((line) => /▾ project/.test(line.slice(left)));
-    const fooRow = lines.findIndex((line) => /[○●◌] foo\b/.test(line.slice(left)));
-    const barRow = lines.findIndex((line) => /[○●◌] bar\b/.test(line.slice(left)));
+    const projectRow = row("project");
+    const fooRow = row("foo");
+    const barRow = row("bar");
     expect(fooRow).toBeGreaterThan(projectRow);
     expect(barRow).toBeGreaterThan(projectRow);
     await screen.mockMouse.click(left + 6, fooRow);
     await until(library, () => library.current === first);
     await screen.flush();
-    expect(app().session).toBe(first.session);
+    expect(first.session).toBe(app().session);
     await library.select(second);
     await screen.flush();
     expect(app().composer.plainText).toBe("keep this draft");
@@ -241,6 +254,31 @@ test("the sidebar tree groups sessions, switches by mouse, collapses and toggles
     expect(app().scroll.x).toBe(2);
     expect(app().composer.plainText).toBe("keep this draft");
   }));
+
+test("a model of the catalog that the roster does not hold joins the session, which opens again on it", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-workspaces-"));
+  // A claude command line that the session names is one the catalog offers, and no model is asked.
+  const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), {
+    claude: join(directory, "claude"),
+  });
+  try {
+    const entry = await library.create(await library.add(directory), "Models");
+    const first = entry.session;
+    expect(first?.roster.map(([name]) => name)).toEqual(["claude-cli:opus", "operator"]);
+    await until(library, () => first?.catalog.some(([name]) => name === "claude-cli:sonnet") ?? false);
+    await first?.submit("/model sonnet");
+    await until(library, () => entry.session !== first && entry.session?.actor === "claude-cli:sonnet/high");
+    expect(entry.session?.roster.map(([name]) => name)).toEqual([
+      "claude-cli:opus",
+      "claude-cli:sonnet",
+      "operator",
+    ]);
+    expect(entry.session?.models).toEqual(["claude-cli:sonnet"]);
+  } finally {
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("the list of saved sessions comes before their replays, and a row shows its state when its replay lands", () =>
   withLibrary(async ({ directory, open }) => {
@@ -356,15 +394,10 @@ test("a save of the workspace list that fails names its file", () =>
 
 test("a session row archives a session through its remove button, which folds it under Archived until a click brings it back", () =>
   withLibrary(async ({ directory, open, sidebar }) => {
-    await mkdir(join(directory, "project"));
-    const library = open();
-    const group = await library.add(join(directory, "project"));
-    const first = await library.create(group, "foo");
-    const second = await library.create(group, "bar");
-    if (!first.session || !second.session) throw new Error("The session did not open.");
-    const { screen, left, frame } = await sidebar(library);
+    const { library, first, second } = await fooAndBar(directory, open);
+    const { screen, left, frame, row } = await sidebar(library);
     let lines = await frame();
-    const fooRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    const fooRow = row("foo");
     const remove = (lines[fooRow] ?? "").lastIndexOf("×");
     expect(remove).toBeGreaterThan(left);
     await screen.mockMouse.moveTo(remove, fooRow);
@@ -376,7 +409,7 @@ test("a session row archives a session through its remove button, which folds it
     await until(library, () => first.archived === true);
     expect(library.current).toBe(second);
     lines = await frame();
-    expect(lines.some((line) => / foo\b/.test(line.slice(left)))).toBe(false);
+    expect(row("foo")).toBe(-1);
     const folded = lines.findIndex((line) => /▸ +Archived +1/.test(line.slice(left)));
     expect(folded).toBeGreaterThan(0);
     const saved = JSON.parse(await readFile(library.path, "utf8")) as {
@@ -385,7 +418,7 @@ test("a session row archives a session through its remove button, which folds it
     expect(saved.workspaces[0]?.archived).toEqual([first.path]);
     await screen.mockMouse.click(left + 4, folded);
     lines = await frame();
-    const archivedRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    const archivedRow = row("foo");
     expect(archivedRow).toBeGreaterThan(folded);
     await screen.mockMouse.click(left + 8, archivedRow);
     await until(library, () => library.current === first);
@@ -404,15 +437,10 @@ function cellAt(frame: CapturedFrame, x: number, y: number): { text: string; fg?
 
 test("a session row lights under the pointer with its buttons, tells its state on its mark alone, and goes dark when the pointer leaves", () =>
   withLibrary(async ({ directory, open, sidebar }) => {
-    await mkdir(join(directory, "project"));
-    const library = open();
-    const group = await library.add(join(directory, "project"));
-    await library.create(group, "foo");
-    const second = await library.create(group, "bar");
-    if (!second.session) throw new Error("The session did not open.");
-    const { screen, left } = await sidebar(library);
+    const { library } = await fooAndBar(directory, open);
+    const { screen, left, row } = await sidebar(library);
     const lines = screen.captureCharFrame().split("\n");
-    const fooRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    const fooRow = row("foo");
     const pencil = (lines[fooRow] ?? "").lastIndexOf("✎");
     const cross = (lines[fooRow] ?? "").lastIndexOf("×");
     const mark = left + (lines[fooRow] ?? "").slice(left).indexOf("○");
@@ -451,15 +479,10 @@ test("a session row lights under the pointer with its buttons, tells its state o
 
 test("a right click on a session row opens its menu at the pointer, and Rename takes a new name in the row", () =>
   withLibrary(async ({ directory, open, sidebar }) => {
-    await mkdir(join(directory, "project"));
-    const library = open();
-    const group = await library.add(join(directory, "project"));
-    const first = await library.create(group, "foo");
-    const second = await library.create(group, "bar");
-    if (!first.session || !second.session) throw new Error("The session did not open.");
-    const { screen, app, left, frame } = await sidebar(library);
+    const { library, first } = await fooAndBar(directory, open);
+    const { screen, app, left, frame, row } = await sidebar(library);
     let lines = await frame();
-    const fooRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    const fooRow = row("foo");
     await screen.mockMouse.click(left + 8, fooRow, 2);
     lines = await frame();
     const menu = lines.slice(fooRow + 1).map((line) => line.slice(left + 8).trim());
@@ -483,9 +506,9 @@ test("a right click on a session row opens its menu at the pointer, and Rename t
     lines = await frame();
     expect(first.name).toBe("notes");
     expect(savedView(first.path).view.sessionName).toBe("notes");
-    expect(lines.some((line) => / notes\b/.test(line.slice(left)))).toBe(true);
+    expect(row("notes")).toBeGreaterThan(0);
     // Escape leaves the name as it was.
-    const notesRow = lines.findIndex((line) => / notes\b/.test(line.slice(left)));
+    const notesRow = row("notes");
     await screen.mockMouse.moveTo(left + 8, notesRow);
     await screen.mockMouse.click((lines[notesRow] ?? "").lastIndexOf("✎"), notesRow);
     await frame();
@@ -511,9 +534,9 @@ test("a workspace row renames its workspace in place, and its remove button take
     const other = await library.add(join(directory, "other"));
     const first = await library.create(project, "foo");
     if (!first.session) throw new Error("The session did not open.");
-    const { screen, left, frame } = await sidebar(library);
+    const { screen, left, frame, row } = await sidebar(library);
     let lines = await frame();
-    const otherRow = lines.findIndex((line) => /▾ other/.test(line.slice(left)));
+    const otherRow = row("other");
     await screen.mockMouse.moveTo(left + 5, otherRow);
     await screen.mockMouse.click((lines[otherRow] ?? "").lastIndexOf("✎"), otherRow);
     await frame();
@@ -530,7 +553,7 @@ test("a workspace row renames its workspace in place, and its remove button take
         }
       ).workspaces;
     expect(listed().find((one) => one.directory === other.directory)?.name).toBe("docs");
-    const projectRow = lines.findIndex((line) => /▾ project/.test(line.slice(left)));
+    const projectRow = row("project");
     await screen.mockMouse.moveTo(left + 5, projectRow);
     await screen.mockMouse.click((lines[projectRow] ?? "").lastIndexOf("×"), projectRow);
     lines = await frame();
@@ -549,18 +572,13 @@ test("a workspace row renames its workspace in place, and its remove button take
 
 test("a rename in a row ends when a dialog opens or another row is clicked, and the dialog and the click still work", () =>
   withLibrary(async ({ directory, open, sidebar }) => {
-    await mkdir(join(directory, "project"));
-    const library = open();
-    const group = await library.add(join(directory, "project"));
-    const first = await library.create(group, "foo");
-    const second = await library.create(group, "bar");
-    if (!first.session || !second.session) throw new Error("The session did not open.");
-    const { screen, app, left, frame } = await sidebar(library);
+    const { library, first, second } = await fooAndBar(directory, open);
+    const { screen, app, left, frame, row } = await sidebar(library);
     const rename = async (name: string) => {
       const lines = await frame();
-      const row = lines.findIndex((line) => new RegExp(` ${name}\\b`).test(line.slice(left)));
-      await screen.mockMouse.moveTo(left + 8, row);
-      await screen.mockMouse.click((lines[row] ?? "").lastIndexOf("✎"), row);
+      const at = row(name);
+      await screen.mockMouse.moveTo(left + 8, at);
+      await screen.mockMouse.click((lines[at] ?? "").lastIndexOf("✎"), at);
       await frame();
     };
     // A dialog that opens during a rename keeps the name typed so far, and takes the keys.
@@ -576,8 +594,8 @@ test("a rename in a row ends when a dialog opens or another row is clicked, and 
     // One click on another row keeps the name and opens that row.
     await rename("bar2");
     await screen.mockInput.typeText("x");
-    const lines = await frame();
-    const fooRow = lines.findIndex((line) => / foo\b/.test(line.slice(left)));
+    await frame();
+    const fooRow = row("foo");
     await screen.mockMouse.click(left + 8, fooRow);
     await until(library, () => library.current === first);
     expect(second.name).toBe("bar2x");

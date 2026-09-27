@@ -15,6 +15,7 @@ from conftest import (
   Sand,
   acts,
   born,
+  chained,
   heads,
   ids,
   lasting,
@@ -73,8 +74,7 @@ async def test_chain_says_what_a_chain_does() -> None:
 async def test_boot_gives_the_root_and_chain_gives_the_chain_which_never_settles() -> None:
   """boot gives the root, and chain gives the chain, which never settles."""
   _, log, root = born()
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   assert (root, two) == ("chain1", "chain2")
   assert engine.peek(root) is None and engine.peek(two) is None
   assert [a for a in said(log, "done") if a[1] in (root, two)] == []
@@ -96,8 +96,7 @@ async def test_the_entry_that_opens_a_chain_with_a_source_carries_its_label_afte
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   was = list(engine.transcript(root))
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   opens = ("tell", twin, twin, [f"#{twin} twin from {root}", binding(twin)])
   assert engine.transcript(twin)[: len(was) + 2] == [*was, ("started", twin, twin), opens]
 
@@ -105,8 +104,7 @@ async def test_the_entry_that_opens_a_chain_with_a_source_carries_its_label_afte
 async def test_chain_gives_the_new_chain_which_never_completes() -> None:
   """chain gives the new chain, which never completes."""
   _, log, root = born()
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   assert twin == "chain2" and engine.peek(twin) is None
   assert [a for a in said(log, "done") if a[1] == twin] == []
 
@@ -125,8 +123,7 @@ async def test_the_engine_makes_a_chain_in_one_way_by_running_its_ladder() -> No
   """The engine makes a chain in one way: by running its rungs."""
   _, log, root = born()
   await engine.rung("k = 1", on=root)
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   assert ran(log) == ["k = 1", "k = 1"] and engine.module(twin)["k"] == 1
   await engine.rung("later = 2", on=root)
   assert "later" not in engine.module(twin)
@@ -138,8 +135,7 @@ async def test_in_a_chain_with_a_source_the_ladder_of_the_origin_runs_again_in_i
   one = engine.prompt(int, "count", on=root)
   assert await one == 2
   await settle()
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   words = [f"{binding(root)}\n{binding(one, 'int')}", "a = 1", "close(a + 1)"]
   assert [(a[3], a[5]) for a in said(log, "run")] == [(root, word) for word in words] + [(twin, word) for word in words]
   assert engine.module(twin)["a"] == 1 and engine.module(twin)["__name__"] == twin
@@ -176,8 +172,7 @@ async def test_a_chain_that_the_word_of_a_rung_opens_is_a_scope_of_its_own() -> 
   sand, log, root = born("side = chain('side', source=__name__)\nclose(side)", "close(None)")
   side = await engine.prompt(str, "fork one", on=root)
   await settle()
-  twin = engine.chain("twin", source=root)
-  await settle(200)
+  twin = await chained("twin", root, 200)
   assert [a[1] for a in said(log, "chain")] == [root, side, twin]
   assert [a[3] for a in said(log, "chain") if a[1] == side] == [root]
   sand.script[side] = ["x = bash('echo hi')\nclose((await x).code)", "close(None)"]
@@ -259,8 +254,7 @@ async def test_a_chain_is_chain_n_whether_boot_or_chain_opened_it_and_the_root_i
 async def test_a_chain_is_an_act_of_never_so_the_chain_never_completes() -> None:
   """A chain is an act of Never, so the chain never completes."""
   _, log, _ = born()
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   assert engine.peek(two) is None and [a for a in said(log, "done") if a[1] == two] == []
 
 
@@ -310,8 +304,7 @@ async def test_an_assistant_turn_keeps_the_role_assistant_in_every_chain_made_fr
   _, _, root = born("close(1)", "close(None)")
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   assert [turn[0] for turn in engine.turns(on=twin)] == [turn[0] for turn in engine.turns(on=root)]
   assert [turn[0] for turn in engine.turns(on=twin)].count("assistant") == 1
 
@@ -351,8 +344,7 @@ async def test_a_chain_with_a_source_made_after_the_rung_that_defined_a_door_has
   _, _, root = born(DOOR, "close(None)")
   assert await engine.prompt(int, "a door", on=root) == 1
   await settle()
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   assert engine.read("note://a", on=twin).content == "kept"
 
 
@@ -527,8 +519,7 @@ async def test_the_steps_that_an_inherited_prompt_takes_after_the_point_enter_it
   one = engine.prompt(int, "count", on=root)
   engine.pause(one)
   await settle()
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   engine.wake(one)
   await settle()
   assert (await one) == 2
@@ -550,8 +541,7 @@ async def test_what_a_chain_binds_is_its_own_and_a_chain_with_a_source_is_how_it
   """What a chain binds is its own, and a chain with a source is how a chain gets isolation."""
   _, _, root = born()
   await engine.rung("k = 1", on=root)
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   await engine.rung("k = 2", on=twin)
   assert (engine.module(root)["k"], engine.module(twin)["k"]) == (1, 2)
 
@@ -569,8 +559,7 @@ async def test_two_chains_from_one_source_hold_the_same_values() -> None:
 async def test_a_chain_with_a_source_inherits_the_default_actor_with_the_globals_of_its_origin() -> None:
   """A chain with a source inherits the default actor with the globals of its origin at that source."""
   _, _, root = born()
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   assert engine.module(twin)["actor"] == engine.module(root)["actor"] == "m/low"
 
 
@@ -580,8 +569,7 @@ async def test_a_chain_with_a_source_that_holds_an_act_reads_the_close_of_the_ac
   assert await engine.prompt(int, "run it", on=root) == 0
   await settle()
   command = said(log, "bash")[0][1]
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   shut = [one for one in paragraphs(engine.turns(on=twin)) if one.startswith(f"#{command} exited")]
   assert shut == [f"#{command} exited 0\n# {command}/stdout, 0 known\n# 1 ran echo hi"]
 
@@ -592,8 +580,7 @@ async def test_a_chain_with_a_source_awaits_or_peeks_an_inherited_act_as_it_like
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   command = said(log, "bash")[0][1]
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   sand.script[twin] = ["out = await x\nseen = peek(x)\nassert isinstance(seen, Exit)\nclose([out.code, seen.code])"]
   assert await engine.prompt(list, "look at it", on=twin) == [0, 0]
   assert [a[1] for a in said(log, "bash")] == [command]
@@ -605,8 +592,7 @@ async def test_the_engine_does_not_wake_a_chain_with_a_source_for_an_inherited_a
   assert await engine.prompt(int, "start one", on=root) == 1
   await settle()
   command = said(log, "bash")[0][1]
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   before = len([a for a in said(log, "reply") if a[3] == twin])
   sand.exits(command, 0)
   await settle()
@@ -636,8 +622,7 @@ async def test_the_transcript_of_a_chain_with_a_source_holds_the_entries_up_to_t
   _, _, root = born()
   await engine.rung("k = 1", on=root)
   was = list(engine.transcript(root))
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   opens = ("tell", twin, twin, [f"#{twin} twin from {root}", binding(twin)])
   assert engine.transcript(twin)[: len(was) + 2] == [*was, ("started", twin, twin), opens]
   assert all(on(a) == root for a in was)
@@ -650,8 +635,7 @@ async def test_the_acts_of_the_prefix_of_a_chain_with_a_source_keep_the_ids_they
   await settle()
   held = engine.transcript(root)
   was = ids(held)
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   now = engine.transcript(twin)
   assert ids(now)[: len(was)] == was
 
@@ -660,8 +644,7 @@ async def test_the_globals_of_a_chain_with_a_source_are_those_of_a_module_of_its
   """The globals of a chain with a source are those of a module of its own."""
   _, _, root = born()
   await engine.rung("k = 1", on=root)
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   assert engine.module(twin) is not engine.module(root)
   assert engine.module(twin)["__name__"] == twin and engine.module(twin)["k"] == 1
 
@@ -670,8 +653,7 @@ async def test_the_objects_of_a_rung_of_a_chain_with_a_source_are_that_chains_ow
   """The objects of a rung of a chain with a source are that chain's own, made again, and only code is shared."""
   _, _, root = born()
   await engine.rung("marks = [1]\ndef twice(x):\n  return x * 2", on=root)
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   assert engine.module(twin)["marks"] == engine.module(root)["marks"]
   assert engine.module(twin)["marks"] is not engine.module(root)["marks"]
   assert engine.module(twin)["twice"] is not engine.module(root)["twice"]
@@ -697,8 +679,7 @@ async def test_a_chain_with_a_source_inherits_the_words_its_caller_wrote_with_it
   sand.script[root] = ["j = k + 1\nclose(j)", "close(None)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await engine.rung("m = 3", on=root)
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   assert (engine.module(twin)["k"], engine.module(twin)["j"], engine.module(twin)["m"]) == (1, 2, 3)
 
 
@@ -718,8 +699,7 @@ async def test_a_chain_with_a_source_holds_the_classes_its_origin_defined_before
   """A chain with a source holds the classes that its origin defined before that source."""
   _, _, root = born()
   await engine.rung("class Plan:\n  n = 21\n\nmine = Plan().n", on=root)
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   assert isinstance(engine.module(twin)["Plan"], type) and engine.module(twin)["mine"] == 21
   assert engine.module(twin)["Plan"] is not engine.module(root)["Plan"]
 
@@ -727,8 +707,7 @@ async def test_a_chain_with_a_source_holds_the_classes_its_origin_defined_before
 async def test_a_chain_with_a_source_reads_nothing_that_its_origin_did_after_that_source() -> None:
   """A chain with a source reads nothing that its origin did after that source."""
   _, _, root = born()
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   told = engine.turns(on=twin)
   after = engine.rung("after = 1", on=root)
   await after
@@ -741,8 +720,7 @@ async def test_a_chain_with_a_source_reads_nothing_that_its_origin_did_after_tha
 async def test_what_a_rung_of_a_chain_with_a_source_binds_lands_on_that_chain() -> None:
   """What a rung of a chain with a source binds lands on that chain and not on its origin."""
   _, _, root = born()
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   await engine.rung("mine = 1", on=twin)
   assert engine.module(twin)["mine"] == 1 and "mine" not in engine.module(root)
 
@@ -769,8 +747,7 @@ async def test_it_holds_the_transcript_of_its_origin_first_and_tells_its_own_ope
   step = engine.rung("k = 1", on=root)
   await step
   was = list(engine.transcript(root))
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   held = engine.transcript(twin)
   assert isinstance(was, list) and isinstance(held, list)
   opens = ("tell", twin, twin, [f"#{twin} twin from {root}", binding(twin)])
@@ -860,8 +837,7 @@ async def test_the_source_of_a_chain_is_a_chain_by_its_name() -> None:
   _, log, root = born()
   await engine.rung("k = 1", on=root)
   was = list(engine.transcript(root))
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   await engine.rung("later = 2", on=root)
   held = engine.transcript(twin)
   assert said(log, "chain")[-1][5] == root
@@ -893,8 +869,7 @@ async def test_a_chain_with_a_source_reads_what_its_origin_stands_on_as_it_stand
   """A chain with a source reads what its origin stands on, as it stands."""
   sand, log, root = born()
   before = [a for a in sand.calls if a[0] == "stand"]
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   assert [a for a in sand.calls if a[0] == "stand"] == before
   assert [a[1] for a in acts(log).values() if a[0] == "stand"] == ["stand1"]
   assert engine.standing() == STANDS and engine.module(twin)["actor"] == "m/low"
@@ -912,8 +887,7 @@ async def test_the_chain_retells_the_rungs_of_its_origin_through_the_program_of_
   one = engine.prompt(int, "count", on=root)
   assert await one == 2
   await settle()
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   theirs = engine.program(root)
   assert list(theirs.values()) == [f"{binding(root)}\n{binding(one, 'int')}", "a = 1", "close(a + 1)"]
   retold = [a for a in said(log, "rung") if a[3] == twin]
@@ -946,8 +920,7 @@ async def test_the_donor_of_a_replay_is_the_ladder_of_the_origin_or_the_ladder_a
   """The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts."""
   _, log, root = born()
   await engine.rung("k = 1", on=root)
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   theirs = [a for a in said(log, "rung") if a[3] == twin]
   assert [a[5] for a in theirs] == [a[1] for a in said(log, "rung") if a[3] == root]
   act = engine.prompt(int, "more", to=OPERATOR, on=twin)
@@ -1057,8 +1030,7 @@ async def test_where_it_asks_the_chain_makes_a_rung_of_the_statements_the_turn_s
 async def test_the_chain_takes_its_own_act() -> None:
   """The chain takes its own act, since the engine is the one that runs it."""
   sand, log, root = born()
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   assert [(a[1], a[2]) for a in said(log, "started") if a[1] in (root, two)] == [(root, root), (two, two)]
   assert [a for a in said(log, "done") if a[1] in (root, two)] == [] and engine.peek(two) is None
   assert [a for a in sand.calls if a[1] in (root, two)] == []

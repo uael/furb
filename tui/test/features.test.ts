@@ -9,7 +9,6 @@ import { openEngine } from "../src/bridge.ts";
 import { clipboardImage } from "../src/clipboard.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import { externalEditor, opener } from "../src/editor.ts";
-import { Extensions } from "../src/extensions.ts";
 import { fileReferences, projectFiles } from "../src/files.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
@@ -23,19 +22,17 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
   let rung = "";
   let record: string | undefined;
   await composing(
-    async ({ session, app, screen }) => {
+    async ({ session, app, screen, frame }) => {
       rung = await session.engine.rung({ word: "await wait(60)", on: session.engine.root });
       await session.refresh();
-      app.render();
-      await screen.flush();
+      await frame();
       let card = app.scroll.getChildren().find((card) => card.id === rung);
       let heading = card?.getChildren()[0];
       if (!heading) throw new Error("No rung header.");
       expect(screen.captureCharFrame()).toContain(`${rung}  by you  running`);
       expect(card?.getChildren().length).toBeGreaterThan(1);
       await screen.mockMouse.click(heading.x + 1, heading.y);
-      app.render();
-      await screen.flush();
+      await frame();
       expect(
         app.scroll
           .getChildren()
@@ -47,9 +44,7 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
       await session.engine.close(null, { id: wait.id });
       await session.engine.result(rung);
       await session.refresh();
-      app.render();
-      await screen.flush();
-      expect(screen.captureCharFrame()).toContain(`✓ ${rung}`);
+      expect(await frame()).toContain(`✓ ${rung}`);
       expect(screen.captureCharFrame()).not.toContain(`${rung}  by you  running`);
       expect(
         app.scroll
@@ -59,18 +54,15 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
       ).toHaveLength(1);
       session.show("transcript");
       await session.refresh();
-      app.render();
-      await screen.flush();
+      await frame();
       session.show("feed");
       await session.refresh();
-      app.render();
-      await screen.flush();
+      await frame();
       card = app.scroll.getChildren().find((card) => card.id === rung);
       expect(card?.getChildren()).toHaveLength(1);
       heading = card?.getChildren()[0];
       if (heading) await screen.mockMouse.click(heading.x + 1, heading.y);
-      app.render();
-      await screen.flush();
+      await frame();
       expect(
         app.scroll
           .getChildren()
@@ -82,19 +74,17 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
         (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
       );
       expect(refused?.run?.status).toBe("failed");
+      expect(session.error).toBe("");
+      expect(session.findings.join("\n")).toContain("line 1");
       await session.refresh();
-      app.render();
-      await screen.flush();
-      expect(screen.captureCharFrame()).toContain("line 1");
+      expect(await frame()).toContain("line 1");
       expect(screen.captureCharFrame()).toContain("failed");
       record = session.host.record;
     },
     { width: 140, height: 42, useMouse: true },
   );
   if (!record) throw new Error("No record.");
-  const reopened = await openEngine({ record, demo: true });
-  const session = new Session(reopened.engine, reopened.host, true);
-  await session.refresh();
+  const session = await demoSession({ record });
   await composing(
     async ({ app }) => {
       expect(session.folds[rung]).toBe(false);
@@ -157,9 +147,7 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     const record = session.host.record;
     if (!record) throw new Error("No record for the queued message.");
     await session.dispose();
-    let reopened = await openEngine({ record, demo: true });
-    session = new Session(reopened.engine, reopened.host, true);
-    await session.refresh();
+    session = await demoSession({ record });
     expect(session.queueHeld).toBe(true);
     expect(session.queued[0]?.text).toBe("Keep this follow-up through exit.");
     await session.submit("/wake");
@@ -178,9 +166,7 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     const stale = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
     stale.queued = saved.queued;
     await writeFile(`${record}.ui.json`, JSON.stringify(stale));
-    reopened = await openEngine({ record, demo: true });
-    session = new Session(reopened.engine, reopened.host, true);
-    await session.refresh();
+    session = await demoSession({ record });
     expect(session.queued).toHaveLength(0);
     expect(session.acts.filter((act) => session.isUserPrompt(act))).toHaveLength(sent);
   } finally {
@@ -242,17 +228,13 @@ test("a model request failure shows in the feed as the failure of an act, and no
     const opened = await openEngine({
       cwd: directory,
       record: join(directory, "session.jsonl"),
-      claude: {
-        bin: executable(
-          join(import.meta.dir, "../../bind/typescript/test/fake-claude.ts"),
-          directory,
-          "claude",
-        ),
-      },
+      // A claude command line that does not start fails every request, as a model that is not there does.
+      claude: join(directory, "missing"),
+      roster: ["claude-cli:sonnet"],
     });
     await composing(
       async ({ session, frame }) => {
-        await session.submit("FAIL");
+        await session.submit("Say something.");
         // The chain pauses at the second failure in a row, and no work runs after that.
         await until(session, () => session.paused);
         await session.refresh();
@@ -268,11 +250,10 @@ test("a model request failure shows in the feed as the failure of an act, and no
   }
 });
 
-test("file and shell shortcuts, an external editor, extensions, and a safe standalone share use the real session", async () => {
+test("file and shell shortcuts, an external editor, and a safe standalone share use the real session", async () => {
   const session = await demoSession();
   const oldEditor = process.env.EDITOR,
     oldVisual = process.env.VISUAL;
-  const extensions = new Extensions(() => session);
   try {
     const directory = session.host.directory;
     await writeFile(join(directory, "review notes.txt"), "Unique context for this check.");
@@ -315,15 +296,8 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
       ),
     ).toBe("edited outside the TUI");
     expect(transitions).toEqual(["suspend", "resume"]);
-    const extension = join(directory, "extension.ts");
-    await writeFile(
-      extension,
-      'export default (api) => { api.registerCommand("test-extension", { label: "Test extension", description: "Bind a value", async run(_, ctx) { await ctx.engine.result(await ctx.engine.rung({ word: "extension_value = 23", on: ctx.chain })); ctx.notify("Extension finished."); } }); };',
-    );
-    await extensions.load(extension);
-    await extensions.run("test-extension", "");
-    expect((await session.engine.inspect("extension_value", session.selected)).value).toBe(23);
-    expect(session.notice).toBe("Extension finished.");
+    await session.command("/extensions");
+    expect(session.notice).toBe("This life runs no extension.");
     session.sessionName = '<script>alert("name")</script>';
     await session.submit('<script>alert("message")</script> [bad link](javascript:alert(1))');
     await idle(session);
@@ -343,8 +317,33 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
     else process.env.EDITOR = oldEditor;
     if (oldVisual === undefined) delete process.env.VISUAL;
     else process.env.VISUAL = oldVisual;
-    await extensions.dispose();
     await session.dispose();
+  }
+});
+
+test("/extensions lists what a life runs, and a cancel of the work of a chain leaves the watcher of its memory", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-extensions-"));
+  try {
+    const opened = await openEngine({ cwd: directory, record: join(directory, "session.jsonl") });
+    await composing(
+      async ({ session, frame }) => {
+        await session.command("/extensions");
+        expect(session.notice).toBe(
+          "This life runs memory with remember(), skills with skills(). Run a word of one with /run.",
+        );
+        await session.command("/run await wait(60)");
+        await session.command("/cancel");
+        await until(session, () => session.activity.every((act) => act.kind !== "wait" || act.done));
+        await session.refresh();
+        // The watcher lives on, and shows no work in the feed.
+        expect((await session.engine.outcome("remember1")).done).toBe(false);
+        expect(await frame()).not.toContain("running");
+      },
+      { width: 140, height: 42 },
+      new Session(opened.engine, opened.host, true),
+    );
+  } finally {
+    await remove(directory);
   }
 });
 
@@ -378,9 +377,7 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
       record,
       `${lines.filter((line) => !(JSON.parse(line)[0][0] === "queue" && JSON.parse(line)[0][3] === "sent")).join("\n")}\n`,
     );
-    let opened = await openEngine({ record, demo: true });
-    session = new Session(opened.engine, opened.host, true);
-    await session.refresh();
+    session = await demoSession({ record });
     expect(session.queued).toHaveLength(0);
     expect(session.dispatched).toContain(entry.id);
     expect(session.acts.filter((act) => act.kind === "prompt")).toHaveLength(1);
@@ -388,9 +385,7 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     await session.dispose();
     await writeFile(record, `${lines.slice(0, begin + 1).join("\n")}\n`);
     await writeFile(`${record}.ui.json`, JSON.stringify(state));
-    opened = await openEngine({ record, demo: true });
-    session = new Session(opened.engine, opened.host, true);
-    await session.refresh();
+    session = await demoSession({ record });
     expect(session.queued).toHaveLength(1);
     const manual = await session.engine.prompt(entry.shape, {
       message: entry.text,

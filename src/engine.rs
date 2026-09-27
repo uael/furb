@@ -190,10 +190,9 @@ fn text(got: Option<ObjectRef<'_>>) -> String {
 
 /// A template string, as a host says one: each expression beside its value.
 fn templated(pairs: &[(&str, Object)]) -> Object {
-  let held = pairs
-    .iter()
-    .map(|(expression, value)| Object::list([value.clone(), Object::string(*expression)]));
-  marked("Templated", [("interpolations", Object::list(held))])
+  crate::value::templated(
+    pairs.iter().map(|(expression, one)| (one.clone(), Object::string(*expression))),
+  )
 }
 
 /// The words of a verb that have a name, as the map the stand-in reads.
@@ -416,7 +415,7 @@ impl Engine {
   }
 
   /// What an act came to, once it is done, and nothing while it lives.
-  pub(crate) fn outcome(&mut self, id: &str) -> Result<Option<Object>, Fault> {
+  pub fn outcome(&mut self, id: &str) -> Result<Option<Object>, Fault> {
     let got = self.run("outcomes_of(__engine, [__id])[0]", vec![("__id", Object::string(id))])?;
     Ok(entry(&got.as_ref(), 0).map(|one| one.to_owned()))
   }
@@ -444,8 +443,10 @@ impl Engine {
   }
 }
 
-// The verbs of the contract, one method each, which the build makes from the contract.
+// The verbs of the contract, one method each, and its constants that are a number or a text, which the build makes
+// from the contract.
 include!(concat!(env!("OUT_DIR"), "/methods.rs"));
+include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
 impl std::fmt::Debug for Engine {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -497,23 +498,19 @@ impl Plain for f64 {
   }
 }
 
-impl Plain for Text {
-  fn plain(got: Object) -> Result<Self, Fault> {
-    Text::of(got.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no text", got.py_repr())))
-  }
+/// A value read as a type of the crate that it makes again, or why it is none.
+macro_rules! made {
+  ($($kind:ty => $what:literal),*) => {$(
+    impl Plain for $kind {
+      fn plain(got: Object) -> Result<Self, Fault> {
+        let no = || Fault::refused(format!("{} is no {}", got.py_repr(), $what));
+        <$kind>::of(got.as_ref()).ok_or_else(no)
+      }
+    }
+  )*};
 }
 
-impl Plain for Exit {
-  fn plain(got: Object) -> Result<Self, Fault> {
-    Exit::of(got.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no exit", got.py_repr())))
-  }
-}
-
-impl Plain for Fact {
-  fn plain(got: Object) -> Result<Self, Fault> {
-    Fact::of(got.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no fact", got.py_repr())))
-  }
-}
+made!(Text => "text", Exit => "exit", Fact => "fact");
 
 impl Plain for Option<Fact> {
   fn plain(got: Object) -> Result<Self, Fault> {

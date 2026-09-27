@@ -9,6 +9,7 @@ from conftest import (
   Where,
   World,
   born,
+  chained,
   dones,
   heads,
   life,
@@ -92,8 +93,7 @@ async def test_a_reply_carries_the_rung_it_asks_for_as_its_maker() -> None:
 async def test_a_reply_is_on_the_chain_that_asks() -> None:
   """A reply is on the chain that asks, so the World keys its facts and its cache by chain."""
   sand, log, root = born()
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   sand.script[root] = ["close(1)"]
   sand.script[two] = ["close(2)"]
   assert await engine.prompt(int, "one", on=root) == 1

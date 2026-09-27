@@ -4,13 +4,17 @@
 //! written in rust for untrusted code. [`Engine`] is one life of it: its methods are the verbs of the contract, made
 //! from the contract when the crate is built, and an act is awaited as an [`Act`]. [`Ear`] is what the engine hears
 //! by, a coroutine that [`ear::ear`] makes, and [`world`] holds the ears the crate writes: files, commands, time,
-//! the store of the record, and the provider of models. The Kernel and the gate are the crate's, and [`PREAMBLE`]
-//! stands in for the ears of the host inside the sandbox. [`wire`] carries a value as JSON, as the record keeps it.
+//! the store of the record, and the provider of models. [`extension`] says what an extension is and plays the ones a
+//! life runs as rungs, and [`life::Opening`] opens a life on the record and on the ears of the crate, to which a host
+//! adds its own. The Kernel and the gate are the crate's, and [`PREAMBLE`] stands in for the ears of the host inside
+//! the sandbox. [`wire`] carries a value as JSON, as the record keeps it.
 
 pub mod ear;
 pub mod engine;
+pub mod extension;
 pub mod fact;
 pub mod gate;
+pub mod life;
 mod sand;
 pub mod value;
 pub mod wire;
@@ -50,13 +54,5 @@ mod tests {
   #[test]
   fn the_stand_in_carries_the_one_mark_of_the_crossing() {
     assert!(super::PREAMBLE.contains(&format!("IS = {:?}", super::value::IS)));
-  }
-
-  #[test]
-  fn the_system_prompt_is_the_engine_in_a_layout_of_its_own() {
-    let lines = super::SYSTEM.lines().collect::<Vec<_>>();
-    assert!(super::SYSTEM.len() < super::ENGINE.len());
-    assert!(lines.iter().all(|one| !one.is_empty() && !one.starts_with(' ')));
-    assert!(lines.contains(&"def pause(id:str)->None:control(\"pause\",\"paused\",id)"));
   }
 }

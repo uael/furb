@@ -5,10 +5,12 @@
 
 use std::{
   mem::ManuallyDrop,
+  path::PathBuf,
   rc::Rc,
   sync::Arc,
   task::{Wake, Waker},
   thread::{self, ThreadId},
+  time::Duration,
 };
 
 use pyo3::{
@@ -24,7 +26,9 @@ use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step, Voice,
   ear::{Call, Spoken},
   engine::Hosted,
-  value::{IS, entry, field, marked},
+  extension::{self, Extension},
+  life::Opening,
+  value::{IS, entry, field, marked, templated},
   world,
 };
 
@@ -300,14 +304,7 @@ impl Hearing {
           return Err(raised(py, made, &fault));
         }
         Step::Call(call) => {
-          let args = call.args.iter().map(|one| to_python(py, made, one.as_ref()));
-          let args = PyTuple::new(py, args.collect::<PyResult<Vec<_>>>()?)?;
-          let kwargs = PyDict::new(py);
-          for (key, one) in &call.kwargs {
-            kwargs.set_item(key, to_python(py, made, one.as_ref())?)?;
-          }
-          let verb = made.python.bind(py).getattr(call.verb.as_str());
-          heard = match verb.and_then(|verb| verb.call(args, Some(&kwargs))) {
+          heard = match verb_said(py, &door, &call) {
             Ok(got) => Heard::Value(of_python(&door, &got)?),
             Err(no) => Heard::Raised(fault_of(&door, py, &no)),
           };
@@ -620,6 +617,148 @@ fn gate(py: Python<'_>, sheet: &str) -> PyResult<Vec<(usize, String)>> {
   }
 }
 
+/// The official extensions, in the order a life runs them, each as its name, its word and its life word.
+#[pyfunction]
+fn official() -> Vec<(String, String, String)> {
+  extension::official().into_iter().map(|one| (one.name, one.word, one.life)).collect()
+}
+
+/// The extensions that a life runs, in the order it enabled them, as the facts of its root say them, each as its name,
+/// its word and its life word.
+#[pyfunction]
+fn enabled(root: Vec<Bound<'_, PyAny>>) -> Vec<(String, String, String)> {
+  // A fact that enables an extension is text alone.
+  let text = |one: &Bound<'_, PyAny>| one.extract::<Vec<String>>().ok();
+  let facts: Vec<Fact> = root
+    .iter()
+    .filter_map(text)
+    .map(|words| Fact(Object::tuple(words.iter().map(Object::string))))
+    .collect();
+  extension::enabled(&facts).into_iter().map(|one| (one.name, one.word, one.life)).collect()
+}
+
+/// The ear of the extensions, given each extension that the life runs as its name, its word and its life word: it
+/// enables each at the tip of the life, unless the record enables it, and plays each as a rung on each chain.
+#[pyfunction]
+fn extensions(given: Vec<(String, String, String)>) -> NativeEar {
+  let given = given.into_iter().map(|(name, word, life)| Extension { name, word, life });
+  NativeEar::of(extension::extensions(given.collect()))
+}
+
+/// The ear of the memory extension, which finds the memory of a path in its folders and in the config directory.
+#[pyfunction]
+fn memory(config: PathBuf) -> NativeEar {
+  NativeEar::of(extension::memory::memory(config))
+}
+
+/// The ear of the skills extension, which finds skills in the folders of a chain and in the config directory.
+#[pyfunction]
+fn skills(config: PathBuf) -> NativeEar {
+  NativeEar::of(extension::skills::skills(config))
+}
+
+/// The record a life opens on, as python holds it, and the ears of the crate, each under its name.
+type Opened<'py> = (Bound<'py, PyAny>, Vec<(String, NativeEar)>);
+
+/// The record a life opens on, and the ears of the crate that it hears after the ears of the host, as every host of
+/// the crate opens a life: the provider, the extensions, which enable at the tip those that the configs of the user
+/// and of the directory turn on unless `extensions` is false, each official extension, the files, the commands, time,
+/// and the store of the record when the life keeps. A life that inspects keeps nothing, enables nothing new, asks no
+/// model, and its files, commands and time do no work. The provider offers the model of `actor` and the models of
+/// `roster`, and a function `answer` answers each request in place of them: it is called on a thread of its own with
+/// the request, as JSON reads it, and a function `write(text="", thinking="")`, and gives the turn. `claude` is the
+/// path of the claude command line, whose turn goes with no progress for `stall` seconds at most, `images` the
+/// directory of the images that a turn names, and `stream` is told what a model writes as it writes it, on a thread of
+/// the models.
+#[pyfunction]
+#[pyo3(signature = (
+  directory, record = None, *, keeps = true, inspecting = false, extensions = true, config = None, actor = None,
+  roster = None, answer = None, claude = None, stall = None, images = None, stream = None
+))]
+#[allow(clippy::too_many_arguments)]
+fn opened(
+  py: Python<'_>,
+  directory: PathBuf,
+  record: Option<PathBuf>,
+  keeps: bool,
+  inspecting: bool,
+  extensions: bool,
+  config: Option<PathBuf>,
+  actor: Option<String>,
+  roster: Option<Vec<String>>,
+  answer: Option<Py<PyAny>>,
+  claude: Option<PathBuf>,
+  stall: Option<f64>,
+  images: Option<PathBuf>,
+  stream: Option<Py<PyAny>>,
+) -> PyResult<Opened<'_>> {
+  let made = Made::new(py)?;
+  let stall = stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
+  let writes = stream.map(|stream| -> world::Writes {
+    Arc::new(move |rung, chain, text, thinking| {
+      Python::attach(|py| {
+        if let Err(no) = stream.call1(py, (rung, chain, text, thinking)) {
+          no.write_unraisable(py, None);
+        }
+      });
+    })
+  });
+  let opening = Opening::new(directory)
+    .record(record, keeps)
+    .config(config)
+    .extending(extensions)
+    .actor(actor)
+    .roster(roster)
+    .claude(claude, stall)
+    .images(images)
+    .writes(writes)
+    .answer(answer.map(|answer| hosted(Arc::new(answer))))
+    .inspecting(inspecting);
+  let (record, ears) = opening.parts().map_err(|fault| raised(py, &made, &fault))?;
+  let ears = ears.into_iter().map(|(name, ear)| (name, NativeEar::of(ear))).collect();
+  Ok((to_python(py, &made, Object::list(record).as_ref())?, ears))
+}
+
+/// A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
+/// line by, or the refusal of it.
+#[pyfunction]
+fn answered<'py>(py: Python<'py>, shape: &str, line: &str) -> PyResult<Bound<'py, PyAny>> {
+  let made = Made::new(py)?;
+  let value = world::answered(shape, line).map_err(|fault| raised(py, &made, &fault))?;
+  to_python(py, &made, value.as_ref())
+}
+
+/// A model of the catalog as python reads it: its name, its efforts, its window, whether it takes an image, and its
+/// price in dollars for a million tokens read, written, read from the cache and written to it.
+type Info = (String, Vec<String>, u64, bool, Option<Vec<f64>>);
+
+/// A model of the catalog as python reads it.
+fn info(model: &world::Model) -> Info {
+  let efforts = model.efforts().into_iter().map(str::to_owned).collect();
+  (model.name().to_owned(), efforts, model.window(), model.sees(), model.priced().map(Vec::from))
+}
+
+/// The models the catalog of this machine offers, with the claude command line at a path when it is given, each
+/// named as the catalog names it.
+#[pyfunction]
+#[pyo3(signature = (claude=None))]
+fn models(claude: Option<PathBuf>) -> Vec<Info> {
+  world::Catalog::load().claude(claude, None).offered().into_iter().map(info).collect()
+}
+
+/// The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, whether it offers
+/// that model or not; nothing when it knows none.
+#[pyfunction]
+fn model(name: &str) -> Option<Info> {
+  world::Catalog::load().find(name).map(info)
+}
+
+/// The levels of effort, from least to most, which an actor names after its model.
+#[pyfunction]
+fn levels() -> Vec<&'static str> {
+  world::catalog::LEVELS.to_vec()
+}
+
 /// What the engine raised, raised here as the exception it is.
 fn raised(py: Python<'_>, made: &Made, fault: &Fault) -> PyErr {
   match fault_to_python(py, made, fault) {
@@ -686,16 +825,11 @@ fn to_python<'py>(
         if mark == "dict"
           && let Some(held) = at("args").and_then(|one| entry(&one, 0)).and_then(|one| one.items())
         {
-          let map = PyDict::new(py);
-          for pair in held {
-            let (Some(key), Some(one)) = (entry(&pair, 0), entry(&pair, 1)) else {
-              return Err(PyTypeError::new_err(
-                "a map that goes out as its pairs holds pairs of two",
-              ));
-            };
-            map.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
-          }
-          return Ok(map.into_any());
+          let pairs = held.iter().map(|pair| entry(pair, 0).zip(entry(pair, 1)));
+          let pairs = pairs.collect::<Option<Vec<_>>>().ok_or_else(|| {
+            PyTypeError::new_err("a map that goes out as its pairs holds pairs of two")
+          })?;
+          return Ok(dict(py, made, pairs)?.into_any());
         }
         if mark == "name"
           && let Some(name) = at("name").and_then(|one| one.as_str())
@@ -723,10 +857,7 @@ fn to_python<'py>(
           && let Some(value) = at("value")
         {
           let class = to_python(py, made, class)?;
-          let fields = PyDict::new(py);
-          for (key, one) in value.pairs().unwrap_or_default() {
-            fields.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
-          }
+          let fields = dict(py, made, value.pairs().unwrap_or_default())?;
           return py.import("furb_monty.engine")?.call_method1("instanced", (class, fields));
         }
         // A value as the record keeps it: an instance of a class of the engine or of the interpreter, by the name of
@@ -739,33 +870,19 @@ fn to_python<'py>(
           {
             return made.fault(py, mark, args);
           }
-          let kwargs = PyDict::new(py);
-          for (key, one) in &pairs {
-            if !matches!(key.as_str(), Some(IS | "args")) {
-              kwargs.set_item(to_python(py, made, *key)?, to_python(py, made, *one)?)?;
-            }
-          }
+          let fields = pairs.iter().filter(|(key, _)| !matches!(key.as_str(), Some(IS | "args")));
+          let kwargs = dict(py, made, fields.copied())?;
           return class.call(PyTuple::new(py, args)?, Some(&kwargs));
         }
       }
-      let held = PyDict::new(py);
-      for (key, one) in pairs {
-        held.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
-      }
-      Ok(held.into_any())
+      Ok(dict(py, made, pairs)?.into_any())
     }
     _ => match Fault::of(said) {
       Some(fault) => {
         made.fault(py, &fault.name, each(fault.args.iter().map(Object::as_ref).collect())?)
       }
       None => match said.pairs() {
-        Some(fields) => {
-          let kwargs = PyDict::new(py);
-          for (key, one) in fields {
-            kwargs.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
-          }
-          made.class(py, said.type_name())?.call((), Some(&kwargs))
-        }
+        Some(fields) => made.class(py, said.type_name())?.call((), Some(&dict(py, made, fields)?)),
         // A class of the engine crosses as its name, which python holds as the class its instances are, and a
         // builtin type as the builtin it is; anything else that has no fields, a coroutine, a function that
         // crossed by no mark, shows as what it is.
@@ -791,6 +908,19 @@ fn to_python<'py>(
       },
     },
   }
+}
+
+/// A map of python from pairs of the sandbox, each key and each value as python holds it.
+fn dict<'py, 'a>(
+  py: Python<'py>,
+  made: &Made,
+  pairs: impl IntoIterator<Item = (ObjectRef<'a>, ObjectRef<'a>)>,
+) -> PyResult<Bound<'py, PyDict>> {
+  let map = PyDict::new(py);
+  for (key, one) in pairs {
+    map.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
+  }
+  Ok(map)
 }
 
 /// One value of python, as the sandbox takes it: a shape as its name, as the engine names one; a name of the
@@ -857,15 +987,13 @@ fn of_python(door: &Door, value: &Bound<'_, PyAny>) -> PyResult<Object> {
     return Ok(door.0.hosted.callable(Box::new(move |args| called.call(args))));
   }
   if kind == "Template" {
-    let mut pairs = Vec::new();
+    let mut interpolations = Vec::new();
     for one in value.getattr("interpolations")?.try_iter()? {
       let one = one?;
-      pairs.push(Object::tuple([
-        of_python(door, &one.getattr("value")?)?,
-        of_python(door, &one.getattr("expression")?)?,
-      ]));
+      let expression = of_python(door, &one.getattr("expression")?)?;
+      interpolations.push((of_python(door, &one.getattr("value")?)?, expression));
     }
-    return Ok(marked("Templated", [("interpolations", Object::list(pairs))]));
+    return Ok(templated(interpolations));
   }
   if value.is_instance_of::<PyList>() {
     return Ok(Object::list(each(value)?));
@@ -980,13 +1108,24 @@ fn bare(shown: &str) -> String {
 fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<PyEngine>()?;
   module.add_class::<NativeEar>()?;
+  module.add_function(wrap_pyfunction!(official, module)?)?;
+  module.add_function(wrap_pyfunction!(extensions, module)?)?;
+  module.add_function(wrap_pyfunction!(enabled, module)?)?;
+  module.add_function(wrap_pyfunction!(memory, module)?)?;
+  module.add_function(wrap_pyfunction!(skills, module)?)?;
+  module.add_function(wrap_pyfunction!(opened, module)?)?;
   module.add_function(wrap_pyfunction!(files, module)?)?;
   module.add_function(wrap_pyfunction!(bash, module)?)?;
   module.add_function(wrap_pyfunction!(time, module)?)?;
   module.add_function(wrap_pyfunction!(store, module)?)?;
   module.add_function(wrap_pyfunction!(kept, module)?)?;
   module.add_function(wrap_pyfunction!(gate, module)?)?;
-  module.add_function(wrap_pyfunction!(provider, module)?)?;
+  module.add_function(wrap_pyfunction!(answered, module)?)?;
+  module.add_function(wrap_pyfunction!(models, module)?)?;
+  module.add_function(wrap_pyfunction!(model, module)?)?;
+  module.add_function(wrap_pyfunction!(levels, module)?)?;
+  module.add("SHAPES", world::SHAPES.to_vec())?;
+  module.add("SYSTEM", crate::SYSTEM)?;
   Ok(())
 }
 
@@ -1003,17 +1142,31 @@ fn verb_said<'py>(py: Python<'py>, door: &Door, call: &Call) -> PyResult<Bound<'
   made.python.bind(py).getattr(call.verb.as_str())?.call(args, Some(&kwargs))
 }
 
-/// The ear of the provider of models, whose models are those of the claude command line: the directory the life
-/// stands on, the default actor, the path of claude, and the seconds a turn may go with no progress.
-#[pyfunction]
-#[pyo3(signature = (directory, actor = None, claude = None, stall = None))]
-fn provider(
-  directory: String,
-  actor: Option<String>,
-  claude: Option<String>,
-  stall: Option<f64>,
-) -> NativeEar {
-  let stall = stall.and_then(|seconds| std::time::Duration::try_from_secs_f64(seconds).ok());
-  let claude = world::claude::Claude::with(claude.map(std::path::PathBuf::from), stall);
-  NativeEar::of(world::provider(directory, claude.models(), actor))
+/// A function of python as a model: it is called with the request, as JSON reads it, and a function
+/// `write(text="", thinking="")` that tells what it writes, on a thread of its own; the turn it gives is the answer,
+/// and what it raised the refusal.
+fn hosted(answer: Arc<Py<PyAny>>) -> world::Hosted {
+  Arc::new(move |request, told| {
+    let answer = Arc::clone(&answer);
+    Box::pin(async move {
+      let called = tokio::task::spawn_blocking(move || {
+        Python::attach(|py| {
+          let json = py.import("json")?;
+          let request = json.call_method1("loads", (request.to_string(),))?;
+          let write = pyo3::types::PyCFunction::new_closure(py, None, None, move |_, kwargs| {
+            let part = |key: &str| -> String {
+              let item = kwargs.and_then(|kwargs| kwargs.get_item(key).ok().flatten());
+              item.and_then(|one| one.extract().ok()).unwrap_or_default()
+            };
+            told(&part("text"), &part("thinking"));
+          })?;
+          let turn = answer.call1(py, (request, write))?;
+          json.call_method1("dumps", (turn,))?.extract::<String>()
+        })
+        .map_err(|no| no.to_string())
+      });
+      let turn = called.await.map_err(|no| no.to_string())??;
+      crate::wire::parsed(&turn).map_err(|fault| fault.message())
+    })
+  })
 }

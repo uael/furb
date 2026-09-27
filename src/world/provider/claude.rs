@@ -11,7 +11,7 @@ use std::{
   env,
   path::{Path, PathBuf},
   process::Stdio,
-  sync::{Arc, Mutex, Weak},
+  sync::{Arc, Mutex, Once, Weak},
   time::{Duration, Instant},
 };
 
@@ -20,7 +20,7 @@ use rig_core::{
     CompletionError, CompletionModel, CompletionRequest, CompletionResponse, FinishReason, Usage,
   },
   message::{AssistantContent, DocumentSourceKind, Message, MimeType, Reasoning, UserContent},
-  streaming::{RawStreamingChoice, StreamFinal, StreamingCompletionResponse},
+  streaming::{RawStreamingChoice, StreamingCompletionResponse},
 };
 use serde_json::{Value, json};
 use tokio::{
@@ -29,17 +29,19 @@ use tokio::{
   sync::mpsc,
 };
 
-use super::{Model, runtime, spawned, uuid};
+use super::{Model, ended, runtime, spawned, uuid};
 
-/// The name of the provider, which each response of the command line says.
+/// The name of the command line as a provider: each response of it says this name, and each of its models is named
+/// by it and the alias of its family.
 pub const CLAUDE: &str = "claude-cli";
 
 /// The efforts the command line spends on a turn, from least to most.
 pub const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
 
-/// The models of the command line, by the alias of their family, and the window of each.
+/// The models of the command line, by the alias of their family, and the window of each, the one a life stands on
+/// when its host names none first.
 const FAMILY: [(&str, u64); 4] =
-  [("fable", 1_000_000), ("opus", 1_000_000), ("sonnet", 1_000_000), ("haiku", 200_000)];
+  [("opus", 1_000_000), ("sonnet", 1_000_000), ("haiku", 200_000), ("fable", 1_000_000)];
 
 /// How many conversations keep a process at most.
 const WARM: usize = 8;
@@ -59,6 +61,9 @@ const LINE: usize = 32 * 1024 * 1024;
 /// How many characters of what a process wrote on its stderr a failure keeps.
 const TAIL: usize = 2000;
 
+/// The error of the system that says a program is open to be written, which is ETXTBSY.
+const BUSY: i32 = 26;
+
 /// The claude command line: its program, how long a turn may go with no progress, and the conversations it holds.
 ///
 /// It is cheap to clone, and every clone holds the same conversations. When the last clone goes, every process it
@@ -72,6 +77,8 @@ struct Held {
   bin: PathBuf,
   stall: Duration,
   conversations: Mutex<HashMap<String, Arc<tokio::sync::Mutex<Conversation>>>>,
+  /// The sweep of the processes that sat idle, begun at the first turn.
+  swept: Once,
 }
 
 impl Default for Claude {
@@ -87,26 +94,20 @@ impl Claude {
     Claude::with(None, None)
   }
 
+  /// The command line of [`Claude::new`], when `FURB_CLAUDE_BIN` names one or this machine holds one.
+  pub fn found() -> Option<Claude> {
+    located().map(|bin| Claude::with(Some(bin), None))
+  }
+
   /// The command line at this program, and how long a turn may go with no progress; each the one [`Claude::new`]
   /// takes when none is given.
   pub fn with(bin: Option<PathBuf>, stall: Option<Duration>) -> Claude {
-    let bin = bin.unwrap_or_else(found);
+    let bin = bin.or_else(located).unwrap_or_else(|| PROGRAM.into());
     let stall = stall.unwrap_or_else(|| {
       let seconds = env::var("FURB_CLAUDE_STALL").ok().and_then(|one| one.parse::<f64>().ok());
       seconds.and_then(|one| Duration::try_from_secs_f64(one).ok()).unwrap_or(STALL)
     });
-    let held = Arc::new(Held { bin, stall, conversations: Mutex::default() });
-    // The processes that sat idle end at the next sweep, which a turn does and this does too while no turn comes.
-    let weak = Arc::downgrade(&held);
-    runtime().spawn(async move {
-      let mut ticks = tokio::time::interval(IDLE);
-      ticks.tick().await;
-      loop {
-        ticks.tick().await;
-        let Some(held) = Weak::upgrade(&weak) else { return };
-        held.sweep();
-      }
-    });
+    let held = Arc::new(Held { bin, stall, conversations: Mutex::default(), swept: Once::new() });
     Claude { held }
   }
 
@@ -115,15 +116,20 @@ impl Claude {
     Completion { claude: self.clone(), name: name.into() }
   }
 
-  /// The models of the command line as the provider offers them: each with its window and every effort, and the
-  /// conversation of a reply under the setting `session`.
+  /// The models of the command line as the provider offers them, each named `claude-cli:` and its alias: each with
+  /// its window, every effort, and the images of a turn, and the conversation of a reply under the setting
+  /// `session`. The command line counts what it read of the cache apart from the rest of what it read.
   pub fn models(&self) -> Vec<Model> {
     FAMILY
       .iter()
-      .map(|(name, window)| {
-        let model =
-          Model::new(*name, *window, self.completion_model(*name)).conversation("session");
-        EFFORTS.iter().fold(model, |model, effort| model.effort(*effort, json!({"effort": effort})))
+      .map(|(alias, window)| {
+        let named = format!("{CLAUDE}:{alias}");
+        let mut model =
+          Model::new(named, *window, self.completion_model(*alias)).conversation("session");
+        model.apart = true;
+        EFFORTS
+          .iter()
+          .fold(model.images(), |model, effort| model.effort(*effort, json!({"effort": effort})))
       })
       .collect()
   }
@@ -142,12 +148,33 @@ pub struct Completion {
 /// Where the parts of a streamed turn go as the command line writes them.
 type Deltas = mpsc::UnboundedSender<Result<RawStreamingChoice, CompletionError>>;
 
+impl Completion {
+  /// The command line, whose processes that sat idle end at the next sweep, which a turn does and a sweep of its own
+  /// does too while no turn comes; that sweep begins at the first turn, and ends when the last clone goes.
+  fn held(&self) -> Arc<Held> {
+    let held = Arc::clone(&self.claude.held);
+    held.swept.call_once(|| {
+      let weak = Arc::downgrade(&held);
+      runtime().spawn(async move {
+        let mut ticks = tokio::time::interval(IDLE);
+        ticks.tick().await;
+        loop {
+          ticks.tick().await;
+          let Some(held) = Weak::upgrade(&weak) else { return };
+          held.sweep();
+        }
+      });
+    });
+    held
+  }
+}
+
 impl CompletionModel for Completion {
   async fn completion(
     &self,
     request: CompletionRequest,
   ) -> Result<CompletionResponse, CompletionError> {
-    let (held, name) = (Arc::clone(&self.claude.held), self.name.clone());
+    let (held, name) = (self.held(), self.name.clone());
     spawned(async move { held.turn(&name, request, None).await }).await?
   }
 
@@ -155,11 +182,12 @@ impl CompletionModel for Completion {
     &self,
     request: CompletionRequest,
   ) -> Result<StreamingCompletionResponse, CompletionError> {
-    let (held, name) = (Arc::clone(&self.claude.held), self.name.clone());
+    let (held, name) = (self.held(), self.name.clone());
     let (deltas, heard) = mpsc::unbounded_channel();
     let task = spawned(async move {
       let got = held.turn(&name, request, Some(&deltas)).await;
-      let _ = deltas.send(got.map(|response| RawStreamingChoice::FinalResponse(ended(response))));
+      let _ =
+        deltas.send(got.map(|response| RawStreamingChoice::FinalResponse(ended(CLAUDE, response))));
     });
     // The task goes with the stream, so a stream that is dropped ends its turn.
     let stream = futures::stream::unfold((heard, task), |(mut heard, task)| async move {
@@ -167,16 +195,6 @@ impl CompletionModel for Completion {
     });
     Ok(StreamingCompletionResponse::stream(CLAUDE, Box::pin(stream)))
   }
-}
-
-/// The terminal record of a stream, from the response of its turn.
-fn ended(response: CompletionResponse) -> StreamFinal {
-  let mut record = StreamFinal::new(CLAUDE, response.usage);
-  record.finish_reason = response.finish_reason();
-  record.response_id = response.response_id;
-  record.model = response.model;
-  record.raw = response.raw;
-  record
 }
 
 impl Held {
@@ -378,8 +396,17 @@ impl Conversation {
     command.env("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "1");
     command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
     command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
-    let mut child =
-      command.spawn().map_err(|no| failed(format!("{} did not start: {no}", bin.display())))?;
+    // A program that a process holds open to write it is busy, as a new program is for a moment while a fork of
+    // another thread holds it, so it starts at a later try.
+    let mut tries = 0;
+    let mut child = loop {
+      match command.spawn() {
+        Err(no) if no.raw_os_error() == Some(BUSY) && tries < 50 => tries += 1,
+        got => break got,
+      }
+      std::thread::sleep(Duration::from_millis(10));
+    }
+    .map_err(|no| failed(format!("{} did not start: {no}", bin.display())))?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
       (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {
@@ -873,50 +900,35 @@ fn failed(why: impl Into<String>) -> CompletionError {
   CompletionError::ProviderError(why.into())
 }
 
+/// The name of the program of the command line.
+const PROGRAM: &str = if cfg!(windows) { "claude.exe" } else { "claude" };
+
 /// The command line of this machine: the one `FURB_CLAUDE_BIN` names, or the first program named claude on the
 /// PATH, in the local programs of the home, or, on macOS, in the newest version of Claude Desktop.
-fn found() -> PathBuf {
-  if let Some(bin) = env::var_os("FURB_CLAUDE_BIN") {
-    return bin.into();
+pub(super) fn located() -> Option<PathBuf> {
+  if let Some(bin) = env::var_os("FURB_CLAUDE_BIN").filter(|one| !one.is_empty()) {
+    return Some(bin.into());
   }
-  let name = if cfg!(windows) { "claude.exe" } else { "claude" };
-  let path = env::var_os("PATH").unwrap_or_default();
-  let mut candidates: Vec<PathBuf> = env::split_paths(&path)
-    .filter(|one| !one.as_os_str().is_empty())
-    .map(|one| one.join(name))
-    .collect();
+  let mut folders: Vec<PathBuf> =
+    env::split_paths(&env::var_os("PATH").unwrap_or_default()).collect();
   if let Some(home) = env::home_dir() {
-    candidates.push(home.join(".local/bin").join(name));
+    folders.push(home.join(".local/bin"));
     if cfg!(target_os = "macos") {
       let desktop = home.join("Library/Application Support/Claude/claude-code");
       let mut versions: Vec<PathBuf> = std::fs::read_dir(&desktop)
         .map(|found| found.filter_map(|one| one.ok().map(|one| one.path())).collect())
         .unwrap_or_default();
       versions.sort_by_key(|one| std::cmp::Reverse(numbered(one)));
-      candidates.extend(versions.iter().map(|one| one.join("claude.app/Contents/MacOS/claude")));
+      folders.extend(versions.iter().map(|one| one.join("claude.app/Contents/MacOS")));
     }
   }
-  candidates.into_iter().find(|one| runs(one)).unwrap_or_else(|| name.into())
+  crate::world::program("claude", folders)
 }
 
 /// The numbers of a version, in order, which sort as a version does.
 fn numbered(version: &Path) -> Vec<u64> {
   let name = version.file_name().map(|one| one.to_string_lossy().into_owned()).unwrap_or_default();
   name.split(|one: char| !one.is_ascii_digit()).filter_map(|one| one.parse().ok()).collect()
-}
-
-/// Whether a path is a program that this machine runs.
-fn runs(path: &Path) -> bool {
-  let Ok(info) = std::fs::metadata(path) else { return false };
-  #[cfg(unix)]
-  {
-    use std::os::unix::fs::PermissionsExt;
-    info.is_file() && info.permissions().mode() & 0o111 != 0
-  }
-  #[cfg(not(unix))]
-  {
-    info.is_file()
-  }
 }
 
 #[cfg(all(test, unix))]

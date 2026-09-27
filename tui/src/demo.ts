@@ -48,8 +48,24 @@ export async function removeDemoDirectories(): Promise<void> {
   temporary.clear();
 }
 
-export async function demoSession(seed = false, preferences?: Preferences): Promise<Session> {
-  const { engine, host } = await openEngine({ demo: true, cwd: await demoDirectory() });
+/** A session of the demo: on a project of its own, a new demo project by default, or on the record of a demo session,
+ * in the folder of its record by default, and with the conversation of the demo when it is seeded. */
+export async function demoSession({
+  seed = false,
+  record,
+  cwd,
+  preferences,
+}: {
+  seed?: boolean;
+  record?: string;
+  cwd?: string;
+  preferences?: Preferences;
+} = {}): Promise<Session> {
+  const { engine, host } = await openEngine({
+    demo: true,
+    record,
+    cwd: cwd ?? (record ? undefined : await demoDirectory()),
+  });
   const session = new Session(engine, host, true, preferences);
   await session.refresh();
   if (seed) await seedDemo(session);

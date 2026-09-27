@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import acts, born, heads, paragraphs, rows, said, settle
+from conftest import acts, born, chained, heads, paragraphs, rows, said, settle
 from furb import engine
 from furb.engine import Refused
 
@@ -142,8 +142,7 @@ async def test_the_engine_refuses_debug_outside_an_act() -> None:
 async def test_a_tell_is_on_the_scope_of_the_act_it_is_of_so_debug_takes_no_chain_of_its_own() -> None:
   """A tell is on the scope of the act it is of, so debug takes no chain of its own."""
   _, log, root = born()
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   step = engine.rung("debug(t'{1}')", on=two)
   await step
   assert [one for one in said(log, "tell") if one[1] == step] == [

@@ -4,7 +4,7 @@
 left behind. The collection is at https://github.com/datacurve-ai/deep-swe, and the rig fetches it once.
 
 The one law of the rig is that no rule of it reaches the model. The system prompt is the engine, minified, and
-nothing else. The message is the instruction of the task as the task wrote it, and one line that asks the model to
+nothing else, and the life enables no extension, so no rung of one reaches the chain. The message is the instruction of the task as the task wrote it, and one line that asks the model to
 close with a float from 0 to 1 for how sure it is that the work is done. Under 0.9, the operator says that the
 level is too low and asks the model to go on, on the same chain. The model reads no other word.
 
@@ -34,13 +34,15 @@ once, before you spend money on it.
 
 `run` takes four options:
 
-- `--to model/effort` is the actor the task is put to, and `opus/low` is the default.
+- `--to provider:model/effort` is the actor the task is put to. The default is the default actor of the crate,
+  which is `claude-cli:opus/high` when this host holds the claude command line.
 - `--ceiling` is the dollars the life may spend, 8 by default, and 0 is no ceiling. It is a grant on the root chain,
   so the chain pauses when an answer carries the ledger to the ceiling.
 - `--timeout` is the seconds the run may take, 1800 by default, and 0 is no cap.
 - `--resume` goes on with the checkout and the record that stand, instead of seeding a fresh one.
 
-`turns` takes `--to`, the actor that the folded life stands on, since `turns` opens a life on the record to fold it.
+`turns` runs `furb turns` on the record of the run, which inspects it, and takes `--to`, the actor that the folded
+life stands on.
 
 ## Where everything stands
 

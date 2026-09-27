@@ -28,24 +28,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
-        with:
-          version: ${{ env.UV_VERSION }}
-          enable-cache: true
-          cache-python: true
-      # The rust of rust-toolchain.toml, and the cache of what cargo built of the dependencies the last time.
-      # The key of the cache holds the files that tell cargo what to build, because the action does not read them.
-      # Only main saves the cache, and a pull request reads the cache of main.
-      # Only a job that passes saves it. A job that fails or is cancelled holds part of the build, and a key that
-      # matches whole is never saved again, so every later run would build again what that part lacks.
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
-        with:
-          cache-key: >-
-            ${{ hashFiles('.github/workflows/gates.yml', '.pre-commit-config.yaml', 'bind/python/pyproject.toml', 'cli/pyproject.toml') }}
-          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: false
-      - run: uv python install
-      - run: uv sync --locked
+      - uses: ./.github/actions/setup
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/pre-commit
@@ -69,19 +52,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
-        with:
-          version: ${{ env.UV_VERSION }}
-          enable-cache: true
-          cache-python: true
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
-        with:
-          cache-key: >-
-            ${{ hashFiles('.github/workflows/gates.yml', '.pre-commit-config.yaml', 'bind/python/pyproject.toml', 'cli/pyproject.toml') }}
-          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: false
-      - run: uv python install
-      - run: uv sync --locked
+      - uses: ./.github/actions/setup
       - run: uv run pytest -q
 
   typescript:
@@ -105,27 +76,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # A python restored from the cache on Windows holds a link to its directory that the restore breaks, so uv
-      # install fails there on every run after the first: Windows installs its python each time.
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
-        with:
-          version: ${{ env.UV_VERSION }}
-          enable-cache: true
-          cache-python: ${{ runner.os != 'Windows' }}
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
-        with:
-          cache-key: >-
-            ${{ hashFiles('.github/workflows/gates.yml', 'bind/python/pyproject.toml', 'cli/pyproject.toml', 'bind/typescript/build.ts') }}
-          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: false
+      - uses: ./.github/actions/setup
       # The bun:ffi of bun 1.3 builds its native callbacks with TinyCC in pages of the heap of Windows, which lose
       # their right to run code while the process lives, and a call into OpenTUI then crashes. From bun 1.4 on, the
       # engine builds them.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: "1.4.2"
-      - run: uv python install
-      - run: uv sync --locked
       - run: bun install --frozen-lockfile
       # The hooks check the format of the crate, and the features do not change it.
       - run: cargo clippy --all-targets --features typescript -- -D warnings

@@ -14,23 +14,32 @@ use std::{
 use furb::{
   Ear, Fact, Fault, Object, Voice,
   ear::{call, ear, hear, say},
-  wire,
+  world::{SHAPES, answered},
 };
 
-/// Every shape the operator answers, by its name: a list and a dict as a line of JSON.
-const SHAPES: [&str; 7] = ["None", "str", "int", "float", "bool", "list", "dict"];
-
-/// One prompt the console took: its act, its shape and its message.
-struct Asked {
-  about: String,
-  shape: String,
-  message: String,
+/// A prompt put to the operator: its act, the chain it is on, its shape and its message.
+pub struct Asked {
+  pub about: String,
+  pub on: String,
+  pub shape: String,
+  pub message: String,
 }
 
-/// The console, as an ear: it takes a prompt to the operator, and its work closes it later by its voice.
-///
-/// It closes at once with a refusal a prompt whose shape the operator does not answer, which is the law of the World.
-/// A prompt that is done before its line comes, by a cancel, is shown no more, and its work says nothing of it.
+impl Asked {
+  /// The prompt a fact asks the operator, when it is one that no ear before the console took.
+  pub fn of(a: &Fact) -> Option<Asked> {
+    let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
+    (a.kind() == "prompt" && a.question()).then(|| Asked {
+      about: a.about().to_owned(),
+      on: a.on().to_owned(),
+      shape: word(1).unwrap_or_default(),
+      message: word(2).unwrap_or_default(),
+    })
+  }
+}
+
+/// The console, as an ear: it takes a prompt to the operator, and its work closes it later by its voice. A prompt that
+/// is done before its line comes, by a cancel, is shown no more, and its work says nothing of it.
 pub fn terminal() -> Box<dyn Ear> {
   ear(|co, voice| async move {
     let (asks, asked) = mpsc::channel::<Asked>();
@@ -40,27 +49,22 @@ pub fn terminal() -> Box<dyn Ear> {
     let mut taken = HashSet::new();
     loop {
       let a = hear(&co).await;
-      let about = a.about().to_owned();
-      match a.kind() {
-        "prompt" if a.question() => {
-          say(&co, Fact::says("started", &about, [])).await;
-          let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
-          let (shape, message) = (word(1).unwrap_or_default(), word(2).unwrap_or_default());
-          if !SHAPES.contains(&shape.as_str()) {
-            let no = Fault::refused(format!("the operator answers no {shape}"));
-            call(&co, "close", vec![no.object()], vec![("id", Object::string(&about))]).await?;
-            continue;
-          }
-          taken.insert(about.clone());
-          let _ = asks.send(Asked { about, shape, message });
+      if let Some(asked) = Asked::of(&a) {
+        say(&co, Fact::says("started", &asked.about, [])).await;
+        // A prompt of a shape that the operator answers not is shown not, and closed at once with what no line comes
+        // to, which is the refusal of its shape.
+        if !SHAPES.contains(&asked.shape.as_str()) {
+          let no = answered(&asked.shape, "").unwrap_or_else(|no| no.object());
+          call(&co, "close", vec![no], vec![("id", Object::string(&asked.about))]).await?;
+          continue;
         }
-        "done" if taken.remove(&about) => {
-          voice.hush(&about);
-          if let Ok(mut over) = over.lock() {
-            over.insert(about);
-          }
+        taken.insert(asked.about.clone());
+        let _ = asks.send(asked);
+      } else if a.kind() == "done" && taken.remove(a.about()) {
+        voice.hush(a.about());
+        if let Ok(mut over) = over.lock() {
+          over.insert(a.about().to_owned());
         }
-        _ => {}
       }
     }
   })
@@ -70,7 +74,7 @@ pub fn terminal() -> Box<dyn Ear> {
 /// came.
 fn shows(asked: &mpsc::Receiver<Asked>, over: &Mutex<HashSet<String>>, voice: &Voice) {
   let done = |about: &str| over.lock().is_ok_and(|over| over.contains(about));
-  for Asked { about, shape, message } in asked {
+  for Asked { about, shape, message, .. } in asked {
     if done(&about) {
       continue;
     }
@@ -79,32 +83,12 @@ fn shows(asked: &mpsc::Receiver<Asked>, over: &Mutex<HashSet<String>>, voice: &V
     let mut line = String::new();
     let value = match io::stdin().lock().read_line(&mut line) {
       Ok(0) => Err(Fault::refused("the operator cannot be read: the input is over")),
-      Ok(_) => answered(&shape, line.trim()),
+      Ok(_) => answered(&shape, line.trim_end_matches(['\n', '\r'])),
       Err(no) => Err(Fault::refused(format!("the operator cannot be read: {no}"))),
     };
     if !done(&about) {
       let value = value.unwrap_or_else(|no| no.object());
       voice.call(&about, "close", vec![value], vec![("id", Object::string(&about))]);
-    }
-  }
-}
-
-/// A line of the operator as a value of the shape the prompt wants, or why it is none.
-fn answered(shape: &str, line: &str) -> Result<Object, Fault> {
-  let no = || Fault::refused(format!("{line:?} is no {shape}"));
-  match shape {
-    "None" => Ok(Object::none()),
-    "str" => Ok(Object::string(line)),
-    "int" => line.parse::<i64>().map(Object::int).map_err(|_| no()),
-    "float" => line.parse::<f64>().map(Object::float).map_err(|_| no()),
-    "bool" => match line.to_lowercase().as_str() {
-      "y" | "yes" | "true" | "1" => Ok(Object::bool(true)),
-      "n" | "no" | "false" | "0" => Ok(Object::bool(false)),
-      _ => Err(Fault::refused(format!("{line:?} is neither yes nor no"))),
-    },
-    _ => {
-      let value = wire::parsed(line).map_err(|_| no())?;
-      if value.as_ref().type_name() == shape { Ok(value) } else { Err(no()) }
     }
   }
 }

@@ -3,9 +3,9 @@
 import re
 from collections.abc import Sequence
 
-from conftest import STANDS, born, heads, paragraphs, rows, said, settle
+from conftest import STANDS, TWO, born, heads, paragraphs, rows, said, settle
 from furb import engine
-from furb.engine import Act, Text
+from furb.engine import Act
 
 EVERY = (
   "x = bash('echo hi')\n"
@@ -68,7 +68,7 @@ async def test_one_thing_a_tell_says() -> None:
   carried = [a[3] for a in said(log, "tell") if a[3][0] == "#read n.txt"]
   assert len(carried) == 1 and len(carried[0]) == 2
   text, show = carried[0][1]
-  assert text == Text("/w/n.txt", "one\ntwo\n") and show(text.lines) == [1]
+  assert text == TWO and show(text.lines) == [1]
   assert "#read n.txt\n# /w/n.txt, 0 known\n# 1 one" in paragraphs(engine.turns(on=root))
 
 

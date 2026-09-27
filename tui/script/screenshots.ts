@@ -3,17 +3,15 @@ import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
-import { openEngine } from "../src/bridge.ts";
-import { removeDemoDirectories, seedDemo, seedDemoFiles } from "../src/demo.ts";
-import { Extensions } from "../src/extensions.ts";
+import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
-import { Session } from "../src/session.ts";
+import type { Exit, Session } from "../src/session.ts";
 import { palettes } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
 import { rasterize } from "./raster.ts";
-import { find, highlighting, home, mount } from "./stage.ts";
+import { click, find, highlighting, home, mount } from "./stage.ts";
 
 // The model of the demo writes slowly, so that its work stays in progress while a capture shows it. The session runs
 // in a worker, which reads the environment once, as it starts.
@@ -25,34 +23,28 @@ async function project(name: string): Promise<string> {
   await seedDemoFiles(directory);
   return directory;
 }
-/** A new session in the project that the conversation of the gallery is about. */
-async function gallerySession(): Promise<Session> {
-  const { engine, host } = await openEngine({ demo: true, cwd: await project("fieldnotes") });
-  const opened = new Session(engine, host, true);
-  await opened.refresh();
-  return opened;
-}
 
 // FURB_GALLERY_OUT writes the gallery to another folder, and FURB_GALLERY_ONLY draws only the shots whose names it
 // matches, so that a change of design is seen in a few seconds.
 const output = resolve(process.env.FURB_GALLERY_OUT ?? "docs/screenshots");
 const only = process.env.FURB_GALLERY_ONLY ? new RegExp(process.env.FURB_GALLERY_ONLY) : undefined;
 await mkdir(output, { recursive: true });
+/** A new session in the project that the conversation of the gallery is about. */
+const gallerySession = async () => demoSession({ cwd: await project("fieldnotes") });
 let session = await gallerySession();
 const test = await createTestRenderer({ width: 152, height: 46 });
 let app!: () => App;
 let library!: Workspaces;
-const extensions = new Extensions(() => session);
 /** A session on the stage, under the name of a first session when it has no name of its own. */
 async function show(next: Session): Promise<void> {
   session = next;
   if (session.sessionName === basename(session.host.directory)) await session.command("/name Session 1");
-  ({ library, app } = await mount(session, test.renderer, extensions));
+  ({ library, app } = await mount(session, test.renderer));
 }
 await show(session);
 
 /** The shots whose notice tells what the step did, which keep it. The others show no notice of an earlier step. */
-const notices = /^(34|36|37|43|44|45|50)-/;
+const notices = /^(34|36|37|42|43|44|45|50)-/;
 /** The work of the chain completes, and the queue sends what waits in it, until nothing is left to do. */
 async function settle(): Promise<void> {
   await session.refresh();
@@ -160,8 +152,9 @@ try {
     "printf 'Building the search index...\\n'; sleep 1; printf '3 notes indexed.\\n'",
     { on: session.selected },
   );
-  await until(session.host, () =>
-    session.host.facts.some((fact) => fact[0] === "out" && fact[1] === command),
+  // The command shows once it has printed its first line.
+  await until(session, () =>
+    Boolean((session.acts.find((act) => act.id === command)?.value as Exit | undefined)?.stdout?.content),
   );
   await session.refresh();
   app().render();
@@ -194,9 +187,7 @@ try {
   await session.engine.wait({ seconds: 60, on: session.engine.root });
   app().dispose();
   await library.dispose();
-  const resumed = await openEngine({ record, demo: true });
-  session = new Session(resumed.engine, resumed.host, true);
-  await session.refresh();
+  session = await demoSession({ record });
   await show(session);
   await capture("21-paused-resume");
   app().closeOverlay();
@@ -253,12 +244,11 @@ try {
   const notes = await project("fieldnotes"),
     atlas = await project("atlas");
   const preferences = new Preferences(join(projects, "config/ui.json"));
-  const archived = await openEngine({
-    demo: true,
+  const archive = await demoSession({
     cwd: atlas,
     record: join(atlas, ".furb/sessions/archive.jsonl"),
+    preferences,
   });
-  const archive = new Session(archived.engine, archived.host, true, preferences);
   await archive.command("/name Archive");
   await archive.dispose();
   library = new Workspaces(preferences, { demo: true });
@@ -290,7 +280,7 @@ try {
   await research.session.submit("/pause");
   await library.select(main);
   session = main.session;
-  app = follow(test.renderer, { quit() {}, workspaces: library, extensions });
+  app = follow(test.renderer, { quit() {}, workspaces: library });
   await until(
     library,
     () =>
@@ -384,12 +374,9 @@ try {
   await capture("41-slash-suggestions");
   app().composer.setText("");
   app().closeOverlay();
-  app().composer.setText(`/extension ${resolve("tui/examples/project-summary.ts")}`);
+  app().composer.setText("/extensions");
   await app().submit();
-  app().palette();
-  await test.mockInput.typeText("Summarize this project");
   await capture("42-extension-command");
-  app().closeOverlay();
   await settle();
   await session.submit("/undo");
   await capture("43-undo-message");
@@ -425,8 +412,7 @@ try {
   const [researchAt, researchRow] = find(test, "Research");
   await test.mockMouse.click(researchAt + 2, researchRow, 2);
   await capture("49-session-menu");
-  const [renameAt, renameRow] = find(test, "Rename", researchAt);
-  await test.mockMouse.click(renameAt + 1, renameRow);
+  await click(test, "Rename", researchAt);
   await test.flush();
   await test.mockInput.typeText(" notes");
   await rest();
@@ -435,6 +421,5 @@ try {
   app().dispose();
   test.renderer.destroy();
   await library.dispose();
-  await extensions.dispose();
   await removeDemoDirectories();
 }

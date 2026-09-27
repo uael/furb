@@ -1,13 +1,5 @@
 import { EventEmitter } from "node:events";
-import type {
-  Act,
-  Fact,
-  FileChange,
-  ImageAttachment,
-  LiveAct,
-  Engine as Native,
-  Session as Owner,
-} from "@furb/engine";
+import type { Act, FileChange, ImageAttachment, LiveAct, Engine as Native, Stream } from "@furb/engine";
 import type { EngineOptions } from "./models.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 
@@ -35,8 +27,6 @@ export type Engine = {
 };
 /** A question that waits for the operator. */
 type Prompt = { id: string; shape: string; message: string };
-/** What a model writes while it answers a rung, on the chain of the rung. */
-type Stream = { chain: string; text: string; thinking: string };
 /** What the session in the worker holds that the host keeps as it comes. */
 interface Plain {
   completed: number;
@@ -49,9 +39,10 @@ interface Plain {
   /** How many file changes the session holds. */
   changes: number;
 }
-/** What the session in the worker holds, as it sends it to the host: the facts that the host has not heard yet. */
+/** What the session in the worker holds, as it sends it to the host, and how many facts the life said since the last
+ * state, which the host needs to know of and not to hold. */
 export interface HostState extends Plain {
-  facts: Fact[];
+  facts: number;
   prompts: Prompt[];
   streams: [string, Stream][];
   pending: [string, string][];
@@ -66,7 +57,6 @@ export class HostView extends EventEmitter implements Plain {
   actor = "";
   record?: string;
   changes = 0;
-  facts: Fact[] = [];
   prompts = new Map<string, Prompt>();
   streams = new Map<string, Stream>();
   pending = new Map<string, string>();
@@ -75,52 +65,38 @@ export class HostView extends EventEmitter implements Plain {
   }
   update({ facts, prompts, streams, pending, ...plain }: HostState): void {
     Object.assign(this, plain);
-    for (const fact of facts) this.facts.push(fact);
     this.prompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
     this.streams = new Map(streams);
     this.pending = new Map(pending);
-    if (facts.length) this.emit("facts", facts);
+    if (facts) this.emit("facts");
     this.emit("change");
   }
-  route(actor: string): Promise<ReturnType<Owner["provider"]["route"]>> {
-    return this.request("provider", "route", [actor]) as Promise<ReturnType<Owner["provider"]["route"]>>;
+  /** A request of the worker: the method of one of its targets, the session, its console, or the library, which
+   * answers what the host reads of the life. */
+  private ask<T>(target: "session" | "console" | "library", method: string, ...args: unknown[]): Promise<T> {
+    return this.request(target, method, args) as Promise<T>;
   }
-  /** The name in the roster of the model that a name gives, and nothing when it gives none. */
-  model(name: string): Promise<string | null> {
-    return this.request("library", "model", [name]) as Promise<string | null>;
-  }
-  answer(id: string, value: string): Promise<unknown> {
-    return this.request("console", "answer", [id, value]);
-  }
-  attachImage(path: string): Promise<ImageAttachment> {
-    return this.request("session", "attachImage", [path]) as Promise<ImageAttachment>;
-  }
-  sendQueued(entry: FollowUp): Promise<string> {
-    return this.request("library", "queue", [entry]) as Promise<string>;
-  }
-  resume(): Promise<unknown> {
-    return this.request("session", "resume", []);
-  }
-  source(): Promise<string> {
-    return this.request("library", "source", []) as Promise<string>;
-  }
-  snapshot(chain: string, since = 0): Promise<Snapshot> {
-    return this.request("library", "snapshot", [chain, since]) as Promise<Snapshot>;
-  }
-  readChanges(start: number, count: number): Promise<FileChange[]> {
-    return this.request("library", "changes", [start, count]) as Promise<FileChange[]>;
-  }
+  /** Whether the model of an actor takes an image, as the catalog of the crate says. */
+  sees = (actor: string) => this.ask<boolean>("library", "sees", actor);
+  /** The models the catalog of the crate offers, each as its name, its efforts and its window. */
+  catalog = () => this.ask<[string, string[], number][]>("library", "catalog");
+  /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
+  model = (name: string) => this.ask<string | null>("library", "model", name);
+  answer = (id: string, value: string) => this.ask<unknown>("console", "answer", id, value);
+  attachImage = (path: string) => this.ask<ImageAttachment>("session", "attachImage", path);
+  sendQueued = (entry: FollowUp) => this.ask<string>("library", "queue", entry);
+  resume = () => this.ask<unknown>("session", "resume");
+  /** The work of a chain cancelled, and not the acts that an extension started on it. */
+  interrupt = (chain: string) => this.ask<unknown>("session", "interrupt", chain);
+  source = () => this.ask<string>("library", "source");
+  snapshot = (chain: string, since = 0) => this.ask<Snapshot>("library", "snapshot", chain, since);
+  readChanges = (start: number, count: number) => this.ask<FileChange[]>("library", "changes", start, count);
   /** An act whole, with all that a command printed, and nothing when the life holds no such act. */
-  act(id: string): Promise<LiveAct | undefined> {
-    return this.request("library", "act", [id]) as Promise<LiveAct | undefined>;
-  }
+  act = (id: string) => this.ask<LiveAct | undefined>("library", "act", id);
   /** The text the World reads at a path, from where a chain stands, which makes no act and keeps nothing. */
-  look(path: string, chain: string): Promise<{ path: string; content: string }> {
-    return this.request("library", "look", [path, chain]) as Promise<{ path: string; content: string }>;
-  }
-  async dispose(): Promise<void> {
-    await this.request("session", "dispose", []);
-  }
+  look = (path: string, chain: string) =>
+    this.ask<{ path: string; content: string }>("library", "look", path, chain);
+  dispose = () => this.ask<void>("session", "dispose");
 }
 
 export async function openEngine(options: EngineOptions): Promise<{ engine: Engine; host: HostView }> {

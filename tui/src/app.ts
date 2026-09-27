@@ -7,6 +7,8 @@ import {
   imageReferences,
   safeText,
   shapes,
+  TIMEOUT,
+  WORK,
 } from "@furb/engine";
 import {
   type BoxOptions,
@@ -18,22 +20,24 @@ import {
   InputRenderable,
   InputRenderableEvents,
   type KeyEvent,
+  type LineNumberOptions,
   LineNumberRenderable,
   MarkdownRenderable,
   type MouseEvent,
   type Renderable,
   RGBA,
+  type ScrollBoxOptions,
   ScrollBoxRenderable,
   StyledText,
   TextareaRenderable,
   type TextChunk,
+  type TextOptions,
   TextRenderable,
 } from "@opentui/core";
 import { clipboardImage } from "./clipboard.ts";
-import { commands } from "./commands.ts";
+import { commands, slashes } from "./commands.ts";
 import { conversation } from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
-import type { Extensions } from "./extensions.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
 import { ago, clip, count, dollars, elapsed, graphemes, kibibytes, modelName, share } from "./format.ts";
 import { type Action, bindings, chords, keys, presses, shown } from "./keys.ts";
@@ -88,8 +92,27 @@ const stateOf = (state: "failed" | "cancelled" | "done" | "held"): State =>
     done: { word: "", mark: glyph.done, color: c.success },
     held: { word: "waits for resume", mark: glyph.held, color: c.warning },
   })[state];
+/** The mark of a state in its color, one shape for each: at work, waiting on the operator, paused, failed, finished
+ * and not yet seen, and at rest. */
+const statusMark = (status: SessionStatus): Part =>
+  (
+    ({
+      working: [`${glyph.running} `, c.accent],
+      opening: [`${glyph.running} `, c.accent],
+      blocked: [`${glyph.asks} `, c.warning],
+      paused: [`${glyph.held} `, c.warning],
+      error: [`${glyph.failed} `, c.danger],
+      done: [`${glyph.dot} `, c.success],
+      idle: [`${glyph.ring} `, c.faint],
+      saved: [`${glyph.ring} `, c.faint],
+    }) satisfies Record<SessionStatus, Part>
+  )[status];
+/** The rows that a key moves the pointer of a list by, in the rewind tree and in a dialog. */
+const steps: Record<string, number> = { up: -1, down: 1, pageup: -8, pagedown: 8, home: -1e9, end: 1e9 };
 /** A span of seconds as a wait says it: 1 second, 0.2 seconds. */
 const seconds = (value: number) => `${value} ${value === 1 ? "second" : "seconds"}`;
+/** The options of a text, and the action that a click on it runs. */
+type TextShape = TextOptions & { run?: () => void };
 /** A border that draws nothing, which a part of a border replaces. */
 const noBorder = {
   topLeft: " ",
@@ -188,7 +211,6 @@ interface TreeRow {
 export interface AppOptions {
   quit(): void | Promise<void>;
   workspaces: Workspaces;
-  extensions?: Extensions;
 }
 
 /** What the picker of the workspaces says of a session: its state, whether it is the current one, the time since
@@ -220,7 +242,7 @@ export function follow(renderer: CliRenderer, options: AppOptions): () => App {
 }
 
 /** The commands whose value is a path of the project, which the suggestions wait for. */
-const pathCommands = new Set(["read", "image", "extension", "cd"]);
+const pathCommands = new Set(["read", "image", "cd"]);
 /** What each effort of a model does, which the picker of the effort says beside it. */
 const efforts: Record<string, string> = {
   off: "Answer with no thought first",
@@ -243,17 +265,15 @@ export class App {
   private hoverTimer?: ReturnType<typeof setTimeout>;
   private editorVersion = 0;
   private closed = false;
-  private readonly folds = new Map<string, boolean>();
   /** The sidebar at the right: the session, its chains and its usage, then the workspaces, which scroll. */
   private readonly rail: BoxRenderable;
   private readonly railSession: BoxRenderable;
   private readonly railHeading: BoxRenderable;
   private readonly railSpaces: ScrollBoxRenderable;
   private readonly railUsage: BoxRenderable;
-  /** The workspaces whose archived sessions the sidebar lists, by their folder. */
-  private readonly showArchived = new Set<string>();
-  /** Whether the sidebar lists the finished chains, which fold under a row of their own. */
-  private showResting = false;
+  /** The lists of the sidebar that the operator unfolded: the finished chains, under the key finished, and the
+   * archived sessions of a workspace, under its folder. */
+  private readonly unfolded = new Set<string>();
   /** The session or the workspace that the operator renames in its row, and the name typed so far. */
   private renaming?: {
     item: SessionEntry | Workspace;
@@ -284,8 +304,6 @@ export class App {
   private suggestionIndex = 0;
   /** The token whose suggestions Escape hid, which a change of the token shows again. */
   private dismissed = "";
-  /** The read of the project files an `@` suggests from, which each `@` that starts a word asks afresh. */
-  private files?: { read: Promise<string[]>; paths?: string[]; error?: string };
   private lastToken = "";
   private readonly search: InputRenderable;
   private readonly searchRow: BoxRenderable;
@@ -365,7 +383,6 @@ export class App {
     readonly options: AppOptions,
   ) {
     setTheme(session.theme);
-    for (const [id, closed] of Object.entries(session.folds)) this.folds.set(id, closed);
     this.theme = session.theme;
     this.style = syntax();
     this.root = this.box({
@@ -391,29 +408,23 @@ export class App {
     });
     this.root.add(center);
     // The top line says where the operator is at its left, and holds the toggle of the views at its right.
-    const top = this.box({ height: space.bar, flexDirection: "row", gap: space.between });
-    this.headline = this.box({
-      height: space.bar,
-      flexDirection: "row",
-      flexGrow: 1,
-      flexShrink: 1,
-      minWidth: 0,
-      overflow: "hidden",
-    });
+    const top = this.row({ gap: space.between });
+    this.headline = this.row({ flexGrow: 1, flexShrink: 1, minWidth: 0, overflow: "hidden" });
     top.add(this.headline);
-    this.toggle = this.box({ id: "views", height: space.bar, flexDirection: "row" });
+    this.toggle = this.row({ id: "views" });
     top.add(this.toggle);
     center.add(top);
-    // The filter of the view is a field of the panel, with its title, the prompt of every filter, and the key that
-    // leaves it.
-    this.searchRow = this.box({
-      flexDirection: "row",
-      height: space.bar,
-      visible: false,
-      marginTop: space.section,
-      paddingX: space.inset,
-      backgroundColor: c.panel,
-    });
+    // The filter of the view is a bar of the panel, with its title, the prompt of every filter, and the key that
+    // leaves it. The bar of the rewind tree stands in the same place.
+    const bar = (options: BoxOptions = {}) =>
+      this.row({
+        visible: false,
+        marginTop: space.section,
+        paddingX: space.inset,
+        backgroundColor: c.panel,
+        ...options,
+      });
+    this.searchRow = bar();
     this.searchRow.add(
       this.text(
         [
@@ -434,17 +445,9 @@ export class App {
       this.renderContent();
     });
     this.searchRow.add(this.search);
-    this.searchRow.add(this.text("Esc", c.faint, { onMouseUp: this.click(() => this.closeSearch()) }));
+    this.searchRow.add(this.text("Esc", c.faint, { run: () => this.closeSearch() }));
     center.add(this.searchRow);
-    this.treeBar = this.box({
-      id: "rewind-bar",
-      flexDirection: "row",
-      height: space.bar,
-      visible: false,
-      marginTop: space.section,
-      paddingX: space.inset,
-      backgroundColor: c.panel,
-    });
+    this.treeBar = bar({ id: "rewind-bar" });
     center.add(this.treeBar);
     this.scroll = new ScrollBoxRenderable(renderer, {
       id: "timeline",
@@ -463,30 +466,17 @@ export class App {
     this.scroll.verticalScrollBar.visible = false;
     this.scroll.horizontalScrollBar.visible = false;
     center.add(this.scroll);
-    this.queueBox = this.box({
+    this.queueBox = this.row({
       id: "queued-follow-ups",
-      height: space.bar,
       visible: false,
-      flexDirection: "row",
       onMouseUp: this.click(() => this.queuePicker()),
     });
     center.add(this.queueBox);
-    this.imageBox = this.box({
-      id: "attached-images",
-      height: space.bar,
-      flexDirection: "row",
-      gap: space.between,
-      visible: false,
-    });
+    this.imageBox = this.row({ id: "attached-images", gap: space.between, visible: false });
     center.add(this.imageBox);
-    this.suggestionBox = this.box({
-      id: "suggestions",
-      flexShrink: 0,
-      visible: false,
-      backgroundColor: c.raised,
-    });
+    this.suggestionBox = this.box({ id: "suggestions", visible: false, backgroundColor: c.raised });
     center.add(this.suggestionBox);
-    this.modeBox = this.box({ flexDirection: "row", height: space.bar, flexShrink: 0 });
+    this.modeBox = this.row();
     // The composer is a panel, whose three rows the mode colors.
     this.composeBox = this.panel(center, c.accent, { id: "composer-box" });
     this.composeEdges = center.getChildren().slice(-3) as BoxRenderable[];
@@ -516,30 +506,20 @@ export class App {
       },
     });
     this.composeBox.add(this.composer);
-    this.meta = this.box({
-      height: space.bar,
-      flexDirection: "row",
-      overflow: "hidden",
-      flexGrow: 1,
-    });
+    this.meta = this.row({ overflow: "hidden", flexGrow: 1 });
     // The line under the text holds the switch of the mode and where the input goes, a row of space under the text.
-    const metaLine = this.box({
-      flexDirection: "row",
-      height: space.bar,
-      flexShrink: 0,
-      marginTop: space.section,
-    });
+    const metaLine = this.row({ marginTop: space.section });
     metaLine.add(this.modeBox);
     metaLine.add(this.text("   ", c.faint));
     metaLine.add(this.meta);
     this.composeBox.add(metaLine);
-    const footer = this.box({ height: space.bar, flexDirection: "row", gap: space.between });
+    const footer = this.row({ gap: space.between });
     this.status = this.whole(
-      this.text("", c.muted, { height: space.bar, truncate: true, flexGrow: 1, flexShrink: 1 }),
+      this.line("", c.muted, { truncate: true, flexGrow: 1, flexShrink: 1 }),
       () => this.statusWhole,
     );
     footer.add(this.status);
-    this.hints = this.box({ height: space.bar, flexDirection: "row" });
+    this.hints = this.row();
     footer.add(this.hints);
     center.add(footer);
     this.rail = this.box({
@@ -550,12 +530,7 @@ export class App {
     });
     this.railSession = this.box({ paddingX: space.between, gap: space.stack });
     this.rail.add(this.railSession);
-    this.railHeading = this.box({
-      flexDirection: "row",
-      height: space.bar,
-      marginTop: space.section,
-      paddingX: space.between,
-    });
+    this.railHeading = this.row({ marginTop: space.section, paddingX: space.between });
     this.rail.add(this.railHeading);
     this.railSpaces = new ScrollBoxRenderable(renderer, {
       id: "workspaces",
@@ -571,7 +546,6 @@ export class App {
     this.rail.add(this.railSpaces);
     // The usage of the chain stands at the foot of the sidebar, under a rule, where the list above it does not move it.
     this.railUsage = this.box({
-      flexShrink: 0,
       paddingX: space.between,
       paddingBottom: space.inset,
       border: ["top"],
@@ -619,6 +593,10 @@ export class App {
   private box(options: BoxOptions = {}): BoxRenderable {
     return new BoxRenderable(this.renderer, { flexDirection: "column", flexShrink: 0, ...options });
   }
+  /** A box that lays out what it holds in a row one bar high. */
+  private row(options: BoxOptions = {}): BoxRenderable {
+    return this.box({ flexDirection: "row", height: space.bar, ...options });
+  }
   /** A handler of the release of the left button that runs only for a click: a press and a release on one node that
    * selected no text between them. A drag over a button selects its text and does nothing else, and the release of
    * a press that opened a dialog does not close it. A node that the view drew again between the press and the
@@ -657,20 +635,22 @@ export class App {
     const length = [...graphemes.segment(text)].length;
     this.session.notice = `Copied ${length} ${length === 1 ? "character" : "characters"}.`;
   };
-  private text(
-    content: string | Part[],
-    fg = c.text,
-    options: ConstructorParameters<typeof TextRenderable>[1] = {},
-  ): TextRenderable {
+  /** A text, which runs an action at a click when it has one. */
+  private text(content: string | Part[], fg = c.text, { run, ...options }: TextShape = {}): TextRenderable {
     const node = new TextRenderable(this.renderer, {
       content: typeof content === "string" ? safeText(content) : styled(content),
       fg,
       // A text truncates only on a line it does not wrap, so a text that truncates keeps one line with an ellipsis.
       wrapMode: options.truncate ? "none" : "word",
       flexShrink: 0,
+      onMouseUp: run && this.click(run),
       ...options,
     });
     return options.truncate && !options.onMouseOver ? this.whole(node) : node;
+  }
+  /** A text one bar high. */
+  private line(content: string | Part[], fg = c.text, options: TextShape = {}): TextRenderable {
+    return this.text(content, fg, { height: space.bar, ...options });
   }
   /** A text cut to its room shows the whole of it in a tip while the pointer is over it: the text that the terminal
    * cut, or the whole that a caller gives for a text that it cut itself. The tip takes the hover handlers of the text,
@@ -796,7 +776,7 @@ export class App {
     if (this.paneChanged(this.imageBox, [images, this.theme])) {
       this.clear(this.imageBox);
       this.imageBox.add(
-        this.text(
+        this.line(
           [
             [`${glyph.chip} `, c.accent],
             [`${images.length} ${images.length === 1 ? "image" : "images"} attached  `, c.text],
@@ -810,10 +790,9 @@ export class App {
           ],
           c.muted,
           {
-            height: space.bar,
             truncate: true,
             flexShrink: 1,
-            onMouseUp: this.click(() => {
+            run: () =>
               this.openPalette(
                 "Image attachments",
                 images.map((image) => ({
@@ -821,8 +800,7 @@ export class App {
                   detail: `${image.mimeType}  ${kibibytes(image.size)}`,
                   run: () => this.imageActions(image.uri),
                 })),
-              );
-            }),
+              ),
           },
         ),
       );
@@ -833,7 +811,7 @@ export class App {
       this.clear(this.queueBox);
       const first = (queued.at(-1) ?? w.queued.at(-1))?.text.split("\n")[0] ?? "";
       this.queueBox.add(
-        this.text(
+        this.line(
           [
             [`${w.queueHeld ? glyph.held : glyph.ring} `, w.queueHeld ? c.warning : c.faint],
             [
@@ -843,11 +821,11 @@ export class App {
             [first, c.muted],
           ],
           c.muted,
-          { height: space.bar, truncate: true, flexGrow: 1, flexShrink: 1 },
+          { truncate: true, flexGrow: 1, flexShrink: 1 },
         ),
       );
       this.queueBox.add(
-        this.text(
+        this.line(
           queued.length
             ? [
                 ["↑", c.muted],
@@ -855,28 +833,23 @@ export class App {
               ]
             : [],
           c.faint,
-          { height: space.bar },
         ),
       );
     }
-    const [mode, modeColor] = w.editing
-      ? ["Edit program", c.warning]
+    const [mode, modeColor, placeholder] = w.editing
+      ? ["Edit program", c.warning, "Edit this prompt's Python program"]
       : pending
-        ? ["Answer", c.warning]
+        ? [
+            "Answer",
+            c.warning,
+            pending.shape === "bool" ? "Answer yes or no" : `Your answer, as ${pending.shape}`,
+          ]
         : w.mode === "python"
-          ? ["Python", c.secondary]
-          : ["Prompt", c.accent];
+          ? ["Python", c.secondary, "Write Python. The gate reads it before it runs."]
+          : ["Prompt", c.accent, "Ask anything, or type / for commands"];
     for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
     this.composer.cursorColor = modeColor;
-    this.composer.placeholder = w.editing
-      ? "Edit this prompt's Python program"
-      : pending
-        ? pending.shape === "bool"
-          ? "Answer yes or no"
-          : `Your answer, as ${pending.shape}`
-        : w.mode === "python"
-          ? "Write Python. The gate reads it before it runs."
-          : "Ask anything, or type / for commands";
+    this.composer.placeholder = placeholder;
     // The box holds the lines of the text, up to six, a row of space, and the line under the text.
     this.composeBox.height =
       Math.min(6, Math.max(space.bar, this.composer.lineCount, this.composer.lineInfo.lineSources.length)) +
@@ -886,7 +859,7 @@ export class App {
     this.renderStatus();
     this.renderContent();
     this.renderRail();
-    this.renderSuggestions();
+    this.suggest();
     if (end && this.lastView === shown && this.scrollTarget === undefined) this.scrollAfterLayout("end");
     const diagnostics = JSON.stringify([w.rejectedWord, w.findings]);
     if (diagnostics !== this.diagnosticsKey) {
@@ -916,9 +889,8 @@ export class App {
       ];
       // The pointer recolors the segment that it is over, and builds no node, so that a press and its release land on
       // the same segment.
-      const segment: TextRenderable = this.text(parts(false), c.text, {
-        height: space.bar,
-        ...(choice.run ? { onMouseUp: this.click(choice.run) } : {}),
+      const segment: TextRenderable = this.line(parts(false), c.text, {
+        run: choice.run,
         ...(choice.run && !active
           ? {
               onMouseOver: () => {
@@ -932,7 +904,7 @@ export class App {
       });
       box.add(segment);
     }
-    if (chord) box.add(this.text(`  ${chord}`, c.faint, { height: space.bar }));
+    if (chord) box.add(this.line(`  ${chord}`, c.faint));
   }
   /** The top line: the session and the chain at its left, each a button, and the toggle of the views at its right. */
   private renderTop(): void {
@@ -973,24 +945,17 @@ export class App {
     }
     if (this.paneChanged(this.headline, [name, w.label, folder && directory, this.theme])) {
       this.clear(this.headline);
-      const button = (parts: Part[], run: () => void) =>
-        this.text(parts, c.text, {
-          height: space.bar,
-          flexShrink: 0,
-          onMouseUp: this.click(run),
-        });
-      this.headline.add(button([[name, c.text, bold]], () => void this.workspacePicker()));
       this.headline.add(
-        this.text([[` ${glyph.crumb} `, c.faint]], c.faint, { height: space.bar, flexShrink: 0 }),
+        this.line([[name, c.text, bold]], c.text, { run: () => void this.workspacePicker() }),
       );
-      this.headline.add(button([[w.label, c.muted]], () => this.chains()));
+      this.headline.add(this.line(` ${glyph.crumb} `, c.faint));
+      this.headline.add(this.line(w.label, c.muted, { run: () => this.chains() }));
       if (folder)
         this.headline.add(
-          this.text([[`   ${directory}`, c.faint]], c.faint, {
-            height: space.bar,
+          this.line(`   ${directory}`, c.faint, {
             truncate: true,
             flexShrink: 1,
-            onMouseUp: this.click(() => this.showValue("Directory", w.workingDirectory)),
+            run: () => this.showValue("Directory", w.workingDirectory),
           }),
         );
     }
@@ -1043,14 +1008,7 @@ export class App {
     for (const part of ["provider", "shape", "effort", "chord"] as const)
       if (width() > room) shown[part] = false;
     const gap = () => this.meta.add(this.text("   ", c.faint));
-    const button = (parts: Part[], run?: () => void) =>
-      this.meta.add(
-        this.text(parts, c.muted, {
-          height: space.bar,
-          flexShrink: 0,
-          ...(run ? { onMouseUp: this.click(run) } : {}),
-        }),
-      );
+    const button = (parts: Part[], run?: () => void) => this.meta.add(this.line(parts, c.muted, { run }));
     // The mode of the input is a switch between a prompt and Python, and an answer or a program that the input edits
     // is a switch of one segment, which only its key leaves.
     this.clear(this.modeBox);
@@ -1136,7 +1094,7 @@ export class App {
     const status = loading ? "opening" : w.status(w.selected);
     const moving = status === "working" || status === "opening";
     this.statusMoves = moving;
-    const [mark, color] = [moving ? spin() : this.statusDot(status), this.statusColor(status)];
+    const [mark, color] = statusMark(status);
     const label = loading
       ? "Loading"
       : status === "error"
@@ -1184,7 +1142,7 @@ export class App {
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
     // beside the keys.
     const state: Part[] = [
-      [`${mark} `, color],
+      [moving ? `${spin()} ` : mark, color],
       [label, moving ? c.text : c.muted],
     ];
     const room =
@@ -1201,12 +1159,7 @@ export class App {
     this.status.content = styled(state);
     this.clear(this.hints);
     for (const [index, [, , run]] of keys.entries())
-      this.hints.add(
-        this.text(buttons[index] ?? [], c.faint, {
-          height: space.bar,
-          ...(run ? { onMouseUp: this.click(run) } : {}),
-        }),
-      );
+      this.hints.add(this.line(buttons[index] ?? [], c.faint, { run }));
   }
 
   /** The heading of a card set to a line, only when the line changed. */
@@ -1248,25 +1201,18 @@ export class App {
       return;
     }
     prior?.node.destroyRecursively();
-    const box = this.box({
-      id,
-      gap: space.stack,
-      flexShrink: 0,
-      marginTop: margin,
-      paddingLeft: options.indent ?? 0,
-    });
-    const labelNode = this.text(heading, c.muted, {
-      height: space.bar,
+    const box = this.box({ id, gap: space.stack, marginTop: margin, paddingLeft: options.indent ?? 0 });
+    const labelNode = this.line(heading, c.muted, {
       truncate: true,
       visible,
       onMouseDown: (event) => {
         if (event.button === 2 && options.act)
           this.actActions(this.session.acts.find((act) => act.id === options.act?.id) ?? options.act);
       },
-      onMouseUp: this.click(() => {
-        this.folds.set(state, !closed);
+      run: () => {
+        this.session.folds[state] = !closed;
         this.renderContent();
-      }),
+      },
     });
     box.add(labelNode);
     if (!closed) body(box);
@@ -1330,41 +1276,52 @@ export class App {
       wrapMode: "word",
       drawUnstyledText: true,
     });
-    const nameAt = (x: number, y: number) => {
-      const { line, column } = this.sourcePoint(code, content, x, y);
-      return [...line.matchAll(/[\p{L}_][\p{L}\p{N}_]*/gu)].find(
-        (match) =>
-          column >= Bun.stringWidth(line.slice(0, match.index)) &&
-          column < Bun.stringWidth(line.slice(0, match.index + match[0].length)),
-      )?.[0];
+    return this.pointable(code, content);
+  }
+  /** Python under the pointer. A name shows what it holds in a card once the pointer rests on it, and a click with ⌃
+   * or ⌥ opens it in the inspector. A header that names an act and an image attachment are references, which show
+   * what they name in the card and open it at a click. */
+  private pointable<T extends CodeRenderable | TextRenderable>(node: T, content: string): T {
+    const target = (x: number, y: number) => {
+      // A row of the node is a line of the content, or a part of a line that the node wraps.
+      const row = y - node.y;
+      const info = node.lineInfo;
+      const line = content.split("\n")[node.getLineSources(row, 1)[0] ?? row] ?? "";
+      const first = row - (info.lineWraps[row] ?? 0);
+      const column = x - node.x + (info.lineStartCols[row] ?? 0) - (info.lineStartCols[first] ?? 0);
+      const under = (pattern: RegExp) =>
+        [...line.matchAll(pattern)].filter(
+          (match) =>
+            column >= Bun.stringWidth(line.slice(0, match.index)) &&
+            column < Bun.stringWidth(line.slice(0, match.index + match[0].length)),
+        );
+      const reference = under(/^#([\w@.]+)|furb-image:\/\/[\w.]+/g).find(
+        (match) => match[1] === undefined || this.session.actOf(match[1]),
+      );
+      if (reference) return { reference: true, value: reference[1] ?? reference[0] };
+      const name = under(/[\p{L}_][\p{L}\p{N}_]*/gu)[0];
+      return name && { reference: false, value: name[0] };
     };
-    code.onMouseMove = (event) => {
-      if (this.hoverTimer) clearTimeout(this.hoverTimer);
-      const name = nameAt(event.x, event.y);
-      if (name)
+    node.onMouseMove = (event) => {
+      clearTimeout(this.hoverTimer);
+      const value = target(event.x, event.y);
+      this.unhover();
+      if (value)
         this.hoverTimer = setTimeout(() => {
-          void this.showHover(name, event.x, event.y);
+          if (value.reference) void this.referenceHover(value.value, event.x, event.y);
+          else void this.showHover(value.value, event.x, event.y);
         }, 220);
     };
-    code.onMouseOut = () => {
-      if (this.hoverTimer) clearTimeout(this.hoverTimer);
+    node.onMouseOut = () => {
+      clearTimeout(this.hoverTimer);
       this.unhover();
     };
-    code.onMouseDown = (event) => {
-      const name = nameAt(event.x, event.y);
-      if (name && (event.modifiers.ctrl || event.modifiers.alt)) this.inspect(name);
+    node.onMouseDown = (event) => {
+      const value = target(event.x, event.y);
+      if (value?.reference) void this.follow(value.value).catch(this.report);
+      else if (value && (event.modifiers.ctrl || event.modifiers.alt)) this.inspect(value.value);
     };
-    return code;
-  }
-  private sourcePoint(node: CodeRenderable | TextRenderable, content: string, x: number, y: number) {
-    const row = y - node.y;
-    const source = node.getLineSources(row, 1)[0] ?? row;
-    const info = node.lineInfo;
-    const first = row - (info.lineWraps[row] ?? 0);
-    return {
-      line: content.split("\n")[source] ?? "",
-      column: x - node.x + (info.lineStartCols[row] ?? 0) - (info.lineStartCols[first] ?? 0),
-    };
+    return node;
   }
   private markdown(content: string, fg = c.prose): MarkdownRenderable {
     return new MarkdownRenderable(this.renderer, {
@@ -1378,7 +1335,7 @@ export class App {
    * with no rung that took its place, stands open, and any other rung starts folded when the preference says so. */
   private folded(state: string, rung?: ActRow, compact = false): boolean {
     return (
-      this.folds.get(state) ??
+      this.session.folds[state] ??
       (rung
         ? this.session.preferences.foldRungs && !working(rung) && (!failed(rung) || Boolean(this.retry(rung)))
         : compact)
@@ -1409,15 +1366,22 @@ export class App {
     }
     const existing = new Set(this.cards.keys());
     const used = new Map<string, number>();
+    const matches = (text: string) => !w.search || text.toLowerCase().includes(w.search.toLowerCase());
     let order = 0,
+      items = 0,
       group = "";
+    // A card that shows an item of the view says the text that the filter reads, and counts as an item once it shows.
     const add = (
       id: string,
       key: string,
       label: Part[],
       body: (box: BoxRenderable) => void,
-      options: BlockOptions = {},
+      options: BlockOptions & { shown?: string } = {},
     ) => {
+      if (options.shown !== undefined) {
+        if (!matches(options.shown)) return;
+        items++;
+      }
       // Two cards never share a name: a second card of one name takes the count of its name.
       const taken = used.get(id) ?? 0;
       used.set(id, taken + 1);
@@ -1432,7 +1396,6 @@ export class App {
       });
       order++;
     };
-    const matches = (text: string) => !w.search || text.toLowerCase().includes(w.search.toLowerCase());
     // The label of an act that works moves with time, so the tick reads it again.
     const moving = (act?: ActRow, indent = 0) =>
       act && working(act) ? () => this.actLabel(act, false, indent) : undefined;
@@ -1443,43 +1406,33 @@ export class App {
         const panel = this.panel(box, c.warning);
         panel.add(
           this.text(w.preferences.notice, c.text, {
-            onMouseUp: this.click(() => {
+            run: () => {
               w.preferences.notice = "";
               this.renderContent();
-            }),
+            },
           }),
         );
       });
     if (w.error)
-      add("view-error", `${w.view}:${w.error}`, [], (box) => {
-        const panel = this.panel(box, c.danger);
-        panel.add(
-          this.text([
+      add("view-error", `${w.view}:${w.error}`, [], (box) =>
+        this.banner(
+          box,
+          c.danger,
+          [
             [`${glyph.failed} `, c.danger],
             [`Error in the ${viewLabels[w.view].toLowerCase()} view`, c.text, bold],
-          ]),
-        );
-        panel.add(this.inset(space.between, this.text(w.error, c.muted)));
-        const retry = this.box({
-          flexDirection: "row",
-          marginTop: space.section,
-          paddingLeft: space.between,
-        });
-        retry.add(
-          this.hoverable(
-            this.text([["Refresh view", c.accent, bold]], c.accent, {
-              onMouseUp: this.click(() => {
-                w.error = "";
-                void w.refresh().catch(w.fail);
-              }),
-            }),
-          ),
-        );
-        retry.add(this.text("  reads the view again", c.faint));
-        panel.add(retry);
-      });
-    let items = 0;
-    const named = new Set<string>();
+          ],
+          this.text(w.error, c.muted),
+          [
+            "Refresh view",
+            "reads the view again",
+            () => {
+              w.error = "";
+              void w.refresh().catch(w.fail);
+            },
+          ],
+        ),
+      );
     if (w.view === "feed") {
       const listed = conversation(w.turns, w.acts);
       // An act that no turn tells yet, such as a command that the operator started, stands at the end of the feed
@@ -1533,8 +1486,6 @@ export class App {
       for (const item of listed) {
         if (item.type === "python") {
           const { code, rung } = item;
-          if (!matches(code)) continue;
-          items++;
           // A word of the operator that only made a chain, as a branch or a new chain does, reads as the chain that it
           // made, and a click on it opens that chain.
           const made =
@@ -1545,44 +1496,42 @@ export class App {
             const name = w.labelOf(made.id);
             // The branch itself reads the same word as the point where it starts.
             const here = made.id === w.selected;
-            add(rung.id, `made:${made.id}:${name}:${here}:${this.theme}`, [], (box) =>
-              box.add(
-                here
-                  ? this.text([
-                      ["↳ ", c.secondary],
-                      ["This branch starts here", c.muted],
-                    ])
-                  : this.hoverable(
-                      this.text(
+            add(
+              rung.id,
+              `made:${made.id}:${name}:${here}:${this.theme}`,
+              [],
+              (box) =>
+                box.add(
+                  here
+                    ? this.text([
+                        ["↳ ", c.secondary],
+                        ["This branch starts here", c.muted],
+                      ])
+                    : this.link(
                         [
                           ["↳ ", c.secondary],
                           [made.words[1] ? "Branched to " : "Started the chain ", c.muted],
                           [name, c.text, bold],
                         ],
-                        c.text,
-                        { onMouseUp: this.click(() => void w.select(made.id).catch(w.fail)) },
+                        () => void w.select(made.id).catch(w.fail),
                       ),
-                    ),
-              ),
+                ),
+              { shown: code },
             );
             continue;
           }
           const closed = this.folded(rung?.id ?? item.key, rung);
           // The card of the word of a rung is named by the rung, so that a jump to the rung finds it.
-          const id = rung && !named.has(rung.id) ? rung.id : item.key;
-          named.add(id);
           add(
-            id,
+            rung?.id ?? item.key,
             `${code}\n${rung?.run?.reason ?? ""}`,
             rung ? this.actLabel(rung, closed, 0, code) : [["Python", c.muted, bold]],
             (box) => this.word(box, code, rung?.run?.reason),
-            { collapsible: true, act: rung, title: moving(rung) },
+            { collapsible: true, act: rung, title: moving(rung), shown: code },
           );
         } else if (item.type === "prompt" && asksOperator(item.act)) {
           const { act } = item;
           const message = String(act.words[1] ?? "");
-          if (!matches(message)) continue;
-          items++;
           const waiting = w.host.prompts.has(act.id);
           add(
             item.key,
@@ -1606,18 +1555,16 @@ export class App {
                         ["⌃A", c.muted],
                       ],
                       c.muted,
-                      { onMouseUp: this.click(() => this.question()) },
+                      { run: () => this.question() },
                     ),
                   ),
                 );
             },
-            { group: "question", act },
+            { group: "question", act, shown: message },
           );
         } else if (item.type === "prompt") {
           const { act } = item;
           const message = String(act.words[1] ?? "");
-          if (!matches(message)) continue;
-          items++;
           const user = w.isUserPrompt(act);
           // A message that the chain or a rung sent is its heading when it is one short line, and stands under its
           // heading otherwise. The heading says who sent it, and to which model.
@@ -1644,7 +1591,7 @@ export class App {
                 text.flexGrow = 1;
                 text.flexShrink = 1;
                 row.add(text);
-                row.add(this.text(state, c.faint, { flexShrink: 0, marginLeft: space.between }));
+                row.add(this.text(state, c.faint, { marginLeft: space.between }));
                 this.panel(box, c.accent).add(row);
               } else if (!line) {
                 const note = this.box({ paddingLeft: space.between });
@@ -1652,13 +1599,11 @@ export class App {
                 box.add(note);
               }
             },
-            { group: user ? "user" : "sent", act, heading: user ? false : undefined },
+            { group: user ? "user" : "sent", act, heading: user ? false : undefined, shown: message },
           );
         } else if (item.type === "result" && asksOperator(item.act)) {
           const { act } = item;
           const value = typeof act.value === "boolean" ? (act.value ? "yes" : "no") : display(act.value);
-          if (!matches(value)) continue;
-          items++;
           const line = !value.includes("\n") && Bun.stringWidth(value) < this.feedWidth - 20;
           add(
             item.key,
@@ -1671,13 +1616,11 @@ export class App {
             (box) => {
               if (!line) box.add(this.inset(space.between, this.markdown(value)));
             },
-            { group: "question", act, heading: true },
+            { group: "question", act, heading: true, shown: value },
           );
         } else if (item.type === "result") {
           const { act } = item;
           const value = display(act.value);
-          if (!matches(value)) continue;
-          items++;
           add(
             item.key,
             value,
@@ -1687,12 +1630,10 @@ export class App {
               answer.add(this.markdown(value));
               box.add(answer);
             },
-            { group: item.parallel ? `assistant:${act.id}` : "assistant", act },
+            { group: item.parallel ? `assistant:${act.id}` : "assistant", act, shown: value },
           );
         } else if (item.type === "act") {
           const { act } = item;
-          if (!matches(JSON.stringify(act))) continue;
-          items++;
           const indent = under(act);
           add(
             item.key,
@@ -1706,13 +1647,12 @@ export class App {
               act,
               title: moving(act, indent),
               indent,
+              shown: JSON.stringify(act),
             },
           );
         } else {
           const { label, detail, body, act } = item;
           const text = [act?.id, label, detail, body].filter(Boolean).join("\n");
-          if (!matches(text)) continue;
-          items++;
           const danger = ["raised", "refused"].includes(label);
           const indent = act ? under(act) : space.between;
           add(
@@ -1741,6 +1681,7 @@ export class App {
               group: "tools",
               act,
               indent,
+              shown: text,
               ...(label === "refused"
                 ? { preview: (box: BoxRenderable) => this.excerpt(box, body, false, c.danger) }
                 : {}),
@@ -1789,40 +1730,24 @@ export class App {
       if (w.paused && !w.search) {
         const failure = w.activity.findLast((act) => act.kind === "rung" && act.run?.status === "failed")?.run
           ?.reason;
-        add("paused", `paused:${failure ?? ""}:${this.theme}`, [], (box) => {
-          const panel = this.panel(box, c.warning);
-          panel.add(
-            this.text([
+        add("paused", `paused:${failure ?? ""}:${this.theme}`, [], (box) =>
+          this.banner(
+            box,
+            c.warning,
+            [
               [`${glyph.held} `, c.warning],
               ["This chain is paused", c.text, bold],
               ["  New work waits until it resumes.", c.muted],
-            ]),
-          );
-          if (failure)
-            panel.add(
-              this.inset(
-                space.between,
-                this.whole(
+            ],
+            failure
+              ? this.whole(
                   this.text(clip(shortenHomes(failure).split("\n")[0] ?? "", this.feedWidth - 8), c.danger),
                   () => shortenHomes(failure),
-                ),
-              ),
-            );
-          const row = this.box({
-            flexDirection: "row",
-            marginTop: space.section,
-            paddingLeft: space.between,
-          });
-          row.add(
-            this.hoverable(
-              this.text([["Resume", c.accent, bold]], c.accent, {
-                onMouseUp: this.click(() => this.action("/wake")),
-              }),
-            ),
-          );
-          row.add(this.text("  runs what waits, once the cause is fixed", c.faint));
-          panel.add(row);
-        });
+                )
+              : undefined,
+            ["Resume", "runs what waits, once the cause is fixed", () => this.action("/wake")],
+          ),
+        );
         items++;
       }
       if (!items && !w.search && !w.loading && !w.error) {
@@ -1833,8 +1758,6 @@ export class App {
     } else if (w.view === "transcript") {
       w.turns.forEach((turn, index) => {
         const text = turn[1];
-        if (!matches(text)) return;
-        items++;
         add(
           `transcript-${index}`,
           text,
@@ -1851,84 +1774,74 @@ export class App {
             inner.add(turn[0] === "assistant" ? this.code(text) : this.transcriptText(text));
             box.add(inner);
           },
-          { group: turn[0] },
+          { group: turn[0], shown: text },
         );
       });
     } else if (w.view === "changes") {
       if (w.host.changes > 20)
         add("change-pages", String(w.changePage), [], (box) => {
-          const row = this.box({ flexDirection: "row", gap: space.between, height: space.bar });
+          const row = this.row({ gap: space.between });
           row.add(
             this.text(
               `Writes ${w.changePage * 20 + 1} to ${Math.min((w.changePage + 1) * 20, w.host.changes)} of ${w.host.changes}`,
               c.muted,
             ),
           );
-          for (const [label, step] of [
-            ["Previous page", -1],
-            ["Next page", 1],
-          ] as const)
-            row.add(
-              this.hoverable(
-                this.text([[label, c.accent]], c.accent, {
-                  onMouseUp: this.click(() => this.changePage(step)),
-                }),
-              ),
-            );
+          row.add(this.link("Previous page", () => this.changePage(-1)));
+          row.add(this.link("Next page", () => this.changePage(1)));
           box.add(row);
         });
       const root = w.host.directory;
-      for (const [index, change] of w.changes.entries())
-        if (matches(change.path)) {
-          items++;
-          // A change never changes once it is written, so its position in the life keys its card.
-          const position = String(w.changePage * 20 + index);
-          const { added, removed } = lineCounts(change.patch);
-          const path = change.path.startsWith(`${root}/`) ? change.path.slice(root.length + 1) : change.path;
-          // The heading of a change is a bar of the panel: the path, what the write did to the file, and the lines it
-          // added and removed at its right.
-          const [what, color] = !change.before
-            ? ["created", c.success]
-            : !change.after
-              ? ["deleted", c.danger]
-              : ["modified", c.warning];
-          const counts = `+${added} -${removed} `;
-          const fill = Math.max(
-            1,
-            this.feedWidth - Bun.stringWidth(` ${glyph.dot} ${path}  ${what}`) - Bun.stringWidth(counts),
-          );
-          add(
-            `change-${position}`,
-            position,
-            [
-              [` ${glyph.dot} `, color, 0, c.panel],
-              [path, c.text, bold, c.panel],
-              [`  ${what}`, c.muted, 0, c.panel],
-              [" ".repeat(fill), c.text, 0, c.panel],
-              [`+${added}`, added ? c.success : c.faint, 0, c.panel],
-              [` -${removed} `, removed ? c.danger : c.faint, 0, c.panel],
-            ],
-            (box) =>
-              box.add(
-                new DiffRenderable(this.renderer, {
-                  diff: change.patch,
-                  // Two sides need room for two lines of code side by side, and one side reads better below that.
-                  view: this.feedWidth >= 160 ? "split" : "unified",
-                  syntaxStyle: this.style,
-                  fg: c.text,
-                  showLineNumbers: true,
-                  lineNumberFg: c.faint,
-                  lineNumberBg: c.background,
-                  contextBg: c.background,
-                  addedBg: c.added,
-                  removedBg: c.removed,
-                  addedSignColor: c.success,
-                  removedSignColor: c.danger,
-                  wrapMode: "word",
-                }),
-              ),
-          );
-        }
+      for (const [index, change] of w.changes.entries()) {
+        // A change never changes once it is written, so its position in the life keys its card.
+        const position = String(w.changePage * 20 + index);
+        const { added, removed } = lineCounts(change.patch);
+        const path = change.path.startsWith(`${root}/`) ? change.path.slice(root.length + 1) : change.path;
+        // The heading of a change is a bar of the panel: the path, what the write did to the file, and the lines it
+        // added and removed at its right.
+        const [what, color] = !change.before
+          ? ["created", c.success]
+          : !change.after
+            ? ["deleted", c.danger]
+            : ["modified", c.warning];
+        const counts = `+${added} -${removed} `;
+        const fill = Math.max(
+          1,
+          this.feedWidth - Bun.stringWidth(` ${glyph.dot} ${path}  ${what}`) - Bun.stringWidth(counts),
+        );
+        add(
+          `change-${position}`,
+          position,
+          [
+            [` ${glyph.dot} `, color, 0, c.panel],
+            [path, c.text, bold, c.panel],
+            [`  ${what}`, c.muted, 0, c.panel],
+            [" ".repeat(fill), c.text, 0, c.panel],
+            [`+${added}`, added ? c.success : c.faint, 0, c.panel],
+            [` -${removed} `, removed ? c.danger : c.faint, 0, c.panel],
+          ],
+          (box) =>
+            box.add(
+              new DiffRenderable(this.renderer, {
+                diff: change.patch,
+                // Two sides need room for two lines of code side by side, and one side reads better below that.
+                view: this.feedWidth >= 160 ? "split" : "unified",
+                syntaxStyle: this.style,
+                fg: c.text,
+                showLineNumbers: true,
+                lineNumberFg: c.faint,
+                lineNumberBg: c.background,
+                contextBg: c.background,
+                addedBg: c.added,
+                removedBg: c.removed,
+                addedSignColor: c.success,
+                removedSignColor: c.danger,
+                wrapMode: "word",
+              }),
+            ),
+          { shown: change.path },
+        );
+      }
     }
     // A view with nothing to show says why in the middle of the feed, and what brings something to it.
     const { height } = this.scroll.viewport;
@@ -1937,10 +1850,16 @@ export class App {
         [`${spin()} `, c.accent],
         [`Loading the ${viewLabels[w.view].toLowerCase()}`, c.muted],
       ];
-      add("view-loading", `${w.view}:${height}`, [], (box) => this.centered(box, height, [loading()]), {
-        title: loading,
-        heading: false,
-      });
+      add(
+        "view-loading",
+        `${w.view}:${height}`,
+        [],
+        (box) => this.centered(box, height, this.text(loading())),
+        {
+          title: loading,
+          heading: false,
+        },
+      );
     }
     if (!items && !w.loading && !w.error) {
       const empty: Record<View, [string, string]> = {
@@ -1952,13 +1871,15 @@ export class App {
         ? [`Nothing matches “${w.search}”`, "Change the filter, or press Esc to clear it."]
         : empty[w.view];
       add("empty", `${title}:${height}:${this.theme}`, [], (box) =>
-        this.centered(box, height, [
-          [
+        this.centered(
+          box,
+          height,
+          this.text([
             [`${glyph.ring} `, c.faint],
             [title, c.text, bold],
-          ],
-          [[hint, c.muted]],
-        ]),
+          ]),
+          this.text(hint, c.muted),
+        ),
       );
     }
     for (const id of existing) {
@@ -1967,6 +1888,27 @@ export class App {
     }
   }
 
+  /** A panel of the feed that says a state of the view: its heading, what the state holds, and a link that acts on it
+   * with what the link does. */
+  private banner(
+    box: BoxRenderable,
+    color: RGBA,
+    heading: Part[],
+    detail: Renderable | undefined,
+    [label, does, run]: [string, string, () => void],
+  ): void {
+    const panel = this.panel(box, color);
+    panel.add(this.text(heading));
+    if (detail) panel.add(this.inset(space.between, detail));
+    const row = this.box({ flexDirection: "row", marginTop: space.section, paddingLeft: space.between });
+    row.add(this.link([[label, c.accent, bold]], run));
+    row.add(this.text(`  ${does}`, c.faint));
+    panel.add(row);
+  }
+  /** A text that lights under the pointer, and runs an action at a click. */
+  private link(content: string | Part[], run: () => void): TextRenderable {
+    return this.hoverable(this.text(content, c.accent, { run }));
+  }
   /** A message of the operator: its text, and the name of each image it refers to in the color of an attachment. A
    * click on the message opens the actions of its first image. */
   private message(text: string): TextRenderable {
@@ -1980,32 +1922,22 @@ export class App {
     }
     parts.push([rest, c.text]);
     const first = images[0];
-    return this.text(
-      parts,
-      c.text,
-      first ? { onMouseUp: this.click(() => this.imageActions(first.uri)) } : {},
-    );
+    return this.text(parts, c.text, { run: first && (() => this.imageActions(first.uri)) });
   }
-  /** Lines in the middle of the feed, which a view with nothing to show says. */
-  private centered(box: BoxRenderable, height: number, lines: Part[][]): void {
+  /** What a view says in the middle of the feed when it has nothing else to show. */
+  private centered(box: BoxRenderable, height: number, ...nodes: Renderable[]): void {
     const frame = this.box({
       minHeight: Math.max(0, height - space.section * 2),
       justifyContent: "center",
       alignItems: "center",
-      gap: space.stack,
     });
-    for (const line of lines) frame.add(this.text(line, c.muted));
+    for (const node of nodes) frame.add(node);
     box.add(frame);
   }
   /** The screen of a feed that has no turn yet: the logo of furb, what it is, where it works, where to start, and the
    * keys to know. */
   private welcome(box: BoxRenderable, height: number): void {
     const w = this.session;
-    const frame = this.box({
-      minHeight: Math.max(0, height - space.section * 2),
-      justifyContent: "center",
-      alignItems: "center",
-    });
     const width = Math.min(72, this.feedWidth);
     const column = this.box({ width, alignItems: "center" });
     // The logo shades from the accent to the color of Python, one column at a time.
@@ -2086,12 +2018,11 @@ export class App {
             [` ${action}`, c.faint],
           ],
           c.faint,
-          { onMouseUp: this.click(run) },
+          { run },
         ),
       );
     column.add(keys);
-    frame.add(column);
-    box.add(frame);
+    this.centered(box, height, column);
   }
 
   private preview(text: string, reserve = 2): string {
@@ -2112,10 +2043,14 @@ export class App {
     const visible = selected
       .map((line) => clip(line, Math.max(8, this.feedWidth - space.between * 3)))
       .join("\n");
-    const preview = this.box({ flexDirection: "row", paddingLeft: space.between });
-    preview.add(this.text(`${glyph.branch} `, c.faint));
-    preview.add(this.text(visible, color, { flexShrink: 1 }));
-    box.add(preview);
+    box.add(this.branched(visible, color));
+  }
+  /** A text joined by a branch to the heading above it. */
+  private branched(text: string, color: RGBA): BoxRenderable {
+    const row = this.box({ flexDirection: "row", paddingLeft: space.between });
+    row.add(this.text(`${glyph.branch} `, c.faint));
+    row.add(this.text(text, color, { flexShrink: 1 }));
+    return row;
   }
   private actPreview(act: ActRow): BlockOptions["preview"] {
     if (act.run)
@@ -2149,10 +2084,10 @@ export class App {
   private actState(act: ActRow): State {
     const w = this.session;
     const running = () => ({ word: `running ${this.progress(act.id)}`, mark: spin(), color: c.accent });
-    if (act.kind === "grant")
-      return act.done
-        ? { word: "ended", mark: glyph.ring, color: c.faint }
-        : { word: "", mark: glyph.dot, color: c.accent };
+    if (act.kind === "grant" && act.done) return { word: "ended", mark: glyph.ring, color: c.faint };
+    // Only work moves: an act of another kind that lives, as a grant or the watcher of an extension, lives until
+    // something ends it, as a chain does, and shows a dot.
+    if (!act.done && !WORK.includes(act.kind)) return { word: "", mark: glyph.dot, color: c.accent };
     // A rung that a pause holds waits for the wake, and says so, where it would otherwise seem to run.
     if (act.kind === "rung")
       return cancelled(act)
@@ -2278,17 +2213,9 @@ export class App {
     const inner = this.box({ gap: space.stack, paddingLeft: space.inset });
     // A rung whose word has not come yet shows no code.
     if (word) inner.add(this.numbered(word));
-    if (reason) {
-      const why = this.box({ flexDirection: "row", paddingLeft: space.between });
-      why.add(this.text(`${glyph.branch} `, c.faint));
-      // The parser names the word as <string> and says its line twice, which the reason leaves out.
-      why.add(
-        this.text(shortenHomes(reason.replace(/\s*\(<string>, line \d+\)$/, "")), c.danger, {
-          flexShrink: 1,
-        }),
-      );
-      inner.add(why);
-    }
+    // The parser names the word as <string> and says its line twice, which the reason leaves out.
+    if (reason)
+      inner.add(this.branched(shortenHomes(reason.replace(/\s*\(<string>, line \d+\)$/, "")), c.danger));
     box.add(inner);
   }
   private actDetails(box: BoxRenderable, act: ActRow): void {
@@ -2357,7 +2284,7 @@ export class App {
           ] as Part[])
         : []),
       [input === true ? "   input open" : "", c.faint],
-      [typeof timeout === "number" && timeout !== 600 ? `   times out after ${timeout}s` : "", c.faint],
+      [typeof timeout === "number" && timeout !== TIMEOUT ? `   times out after ${timeout}s` : "", c.faint],
     ];
     meta.add(this.text(notes, c.faint));
     details.add(meta);
@@ -2372,13 +2299,38 @@ export class App {
       }, this.report);
   }
 
-  private numbered(word: string): LineNumberRenderable {
+  /** Python with the number of each line. */
+  private numbered(
+    word: string,
+    options: LineNumberOptions = { fg: c.faint, minWidth: 3 },
+  ): LineNumberRenderable {
     return new LineNumberRenderable(this.renderer, {
       target: this.code(word),
-      fg: c.faint,
-      minWidth: 3,
       paddingRight: space.inset,
+      ...options,
     });
+  }
+  /** A text of a dialog, which scrolls past the rows it takes. */
+  private document(node: Renderable, options: ScrollBoxOptions): ScrollBoxRenderable {
+    const document = new ScrollBoxRenderable(this.renderer, { scrollX: false, scrollY: true, ...options });
+    document.add(node);
+    return document;
+  }
+  /** A card under the pointer, which a press opens. */
+  private hoverCard(x: number, y: number, rows: number, open: () => void, ...nodes: Renderable[]): void {
+    const width = Math.min(58, this.renderer.width - 4);
+    this.popup(
+      {
+        left: Math.max(1, Math.min(x, this.renderer.width - width - 1)),
+        top: Math.max(1, Math.min(y + 1, this.renderer.height - rows)),
+        width,
+        maxHeight: rows,
+        paddingX: space.between,
+        paddingY: space.inset,
+        onMouseDown: open,
+      },
+      ...nodes,
+    );
   }
 
   private reference(label: string, value: string): TextRenderable {
@@ -2429,18 +2381,11 @@ export class App {
           ? `${act.kind}  ${act.done ? display(act.value) : "pending"}`
           : display(await this.referenced(value));
       if (this.closed || this.overlay) return;
-      this.popup(
-        {
-          left: Math.max(1, Math.min(x, this.renderer.width - 60)),
-          top: Math.max(1, Math.min(y + 1, this.renderer.height - 8)),
-          width: Math.min(58, this.renderer.width - 4),
-          maxHeight: 8,
-          paddingX: space.between,
-          paddingY: space.inset,
-          onMouseDown: () => {
-            void this.follow(value).catch(this.report);
-          },
-        },
+      this.hoverCard(
+        x,
+        y,
+        8,
+        () => void this.follow(value).catch(this.report),
         this.text(value, c.link, { attributes: bold }),
         this.text(detail.slice(0, 400), c.muted, { maxHeight: 4 }),
       );
@@ -2469,47 +2414,10 @@ export class App {
       at = match.index + match[0].length;
     }
     chunks.push({ __isChunk: true, text: text.slice(at), fg: c.text });
-    const node = new TextRenderable(this.renderer, {
-      content: new StyledText(chunks),
-      wrapMode: "word",
-      flexShrink: 0,
-    });
-    const target = (x: number, y: number) => {
-      const { line, column } = this.sourcePoint(node, text, x, y);
-      const match = [...line.matchAll(/^#([\w@.]+)|furb-image:\/\/[\w.]+/g)].find(
-        (match) =>
-          (match[1] === undefined || this.session.actOf(match[1])) &&
-          column >= Bun.stringWidth(line.slice(0, match.index)) &&
-          column < Bun.stringWidth(line.slice(0, match.index + match[0].length)),
-      );
-      if (match) return { reference: true, value: match[1] ?? match[0] };
-      const name = [...line.matchAll(/[\p{L}_][\p{L}\p{N}_]*/gu)].find(
-        (match) =>
-          column >= Bun.stringWidth(line.slice(0, match.index)) &&
-          column < Bun.stringWidth(line.slice(0, match.index + match[0].length)),
-      );
-      return name ? { reference: false, value: name[0] } : undefined;
-    };
-    node.onMouseMove = (event) => {
-      clearTimeout(this.hoverTimer);
-      const value = target(event.x, event.y);
-      this.unhover();
-      if (value)
-        this.hoverTimer = setTimeout(() => {
-          if (value.reference) void this.referenceHover(value.value, event.x, event.y);
-          else void this.showHover(value.value, event.x, event.y);
-        }, 220);
-    };
-    node.onMouseOut = () => {
-      clearTimeout(this.hoverTimer);
-      this.unhover();
-    };
-    node.onMouseDown = (event) => {
-      const value = target(event.x, event.y);
-      if (value?.reference) void this.follow(value.value).catch(this.report);
-      else if (value && (event.modifiers.ctrl || event.modifiers.alt)) this.inspect(value.value);
-    };
-    return node;
+    return this.pointable(
+      new TextRenderable(this.renderer, { content: new StyledText(chunks), wrapMode: "word", flexShrink: 0 }),
+      text,
+    );
   }
 
   private renderRail(): void {
@@ -2532,7 +2440,7 @@ export class App {
         width,
         w.chains.map((chain) => [chain.id, w.labelOf(chain.id), this.session.chainStatus(chain.id)]),
         grant?.words,
-        this.showResting,
+        this.unfolded.has("finished"),
       ])
     )
       return;
@@ -2541,26 +2449,21 @@ export class App {
     const inner = width - space.between * 2;
     // The chains fill the head of the sidebar, and the usage its foot.
     let target: BoxRenderable = this.railSession;
-    const add = (parts: Part[], options: ConstructorParameters<typeof TextRenderable>[1] = {}) => {
-      const node = this.text(parts, c.muted, { height: space.bar, truncate: true, ...options });
+    const add = (parts: Part[], options: TextShape = {}) => {
+      const node = this.line(parts, c.muted, { truncate: true, ...options });
       target.add(node);
       return node;
     };
-    // A row of a table: its name at the left, and its value at the right.
-    const row = (name: string, value: string, color = c.text, note = "") => {
-      const room = Math.max(1, inner - Bun.stringWidth(name + note + value));
-      return add([[name, c.muted], [note, c.faint], [" ".repeat(room)], [value, color]]);
+    // A line of a table: its name and its note at its left, and its value at its right.
+    const spread = (name: Part, note: string, value: Part, options: TextShape = {}) => {
+      const room = Math.max(1, inner - Bun.stringWidth(name[0] + note + value[0]));
+      return add([name, [note, c.faint], [" ".repeat(room)], value], options);
     };
-    const section = (name: string, value = "", note = "", run?: () => void) => {
-      const room = Math.max(1, inner - Bun.stringWidth(name + note + value));
-      add([[name, c.text, bold], [note, c.faint], [" ".repeat(room)], [value, c.faint]], {
-        marginTop: space.section,
-        ...(run ? { onMouseUp: this.click(run) } : {}),
-      });
-    };
+    const row = (name: string, value: string, color = c.text) => spread([name, c.muted], "", [value, color]);
+    // The heading of a section, which stands first in its part of the sidebar.
+    const section = (name: string, value = "", note = "", run?: () => void) =>
+      spread([name, c.text, bold], note, [value, c.faint], { run });
     section("Chains", "⌃B", "", () => this.chains());
-    const first = this.railSession.getChildren()[0];
-    if (first) first.marginTop = 0;
     // The root chain, the chain that is shown, and a chain that has something to say stand in the list, and the other
     // finished chains fold under a row of their own, which a click opens. The list takes six rows at most, and the rest
     // wait behind a button that lists them all.
@@ -2579,7 +2482,7 @@ export class App {
           [
             [selected ? glyph.mark : " ", c.accent],
             [" "],
-            [`${this.statusDot(status)} `, this.statusColor(status)],
+            statusMark(status),
             [
               w.labelOf(chain.id),
               selected ? c.text : status === "idle" ? c.faint : c.muted,
@@ -2600,27 +2503,13 @@ export class App {
           ["   ", c.faint],
           [`${active.length - shown} more`, c.accent],
         ],
-        { onMouseUp: this.click(() => this.chains()) },
+        { run: () => this.chains() },
       );
     if (resting.length) {
       // The row of the finished chains stands as a chain row does: its fold mark in the column of the bar of the
       // selected chain, and its name where the names of the chains start.
-      this.railSession.add(
-        this.railRow(
-          [
-            [this.showResting ? glyph.open : glyph.closed, c.faint],
-            [" ", c.faint],
-            ["Finished", c.faint],
-            [`  ${resting.length}`, c.faint],
-          ],
-          () => {
-            this.showResting = !this.showResting;
-            this.render();
-          },
-          edge,
-        ),
-      );
-      if (this.showResting) for (const chain of resting.slice(0, 12)) chainLine(chain);
+      this.railSession.add(this.foldRow("finished", " Finished", resting.length, edge));
+      if (this.unfolded.has("finished")) for (const chain of resting.slice(0, 12)) chainLine(chain);
     }
     target = this.railUsage;
     const spend = w.spend;
@@ -2635,9 +2524,6 @@ export class App {
         known ? `${Number(((window ?? 0) * 100).toFixed(1))}%` : "",
         w.demo ? "  simulated" : "",
       );
-      // The rule above the usage stands in for the space above a section.
-      const head = this.railUsage.getChildren()[0];
-      if (head) head.marginTop = 0;
       // The meter fills with the share of the window that the last answer used, and marks the ceiling of a grant. It
       // stands empty until an answer tells the share, and a hover over it says the share and where the chain pauses.
       const part = known ? (window ?? 0) : 0;
@@ -2652,31 +2538,16 @@ export class App {
         [known ? " of the context window" : "", c.muted],
         [ceiling === undefined ? "" : `, pauses at ${Number((ceiling * 100).toFixed(1))}%`, c.warning],
       ];
-      add(cells, {
-        onMouseOver: (event) => this.tip(tip, event.x, event.y),
-        onMouseOut: () => {
-          this.unhover();
-        },
-      });
+      this.tipped(add(cells), tip);
       // The input is the whole prompt of the last answer, its system prompt included, which the share of the window
       // measures. The output and the cache are what every answer of the chain wrote and read, each counted once.
       if (tokens > 0) {
         const input = w.context;
-        if (input !== undefined) {
-          const shown = row("Input", count(input));
-          shown.onMouseOver = (event) =>
-            this.tip(
-              [
-                ["The whole prompt of the last answer, system prompt included. ", c.text],
-                [`${count(spend.input)} of the input of the chain was fresh.`, c.muted],
-              ],
-              event.x,
-              event.y,
-            );
-          shown.onMouseOut = () => {
-            this.unhover();
-          };
-        }
+        if (input !== undefined)
+          this.tipped(row("Input", count(input)), [
+            ["The whole prompt of the last answer, system prompt included. ", c.text],
+            [`${count(spend.input)} of the input of the chain was fresh.`, c.muted],
+          ]);
         row("Output", count(spend.output));
         if (spend.cacheRead) row("Cache read", count(spend.cacheRead));
         if (spend.cacheWrite) row("Cache write", count(spend.cacheWrite));
@@ -2689,17 +2560,33 @@ export class App {
    * edge to edge. It lights while the pointer is on it, and stays lit while it is selected. */
   private railRow(parts: Part[], run: () => void, options: BoxOptions, selected = false): BoxRenderable {
     const row = this.hoverable(
-      this.box({
-        flexDirection: "row",
-        height: space.bar,
-        backgroundColor: selected ? c.selected : c.panel,
-        onMouseUp: this.click(run),
-        ...options,
-      }),
+      this.row({ backgroundColor: selected ? c.selected : c.panel, onMouseUp: this.click(run), ...options }),
       selected ? c.selected : c.raised,
     );
     row.add(this.text(parts, c.muted, { truncate: true, flexGrow: 1, flexShrink: 1 }));
     return row;
+  }
+  /** A row of the sidebar that folds a list under it, with its label and the count of the list, which a click folds
+   * or unfolds. */
+  private foldRow(key: string, label: string, count: number, options: BoxOptions): BoxRenderable {
+    return this.railRow(
+      [
+        [this.unfolded.has(key) ? glyph.open : glyph.closed, c.faint],
+        [label, c.faint],
+        [`  ${count}`, c.faint],
+      ],
+      () => {
+        if (!this.unfolded.delete(key)) this.unfolded.add(key);
+        this.render();
+      },
+      options,
+    );
+  }
+  /** A node that shows a tip while the pointer is over it. */
+  private tipped<T extends Renderable>(node: T, parts: Part[]): T {
+    node.onMouseOver = (event) => this.tip(parts, event.x, event.y);
+    node.onMouseOut = () => this.unhover();
+    return node;
   }
   /** The composer holds a text in place of the draft that the session shows, and an undo gives the draft back. */
   private insert(text: string): void {
@@ -2707,31 +2594,6 @@ export class App {
     if (this.draftKey !== this.session.draftKey) this.showDraft(this.session.draftKey);
     this.composer.replaceText(text);
     this.composer.focus();
-  }
-  private statusColor(status: SessionStatus): RGBA {
-    return status === "blocked" || status === "paused"
-      ? c.warning
-      : status === "error"
-        ? c.danger
-        : status === "done"
-          ? c.success
-          : status === "working" || status === "opening"
-            ? c.accent
-            : c.faint;
-  }
-  /** The mark of a state, one shape for each: at work, waiting on the operator, paused, failed, finished and not yet
-   * seen, and at rest. */
-  private statusDot(status: SessionStatus): string {
-    return {
-      working: glyph.running,
-      opening: glyph.running,
-      blocked: glyph.asks,
-      paused: glyph.held,
-      error: glyph.failed,
-      done: glyph.dot,
-      idle: glyph.ring,
-      saved: glyph.ring,
-    }[status];
   }
   /** The workspaces in the sidebar, under the session: each folder with its sessions, which scroll on their own. */
   private renderWorkspaces(): void {
@@ -2749,7 +2611,7 @@ export class App {
           group.collapsed,
           group.sessions.map((entry) => [entry.path, entry.name, entry.status, entry.error, entry.archived]),
         ]),
-        [...this.showArchived],
+        [...this.unfolded],
         this.renaming && this.itemKey(this.renaming.item),
         this.menuItem && this.itemKey(this.menuItem),
       ])
@@ -2760,13 +2622,10 @@ export class App {
     this.unhover();
     const inner = width - space.between * 2;
     this.railHeading.add(this.text("Workspaces", c.text, { attributes: bold, flexGrow: 1 }));
-    this.railHeading.add(
-      this.text("⌃W", c.faint, { onMouseUp: this.click(() => void this.workspacePicker()) }),
-    );
+    this.railHeading.add(this.text("⌃W", c.faint, { run: () => void this.workspacePicker() }));
+    const padding = { paddingLeft: space.inset, paddingRight: space.between };
     const line = (parts: Part[], run: () => void, options: BoxOptions = {}) =>
-      this.railSpaces.add(
-        this.railRow(parts, run, { paddingLeft: space.inset, paddingRight: space.between, ...options }),
-      );
+      this.railSpaces.add(this.railRow(parts, run, { ...padding, ...options }));
     if (library.notice) this.railSpaces.add(this.inset(space.between, this.text(library.notice, c.warning)));
     if (!library.groups.length)
       this.railSpaces.add(
@@ -2789,9 +2648,7 @@ export class App {
       const ground = selected ? c.selected : this.menuItem === item ? lit : c.panel;
       // A click in the input of a new name only moves its cursor.
       const renaming = this.renaming?.item === item ? this.renaming : undefined;
-      const row = this.box({
-        flexDirection: "row",
-        height: space.bar,
+      const row = this.row({
         paddingLeft: space.inset,
         paddingRight: space.between,
         backgroundColor: renaming ? lit : ground,
@@ -2803,8 +2660,8 @@ export class App {
         },
         ...options,
       });
-      row.add(this.text(parts.lead, c.muted, { height: space.bar }));
-      const state = parts.state && this.text([parts.state], c.muted, { height: space.bar });
+      row.add(this.line(parts.lead, c.muted));
+      const state = parts.state && this.line([parts.state], c.muted);
       if (state && !parts.after) row.add(state);
       if (renaming) {
         const input = new InputRenderable(this.renderer, {
@@ -2837,8 +2694,7 @@ export class App {
         input.focus();
         return row;
       }
-      const name = this.text([parts.name], c.muted, {
-        height: space.bar,
+      const name = this.line([parts.name], c.muted, {
         truncate: true,
         flexShrink: 1,
         flexGrow: parts.after ? 0 : 1,
@@ -2850,8 +2706,7 @@ export class App {
       }
       if (parts.after) row.add(this.box({ flexGrow: 1 }));
       const button = (mark: string, act: () => void) =>
-        this.text(mark, ground, {
-          height: space.bar,
+        this.line(mark, ground, {
           marginLeft: space.inset,
           onMouseUp: this.click((event) => {
             event.stopPropagation();
@@ -2906,11 +2761,11 @@ export class App {
         {
           lead: [[" "], [`${group.collapsed ? glyph.closed : glyph.open} `, c.faint]],
           name: [group.name, current ? c.text : c.muted, bold],
-          state: quiet ? undefined : [this.statusDot(status), this.statusColor(status)],
+          state: quiet ? undefined : statusMark(status),
           after: true,
         },
         () => [
-          [`${this.statusDot(status)} `, this.statusColor(status)],
+          statusMark(status),
           [statusLabels[status], c.text, bold],
           [
             `  ${count} of ${group.sessions.length} ${group.sessions.length === 1 ? "session" : "sessions"}`,
@@ -2926,8 +2781,7 @@ export class App {
         this.inset(
           space.inset + 3,
           this.whole(
-            this.text(clip(shortenHome(group.directory), inner - space.inset - 1, "end"), c.faint, {
-              height: space.bar,
+            this.line(clip(shortenHome(group.directory), inner - space.inset - 1, "end"), c.faint, {
               truncate: true,
             }),
             () => shortenHome(group.directory),
@@ -2940,11 +2794,11 @@ export class App {
           entry,
           {
             lead: [[selected ? glyph.mark : " ", c.accent], ["  "]],
-            state: [`${this.statusDot(entry.status)} `, this.statusColor(entry.status)],
+            state: statusMark(entry.status),
             name: [entry.name, selected ? c.text : entry.archived ? c.faint : c.muted, selected ? bold : 0],
           },
           () => [
-            [`${this.statusDot(entry.status)} `, this.statusColor(entry.status)],
+            statusMark(entry.status),
             [statusLabels[entry.status], c.text, bold],
             [entry.error ? `  ${entry.error}` : "", c.danger],
           ],
@@ -2962,21 +2816,8 @@ export class App {
       // The archived sessions fold under a row of their own, as the finished chains do, which a click opens.
       const archived = group.sessions.filter((entry) => entry.archived);
       if (archived.length) {
-        const open = this.showArchived.has(group.directory);
-        line(
-          [
-            [open ? glyph.open : glyph.closed, c.faint],
-            ["  "],
-            ["Archived", c.faint],
-            [`  ${archived.length}`, c.faint],
-          ],
-          () => {
-            if (open) this.showArchived.delete(group.directory);
-            else this.showArchived.add(group.directory);
-            this.render();
-          },
-        );
-        if (open) for (const entry of archived) sessionRow(entry);
+        this.railSpaces.add(this.foldRow(group.directory, "  Archived", archived.length, padding));
+        if (this.unfolded.has(group.directory)) for (const entry of archived) sessionRow(entry);
       }
     }
     line([[" "], ["+ ", c.faint], ["Add a workspace", c.faint]], () => this.insert("/workspace "), {
@@ -3172,20 +3013,11 @@ export class App {
   };
   /** The commands that the view answers itself, by their text. */
   private async globalCommand(text: string): Promise<boolean> {
-    const extensions = this.options.extensions;
-    if (text.startsWith("/extension ") && extensions) {
-      await extensions.load(this.session.path(text.slice(11).trim()));
-      this.session.notice = "Extension loaded.";
-      return true;
-    }
     const [name, ...words] = text.startsWith("/") ? text.slice(1).split(" ") : [];
     const argument = words.join(" ").trim();
-    if (name && extensions?.commands.has(name)) {
-      await extensions.run(name, words.join(" "));
-      return true;
-    }
-    // A command with no argument that opens a picker, and /inspect, which opens the value it names.
-    const pickers: Record<string, () => unknown> = {
+    const library = this.options.workspaces;
+    // A command with no argument that opens a picker or acts at once, and /inspect, which opens the value it names.
+    const bare: Record<string, () => unknown> = {
       details: this.details,
       rewind: this.rewind,
       tree: this.sessionTree,
@@ -3194,30 +3026,19 @@ export class App {
       effort: this.effortPicker,
       shape: () => this.shapes(),
       theme: () => this.themes(),
+      exit: () => this.options.quit(),
+      editor: () => this.editDraft(),
+      files: this.filesPicker,
+      new: () => library.create(),
+      sidebar: () => library.toggle(),
+      workspace: this.workspacePicker,
     };
-    if (name && !argument && Object.hasOwn(pickers, name)) {
-      pickers[name]?.();
+    if (name && !argument && Object.hasOwn(bare, name)) {
+      await bare[name]?.();
       return true;
     }
     if (name === "inspect" && argument) {
       await this.inspect(argument);
-      return true;
-    }
-    if (text === "/exit") {
-      await this.options.quit();
-      return true;
-    }
-    if (text === "/editor") {
-      await this.editDraft();
-      return true;
-    }
-    if (text === "/files") {
-      await this.filesPicker();
-      return true;
-    }
-    const library = this.options.workspaces;
-    if (text === "/new") {
-      await library.create();
       return true;
     }
     if (text === "/image" || text.startsWith("/image ")) {
@@ -3242,14 +3063,6 @@ export class App {
           })),
         ),
       );
-      return true;
-    }
-    if (text === "/sidebar") {
-      library.toggle();
-      return true;
-    }
-    if (text === "/workspace") {
-      await this.workspacePicker();
       return true;
     }
     if (text.startsWith("/workspace ")) {
@@ -3422,7 +3235,7 @@ export class App {
   private actActions(act: ActRow): void {
     const w = this.session;
     const message = w.isUserPrompt(act) && !asksOperator(act);
-    this.openPalette(`${act.kind === "rung" ? "Rung" : title(act.kind)} ${act.id}`, [
+    this.openPalette(`${title(act.kind)} ${act.id}`, [
       {
         label: "Inspect",
         detail: "Its words, its state, and its value",
@@ -3502,21 +3315,14 @@ export class App {
         keys: toggle && shown(toggle.key, toggle.binding, kitty).replace("1-3", String(index + 1)),
         run: () => this.showView(view),
       });
-    for (const [name, command] of this.options.extensions?.commands ?? [])
-      choices.push({
-        label: command.label,
-        detail: command.description,
-        command: `/${name}`,
-        run: () => this.action(`/${name}`),
-      });
-    for (const [name, [label, argument, detail]] of Object.entries(commands)) {
+    for (const { name, label, argument, detail, usage } of slashes) {
       if (name === "new") continue;
       const aside = before.get(name);
       if (aside) choices.push(aside);
       choices.push({
         label,
         detail,
-        command: `/${name}${argument ? ` ${argument}` : ""}`,
+        command: usage,
         keys: keysOf.get(name),
         run: this.command(name, argument),
       });
@@ -3556,24 +3362,11 @@ export class App {
     if (token)
       this.replaceBefore(token.kind === "value" ? token.text : `${token.kind}${token.text}`, suggestion.text);
   }
-  /** The paths of the project, which the suggestions read: known once the first read ends, which suggests again. */
-  private projectPaths(fresh = false): string[] | undefined {
-    const read = this.session.projectFiles(fresh);
-    if (this.files?.read !== read) {
-      const files: NonNullable<typeof this.files> = { read };
-      this.files = files;
-      read.then(
-        (paths) => {
-          files.paths = paths;
-          if (this.files === files && !this.closed) this.suggest();
-        },
-        (error: unknown) => {
-          files.error = error instanceof Error ? error.message : String(error);
-          if (this.files === files && !this.closed) this.suggest();
-        },
-      );
-    }
-    return this.files.paths;
+  /** The paths of the project, which the suggestions read, as a pick of them gives them: none until the read of the
+   * session ends, which draws the suggestions again. An `@` that starts a word reads them afresh. */
+  private paths(pick = (paths: string[]) => paths, fresh = false): Value[] {
+    void this.session.projectFiles(fresh);
+    return pick(this.session.files?.paths ?? []).map((path) => ({ value: path, detail: "" }));
   }
   /** The values that the first argument of a command may take, for each command whose values the TUI knows. A value
    * of a command that takes more after it completes, and a value of any other command runs the command when it is
@@ -3582,11 +3375,15 @@ export class App {
     model: () => {
       const w = this.session;
       const roster = w.roster.filter(([name]) => name !== "operator");
-      return roster.map(([name, , window]) => {
+      // The models of the catalog that the roster does not hold follow it, and one of them joins the roster when it is
+      // chosen.
+      const added = w.catalog.filter(([name]) => !roster.some(([held]) => held === name));
+      return [...roster, ...added].map(([name, , window], at) => {
         const { provider, id } = modelName(name);
+        const shared = roster.filter(([other]) => modelName(other).id === id).length > 1;
         return {
-          // A model goes by its id alone, unless two providers offer a model of that id.
-          value: roster.filter(([other]) => modelName(other).id === id).length > 1 ? name : id,
+          // A model of the roster goes by its id alone, unless two providers offer a model of that id.
+          value: at < roster.length && !shared ? id : name,
           detail: `${count(window)} tokens of context`,
           current: name === w.actorChoice.model,
           label: id,
@@ -3603,7 +3400,7 @@ export class App {
       }));
     },
     shape: () =>
-      shapes.map((shape) => ({
+      shapes().map((shape) => ({
         value: shape,
         detail: `The answer is a ${shape}`,
         current: shape === this.session.shape,
@@ -3614,25 +3411,16 @@ export class App {
         detail: themeLabels[name].join(", "),
         current: name === this.theme,
       })),
-    read: () => (this.projectPaths() ?? []).map((path) => ({ value: path, detail: "" })),
-    image: () =>
-      (this.projectPaths() ?? [])
-        .filter((path) => /\.(png|jpe?g|gif|webp)$/i.test(path))
-        .map((path) => ({ value: path, detail: "" })),
-    extension: () =>
-      (this.projectPaths() ?? [])
-        .filter((path) => /\.(ts|js|mts|mjs)$/.test(path))
-        .map((path) => ({ value: path, detail: "" })),
+    read: () => this.paths(),
+    image: () => this.paths((paths) => paths.filter((path) => /\.(png|jpe?g|gif|webp)$/i.test(path))),
     cd: () =>
-      [
-        ...new Set(
-          (this.projectPaths() ?? []).flatMap((path) =>
-            path.includes("/") ? [path.slice(0, path.lastIndexOf("/"))] : [],
+      this.paths((paths) =>
+        [
+          ...new Set(
+            paths.flatMap((path) => (path.includes("/") ? [path.slice(0, path.lastIndexOf("/"))] : [])),
           ),
-        ),
-      ]
-        .sort()
-        .map((path) => ({ value: path, detail: "" })),
+        ].sort(),
+      ),
     workspace: () =>
       this.options.workspaces.groups.map((group) => ({
         value: shortenHome(group.directory),
@@ -3696,20 +3484,12 @@ export class App {
       return;
     }
     if (token.kind === "/") {
-      const names = [
-        ...Object.entries(commands).map(([name, [, argument, detail]]) => ({ name, argument, detail })),
-        ...[...(this.options.extensions?.commands ?? [])].map(([name, command]) => ({
-          name,
-          argument: "",
-          detail: command.description,
-        })),
-      ];
       // The command that the token names whole comes first.
-      this.suggestions = names
+      this.suggestions = slashes
         .filter(({ name }) => name.startsWith(token.text))
         .sort((one, other) => Number(other.name === token.text) - Number(one.name === token.text))
-        .map(({ name, argument, detail }) => ({
-          label: `/${name}${argument ? ` ${argument}` : ""}`,
+        .map(({ name, argument, detail, usage }) => ({
+          label: usage,
           detail,
           text: `/${name} `,
           submit: () => {
@@ -3744,10 +3524,12 @@ export class App {
         }));
     } else {
       const wanted = token.text.toLowerCase();
-      this.suggestions = (this.projectPaths(started) ?? [])
-        .filter((path) => path.toLowerCase().includes(wanted))
+      this.suggestions = this.paths(
+        (paths) => paths.filter((path) => path.toLowerCase().includes(wanted)),
+        started,
+      )
         .slice(0, 50)
-        .map((path) => ({
+        .map(({ value: path }) => ({
           label: `@${path}`,
           detail: "",
           text: `@${/\s/.test(path) ? JSON.stringify(path) : path} `,
@@ -3759,11 +3541,12 @@ export class App {
   private renderSuggestions(): void {
     const token = this.overlay || this.dismissed ? undefined : this.token();
     const shown = token ? this.suggestions : [];
+    const files = this.session.files;
     const state = !token
       ? ""
-      : (token.kind === "@" || pathCommands.has(token.command ?? "")) && this.files?.error
-        ? this.files.error
-        : (token.kind === "@" || pathCommands.has(token.command ?? "")) && !this.files?.paths
+      : (token.kind === "@" || pathCommands.has(token.command ?? "")) && files?.error
+        ? files.error
+        : (token.kind === "@" || pathCommands.has(token.command ?? "")) && !files?.paths
           ? "Finding project files..."
           : shown.length
             ? ""
@@ -3784,12 +3567,7 @@ export class App {
     this.clear(this.suggestionBox);
     this.suggestionBox.visible = Boolean(state || shown.length);
     if (state)
-      this.suggestionBox.add(
-        this.inset(
-          space.between,
-          this.text(state, this.files?.error ? c.danger : c.muted, { height: space.bar }),
-        ),
-      );
+      this.suggestionBox.add(this.inset(space.between, this.line(state, files?.error ? c.danger : c.muted)));
     const rows = 8;
     const first = Math.max(0, Math.min(this.suggestionIndex - rows + 1, shown.length - rows));
     const visible = shown.slice(first, first + rows);
@@ -3801,9 +3579,7 @@ export class App {
     for (const [offset, one] of visible.entries()) {
       const index = first + offset;
       const selected = index === this.suggestionIndex;
-      const row = this.box({
-        flexDirection: "row",
-        height: space.bar,
+      const row = this.row({
         paddingX: space.inset,
         backgroundColor: selected ? c.selected : c.raised,
         onMouseUp: this.click(() => {
@@ -3820,7 +3596,6 @@ export class App {
       row.add(
         this.text(one.label, selected ? c.accent : c.text, {
           width: one.detail ? column : undefined,
-          flexShrink: 0,
           truncate: true,
           attributes: selected ? bold : 0,
         }),
@@ -3830,10 +3605,7 @@ export class App {
     }
     if (shown.length > rows)
       this.suggestionBox.add(
-        this.inset(
-          space.between + space.inset,
-          this.text(`${shown.length - rows} more`, c.faint, { height: space.bar }),
-        ),
+        this.inset(space.between + space.inset, this.line(`${shown.length - rows} more`, c.faint)),
       );
     this.renderStatus();
   }
@@ -3857,7 +3629,7 @@ export class App {
       { selected: values.findIndex((one) => one.current), note },
     );
   }
-  /** The models of the roster under their providers, with the one the chain uses marked. */
+  /** The models of the roster and of the catalog under their providers, with the one the chain uses marked. */
   models = (): void => this.pick("model", "Model", "The chain sends its next prompt to this model.");
   effortPicker = (): void =>
     this.pick(
@@ -3874,7 +3646,7 @@ export class App {
           label: card.heading.plainText.replace(/^[▸▾] /, ""),
           detail: card.closed ? "Expand" : "Collapse",
           run: () => {
-            this.folds.set(card.state, !card.closed);
+            this.session.folds[card.state] = !card.closed;
             this.renderContent();
             this.scrollAfterLayout({ card: id });
           },
@@ -3908,7 +3680,7 @@ export class App {
   shapes(): void {
     this.openPalette(
       "Response shape",
-      shapes.map((name) => ({
+      shapes().map((name) => ({
         label: name,
         detail: "The engine validates the result against this Python type",
         run: () => {
@@ -3946,7 +3718,8 @@ export class App {
       for (const child of node.getChildren()) recolor(child);
     };
     recolor(this.root);
-    Object.assign(this.composer, inputColors(c.panel), { placeholderColor: c.muted });
+    // An input keeps the colors that it shows focused, which the walk above cannot read.
+    for (const input of [this.composer, this.search]) Object.assign(input, inputColors(c.panel));
     this.clear(this.scroll);
     this.cards.clear();
     const previous = this.style;
@@ -3959,7 +3732,7 @@ export class App {
     const content = this.composer.plainText;
     this.keepDraft();
     const version = ++this.editorVersion;
-    for (let line = 0; line < this.composer.lineCount; line++) this.composer.clearLineHighlights(line);
+    this.composer.clearAllHighlights();
     if (this.session.mode !== "python" && !this.session.editing && !content.startsWith("/run ")) return;
     const result = await getTreeSitterClient()
       .highlightOnce(content, "python")
@@ -4088,15 +3861,12 @@ export class App {
       .split("\n")
       .reduce((sum, line) => sum + Math.max(1, Math.ceil(Bun.stringWidth(line) / inner)), 0);
     if (rows > 3) this.overlay.top = 1;
-    this.questionDocument = new ScrollBoxRenderable(this.renderer, {
+    this.questionDocument = this.document(this.markdown(message), {
       height: Math.max(1, Math.min(rows, 8, this.renderer.height - 18)),
       // A field that shows stands a row under the text, and a field that takes no row leaves its own space under it.
       marginBottom: this.paletteInputRow?.height ? space.section : 0,
-      scrollX: false,
-      scrollY: true,
       contentOptions: { paddingLeft: space.between, paddingRight: space.between },
     });
-    this.questionDocument.add(this.markdown(message));
     this.overlay.insertBefore(this.questionDocument, this.paletteInputRow);
     this.overlay.maxHeight = this.paletteHeight;
   }
@@ -4104,17 +3874,11 @@ export class App {
     try {
       const inspected = await this.session.engine.inspect(name, this.session.selected);
       if (this.closed || this.overlay) return;
-      const width = Math.min(58, this.renderer.width - 4);
-      this.popup(
-        {
-          left: Math.max(1, Math.min(x, this.renderer.width - width - 1)),
-          top: Math.max(1, Math.min(y + 1, this.renderer.height - 9)),
-          width,
-          maxHeight: 9,
-          paddingX: space.between,
-          paddingY: space.inset,
-          onMouseDown: () => this.inspect(name),
-        },
+      this.hoverCard(
+        x,
+        y,
+        9,
+        () => this.inspect(name),
         this.text([
           [name, c.text, bold],
           [`: ${inspected.kind}`, c.secondary],
@@ -4181,20 +3945,15 @@ export class App {
                 run: () => this.showValue(label, value, name, back),
               },
             ]);
-            const document = new ScrollBoxRenderable(this.renderer, {
-              height: Math.min(24, this.renderer.height - 16),
-              scrollX: false,
-              scrollY: true,
-            });
-            document.add(
-              new LineNumberRenderable(this.renderer, {
-                target: this.code(lines.slice(at, next < 0 ? undefined : at + next + 1).join("\n")),
-                fg: c.muted,
-                lineNumberOffset: at,
-                paddingRight: space.inset,
-              }),
+            this.paletteList?.add(
+              this.document(
+                this.numbered(lines.slice(at, next < 0 ? undefined : at + next + 1).join("\n"), {
+                  fg: c.muted,
+                  lineNumberOffset: at,
+                }),
+                { height: Math.min(24, this.renderer.height - 16) },
+              ),
             );
-            this.paletteList?.add(document);
           },
         });
     }
@@ -4234,14 +3993,10 @@ export class App {
       });
     this.openPalette(label, choices);
     if (typeof value === "string" && (value.length > 100 || value.includes("\n"))) {
-      const document = new ScrollBoxRenderable(this.renderer, {
+      this.questionDocument = this.document(this.text(value), {
         height: Math.max(3, Math.min(18, this.renderer.height - 18)),
-        scrollX: false,
-        scrollY: true,
       });
-      document.add(this.text(value));
-      this.paletteList?.add(document);
-      this.questionDocument = document;
+      this.paletteList?.add(this.questionDocument);
     }
   }
   async names(): Promise<void> {
@@ -4444,10 +4199,7 @@ export class App {
       const current = act.id === w.selected;
       const status = this.session.chainStatus(act.id);
       return {
-        parts: [
-          [`${this.statusDot(status)} `, this.statusColor(status)],
-          [w.labelOf(act.id), current ? c.text : c.muted, bold],
-        ],
+        parts: [statusMark(status), [w.labelOf(act.id), current ? c.text : c.muted, bold]],
         tag: current ? "current" : act.id,
         hint: "open it",
         run: async () => {
@@ -4512,16 +4264,16 @@ export class App {
       const room =
         width - space.inset * 2 - Bun.stringWidth(tree.title) - space.between * 2 - Bun.stringWidth("Esc");
       this.treeBar.add(
-        this.text(
+        this.line(
           [
             [tree.title, c.text, bold],
             [`${" ".repeat(space.between)}${clip(note, Math.max(0, room))}`, c.muted],
           ],
           c.muted,
-          { height: space.bar, flexGrow: 1, flexShrink: 1 },
+          { flexGrow: 1, flexShrink: 1 },
         ),
       );
-      this.treeBar.add(this.text("Esc", c.faint, { onMouseUp: this.click(() => this.closeTree()) }));
+      this.treeBar.add(this.text("Esc", c.faint, { run: () => this.closeTree() }));
     }
     if (
       !this.paneChanged(this.scroll, [
@@ -4535,10 +4287,8 @@ export class App {
     this.clear(this.scroll);
     for (const [index, row] of tree.rows.entries()) {
       const active = row.id === tree.selected;
-      const line = this.box({
+      const line = this.row({
         id: `tree-${row.id}`,
-        flexDirection: "row",
-        height: space.bar,
         // Each tree of chains stands apart from the one above it.
         marginTop: index && !row.lines ? space.section : 0,
         paddingX: space.inset,
@@ -4551,29 +4301,24 @@ export class App {
           else if (active) void this.chooseTreeRow();
           else this.pointTree(row.id);
         }),
-        onMouseOver() {
-          if (!active) this.backgroundColor = c.panel;
-        },
-        onMouseOut() {
-          if (!active) this.backgroundColor = c.background;
-        },
       });
+      if (!active) this.hoverable(line, c.panel);
       const fold = row.parent ? `${row.folded ? glyph.closed : glyph.open} ` : "  ";
       const tag = row.tag ? `  ${row.tag}` : "";
       const room = Math.max(8, width - space.inset * 2 - Bun.stringWidth(row.lines + fold + tag));
       const label = plain(row.parts);
       line.add(
-        this.text(
+        this.line(
           [
             [row.lines, c.faint],
             [fold, c.faint],
             ...(Bun.stringWidth(label) > room ? this.clipParts(row.parts, room) : row.parts),
           ],
           c.text,
-          { height: space.bar, flexGrow: 1, flexShrink: 1, truncate: true },
+          { flexGrow: 1, flexShrink: 1, truncate: true },
         ),
       );
-      if (tag) line.add(this.text(tag, active ? c.muted : c.faint, { height: space.bar }));
+      if (tag) line.add(this.line(tag, active ? c.muted : c.faint));
       this.scroll.add(line);
     }
     this.scrollAfterLayout({ card: `tree-${tree.selected}` });
@@ -4808,27 +4553,16 @@ export class App {
     this.root.add(this.overlay);
     // The title and the filter start where the labels of the list start, and the prompt of the filter stands over the
     // pointer of the list.
-    const heading = this.box({
-      flexDirection: "row",
-      height: space.bar,
-      paddingLeft: space.between,
-      paddingRight: space.inset,
-    });
+    const heading = this.row({ paddingLeft: space.between, paddingRight: space.inset });
     heading.add(this.text(label, c.text, { attributes: bold, truncate: true, flexGrow: 1, flexShrink: 1 }));
-    heading.add(this.text("Esc", c.faint, { onMouseUp: this.click(() => this.closeOverlay()) }));
+    heading.add(this.text("Esc", c.faint, { run: () => this.closeOverlay() }));
     this.overlay.add(heading);
     this.paletteNote = note ? space.bar : 0;
     if (note)
-      this.overlay.add(
-        this.inset(
-          space.between,
-          this.text(clip(note, this.paletteWidth - 8), c.muted, { height: space.bar }),
-        ),
-      );
+      this.overlay.add(this.inset(space.between, this.line(clip(note, this.paletteWidth - 8), c.muted)));
     // A short list shows its filter only once the operator types in it, and until then the filter takes no row.
     const quiet = choices.length <= 5;
-    this.paletteInputRow = this.box({
-      flexDirection: "row",
+    this.paletteInputRow = this.row({
       height: quiet ? 0 : space.bar,
       paddingRight: space.inset,
       marginBottom: space.section,
@@ -4916,8 +4650,8 @@ export class App {
     const cost = (index: number, first: boolean) => {
       const choice = this.filtered[index];
       if (!choice) return 0;
-      const title = first ? (choice.heading ? 1 : 0) : titled(index) ? 2 : 0;
-      return (this.rich ? (choice.command ? 3 : 2) : 1) + title;
+      const above = first ? (choice.heading ? 1 : 0) : titled(index) ? 2 : 0;
+      return (this.rich ? (choice.command ? 3 : 2) : 1) + above;
     };
     const gap = this.rich ? space.section : 0;
     const span = (from: number, to: number) => {
@@ -4959,8 +4693,7 @@ export class App {
         this.paletteList.add(
           this.inset(
             space.between,
-            this.text([[choice.heading ?? "", c.muted, bold]], c.muted, {
-              height: space.bar,
+            this.line([[choice.heading ?? "", c.muted, bold]], c.muted, {
               marginTop: offset ? space.section : 0,
             }),
           ),
@@ -4983,27 +4716,19 @@ export class App {
         const bar: Part = [`${selected ? glyph.mark : " "} `, c.accent];
         const width = inner - 2;
         const keys = choice.keys ?? "";
-        const title = this.box({ flexDirection: "row", height: space.bar });
-        title.add(
+        const top = this.row();
+        top.add(
           this.text([bar, [clip(choice.label, width - Bun.stringWidth(keys) - 2), c.text, bold]], c.text, {
             flexGrow: 1,
             flexShrink: 1,
             truncate: true,
           }),
         );
-        if (keys) title.add(this.text(keys, selected ? c.muted : c.faint, { paddingRight: space.inset }));
-        block.add(title);
+        if (keys) top.add(this.text(keys, selected ? c.muted : c.faint, { paddingRight: space.inset }));
+        block.add(top);
         if (choice.command)
-          block.add(
-            this.text([bar, [clip(choice.command, width), selected ? c.accent : c.secondary]], c.text, {
-              height: space.bar,
-            }),
-          );
-        block.add(
-          this.text([bar, [clip(choice.detail.replace(/\s*\n\s*/g, " "), width), c.muted]], c.muted, {
-            height: space.bar,
-          }),
-        );
+          block.add(this.line([bar, [clip(choice.command, width), selected ? c.accent : c.secondary]]));
+        block.add(this.line([bar, [clip(choice.detail.replace(/\s*\n\s*/g, " "), width), c.muted]], c.muted));
         this.paletteList.add(block);
         continue;
       }
@@ -5011,9 +4736,7 @@ export class App {
       block.height = space.bar;
       const fg = choice.color ?? c.text;
       block.add(this.text(`${selected ? glyph.pointer : " "} `, c.accent, { attributes: bold }));
-      const mark: Part | undefined =
-        choice.mark ??
-        (choice.status ? [`${this.statusDot(choice.status)} `, this.statusColor(choice.status)] : undefined);
+      const mark: Part | undefined = choice.mark ?? (choice.status ? statusMark(choice.status) : undefined);
       // A label or a detail that the row cut shows whole in a tip while the pointer is over it.
       const markText = mark ? mark[0] : "";
       block.add(
@@ -5146,8 +4869,8 @@ export class App {
           })),
         )
         .concat(
-          Object.entries(commands).map(([name, [, argument, detail]]) => ({
-            label: `/${name}${argument ? ` ${argument}` : ""}`,
+          slashes.map(({ usage, detail }) => ({
+            label: usage,
             detail,
             heading: "Slash commands",
             run: () => {},
@@ -5172,14 +4895,6 @@ export class App {
     const plainKey = !key.ctrl && !key.meta && !key.shift;
     if (!this.overlay && this.tree && plainKey) {
       const row = this.treeRow();
-      const steps: Record<string, number> = {
-        up: -1,
-        down: 1,
-        pageup: -10,
-        pagedown: 10,
-        home: -1e9,
-        end: 1e9,
-      };
       if (key.name in steps) {
         key.preventDefault();
         this.moveTree(steps[key.name] ?? 0);
@@ -5348,8 +5063,10 @@ export class App {
       }
       if (["up", "down", "pageup", "pagedown"].includes(key.name)) {
         key.preventDefault();
-        const step = { up: -1, down: 1, pageup: -8, pagedown: 8 }[key.name as "up"] ?? 0;
-        this.selection = Math.max(0, Math.min(this.filtered.length - 1, this.selection + step));
+        this.selection = Math.max(
+          0,
+          Math.min(this.filtered.length - 1, this.selection + (steps[key.name] ?? 0)),
+        );
         this.renderChoices();
       }
     }
@@ -5477,7 +5194,6 @@ export class App {
     this.keepDraft();
     this.session.scrolls[this.lastView] = this.place;
     this.renderer.off("frame", this.laidOut);
-    this.session.folds = Object.fromEntries(this.folds);
     this.session.save();
     if (this.redraw) clearTimeout(this.redraw);
     if (this.hoverTimer) clearTimeout(this.hoverTimer);

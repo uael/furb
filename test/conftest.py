@@ -6,12 +6,12 @@ hear by, so no name of them stands in the globals of the engine. Every fact is a
 """
 
 import asyncio
-import builtins
-import json
+import os
 import re
 import sys
-from collections.abc import Generator, Sequence
-from dataclasses import dataclass, field, fields, is_dataclass, replace
+import tempfile
+from collections.abc import Callable, Generator, Sequence
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 
@@ -22,11 +22,16 @@ import furb.kernel
 import furb_monty.engine
 from furb import engine, sheet
 from furb.engine import OPERATOR, Act, Exit, Refused, Text, site
+from furb.world import entries
+from furb_monty import _monty
 
 ENGINE = vars(furb.python)
 """ENGINE is the module of the engine of this interpreter, whose names the Kernel and the gate read."""
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
+SUITES = (HERE, *sorted((HERE.parent / "extensions").glob("*/test")))
+"""SUITES are the suite of the engine and the suite of each extension, whose modules bind the names of the engine
+under test."""
 ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
@@ -63,6 +68,12 @@ WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nclose((await x
 BAD = "line 1: error[unresolved-reference] Name `BAD` used when not defined"
 """BAD is what the gate finds against a word whose first line names BAD, which nothing binds."""
 
+TWO = Text("/w/n.txt", "one\ntwo\n")
+"""TWO is a text of two lines."""
+
+THREE = Text("/w/n.txt", "one\ntwo\nthree\n")
+"""THREE is a text of three lines."""
+
 MANY = "".join(f"line {i}\n" for i in range(1, 301))
 """A text of three hundred lines, which is longer than what a tell of a text shows of it."""
 
@@ -80,41 +91,17 @@ DOOR = (
 """A word of a rung that opens an act of an extension, which takes it and answers a read of a door of its own."""
 
 
-def wire(x: object) -> object:
-  """The plain form of a value, as the World of this machine makes it: the same shape world.py writes."""
-  match x:
-    case BaseException():
-      return {"is": type(x).__name__, "args": wire(x.args)}
-    case Text():
-      return {"is": "Text", "path": x.path, "content": x.content}
-    case dict():
-      return {k: wire(v) for k, v in x.items()}
-    case list() | tuple():
-      return [wire(i) for i in x]
-  if is_dataclass(x) and not isinstance(x, type):
-    return {"is": type(x).__name__} | {f.name: wire(getattr(x, f.name)) for f in fields(x)}
-  return x
-
-
-def unwire(x: object) -> object:
-  """The value again from its plain form, as the World of this machine reads it back."""
-  match x:
-    case list():
-      return [unwire(i) for i in x]
-    case {"is": str(name), **rest}:
-      held = rest.pop("args", [])
-      args = [unwire(i) for i in held] if isinstance(held, list) else []
-      return (vars(builtins) | vars(engine))[name](*args, **{str(k): unwire(v) for k, v in rest.items()})
-    case dict():
-      return {k: unwire(v) for k, v in x.items()}
-  return x
-
-
-def plain(record: Sequence[object]) -> list:
-  """A record as a later life is given it: through the wire and back, so every tuple is a list and every text a Text."""
-  got = unwire(json.loads(json.dumps(wire(list(record)))))
-  assert isinstance(got, list)
-  return [(tuple(one),) for (one,) in got]
+def plain(record: Sequence[tuple]) -> list:
+  """A record as a later life is given it: kept by the store of the crate and read again, so every tuple is a list,
+  and every other value is what the crate makes of it."""
+  with tempfile.TemporaryDirectory() as folder:
+    path = str(Path(folder) / "record.jsonl")
+    _, store = _monty.store(path)
+    store.send(None)
+    for entry in record:
+      store.send(("keep", "", "journal", entry))
+    store.dispose()
+    return entries(_monty.kept(path))
 
 
 @dataclass
@@ -347,12 +334,47 @@ def kernel() -> dict[str, Kernel]:
   return {} if engine is not furb.python else {"kernel": Py().kernel(), "gate": Py().gating()}
 
 
-def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
-  """A life: the engine opened from a record, with the Kernel it takes, a World in memory and a generator that keeps
-  every fact said in it; it gives what was said and the id of the root.
+def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list[tuple], str]:
+  """A life: the engine opened from a record, with the Kernel it takes, a World in memory, a generator that keeps
+  every fact said in it, and the ears it is given after them; it gives what was said and the id of the root.
   """
   log: list[tuple] = []
-  return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears())
+  return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears(), **ears)
+
+
+def extended(
+  name: str, at: Path, ear: Callable[[str], World], *, lives: bool = False, record: Sequence[tuple] = ()
+) -> tuple[Sand, str]:
+  """A life on a record, whose chains stand in the folder work of a directory, which enables at its tip the official
+  extension of that name, with its life word when it lives: it hears the ear of the extension, whose config directory
+  of the user is the folder config of the directory, and the files of the machine after the World of the suite. It
+  gives the World and the root."""
+  one, word, life_word = next(x for x in _monty.official() if x[0] == name)
+  (at / "work").mkdir(exist_ok=True)
+  given = _monty.extensions([(one, word, life_word if lives else "")])
+  sand = sown(stands=[STANDS[0], str(at / "work"), STANDS[2]])
+  return sand, life(sand, record, extensions=given, **{name: ear(str(at / "config"))}, files=_monty.files())[1]
+
+
+def noted(folder: Path, text: str, name: str = "CLAUDE.md") -> Path:
+  """A memory file in a folder, which it makes with the folders above it, and the path of that file."""
+  folder.mkdir(parents=True, exist_ok=True)
+  (path := folder / name).write_text(text, encoding="utf-8")
+  return path
+
+
+def recalled(chain: str, at: Path) -> list[str]:
+  """Every paragraph of memory that a chain was told of a file under a directory, in order, since a folder above
+  that directory belongs to the machine."""
+  return [one for one in of(engine.turns(on=chain), "memory") if one.startswith(f"#memory {at}")]
+
+
+def skilled(skills: Path, folder: str, head: str) -> Path:
+  """A skill in a folder of skills, whose SKILL.md file opens with a frontmatter of these lines, and the path of that
+  file."""
+  (skills / folder).mkdir(parents=True, exist_ok=True)
+  (path := skills / folder / "SKILL.md").write_text(f"---\n{head}\n---\nSteps.\n", encoding="utf-8")
+  return path
 
 
 def world_says(kind: str, about: str, *words: object) -> tuple:
@@ -368,6 +390,13 @@ async def settle(n: int = 80) -> None:
   """Room for the loop to do what it still owes, so that finding nothing done means something."""
   for _ in range(n):
     await asyncio.sleep(0)
+
+
+async def chained(label: str, source: str = "", n: int = 80) -> str:
+  """A chain of a label, and of a source when it is given one, once the loop gave it room to stand on its origin."""
+  made = engine.chain(label, source)
+  await settle(n)
+  return made
 
 
 def sown(**world: object) -> Sand:
@@ -390,6 +419,13 @@ async def lived() -> tuple[Sand, list[tuple], str]:
   assert await engine.prompt(int, "read and run", on=root) == 0
   await settle()
   return sand, log, root
+
+
+def slow() -> tuple[Sand, list[tuple], str, Act[Exit]]:
+  """A life on the World of the suite whose command runs on until the test ends it: the World, what was said, the
+  root and the command."""
+  sand, log, root = born(auto=False)
+  return sand, log, root, engine.bash("slow", on=root)
 
 
 async def stalled() -> tuple[Sand, list[tuple], str, Act[int], str, str]:
@@ -473,7 +509,7 @@ def acts(log: Sequence[tuple]) -> dict[str, tuple]:
 def paragraphs(got: Sequence[tuple]) -> list[str]:
   """Every paragraph the user turns of a fold hold, in order: what one fact that tells stands as. A blank line that a
   header follows is where one paragraph ends, since a word its caller wrote may hold a blank line of its own."""
-  return [one for role, py, _, _ in got if role == "user" and py for one in re.split(r"\n\n(?=#\w)", py)]
+  return [one for role, py, _, _ in got if role == "user" and py for one in re.split(r"\n\n(?=#\S)", py)]
 
 
 def heads(got: Sequence[tuple]) -> list[str]:
@@ -530,23 +566,30 @@ def swapped(to: object) -> None:
   """
   fro = furb_monty.engine if to is furb.python else furb.python
   seen: set[int] = set()
-  for mod in list(sys.modules.values()):
-    file = getattr(mod, "__file__", None)
-    if not file or id(mod) in seen or not str(file).startswith(str(HERE)):
+  # pytest drops the name conftest before it loads each conftest outside a package, so this module may stand under
+  # no name, and it rebinds its own names as well.
+  for names in [globals(), *(vars(mod) for mod in list(sys.modules.values()) if getattr(mod, "__file__", None))]:
+    if id(names) in seen or not any(Path(names["__file__"]).is_relative_to(one) for one in SUITES):
       continue
-    seen.add(id(mod))
-    for key, value in list(vars(mod).items()):
+    seen.add(id(names))
+    for key, value in list(names.items()):
       if value is fro:
-        setattr(mod, key, to)
+        names[key] = to
       elif key in SURFACE and value is getattr(fro, key):
-        setattr(mod, key, getattr(to, key))
+        names[key] = getattr(to, key)
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-  """Every test of the suite runs once on each engine; the hygiene laws read the file and run once."""
+  """Every test of the suites runs once on each engine; the hygiene laws read the files and run once."""
   path = metafunc.definition.path
-  if "engine_of" in metafunc.fixturenames and path.parent == HERE and path.name != "test_hygiene.py":
+  if "engine_of" in metafunc.fixturenames and path.parent in SUITES and path.name != "test_hygiene.py":
     metafunc.parametrize("engine_of", list(ENGINES), indirect=True)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def cached(tmp_path_factory: pytest.TempPathFactory) -> None:
+  """The cache that the catalog of each life of the suite reads, of its own, and not the one of the machine."""
+  os.environ["XDG_CACHE_HOME"] = str(tmp_path_factory.mktemp("cache"))
 
 
 @pytest.fixture(autouse=True)

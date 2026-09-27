@@ -10,15 +10,16 @@ uv sync
 bun install
 bun run build
 bun run demo                 # A local, scripted life. No model request.
-bun run tui                  # Claude CLI through pi-ai.
+bun run tui                  # A real life, on the models of the catalog of the crate.
 bun run tui -- --resume .furb/sessions/example.jsonl
 ```
 
-`furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, and the words
-after `--`.
+`furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, the model and the
+effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`.
 
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
-a new life. Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
+a new life. A session offers its model, the default model when you name none, and the models of `--roster`.
+Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
 a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.session.json`, `.changes.jsonl`, and
 `.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory
 too when the session has image attachments. An unfinished session opens paused and offers a resume choice. The
@@ -127,7 +128,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/sidebar` | Show or hide the chains, the usage, and the workspaces |
 | `/delete` | Move a session and its files to the workspace trash |
 | `/autocollapse` | Toggle collapse of completed rungs |
-| `/extension <path>` | Load commands from a TypeScript or JavaScript extension |
+| `/extensions` | List the extensions that this life runs |
 | `/exit` | Save every session and quit |
 
 <!-- commands:end -->
@@ -146,12 +147,15 @@ command. ⌥E or `/editor` edits the current draft with `VISUAL`, then `EDITOR`,
 that runs commands; configure the editor to wait until the file is saved and closed.
 `/image path` attaches a PNG, JPEG, GIF, or WebP file. ⌃V or bare `/image` pastes an image through macOS
 AppKit, Windows PowerShell, Wayland `wl-paste`, or X11 `xclip`. Attachments have a limit of 20 MiB each and are
-copied beside the record. The provider of the session sends them as pi-ai image blocks, with their references kept
-in the prompt.
+copied beside the record. The provider of the session sends them to a model that takes images, with their
+references kept in the prompt.
 Click the attachment row to open or remove an image from the draft.
-`/model` and `/effort` open separate pickers. `/model name` takes `provider:model` or the model's id alone, by
-the rule of the provider. Each model offers the efforts in its pi-ai metadata, saved in
-the chain's roster. A model change keeps the current effort if the new model offers it.
+`/model` and `/effort` open separate pickers. The model picker lists the models of the session, then every
+model that the catalog of the crate offers. `/model name` takes `provider:model` or the model's id alone, by the
+rule of the catalog. A model of the catalog that the session does not offer joins the session: the session saves
+it, opens again on its record, starts again the work that was running, and sends the next prompt of the chain to
+that model. Each model offers the efforts that the catalog gives it, saved in the chain's roster. A model change
+keeps the current effort if the new model offers it.
 
 The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
 historical checkpoint. A branch that the rewind tree makes uses the engine's `take` filter and runs as an operator
@@ -160,15 +164,13 @@ same durable filter to remove the last user message from a new branch; `/redo` r
 change the model's conversation. The module and filesystem remain current. The TUI does not add a separate
 permission or tool protocol to the engine.
 
-`/share` writes a standalone HTML conversation, including its images and exact transcript. `/share`, `/export`,
-`/image`, and `/extension` read a leading `~` as the home directory, and a relative path from the directory of the
-selected chain. The share dialog
-can open the file, copy its path, or upload the selected conversation to an unlisted GitHub gist through
-`gh`. Upload happens only when chosen. Anyone with its link can read the shared conversation. `/export`
-keeps the structured JSON export. `/context` sets the context ceiling.
+`/share` writes a standalone HTML conversation, including its images and exact transcript. `/share`, `/export`
+and `/image` read a leading `~` as the home directory, and a relative path from the directory of the selected chain.
+The share dialog can open the file, copy its path, or upload the selected conversation to an unlisted GitHub gist
+through `gh`. Upload happens only when chosen. Anyone with its link can read the shared conversation. `/export` keeps
+the structured JSON export. `/context` sets the context ceiling.
 
-Load a local command extension with `--extension <path>` or `/extension <path>`. An extension exports a setup
-function that receives `ExtensionAPI` and registers commands with a label, description, and `run` function.
-Its context gives the current chain, directory, engine, message submission, and notices. Extensions are loaded
-only when named by the user. See [the example](examples/project-summary.ts); loaded commands join the palette
-and slash completion.
+A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
+and each chain shows the rungs of their words in its feed, as it shows any rung. The TUI has no part of its own for an extension: `/extensions` lists what the life runs, and `/run`
+runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel of the work of a chain ends its prompts,
+rungs, commands and waits, and not what an extension started on it, such as the watcher of the memory.

@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import born, said, settle
+from conftest import born, chained, said
 from furb import engine
 
 
@@ -12,8 +12,7 @@ async def test_whether_an_act_tells() -> None:
   step = engine.rung("t = read('a.txt')\nraise ValueError('boom')", on=root)
   with pytest.raises(ValueError, match="boom"):
     await step
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   (again,) = [a[1] for a in said(log, "rung") if a[3] == twin]
   assert engine.tells(step) and not engine.tells(again) and engine.get(again)[2] == twin
   told = [a[3][0].split("\n")[0] for a in said(engine.transcript(root), "tell") if a[1] == step]

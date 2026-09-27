@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, settle
+from conftest import born, settle, slow
 from furb import engine
 from furb.engine import OPERATOR, Act, Refused
 
@@ -49,8 +49,7 @@ async def test_an_act_is_over_when_its_done_stands_and_lives_until_then() -> Non
 
 async def test_the_outcome_of_a_cancelled_act_is_the_cancellederror_it_completed_with() -> None:
   """The outcome of a cancelled act is the CancelledError it completed with."""
-  _, _, root = born(auto=False)
-  one = engine.bash("slow", on=root)
+  _, _, _, one = slow()
   await settle()
   assert engine.peek(one) is None
   engine.cancel(one)

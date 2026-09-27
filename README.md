@@ -30,6 +30,9 @@ module, and each answer of the model is a program that runs in it.
   starts again when you resume it.
 - **Limits that hold.** A chain pauses when it reaches a dollar ceiling or a share of the context window.
 - **The model can ask you.** A question to the operator waits in the feed until you answer it.
+- **Extensions are words.** An extension is Python that each chain runs as a rung, which the model reads in its turns.
+  The official ones tell a chain the `CLAUDE.md` files of its project and the skills it can read. The system prompt
+  stays the engine alone, so an extension never breaks what a provider caches.
 - **One contract, proven twice.** `src/furb/engine.pyi` holds each law of the engine as one sentence, and the
   suite has one test for each sentence. The suite runs on CPython, and on monty, a Python interpreter written in
   Rust.
@@ -40,14 +43,16 @@ module, and each answer of the model is a program that runs in it.
 pip install furb                     # The engine, and furb, the command line. It needs Python 3.14 or later.
 ```
 
-`furb` is a program of Rust. It runs the engine in monty, and it asks the models through the claude command line:
+`furb` is a program of Rust. It runs the engine in monty. It asks the models of the claude command line, and the models
+of each provider whose credential, such as `ANTHROPIC_API_KEY`, stands in the environment:
 
 ```sh
 furb                                 # The TUI, when furb finds one.
 furb --mode rpc                      # A JSON-RPC on stdin and stdout, with no TUI.
 furb prompt "How many lines does a.txt hold?" --shape int
 furb run "close(1 + 1)"              # A Python word, run on the root chain.
-furb turns --record session.jsonl    # The turns of a record, as the model read them.
+furb turns --record session.jsonl    # The turns of a life made again from its record, which it only reads.
+furb extensions                      # The extensions that a life runs here.
 ```
 
 The TUI runs from a clone of this repository. It needs uv, the Rust toolchain, and Bun 1.4.2 or later:
@@ -66,6 +71,7 @@ program that `FURB_TUI` names, or the `furb-tui` on PATH.
 
 - [The TUI](tui/README.md): the views, the keys, the commands, and [a gallery of each screen](docs/tui.md).
 - [The JSON-RPC](docs/rpc.md): the commands and the events of `furb --mode rpc`.
+- [The extensions](docs/extensions.md): what an extension is, the configs that turn one on, and the official ones.
 - [The developer guide](docs/developer-guide.md): the tools to install, how a word runs, and how to change the TUI.
 - [The contract](src/furb/engine.pyi): every law of the engine, one sentence per line.
 

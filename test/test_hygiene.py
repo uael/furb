@@ -8,11 +8,15 @@ from pathlib import Path
 import tiktoken
 
 from furb import engine
-from furb.world import SYSTEM
+from furb_monty import _monty
+from furb_monty._monty import SYSTEM
 
 PY = Path(engine.__file__)
 PYI = PY.with_suffix(".pyi")
 TESTS = PYI.parents[2] / "test"
+EXTENSIONS = TESTS.parent / "extensions"
+# The contract of the engine and the contract of each extension, each with the folder of its suite.
+CONTRACTS = {PYI: TESTS, **{one: one.parent / "test" for one in sorted(EXTENSIONS.glob("*/*.pyi"))}}
 # What the engine may cost the model that reads it: a wall, and a shape that will not fit under it is a shape not
 # found yet. Six thousand, by the owner's word.
 BUDGET = 6_000
@@ -62,7 +66,7 @@ def sentences(doc: str | None) -> list[str]:
   return [normal(line) for line in (doc or "").splitlines() if line.strip()]
 
 
-def file_of(name: str, taken: set[str]) -> Path:
+def file_of(name: str, taken: set[str], tests: Path) -> Path:
   """test_<name>.py for a function, a class or a global, test_<class>_<method>.py for a method, in lower case, dunders bare.
 
   A class whose lower-case name is another definition's, Bash beside bash or Head beside HEAD, has test_<class>_shape.py.
@@ -70,7 +74,7 @@ def file_of(name: str, taken: set[str]) -> Path:
   parts = [part.strip("_").lower() for part in name.split(".")]
   if "." not in name and name[0].isupper() and not name.isupper() and parts[0] in taken:
     parts.append("shape")
-  return TESTS / ("test_" + "_".join(parts) + ".py")
+  return tests / ("test_" + "_".join(parts) + ".py")
 
 
 def taken_by_others(named: dict[str, list[str]]) -> set[str]:
@@ -87,46 +91,47 @@ def carried_by(path: Path) -> list[str]:
   ]
 
 
-def suite() -> dict[Path, list[str]]:
+def suite(tests: Path) -> dict[Path, list[str]]:
   here = Path(__file__)
-  return {p: carried_by(p) for p in sorted(TESTS.glob("test_*.py")) if p != here}
+  return {p: carried_by(p) for p in sorted(tests.glob("test_*.py")) if p != here}
 
 
 def test_every_sentence_has_one_test_in_the_file_of_its_definition() -> None:
-  tree = ast.parse(PYI.read_text(encoding="utf-8"))
-  carried = suite()
-  named = defs(tree)
-  taken = taken_by_others(named)
   missing = []
-  for name, said in named.items():
-    counts = Counter(carried.get(file_of(name, taken), []))
-    missing.extend((name, s, counts[s]) for s in said if counts[s] != 1)
+  for contract, tests in CONTRACTS.items():
+    carried = suite(tests)
+    named = defs(ast.parse(contract.read_text(encoding="utf-8")))
+    taken = taken_by_others(named)
+    for name, said in named.items():
+      counts = Counter(carried.get(file_of(name, taken, tests), []))
+      missing.extend((contract.name, name, s, counts[s]) for s in said if counts[s] != 1)
   assert missing == []
 
 
 def test_every_test_carries_a_sentence_of_the_contract() -> None:
-  tree = ast.parse(PYI.read_text(encoding="utf-8"))
-  named = defs(tree)
-  taken = taken_by_others(named)
-  said = {(file_of(name, taken), s) for name, lines in named.items() for s in lines}
-  stray = [(p.name, s) for p, docs in suite().items() for s in docs if (p, s) not in said]
+  stray = []
+  for contract, tests in CONTRACTS.items():
+    named = defs(ast.parse(contract.read_text(encoding="utf-8")))
+    taken = taken_by_others(named)
+    said = {(file_of(name, taken, tests), s) for name, lines in named.items() for s in lines}
+    stray.extend((p.name, s) for p, docs in suite(tests).items() for s in docs if (p, s) not in said)
   assert stray == []
 
 
 def test_every_definition_has_a_file_and_a_sentence() -> None:
-  tree = ast.parse(PYI.read_text(encoding="utf-8"))
-  named = defs(tree)
-  taken = taken_by_others(named)
-  files = {name: file_of(name, taken) for name in named}
-  shared = Counter(files.values())
-  assert [name for name, path in files.items() if shared[path] > 1] == []
-  assert [name for name, path in files.items() if not path.exists()] == []
-  assert [name for name, said in named.items() if not said] == []
+  for contract, tests in CONTRACTS.items():
+    named = defs(ast.parse(contract.read_text(encoding="utf-8")))
+    taken = taken_by_others(named)
+    files = {name: file_of(name, taken, tests) for name in named}
+    shared = Counter(files.values())
+    assert [name for name, path in files.items() if shared[path] > 1] == []
+    assert [name for name, path in files.items() if not path.exists()] == []
+    assert [name for name, said in named.items() if not said] == []
 
 
 def test_the_module_docstring_is_empty() -> None:
-  tree = ast.parse(PYI.read_text(encoding="utf-8"))
-  assert ast.get_docstring(tree) is None
+  for contract in CONTRACTS:
+    assert ast.get_docstring(ast.parse(contract.read_text(encoding="utf-8"))) is None
 
 
 def test_the_engine_fits_the_window_it_is_meant_to_be_read_in() -> None:
@@ -188,14 +193,34 @@ def reaching(tree: ast.Module) -> tuple[dict[int, tuple[ast.AST, ...]], dict[int
   return chain, {i: binds(s) for i, s in held.items()}
 
 
-def test_no_name_is_bound_again_beneath_itself() -> None:
-  """A name bound where an enclosing scope already binds it says two things at once; every word keeps one meaning."""
-  tree = ast.parse(PY.read_text(encoding="utf-8"))
-  chain, bound = reaching(tree)
+def shadows(text: str) -> list[str]:
+  """Every name of a module that a scope binds again beneath a scope that binds it already, with its line."""
+  chain, bound = reaching(ast.parse(text))
   dark: list[str] = []
   for at in {id(c[-1]): c for c in chain.values()}.values():
     if isinstance(at[-1], ast.ClassDef):
       continue
     over = set().union(*(bound[id(s)] for s in at[:-1] if not isinstance(s, ast.ClassDef)), set())
-    dark.extend(f"{PY.name}:{getattr(at[-1], 'lineno', 0)} {name}" for name in sorted(bound[id(at[-1])] & over - {"_"}))
-  assert dark == [], f"these bindings shadow an enclosing one: {dark}"
+    dark.extend(f"{getattr(at[-1], 'lineno', 0)} {name}" for name in sorted(bound[id(at[-1])] & over - {"_"}))
+  return dark
+
+
+def test_no_name_is_bound_again_beneath_itself() -> None:
+  """A name bound where an enclosing scope already binds it says two things at once; every word keeps one meaning."""
+  assert shadows(PY.read_text(encoding="utf-8")) == [], "these bindings shadow an enclosing one"
+
+
+def test_the_word_of_an_extension_is_its_file_less_its_imports_of_furb() -> None:
+  """The word that a chain runs is the program of the file of the extension, which ruff and ty read."""
+  for name, word, _ in _monty.official():
+    body = ast.parse((EXTENSIONS / name / f"{name}.py").read_text(encoding="utf-8")).body
+    kept = [one for one in body if not (isinstance(one, ast.ImportFrom) and (one.module or "").startswith("furb"))]
+    assert ast.dump(ast.parse(word)) == ast.dump(ast.Module(body=kept, type_ignores=[]))
+
+
+def test_the_word_of_an_extension_binds_no_name_of_the_engine_nor_again_beneath_itself() -> None:
+  """A word runs in the module of a chain, after the engine, so it keeps the meaning of every name there."""
+  held = set(binds(ast.parse(PY.read_text(encoding="utf-8"))))
+  for name, word, _ in _monty.official():
+    assert binds(ast.parse(word)) & held == set(), name
+    assert shadows(f"{PY.read_text(encoding='utf-8')}\n{word}") == [], name

@@ -1,8 +1,8 @@
 """showing, what a paragraph shows of what a door answered."""
 
-from conftest import born, settle
+from conftest import TWO, born, settle
 from furb import engine
-from furb.engine import HEAD, Text
+from furb.engine import HEAD
 
 NUMS = (
   "def kept(id):\n"
@@ -20,8 +20,7 @@ NUMS = (
 
 async def test_what_a_paragraph_shows_of_what_a_door_answered() -> None:
   """What a paragraph shows of what a door answered: the text by the lines the model has not seen, and anything that is no text as a comment of how python shows it."""
-  one = Text("/w/n.txt", "one\ntwo\n")
-  assert engine.showing(one, HEAD) == [(one, HEAD)]
+  assert engine.showing(TWO, HEAD) == [(TWO, HEAD)]
   assert engine.showing([1, 2], HEAD) == ["# [1, 2]"]
   assert engine.showing(None, HEAD) == ["# None"]
   assert engine.showing("a\n\nb", HEAD) == ["# 'a\\n\\nb'"]

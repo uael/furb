@@ -9,13 +9,13 @@ import { until } from "../../bind/typescript/test/until.ts";
 import { type Engine, openEngine } from "../src/bridge.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import { Session } from "../src/session.ts";
+import { withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
 
 afterAll(removeDemoDirectories);
 
-test("an @word that names no file is text of the message, and a word that names a file is read first", async () => {
-  const session = await demoSession();
-  try {
+test("an @word that names no file is text of the message, and a word that names a file is read first", () =>
+  withDemo(async (session) => {
     const message = "Add @dataclass to Point, as @README.md says, and install @types/node for @alice.";
     await session.submit(message);
     await idle(session);
@@ -27,25 +27,20 @@ test("an @word that names no file is text of the message, and a word that names 
     expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
       message,
     ]);
-  } finally {
-    await session.dispose();
-  }
-});
+  }));
 
 test("a view that cannot be read opens the record with the default view and names the file", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-view-"));
   const record = join(directory, "life.jsonl");
   let session: Session | undefined;
   try {
-    let opened = await openEngine({ cwd: directory, record, demo: true });
-    session = new Session(opened.engine, opened.host, true);
+    session = await demoSession({ record });
     session.sessionName = "Named";
     await session.engine.result(await session.engine.rung({ word: "kept = 7", on: session.engine.root }));
     await session.dispose();
     for (const damaged of ["", '{"sessionName": "cut', "[1, 2]"]) {
       await writeFile(`${record}.ui.json`, damaged);
-      opened = await openEngine({ cwd: directory, record, demo: true });
-      session = new Session(opened.engine, opened.host, true);
+      session = await demoSession({ record });
       expect(session.notice).toContain(`Could not read ${record}.ui.json`);
       expect(session.sessionName).toBe(basename(directory));
       expect((await session.engine.inspect("kept", session.selected)).value).toBe(7);
@@ -61,8 +56,7 @@ test("a view that cannot be read opens the record with the default view and name
 test("a session that cannot save its view still ends its life, its commands and its lease", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-dispose-"));
   const record = join(directory, "life.jsonl");
-  const opened = await openEngine({ cwd: directory, record, demo: true });
-  const session = new Session(opened.engine, opened.host, true);
+  const session = await demoSession({ record });
   try {
     const command = await session.engine.bash(`${printPid}; sleep 30`, { on: session.engine.root });
     const pid = () =>
@@ -87,16 +81,10 @@ test("a session that cannot save its view still ends its life, its commands and 
 test("a snapshot asked before a model choice lands after it, and the choice holds for the next prompt", async () => {
   const session = await demoSession();
   const snapshot = session.host.snapshot.bind(session.host);
-  let release = () => {};
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: gate, resolve: release } = Promise.withResolvers<void>();
   try {
     await idle(session);
-    let taken = () => {};
-    const asked = new Promise<void>((resolve) => {
-      taken = resolve;
-    });
+    const { promise: asked, resolve: taken } = Promise.withResolvers<void>();
     session.host.snapshot = async (chain) => {
       session.host.snapshot = snapshot;
       const early = await snapshot(chain);
@@ -109,14 +97,14 @@ test("a snapshot asked before a model choice lands after it, and the choice hold
     await session.command("/model claude-cli:opus");
     release();
     await reading;
-    expect(session.actor).toBe("claude-cli:opus/low");
+    expect(session.actor).toBe("claude-cli:opus/high");
     await session.submit("Which model reads this?");
     const prompt = session.acts.findLast((act) => session.isUserPrompt(act));
-    expect(prompt?.words).toEqual(["str", "Which model reads this?", "claude-cli:opus/low"]);
+    expect(prompt?.words).toEqual(["str", "Which model reads this?", "claude-cli:opus/high"]);
     await idle(session);
     await session.refresh();
-    expect((await session.engine.inspect("actor", session.engine.root)).value).toBe("claude-cli:opus/low");
-    expect(session.actor).toBe("claude-cli:opus/low");
+    expect((await session.engine.inspect("actor", session.engine.root)).value).toBe("claude-cli:opus/high");
+    expect(session.actor).toBe("claude-cli:opus/high");
   } finally {
     release();
     session.host.snapshot = snapshot;
@@ -189,9 +177,8 @@ test("a follow-up that the operator removes while its files are read is not sent
   }
 });
 
-test("each /feed sends one line, and a /feed with no text closes the input", async () => {
-  const session = await demoSession();
-  try {
+test("each /feed sends one line, and a /feed with no text closes the input", () =>
+  withDemo(async (session) => {
     const command = await session.engine.bash('read -r a; read -r b; echo "a=[$a] b=[$b]"; cat', {
       fed: true,
       on: session.engine.root,
@@ -210,78 +197,50 @@ test("each /feed sends one line, and a /feed with no text closes the input", asy
       code: 0,
       stdout: { content: "a=[yes] b=[two  words]\n" },
     });
-  } finally {
-    await session.dispose();
-  }
-});
+  }));
 
-test("/model finds a model of the roster by the rule of the provider, so an id with a colon names it", async () => {
+test("/model finds a model of the roster by the rule of the catalog, and keeps the effort that the model takes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-models-"));
   const opened = await openEngine({
     cwd: directory,
-    model: "openai:gpt-4o",
-    roster: ["amazon-bedrock:amazon.nova-lite-v1:0"],
+    model: "claude-cli:haiku",
+    effort: "xhigh",
+    roster: ["claude-cli:opus"],
   });
   const session = new Session(opened.engine, opened.host);
   try {
     await session.refresh();
-    await session.submit("/model amazon.nova-lite-v1:0");
-    expect(session.actor).toBe("amazon-bedrock:amazon.nova-lite-v1:0/off");
-    expect(String(await session.submit("/model 0").catch((error: unknown) => error))).toContain(
-      "Choose one of",
+    expect(session.actor).toBe("claude-cli:haiku/xhigh");
+    await session.submit("/model opus");
+    expect(session.actor).toBe("claude-cli:opus/xhigh");
+    expect(String(await session.submit("/model nothing").catch((error: unknown) => error))).toContain(
+      "Choose one of claude-cli:haiku, claude-cli:opus.",
     );
-    await session.submit("/model gpt-4o");
-    expect(session.actor).toBe("openai:gpt-4o/off");
+    await session.submit("/model claude-cli:haiku");
+    expect(session.actor).toBe("claude-cli:haiku/xhigh");
   } finally {
     await session.dispose();
     await rm(directory, { recursive: true, force: true });
   }
 });
 
-test("the answers to the questions of the snapshots stay out of the facts of the host", async () => {
-  const session = await demoSession();
-  try {
-    await session.submit("A question.");
-    await idle(session);
-    for (const view of ["feed", "transcript", "changes"] as const) {
-      session.show(view);
-      await session.refresh();
-    }
-    const acts = new Set(session.acts.map((act) => act.id));
-    expect(
-      session.host.facts.filter(
-        ([kind, id]) => kind === "done" && /^\w+:\/\/operator\.\d+$/.test(id) && !acts.has(id),
-      ),
-    ).toEqual([]);
-  } finally {
-    await session.dispose();
-  }
-});
-
-test("a path that starts with ~ is read from the home directory by /share, /export, /image and /extension", async () => {
+test("a path that starts with ~ is read from the home directory by /share, /export and /image", async () => {
   const home = await mkdtemp(join(tmpdir(), "furb-home-"));
   const script = join(home, "run.ts");
   const pixel =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
   try {
     await writeFile(join(home, "pixel.png"), Buffer.from(pixel, "base64"));
-    await writeFile(
-      join(home, "extension.ts"),
-      'export default (api) => api.registerCommand("home-probe", { label: "Home", description: "A probe", run() {} });',
-    );
     // The home directory of a process is read once, so a process of its own gives the test a home of its own.
     await writeFile(
       script,
       `import { demoSession, removeDemoDirectories } from ${JSON.stringify(join(import.meta.dir, "../src/demo.ts"))};
-import { Extensions } from ${JSON.stringify(join(import.meta.dir, "../src/extensions.ts"))};
 const session = await demoSession();
-const extensions = new Extensions(() => { throw new Error("No context is asked."); });
 try {
   await session.submit("/share ~/shared/chat.html");
   await session.submit("/export ~/export.json");
   await session.attachImage("~/pixel.png");
-  await extensions.load(session.path("~/extension.ts"));
-  console.log(JSON.stringify({ images: session.images[session.selected]?.length, commands: [...extensions.commands.keys()] }));
+  console.log(JSON.stringify({ images: session.images[session.selected]?.length }));
 } finally {
   await session.dispose();
   await removeDemoDirectories();
@@ -302,7 +261,7 @@ try {
     ]);
     expect(errors).toBe("");
     expect(code).toBe(0);
-    expect(JSON.parse(output)).toEqual({ images: 1, commands: ["home-probe"] });
+    expect(JSON.parse(output)).toEqual({ images: 1 });
     expect(await readFile(join(home, "shared/chat.html"), "utf8")).toContain("<!doctype html>");
     expect(JSON.parse(await readFile(join(home, "export.json"), "utf8")).chain).toBe("chain1");
     expect(existsSync(join(home, "~"))).toBe(false);
@@ -311,9 +270,8 @@ try {
   }
 });
 
-test("an undo leaves out of its branch a grant that came after the message it takes back", async () => {
-  const session = await demoSession();
-  try {
+test("an undo leaves out of its branch a grant that came after the message it takes back", () =>
+  withDemo(async (session) => {
     await session.submit("Explore this project.");
     await idle(session);
     await session.submit("/grant 1.5");
@@ -325,7 +283,4 @@ test("an undo leaves out of its branch a grant that came after the message it ta
     const told = session.turns.map(([, python]) => python).join("\n");
     expect(told).not.toContain(`#${grant.id}`);
     expect(session.activity.some((act) => act.kind === "grant")).toBe(false);
-  } finally {
-    await session.dispose();
-  }
-});
+  }));

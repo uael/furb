@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, heads, said, settle, stalled
+from conftest import born, chained, heads, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -12,8 +12,7 @@ from furb.engine import OPERATOR
 async def test_a_cancel_of_that_prompt_reaches_the_acts_that_its_rungs_made_on_the_chain_with_a_source() -> None:
   """A cancel of that prompt reaches the acts that its rungs made on the chain with a source."""
   sand, log, root = born(auto=False)
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   sand.script[root] = [f"y = bash('there', on={twin!r})\nclose((await y).code)"]
   one = engine.prompt(int, "run it there", on=root)
   await settle()
@@ -44,16 +43,14 @@ async def test_a_cancel_is_over_the_act_it_names_and_everything_that_act_made() 
 
 async def test_cancel_is_given_the_id_of_an_act_and_says_a_cancel_over_it() -> None:
   """cancel is given the id of an act, and says a cancel over it."""
-  _, log, root = born(auto=False)
-  one = engine.bash("slow", on=root)
+  _, log, _, one = slow()
   engine.cancel(one)
   assert said(log, "cancel") == [("cancel", one, OPERATOR, [f"#{one} cancelled"])]
 
 
 async def test_a_cancelled_act_completes_with_cancellederror() -> None:
   """A cancelled act completes with CancelledError."""
-  _, _, root = born(auto=False)
-  one = engine.bash("slow", on=root)
+  _, _, _, one = slow()
   engine.cancel(one)
   await settle()
   assert isinstance(engine.peek(one), CancelledError)

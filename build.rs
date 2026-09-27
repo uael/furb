@@ -11,12 +11,14 @@
 //! What each annotation is, in rust and in TypeScript, is the table of [`Kind::of`] and [`Answer::of`], and an
 //! annotation that the tables do not hold stops the build, so no verb of the contract goes without its method.
 //!
-//! The engine is read here too, and [`minified`] makes of it the system prompt of every model.
+//! Each constant of the contract that is a number or a text becomes a constant of the engine, with its sentence, so
+//! no ear of the crate writes it again. The engine is read here too, and [`minified`] makes of it the system prompt of
+//! every model.
 
 use std::{env, fmt::Write as _, fs, path::Path};
 
 use ruff_python_ast::{
-  Expr, Stmt, StmtFunctionDef,
+  Expr, Number, Stmt, StmtFunctionDef,
   comparable::ComparableModModule,
   token::{Token, TokenKind},
 };
@@ -313,6 +315,31 @@ fn doc(def: &StmtFunctionDef) -> String {
     },
     _ => String::new(),
   }
+}
+
+/// Each constant of the contract that is a number or a text, as a constant of rust with the sentence that says it.
+fn constants(source: &str) -> String {
+  let module = parse_module(source).expect("the contract parses").into_syntax();
+  let mut out = String::new();
+  for (stmt, said) in module.body.iter().zip(module.body.iter().skip(1)) {
+    let (Stmt::AnnAssign(one), Stmt::Expr(said)) = (stmt, said) else { continue };
+    let (Expr::Name(name), Some(value), Expr::StringLiteral(doc)) =
+      (one.target.as_ref(), one.value.as_deref(), said.value.as_ref())
+    else {
+      continue;
+    };
+    let (kind, value) = match value {
+      Expr::NumberLiteral(number) => match &number.value {
+        Number::Int(int) => ("i64", int.to_string()),
+        Number::Float(float) => ("f64", format!("{float:?}")),
+        Number::Complex { .. } => continue,
+      },
+      Expr::StringLiteral(text) => ("&str", format!("{:?}", text.value.to_str())),
+      _ => continue,
+    };
+    let _ = writeln!(out, "/// {}\npub const {}: {kind} = {value};", doc.value.to_str(), name.id);
+  }
+  out
 }
 
 /// The methods of the engine, one per verb.
@@ -613,6 +640,7 @@ fn main() {
   let written = |name: &str, text: String| {
     fs::write(Path::new(&out).join(name), text).expect("the build writes")
   };
+  written("constants.rs", constants(&source));
   written("methods.rs", methods(&verbs));
   written("verbs.rs", structs(&verbs));
   written("ts.rs", scripted(&verbs));

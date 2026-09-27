@@ -1,80 +1,38 @@
 """The smoke of a real life: one model, one record, and the journal answering the same prompt from it the second
 time.
 
-Run it from the root of the repository, as `uv run python script/smoke.py`. It spends the dollars of one turn of
-one model and no more: the first life asks the model, and the second life is given the record of the first and is
-answered out of it, so no model is asked again.
+Run it from the root of the repository, as `uv run python script/smoke.py`. It runs `furb prompt` twice on one record,
+on the default actor of the crate. It spends the dollars of one turn of one model and no more: the first life asks
+the model, and the second life is answered out of the record of the first, so no model is asked again.
 """
 
-import asyncio
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-from real import again, lived, ready, say, spent
-
-from furb import engine
-from furb.engine import Act
-from furb.provider.claude import cool
-from furb.world import answered, kept
+from real import bought, ready, say, spent
 
 MESSAGE = "How many lines does the file a.txt hold?"
 """MESSAGE is what the model is asked, of a file it must read to answer."""
 HELD = "one\ntwo\nthree\n"
 """HELD is what the file holds."""
-LINES = len(HELD.splitlines())
-"""LINES is how many lines the file holds, which is what the model must answer."""
-TO = "opus/low"
-"""TO is the actor the smoke asks, which is opus at the least effort it takes."""
 STALL = 300.0
-"""STALL is the seconds the smoke waits for a prompt, since a chain the World paused would wait for ever."""
+"""STALL is the seconds the smoke waits for a command of furb, since a chain the World paused ends the command."""
 CEILING = 1.0
 """CEILING is the dollars the first life may spend, ten answers or so, so that a model that loops is paused."""
 
 
-def replies(calls: list[tuple]) -> list[tuple]:
-  """Every reply the World took in one life."""
-  return [one for one in calls if one[0] == "reply"]
-
-
-async def first(yard: Path, record: Path) -> None:
-  """The first life: the model reads the file and answers with the number of the lines it holds."""
-  world, root, held = lived(record, yard, TO, keeps=True)
-  assert held == [], "the first life is opened on no record"
-  engine.grant(usd=CEILING, on=root)
-  try:
-    got = await asyncio.wait_for(engine.prompt(int, MESSAGE, TO, on=root), STALL)
-  except TimeoutError:
-    say(f"no answer in {STALL:.0f} seconds: {len(replies(world.calls))} reply(s) cost {spent(record):.4f} dollars")
-    # A chain at the ceiling of its grant is paused and answers nothing more, which is why nothing came back.
-    if engine.paused(root):
-      say(f"the chain is paused: the grant of {CEILING} dollars holds it at its ceiling")
-    raise
-  finally:
-    world.end()
-    await cool()
-  say(f"the first life gave {got!r}, after {len(replies(world.calls))} reply(s)")
-  for one in answered(kept(record)):
-    _, word, usage, _ = one[3]
-    say(f"the word of the model:\n{word}")
-    say(f"the usage of the answer: {usage}")
-  assert got == LINES, f"the model answered {got!r} and not {LINES}"
-
-
-async def second(yard: Path, record: Path) -> None:
-  """The second life, on the record of the first: it asks no model, since the journal answers the prompt from that
-  record."""
-  world, root, held = lived(record, yard, TO, keeps=True)
-  name = again(held, root, int, MESSAGE, TO)
-  assert name, "the record holds no prompt of the operator"
-  try:
-    got = await asyncio.wait_for(Act(name), STALL)
-  finally:
-    world.end()
-    await cool()
-  say(f"the second life gave {got!r}, after {len(replies(world.calls))} reply(s), from {name}")
-  assert got == LINES, f"the journal answered {got!r} and not {LINES}"
-  assert replies(world.calls) == [], "the second life asked a model for what the record holds"
+def furb(yard: Path, *words: str) -> str:
+  """What one command of the furb of this venv printed, on the record of the smoke, in its directory; and the end of
+  the smoke when the command failed, with what furb said."""
+  place = ["--record", str(yard / "record.jsonl"), "--cwd", str(yard)]
+  command = [str(Path(sys.executable).with_name("furb")), *words, *place]
+  got = subprocess.run(command, capture_output=True, text=True, timeout=STALL, check=False)  # noqa: S603
+  if got.returncode:
+    say(got.stderr.strip())
+    raise SystemExit(1)
+  return got.stdout.strip()
 
 
 def main() -> int:
@@ -84,9 +42,15 @@ def main() -> int:
   record = yard / "record.jsonl"
   (yard / "a.txt").write_text(HELD, encoding="utf-8")
   say(f"the directory of the smoke is {yard}")
-  asyncio.run(first(yard, record))
-  asyncio.run(second(yard, record))
-  say(f"the smoke spent {spent(record):.6f} dollars, and the record holds {len(kept(record))} entries")
+  furb(yard, "run", f"grant({CEILING})")
+  for life in ("first", "second"):
+    got = furb(yard, "prompt", MESSAGE, "--shape", "int")
+    say(f"the {life} life gave {got}, and the record holds {len(bought(record))} answer(s) of a model")
+    assert got == str(len(HELD.splitlines())), f"the {life} life answered {got}"
+  _, word, usage, _ = bought(record)[0][3]
+  say(f"the word of the model:\n{word}\nthe usage of the answer: {usage}")
+  assert len(bought(record)) == 1, "the second life asked a model for what the record holds"
+  say(f"the smoke spent {spent(record):.6f} dollars")
   say("SMOKE OK")
   return 0
 

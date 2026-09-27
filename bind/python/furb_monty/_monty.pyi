@@ -64,6 +64,72 @@ class Engine:
   def dispose(self) -> None:
     """The engine is gone, and its ears with it."""
 
+def official() -> list[tuple[str, str, str]]:
+  """The official extensions, in the order a life runs them, each as its name, its word and its life word."""
+
+def enabled(root: list[tuple]) -> list[tuple[str, str, str]]:
+  """The extensions that a life runs, in the order it enabled them, as the facts of its root say them, each as its
+  name, its word and its life word."""
+
+def extensions(given: list[tuple[str, str, str]]) -> NativeEar:
+  """The ear of the extensions, given each extension that the life runs as its name, its word and its life word: it
+  enables each at the tip of the life, unless the record enables it, and plays each as a rung on each chain."""
+
+def memory(config: str) -> NativeEar:
+  """The ear of the memory extension, which finds the memory of a path in its folders and in the config directory."""
+
+def skills(config: str) -> NativeEar:
+  """The ear of the skills extension, which finds skills in the folders of a chain and in the config directory."""
+
+def opened(
+  directory: str,
+  record: str | None = None,
+  *,
+  keeps: bool = True,
+  inspecting: bool = False,
+  extensions: bool = True,
+  config: str | None = None,
+  actor: str | None = None,
+  roster: list[str] | None = None,
+  answer: Callable[[dict, Callable[..., None]], tuple] | None = None,
+  claude: str | None = None,
+  stall: float | None = None,
+  images: str | None = None,
+  stream: Callable[[str, str, str, str], None] | None = None,
+) -> tuple[list[list[list[object]]], list[tuple[str, NativeEar]]]:
+  """The record a life opens on, and the ears of the crate that it hears after the ears of the host, as every host of
+  the crate opens a life: the provider, the extensions, which enable at the tip those that the configs of the user
+  and of the directory turn on unless `extensions` is false, each official extension, the files, the commands, time,
+  and the store of the record when the life keeps. A life that inspects keeps nothing, enables nothing new, asks no
+  model, and its files, commands and time do no work.
+
+  The provider offers the model of `actor` and the models of `roster`, each named `provider:id` or by an id that one
+  model alone holds, or the first model the catalog offers when neither is said. `answer`, when given, answers each
+  request in place of the models: it is called on a thread of its own with the request, as JSON reads it, and a
+  function `write(text="", thinking="")`, and gives the turn. `claude` is the path of the claude command line, whose
+  turn is refused when it makes no progress for `stall` seconds. `images` is the directory of the images that a turn
+  names. `stream` is told what a model writes as it writes it, on a thread of the models: the rung it writes for, the
+  chain of that rung, and what it added to its text and to its thought."""
+
+def answered(shape: str, line: str) -> object:
+  """A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
+  line by. It raises Refused for a line that is no value of the shape, and for a shape the operator answers not."""
+
+type Info = tuple[str, list[str], int, bool, list[float] | None]
+"""A model of the catalog: its name, its efforts, its window, whether it takes an image, and its price in dollars for a
+million tokens read, written, read from the cache and written to it."""
+
+def models(claude: str | None = None) -> list[Info]:
+  """The models the catalog of this machine offers, with the claude command line at a path when it is given, each
+  named as the catalog names it."""
+
+def model(name: str) -> Info | None:
+  """The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, whether it offers
+  that model or not; nothing when it knows none."""
+
+def levels() -> list[str]:
+  """The levels of effort, from least to most, which an actor names after its model."""
+
 def files() -> NativeEar:
   """The ear of the files, which reads and writes a path."""
 
@@ -84,9 +150,7 @@ def gate(sheet: str) -> list[tuple[int, str]]:
   """The gate of the crate, for the Kernel of this interpreter to read a sheet with: what the checker found on the
   sheet, each error by its line, and no warning. It raises when the checker could not read the sheet."""
 
-def provider(
-  directory: str, actor: str | None = None, claude: str | None = None, stall: float | None = None
-) -> NativeEar:
-  """The ear of the provider of models, whose models are those of the claude command line at the path `claude`: it
-  answers a stand with the standing of the directory and the default actor, and takes each reply, which a model
-  answers with its turn, or refuses when a turn makes no progress for `stall` seconds."""
+SHAPES: list[str]
+"""Every shape the operator answers, by its name."""
+SYSTEM: str
+"""The system prompt of every model: the engine, minified in layout alone, and nothing else."""

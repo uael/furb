@@ -179,18 +179,6 @@ async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_r
   assert (refused_yet_ran, accepted_yet_unbound) == ([], [])
 
 
-async def test_the_gate_of_the_sandbox_finds_what_the_run_finds_of_a_name_the_program_bound_again() -> None:
-  """A rung that bound a name of the engine again leaves that value to the word after it in the sandbox too, so the
-  word raises when it calls it, and the gate of the sandbox refuses a word that calls it where it can see it."""
-  root = engine.boot((), world=Sand(stands=STANDS).hears())
-  assert await engine.rung("read = 1", on=root) is None
-  with pytest.raises(TypeError, match="not callable"):
-    await engine.rung("f: Any = read\nclose(f('a'))", on=root)
-  assert engine.gate("close(read('a'))", on=root)[0].startswith("line 1: error[call-non-callable]")
-  with pytest.raises(Refused):
-    await engine.rung("close(read('a'))", on=root)
-
-
 async def test_an_ear_of_the_crate_serves_a_life_of_this_interpreter_and_what_it_says_from_a_thread_drives_it() -> None:
   """An ear of the crate crosses to the boot of the door beside the generators the contract says, and what it says
   from a thread of its own drives the life from the loop: time ends a wait from its thread."""
@@ -206,15 +194,12 @@ async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_gen
   back as the values it held."""
   swapped(furb.python)
   path = str(tmp_path / "record.jsonl")
-  stored, store = _monty.store(path)
-  assert stored == []
-  ears = {"files": _monty.files(), "bash": _monty.bash(), "time": _monty.time(), "store": store}
+  _, store = _monty.store(path)
+  ears = {"files": _monty.files(), "time": _monty.time(), "store": store}
   world = Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
   root = furb.python.boot((), kernel=Py().kernel(), gate=Py().gating(), **ears, world=world)
   furb.python.write(furb.python.Text("a.txt", "one\n"), on=root)
   assert furb.python.read("a.txt", on=root).content == "one\n"
-  ran = await furb.python.bash("printf hi; sleep 0.1; printf there", on=root)
-  assert (ran.code, ran.stdout.content) == (0, "hithere")
   assert await furb.python.wait(0.01, on=root) is None
   for one in ears.values():
     one.dispose()
@@ -222,3 +207,37 @@ async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_gen
   assert [fact[3] for fact in kept if fact[:2] == ["done", "read1"]] == [
     furb.python.Text(str(tmp_path / "a.txt"), "one\n")
   ]
+
+
+async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> None:
+  """A life opens on its record and on the ears of the crate, in the order every host boots them after its own, and
+  enables at its tip what the configs turn on; a life that turns the extensions off enables nothing new."""
+  path = str(tmp_path / "record.jsonl")
+  record, ears = _monty.opened(str(tmp_path), path, config=str(tmp_path / "config"))
+  assert (record, [name for name, _ in ears]) == (
+    [],
+    ["provider", "extensions", "memory", "skills", "files", "bash", "time", "store"],
+  )
+  root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
+  await settle()
+  assert [name for name, _, _ in _monty.enabled(engine.transcript(on=root))] == ["memory", "skills"]
+  assert {a[0] for a in engine.transcript(on=root) if a[2] == "memory"} == {"done"}, "the memory ear answered"
+  for _, one in ears:
+    one.dispose()
+  record, ears = _monty.opened(str(tmp_path), path, keeps=False, extensions=False)
+  assert [name for name, _ in ears] == ["provider", "extensions", "memory", "skills", "files", "bash", "time"]
+  root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
+  assert [name for name, _, _ in _monty.enabled(engine.transcript(on=root))] == ["memory", "skills"]
+
+
+def test_the_door_gives_the_catalog_of_the_crate(tmp_path: Path) -> None:
+  """The door gives the catalog of the crate, as the door to TypeScript gives it: the levels of effort, a model by
+  its name whether this machine offers it or not, and the models this machine offers."""
+  assert _monty.levels() == ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+  efforts = ["low", "medium", "high", "xhigh", "max"]
+  assert _monty.model("claude-cli:haiku") == ("claude-cli:haiku", efforts, 200000, True, None)
+  assert _monty.model("nobody:none") is None
+  claude = tmp_path / "claude"
+  claude.write_text("#!/bin/sh\n")
+  claude.chmod(0o755)
+  assert ("claude-cli:opus", efforts, 1000000, True, None) in _monty.models(str(claude))

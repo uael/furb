@@ -28,7 +28,8 @@ requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"
 
 [tool.maturin]
-# The one crate, at the root of the repository, built with its python feature: there is no second crate.
+# The crate at the root of the repository, built with its python feature. The command line, the other crate of its
+# workspace, is the package furb-cli.
 manifest-path = "../../Cargo.toml"
 module-name = "furb_monty._monty"
 features = ["extension-module"]

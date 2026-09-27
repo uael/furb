@@ -7,21 +7,30 @@
 pub mod console;
 mod host;
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
+
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use napi::{
   Env, JsValue,
   bindgen_prelude::{
     ClassInstance, FnArgs, FromNapiValue, Function, JavaScriptClassExt, JsObjectValue,
-    Object as JsObject, Unknown,
+    Object as JsObject, Promise, Unknown,
   },
+  threadsafe_function::ThreadsafeFunctionCallMode,
 };
 use napi_derive::napi;
 use serde_json::Value;
 
 use host::{Door, Held, Word, refused};
 
-use crate::{Ear, Engine, Fault, Object, wire, world};
+use crate::{
+  Ear, Engine, Fault, Object,
+  extension::{self, Extension},
+  life::Opening,
+  verbs, wire,
+  world::{self, images},
+};
 
 #[napi(object)]
 pub struct TextValue {
@@ -139,6 +148,52 @@ pub struct JsEngine {
   held: Rc<Held>,
   root: String,
   raised: Option<Value>,
+  record: Vec<Value>,
+}
+
+/// What a life is opened on, which every host of the crate shares.
+#[napi(object, object_to_js = false)]
+pub struct OpenOptions<'env> {
+  /// The directory the life stands on, which each chain stands in until it goes elsewhere, and whose config turns
+  /// extensions on.
+  pub directory: String,
+  /// The record the life opens on.
+  pub record: Option<String>,
+  /// Whether the life keeps what it says to its record, under the lease of the store; true when unsaid.
+  pub keeps: Option<bool>,
+  /// Whether the life only inspects its record: it keeps nothing, enables nothing new, asks no model, and its files,
+  /// commands and time do no work.
+  pub inspecting: Option<bool>,
+  /// Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs
+  /// what its record enables either way.
+  pub extensions: Option<bool>,
+  /// The config directory of the user, in place of the one of this process.
+  pub config: Option<String>,
+  /// The actor a prompt goes to when it names none, as model/effort, at its effort as the catalog moves it; the first
+  /// model of the roster when unsaid.
+  pub actor: Option<String>,
+  /// The models the provider offers beside the model of the actor, each named `provider:id`, or by an id that one
+  /// model of the catalog alone holds. When it is unsaid, the model of the actor stands alone, and the first model
+  /// the catalog offers when the actor is unsaid too; a roster that names none, with no actor, offers the operator
+  /// alone.
+  pub roster: Option<Vec<String>>,
+  /// The path of the claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine
+  /// holds.
+  pub claude: Option<String>,
+  /// How many seconds a turn of the claude command line may go with no progress.
+  pub stall: Option<f64>,
+  /// The directory of the images that a turn names.
+  pub images: Option<String>,
+  /// A function that answers each request in place of the models, with a turn, and may tell what it writes as it
+  /// writes it.
+  #[napi(
+    ts_type = "(request: { actor: string; chain: string; messages: unknown[]; settings: Record<string, unknown> }, write: (delta: { text?: string; thinking?: string }) => void) => Promise<unknown>"
+  )]
+  pub answer: Option<Function<'env, (), Promise<Value>>>,
+  /// Told what a model writes as it writes it: the rung it writes for, the chain of that rung, and what it added to
+  /// its text and to its thought.
+  #[napi(ts_type = "(rung: string, chain: string, text: string, thinking: string) => void")]
+  pub stream: Option<Function<'env, (), ()>>,
 }
 
 /// An act: its name, which a control takes, and what it comes to, which JavaScript awaits.
@@ -209,22 +264,61 @@ impl JsEngine {
     record: Vec<Value>,
     ears: Vec<(String, Unknown<'_>)>,
   ) -> napi::Result<Self> {
-    let record = record.iter().map(wire::inward).collect::<Result<Vec<_>, _>>().map_err(error)?;
+    let kept = record.iter().map(wire::inward).collect::<Result<Vec<_>, _>>().map_err(error)?;
     let hosted = crate::engine::Hosted::default();
     let door = Door::new(env, hosted.clone())?;
-    let mut given = Vec::new();
-    for (name, value) in ears {
-      let object = value.coerce_to_object()?;
-      let ear = match NativeEar::taken(&env, &object).map_err(error)? {
-        Some(ear) => ear,
-        None => door.ear(object).map_err(error)?,
-      };
-      given.push((name, ear));
-    }
-    let engine = Engine::open(hosted, record, given).map_err(error)?;
+    let engine = Engine::open(hosted, kept, eared(&env, &door, ears)?).map_err(error)?;
     let root = engine.root().to_owned();
     let raised = engine.raised().map(|fault| wire::record(fault.object().as_ref()));
-    Ok(Self { held: Held::new(&env, engine, door)?, root, raised })
+    Ok(Self { held: Held::new(&env, engine, door)?, root, raised, record })
+  }
+
+  /// A life opened as every host of the crate opens one: on its record, on these ears of the host, each a generator
+  /// of JavaScript or an ear of the crate, and then on the ears of the crate and of the extensions. A life whose
+  /// record drifted is refused.
+  #[napi(
+    factory,
+    ts_args_type = "options: OpenOptions, ears: Array<[string, Generator<unknown, unknown, unknown> | NativeEar]>"
+  )]
+  pub fn open(
+    env: Env,
+    options: OpenOptions<'_>,
+    ears: Vec<(String, Unknown<'_>)>,
+  ) -> napi::Result<Self> {
+    let stall =
+      options.stall.and_then(|seconds| std::time::Duration::try_from_secs_f64(seconds).ok());
+    let writes = options.stream.map(|stream| -> napi::Result<world::Writes> {
+      let told = stream
+        .build_threadsafe_function::<(String, String, String, String)>()
+        .weak::<true>()
+        .build_callback(|call| Ok(FnArgs::from(call.value)))?;
+      Ok(Arc::new(move |rung, chain, text, thinking| {
+        let said = (rung.to_owned(), chain.to_owned(), text.to_owned(), thinking.to_owned());
+        told.call(said, ThreadsafeFunctionCallMode::NonBlocking);
+      }))
+    });
+    let opening = Opening::new(options.directory)
+      .record(options.record.map(Into::into), options.keeps.unwrap_or(true))
+      .config(options.config.map(Into::into))
+      .extending(options.extensions != Some(false))
+      .actor(options.actor)
+      .roster(options.roster)
+      .claude(options.claude.map(Into::into), stall)
+      .images(options.images.map(Into::into))
+      .writes(writes.transpose()?)
+      .answer(options.answer.as_ref().map(hosted).transpose()?)
+      .inspecting(options.inspecting == Some(true));
+    let hosted = crate::engine::Hosted::default();
+    let door = Door::new(env, hosted.clone())?;
+    let (engine, record) = opening.boot_on(hosted, eared(&env, &door, ears)?).map_err(error)?;
+    let root = engine.root().to_owned();
+    Ok(Self { held: Held::new(&env, engine, door)?, root, raised: None, record: records(&record) })
+  }
+
+  /// The record the life opened on, which the journal said again whole before boot returned.
+  #[napi(getter, ts_return_type = "unknown[]")]
+  pub fn record(&self) -> Vec<Value> {
+    self.record.clone()
   }
 
   #[napi(getter)]
@@ -284,6 +378,15 @@ impl JsEngine {
         value: Some(wire::outward(value.as_ref())).filter(|value| !value.is_null()),
         name,
       })
+    })
+  }
+
+  /// The extensions that the life runs, in the order it enabled them, as the transcript of its root holds them.
+  #[napi]
+  pub fn extensions(&self) -> napi::Result<Vec<Extension>> {
+    self.held.call(|engine| {
+      let on = Some(engine.root().to_owned());
+      Ok(extension::enabled(&engine.transcript(verbs::Transcript { on })?))
     })
   }
 
@@ -368,13 +471,27 @@ impl JsEngine {
 // The verbs of the contract, one method each, which the build makes from the contract.
 include!(concat!(env!("OUT_DIR"), "/ts.rs"));
 
-fn error(fault: Fault) -> napi::Error {
-  napi::Error::from_reason(fault.to_string())
+/// The ears JavaScript gave, each as the engine hears it: an ear of the crate as itself, and a generator of JavaScript
+/// through the door.
+fn eared(
+  env: &Env,
+  door: &Door,
+  ears: Vec<(String, Unknown<'_>)>,
+) -> napi::Result<Vec<(String, Box<dyn Ear>)>> {
+  let mut given = Vec::new();
+  for (name, value) in ears {
+    let object = value.coerce_to_object()?;
+    let ear = match NativeEar::taken(env, &object).map_err(error)? {
+      Some(ear) => ear,
+      None => door.ear(object).map_err(error)?,
+    };
+    given.push((name, ear));
+  }
+  Ok(given)
 }
 
-#[napi]
-pub fn engine_source() -> &'static str {
-  crate::ENGINE
+fn error(fault: Fault) -> napi::Error {
+  napi::Error::from_reason(fault.to_string())
 }
 
 #[napi(ts_return_type = "unknown")]
@@ -384,27 +501,185 @@ pub fn decode_record(line: String) -> napi::Result<Value> {
   wire::decoded(value, 0).map_err(error)
 }
 
-/// What the provider of the crate stands on and asks: the directory of the life, the default actor, and the claude
-/// command line, whose models it offers.
-#[napi(object)]
-pub struct ProviderOptions {
-  /// The directory the life stands on, which each chain stands in until it goes elsewhere.
-  pub directory: String,
-  /// The actor a prompt goes to when it names none, as model/effort, which is the first model at its first effort
-  /// when none is given.
-  pub actor: Option<String>,
-  /// The path of the claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine
-  /// holds.
-  pub claude: Option<String>,
-  /// How many milliseconds a turn of claude may go with no progress.
-  pub stall_ms: Option<f64>,
+/// A function of JavaScript as a model: it is called on the thread of JavaScript with the request and a function
+/// that tells what it writes, and the turn its promise gives is the answer, or what it threw is the refusal.
+fn hosted(answer: &Function<'_, (), Promise<Value>>) -> napi::Result<world::Hosted> {
+  /// What a call tells as it writes, as one type, which a future of the call carries to the thread of JavaScript.
+  struct Writing(world::Told);
+  let called = answer
+    .build_threadsafe_function::<(Value, Writing)>()
+    .weak::<true>()
+    .build_callback(|call| {
+      let (request, Writing(told)) = call.value;
+      let request = call.env.to_js_value(&request)?;
+      let write: Function<'_, Value, ()> =
+        call.env.create_function_from_closure("write", move |cx| {
+          let delta: Value = cx.first_arg()?;
+          let part =
+            |key: &str| delta.get(key).and_then(Value::as_str).unwrap_or_default().to_owned();
+          told(&part("text"), &part("thinking"));
+          Ok(())
+        })?;
+      // The values go as they are on the thread of JavaScript, where the call takes them at once.
+      Ok(FnArgs::from((request.raw(), write.raw())))
+    })?;
+  let called = Arc::new(called);
+  Ok(Arc::new(move |request, told| {
+    let called = Arc::clone(&called);
+    let writing = Writing(told);
+    Box::pin(async move {
+      let promise =
+        called.call_async_catch((request, writing)).await.map_err(|no| no.reason.clone())?;
+      let turn = promise.await.map_err(|no| no.reason.clone())?;
+      wire::inward(&turn).map_err(|fault| fault.message())
+    })
+  }))
 }
 
-/// The ear of the provider of models, which answers a stand and takes each reply, and whose models are those of the
-/// claude command line.
+/// A model of the catalog as JavaScript reads it: its name, its efforts, its window, whether it takes an image, and
+/// its price in dollars for a million tokens read, written, read from the cache and written to it.
+#[napi(object)]
+pub struct ModelInfo {
+  pub name: String,
+  pub efforts: Vec<String>,
+  pub window: f64,
+  pub images: bool,
+  pub price: Option<Vec<f64>>,
+}
+
+/// A model of the catalog as JavaScript reads it.
+fn info(model: &world::Model) -> ModelInfo {
+  ModelInfo {
+    name: model.name().to_owned(),
+    efforts: model.efforts().into_iter().map(str::to_owned).collect(),
+    window: model.window() as f64,
+    images: model.sees(),
+    price: model.priced().map(Vec::from),
+  }
+}
+
+/// The models the catalog of this machine offers, with the claude command line at a path when it is given, each
+/// named as the catalog names it.
 #[napi]
-pub fn provider(options: ProviderOptions) -> NativeEar {
-  let stall = options.stall_ms.and_then(|ms| std::time::Duration::try_from_secs_f64(ms / 1e3).ok());
-  let claude = world::claude::Claude::with(options.claude.map(std::path::PathBuf::from), stall);
-  NativeEar::of(world::provider(options.directory, claude.models(), options.actor))
+pub fn models(claude: Option<String>) -> Vec<ModelInfo> {
+  let catalog = world::Catalog::load().claude(claude.map(Into::into), None);
+  catalog.offered().into_iter().map(info).collect()
+}
+
+/// The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, whether it offers
+/// that model or not; nothing when it knows none.
+#[napi]
+pub fn model(name: String) -> Option<ModelInfo> {
+  world::Catalog::load().find(&name).map(info)
+}
+
+/// The levels of effort, from least to most, which an actor names after its model.
+#[napi]
+pub fn levels() -> Vec<&'static str> {
+  world::catalog::LEVELS.to_vec()
+}
+
+/// The engine: the one file the sandbox runs, as the crate carries it.
+#[napi]
+pub const ENGINE: &str = crate::ENGINE;
+
+/// The window, in tokens, of a model whose roster entry does not say one, as the contract names it.
+#[napi]
+pub const WINDOW: i64 = crate::engine::WINDOW;
+
+/// The name of the operator in the roster and as an actor, as the contract names it.
+#[napi]
+pub const OPERATOR: &str = crate::engine::OPERATOR;
+
+/// The timeout, in seconds, of a command that does not say one, as the contract names it.
+#[napi]
+pub const TIMEOUT: f64 = crate::engine::TIMEOUT;
+
+/// The name of the root, which every life opens first, as the contract names it.
+#[napi]
+pub const ROOT: &str = crate::engine::ROOT;
+
+/// The config directory of the user for this process, where the configs, the extensions of the user and the
+/// preferences of the TUI stand.
+#[napi]
+pub fn config_directory() -> String {
+  extension::Places::here().config.display().to_string()
+}
+
+/// Every shape the operator answers, by its name.
+#[napi]
+pub fn shapes() -> Vec<&'static str> {
+  world::SHAPES.to_vec()
+}
+
+/// A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
+/// line by, as the record keeps it, so a whole float stays a float; or an error that says why it is none.
+#[napi(ts_return_type = "unknown")]
+pub fn answered(shape: String, line: String) -> napi::Result<Value> {
+  let value =
+    world::answered(&shape, &line).map_err(|no| napi::Error::from_reason(no.message()))?;
+  Ok(wire::record(value.as_ref()))
+}
+
+/// An image a host attached: the name of its file, the uri a message names it by, its media type, and its size.
+#[napi(object)]
+pub struct ImageAttachment {
+  pub name: String,
+  pub uri: String,
+  pub mime_type: String,
+  pub size: f64,
+}
+
+/// An image copied into a directory of images under the digest of its bytes, as a message attaches it.
+#[napi]
+pub fn attach_image(directory: String, path: String) -> napi::Result<ImageAttachment> {
+  let got = images::attach(directory.as_ref(), path.as_ref()).map_err(napi::Error::from_reason)?;
+  Ok(ImageAttachment {
+    name: got.name,
+    uri: got.uri,
+    mime_type: got.media.to_owned(),
+    size: got.size as f64,
+  })
+}
+
+/// The bytes of the image of a uri, as base64, and its media type, once the bytes have the digest the uri names.
+#[napi(ts_return_type = "{ data: string; mimeType: string }")]
+pub fn image_content(env: &Env, directory: String, uri: String) -> napi::Result<JsObject<'_>> {
+  let (media, bytes) = images::read(directory.as_ref(), &uri).map_err(napi::Error::from_reason)?;
+  let mut got = JsObject::new(env)?;
+  got.set_named_property("data", STANDARD.encode(bytes))?;
+  got.set_named_property("mimeType", media)?;
+  Ok(got)
+}
+
+/// The file that holds the image of a uri, and the digest its bytes have.
+#[napi(ts_return_type = "{ path: string; digest: string }")]
+pub fn image_path(env: &Env, directory: String, uri: String) -> napi::Result<JsObject<'_>> {
+  let (path, digest) = images::path(directory.as_ref(), &uri).map_err(napi::Error::from_reason)?;
+  let mut got = JsObject::new(env)?;
+  got.set_named_property("path", path.display().to_string())?;
+  got.set_named_property("digest", digest)?;
+  Ok(got)
+}
+
+/// How a message names an image: `![name](uri)`.
+#[napi(ts_args_type = "image: { name: string; uri: string }")]
+pub fn image_reference(image: JsObject<'_>) -> napi::Result<String> {
+  let (name, uri): (String, String) =
+    (image.get_named_property("name")?, image.get_named_property("uri")?);
+  Ok(images::reference(&name, &uri))
+}
+
+/// Each image a message names, as its text in the message, its name, and its uri.
+#[napi(ts_return_type = "{ text: string; name: string; uri: string }[]")]
+pub fn image_references(message: String) -> Vec<Value> {
+  let each = images::references(&message).into_iter();
+  each.map(|one| serde_json::json!({"text": one.text, "name": one.name, "uri": one.uri})).collect()
+}
+
+/// The type of an image by its first bytes: its media type and its extension, for a PNG, a JPEG, a GIF or a WebP.
+#[napi(ts_return_type = "{ mimeType: string; extension: string }")]
+pub fn image_type(data: &[u8]) -> napi::Result<Value> {
+  let (media, extension) = images::kind(data).map_err(napi::Error::from_reason)?;
+  Ok(serde_json::json!({"mimeType": media, "extension": extension}))
 }

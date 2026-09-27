@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import Sand, born, relived, said, settle, world_says
+from conftest import Sand, born, chained, relived, said, settle, slow, world_says
 from furb import engine
 from furb.engine import Exit, Refused, Text
 
@@ -45,8 +45,7 @@ async def test_peek_gives_the_value_or_the_exception_itself() -> None:
 
 async def test_peek_never_raises() -> None:
   """peek never raises."""
-  _, log, root = born(auto=False)
-  gone = engine.bash("slow", on=root)
+  _, log, root, gone = slow()
   engine.cancel(gone)
   await settle()
   assert isinstance(engine.peek(gone), CancelledError)
@@ -74,8 +73,7 @@ async def test_the_done_of_that_act_filled_its_outcome_and_the_life_holds_every_
 async def test_a_peek_at_a_chain_gives_none_since_a_chain_never_comes_to_anything() -> None:
   """A peek at a chain gives None, since a chain never comes to anything."""
   _, _, root = born()
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   assert engine.peek(root) is None
   assert engine.peek(two) is None
 
@@ -89,8 +87,7 @@ async def test_a_peek_at_a_name_of_no_question_gives_none() -> None:
 
 async def test_the_outcome_is_no_slot_of_the_act() -> None:
   """The outcome is no slot of the act, so the plain form of an act holds none of it, and an act made again from the record waits until its done is said again."""
-  sand, log, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  sand, log, root, act = slow()
   await settle()
   assert engine.peek(act, ...) is ... and len(said(log, "bash")[0]) == 7
   kept = list(sand.record)

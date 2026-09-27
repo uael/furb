@@ -1,35 +1,16 @@
 import { stripVTControlCharacters } from "node:util";
-import type { ModelThinkingLevel, Usage as ModelUsage } from "@earendil-works/pi-ai";
-import type { Engine } from "../index.cjs";
+import { type Engine, levels } from "../index.cjs";
 
-export const efforts = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-] as const satisfies readonly ModelThinkingLevel[];
+/** The levels of effort, from least to most, which an actor names after its model. */
+export const efforts: readonly string[] = levels();
+/** The model and the effort an actor names: a model alone, whose effort is `off`, or a model and a level after its
+ * last slash, when the models named do not hold the whole name. */
 export function actorParts(actor: string, models: readonly string[] = []): { model: string; effort: string } {
   const at = actor.lastIndexOf("/");
   return at < 0 || models.includes(actor) || !efforts.some((effort) => effort === actor.slice(at + 1))
     ? { model: actor, effort: "off" }
     : { model: actor.slice(0, at), effort: actor.slice(at + 1) };
 }
-/** The one model among models that an actor names, with or without its effort: its provider and id as
- * `provider:id`, or its id alone. */
-export function modelNamed<M extends { provider: string; id: string }>(
-  models: readonly M[],
-  actor: string,
-): M | undefined {
-  for (const name of [actor, actorParts(actor).model]) {
-    const found = models.filter((model) => `${model.provider}:${model.id}` === name || model.id === name);
-    if (found.length === 1) return found[0];
-  }
-  return undefined;
-}
-export const shapes = ["str", "None", "bool", "int", "float", "list", "dict"] as const;
 
 export type Turn = ReturnType<Engine["turns"]>[number];
 export type Fact = ReturnType<Engine["say"]>;
@@ -94,21 +75,6 @@ export function unmarked(value: unknown): unknown {
     return Object.fromEntries(pairs.map(([key, one]) => [key, unmarked(one)]));
   return Object.fromEntries(Object.entries(held).map(([key, one]) => [key, unmarked(one)]));
 }
-/** A plain value of the host as the life takes it: each map that holds the key `is` crosses as its pairs, under the
- * mark dict, so no map of the host reads as a mark. `decoded` is the same value as the native reader gave it, whose
- * numbers it keeps. */
-export function marked(plain: unknown, decoded: unknown = plain): unknown {
-  if (Array.isArray(plain)) return plain.map((one, index) => marked(one, (decoded as unknown[])[index]));
-  if (!plain || typeof plain !== "object") return decoded;
-  const pairs = Object.entries(plain).map(
-    ([key, one]) => [key, marked(one, (decoded as Record<string, unknown>)[key])] as const,
-  );
-  return "is" in plain ? { is: "dict", args: [pairs] } : Object.fromEntries(pairs);
-}
-/** A number as python takes a float: a whole number crosses as an int, so a float crosses marked, as its digits. */
-export function float(value: number): { is: string; args: string[] } {
-  return { is: "float", args: [String(value)] };
-}
 export function display(value: unknown): string {
   if (typeof value === "string") return value;
   return JSON.stringify(unmarked(value), null, 2) ?? "None";
@@ -118,11 +84,3 @@ export function safeText(value: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: Remove terminal control bytes from displayed text.
   return stripVTControlCharacters(value).replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
 }
-export const zeroUsage = (): ModelUsage => ({
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  totalTokens: 0,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-});
