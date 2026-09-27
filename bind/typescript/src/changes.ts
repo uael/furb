@@ -2,6 +2,7 @@ import {
   closeSync,
   existsSync,
   fsyncSync,
+  mkdirSync,
   mkdtempSync,
   openSync,
   readFileSync,
@@ -11,7 +12,9 @@ import {
   writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import type { Ear } from "./ears.js";
+import { type Fact, isQuestion } from "./types.js";
 
 export interface FileChange {
   path: string;
@@ -19,7 +22,9 @@ export interface FileChange {
   after: string;
 }
 
-/** Append file snapshots once. Keep only their positions in memory and read a page on demand. */
+/** Append file snapshots once. Keep only their positions in memory and read a page on demand. As an ear that comes
+ * before the files, it reads the text a write replaces before the files take the write, and keeps the change once the
+ * write is done. */
 export class FileChanges {
   private readonly positions: { start: number; size: number }[] = [];
   private readonly temporary?: string;
@@ -29,6 +34,8 @@ export class FileChanges {
     if (readOnly) return;
     if (!record) this.temporary = mkdtempSync(join(tmpdir(), "furb-changes-"));
     const path = record ? `${record}.changes.jsonl` : join(this.temporary ?? "", "changes.jsonl");
+    // The changes stand beside the record, whose directory may not stand yet when the session is made.
+    mkdirSync(dirname(path), { recursive: true });
     if (existsSync(path)) {
       const data = readFileSync(path);
       while (this.end < data.length) {
@@ -37,7 +44,7 @@ export class FileChanges {
           truncateSync(path, this.end);
           break;
         }
-        // A complete line that is no change fails here, before the World opens on it.
+        // A complete line that is no change fails here, before the session opens on it.
         JSON.parse(data.subarray(this.end, newline).toString("utf8"));
         this.positions.push({ start: this.end, size: newline - this.end });
         this.end = newline + 1;
@@ -47,6 +54,35 @@ export class FileChanges {
   }
   get length(): number {
     return this.positions.length;
+  }
+  /** The ear of the changes, for a life that stands on this directory: it says nothing, so each write goes on to the
+   * ear that takes it. */
+  *ear(directory: string, changed?: () => void): Ear {
+    const before = new Map<string, { path: string; before: string }>();
+    for (;;) {
+      const fact = (yield null) as Fact | undefined;
+      if (!fact) continue;
+      const [kind, id, , ...words] = fact;
+      if (kind === "write" && isQuestion(kind, id)) {
+        const text = words[1] as { path?: unknown } | undefined;
+        if (typeof text?.path !== "string" || text.path.includes("://")) continue;
+        const here = String(yield { verb: "cwd", kwargs: { on: words[0] } });
+        const path = resolve(directory, here, text.path);
+        let old = "";
+        try {
+          old = readFileSync(path, "utf8");
+        } catch {}
+        before.set(id, { path, before: old });
+      } else if (kind === "done" && before.has(id)) {
+        const held = before.get(id);
+        before.delete(id);
+        const after = words[0] as { is?: unknown; content?: unknown } | undefined;
+        if (!held || after?.is !== "Text" || typeof after.content !== "string") continue;
+        this.append({ ...held, after: after.content });
+        // A listener may ask the life, which no ear may do while it hears, so the host hears of it after the ear.
+        if (changed) queueMicrotask(changed);
+      }
+    }
   }
   append(change: FileChange): void {
     if (this.fd === undefined) return;

@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createModels, type Message } from "@earendil-works/pi-ai";
-import { World } from "../src/index.ts";
+import { Session } from "../src/index.ts";
 import { claudeProvider } from "../src/providers/claude.ts";
 import { executable } from "./executable.ts";
 import { remove } from "./processes.ts";
@@ -37,7 +37,7 @@ test("a CLI that exits before it reads a request fails that request, and a Node 
   } finally {
     await remove(cwd);
   }
-}, 30000);
+});
 
 test("two lives on one provider keep a conversation each, though their chains share ids", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-two-lives-"));
@@ -47,13 +47,16 @@ test("two lives on one provider keep a conversation each, though their chains sh
   const cli = claudeProvider({ bin, stallMs: 1000 });
   const models = createModels();
   models.setProvider(cli.provider);
-  const one = new World({ cwd, models, model: "claude-cli:sonnet" });
-  const two = new World({ cwd, models, model: "claude-cli:sonnet" });
+  const one = new Session({ cwd, models, model: "claude-cli:sonnet" });
+  const two = new Session({ cwd, models, model: "claude-cli:sonnet" });
   try {
     const [first, second] = [one.open(), two.open()];
     expect(first.root).toBe(second.root);
     expect(
-      await Promise.all([first.prompt<string>("str", "task"), second.prompt<string>("str", "task")]),
+      await Promise.all([
+        first.prompt("str", { message: "task", on: first.root }),
+        second.prompt("str", { message: "task", on: second.root }),
+      ]),
     ).toEqual(["reply 1", "reply 1"]);
     expect((await readFile(log, "utf8")).split("\n").filter((line) => line.includes('"pid"'))).toHaveLength(
       2,
@@ -65,7 +68,7 @@ test("two lives on one provider keep a conversation each, though their chains sh
     delete process.env.FURB_FAKE_LOG;
     await remove(cwd);
   }
-}, 30000);
+});
 
 test("the pi-ai Claude provider forwards normalized system text, reuses a session, and charges each turn once", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-provider-"));
@@ -137,7 +140,7 @@ test("the pi-ai Claude provider forwards normalized system text, reuses a sessio
     delete process.env.FURB_FAKE_LOG;
     await remove(cwd);
   }
-}, 30000);
+});
 
 test("a turn claude settles block by block keeps each block once, at the place it streamed", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-blocks-"));
@@ -173,4 +176,4 @@ test("a turn claude settles block by block keeps each block once, at the place i
     cli.dispose();
     await remove(cwd);
   }
-}, 30000);
+});

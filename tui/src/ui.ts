@@ -1,4 +1,4 @@
-import { safeText } from "@furb/engine/world";
+import { safeText } from "@furb/engine";
 import { RGBA, StyledText } from "@opentui/core";
 
 /** One run of text in a line, with its color, its attributes, and the color behind it. */

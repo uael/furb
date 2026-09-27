@@ -9,8 +9,6 @@ WINDOW: Final[int] = 200000
 """WINDOW is the window, in tokens, of a model whose roster entry does not say one."""
 OPERATOR: Final[str] = "operator"
 """OPERATOR is the name of the operator in the roster and as an actor."""
-WORLD: Final[str] = "world"
-"""WORLD is the name that boot takes the World under, and that the World says its facts by."""
 TIMEOUT: Final[float] = 600.0
 """TIMEOUT is the timeout, in seconds, of a command that does not say one."""
 ROOT: Final[str] = "chain1"
@@ -47,7 +45,7 @@ type Saying = tuple[str, str, *tuple[object, ...]]
 """What an ear says: the kind of the fact, the act it is about, and the words, and nothing of who says it, which the bus fills in from whoever is speaking."""
 type Ear = Generator[Saying | None, Fact]
 """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by.
-The World hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
+The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
 The World performs any fact that an extension defines and that the World knows.
 The facts that the World says of its own are for the acts that complete later.
 An ear speaks by yielding a saying, and the work it began speaks later by say, under the site of the ear that began it.

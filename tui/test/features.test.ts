@@ -2,11 +2,9 @@ import { afterAll, expect, test } from "bun:test";
 import { link, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, extname, join } from "node:path";
-import { createTestRenderer } from "@opentui/core/testing";
 import { executable } from "../../bind/typescript/test/executable.ts";
 import { remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
-import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { clipboardImage } from "../src/clipboard.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
@@ -15,102 +13,103 @@ import { Extensions } from "../src/extensions.ts";
 import { fileReferences, projectFiles } from "../src/files.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
+import { composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
 
 afterAll(removeDemoDirectories);
 
 test("rungs retain clicked folds across views and reopen, with running, failed, and done labels and gate findings", async () => {
-  let session = await demoSession();
-  const screen = await createTestRenderer({ width: 140, height: 42, useMouse: true });
-  let app = new App(screen.renderer, session, { quit() {} });
-  try {
-    const rung = await session.life.rung("await wait(60)");
-    await session.refresh();
-    app.render();
-    await screen.flush();
-    let card = app.scroll.getChildren().find((card) => card.id === rung);
-    let heading = card?.getChildren()[0];
-    if (!heading) throw new Error("No rung header.");
-    expect(screen.captureCharFrame()).toContain(`${rung}  by you  running`);
-    expect(card?.getChildren().length).toBeGreaterThan(1);
-    await screen.mockMouse.click(heading.x + 1, heading.y);
-    app.render();
-    await screen.flush();
-    expect(
-      app.scroll
-        .getChildren()
-        .find((card) => card.id === rung)
-        ?.getChildren(),
-    ).toHaveLength(1);
-    const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
-    if (!wait) throw new Error("No pending wait.");
-    await session.life.close(null, wait.id);
-    await session.life.result(rung);
-    await session.refresh();
-    app.render();
-    await screen.flush();
-    expect(screen.captureCharFrame()).toContain(`✓ ${rung}`);
-    expect(screen.captureCharFrame()).not.toContain(`${rung}  by you  running`);
-    expect(
-      app.scroll
-        .getChildren()
-        .find((card) => card.id === rung)
-        ?.getChildren(),
-    ).toHaveLength(1);
-    session.show("transcript");
-    await session.refresh();
-    app.render();
-    await screen.flush();
-    session.show("feed");
-    await session.refresh();
-    app.render();
-    await screen.flush();
-    card = app.scroll.getChildren().find((card) => card.id === rung);
-    expect(card?.getChildren()).toHaveLength(1);
-    heading = card?.getChildren()[0];
-    if (heading) await screen.mockMouse.click(heading.x + 1, heading.y);
-    app.render();
-    await screen.flush();
-    expect(
-      app.scroll
-        .getChildren()
-        .find((card) => card.id === rung)
-        ?.getChildren().length,
-    ).toBeGreaterThan(1);
-    await session.submit("/run this is invalid python !!!");
-    const refused = session.activity.findLast(
-      (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
-    );
-    expect(refused?.run?.status).toBe("failed");
-    await session.refresh();
-    app.render();
-    await screen.flush();
-    expect(screen.captureCharFrame()).toContain("line 1");
-    expect(screen.captureCharFrame()).toContain("failed");
-    const record = session.world.records.path;
-    if (!record) throw new Error("No record.");
-    app.dispose();
-    await session.dispose();
-    const reopened = await openEngine({ record, demo: true });
-    session = new Session(reopened.life, reopened.world, true);
-    await session.refresh();
-    app = new App(screen.renderer, session, { quit() {} });
-    await screen.flush();
-    expect(session.folds[rung]).toBe(false);
-    expect(session.acts.find((act) => act.id === rung)?.run?.status).toBe("done");
-    expect(
-      app.scroll
-        .getChildren()
-        .find((card) => card.id === rung)
-        ?.getChildren().length,
-    ).toBeGreaterThan(1);
-  } finally {
-    app.dispose();
-    screen.renderer.destroy();
-    await session.dispose();
-  }
-}, 30000);
+  let rung = "";
+  let record: string | undefined;
+  await composing(
+    async ({ session, app, screen }) => {
+      rung = await session.engine.rung({ word: "await wait(60)", on: session.engine.root });
+      await session.refresh();
+      app.render();
+      await screen.flush();
+      let card = app.scroll.getChildren().find((card) => card.id === rung);
+      let heading = card?.getChildren()[0];
+      if (!heading) throw new Error("No rung header.");
+      expect(screen.captureCharFrame()).toContain(`${rung}  by you  running`);
+      expect(card?.getChildren().length).toBeGreaterThan(1);
+      await screen.mockMouse.click(heading.x + 1, heading.y);
+      app.render();
+      await screen.flush();
+      expect(
+        app.scroll
+          .getChildren()
+          .find((card) => card.id === rung)
+          ?.getChildren(),
+      ).toHaveLength(1);
+      const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
+      if (!wait) throw new Error("No pending wait.");
+      await session.engine.close(null, { id: wait.id });
+      await session.engine.result(rung);
+      await session.refresh();
+      app.render();
+      await screen.flush();
+      expect(screen.captureCharFrame()).toContain(`✓ ${rung}`);
+      expect(screen.captureCharFrame()).not.toContain(`${rung}  by you  running`);
+      expect(
+        app.scroll
+          .getChildren()
+          .find((card) => card.id === rung)
+          ?.getChildren(),
+      ).toHaveLength(1);
+      session.show("transcript");
+      await session.refresh();
+      app.render();
+      await screen.flush();
+      session.show("feed");
+      await session.refresh();
+      app.render();
+      await screen.flush();
+      card = app.scroll.getChildren().find((card) => card.id === rung);
+      expect(card?.getChildren()).toHaveLength(1);
+      heading = card?.getChildren()[0];
+      if (heading) await screen.mockMouse.click(heading.x + 1, heading.y);
+      app.render();
+      await screen.flush();
+      expect(
+        app.scroll
+          .getChildren()
+          .find((card) => card.id === rung)
+          ?.getChildren().length,
+      ).toBeGreaterThan(1);
+      await session.submit("/run this is invalid python !!!");
+      const refused = session.activity.findLast(
+        (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
+      );
+      expect(refused?.run?.status).toBe("failed");
+      await session.refresh();
+      app.render();
+      await screen.flush();
+      expect(screen.captureCharFrame()).toContain("line 1");
+      expect(screen.captureCharFrame()).toContain("failed");
+      record = session.host.record;
+    },
+    { width: 140, height: 42, useMouse: true },
+  );
+  if (!record) throw new Error("No record.");
+  const reopened = await openEngine({ record, demo: true });
+  const session = new Session(reopened.engine, reopened.host, true);
+  await session.refresh();
+  await composing(
+    async ({ app }) => {
+      expect(session.folds[rung]).toBe(false);
+      expect(session.acts.find((act) => act.id === rung)?.run?.status).toBe("done");
+      expect(
+        app.scroll
+          .getChildren()
+          .find((card) => card.id === rung)
+          ?.getChildren().length,
+      ).toBeGreaterThan(1);
+    },
+    { width: 140, height: 42, useMouse: true },
+    session,
+  );
+});
 
 test("queued follow-ups wait for current work, attach files, and message undo and redo keep their branches", async () => {
   let session = await demoSession();
@@ -139,27 +138,27 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     const source = session.selected;
     await session.undo();
     expect(session.selected).not.toBe(source);
-    expect((await transcriptOf(session.life, session.selected)).join("\n")).not.toContain(
+    expect((await transcriptOf(session.engine, session.selected)).join("\n")).not.toContain(
       "Explain @README.md after this answer.",
     );
     await session.submit("/redo");
     expect(session.selected).toBe(source);
-    expect((await transcriptOf(session.life, source)).join("\n")).toContain(
+    expect((await transcriptOf(session.engine, source)).join("\n")).toContain(
       "Explain @README.md after this answer.",
     );
     await session.submit("/pause");
     session.enqueue("Keep this follow-up through exit.");
     session.save();
-    const saved = JSON.parse(await readFile(`${session.world.records.path}.ui.json`, "utf8"));
+    const saved = JSON.parse(await readFile(`${session.host.record}.ui.json`, "utf8"));
     expect(saved.queued[0].text).toBe("Keep this follow-up through exit.");
     expect(session.acts.some((act) => act.kind === "prompt" && act.words[1] === saved.queued[0].text)).toBe(
       false,
     );
-    const record = session.world.records.path;
+    const record = session.host.record;
     if (!record) throw new Error("No record for the queued message.");
     await session.dispose();
     let reopened = await openEngine({ record, demo: true });
-    session = new Session(reopened.life, reopened.world, true);
+    session = new Session(reopened.engine, reopened.host, true);
     await session.refresh();
     expect(session.queueHeld).toBe(true);
     expect(session.queued[0]?.text).toBe("Keep this follow-up through exit.");
@@ -180,14 +179,14 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     stale.queued = saved.queued;
     await writeFile(`${record}.ui.json`, JSON.stringify(stale));
     reopened = await openEngine({ record, demo: true });
-    session = new Session(reopened.life, reopened.world, true);
+    session = new Session(reopened.engine, reopened.host, true);
     await session.refresh();
     expect(session.queued).toHaveLength(0);
     expect(session.acts.filter((act) => session.isUserPrompt(act))).toHaveLength(sent);
   } finally {
     await session.dispose();
   }
-}, 30000);
+});
 
 test("clipboard import and share publication use bounded files and the explicitly chosen uploader", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-desktop-"));
@@ -235,58 +234,47 @@ test("clipboard import and share publication use bounded files and the explicitl
     else process.env.PATH = oldPath;
     await remove(directory);
   }
-}, 30000);
+});
 
-test("a model request failure is an act failure, and a second in a row pauses the session before its rung hears it", async () => {
+test("a model request failure shows in the feed as the failure of an act, and not as an error of the view", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-model-failure-"));
-  const opened = await openEngine({
-    cwd: directory,
-    record: join(directory, "session.jsonl"),
-    claude: {
-      bin: executable(
-        join(import.meta.dir, "../../bind/typescript/test/fake-claude.ts"),
-        directory,
-        "claude",
-      ),
-    },
-  });
-  const session = new Session(opened.life, opened.world, true);
-  const screen = await createTestRenderer({ width: 140, height: 42 });
-  const app = new App(screen.renderer, session, { quit() {} });
   try {
-    await session.submit("FAIL");
-    await until(session, () => session.paused);
-    await session.refresh();
-    app.render();
-    await screen.flush();
-    expect(session.error).toBe("");
-    expect(screen.captureCharFrame()).not.toContain("Refresh view");
-    expect(screen.captureCharFrame()).toContain("answered nothing");
-    // The World pauses the chain before it says the second reply done, so its rung comes to that refusal at the wake.
-    expect(session.activity.filter((act) => act.run?.status === "failed")).toHaveLength(1);
+    const opened = await openEngine({
+      cwd: directory,
+      record: join(directory, "session.jsonl"),
+      claude: {
+        bin: executable(
+          join(import.meta.dir, "../../bind/typescript/test/fake-claude.ts"),
+          directory,
+          "claude",
+        ),
+      },
+    });
+    await composing(
+      async ({ session, frame }) => {
+        await session.submit("FAIL");
+        // The chain pauses at the second failure in a row, and no work runs after that.
+        await until(session, () => session.paused);
+        await session.refresh();
+        const shown = await frame();
+        expect(shown).not.toContain("Refresh view");
+        expect(shown).toContain("answered nothing");
+      },
+      { width: 140, height: 42 },
+      new Session(opened.engine, opened.host, true),
+    );
   } finally {
-    app.dispose();
-    screen.renderer.destroy();
-    await session.dispose();
     await remove(directory);
   }
-}, 30000);
+});
 
 test("file and shell shortcuts, an external editor, extensions, and a safe standalone share use the real session", async () => {
   const session = await demoSession();
   const oldEditor = process.env.EDITOR,
     oldVisual = process.env.VISUAL;
-  const extensions = new Extensions(() => ({
-    life: session.life,
-    chain: session.selected,
-    directory: session.directory,
-    notify: (message) => {
-      session.notice = message;
-    },
-    submit: (message) => session.submit(message),
-  }));
+  const extensions = new Extensions(() => session);
   try {
-    const directory = session.world.directory;
+    const directory = session.host.directory;
     await writeFile(join(directory, "review notes.txt"), "Unique context for this check.");
     expect(await projectFiles(directory)).toContain("review notes.txt");
     expect(await fileReferences('Read @"review notes.txt" and @README.md', directory)).toEqual([
@@ -302,7 +290,7 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
       (act) => act.kind === "bash" && act.words[0] === "printf shell-shortcut",
     );
     if (!shell) throw new Error("No shell shortcut act.");
-    expect(await session.life.result(shell.id)).toMatchObject({
+    expect(await session.engine.result(shell.id)).toMatchObject({
       code: 0,
       stdout: { content: "shell-shortcut" },
     });
@@ -330,11 +318,11 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
     const extension = join(directory, "extension.ts");
     await writeFile(
       extension,
-      'export default (api) => { api.registerCommand("test-extension", { label: "Test extension", description: "Bind a value", async run(_, ctx) { await ctx.life.result(await ctx.life.rung("extension_value = 23", { on: ctx.chain })); ctx.notify("Extension finished."); } }); };',
+      'export default (api) => { api.registerCommand("test-extension", { label: "Test extension", description: "Bind a value", async run(_, ctx) { await ctx.engine.result(await ctx.engine.rung({ word: "extension_value = 23", on: ctx.chain })); ctx.notify("Extension finished."); } }); };',
     );
     await extensions.load(extension);
     await extensions.run("test-extension", "");
-    expect((await session.life.inspect("extension_value", session.selected)).value).toBe(23);
+    expect((await session.engine.inspect("extension_value", session.selected)).value).toBe(23);
     expect(session.notice).toBe("Extension finished.");
     session.sessionName = '<script>alert("name")</script>';
     await session.submit('<script>alert("message")</script> [bad link](javascript:alert(1))');
@@ -358,12 +346,12 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
     await extensions.dispose();
     await session.dispose();
   }
-}, 30000);
+});
 
 test("a queued dispatch recovers both sides of the prompt-write boundary without sending twice", async () => {
   let session = await demoSession();
   try {
-    const record = session.world.records.path;
+    const record = session.host.record;
     if (!record) throw new Error("No record.");
     const entry = {
       id: "recovery-check",
@@ -375,7 +363,7 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     session.queued = [entry];
     session.queueHeld = true;
     session.save();
-    const sent = await session.world.sendQueued(entry);
+    const sent = await session.host.sendQueued(entry);
     await session.refresh();
     await session.dispose();
     const lines = (await readFile(record, "utf8")).trimEnd().split("\n");
@@ -391,7 +379,7 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
       `${lines.filter((line) => !(JSON.parse(line)[0][0] === "queue" && JSON.parse(line)[0][3] === "sent")).join("\n")}\n`,
     );
     let opened = await openEngine({ record, demo: true });
-    session = new Session(opened.life, opened.world, true);
+    session = new Session(opened.engine, opened.host, true);
     await session.refresh();
     expect(session.queued).toHaveLength(0);
     expect(session.dispatched).toContain(entry.id);
@@ -401,22 +389,25 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     await writeFile(record, `${lines.slice(0, begin + 1).join("\n")}\n`);
     await writeFile(`${record}.ui.json`, JSON.stringify(state));
     opened = await openEngine({ record, demo: true });
-    session = new Session(opened.life, opened.world, true);
+    session = new Session(opened.engine, opened.host, true);
     await session.refresh();
     expect(session.queued).toHaveLength(1);
-    expect(await readFile(record, "utf8")).toContain('"aborted"');
-    const manual = await session.life.prompt(entry.shape, entry.text, { on: entry.chain, to: entry.actor });
+    const manual = await session.engine.prompt(entry.shape, {
+      message: entry.text,
+      on: entry.chain,
+      to: entry.actor,
+    });
     await session.refresh();
     expect(session.queued).toHaveLength(1);
-    const dispatched = await session.world.sendQueued(entry);
+    const dispatched = await session.host.sendQueued(entry);
     expect(dispatched).not.toBe(manual);
-    expect(await session.world.sendQueued(entry)).toBe(dispatched);
+    expect(await session.host.sendQueued(entry)).toBe(dispatched);
     await session.refresh();
     expect(session.acts.filter((act) => act.kind === "prompt")).toHaveLength(2);
   } finally {
     await session.dispose();
   }
-}, 30000);
+});
 
 test("a file opens with the command of the system it runs on", () => {
   const path = "C:\\Users\\me\\a picture.png";

@@ -16,9 +16,6 @@ const command = [
   "bind/typescript/package.json",
   "--output-dir",
   "bind/typescript",
-  "--platform",
-  "--js",
-  "index.cjs",
   "--dts",
   "index.d.cts",
   // The engine runs in the interpreter, which a debug build runs many times slower: release unless asked.

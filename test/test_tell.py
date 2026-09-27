@@ -1,14 +1,13 @@
 """tell, what a question answered now tells of itself."""
 
-from conftest import life, named, said, settle, sown
+from conftest import born, named, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Text
 
 
 async def test_what_a_question_answered_now_that_shows_a_text_or_changes_a_state_tells_of_itself() -> None:
   """What a question answered now that shows a text or changes a state tells of itself: a paragraph headed with its kind, its words and what it was answered, said on the run that asked it, and nothing at all outside a run; one that only reads a value tells nothing, since the word that asked it holds the value, which it debugs to see."""
-  sand = sown()
-  log, root = life(sand)
+  sand, log, root = born()
   word = (
     "read('a.txt')\ncd('/x')\nx = bash('echo hi')\nseen = [peek(x), turns(), clock(), chance(), gate('k = 1'), cwd()]\n"
   )
@@ -36,8 +35,7 @@ async def test_what_a_question_answered_now_that_shows_a_text_or_changes_a_state
 
 async def test_a_question_is_put_to_the_ears_of_the_engine_before_those_of_the_outside() -> None:
   """A question is put to the ears of the engine before those of the outside, so the World is asked for nothing that the engine knows."""
-  sand = sown()
-  _, root = life(sand)
+  sand, _, root = born()
   assert engine.cwd(on=root) == "/w"
   assert engine.turns(on=root) != []
   act = engine.prompt(int, "count", to=OPERATOR, on=root)

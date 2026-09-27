@@ -3,15 +3,14 @@
 import asyncio
 from collections.abc import Generator
 
-from conftest import keeping, life, said, settle, sown
+from conftest import WORLD, born, keeping, said, settle
 from furb import engine
-from furb.engine import OPERATOR, WORLD
+from furb.engine import OPERATOR
 
 
 async def test_who_is_speaking_is_the_site_which_every_fact_is_said_from() -> None:
   """Who is speaking is the site, which every fact is said from: the generator while it speaks, the run while it is stepped, the operator otherwise."""
-  sand = sown()
-  log, root = life(sand)
+  sand, log, root = born()
   assert engine.site.get() == OPERATOR
   sand.script[root] = ["here = site.get()\nread('a.txt')\nclose(here)"]
   step = await engine.prompt(str, "who speaks", on=root)
@@ -27,8 +26,7 @@ async def test_who_is_speaking_is_the_site_which_every_fact_is_said_from() -> No
 
 async def test_work_that_an_ear_begins_while_it_speaks_keeps_the_site_of_that_ear() -> None:
   """Work that an ear begins while it speaks keeps the site of that ear, so what the work says later is said by that ear."""
-  sand = sown()
-  log, root = life(sand)
+  _, log, root = born()
   loop = asyncio.get_running_loop()
 
   def later() -> Generator[None, tuple | None]:

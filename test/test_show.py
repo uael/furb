@@ -1,6 +1,6 @@
 """Show, what says which lines of a text the engine tells."""
 
-from conftest import MANY, acts, life, paragraphs, said, settle, sown
+from conftest import MANY, acts, born, paragraphs, said, settle
 from furb import engine
 from furb.engine import HEAD, Text, differs, grep, span
 
@@ -19,18 +19,14 @@ def test_a_show_is_given_the_lines_of_a_text_and_gives_the_numbers_of_the_lines_
 async def test_a_show_is_any_callable_of_that_shape() -> None:
   """A show is any callable of that shape, so a word adds a show by writing one, and span, grep and differs make the shows of the file."""
   assert callable(span(1, 2)) and callable(grep("^t")) and callable(differs(["one"]))
-  sand = sown()
-  _, root = life(sand)
-  sand.script[root] = [ODD]
+  _, _, root = born(ODD)
   assert await engine.prompt(int, "show the odd lines", on=root) == 1
   assert engine.turns(on=root)[-1][1] == "#read a.txt\n# /w/a.txt, 0 known\n# 1 one\n\n#prompt1 closed 1"
 
 
 async def test_a_show_is_no_word_of_a_fact() -> None:
   """A show is no word of a fact: the verb that was given it keeps it for what it tells, and the ear of the act closes over it, so no record holds one."""
-  sand = sown()
-  log, root = life(sand)
-  sand.script[root] = ["read('a.txt', span(1, 1))\nx = bash('echo hi', show=span(1, 1))\nclose(1)"]
+  sand, log, root = born("read('a.txt', span(1, 1))\nx = bash('echo hi', show=span(1, 1))\nclose(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   command = said(log, "bash")[0][1]

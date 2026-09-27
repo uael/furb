@@ -1,6 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 import type { ModelThinkingLevel, Usage as ModelUsage } from "@earendil-works/pi-ai";
-import type { Life } from "../index.cjs";
+import type { Engine } from "../index.cjs";
 
 export const efforts = [
   "off",
@@ -31,16 +31,10 @@ export function modelNamed<M extends { provider: string; id: string }>(
 }
 export const shapes = ["str", "None", "bool", "int", "float", "list", "dict"] as const;
 
-export type Turn = Awaited<ReturnType<Life["turns"]>>[number];
-export type Fact = Awaited<ReturnType<Life["say"]>>;
+export type Turn = ReturnType<Engine["turns"]>[number];
+export type Fact = ReturnType<Engine["say"]>;
 /** One entry of the record: one fact, an act among them. */
 export type Entry = [Fact];
-export type Usage = NonNullable<Turn[2]>;
-export interface TextValue {
-  is?: "Text";
-  path: string;
-  content: string;
-}
 export interface OperatorPrompt {
   id: string;
   shape: string;
@@ -110,6 +104,10 @@ export function marked(plain: unknown, decoded: unknown = plain): unknown {
     ([key, one]) => [key, marked(one, (decoded as Record<string, unknown>)[key])] as const,
   );
   return "is" in plain ? { is: "dict", args: [pairs] } : Object.fromEntries(pairs);
+}
+/** A number as python takes a float: a whole number crosses as an int, so a float crosses marked, as its digits. */
+export function float(value: number): { is: string; args: string[] } {
+  return { is: "float", args: [String(value)] };
 }
 export function display(value: unknown): string {
   if (typeof value === "string") return value;

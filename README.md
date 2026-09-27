@@ -52,7 +52,7 @@ bun run tui                          # A real life, through the claude command l
 ## Learn more
 
 - [The TUI](tui/README.md): the views, the keys, the commands, and [a gallery of each screen](docs/tui.md).
-- [The developer guide](docs/developer-guide.md): how the repository fits together, and how to change it.
+- [The developer guide](docs/developer-guide.md): the tools to install, how a word runs, and how to change the TUI.
 - [The contract](src/furb/engine.pyi): every law of the engine, one sentence per line.
 
 ## License

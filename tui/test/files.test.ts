@@ -107,4 +107,4 @@ console.log(JSON.stringify(await projectFiles(${JSON.stringify(project)})));`,
     await readable();
     await rm(directory, { recursive: true, force: true });
   }
-}, 30000);
+});

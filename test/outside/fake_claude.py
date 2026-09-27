@@ -43,7 +43,7 @@ def main() -> int:
     got = json.loads(raw)
     said = " ".join(b.get("text", "") for b in got["message"]["content"] if b.get("type") == "text")
     with (home / "heard.jsonl").open("a", encoding="utf-8") as fh:
-      fh.write(json.dumps({"sid": sid, "turn": turn, "text": said, "blocks": got["message"]["content"]}) + "\n")
+      fh.write(json.dumps({"text": said}) + "\n")
     if mode == "hush":
       time.sleep(5)
       continue

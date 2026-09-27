@@ -13,7 +13,7 @@
     "animation": "bun run tui/script/animation.ts",
     "docs": "bun run tui/script/docs.ts",
     "check": "tsc --noEmit",
-    "test": "bun test bind/typescript/test tui/test",
+    "test": "bun test --timeout 30000 bind/typescript/test tui/test",
     "format": "biome format --write bind/typescript tui package.json tsconfig.json biome.json",
     "lint": "biome check bind/typescript tui package.json tsconfig.json biome.json"
   },
@@ -23,6 +23,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@types/bun": "latest",
     "@types/upng-js": "2.1.5",
+    "gifenc": "1.0.3",
     "typescript": "~5.9.3",
     "upng-js": "2.1.0"
   }

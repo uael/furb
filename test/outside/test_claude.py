@@ -8,27 +8,20 @@ from pathlib import Path
 
 import pytest
 from pydantic_ai.messages import (
-  BinaryContent,
-  ImageUrl,
   ModelMessage,
   ModelRequest,
   ModelResponse,
-  RetryPromptPart,
   SystemPromptPart,
   TextPart,
   ThinkingPart,
-  ToolCallPart,
-  ToolReturnPart,
   UserPromptPart,
 )
 from pydantic_ai.models import ModelRequestParameters
-from pydantic_ai.tools import ToolDefinition
 
 from furb.engine import OPERATOR, Refused
 from furb.provider.claude import (
   ACTOR,
   API,
-  FLOOR,
   LEVELS,
   LIVE,
   MILLION,
@@ -41,22 +34,28 @@ from furb.provider.claude import (
   Settings,
   Spend,
   actors,
-  alike,
   based,
   canon,
   cool,
   default,
-  effort_of,
   limits,
   listed,
   mine,
-  shown,
   spent,
   wrong,
 )
-from outside.doubles import ask, reply
 
 PARAMS = ModelRequestParameters()
+
+
+def ask(text: str) -> ModelRequest:
+  """One message of the user, as pydantic_ai holds it."""
+  return ModelRequest(parts=[UserPromptPart(content=text)])
+
+
+def reply(text: str) -> ModelResponse:
+  """One message of a model, as pydantic_ai holds it, with the emptied thinking part a record gives back."""
+  return ModelResponse(parts=[ThinkingPart(content="", signature="sig"), TextPart(content=text)])
 
 
 def seat_of(sid: str = "", effort: str | None = None, said: str = "be terse") -> Seat:
@@ -81,29 +80,14 @@ async def bought(model: Claude, messages: Sequence[ModelMessage], settings: Sett
 
 def test_a_model_knows_what_it_can_hold_and_how_much_it_may_write() -> None:
   assert limits("opus") == (MILLION, 128_000)
-  assert limits("claude-haiku-4-5") == (200_000, 64_000)
-  assert limits("claude-haiku-4-5-20251001") == (200_000, 64_000)
-  assert limits("claude-nothing-9") == FLOOR
-  assert limits("x") == FLOOR
-  assert Claude("opus").window == MILLION
-  assert Claude("opus").tokens == 128_000
+  assert limits("haiku") == (200_000, 64_000)
 
 
-def test_an_effort_is_spent_in_the_words_the_cli_speaks() -> None:
-  assert effort_of("minimal") == "low"
-  assert effort_of("medium") == "medium"
-  assert effort_of("xhigh") == "xhigh"
-  assert effort_of("max") == "max"
-  assert effort_of(level=True) is None
-  assert effort_of(None) is None
-  assert effort_of("whenever") is None
-
-
-def test_a_request_carries_three_settings_this_provider_reads_for_itself() -> None:
-  assert mine(None) == ("", "", "")
-  told: Settings = {"claude_session_id": "one", "claude_fork_of": "two", "claude_effort": "max", "temperature": 0.5}
-  assert mine(told) == ("one", "two", "max")
-  assert mine({"temperature": 0.5}) == ("", "", "")  # a setting this provider does not read for itself
+def test_a_request_carries_two_settings_this_provider_reads_for_itself() -> None:
+  assert mine(None) == ("", "")
+  told: Settings = {"claude_session_id": "one", "claude_effort": "max", "temperature": 0.5}
+  assert mine(told) == ("one", "max")
+  assert mine({"temperature": 0.5}) == ("", "")  # a setting this provider does not read for itself
 
 
 def test_the_count_of_a_turn_holds_the_cache_inside_its_input() -> None:
@@ -123,23 +107,9 @@ def test_two_conversations_of_the_same_meaning_fingerprint_the_same() -> None:
     ModelResponse(parts=[ThinkingPart(content="a whole thought"), TextPart(content="said")])
   )
   assert canon(ModelRequest(parts=[SystemPromptPart(content="a"), UserPromptPart(content="hi")])) == canon(ask("hi"))
-  blob = BinaryContent(data=b"\x89PNG", media_type="image/png")
-  assert canon(ModelRequest(parts=[UserPromptPart(content=["look", blob])])) == canon(
-    ModelRequest(parts=[UserPromptPart(content=["look", blob])])
-  )
-  assert canon(ModelRequest(parts=[UserPromptPart(content=[ImageUrl(url="http://x/y.png")])])) != canon(ask("hi"))
-  assert canon(ModelRequest(parts=[ToolReturnPart(tool_name="t", content="out", tool_call_id="1")])) != canon(
-    ask("out")
-  )
-  assert canon(ModelRequest(parts=[RetryPromptPart(content="again", tool_call_id="1")])) != canon(ask("again"))
-  assert canon(ModelResponse(parts=[ToolCallPart(tool_name="t", args={"a": 1}, tool_call_id="1")])) != canon(reply("t"))
-  assert shown(blob).startswith("image/png:")
-  assert "ImageUrl" in shown(ImageUrl(url="http://x/y.png"))
 
 
 def test_a_request_continues_the_reply_the_last_ask_or_nothing_at_all() -> None:
-  assert alike(["a", "b"], ["a", "b", "c"]) == 2
-  assert alike(["a", "b"], ["z"]) == 0
   assert based([], [], ["a"]) == 0
   assert based(["a", "b"], ["a"], ["a", "b", "c"]) == 2
   assert based(["a", "b"], ["a"], ["a", "z"]) == 1
@@ -169,40 +139,30 @@ def test_the_provider_is_keyless_and_hands_out_the_pool_as_its_client() -> None:
   assert actors()[4][2] == 200_000
 
 
-def test_the_system_prompt_is_the_instructions_and_every_system_part_after_them() -> None:
+def test_the_system_prompt_is_every_system_part_the_history_carries() -> None:
   model = Claude("haiku")
   assert model.preface([ask("hi")]) == ""
   told: list[ModelMessage] = [
     ModelRequest(parts=[SystemPromptPart(content="be terse"), UserPromptPart(content="hi")]),
     reply("ok"),
-    ModelRequest(parts=[UserPromptPart(content="more")], instructions="say less"),
+    ModelRequest(parts=[SystemPromptPart(content="say less"), UserPromptPart(content="more")]),
   ]
-  assert model.preface(told) == "say less\n\nbe terse"
+  assert model.preface(told) == "be terse\n\nsay less"
 
 
-def test_the_delta_goes_out_as_one_line_whatever_it_holds() -> None:
+def test_the_delta_goes_out_as_one_line_of_text() -> None:
   session = Session(seat_of())
-  blob = BinaryContent(data=b"\x89PNG", media_type="image/png")
-  told: list[ModelMessage] = [
-    reply("an earlier answer"),
-    ModelRequest(parts=[ToolReturnPart(tool_name="t", content="an observation", tool_call_id="1")]),
-    ModelRequest(parts=[RetryPromptPart(content="that failed", tool_call_id="1")]),
-    ModelRequest(parts=[UserPromptPart(content="an earlier ask")]),
-    ModelRequest(parts=[UserPromptPart(content=["the live ask", blob])]),
-  ]
+  told: list[ModelMessage] = [reply("an earlier answer"), ask("an earlier ask"), ask("the live ask")]
   got = json.loads(session.line(told))
   assert got["type"] == "user"
-  blocks = got["message"]["content"]
-  assert [b["type"] for b in blocks] == ["text", "image"]
-  assert "[earlier turn: you]\nan earlier answer" in blocks[0]["text"]
-  assert "[earlier observation]\nan observation" in blocks[0]["text"]
-  assert "that failed" in blocks[0]["text"]
-  assert "an earlier ask" in blocks[0]["text"]
-  assert "[earlier turn: user]" not in blocks[0]["text"]
-  assert blocks[0]["text"].endswith("the live ask")
-  assert blocks[1]["source"] == {"type": "base64", "media_type": "image/png", "data": "iVBORw=="}
-  with pytest.raises(Refused, match="never ImageUrl"):
-    session.line([ModelRequest(parts=[UserPromptPart(content=[ImageUrl(url="http://x/y.png")])])])
+  (block,) = got["message"]["content"]
+  assert block["type"] == "text"
+  assert "[earlier turn: you]\nan earlier answer" in block["text"]
+  assert "an earlier ask" in block["text"]
+  assert "[earlier turn: user]" not in block["text"]
+  assert block["text"].endswith("the live ask")
+  with pytest.raises(Refused, match="carries text alone"):
+    session.line([ModelRequest(parts=[UserPromptPart(content=["a list of content"])])])
   with pytest.raises(Refused, match="nothing to send"):
     session.line([ModelRequest(parts=[SystemPromptPart(content="be terse")])])
 
@@ -232,21 +192,6 @@ async def test_two_sweeps_at_once_do_not_trip_over_the_session_the_other_gave_up
     pool.sessions[held.seat] = held
   await asyncio.gather(pool.sweep(seat_of("elsewhere")), pool.sweep(seat_of("elsewhere")))
   assert pool.sessions == {}
-
-
-async def test_a_pool_forks_the_conversation_a_request_names_as_its_parent() -> None:
-  pool = Pool()
-  kin = Session(seat_of("one", "high"))
-  kin.asked = ["a", "b"]
-  pool.sessions[seat_of("one", "high")] = kin
-  assert pool.forked(seat_of("two"), "", ["a", "b"]) is None
-  assert pool.forked(seat_of("two"), "nowhere", ["a", "b"]) is None
-  assert pool.forked(seat_of("two"), "one", ["z"]) is None
-  kid = pool.forked(seat_of("two"), "one", ["a", "b", "c"])
-  assert kid is not None
-  assert (kid.chain, kid.parent, kid.mode) == (["a", "b"], kin.id, "branch")
-  kin.busy = True
-  assert pool.forked(seat_of("two"), "one", ["a", "b"]) is None
 
 
 async def test_a_pool_branches_off_the_sibling_sitting_at_the_branch_point() -> None:
@@ -373,13 +318,13 @@ async def test_a_cooled_conversation_is_revived_by_resuming_it(fake: Path) -> No
   assert heard(fake) == ["say alpha", "say beta"]
 
 
-async def test_a_fork_takes_the_parent_transcript_and_the_new_name_it_is_given(fake: Path) -> None:
+async def test_a_fork_takes_the_transcript_of_its_sibling_and_the_new_name_it_is_given(fake: Path) -> None:
   model = Claude("haiku")
   told: list[ModelMessage] = [ask("say alpha")]
   one = await bought(model, told, {"claude_session_id": "parent"})
   session = model.cli.pool.sessions[seat_of("parent", said="")]
   told += [one, ask("say beta")]
-  two = await bought(model, told, {"claude_session_id": "child", "claude_fork_of": "parent"})
+  two = await bought(model, told, {"claude_session_id": "child"})
   assert two.text == "heard: say beta"
   said = argv(fake, 1)
   assert said[said.index("--resume") + 1] == session.id
@@ -487,20 +432,8 @@ async def test_a_stream_hands_every_word_over_as_it_lands(fake: Path) -> None:
   assert LIVE == []
 
 
-async def test_a_run_is_a_conversation_of_its_own_unless_the_caller_names_one(fake: Path) -> None:
-  assert fake.is_dir()
+async def test_a_model_refuses_an_effort_claude_does_not_spend_before_it_spawns_anything() -> None:
   model = Claude("haiku")
-  told: list[ModelMessage] = [ask("say alpha")]
-  await bought(model, told)
-  await bought(model, told, {"claude_session_id": "named"})
-  assert sorted(k.sid for k in model.cli.pool.sessions) == ["", "named"]
-
-
-async def test_a_model_refuses_what_it_cannot_bridge_before_it_spawns_anything() -> None:
-  model = Claude("haiku")
-  tooled = ModelRequestParameters(function_tools=[ToolDefinition(name="t", description="", parameters_json_schema={})])
-  with pytest.raises(Refused, match="bridges no tools"):
-    await model.request([ask("hi")], None, tooled)
   bad: Settings = {"claude_effort": "whenever"}
   with pytest.raises(Refused, match="never whenever"):
     await model.request([ask("hi")], bad, PARAMS)

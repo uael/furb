@@ -1,27 +1,17 @@
-"""The World of this machine: the disk, the shell, the models of the provider, the operator, a clock and chance.
+"""The World of this machine: the models of the provider and the operator, beside the ears of the crate.
 
-The engine holds the record as entries and this holds it as lines, one json array to an entry, made plain by wire
-and read back by unwire. Everything the World does runs on the loop the operator booted the life on: a command and
-a reply are tasks of that loop, begun while the World speaks, so what they come to reaches the life through say
-under the name of the World.
+The ears of the crate serve the rest of the World: the files, the commands, time and the store of the record, which
+`furb_monty` gives. This World answers what they do not: the standing, a reply, which a model of the provider
+answers, and a prompt to the operator, which the terminal answers. A reply and a prompt are tasks of the loop the
+operator booted the life on, begun while the World speaks, so what they come to reaches the life through say under
+the name of the World.
 """
 
 import asyncio
-import builtins
-import codecs
-import json
-import os
-import random
-import signal
-import subprocess
 import sys
-import time
 from asyncio import Task
-from asyncio.subprocess import Process
 from collections.abc import Callable, Coroutine, Generator, Sequence
-from contextlib import suppress
-from dataclasses import dataclass, field, fields, is_dataclass
-from functools import partial
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import TypeAdapter
@@ -39,16 +29,13 @@ from pydantic_ai.models import Model
 from python_minifier import minify
 
 from furb import engine, python
-from furb.engine import Drift, Exit, Refused, Text
+from furb.engine import Refused
 from furb.provider.claude import ACTOR, Claude, Settings, actors
+from furb_monty import _monty
 
 type World = Generator[tuple | None, tuple]
 """The World, an Ear of engine.pyi: engine.py binds no such name, so this module says the type itself."""
 
-CAP = 524288
-"""CAP is the most bytes the World reads of one file, since a text a model cannot hold is no answer."""
-PIPE = 65536
-"""PIPE is the bytes the World reads of a stream at a time, which is one Out word of the command."""
 MUTE = "{} answered nothing"
 """MUTE is how the World says an actor gave no turn."""
 
@@ -72,42 +59,6 @@ SYSTEM = minify(
 
 PARTS = TypeAdapter(list[ModelResponsePart])
 """PARTS reads the parts of an answer back into the shapes the provider gave, whether from a record or from the answer."""
-
-
-def wire(x: object) -> object:
-  """The plain form of a value, which is how a record leaves a life: an exception its name and what it was made
-  with, a text its path and its content, a shape its name beside its fields, a list and a tuple their entries, a map
-  its entries, or its pairs when it holds the key `is`, so that unwire reads it as the map it is, and plain data is
-  plain.
-  """
-  match x:
-    case BaseException():
-      return {"is": type(x).__name__, "args": wire(x.args)}
-    case Text():
-      return {"is": "Text", "path": x.path, "content": x.content}
-    case dict():
-      plain = {k: wire(v) for k, v in x.items()}
-      return {"is": "dict", "args": [[[k, v] for k, v in plain.items()]]} if "is" in plain else plain
-    case list() | tuple():
-      return [wire(i) for i in x]
-  if is_dataclass(x) and not isinstance(x, type):
-    return {"is": type(x).__name__} | {f.name: wire(getattr(x, f.name)) for f in fields(x)}
-  return x
-
-
-def unwire(x: object) -> object:
-  """The value again from the plain form wire gave, made by what its name is known by: a name of the engine, or of
-  the interpreter when the engine holds none."""
-  match x:
-    case list():
-      return [unwire(i) for i in x]
-    case {"is": str(name), **rest}:
-      held = rest.pop("args", [])
-      args = [unwire(i) for i in held] if isinstance(held, list) else []
-      return (vars(builtins) | vars(engine))[name](*args, **{str(k): unwire(v) for k, v in rest.items()})
-    case dict():
-      return {k: unwire(v) for k, v in x.items()}
-  return x
 
 
 def worded(got: ModelResponse) -> str:
@@ -137,24 +88,14 @@ LINES: dict[str, Callable[[str], object]] = {
 
 
 def kept(record: Path) -> list[tuple]:
-  """The record of an earlier life, as the entries it holds, which is what boot is given.
+  """The record of an earlier life, as the entries it holds, which is what boot is given: what the store of the crate
+  kept at the path, read with no lease."""
+  return entries(_monty.kept(str(record)))
 
-  A crash tears the last line alone, which is cut away; a line anywhere else that is no entry is a drift.
-  """
-  said: list[tuple] = []
-  lines = [line for line in record.read_text(encoding="utf-8").split("\n") if line.strip()]
-  for n, line in enumerate(lines, 1):
-    try:
-      got = unwire(json.loads(line))
-    except ValueError:
-      if n < len(lines):
-        raise
-      break
-    if not (isinstance(got, list) and len(got) == 1 and isinstance(got[0], list) and got[0]):
-      why = f"line {n} of {record} is no entry of the record"
-      raise Drift(why)
-    said.append((tuple(got[0]),))
-  return said
+
+def entries(record: list[list[list[object]]]) -> list[tuple]:
+  """The entries of a record as the store of the crate gives them, each one fact, as the engine takes them."""
+  return [(tuple(one),) for (one,) in record]
 
 
 def answered(entries: Sequence[tuple]) -> list[tuple]:
@@ -166,67 +107,19 @@ def answered(entries: Sequence[tuple]) -> list[tuple]:
 
 
 @dataclass
-class Command:
-  """One command of the World: its act, its process once the process stands, what waits to be fed to it, and its
-  two streams as they came, which the World answers the command with when it ends.
-
-  A rung writes the stdin of a command as soon as it has made the command, which is before the World has the
-  process up, so what is fed before then waits here and goes in the order it was said once the process stands.
-  """
-
-  id: str
-  command: str
-  fed: bool
-  timeout: float
-  merged: bool
-  proc: Process | None = None
-  waiting: list[str | None] = field(default_factory=list)
-  over: bool = False
-  streams: dict[str, str] = field(default_factory=lambda: {"stdout": "", "stderr": ""})
-
-  def feed(self, text: str | None) -> None:
-    """The text into the stdin of the command, and a text of nothing closes that stdin."""
-    if self.proc is None:
-      self.waiting.append(text)
-    elif self.proc.stdin is None:
-      return
-    elif text is None:
-      self.proc.stdin.close()
-    else:
-      self.proc.stdin.write(text.encode())
-
-  def stands(self, proc: Process) -> None:
-    """The process of the command, up, and everything that waited to be fed to it, fed."""
-    self.proc, waiting = proc, self.waiting
-    self.waiting = []
-    for text in waiting:
-      self.feed(text)
-
-  def slay(self) -> None:
-    """The whole group of the command dies, and not its shell alone, since a command grows a tree of its own."""
-    if self.proc is None:
-      return
-    try:
-      os.killpg(self.proc.pid, signal.SIGKILL)
-    except OSError, AttributeError:
-      with suppress(ProcessLookupError):
-        self.proc.kill()
-
-
-@dataclass
 class Live:
-  """The World of one record on this machine, which one life holds.
+  """The World of one life on this machine: its models and its operator, and the ears of the crate it stands beside.
 
-  `directory` is where the chains of the life start, `record` the file it keeps the record in and reads it back
-  from, `actor` the actor a prompt goes to when it names none, and `roster` the actors it offers. `calls` holds
-  every fact it answered or performed, in order, and `model` is the one model it asks, when it is given one.
+  `directory` is where the chains of the life start, `actor` the actor a prompt goes to when it names none, and
+  `roster` the actors it offers. `calls` holds every fact it answered or performed, in order, and `model` is the one
+  model it asks, when it is given one. `ears` are the ears of the crate the life is booted on, which the World lets
+  go at its end.
   `mute` holds, for each chain, the actor whose last reply on that chain answered nothing, so a second such reply in
   a row pauses the chain, and an answer between the two ends the row.
   `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
   """
 
   directory: str
-  record: Path | None = None
   actor: str = ACTOR
   roster: list[list[str | list[str] | int]] = field(default_factory=actors)
   calls: list[tuple] = field(default_factory=list)
@@ -235,6 +128,12 @@ class Live:
   mute: dict[str, str] = field(default_factory=dict)
   reader: asyncio.StreamReader | None = None
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
+  ears: dict[str, _monty.NativeEar] = field(default_factory=dict)
+
+  def end(self) -> None:
+    """The ears of the crate let go: a command ends, a wait ends, and the store lets its record go."""
+    for one in self.ears.values():
+      one.dispose()
 
   def buys(self, name: str) -> Model[object]:
     """The model a name asks for, bought once, or the one model the World was given for every name it hears."""
@@ -271,14 +170,6 @@ class Live:
     )
     return ("assistant", worded(got), usage, PARTS.dump_python(list(got.parts), mode="json"))
 
-  def at(self, here: str, path: str = "") -> Path:
-    """One path of the disk: the directory of the life, where the chain stands, and then the path.
-
-    A chain holds the path a cd was given, which may name no directory of its own, and the World has one place to
-    stand such a path against: the directory every chain of the life started in.
-    """
-    return Path(self.directory, here, path)
-
   async def line(self) -> str:
     """One line of the operator, read on the loop and never on a thread, so no read outlives the life.
 
@@ -292,109 +183,6 @@ class Live:
       made = asyncio.StreamReaderProtocol(reader)
       await asyncio.get_running_loop().connect_read_pipe(lambda: made, sys.stdin)
     return (await self.reader.readline()).decode(errors="replace").strip()
-
-  def serves(self, path: str) -> bool:
-    """Whether the World answers for a path: a path of the disk, and a door of an act of the life, which it refuses
-    once nothing lives behind it. A path of a scheme is another ear's to answer, so the World says nothing of it,
-    whatever the order the ears were given in."""
-    return "://" not in path
-
-  def door(self, path: str) -> bool:
-    """Whether a path is a door: its first part names an act of the life, so `./` before it reaches the file."""
-    return engine.get(path.split("/", 1)[0]) is not None
-
-  def read(self, here: str, path: str) -> Text | Refused:
-    """The text at a path: the file on the disk, and a refusal for the door of nothing that lives."""
-    if self.door(path):
-      return Refused(f"{path} is the door of nothing that lives")
-    at = self.at(here, path)
-    if not at.is_file():
-      return Refused(f"no file at {at}")
-    raw = at.read_bytes()
-    if len(raw) > CAP:
-      return Refused(f"{at} holds {len(raw)} bytes, over the {CAP} the World reads")
-    try:
-      return Text(str(at), raw.decode())
-    except UnicodeDecodeError:
-      return Refused(f"{at} is no text")
-
-  def write(self, here: str, path: str, content: str) -> Text | Refused:
-    """The content onto the file at a path, and the text of that file as it stands on the disk after the write."""
-    if self.door(path):
-      return Refused(f"{path} is the door of nothing that takes a word")
-    at = self.at(here, path)
-    at.parent.mkdir(parents=True, exist_ok=True)
-    at.write_text(content, encoding="utf-8")
-    return Text(str(at), at.read_text(encoding="utf-8"))
-
-  def keep(self, entry: tuple) -> None:
-    """One entry of the record onto its file, plain, as json, and on the disk before this gives back."""
-    if self.record is None:
-      return
-    line = json.dumps(wire(entry), separators=(",", ":")) + "\n"
-    self.record.parent.mkdir(parents=True, exist_ok=True)
-    with self.record.open("a", encoding="utf-8") as file:
-      file.write(line)
-      file.flush()
-      os.fsync(file.fileno())
-
-  async def ran(self, one: Command, here: str) -> None:
-    """The command in a session of its own: what it says as it says it, and what it came to when it is over, which
-    the World answers it with, since the World took it.
-
-    When the command is merged, its stderr is its stdout, so the two stand in the order the command wrote them. The
-    World ends the command at its timeout, and the code of it is nothing then.
-    """
-    hiss = subprocess.STDOUT if one.merged else subprocess.PIPE
-    mouth = subprocess.PIPE if one.fed else subprocess.DEVNULL
-    try:
-      proc = await asyncio.create_subprocess_shell(
-        one.command, stdin=mouth, stdout=subprocess.PIPE, stderr=hiss, cwd=self.at(here), start_new_session=True
-      )
-    except OSError as no:
-      # The machine would not start it, so the World closes it with why, as it closes a prompt it cannot show.
-      engine.close(Refused(f"{one.command!r} did not start: {no}"), one.id)
-      return
-    one.stands(proc)
-    if one.over:
-      one.slay()
-
-    async def drained() -> None:
-      """Both streams to their end, and then the code of the command."""
-      await asyncio.gather(self.told(proc.stdout, one, "stdout"), self.told(proc.stderr, one, "stderr"))
-      await proc.wait()
-
-    # Every way out reads both streams to their end and reaps the process, the one ended before it stood and the
-    # one the life leaves up too, since a pipe of a command that outlives the loop is a pipe nobody closes.
-    job = asyncio.ensure_future(drained())
-    late = False
-    try:
-      async with asyncio.timeout(one.timeout):
-        await asyncio.shield(job)
-    except TimeoutError:
-      late = True
-      one.slay()
-      await job
-    except asyncio.CancelledError:
-      one.slay()
-      await job
-      raise
-    if not one.over:
-      out, err = (Text(f"{one.id}/{name}", text) for name, text in one.streams.items())
-      engine.say("done", one.id, Exit(None if late else proc.returncode, out, err))
-
-  async def told(self, reader: asyncio.StreamReader | None, one: Command, stream: str) -> None:
-    """One stream of a command, said as it comes, one out fact of the engine for each part that arrives, and kept."""
-    if reader is None:
-      return
-    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-    while raw := await reader.read(PIPE):
-      if text := decoder.decode(raw):
-        one.streams[stream] += text
-        engine.say("out", one.id, text, stream)
-    if text := decoder.decode(b"", final=True):
-      one.streams[stream] += text
-      engine.say("out", one.id, text, stream)
 
   async def asked(self, about: str, on: str, actor: str, turns: Sequence[tuple]) -> None:
     """One turn of a model for one reply, and the refusal for a reply the World cannot answer, with a pause when the
@@ -440,11 +228,9 @@ class Live:
     except ValueError as no:
       engine.close(Refused(f"{line!r} is no {shape}: {no}"), about)
 
-  def hears(self) -> World:  # noqa: PLR0912
-    """The World as one generator for one life: it takes a command, a wait, a prompt to the operator and a reply,
-    answers the questions that are its own, feeds and ends its commands, and keeps what it is told.
-    """
-    running: dict[str, Command] = {}
+  def hears(self) -> World:
+    """The World as one generator for one life: it answers the stand, and takes a prompt to the operator and a reply,
+    whose done it says when the operator or the model answered."""
     replies: dict[str, Task[None]] = {}
     jobs: set[Task[None]] = set()
     loop = asyncio.get_running_loop()
@@ -459,16 +245,9 @@ class Live:
     while True:
       a = yield
       # Every fact the World answered or performed, and none that it only heard.
-      if a[0] in ("bash", "wait", "prompt", "reply", "stand", "read", "write", "feed", "clock", "chance"):
+      if a[0] in ("prompt", "reply", "stand"):
         self.calls.append(a)
       match a:
-        case ("bash", about, _, on, command, fed, timeout):
-          yield "started", about
-          running[about] = held = Command(about, command, fed, timeout, bool(engine.ask("merged", on, about)))
-          start(self.ran(held, engine.cwd(on=on)))
-        case ("wait", about, _, _, seconds):
-          yield "started", about
-          loop.call_later(seconds, partial(engine.say, "done", about, None))
         case ("prompt", about, _, _, shape, message, _):
           yield "started", about
           start(self.show(about, shape, message))
@@ -477,25 +256,8 @@ class Live:
           replies[about] = start(self.asked(about, on, actor, engine.turns(on=on)))
         case ("stand", qid, *_):
           yield "done", qid, [self.roster, self.directory, self.actor]
-        case ("read", qid, _, on, path) if self.serves(path):
-          yield "done", qid, self.read(engine.cwd(on=on), path)
-        case ("write", qid, _, on, Text(path=path, content=content)) if self.serves(path):
-          yield "done", qid, self.write(engine.cwd(on=on), path, content)
-        case ("feed", about, _, text) if about in running:
-          running[about].feed(text)
-        case ("cancel" | "close", *_):
-          for one in [x for x in running.values() if engine.covers(a, x.id)]:
-            one.over = True
-            one.slay()
-            running.pop(one.id)
-        case ("done", about, by, *_):
-          running.pop(about, None)
-          # A reply that another ear ended wants no turn, so the model is asked for nothing more.
-          if (job := replies.pop(about, None)) is not None and by != engine.WORLD:
+        case ("done", about, *_):
+          # A reply that another ear ended wants no turn, so the model is asked for nothing more. The World says the
+          # done of its own reply from the task of that reply.
+          if (job := replies.pop(about, None)) is not None and job is not asyncio.current_task():
             job.cancel()
-        case ("keep", _, _, entry):
-          self.keep(entry)
-        case ("clock", qid, *_):
-          yield "done", qid, time.time()
-        case ("chance", qid, *_):
-          yield "done", qid, random.random()  # noqa: S311

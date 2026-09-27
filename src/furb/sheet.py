@@ -10,7 +10,7 @@ The word stands on a sheet of its own::
   import __engine__
   async def __body():
     <each name ty gives a module that a chain in the sandbox does not hold>: object
-    <each name of the engine> = __engine__.<that name>
+    <each name of the engine that is not private> = __engine__.<that name>
     actor = ""
     raised: BaseException | None = None
     try:
@@ -62,14 +62,11 @@ __loader__ and __debug__, which the module of the engine holds before the engine
 every engine, in the vocabulary of the sandbox, so the gate of python refuses these names too, though python runs
 some of them."""
 BOUND = '  actor = ""\n  raised: BaseException | None = None\n'
-"""BOUND binds the two names a chain binds of its own, the actor it stands on and what the last rung raised, with
-the types the contract gives them."""
+"""BOUND binds the two names a chain binds of its own."""
 OPENED = "  try:\n    acting()\n"
-"""OPENED opens a word of the program in a try, on a call, since ty reads an except that no statement before it can
-reach: a name the word bound before it raised reaches every word after it, and an empty word still has a body."""
+"""OPENED opens the try of a word of the program."""
 CAUGHT = "  except BaseException:\n    pass\n"
-"""CAUGHT closes a word of the program, so that a rung which raised or which never ends leaves the words after it
-reachable."""
+"""CAUGHT closes the try of a word of the program."""
 
 
 def python(word: str) -> list[str]:
@@ -90,10 +87,8 @@ def laid(text: str, depth: int) -> str:
 
 
 def sheet(engine: dict[str, object], program: Sequence[str], word: str) -> tuple[str, int]:
-  """The word on a sheet of its own, and how many lines stand above the word, which every finding is counted back
-  by: each name of UNBOUND, declared and never bound; every name of the engine, which is a key of its module that is
-  not private, bound from MODULE; then the two names the chain binds; then each word of the program of the chain
-  before the word, in a try of its own; then the word."""
+  """The word on its sheet, laid out as this module says, and how many lines stand above the word, which every
+  finding is counted back by."""
   unbound = "".join(f"  {name}: object\n" for name in UNBOUND)
   names = "".join(f"  {name} = {MODULE}.{name}\n" for name in engine if not name.startswith("_"))
   words = "".join(OPENED + laid(one, 4) + CAUGHT for one in program)

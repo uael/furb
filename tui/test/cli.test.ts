@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RecordLock } from "@furb/engine";
+import { store } from "@furb/engine";
 import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
 
 /** The moment a condition holds, read again every 20 ms: a process in a terminal tells its state by no event. */
@@ -117,7 +117,7 @@ for (const ending of endings)
       expect(Object.values(view.drafts)).toContain("draftmarker");
       const running = await pid();
       await eventually(() => !alive(running), "the command to end");
-      new RecordLock(join(sessions, record ?? "")).dispose();
+      store(join(sessions, record ?? "")).ear.dispose();
     } finally {
       tui.kill();
       await remove(directory);

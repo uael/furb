@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Sand, life, paragraphs, plain, rows, said, settle, takes
+from conftest import STANDS, Sand, born, life, paragraphs, plain, rows, said, settle, takes
 from furb import engine
 from furb.engine import Drift
 
@@ -11,9 +11,7 @@ ROSTER, WHERE, WHO = STANDS
 
 async def test_what_a_chain_stands_on() -> None:
   """What a chain stands on: the actors the World offers, the directory the chain starts in, and the actor a prompt goes to when it names none."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  _, log, root = born("close(1)")
   assert await engine.prompt(int, "count", on=root) == 1
   assert (WHERE, WHO) == ("/w", "m/low")
   assert [name for name, *_ in ROSTER] == ["operator", "m", "n"]
@@ -24,9 +22,7 @@ async def test_what_a_chain_stands_on() -> None:
 
 async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_the_transcript() -> None:
   """The roster, the directory and the actor that a model reads are in the transcript of its chain."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  sand, log, root = born("close(1)")
   assert await engine.prompt(int, "count", on=root) == 1
   told = takes(root)
   assert told == (
@@ -41,10 +37,7 @@ async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_
 
 async def test_a_standing_holds_no_source() -> None:
   """A standing holds no source: the engine is one file the model imports, and a record made by another engine is a drift."""
-  assert len(STANDS) == 3
-  sand = Sand(stands=STANDS)
-  _, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\nclose(1)"]
+  sand, _, root = born("x = bash('echo hi')\nclose(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   kept = [
@@ -52,4 +45,4 @@ async def test_a_standing_holds_no_source() -> None:
     for fact, *rest in plain(sand.record)
   ]
   with pytest.raises(Drift, match=r"^bash1 drifts$"):
-    life(Sand(stands=STANDS), kept)
+    life(Sand(), kept)

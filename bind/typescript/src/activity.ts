@@ -1,5 +1,9 @@
-import type { Call } from "./ears.js";
+import { type Call, isFault } from "./ears.js";
 import { display, type Fact, isQuestion, uncommented } from "./types.js";
+
+/** The kinds of act that are work which ends later: the table counts each one that is done, and the record may show
+ * one begun and not done, which waits for a wake. */
+export const WORK = ["prompt", "rung", "bash", "wait"];
 
 export interface RunState {
   status: "running" | "failed" | "done";
@@ -19,8 +23,6 @@ export interface LiveAct {
 }
 /** The questions the table asks the engine while it hears a fact. */
 type Hearing<T = void> = Generator<Call, T, unknown>;
-const exception = (value: unknown): value is { is: string; args: unknown[] } =>
-  Boolean(value && typeof value === "object" && "is" in value && "args" in value);
 const covers = (control: Fact, id: string): Call => ({ verb: "covers", args: [control, id] });
 /** The questions the engine asks on the way to what an act does, which are no acts a person follows: each is
  * answered for the act that asked it, which shows what it came to. */
@@ -129,7 +131,7 @@ export class Activity {
         if (row) this.updateRun(row);
       }
       if (act) {
-        if (!act.done && ["prompt", "rung", "bash", "wait"].includes(act.kind)) this.completed++;
+        if (!act.done && WORK.includes(act.kind)) this.completed++;
         act.done = true;
         act.value = fact[3];
         this.mark(act);
@@ -174,13 +176,13 @@ export class Activity {
     }
     const ran = this.ran.has(act.id);
     const value = ran ? this.ran.get(act.id) : act.value;
-    if (exception(value)) {
+    if (isFault(value)) {
       const parent = this.acts.get(act.by);
       if (
         value.is === "CancelledError" &&
         (act.words[1] ||
-          (act.done && !exception(act.value)) ||
-          (parent?.kind === "prompt" && parent.done && !exception(parent.value)))
+          (act.done && !isFault(act.value)) ||
+          (parent?.kind === "prompt" && parent.done && !isFault(parent.value)))
       )
         act.run = { status: "done", reason: "" };
       else act.run = { status: "failed", reason: `${value.is}: ${value.args.map(display).join(", ")}` };

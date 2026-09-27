@@ -2,9 +2,10 @@ import { realpath } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import type { Engine } from "./bridge.ts";
 import { commands } from "./commands.ts";
+import type { Session } from "./session.ts";
 
 export interface ExtensionContext {
-  life: Engine;
+  engine: Engine;
   chain: string;
   directory: string;
   notify(message: string): void;
@@ -24,7 +25,8 @@ export class Extensions {
   readonly commands = new Map<string, ExtensionCommand>();
   readonly paths = new Set<string>();
   private readonly cleanups: (() => void | Promise<void>)[] = [];
-  constructor(private readonly context: () => ExtensionContext) {}
+  /** The extensions of the session that the operator works in, which a command of an extension acts on. */
+  constructor(private readonly session: () => Session) {}
   /** Load the extension at a path, which the caller resolves as it resolves every path the user gives. */
   async load(path: string): Promise<void> {
     const file = await realpath(path);
@@ -58,7 +60,16 @@ export class Extensions {
   async run(name: string, argument: string): Promise<boolean> {
     const command = this.commands.get(name);
     if (!command) return false;
-    await command.run(argument, this.context());
+    const session = this.session();
+    await command.run(argument, {
+      engine: session.engine,
+      chain: session.selected,
+      directory: session.workingDirectory,
+      notify: (message) => {
+        session.notice = message;
+      },
+      submit: (message) => session.submit(message),
+    });
     return true;
   }
   async dispose(): Promise<void> {

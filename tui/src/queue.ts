@@ -6,7 +6,7 @@ export function queueHash(chain: string, shape: string, message: string, actor: 
     .update(JSON.stringify([chain, shape, message, actor]))
     .digest("hex");
 }
-export function queueEvent(fact: Fact): { step: string; key: string; value: unknown } | undefined {
+function queueEvent(fact: Fact): { step: string; key: string; value: unknown } | undefined {
   if (fact[2] !== "operator") return undefined;
   if (fact[0] === "queue") return { step: String(fact[3]), key: String(fact[4]), value: fact[5] };
   return undefined;

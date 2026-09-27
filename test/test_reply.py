@@ -1,15 +1,14 @@
 """Reply, the question of a turn of a model, which the World answers with that turn."""
 
-import asyncio
 from asyncio import CancelledError
 from dataclasses import dataclass
-from functools import partial
 
 from conftest import (
-  STANDS,
+  WORLD,
   Sand,
   Where,
   World,
+  born,
   dones,
   heads,
   life,
@@ -19,12 +18,10 @@ from conftest import (
   rows,
   said,
   settle,
-  sown,
   takes,
-  world_says,
 )
 from furb import engine
-from furb.engine import OPERATOR, WORLD, Refused
+from furb.engine import OPERATOR, Refused
 
 
 @dataclass
@@ -36,32 +33,20 @@ class Busy(Sand):
 
   balked: bool = False
 
-  def hears(self) -> World:
-    """The World that refuses one reply, and answers the replies after it."""
-    loop = asyncio.get_running_loop()
-    while True:
-      a = yield
-      match a:
-        case ("stand", qid, *_):
-          yield "done", qid, self.stands or [[], "", ""]
-        case ("reply", about, _, on, _):
-          self.calls.append(a)
-          if not self.balked:
-            self.balked = True
-            engine.pause(on)
-            yield "done", about, Refused("the World is busy")
-          else:
-            yield "started", about
-            word = self.script[on].pop(0)
-            turn = ("assistant", word, self.cost or (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
-            loop.call_soon(partial(world_says, "done", about, turn))
+  def hear(self, a: tuple) -> World:
+    """The World of the suite, but for the first reply, which it refuses."""
+    match a:
+      case ("reply", about, _, on, _) if not self.balked:
+        self.balked = True
+        engine.pause(on)
+        yield "done", about, Refused("the World is busy")
+      case _:
+        yield from super().hear(a)
 
 
 async def test_the_request_of_a_reply_is_the_transcript_of_the_chain_as_turns() -> None:
   """The request of a reply is the transcript of the chain as turns, which the World reads when it takes it."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  sand, log, root = born("close(1)")
   act = engine.prompt(int, "count", on=root)
   assert await act == 1
   await settle()
@@ -84,9 +69,7 @@ async def test_the_request_of_a_reply_is_the_transcript_of_the_chain_as_turns() 
 
 async def test_the_model_reads_the_turns_of_the_chain_at_each_step() -> None:
   """The model reads the turns of the chain at each step."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
-  sand.script[root] = ["k = 1", "close(k + 1)"]
+  sand, log, root = born("k = 1", "close(k + 1)")
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   asked = [sand.turns[a[1]] for a in said(log, "reply")]
@@ -97,9 +80,7 @@ async def test_the_model_reads_the_turns_of_the_chain_at_each_step() -> None:
 
 async def test_a_reply_carries_the_rung_it_asks_for_as_its_maker() -> None:
   """A reply carries the rung it asks for as its maker, the chain that asks as the chain it is on, and the actor as its one word, and nothing else."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  _, log, root = born("close(1)")
   act = engine.prompt(int, "count", on=root)
   assert await act == 1
   await settle()
@@ -110,8 +91,7 @@ async def test_a_reply_carries_the_rung_it_asks_for_as_its_maker() -> None:
 
 async def test_a_reply_is_on_the_chain_that_asks() -> None:
   """A reply is on the chain that asks, so the World keys its facts and its cache by chain."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
+  sand, log, root = born()
   two = engine.chain("two")
   await settle()
   sand.script[root] = ["close(1)"]
@@ -125,7 +105,7 @@ async def test_a_reply_is_on_the_chain_that_asks() -> None:
 
 async def test_a_reply_the_world_cannot_answer_is_the_worlds_to_refuse() -> None:
   """A reply the World cannot answer is the World's to refuse: it pauses the chain first when it wants a wake, and is done with the refusal, which the rung comes to and the prompt asks again after."""
-  sand = Busy(stands=STANDS)
+  sand = Busy()
   log, root = life(sand)
   sand.script[root] = ["close(7)"]
   one = engine.prompt(int, "count", on=root)
@@ -143,8 +123,7 @@ async def test_a_reply_the_world_cannot_answer_is_the_worlds_to_refuse() -> None
 
 async def test_the_life_refuses_a_reply_that_no_ear_owns() -> None:
   """The life refuses a reply that no ear owns, and the chain that asks then pauses itself, since that fault stands until a wake."""
-  where = Where(stands=STANDS)
-  log, root = life(where)
+  log, root = life(Where())
   asked = engine.prompt(int, "count", on=root)
   await settle()
   (reply,) = [a[1] for a in said(log, "reply")]
@@ -159,8 +138,7 @@ async def test_the_life_refuses_a_reply_that_no_ear_owns() -> None:
 
 async def test_a_reply_ends_as_a_wait_does() -> None:
   """A reply ends as a wait does, so a cancel or a close over it ends it with a CancelledError."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
+  _, log, root = born()
   one = engine.prompt(int, "one", on=root)
   await settle()
   first = said(log, "reply")[-1][1]
@@ -177,9 +155,7 @@ async def test_a_reply_ends_as_a_wait_does() -> None:
 
 async def test_the_world_reads_the_turns_of_the_chain_whole_when_it_takes_a_reply() -> None:
   """The World reads the turns of the chain whole when it takes a reply, folded again for that reply, and the journal keeps the answer and no turns."""
-  sand = Sand(stands=STANDS)
-  log, root = life(sand)
-  sand.script[root] = ["k = 1", "close(k + 1)"]
+  sand, log, root = born("k = 1", "close(k + 1)")
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   asked = [sand.turns[a[1]] for a in said(log, "reply")]
@@ -193,9 +169,7 @@ async def test_the_world_reads_the_turns_of_the_chain_whole_when_it_takes_a_repl
 
 async def test_the_world_answers_a_reply_with_a_done_whose_value_is_the_turn_of_the_model() -> None:
   """The World answers a reply with a done whose value is the turn of the model, which stands as the turn it is, with its usage and the blocks of the provider."""
-  sand = Sand(stands=STANDS, cost=(80000, 7, 0, 0, 1.5))
-  log, root = life(sand)
-  sand.script[root] = ["close(1)"]
+  _, log, root = born("close(1)", cost=(80000, 7, 0, 0, 1.5))
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   (answer,) = [a for a in said(log, "done") if a[1] == "reply1"]
@@ -205,8 +179,7 @@ async def test_the_world_answers_a_reply_with_a_done_whose_value_is_the_turn_of_
 
 async def test_many_prompts_are_pending_on_one_chain_at_once() -> None:
   """Many prompts are pending on one chain at once."""
-  sand = sown()
-  _, root = life(sand)
+  _, _, root = born()
   one = engine.prompt(int, "one", to=OPERATOR, on=root)
   two = engine.prompt(int, "two", to=OPERATOR, on=root)
   await settle()
@@ -219,9 +192,7 @@ async def test_many_prompts_are_pending_on_one_chain_at_once() -> None:
 
 async def test_a_chain_has_at_most_one_reply_in_flight() -> None:
   """A chain has at most one reply in flight."""
-  sand = sown()
-  _, root = life(sand)
-  sand.script[root] = ["close(1)", "close(2)", "close(None)", "close(None)"]
+  _, _, root = born("close(1)", "close(2)", "close(None)", "close(None)")
   first = engine.prompt(int, "first", on=root)
   second = engine.prompt(int, "second", on=root)
   await settle()
@@ -234,8 +205,7 @@ async def test_a_chain_has_at_most_one_reply_in_flight() -> None:
 
 async def test_across_chains_there_is_no_limit_on_the_replies_in_flight() -> None:
   """Across chains there is no limit on the replies in flight."""
-  sand = sown()
-  log, root = life(sand)
+  sand, log, root = born()
   two = engine.chain("two")
   here = engine.prompt(int, "here", on=root)
   there = engine.prompt(int, "there", on=two)
@@ -247,9 +217,7 @@ async def test_across_chains_there_is_no_limit_on_the_replies_in_flight() -> Non
 
 async def test_every_model_asked_on_a_chain_reads_all_the_turns_of_the_chain_as_the_turns_grow() -> None:
   """Every model asked on a chain reads all the turns of the chain, as the turns grow."""
-  sand = sown()
-  log, root = life(sand)
-  sand.script[root] = ["a = 1", "close(a + 1)", "close(None)"]
+  sand, log, root = born("a = 1", "close(a + 1)", "close(None)")
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   first, second = [sand.turns[a[1]] for a in said(log, "reply")][:2]
@@ -259,8 +227,7 @@ async def test_every_model_asked_on_a_chain_reads_all_the_turns_of_the_chain_as_
 
 async def test_as_many_replies_as_there_are_chains_are_in_flight_together() -> None:
   """As many replies as there are chains are in flight together."""
-  sand = sown()
-  log, root = life(sand)
+  _, log, root = born()
   two, three = engine.chain("two"), engine.chain("three")
   for one in (root, two, three):
     engine.prompt(int, "work", on=one)
@@ -270,20 +237,17 @@ async def test_as_many_replies_as_there_are_chains_are_in_flight_together() -> N
 
 async def test_a_later_life_asks_no_model_and_does_no_act_whose_close_the_record_already_holds() -> None:
   """A later life asks no model, and does no act, whose close the record already holds."""
-  sand = sown()
-  _, root = life(sand)
-  sand.script[root] = ["x = bash('echo hi')\nclose((await x).code)", "close(None)"]
+  sand, _, root = born("x = bash('echo hi')\nclose((await x).code)", "close(None)")
   assert await engine.prompt(int, "run it", on=root) == 0
   await settle()
-  later = Sand(stands=STANDS)
+  later = Sand()
   await relived(later, plain(sand.record))
   assert [a for a in later.calls if a[0] in ("reply", "bash")] == []
 
 
 async def test_a_new_prompt_reads_the_whole_transcript_of_the_chain_the_cancelled_work_included() -> None:
   """A new prompt reads the whole transcript of the chain, the cancelled work included."""
-  sand = sown()
-  log, root = life(sand)
+  sand, log, root = born()
   first = engine.prompt(int, "one", to=OPERATOR, on=root)
   await settle()
   engine.cancel(first)
@@ -304,9 +268,7 @@ async def test_a_new_prompt_reads_the_whole_transcript_of_the_chain_the_cancelle
 
 async def test_no_prompt_that_a_pause_is_over_asks_a_model() -> None:
   """No prompt that a pause is over asks a model."""
-  sand = sown()
-  log, root = life(sand)
-  sand.script[root] = ["a = 1", "close(a + 1)", "close(None)"]
+  _, log, root = born("a = 1", "close(a + 1)", "close(None)")
   one = engine.prompt(int, "count", on=root)
   engine.pause(one)
   await settle()
@@ -318,9 +280,7 @@ async def test_no_prompt_that_a_pause_is_over_asks_a_model() -> None:
 
 async def test_a_paused_chain_makes_no_new_reply_after_a_held_response() -> None:
   """A paused chain makes no new reply after a held response."""
-  sand = sown()
-  log, root = life(sand)
-  sand.script[root] = ["a = 1", "close(a + 1)", "close(None)"]
+  _, log, root = born("a = 1", "close(a + 1)", "close(None)")
   one = engine.prompt(int, "count", on=root)
   engine.pause(root)
   await settle()
@@ -331,12 +291,10 @@ async def test_a_paused_chain_makes_no_new_reply_after_a_held_response() -> None
 
 async def test_no_model_is_asked_for_a_rung_the_journal_answered() -> None:
   """No model is asked for a rung the journal answered, since a later life asks again for nothing it was answered once."""
-  sand = sown()
-  _, root = life(sand)
-  sand.script[root] = ["a = 1", "close(a + 1)", "close(None)"]
+  sand, _, root = born("a = 1", "close(a + 1)", "close(None)")
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
-  later = Sand(stands=STANDS)
+  later = Sand()
   _, over = await relived(later, plain(sand.record))
   assert [a for a in later.calls if a[0] == "reply"] == []
   assert engine.module(over)["a"] == 1
@@ -344,8 +302,7 @@ async def test_no_model_is_asked_for_a_rung_the_journal_answered() -> None:
 
 async def test_it_asks_for_no_rung_a_pause_stands_over() -> None:
   """It asks for no rung a pause stands over, whether the pause is over that rung or over the chain, so a paused chain asks no model until the wake."""
-  sand = sown()
-  log, root = life(sand)
+  sand, log, root = born()
   engine.pause(root)
   sand.script[root] = ["close(1)", "close(None)"]
   one = engine.prompt(int, "count", on=root)
@@ -358,9 +315,7 @@ async def test_it_asks_for_no_rung_a_pause_stands_over() -> None:
 
 async def test_the_chain_asks_one_model_at_a_time() -> None:
   """The chain asks one model at a time, which it reads from its transcript, the rung that has waited the longest among those it heard on itself that nothing has been said of, handing it the turns as they stand, for the World to hand its provider as it likes, so that many chains ask many models at once."""
-  sand = sown()
-  log, root = life(sand)
-  sand.script[root] = ["close(1)", "close(2)"]
+  sand, log, root = born("close(1)", "close(2)")
   one = engine.prompt(int, "first", on=root)
   two = engine.prompt(int, "second", on=root)
   assert (await one, await two) == (1, 2)

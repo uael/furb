@@ -12,14 +12,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./native": {
-      "types": "./index.d.cts",
-      "default": "./index.cjs"
-    },
-    "./world": {
-      "types": "./dist/world.d.ts",
-      "import": "./dist/world.js"
-    },
     "./claude": {
       "types": "./dist/providers/claude.d.ts",
       "import": "./dist/providers/claude.js"

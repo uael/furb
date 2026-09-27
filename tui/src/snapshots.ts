@@ -1,7 +1,7 @@
-import { type Fact, isQuestion, type Life, type LiveAct, questionKind, type World } from "@furb/engine";
+import { type Engine, type Fact, isQuestion, type LiveAct, questionKind, type Session } from "@furb/engine";
 import type { Snapshot } from "./bridge.ts";
 import { queueDispatches } from "./queue.ts";
-import type { ActRow } from "./session.ts";
+import type { ActRow, Exit } from "./session.ts";
 
 /** What a snapshot knows of one chain. A value it must read again is undefined. */
 interface ChainView {
@@ -17,8 +17,7 @@ const TAIL = 2000;
 
 /** An act as a row of a snapshot: a command that printed more than a tail carries the tail of each stream. */
 function row(act: LiveAct): ActRow {
-  const exit =
-    act.kind === "bash" ? (act.value as { stdout?: { content: string }; stderr?: { content: string } }) : {};
+  const exit: Exit = act.kind === "bash" ? (act.value as Exit) : {};
   const streams = [exit?.stdout?.content ?? "", exit?.stderr?.content ?? ""];
   if (streams.every((content) => content.length <= TAIL)) return act;
   const tail = (stream?: { content: string }) =>
@@ -37,8 +36,8 @@ export class Snapshots {
   private entries = -1;
   private dispatched: string[] = [];
   constructor(
-    private readonly life: Life,
-    private readonly world: World,
+    private readonly engine: Engine,
+    private readonly session: Session,
   ) {}
 
   private changed(fact: Fact): void {
@@ -58,7 +57,7 @@ export class Snapshots {
           turns: undefined,
         });
     // A fact stands in the transcript of the chain its scope names, which is all that view reads.
-    const view = this.chains.get(this.world.activity.scope(id));
+    const view = this.chains.get(this.session.activity.scope(id));
     if (!view) return;
     if (["tell", "pause", "wake", "cancel", "close", "reply"].includes(kind) || answered === "reply")
       view.turns = undefined;
@@ -78,26 +77,27 @@ export class Snapshots {
   }
   /** The view of a chain, with the acts that changed after a count of changes of the act table. */
   take(requested: string, since = 0): Snapshot {
-    for (const fact of this.world.facts.slice(this.heard)) this.changed(fact);
-    this.heard = this.world.facts.length;
-    const selected = this.world.activity.acts.get(requested)?.kind === "chain" ? requested : this.life.root;
+    for (const fact of this.session.facts.slice(this.heard)) this.changed(fact);
+    this.heard = this.session.facts.length;
+    const selected =
+      this.session.activity.acts.get(requested)?.kind === "chain" ? requested : this.engine.root;
     const view = this.chains.get(selected) ?? {};
     this.chains.set(selected, view);
-    view.roster ??= this.life.call<[Snapshot["roster"], string, string]>("standing", [], {})[0];
-    view.program ??= this.life.call<Record<string, string>>("program", [selected], {});
-    view.turns ??= this.life.turns(selected);
-    view.directory ??= this.life.cwd(selected);
-    view.actor ??= String(this.life.inspect("actor", selected).value ?? "");
-    if (this.entries !== this.world.records.entries.length) {
-      this.entries = this.world.records.entries.length;
-      this.dispatched = [...queueDispatches(this.world.records.entries).keys()];
+    view.roster ??= (this.engine.standing() as [Snapshot["roster"], string, string])[0];
+    view.program ??= this.engine.program({ on: selected }) as Snapshot["program"];
+    view.turns ??= this.engine.turns({ on: selected });
+    view.directory ??= this.engine.cwd({ on: selected });
+    view.actor ??= String(this.engine.inspect("actor", selected).value ?? "");
+    if (this.entries !== this.session.entries.length) {
+      this.entries = this.session.entries.length;
+      this.dispatched = [...queueDispatches(this.session.entries).keys()];
     }
-    const { acts, count } = this.world.activity.since(since);
+    const { acts, count } = this.session.activity.since(since);
     return {
       selected,
       acts: acts.map(row),
       count,
-      paused: this.world.isPaused(selected) || this.world.pending.size > 0,
+      paused: this.session.isPaused(selected) || this.session.pending.size > 0,
       dispatched: this.dispatched,
       roster: view.roster,
       program: view.program,

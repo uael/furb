@@ -1,73 +1,40 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { CodeRenderable, type Renderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
-import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Session } from "../src/session.ts";
 import { palettes } from "../src/theme.ts";
-import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
 import { gif, pack, type Still } from "./gif.ts";
 import { pixels } from "./raster.ts";
+import { find, highlighting, home, mount } from "./stage.ts";
 
 // The model of the demo writes its words as a stream in the animation, as a real model does.
 process.env.FURB_DEMO_STREAM = "1";
-// The animation runs in a home of its own, so the paths it shows read as the paths of a user do: ~/fieldnotes. The
-// runtime reads the home directory once, so the script runs again as a child that starts in that home.
-const home = process.env.FURB_GALLERY_HOME;
-if (!home) {
-  // The home has the same path at each run, so that the transcript, which shows the exact paths, reads the same.
-  const gallery = join(tmpdir(), "furb-animation");
-  await rm(gallery, { recursive: true, force: true });
-  await mkdir(gallery, { recursive: true });
-  try {
-    const child = Bun.spawn([process.execPath, import.meta.path], {
-      env: { ...process.env, HOME: gallery, USERPROFILE: gallery, FURB_GALLERY_HOME: gallery },
-      stdio: ["inherit", "inherit", "inherit"],
-    });
-    process.exitCode = await child.exited;
-  } finally {
-    await rm(gallery, { recursive: true, force: true });
-  }
-  process.exit();
-}
+const directory = join(await home("furb-animation"), "fieldnotes");
 
 /** The terminal of the animation, and the scale of its pictures, which a screen of high density shows sharp. */
 const columns = 138,
   rows = 40,
   zoom = 2;
 const output = resolve(process.env.FURB_ANIMATION_OUT ?? "docs/furb.gif");
-const directory = join(home, "fieldnotes");
 await seedDemoFiles(directory);
-const { life, world } = await openEngine({ demo: true, cwd: directory });
-const session = new Session(life, world, true);
+const { engine, host } = await openEngine({ demo: true, cwd: directory });
+const session = new Session(engine, host, true);
 await session.refresh();
 await session.command("/name Explore project");
-const library = new Workspaces(session.preferences, { demo: true });
-const entry = library.adopt(session, await library.add(directory));
-await library.select(entry);
-library.preferences.sidebar = true;
 // With the kitty keyboard protocol, an Escape is a key of its own that no key after it joins.
 const test = await createTestRenderer({ width: columns, height: rows, useMouse: true, kittyKeyboard: true });
-const app = new App(test.renderer, session, { quit() {}, workspaces: library });
+const { library, app } = await mount(session, test.renderer);
 const stills: Still[] = [];
 let size = { width: 0, height: 0 };
-
-function highlighting(node: Renderable): Promise<void>[] {
-  return [
-    ...(node instanceof CodeRenderable ? [node.highlightingDone] : []),
-    ...node.getChildren().flatMap(highlighting),
-  ];
-}
 /** The screen as it is now, which stays for a time in hundredths of a second. */
 async function still(delay: number): Promise<void> {
   // The input is colored by a parser off the main thread, which a moment lets finish.
   await new Promise((done) => setTimeout(done, 30));
-  app.render();
+  app().render();
   await test.flush();
   await Promise.all(highlighting(test.renderer.root));
   await test.flush();
@@ -94,10 +61,8 @@ async function working(delay = 8): Promise<void> {
 }
 /** A click on the first place of the screen that shows a text. */
 async function click(text: string): Promise<void> {
-  const lines = test.captureCharFrame().split("\n");
-  const row = lines.findIndex((line) => line.includes(text));
-  if (row < 0) throw new Error(`The screen shows no ${text} to click.`);
-  await test.mockMouse.click((lines[row] ?? "").indexOf(text) + 1, row);
+  const [column, row] = find(test, text);
+  await test.mockMouse.click(column + 1, row);
 }
 
 try {
@@ -158,7 +123,7 @@ try {
   await writeFile(output, gif(stills, size.width, size.height, [0xff5f57, 0xfebc2e, 0x28c840]));
   console.log(`${output}: ${stills.length} pictures`);
 } finally {
-  app.dispose();
+  app().dispose();
   test.renderer.destroy();
   await library.dispose();
   await removeDemoDirectories();

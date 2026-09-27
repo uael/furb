@@ -1,13 +1,12 @@
 """Wants, the act a run waits for."""
 
-from conftest import STANDS, Sand, dones, life, said, settle
+from conftest import born, dones, said, settle
 from furb import engine
 
 
 async def test_a_wants_is_the_act_that_a_run_makes_when_its_word_waits() -> None:
   """A wants is the act that a run makes when its word waits for an act that is not done: the rung takes it, and answers it with what that act came to when the rung hears its done, so a pause over the rung holds the word."""
-  sand = Sand(stands=STANDS, auto=False)
-  log, root = life(sand)
+  sand, log, root = born(auto=False)
   act = engine.rung("out = await bash('slow')\nclose(out.code)", on=root)
   await settle()
   _, command, *_ = said(log, "bash")[0]

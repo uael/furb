@@ -7,16 +7,16 @@ answered out of it, so no model is asked again.
 """
 
 import asyncio
-import os
-import shutil
 import sys
 import tempfile
 from pathlib import Path
 
+from real import ready, spent
+
 from furb import engine
 from furb.cli import again, lived, say
 from furb.engine import Act
-from furb.provider.claude import BIN, cool
+from furb.provider.claude import cool
 from furb.world import answered, kept
 
 MESSAGE = "How many lines does the file a.txt hold?"
@@ -31,11 +31,6 @@ STALL = 300.0
 """STALL is the seconds the smoke waits for a prompt, since a chain the World paused would wait for ever."""
 CEILING = 1.0
 """CEILING is the dollars the first life may spend, ten answers or so, so that a model that loops is paused."""
-
-
-def spent(record: Path) -> float:
-  """The dollars the answers of the record cost."""
-  return sum(one[3][2][4] for one in answered(kept(record)) if one[3][2])
 
 
 def replies(calls: list[tuple]) -> list[tuple]:
@@ -53,11 +48,11 @@ async def first(yard: Path, record: Path) -> None:
   except TimeoutError:
     say(f"no answer in {STALL:.0f} seconds: {len(replies(world.calls))} reply(s) cost {spent(record):.4f} dollars")
     # A chain at the ceiling of its grant is paused and answers nothing more, which is why nothing came back.
-    heads = [line.split()[1:2] for turn in engine.turns(on=root) for line in turn[1].split("\n") if line[1:2].isalnum()]
-    if ["paused"] in heads:
+    if engine.paused(root):
       say(f"the chain is paused: the grant of {CEILING} dollars holds it at its ceiling")
     raise
   finally:
+    world.end()
     await cool()
   say(f"the first life gave {got!r}, after {len(replies(world.calls))} reply(s)")
   for one in answered(kept(record)):
@@ -76,6 +71,7 @@ async def second(yard: Path, record: Path) -> None:
   try:
     got = await asyncio.wait_for(Act(name), STALL)
   finally:
+    world.end()
     await cool()
   say(f"the second life gave {got!r}, after {len(replies(world.calls))} reply(s), from {name}")
   assert got == LINES, f"the journal answered {got!r} and not {LINES}"
@@ -84,9 +80,7 @@ async def second(yard: Path, record: Path) -> None:
 
 def main() -> int:
   """The two lives, in a directory of their own, and what the answer of the model cost."""
-  if shutil.which(os.environ.get(BIN) or "claude") is None:
-    say("no claude on PATH, so no model can be asked and the smoke stops here.")
-    return 1
+  ready()
   yard = Path(tempfile.mkdtemp(prefix="furb-smoke-"))
   record = yard / "record.jsonl"
   (yard / "a.txt").write_text(HELD, encoding="utf-8")

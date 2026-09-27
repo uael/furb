@@ -1,15 +1,13 @@
 import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { imageContent, imageReferences } from "@furb/engine";
-import { display } from "@furb/engine/world";
+import { display, imageContent, imageReferences } from "@furb/engine";
 import { Marked } from "marked";
 import { conversation } from "./conversation.ts";
+import { escaped } from "./format.ts";
 import type { Session } from "./session.ts";
 import { palettes } from "./theme.ts";
 
-const escaped = (value: string) =>
-  value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 const markdown = new Marked({
   gfm: true,
   renderer: {
@@ -41,7 +39,7 @@ export function shareHtml(session: Session): string {
       const references = imageReferences(message);
       const images = references
         .map((reference) => {
-          const image = imageContent(session.world.imageDirectory, reference.uri);
+          const image = imageContent(session.host.imageDirectory, reference.uri);
           return `<img alt="Attached image" src="data:${image.mimeType};base64,${image.data}">`;
         })
         .join("");
