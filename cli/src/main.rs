@@ -13,7 +13,7 @@ mod tui;
 use std::{path::PathBuf, process::ExitCode};
 
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
-use furb::{Object, value::entry, verbs};
+use furb::{life::Opening, value::entry, verbs, world::SHAPES};
 
 use crate::life::Life;
 
@@ -60,7 +60,7 @@ struct Place {
 
 /// What a life stands on: the actor a prompt goes to when it names none, and the models it offers beside the model
 /// of that actor. The standing of every chain tells the roster, so a life offers the models it names and no more.
-#[derive(Args)]
+#[derive(Args, Default)]
 struct Stand {
   /// The actor a prompt goes to when it names none, as provider:model/effort; the first model the catalog offers,
   /// at its least effort, when unsaid.
@@ -82,22 +82,24 @@ enum Command {
     /// when unsaid.
     #[arg(long, default_value = "", hide_default_value = true)]
     to: String,
-    /// The shape of the response.
-    #[arg(long, value_enum, default_value_t = Shape::None)]
-    shape: Shape,
+    /// The shape of the response, as python names it.
+    #[arg(long, default_value = "None", value_parser = SHAPES)]
+    shape: String,
     #[command(flatten)]
     place: Place,
     #[command(flatten)]
     stand: Stand,
   },
-  /// Print the turns of the root of a life made again from its record.
+  /// Print the turns of the root of a life made again from its record, which only inspects it.
   Turns {
-    /// The record to resume from.
+    /// The record to read.
     #[arg(long)]
     record: PathBuf,
     /// The directory the chains of the life start in, the current directory when unsaid.
     #[arg(long)]
     cwd: Option<PathBuf>,
+    #[command(flatten)]
+    stand: Stand,
   },
   /// Run a word the caller wrote on the root chain and print what it gave.
   Run {
@@ -116,43 +118,22 @@ enum Command {
   },
 }
 
+impl Place {
+  /// A life in the directory of this place, on its record, which it keeps what it says to when `keeps` says so.
+  fn opening(&self, keeps: bool) -> Opening {
+    let opening = Opening::new(life::directory(self.cwd.as_deref()));
+    match &self.record {
+      Some(record) => opening.record(record, keeps),
+      None => opening,
+    }
+  }
+}
+
 impl Stand {
-  /// What the life stands on, as a life takes it.
-  fn stood(&self) -> life::Stood {
-    life::Stood { actor: self.model.clone(), roster: self.roster.clone() }
-  }
-}
-
-/// Every shape a prompt of the command line takes, by the name it is given on the line.
-#[derive(Clone, Copy, ValueEnum)]
-enum Shape {
-  None,
-  Str,
-  Int,
-  Float,
-  Bool,
-  List,
-}
-
-impl Shape {
-  /// The name of the shape, as a prompt carries it.
-  fn name(self) -> &'static str {
-    match self {
-      Shape::None => "None",
-      Shape::Str => "str",
-      Shape::Int => "int",
-      Shape::Float => "float",
-      Shape::Bool => "bool",
-      Shape::List => "list",
-    }
-  }
-
-  /// The shape as a prompt is given it: None itself, or the name of a type.
-  fn object(self) -> Object {
-    match self {
-      Shape::None => Object::none(),
-      one => Object::string(one.name()),
-    }
+  /// A life that stands on the actor and the roster of this stand.
+  fn on(&self, opening: Opening) -> Opening {
+    let roster = (!self.roster.is_empty()).then(|| self.roster.clone());
+    opening.actor(self.model.clone()).roster(roster)
   }
 }
 
@@ -162,22 +143,23 @@ fn main() -> ExitCode {
     Some(Command::Prompt { message, to, shape, place, mut stand }) => {
       // The actor of the prompt is one the life offers.
       stand.roster.extend(life::model(&to));
-      prompt(&place, &stand, shape, message, to)
+      prompt(stand.on(place.opening(true)), &shape, message, to)
     }
-    Some(Command::Turns { record, cwd }) => turns(record, cwd),
-    Some(Command::Run { word, place, stand }) => run(&place, &stand, word),
-    Some(Command::Extensions { place }) => extensions(&place),
+    Some(Command::Turns { record, cwd, stand }) => {
+      let opening = Opening::new(life::directory(cwd.as_deref())).record(record, false);
+      turns(stand.on(opening.inspecting()))
+    }
+    Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word),
+    Some(Command::Extensions { place }) => extensions(place.opening(false)),
     None if furb.mode == Mode::Rpc => {
       if furb.demo || !furb.more.is_empty() {
         let why = "--demo and the words after -- are for the TUI, and --mode rpc serves no TUI";
         Furb::command().error(ErrorKind::ArgumentConflict, why).exit();
       }
-      let cwd = life::directory(furb.place.cwd.as_deref());
-      rpc::serve(furb.place.record.as_deref(), &cwd, &furb.stand.stood())
+      rpc::serve(furb.stand.on(furb.place.opening(true)), furb.place.record.as_deref())
     }
     None => {
-      let stood = furb.stand.stood();
-      tui::launch(furb.demo, &furb.place, &stood, &furb.more).map(|never| match never {})
+      tui::launch(furb.demo, &furb.place, &furb.stand, &furb.more).map(|never| match never {})
     }
   };
   match done {
@@ -195,34 +177,27 @@ fn main() -> ExitCode {
 /// A prompt the record already holds is taken up and never asked twice, so a command said again on a kept record
 /// reads the answer of the life before it and asks no model for it. A prompt it holds that is not done goes on, since
 /// the command wakes it, and a wake of a prompt that is done says nothing.
-fn prompt(
-  place: &Place,
-  stand: &Stand,
-  shape: Shape,
-  message: String,
-  to: String,
-) -> Result<(), String> {
-  let mut life = Life::lived(place.record.as_deref(), place.cwd.as_deref(), &stand.stood(), true)?;
-  let root = life.root.clone();
+fn prompt(opening: Opening, shape: &str, message: String, to: String) -> Result<(), String> {
+  let mut life = Life::lived(opening)?;
   let to = life::actor(&to);
-  let id = match life.again(shape.name(), &message, &to) {
+  let id = match life.again(shape, &message, &to) {
     Some(id) => {
       life.engine.wake(&id).map_err(|no| no.to_string())?;
       id
     }
     None => {
-      let with = verbs::Prompt { message: Some(message), to: Some(to), on: Some(root) };
-      life.engine.prompt(shape.object(), with).map_err(|no| no.to_string())?.id().to_owned()
+      let with =
+        verbs::Prompt { message: Some(message), to: Some(to), on: Some(life.root.clone()) };
+      life.engine.prompt(life::shape(shape), with).map_err(|no| no.to_string())?.id().to_owned()
     }
   };
   println!("{}", life.settled(&id)?.py_repr());
   Ok(())
 }
 
-/// The turns of the root of a life made again from its record, each as the python a model reads of it. The life only
-/// reads the record, and keeps nothing.
-fn turns(record: PathBuf, cwd: Option<PathBuf>) -> Result<(), String> {
-  let mut life = Life::lived(Some(&record), cwd.as_deref(), &life::Stood::default(), false)?;
+/// The turns of the root of a life made again from its record, each as the python a model reads of it.
+fn turns(opening: Opening) -> Result<(), String> {
+  let mut life = Life::lived(opening)?;
   let on = Some(life.root.clone());
   for turn in life.engine.turns(verbs::Turns { on }).map_err(|no| no.to_string())? {
     let text =
@@ -233,19 +208,17 @@ fn turns(record: PathBuf, cwd: Option<PathBuf>) -> Result<(), String> {
 }
 
 /// One word its caller wrote, run as a rung on the root of a life, awaited for what the word gave, as python shows it.
-fn run(place: &Place, stand: &Stand, word: String) -> Result<(), String> {
-  let mut life = Life::lived(place.record.as_deref(), place.cwd.as_deref(), &stand.stood(), true)?;
+fn run(opening: Opening, word: String) -> Result<(), String> {
+  let mut life = Life::lived(opening)?;
   let with = verbs::Rung { word: Some(word), on: Some(life.root.clone()), ..Default::default() };
   let id = life.engine.rung(with).map_err(|no| no.to_string())?.id().to_owned();
   println!("{}", life.settled(&id)?.py_repr());
   Ok(())
 }
 
-/// Each extension that a life on the record runs, as its name and its life word, one on each line. The life only reads
-/// the record, and keeps nothing.
-fn extensions(place: &Place) -> Result<(), String> {
-  let mut life =
-    Life::lived(place.record.as_deref(), place.cwd.as_deref(), &life::Stood::default(), false)?;
+/// Each extension that a life on the record runs, as its name and its life word, one on each line.
+fn extensions(opening: Opening) -> Result<(), String> {
+  let mut life = Life::lived(opening)?;
   for one in life.extensions()? {
     println!("{}: {}", one.name, one.life);
   }

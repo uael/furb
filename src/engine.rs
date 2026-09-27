@@ -416,7 +416,7 @@ impl Engine {
   }
 
   /// What an act came to, once it is done, and nothing while it lives.
-  pub(crate) fn outcome(&mut self, id: &str) -> Result<Option<Object>, Fault> {
+  pub fn outcome(&mut self, id: &str) -> Result<Option<Object>, Fault> {
     let got = self.run("outcomes_of(__engine, [__id])[0]", vec![("__id", Object::string(id))])?;
     Ok(entry(&got.as_ref(), 0).map(|one| one.to_owned()))
   }

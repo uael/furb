@@ -136,7 +136,7 @@ fn the_command_line_takes_four_commands_of_the_operator() {
   let output = ran(yard.furb(&["prompt", "count", "--shape", "nothing"]), "");
   assert_eq!(output.status.code(), Some(2));
   let said = String::from_utf8_lossy(&output.stderr);
-  assert!(said.contains("[possible values: none, str, int, float, bool, list]"), "{said}");
+  assert!(said.contains("[possible values: str, None, bool, int, float, list, dict]"), "{said}");
   assert_eq!(
     ran(yard.furb(&["turns"]), "").status.code(),
     Some(2),
@@ -155,6 +155,9 @@ fn a_word_its_caller_wrote_runs_on_the_root() {
 #[test]
 fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let yard = Yard::new("resumed");
+  fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
+  let off = r#"{"extensions": {"memory": false, "skills": false}}"#;
+  fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "4\n");
   let kinds: Vec<String> = fs::read_to_string(yard.record())
@@ -166,17 +169,13 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   assert_eq!(stands, 2, "each life that keeps keeps its stand: {kinds:?}");
   let before = fs::read(yard.record()).expect("the record");
   let elsewhere = yard.at.join("elsewhere");
-  fs::create_dir_all(&elsewhere).expect("another directory");
+  fs::create_dir_all(&elsewhere).expect("another directory, whose configs turn the extensions on");
   let mut turns = yard.furb(&["turns", "--record"]);
   turns.arg(yard.record()).arg("--cwd").arg(&elsewhere);
   let said = printed(turns, "");
-  // The two rungs of the extensions come first, and every word runs again.
-  assert!(said.contains("#rung4 closed 4"), "the turns of a record run every word again: {said}");
-  assert_eq!(
-    fs::read(yard.record()).expect("the record"),
-    before,
-    "a life that only reads keeps nothing"
-  );
+  assert!(said.contains("#rung2 closed 4"), "the turns of a record run every word again: {said}");
+  assert!(!said.contains("remember()"), "an inspection enables no extension: {said}");
+  assert_eq!(fs::read(yard.record()).expect("the record"), before, "an inspection keeps nothing");
 }
 
 #[test]

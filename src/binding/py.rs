@@ -5,10 +5,12 @@
 
 use std::{
   mem::ManuallyDrop,
+  path::PathBuf,
   rc::Rc,
   sync::Arc,
   task::{Wake, Waker},
   thread::{self, ThreadId},
+  time::Duration,
 };
 
 use pyo3::{
@@ -24,7 +26,7 @@ use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step, Voice,
   ear::{Call, Spoken},
   engine::Hosted,
-  extension::{self, Extension, Places},
+  extension::{self, Extension},
   life::Opening,
   value::{IS, entry, field, marked},
   world,
@@ -638,13 +640,13 @@ fn extensions(given: Vec<(String, String, String)>) -> NativeEar {
 
 /// The ear of the memory extension, which finds the memory of a path in its folders and in the config directory.
 #[pyfunction]
-fn memory(config: std::path::PathBuf) -> NativeEar {
+fn memory(config: PathBuf) -> NativeEar {
   NativeEar::of(extension::memory::memory(config))
 }
 
 /// The ear of the skills extension, which finds skills in the folders of a chain and in the config directory.
 #[pyfunction]
-fn skills(config: std::path::PathBuf) -> NativeEar {
+fn skills(config: PathBuf) -> NativeEar {
   NativeEar::of(extension::skills::skills(config))
 }
 
@@ -652,32 +654,75 @@ fn skills(config: std::path::PathBuf) -> NativeEar {
 type Opened<'py> = (Bound<'py, PyAny>, Vec<(String, NativeEar)>);
 
 /// The record a life opens on, and the ears of the crate that it hears after the ears of the host, as every host of
-/// the crate opens a life: the extensions, which enable at the tip those that the configs of the user and of the
-/// directory turn on unless `extensions` is false, each official extension, the files, the commands, time, and the
-/// store of the record when the life keeps.
+/// the crate opens a life: the provider, the extensions, which enable at the tip those that the configs of the user
+/// and of the directory turn on unless `extensions` is false, each official extension, the files, the commands, time,
+/// and the store of the record when the life keeps. A life that inspects keeps nothing, enables nothing new, asks no
+/// model, and its files, commands and time do no work. The provider offers the model of `actor` and the models of
+/// `roster`, and a function `answer` answers each request in place of them: it is called on a thread of its own with
+/// the request, as JSON reads it, and a function `write(text="", thinking="")`, and gives the turn. `claude` is the
+/// path of the claude command line, whose turn goes with no progress for `stall` seconds at most, `images` the
+/// directory of the images that a turn names, and `stream` is told what a model writes as it writes it, on a thread of
+/// the models.
 #[pyfunction]
-#[pyo3(signature = (directory, record = None, *, keeps = true, extensions = true, config = None))]
+#[pyo3(signature = (
+  directory, record = None, *, keeps = true, inspecting = false, extensions = true, config = None, actor = None,
+  roster = None, answer = None, claude = None, stall = None, images = None, stream = None
+))]
+#[allow(clippy::too_many_arguments)]
 fn opened(
   py: Python<'_>,
-  directory: std::path::PathBuf,
-  record: Option<std::path::PathBuf>,
+  directory: PathBuf,
+  record: Option<PathBuf>,
   keeps: bool,
+  inspecting: bool,
   extensions: bool,
-  config: Option<std::path::PathBuf>,
+  config: Option<PathBuf>,
+  actor: Option<String>,
+  roster: Option<Vec<String>>,
+  answer: Option<Py<PyAny>>,
+  claude: Option<PathBuf>,
+  stall: Option<f64>,
+  images: Option<PathBuf>,
+  stream: Option<Py<PyAny>>,
 ) -> PyResult<Opened<'_>> {
   let made = Made::new(py)?;
-  let mut opening = Opening::new();
-  if let Some(config) = config {
-    opening = opening.places(Places { config, ..Places::here() });
-  }
+  let stall = stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
+  let writes = stream.map(|stream| -> world::Writes {
+    Arc::new(move |rung, chain, text, thinking| {
+      Python::attach(|py| {
+        if let Err(no) = stream.call1(py, (rung, chain, text, thinking)) {
+          no.write_unraisable(py, None);
+        }
+      });
+    })
+  });
+  let mut opening = Opening::new(directory)
+    .config(config)
+    .extending(extensions)
+    .actor(actor)
+    .roster(roster)
+    .claude(claude, stall)
+    .images(images)
+    .writes(writes)
+    .answer(answer.map(|answer| hosted(Arc::new(answer))));
   if let Some(record) = record {
     opening = opening.record(record, keeps);
   }
-  let opening = if extensions { opening.configured(&directory) } else { Ok(opening) };
-  let (record, ears) =
-    opening.and_then(Opening::parts).map_err(|fault| raised(py, &made, &fault))?;
+  if inspecting {
+    opening = opening.inspecting();
+  }
+  let (record, ears) = opening.parts().map_err(|fault| raised(py, &made, &fault))?;
   let ears = ears.into_iter().map(|(name, ear)| (name, NativeEar::of(ear))).collect();
   Ok((to_python(py, &made, Object::list(record).as_ref())?, ears))
+}
+
+/// A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
+/// line by, or the refusal of it.
+#[pyfunction]
+fn answered<'py>(py: Python<'py>, shape: &str, line: &str) -> PyResult<Bound<'py, PyAny>> {
+  let made = Made::new(py)?;
+  let value = world::answered(shape, line).map_err(|fault| raised(py, &made, &fault))?;
+  to_python(py, &made, value.as_ref())
 }
 
 /// What the engine raised, raised here as the exception it is.
@@ -1051,7 +1096,8 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(store, module)?)?;
   module.add_function(wrap_pyfunction!(kept, module)?)?;
   module.add_function(wrap_pyfunction!(gate, module)?)?;
-  module.add_function(wrap_pyfunction!(provider, module)?)?;
+  module.add_function(wrap_pyfunction!(answered, module)?)?;
+  module.add("SHAPES", world::SHAPES.to_vec())?;
   module.add("SYSTEM", crate::SYSTEM)?;
   Ok(())
 }
@@ -1067,50 +1113,6 @@ fn verb_said<'py>(py: Python<'py>, door: &Door, call: &Call) -> PyResult<Bound<'
     kwargs.set_item(key, to_python(py, made, one.as_ref())?)?;
   }
   made.python.bind(py).getattr(call.verb.as_str())?.call(args, Some(&kwargs))
-}
-
-/// The ear of the provider of models: the catalog makes the model of the default actor and the models of its roster,
-/// or the first model it offers when neither is named, and a function of python answers them in place of the models
-/// when it is given one. The actor is the default actor, whose effort moves to the nearest one its model takes;
-/// `claude` is the path of the claude command line, and `stall` the seconds a turn of it may go with no progress;
-/// `images` is the directory of the images that a turn names; and `stream` is told what a model writes as it writes
-/// it, on a thread of the models.
-#[pyfunction]
-#[pyo3(signature = (
-  directory, roster = None, actor = None, answer = None, claude = None, stall = None, images = None, stream = None
-))]
-#[allow(clippy::too_many_arguments)]
-fn provider(
-  directory: String,
-  roster: Option<Vec<String>>,
-  actor: Option<String>,
-  answer: Option<Py<PyAny>>,
-  claude: Option<String>,
-  stall: Option<f64>,
-  images: Option<String>,
-  stream: Option<Py<PyAny>>,
-) -> PyResult<NativeEar> {
-  let mut catalog = world::Catalog::load();
-  if let Some(bin) = claude {
-    let stall = stall.and_then(|seconds| std::time::Duration::try_from_secs_f64(seconds).ok());
-    catalog = catalog.with_claude(world::claude::Claude::with(Some(bin.into()), stall));
-  }
-  let host = answer.map(|answer| hosted(Arc::new(answer)));
-  let made = catalog.provider(directory, roster.as_deref(), actor.as_deref(), host);
-  let mut made = made.map_err(pyo3::exceptions::PyValueError::new_err)?;
-  if let Some(images) = images {
-    made = made.images(images);
-  }
-  if let Some(stream) = stream {
-    made = made.writes(Arc::new(move |rung, chain, text, thinking| {
-      Python::attach(|py| {
-        if let Err(no) = stream.call1(py, (rung, chain, text, thinking)) {
-          no.write_unraisable(py, None);
-        }
-      });
-    }));
-  }
-  Ok(NativeEar::of(made.ear()))
 }
 
 /// A function of python as a model: it is called with the request, as JSON reads it, and a function

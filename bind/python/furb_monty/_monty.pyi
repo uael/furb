@@ -78,12 +78,38 @@ def skills(config: str) -> NativeEar:
   """The ear of the skills extension, which finds skills in the folders of a chain and in the config directory."""
 
 def opened(
-  directory: str, record: str | None = None, *, keeps: bool = True, extensions: bool = True, config: str | None = None
+  directory: str,
+  record: str | None = None,
+  *,
+  keeps: bool = True,
+  inspecting: bool = False,
+  extensions: bool = True,
+  config: str | None = None,
+  actor: str | None = None,
+  roster: list[str] | None = None,
+  answer: Callable[[dict, Callable[..., None]], tuple] | None = None,
+  claude: str | None = None,
+  stall: float | None = None,
+  images: str | None = None,
+  stream: Callable[[str, str, str, str], None] | None = None,
 ) -> tuple[list[list[list[object]]], list[tuple[str, NativeEar]]]:
   """The record a life opens on, and the ears of the crate that it hears after the ears of the host, as every host of
-  the crate opens a life: the extensions, which enable at the tip those that the configs of the user and of the
-  directory turn on unless `extensions` is false, each official extension, the files, the commands, time, and the
-  store of the record when the life keeps."""
+  the crate opens a life: the provider, the extensions, which enable at the tip those that the configs of the user
+  and of the directory turn on unless `extensions` is false, each official extension, the files, the commands, time,
+  and the store of the record when the life keeps. A life that inspects keeps nothing, enables nothing new, asks no
+  model, and its files, commands and time do no work.
+
+  The provider offers the model of `actor` and the models of `roster`, each named `provider:id` or by an id that one
+  model alone holds, or the first model the catalog offers when neither is said. `answer`, when given, answers each
+  request in place of the models: it is called on a thread of its own with the request, as JSON reads it, and a
+  function `write(text="", thinking="")`, and gives the turn. `claude` is the path of the claude command line, whose
+  turn is refused when it makes no progress for `stall` seconds. `images` is the directory of the images that a turn
+  names. `stream` is told what a model writes as it writes it, on a thread of the models: the rung it writes for, the
+  chain of that rung, and what it added to its text and to its thought."""
+
+def answered(shape: str, line: str) -> object:
+  """A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
+  line by. It raises Refused for a line that is no value of the shape, and for a shape the operator answers not."""
 
 def files() -> NativeEar:
   """The ear of the files, which reads and writes a path."""
@@ -105,25 +131,7 @@ def gate(sheet: str) -> list[tuple[int, str]]:
   """The gate of the crate, for the Kernel of this interpreter to read a sheet with: what the checker found on the
   sheet, each error by its line, and no warning. It raises when the checker could not read the sheet."""
 
-def provider(
-  directory: str,
-  roster: list[str] | None = None,
-  actor: str | None = None,
-  answer: Callable[[dict, Callable[..., None]], tuple] | None = None,
-  claude: str | None = None,
-  stall: float | None = None,
-  images: str | None = None,
-  stream: Callable[[str, str, str, str], None] | None = None,
-) -> NativeEar:
-  """The ear of the provider of models, which answers a stand with the standing of the directory and the default
-  actor, and takes each reply, which a model answers with its turn. The catalog of the crate makes the model of the
-  actor and the models of the roster, each named `provider:id` or by an id that one model alone holds, or the first
-  model it offers when neither is said. `answer`, when given, answers each request in place of the models: it is
-  called on a thread of its own with the request, as JSON reads it, and a function `write(text="", thinking="")`,
-  and gives the turn. `claude` is the path of the claude command line, whose turn is refused when it makes no
-  progress for `stall` seconds. `images` is the directory of the images that a turn names. `stream` is told what a
-  model writes as it writes it, on a thread of the models: the rung it writes for, the chain of that rung, and what
-  it added to its text and to its thought."""
-
+SHAPES: list[str]
+"""Every shape the operator answers, by its name."""
 SYSTEM: str
 """The system prompt of every model: the engine, minified in layout alone, and nothing else."""

@@ -15,6 +15,5 @@ export {
   paragraphs,
   questionKind,
   safeText,
-  shapes,
   uncommented,
 } from "./types.js";

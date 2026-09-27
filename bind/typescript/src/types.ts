@@ -11,7 +11,6 @@ export function actorParts(actor: string, models: readonly string[] = []): { mod
     ? { model: actor, effort: "off" }
     : { model: actor.slice(0, at), effort: actor.slice(at + 1) };
 }
-export const shapes = ["str", "None", "bool", "int", "float", "list", "dict"] as const;
 
 export type Turn = ReturnType<Engine["turns"]>[number];
 export type Fact = ReturnType<Engine["say"]>;
@@ -75,21 +74,6 @@ export function unmarked(value: unknown): unknown {
   if (Array.isArray(pairs) && pairs.every((pair) => Array.isArray(pair) && typeof pair[0] === "string"))
     return Object.fromEntries(pairs.map(([key, one]) => [key, unmarked(one)]));
   return Object.fromEntries(Object.entries(held).map(([key, one]) => [key, unmarked(one)]));
-}
-/** A plain value of the host as the life takes it: each map that holds the key `is` crosses as its pairs, under the
- * mark dict, so no map of the host reads as a mark. `decoded` is the same value as the native reader gave it, whose
- * numbers it keeps. */
-export function marked(plain: unknown, decoded: unknown = plain): unknown {
-  if (Array.isArray(plain)) return plain.map((one, index) => marked(one, (decoded as unknown[])[index]));
-  if (!plain || typeof plain !== "object") return decoded;
-  const pairs = Object.entries(plain).map(
-    ([key, one]) => [key, marked(one, (decoded as Record<string, unknown>)[key])] as const,
-  );
-  return "is" in plain ? { is: "dict", args: [pairs] } : Object.fromEntries(pairs);
-}
-/** A number as python takes a float: a whole number crosses as an int, so a float crosses marked, as its digits. */
-export function float(value: number): { is: string; args: string[] } {
-  return { is: "float", args: [String(value)] };
 }
 export function display(value: unknown): string {
   if (typeof value === "string") return value;

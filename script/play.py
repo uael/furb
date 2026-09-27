@@ -20,8 +20,6 @@ from furb import engine
 from furb.engine import OPERATOR
 from furb.world import kept
 
-TO = "claude-cli:opus/low"
-"""TO is the actor the play asks, which is opus of the claude command line at the least effort it takes."""
 CEILING = 4.0
 """CEILING is the dollars the play may spend, on each chain it sees and over all of them together."""
 QUIET = 240.0
@@ -100,10 +98,10 @@ async def watching(root: str, record: Path, name: str) -> None:
 
 async def first(yard: Path, record: Path) -> list[object]:
   """The life that does the work, and everything the play holds it to when the work is done."""
-  world, root, held = lived(record, yard, TO, keeps=True)
+  world, root, held = lived(record, yard, None, keeps=True)
   assert held == [], "the first life is opened on no record"
   engine.grant(usd=CEILING, on=root)
-  waits = engine.prompt(list, MESSAGE, TO, on=root)
+  waits = engine.prompt(list, MESSAGE, on=root)
   watched = asyncio.ensure_future(watching(root, record, waits))
   try:
     got = await asyncio.wait_for(waits, STALL)
@@ -153,7 +151,7 @@ async def first(yard: Path, record: Path) -> list[object]:
 
 async def second(yard: Path, record: Path, got: list[object]) -> float:
   """The life on the record of the first: it asks no model for what the record holds, and takes one prompt more."""
-  world, root, held = lived(record, yard, TO, keeps=True)
+  world, root, held = lived(record, yard, None, keeps=True)
   await asyncio.sleep(SETTLE)
   replies = [one for one in world.calls if one[0] == "reply"]
   assert replies == [], f"the resumed life asked a model {len(replies)} times for what its record holds"
@@ -167,7 +165,7 @@ async def second(yard: Path, record: Path, got: list[object]) -> float:
     await asyncio.sleep(SETTLE)
   message = "How many items did you give back? Close with the number and nothing else."
   try:
-    more = await asyncio.wait_for(engine.prompt(int, message, TO, on=root), STALL)
+    more = await asyncio.wait_for(engine.prompt(int, message, on=root), STALL)
     assert more == len(got), (more, len(got))
     say(f"the resumed life answered {more!r} for the length of that list")
     return ledger(root, record)

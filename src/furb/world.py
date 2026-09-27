@@ -1,10 +1,10 @@
 """The World of this machine: the ears of the crate, and the operator at its terminal.
 
-The ears of the crate serve the World: the files, the commands, time, the store of the record, and the provider of
-models, which `furb_monty` gives and whose models the catalog of the crate knows. This World answers what they do
-not: a prompt to the operator, which the terminal answers, as a task of the loop the operator booted the life on,
-begun while the World speaks, so what it comes to reaches the life through close under the name of the World. It
-tells the operator on stderr why the provider paused a chain.
+The ears of the crate serve the World: the provider of models, whose models the catalog of the crate knows, the files,
+the commands, time and the store of the record, which `furb_monty` opens a life on as every host of the crate does.
+This World answers what they do not: a prompt to the operator, which the terminal answers, as a task of the loop the
+operator booted the life on, begun while the World speaks, so what it comes to reaches the life through close under
+the name of the World. It tells the operator on stderr why the provider paused a chain.
 """
 
 import asyncio
@@ -23,26 +23,6 @@ type World = Generator[tuple | None, tuple]
 type Answer = Callable[[dict, Callable[..., None]], tuple]
 """A function that answers each request of the provider with a turn in place of a model, and that may tell what it
 writes as it writes it, through `write(text="", thinking="")`."""
-
-
-def truth(line: str) -> bool:
-  """A line of the operator as a truth: yes or no, and nothing else."""
-  if line.lower() in ("y", "yes", "true", "1"):
-    return True
-  if line.lower() in ("n", "no", "false", "0"):
-    return False
-  why = f"{line!r} is neither yes nor no"
-  raise ValueError(why)
-
-
-LINES: dict[str, Callable[[str], object]] = {
-  "None": lambda _: None,
-  "str": str,
-  "int": int,
-  "float": float,
-  "bool": truth,
-}
-"""LINES is every shape the operator answers, by name, and how a line of the operator becomes a value of that shape."""
 
 
 def kept(record: Path) -> list[tuple]:
@@ -66,15 +46,16 @@ def answered(entries: Sequence[tuple]) -> list[tuple]:
 
 @dataclass
 class Live:
-  """The World of one life on this machine: the provider of its models, its operator, and the ears of the crate.
+  """The World of one life on this machine: its operator, and the ears of the crate, the provider of its models among
+  them.
 
   `directory` is where the chains of the life start. `actor` is the actor a prompt goes to when it names none, and
   `roster` names the models the life offers beside its model, or the first model the catalog of the crate offers
   stands alone when neither is said. `answer` answers each request in place of the models, when it is given, and
   `stream` is told what a model writes as it writes it, on a thread of the models. `images` is the directory of the
   images that a turn names. `calls` holds every question the World heard that it or the provider answered, in order.
-  `ears` are the ears of the crate the life is booted on beside the provider, which the World lets go at its end.
-  `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
+  `ears` are the ears of the crate the life is booted on, which the World lets go at its end. `reader` reads the
+  terminal and `reading` keeps one read of it at a time, since there is one operator.
   """
 
   directory: str
@@ -88,13 +69,24 @@ class Live:
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
   ears: dict[str, _monty.NativeEar] = field(default_factory=dict)
 
-  def provider(self) -> _monty.NativeEar:
-    """The provider of the crate, which answers what the chains stand on and takes each reply, and which the World
-    lets go at its end."""
-    self.ears["provider"] = _monty.provider(
-      self.directory, roster=self.roster, actor=self.actor, answer=self.answer, images=self.images, stream=self.stream
+  def opened(self, record: Path | None = None, *, keeps: bool = True, extensions: bool = True) -> list[tuple]:
+    """The record a life opens on, and the ears of the crate held for it, as every host of the crate opens a life:
+    the provider, which stands on what this World names, then the extensions, the files, the commands, time, and
+    the store of the record when the life keeps, which holds its lease until the World ends. The life enables at its
+    tip the extensions that the configs turn on, unless `extensions` is false."""
+    stored, ears = _monty.opened(
+      self.directory,
+      None if record is None else str(record),
+      keeps=keeps,
+      extensions=extensions,
+      actor=self.actor,
+      roster=self.roster,
+      answer=self.answer,
+      stream=self.stream,
+      images=self.images,
     )
-    return self.ears["provider"]
+    self.ears.update(ears)
+    return entries(stored)
 
   def end(self) -> None:
     """The ears of the crate let go: a command ends, a wait ends, a model is asked nothing more, and the store lets
@@ -114,29 +106,28 @@ class Live:
       self.reader = reader = asyncio.StreamReader()
       made = asyncio.StreamReaderProtocol(reader)
       await asyncio.get_running_loop().connect_read_pipe(lambda: made, sys.stdin)
-    return (await self.reader.readline()).decode(errors="replace").strip()
+    return (await self.reader.readline()).decode(errors="replace").rstrip("\r\n")
 
   async def show(self, about: str, shape: str, message: str) -> None:
-    """A prompt of the operator: the message on the terminal, and one line back as the shape the prompt wants.
+    """A prompt of the operator: the message on the terminal, and one line back as the shape the prompt wants, by the
+    rules of the crate; and no line for a shape the operator answers not, which that no line refuses.
 
     There is one terminal and one operator, so prompts of the operator are shown and answered one at a time, in
     the order they asked, and never two at once on one stream.
     """
-    if shape not in LINES:
-      engine.close(Refused(f"the operator answers no {shape}"), about)
-      return
     try:
-      async with self.reading:
-        sys.stdout.write(f"{about} wants a {shape}: {message}\n> ")
-        sys.stdout.flush()
-        line = await self.line()
+      line = ""
+      if shape in _monty.SHAPES:
+        async with self.reading:
+          sys.stdout.write(f"{about} wants a {shape}: {message}\n> ")
+          sys.stdout.flush()
+          line = await self.line()
+      value = _monty.answered(shape, line)
     except (OSError, ValueError) as no:
-      engine.close(Refused(f"the operator cannot be read: {no}"), about)
-      return
-    try:
-      engine.close(LINES[shape](line), about)
-    except ValueError as no:
-      engine.close(Refused(f"{line!r} is no {shape}: {no}"), about)
+      value = Refused(f"the operator cannot be read: {no}")
+    except Refused as no:
+      value = no
+    engine.close(value, about)
 
   def hears(self) -> World:
     """The World as one generator for one life, which comes before the provider: it takes a prompt to the operator,

@@ -251,16 +251,16 @@ test("a model of the catalog that the roster does not hold joins the session, wh
   try {
     const entry = await library.create(await library.add(directory), "Models");
     const first = entry.session;
-    expect(first?.roster.map(([name]) => name)).toEqual(["claude-cli:sonnet", "operator"]);
-    await until(library, () => first?.catalog.some(([name]) => name === "claude-cli:opus") ?? false);
-    await first?.submit("/model opus");
-    await until(library, () => entry.session !== first && entry.session?.actor === "claude-cli:opus/low");
+    expect(first?.roster.map(([name]) => name)).toEqual(["claude-cli:opus", "operator"]);
+    await until(library, () => first?.catalog.some(([name]) => name === "claude-cli:sonnet") ?? false);
+    await first?.submit("/model sonnet");
+    await until(library, () => entry.session !== first && entry.session?.actor === "claude-cli:sonnet/low");
     expect(entry.session?.roster.map(([name]) => name)).toEqual([
-      "claude-cli:sonnet",
       "claude-cli:opus",
+      "claude-cli:sonnet",
       "operator",
     ]);
-    expect(entry.session?.models).toEqual(["claude-cli:opus"]);
+    expect(entry.session?.models).toEqual(["claude-cli:sonnet"]);
   } finally {
     await library.dispose();
     await rm(directory, { recursive: true, force: true });

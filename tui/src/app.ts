@@ -3589,7 +3589,7 @@ export class App {
       }));
     },
     shape: () =>
-      shapes.map((shape) => ({
+      shapes().map((shape) => ({
         value: shape,
         detail: `The answer is a ${shape}`,
         current: shape === this.session.shape,
@@ -3887,7 +3887,7 @@ export class App {
   shapes(): void {
     this.openPalette(
       "Response shape",
-      shapes.map((name) => ({
+      shapes().map((name) => ({
         label: name,
         detail: "The engine validates the result against this Python type",
         run: () => {

@@ -5,13 +5,14 @@
 //! reads the clock, draws a chance and ends a wait, [`store`] keeps the record on the disk under a lease, and the
 //! [`Provider`] answers what the chains stand on and asks the models of rig for their turns, which the [`Catalog`]
 //! knows, the claude command line among them. The host names the models it offers, and gives the rest, its
-//! console, which the crate knows nothing of.
+//! console, which reads what the operator answers by the rules of [`answered`].
 //!
 //! Each is an ear like any other, so an ear that comes before one of them in the order of boot takes a question in
 //! its place, and an ear that takes a question and asks it again wraps it.
 
 mod bash;
 pub(crate) mod files;
+mod operator;
 mod provider;
 mod store;
 mod time;
@@ -20,6 +21,7 @@ use std::path::{Component, Path, PathBuf};
 
 pub use bash::{SHELL, bash};
 pub use files::files;
+pub use operator::{SHAPES, answered};
 pub use provider::{
   Hosted, Model, Provider, Told, Writes,
   catalog::{self, Catalog},

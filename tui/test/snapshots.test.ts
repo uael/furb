@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Engine, Session } from "@furb/engine";
 import { until } from "../../bind/typescript/test/until.ts";
-import { defaultModel } from "../src/models.ts";
 import { Snapshots } from "../src/snapshots.ts";
 
 /** An engine that names each of its methods in a list as they are called, and then calls them. */
@@ -172,15 +171,15 @@ test("a take carries the acts that changed after the count it is given, and ever
 
 test("a new standing drops the roster, the directory and the actor that the view of a chain read", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-standing-"));
-  const session = new Session({ cwd, model: defaultModel });
+  const session = new Session({ cwd, model: "claude-cli:sonnet" });
   try {
     const engine = session.open();
     const snapshots = new Snapshots(engine, session);
     const before = snapshots.take(engine.root);
     expect([before.roster.map(([name]) => name), before.directory, before.actor]).toEqual([
-      [defaultModel, "operator"],
+      ["claude-cli:sonnet", "operator"],
       cwd,
-      `${defaultModel}/low`,
+      "claude-cli:sonnet/low",
     ]);
     // A stand that an ear of the word takes is answered by whoever says its done, here the operator.
     await engine.rung({

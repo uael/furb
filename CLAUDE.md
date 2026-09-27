@@ -13,15 +13,16 @@ API of its own:
 - `src/world/` holds the ears of the World that the crate writes: the files, the commands, time, the store of the
   record, and the provider of models, which asks each model through rig and streams what it writes. Its catalog
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
-  model whose credential stands in the environment, and the claude command line when it finds the program. A host
-  names its default actor and the rest of its roster from the catalog, or gives a model of its own, and adds its own
-  ears, such as the console of its operator.
+  model whose credential stands in the environment, and the claude command line when it finds the program. It also
+  holds the rules by which every console reads what the operator answers.
 - `src/extension.rs` says what an extension is and where a host finds the ones that a life runs, and holds the ear
   `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain.
   `extensions/` holds the official extensions, `memory` and `skills`, each a word, a contract and a suite, and
   `src/extension/` holds the ear of the World of each. `docs/extensions.md` says how an extension works.
-- `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate, the extensions among
-  them, after the ears of the host.
+- `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate after the ears of the
+  host, the provider among them, on the default actor and the roster that the host names from the catalog, or on a
+  model of its own, and the extensions. A host adds only its own ears, such as the console of its operator. The
+  python door gives it as `_monty.opened`, and the TypeScript door as `Engine.open`.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate is the type checker of monty. It reads a word on the sheet of the engine,

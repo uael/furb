@@ -15,9 +15,9 @@ import pytest
 
 from furb import engine
 from furb.engine import OPERATOR, Refused
-from furb.world import Answer, answered, entries, kept, truth
+from furb.world import Answer, answered, kept
 from furb_monty import _monty
-from outside.doubles import booted, broken, life, scripted, settle, speaking, turn, until, watched, world
+from outside.doubles import broken, life, scripted, settle, speaking, turn, until, watched, world
 
 
 async def test_the_world_stands_a_life_on_the_provider_of_the_crate_and_its_model_answers_each_reply(
@@ -55,8 +55,8 @@ def test_the_world_refuses_a_model_that_the_catalog_knows_no_model_by(yard: Path
   """A name that the catalog of the crate knows no model by is no model, and the World cannot offer it."""
   live = world(yard, scripted([]))
   live.roster = ["nothing"]
-  with pytest.raises(ValueError, match=r"No model is nothing\. Name one as provider:id\."):
-    live.provider()
+  with pytest.raises(Refused, match=r"No model is nothing\. Name one as provider:id\."):
+    live.opened()
 
 
 async def test_a_fault_that_stands_pauses_the_chain_and_the_world_tells_the_operator_why(
@@ -101,25 +101,15 @@ async def test_the_answers_a_record_holds_are_the_turns_its_replies_came_to(yard
   """The answers a record holds are the done of each reply that came to a turn, and none of a reply that came to a
   refusal."""
   record = yard / "record.jsonl"
-  stored, store = _monty.store(str(record))
   live = world(yard, faltering([None, "close(3)"]))
-  root = booted(live.hears(), entries(stored), gated=False, provider=live.provider(), store=store)
+  root = life(live, record)
   assert await engine.prompt(int, "count", on=root) == 3
   await settle()
   live.end()
-  store.dispose()
   said = kept(record)
   replies = [fact[1] for (fact,) in said if fact[0] == "reply"]
   assert len(replies) == 2
   assert [(one[1], one[3][1]) for one in answered(said)] == [(replies[1], "close(3)")]
-
-
-def test_the_operator_answers_the_shapes_the_world_puts_to_it() -> None:
-  """A line of the operator becomes a value of the shape the prompt wants, and a line that is neither yes nor no is none."""
-  assert truth("YES") is True
-  assert truth("n") is False
-  with pytest.raises(ValueError, match="neither yes nor no"):
-    truth("perhaps")
 
 
 async def test_the_world_shows_a_prompt_to_the_operator_and_closes_it_with_the_line_it_read(yard: Path) -> None:
@@ -166,10 +156,10 @@ async def test_two_prompts_of_the_operator_are_shown_and_answered_one_at_a_time(
 async def test_the_world_refuses_a_shape_the_operator_does_not_answer(yard: Path) -> None:
   """Which shapes the operator answers is the law of the World, and one it cannot put to the operator it closes."""
   root = life(world(yard))
-  got = engine.prompt(list, "a list please", OPERATOR, on=root)
+  got = engine.prompt(set, "a set please", OPERATOR, on=root)
   await settle()
   assert engine.peek(got, ...) is not ...
-  with pytest.raises(Refused, match="the operator answers no list"):
+  with pytest.raises(Refused, match="the operator answers no set"):
     await got
 
 

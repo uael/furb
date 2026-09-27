@@ -110,7 +110,7 @@ test("an actor names its model and its effort after the last slash that follows 
 test("a session offers the models its host names, and keeps the model and the effort chosen last as a preference", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-roster-"));
   const record = join(cwd, "session.jsonl");
-  const alone = new Session({ cwd });
+  const alone = new Session({ cwd, roster: [] });
   try {
     expect(alone.actor).toBe("operator");
     const engine = alone.open();
@@ -331,7 +331,7 @@ test("an operator question survives a resume and validates its answer", async ()
     await second.resume();
     await until(second, () => second.console.prompts.has(question));
     expect(second.console.prompts.get(question)?.message).toBe("Continue?");
-    expect(() => second.console.answer(question, "maybe")).toThrow("yes or no");
+    expect(() => second.console.answer(question, "maybe")).toThrow("neither yes nor no");
     second.console.answer(question, "yes");
     expect(await engine.result<boolean>(question)).toBe(true);
   } finally {
@@ -471,8 +471,8 @@ test("an operator answer of a list keeps its numbers exact, and a map in it that
     const on = engine.root;
     const question = engine.prompt("list", { message: "Numbers?", to: "operator", on });
     await until(session, () => session.console.prompts.has(question.id));
-    expect(() => session.console.answer(question.id, "[9007199254740993]")).toThrow("safe integer");
-    session.console.answer(question.id, '[2.0, 3, {"is": "str", "args": [1.0]}]');
+    expect(() => session.console.answer(question.id, "{}")).toThrow('"{}" is no list');
+    session.console.answer(question.id, '[2.0, 9007199254740993, {"is": "str", "args": [1.0]}]');
     const kept = {
       is: "dict",
       args: [
@@ -482,10 +482,11 @@ test("an operator answer of a list keeps its numbers exact, and a map in it that
         ],
       ],
     };
-    expect(await question).toEqual([2, 3, kept]);
+    const big = { is: "int", args: ["9007199254740993"] };
+    expect(await question).toEqual([2, big, kept]);
     await engine.rung({ word: `x = peek(${JSON.stringify(question.id)})`, on });
-    expect(engine.inspect("x").representation).toBe("[2.0, 3, {'is': 'str', 'args': [1.0]}]");
-    expect(engine.inspect("x").value).toEqual([2, 3, kept]);
+    expect(engine.inspect("x").representation).toBe("[2.0, 9007199254740993, {'is': 'str', 'args': [1.0]}]");
+    expect(engine.inspect("x").value).toEqual([2, big, kept]);
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
@@ -502,6 +503,7 @@ test("a session with no model puts to the operator every prompt that names no ac
   const session = boot({
     cwd,
     record: join(cwd, "work.jsonl"),
+    roster: [],
     operator: async ({ shape, message }) => {
       if (shape === "None") acknowledged(message);
       return shape === "str" ? `You asked: ${message}` : null;

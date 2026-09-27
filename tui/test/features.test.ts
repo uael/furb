@@ -10,7 +10,6 @@ import { clipboardImage } from "../src/clipboard.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import { externalEditor, opener } from "../src/editor.ts";
 import { fileReferences, projectFiles } from "../src/files.ts";
-import { defaultModel } from "../src/models.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
 import { composing } from "./composing.ts";
@@ -244,7 +243,7 @@ test("a model request failure shows in the feed as the failure of an act, and no
       record: join(directory, "session.jsonl"),
       // A claude command line that does not start fails every request, as a model that is not there does.
       claude: join(directory, "missing"),
-      roster: [defaultModel],
+      roster: ["claude-cli:sonnet"],
     });
     await composing(
       async ({ session, frame }) => {

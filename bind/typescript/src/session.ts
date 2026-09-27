@@ -7,8 +7,7 @@ import {
   type ImageAttachment,
   model,
   type NativeEar,
-  type ProviderOptions,
-  provider,
+  type OpenOptions,
 } from "../index.cjs";
 import { Activity, WORK } from "./activity.js";
 import { FileChanges } from "./changes.js";
@@ -25,7 +24,7 @@ function* silent(): Ear {
 /** A function that answers each request of the provider in place of a model: it is given the request, the actor,
  * the chain, the messages and the settings of the effort, and a function that tells what it writes as it writes it,
  * and gives the turn of the model. */
-export type Answer = NonNullable<ProviderOptions["answer"]>;
+export type Answer = NonNullable<OpenOptions["answer"]>;
 /** What a model writes while it answers a rung, on the chain of the rung. */
 export type Stream = { chain: string; text: string; thinking: string };
 
@@ -35,12 +34,13 @@ export interface SessionOptions {
   cwd?: string;
   record?: string;
   /** The model a prompt goes to when it names none, as the catalog of the crate names it; the first of the roster
-   * when unsaid. */
+   * when unsaid, and the default of the crate when the roster is unsaid too. */
   model?: string;
   /** The effort of that model, which moves to the nearest one the model takes; `low` when unsaid. */
   effort?: string;
-  /** The models the session offers beside that one, as the catalog names them; none when unsaid, so a session given
-   * no model puts every prompt to the operator. */
+  /** The models the session offers beside that one, as the catalog names them. When it is unsaid, the model stands
+   * alone, or the first model the catalog offers when the model is unsaid too; a roster that names none, with no
+   * model, offers the operator alone. */
   roster?: string[];
   /** The claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine holds. */
   claude?: string;
@@ -141,33 +141,16 @@ export class Session extends EventEmitter {
   }
 
   /** The engine, opened on the record, on the ears of the host, then on the ears of the session, and then on the
-   * ears of the crate. An inspection keeps nothing, enables no extension, and hears no ear that does work. */
+   * ears of the crate, the provider among them. An inspection keeps nothing, enables no extension, asks no model,
+   * and hears no ear that does work. */
   open(): Engine {
     if (this.engine) throw new Error("This session already owns an engine.");
     // A later life hears under the names the life before it heard, since the record says who asked what. An
-    // inspection hears each by an ear that does no work, and asks no model.
+    // inspection hears each by an ear that does no work.
     const working = !this.options.readOnly;
-    const actor = this.options.model && `${this.options.model}/${this.options.effort ?? "low"}`;
-    const answer: Answer | undefined = working
-      ? this.options.answer
-      : async () => {
-          throw new Error("Record inspection cannot ask a model.");
-        };
     const ears: Array<[string, Ear | NativeEar]> = [
       ...(this.options.ears ?? []),
       ["observer", driving(this.observer(), "activity")],
-      [
-        "provider",
-        provider({
-          directory: this.directory,
-          roster: this.options.roster ?? [],
-          actor,
-          claude: this.options.claude,
-          images: this.imageDirectory,
-          answer,
-          stream: (rung, chain, text, thinking) => this.wrote(rung, chain, text, thinking),
-        }),
-      ],
       ["console", working ? this.console.ear() : silent()],
       ["changes", working ? this.changes.ear(this.directory, () => this.emit("change")) : silent()],
     ];
@@ -178,8 +161,14 @@ export class Session extends EventEmitter {
           directory: this.directory,
           record: this.record,
           inspecting: !working,
-          extensions: working && this.options.extensions !== false,
+          extensions: this.options.extensions,
           config: this.options.config,
+          actor: this.options.model && `${this.options.model}/${this.options.effort ?? "low"}`,
+          roster: this.options.roster,
+          claude: this.options.claude,
+          images: this.imageDirectory,
+          answer: this.options.answer,
+          stream: (rung, chain, text, thinking) => this.wrote(rung, chain, text, thinking),
         },
         ears,
       );

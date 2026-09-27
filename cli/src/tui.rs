@@ -13,7 +13,7 @@ use std::{
   process::Command,
 };
 
-use crate::{Place, life::Stood};
+use crate::{Place, Stand};
 
 /// How to get a TUI when none is found.
 const NONE: &str = "no TUI is found: set FURB_TUI to the program of the furb TUI, put furb-tui on PATH, or run furb \
@@ -24,7 +24,7 @@ const NONE: &str = "no TUI is found: set FURB_TUI to the program of the furb TUI
 pub fn launch(
   demo: bool,
   place: &Place,
-  stood: &Stood,
+  stand: &Stand,
   more: &[String],
 ) -> Result<Infallible, String> {
   let path = env::var_os("PATH").unwrap_or_default();
@@ -38,10 +38,10 @@ pub fn launch(
   if let Some(cwd) = &place.cwd {
     words.extend(["--cwd".into(), cwd.into()]);
   }
-  if let Some(model) = &stood.actor {
+  if let Some(model) = &stand.model {
     words.extend(["--model".into(), model.into()]);
   }
-  for one in &stood.roster {
+  for one in &stand.roster {
     words.extend(["--roster".into(), one.into()]);
   }
   words.extend(more.iter().map(OsString::from));

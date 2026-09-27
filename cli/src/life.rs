@@ -68,41 +68,20 @@ impl Quiet {
   }
 }
 
-/// What a life stands on: the actor a prompt goes to when it names none, and the models it offers beside the model
-/// of that actor, each as the catalog names it.
-#[derive(Default)]
-pub struct Stood {
-  pub actor: Option<String>,
-  pub roster: Vec<String>,
-}
-
 impl Life {
-  /// A life on the World of this machine and on a console of the operator: the provider of the models it stands on,
-  /// then the ears of the crate as every host opens a life on them, which enable at its tip the extensions that the
-  /// configs of the user and of the directory turn on. Each ear is heard under the name the TUI hears it by, so the
-  /// record of one opens in the other.
+  /// A life as it opens, on a console of the operator, which comes before the ears of the crate. Each ear is heard
+  /// under the name every host hears it by, so the record of one opens in another.
   ///
   /// The journal says the whole record again before boot returns, so the life stands whole on its record here, and a
   /// life whose record drifted is refused, since it would keep nothing more. `heard` is given every fact said after
   /// that, as an ear of the engine hears it.
   pub fn open(
-    record: Option<&Path>,
-    keeps: bool,
-    cwd: &Path,
-    stood: &Stood,
+    opening: Opening,
     console: Box<dyn Ear>,
     mut heard: impl FnMut(&Fact) + 'static,
   ) -> Result<Life, String> {
     let failed = |no: Fault| no.to_string();
-    let roster = (!stood.roster.is_empty()).then_some(stood.roster.as_slice());
-    let directory = cwd.display().to_string();
-    let provider = Catalog::load().provider(directory, roster, stood.actor.as_deref(), None)?;
-    let mut opening = Opening::new().configured(cwd).map_err(failed)?;
-    if let Some(path) = record {
-      opening = opening.record(path, keeps);
-    }
-    let (mut engine, held) =
-      opening.boot([("provider", provider.ear()), ("console", console)]).map_err(failed)?;
+    let (mut engine, held) = opening.boot([("console", console)]).map_err(failed)?;
     let root = engine.root().to_owned();
     let mut quiet = Quiet::default();
     let facts = engine.transcript(verbs::Transcript { on: Some(root.clone()) }).map_err(failed)?;
@@ -120,16 +99,9 @@ impl Life {
     Ok(Life { engine, root, held, quiet })
   }
 
-  /// A life for one command of the operator, on the terminal. It keeps what it says to its record when it keeps, and
-  /// a life that only reads its record keeps nothing, since every life stands as it opens and a life that keeps
-  /// keeps that stand.
-  pub fn lived(
-    record: Option<&Path>,
-    cwd: Option<&Path>,
-    stood: &Stood,
-    keeps: bool,
-  ) -> Result<Life, String> {
-    Life::open(record, keeps, &directory(cwd), stood, console::terminal(), |_| {})
+  /// A life for one command of the operator, on the terminal.
+  pub fn lived(opening: Opening) -> Result<Life, String> {
+    Life::open(opening, console::terminal(), |_| {})
   }
 
   /// The extensions that the life runs, in the order it enabled them.
@@ -184,6 +156,11 @@ impl Life {
       thread::park();
     }
   }
+}
+
+/// A shape as a prompt is given it, by its name: None itself, or the name of a type.
+pub fn shape(name: &str) -> Object {
+  if name == "None" { Object::none() } else { Object::string(name) }
 }
 
 /// An actor as the roster names it: the model the catalog finds by the name, with the effort moved to the nearest

@@ -849,7 +849,7 @@ export class Session extends EventEmitter {
         break;
       }
       case "shape":
-        if (!shapes.some((name) => name === argument)) throw new Error(`Choose ${shapes.join(", ")}.`);
+        if (!shapes().includes(argument)) throw new Error(`Choose ${shapes().join(", ")}.`);
         this.shape = argument;
         break;
       case "theme":
