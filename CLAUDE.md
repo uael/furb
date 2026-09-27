@@ -48,12 +48,11 @@ The TypeScript side is a bun workspace at the root, with two packages:
   act that is answered later can be awaited. It includes a `Session`: an engine on the ears of the crate, the
   provider among them, and on a console of the operator. `bind/typescript/README.md` says how to use it. The
   TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
-- `tui` is the OpenTUI application on that package. The session runs in a worker, `tui/src/worker.ts`, which also
-  holds the demo session and its scripted answers. `tui/README.md` says what the TUI does, and
-  `docs/tui.md` shows each screen. The gallery and the animation come from `tui/script/`.
+- `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
+  each screen.
 
 `docs/developer-guide.md` is the guide for a person who changes the repository: the tools to install, how a word
-runs, and the files of the TUI and of the command line. For everything else, it links to this file.
+runs, and the files of each part. For everything else, it links to this file.
 
 ## The contract
 
