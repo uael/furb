@@ -1,10 +1,11 @@
 //! The claude command line as a completion model of rig: one process of `claude -p` holds one conversation and
 //! stays up between its turns, and each turn writes to it only what it has not heard.
 //!
-//! A conversation is keyed by its model, its effort, its system prompt and the conversation the request names, which
-//! the provider names as a chain of its life. A process that is gone leaves its conversation on the disk under its
-//! id, so a later turn resumes it, and a new conversation that grows out of one the command line holds forks it. A
-//! subscription pays for the turns, and no key is read.
+//! A conversation is keyed by its model, its system prompt and the conversation the request names, which the provider
+//! names as a chain of its life, so a chain holds one conversation and at most one process at every effort. A process
+//! starts at one effort, so a new effort ends it, and the next process resumes the same conversation. A process that
+//! is gone leaves its conversation on the disk under its id, so a later turn resumes it, and a new conversation that
+//! grows out of one the command line holds forks it. A subscription pays for the turns, and no key is read.
 
 use std::{
   collections::HashMap,
@@ -224,9 +225,12 @@ impl Held {
       .into_iter()
       .filter(|one| !matches!(one, Message::System { .. }))
       .collect();
-    let key = json!([name, effort, system, session]).to_string();
-    let conversation = self.conversation(&key, &name, effort, &system, &messages);
-    let got = conversation.lock().await.turn(&messages, &self.bin, self.stall, deltas).await;
+    let key = json!([name, system, session]).to_string();
+    let conversation = self.conversation(&key, &name, effort.clone(), &system, &messages);
+    let mut held = conversation.lock().await;
+    held.spend(effort);
+    let got = held.turn(&messages, &self.bin, self.stall, deltas).await;
+    drop(held);
     self.sweep();
     got
   }
@@ -337,6 +341,15 @@ impl Conversation {
       again: false,
       process: None,
       used: Instant::now(),
+    }
+  }
+
+  /// The effort of the turns to come. A process spends the effort it started at, so a new effort ends the process, and
+  /// the next process resumes the same conversation at the new effort.
+  fn spend(&mut self, effort: Option<String>) {
+    if self.effort != effort {
+      self.effort = effort;
+      self.process = None;
     }
   }
 

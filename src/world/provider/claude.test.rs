@@ -270,6 +270,34 @@ fn past_the_warm_processes_the_least_used_one_ends_and_past_the_held_conversatio
 }
 
 #[test]
+fn a_new_effort_ends_the_process_of_the_conversation_and_the_next_process_resumes_it_at_that_effort()
+ {
+  let yard = Yard::new("efforts");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let turn = |messages: &[Message], effort: &str| {
+    asked(&model, messages, json!({"effort": effort, "session": "chain"})).unwrap()
+  };
+  let mut messages = vec![user("first")];
+  let one = turn(&messages, "high");
+  messages.extend([Message::Assistant { id: None, content: one.choice }, user("second")]);
+  let two = turn(&messages, "low");
+  messages.extend([Message::Assistant { id: None, content: two.choice }, user("third")]);
+  turn(&messages, "high");
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 3);
+  let first = after(&yard.args(&pids[0]), "--session-id");
+  for (pid, effort) in pids[1..].iter().zip(["low", "high"]) {
+    let args = yard.args(pid);
+    assert_eq!(after(&args, "--resume"), first, "the same conversation goes on");
+    assert!(!args.iter().any(|one| one == "--fork-session"), "{args:?}");
+    assert_eq!(after(&args, "--effort").as_deref(), Some(effort));
+  }
+  assert!(gone(&pids[0]) && gone(&pids[1]), "one process of the chain stands at a time");
+  let heard = yard.heard();
+  assert!(heard[2].contains("third") && !heard[2].contains("second"), "{}", heard[2]);
+}
+
+#[test]
 fn an_effort_that_the_command_line_does_not_take_is_refused_before_any_process_starts() {
   let yard = Yard::new("effort");
   let model = yard.claude(10_000).completion_model("sonnet");
