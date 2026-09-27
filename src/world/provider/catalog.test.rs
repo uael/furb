@@ -193,14 +193,21 @@ fn a_level_that_a_model_does_not_take_moves_to_the_nearest_one_it_takes() {
 }
 
 #[test]
-fn a_roster_holds_the_models_a_host_names_and_the_model_of_its_actor_first() {
+fn a_roster_holds_the_model_of_its_actor_first_and_the_models_a_host_names() {
   let catalog = catalog(&["OPENAI_API_KEY"]);
   let names =
     |models: &[super::Model]| models.iter().map(|one| one.name.clone()).collect::<Vec<_>>();
-  let (models, actor) = catalog.roster(None, None).expect("the offered roster");
+  let (models, actor) = catalog.roster(None, None).expect("the roster of no name");
   assert_eq!(
     (names(&models), actor),
-    (vec!["openai:gpt-5".to_owned(), "openai:gpt-4o".to_owned()], None)
+    (vec!["openai:gpt-5".to_owned()], None),
+    "a host that names nothing stands on the first model the catalog offers"
+  );
+  let (models, actor) =
+    catalog.roster(None, Some("openai:gpt-4o/high")).expect("the roster of an actor");
+  assert_eq!(
+    (names(&models), actor.as_deref()),
+    (vec!["openai:gpt-4o".to_owned()], Some("openai:gpt-4o"))
   );
   let named = ["claude-opus-5".to_owned(), "openai:gpt-5".to_owned()];
   let (models, actor) =

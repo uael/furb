@@ -192,8 +192,11 @@ export interface ModelInfo {
   price?: Array<number>
 }
 
-/** The models the catalog of this machine offers, each named as the catalog names it. */
-export declare function models(): Array<ModelInfo>
+/**
+ * The models the catalog of this machine offers, with the claude command line at a path when it is given, each
+ * named as the catalog names it.
+ */
+export declare function models(claude?: string | undefined | null): Array<ModelInfo>
 
 /**
  * Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
@@ -220,8 +223,9 @@ export interface ProviderOptions {
   /** The directory the life stands on, which each chain stands in until it goes elsewhere. */
   directory: string
   /**
-   * The models it offers, each named `provider:id`, or by an id that one model of the catalog alone holds; every
-   * model that the catalog offers when unsaid.
+   * The models it offers beside the model of the actor, each named `provider:id`, or by an id that one model of the
+   * catalog alone holds. When it is unsaid, the model of the actor stands alone, and the first model the catalog
+   * offers when the actor is unsaid too.
    */
   roster?: Array<string>
   /**

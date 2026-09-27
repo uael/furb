@@ -2,9 +2,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, SessionOptions, Turn } from "@furb/engine";
-import { Act, actorParts, engineSource, model, Session } from "@furb/engine";
+import { Act, actorParts, engineSource, model, models, Session } from "@furb/engine";
 import type { HostState } from "./bridge.ts";
-import { type EngineOptions, offered } from "./models.ts";
+import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
 import type { FollowUp } from "./session.ts";
 import { Snapshots } from "./snapshots.ts";
@@ -13,6 +13,9 @@ declare const self: Worker & { close(): void };
 let session: Session | undefined;
 let engine: Engine | undefined;
 let snapshots: Snapshots | undefined;
+/** The claude command line that the session names, which the catalog offers, and whether the session is the demo. */
+let claude: string | undefined;
+let demo = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let sentFacts = 0;
 const state = () => {
@@ -72,9 +75,6 @@ function reply(turn: string): [thinking: string, answer: string] {
       ];
 }
 
-/** The models of the demo, which it names in the catalog of the crate and asks none of. */
-const demoRoster = ["claude-cli:sonnet", "claude-cli:opus", "claude-cli:haiku", "claude-cli:fable"];
-
 /** A session whose models are the demo, which asks no model and answers each turn from the script above. */
 function scriptedSession(options: SessionOptions): Session {
   const { record, cwd } = options;
@@ -82,7 +82,7 @@ function scriptedSession(options: SessionOptions): Session {
   if (!directory) throw new Error("A demo session needs a directory or a record.");
   return new Session({
     ...options,
-    roster: options.roster ?? demoRoster,
+    roster: roster({ ...options, demo: true }),
     cwd: directory,
     record: record ?? join(directory, "demo.jsonl"),
     answer: async ({ messages }, write): Promise<Turn> => {
@@ -126,10 +126,10 @@ function scriptedSession(options: SessionOptions): Session {
 /** What a request of the session comes to. */
 async function answer(data: { target: string; method: string; args: unknown[] }): Promise<unknown> {
   if (data.method === "open") {
-    const { demo, ...options } = data.args[0] as EngineOptions;
-    const opened = demo
-      ? scriptedSession(options)
-      : new Session({ ...options, roster: options.roster ?? offered() });
+    const { demo: scripted, ...options } = data.args[0] as EngineOptions;
+    claude = options.claude;
+    demo = scripted ?? false;
+    const opened = demo ? scriptedSession(options) : new Session({ ...options, roster: roster(options) });
     session = opened;
     engine = opened.open();
     snapshots = new Snapshots(engine, opened);
@@ -158,17 +158,22 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     engine.say("queue", entry.chain, ["sent", entry.id, act.id]);
     return act.id;
   }
+  // The demo asks no model, so it offers its roster and nothing of the catalog of this machine.
+  if (data.target === "library" && data.method === "catalog")
+    return demo ? [] : models(claude).map(({ name, efforts, window }) => [name, efforts, window]);
   if (data.target === "library" && (data.method === "model" || data.method === "sees")) {
     if (!engine) throw new Error("The session is not open.");
-    const [roster] = engine.standing() as [[string][]];
-    const names = roster.map(([name]) => name);
+    const [standing] = engine.standing() as [[string][]];
+    const names = standing.map(([name]) => name);
     // A name of the roster is found by the rule the catalog finds every model by, and an actor by its model.
     const name =
       data.method === "sees" ? actorParts(String(data.args[0]), names).model : String(data.args[0]);
     const found = model(name);
     if (data.method === "sees") return found?.images ?? false;
     const held = found?.name ?? name;
-    return names.includes(held) ? held : null;
+    // A model that the roster does not hold is one the operator may add from the catalog, which offers it.
+    const offered = names.includes(held) || (!demo && models(claude).some((one) => one.name === held));
+    return offered ? held : null;
   }
   if (data.target === "library" && data.method === "source") return engineSource();
   if (data.target === "library" && data.method === "changes")

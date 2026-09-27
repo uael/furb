@@ -37,18 +37,19 @@ try {
 
 A `Session` opens an engine on the ears of the World that the crate writes, which the package gives as `files()`,
 `bash()`, `time()`, `store(path)` and `provider(options)`, and on the console of the operator, which this package
-writes. The files read and write a path against the directory where its chain stands. The commands stream what a
-command writes, feed its stdin, and end it at its timeout. Time gives the clock and a chance, and ends a wait. The
-provider asks the models of the catalog of the crate, which `models()` lists and `model(name)` finds, and it
-preserves provider response blocks in the record. The catalog offers the models of a provider when a credential of
-it stands in the environment, such as `ANTHROPIC_API_KEY`, and the models of the claude command line when it finds
-the program. The host names what the provider offers in `roster`, as `provider:id`, and the default actor in
-`model` and `effort`: the first of the roster, and `low`, when unsaid. The effort moves to the nearest one the model
-takes, among `levels()`. A session given neither offers the operator alone, and a prompt that names no actor goes
-to the operator. A name without its provider names the one model of that id. A reopened session offers what its
-host names now. It keeps the model and the effort that the host chose last, and takes that model when the host
-names none and the catalog knows it. The journal keeps each stand and what the provider answered it, and every life
-stands again as it opens, so a later life tells the new standing on each chain whose standing changed.
+writes. The files read and write a path against the directory where its chain stands. The commands stream what a command
+writes, feed its stdin, and end it at its timeout. Time gives the clock and a chance, and ends a wait. The provider asks
+the models of the catalog of the crate, which `models(claude?)` lists and `model(name)` finds, and it preserves provider
+response blocks in the record. The catalog offers the models of a provider when a credential of it stands in the
+environment, such as `ANTHROPIC_API_KEY`, and the models of the claude command line when it finds the program. The host
+names what the provider offers beside the model of the default actor in `roster`, as `provider:id`, and the default
+actor in `model` and `effort`: the first of the roster, and `low`, when unsaid. The standing of every chain tells the
+roster, so a session offers the models it names and not the whole catalog. The effort moves to the nearest one the model
+takes, among `levels()`. A session given neither offers the operator alone, and a prompt that names no actor goes to the
+operator. A name without its provider names the one model of that id. A reopened session offers what its host names now.
+It keeps the model and the effort that the host chose last, and takes that model when the host names none and the
+catalog knows it. The journal keeps each stand and what the provider answered it, and every life stands again as it
+opens, so a later life tells the new standing on each chain whose standing changed.
 
 The claude command line is the provider `claude-cli` of the catalog, with the models `opus`, `sonnet`, `haiku` and
 `fable`. It follows the pooled session design in [dirt](https://github.com/uael/dirt/tree/main/packages/cli/src/providers).
@@ -60,8 +61,9 @@ or the CLI installed by Claude Desktop. No process starts until a model is asked
 ```ts
 import { models, Session } from "@furb/engine";
 
-const roster = models().map((model) => model.name);
-const session = new Session({ roster, model: "claude-cli:opus", effort: "high" });
+// The models the catalog offers, which a host names as its default actor and in its roster.
+const [first, ...others] = models().map((model) => model.name);
+const session = new Session({ model: first, effort: "high", roster: others.slice(0, 2) });
 ```
 
 Pass `answer` to replace only model requests, or `operator` to supply operator answers. `answer` gets the actor,

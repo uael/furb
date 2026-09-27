@@ -68,9 +68,9 @@ def answered(entries: Sequence[tuple]) -> list[tuple]:
 class Live:
   """The World of one life on this machine: the provider of its models, its operator, and the ears of the crate.
 
-  `directory` is where the chains of the life start. `roster` names the models the life offers, every model the
-  catalog of the crate offers when it names none, and `actor` is the actor a prompt goes to when it names none.
-  `answer` answers each request in place of the models, when it is given. `calls` holds every question the World
+  `directory` is where the chains of the life start. `actor` is the actor a prompt goes to when it names none, and
+  `roster` names the models the life offers beside its model, or the first model the catalog of the crate offers
+  stands alone when neither is said. `answer` answers each request in place of the models, when it is given. `calls` holds every question the World
   heard that it or the provider answered, in order. `ears` are the ears of the crate the life is booted on beside the
   provider, which the World lets go at its end. `reader` reads the terminal and `reading` keeps one read of it at a
   time, since there is one operator.

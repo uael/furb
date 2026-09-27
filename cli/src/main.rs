@@ -29,7 +29,9 @@ struct Furb {
   demo: bool,
   #[command(flatten)]
   place: Place,
-  /// More words for the TUI, after --, such as --model provider:model.
+  #[command(flatten)]
+  stand: Stand,
+  /// More words for the TUI, after --, such as --effort high.
   #[arg(last = true, value_name = "TUI WORDS")]
   more: Vec<String>,
   #[command(subcommand)]
@@ -56,6 +58,19 @@ struct Place {
   cwd: Option<PathBuf>,
 }
 
+/// What a life stands on: the actor a prompt goes to when it names none, and the models it offers beside the model
+/// of that actor. The standing of every chain tells the roster, so a life offers the models it names and no more.
+#[derive(Args)]
+struct Stand {
+  /// The actor a prompt goes to when it names none, as provider:model/effort; the first model the catalog offers,
+  /// at its least effort, when unsaid.
+  #[arg(long)]
+  model: Option<String>,
+  /// A model the life offers beside the model of that actor, as provider:model; say it again for each model.
+  #[arg(long)]
+  roster: Vec<String>,
+}
+
 /// One command of the operator, on one life.
 #[derive(Subcommand)]
 enum Command {
@@ -72,6 +87,8 @@ enum Command {
     shape: Shape,
     #[command(flatten)]
     place: Place,
+    #[command(flatten)]
+    stand: Stand,
   },
   /// Print the turns of the root of a life made again from its record.
   Turns {
@@ -88,7 +105,16 @@ enum Command {
     word: String,
     #[command(flatten)]
     place: Place,
+    #[command(flatten)]
+    stand: Stand,
   },
+}
+
+impl Stand {
+  /// What the life stands on, as a life takes it.
+  fn stood(&self) -> life::Stood {
+    life::Stood { actor: self.model.clone(), roster: self.roster.clone() }
+  }
 }
 
 /// Every shape a prompt of the command line takes, by the name it is given on the line.
@@ -127,17 +153,25 @@ impl Shape {
 fn main() -> ExitCode {
   let furb = Furb::parse();
   let done = match furb.command {
-    Some(Command::Prompt { message, to, shape, place }) => prompt(&place, shape, message, to),
+    Some(Command::Prompt { message, to, shape, place, mut stand }) => {
+      // The actor of the prompt is one the life offers.
+      stand.roster.extend(life::model(&to));
+      prompt(&place, &stand, shape, message, to)
+    }
     Some(Command::Turns { record, cwd }) => turns(record, cwd),
-    Some(Command::Run { word, place }) => run(&place, word),
+    Some(Command::Run { word, place, stand }) => run(&place, &stand, word),
     None if furb.mode == Mode::Rpc => {
       if furb.demo || !furb.more.is_empty() {
         let why = "--demo and the words after -- are for the TUI, and --mode rpc serves no TUI";
         Furb::command().error(ErrorKind::ArgumentConflict, why).exit();
       }
-      rpc::serve(furb.place.record.as_deref(), &life::directory(furb.place.cwd.as_deref()))
+      let cwd = life::directory(furb.place.cwd.as_deref());
+      rpc::serve(furb.place.record.as_deref(), &cwd, &furb.stand.stood())
     }
-    None => tui::launch(furb.demo, &furb.place, &furb.more).map(|never| match never {}),
+    None => {
+      let stood = furb.stand.stood();
+      tui::launch(furb.demo, &furb.place, &stood, &furb.more).map(|never| match never {})
+    }
   };
   match done {
     Ok(()) => ExitCode::SUCCESS,
@@ -154,8 +188,14 @@ fn main() -> ExitCode {
 /// A prompt the record already holds is taken up and never asked twice, so a command said again on a kept record
 /// reads the answer of the life before it and asks no model for it. A prompt it holds that is not done goes on, since
 /// the command wakes it, and a wake of a prompt that is done says nothing.
-fn prompt(place: &Place, shape: Shape, message: String, to: String) -> Result<(), String> {
-  let mut life = Life::lived(place.record.as_deref(), place.cwd.as_deref(), true)?;
+fn prompt(
+  place: &Place,
+  stand: &Stand,
+  shape: Shape,
+  message: String,
+  to: String,
+) -> Result<(), String> {
+  let mut life = Life::lived(place.record.as_deref(), place.cwd.as_deref(), &stand.stood(), true)?;
   let root = life.root.clone();
   let to = life::actor(&to);
   let id = match life.again(shape.name(), &message, &to) {
@@ -175,7 +215,7 @@ fn prompt(place: &Place, shape: Shape, message: String, to: String) -> Result<()
 /// The turns of the root of a life made again from its record, each as the python a model reads of it. The life only
 /// reads the record, and keeps nothing.
 fn turns(record: PathBuf, cwd: Option<PathBuf>) -> Result<(), String> {
-  let mut life = Life::lived(Some(&record), cwd.as_deref(), false)?;
+  let mut life = Life::lived(Some(&record), cwd.as_deref(), &life::Stood::default(), false)?;
   let on = Some(life.root.clone());
   for turn in life.engine.turns(verbs::Turns { on }).map_err(|no| no.to_string())? {
     let text =
@@ -186,8 +226,8 @@ fn turns(record: PathBuf, cwd: Option<PathBuf>) -> Result<(), String> {
 }
 
 /// One word its caller wrote, run as a rung on the root of a life, awaited for what the word gave, as python shows it.
-fn run(place: &Place, word: String) -> Result<(), String> {
-  let mut life = Life::lived(place.record.as_deref(), place.cwd.as_deref(), true)?;
+fn run(place: &Place, stand: &Stand, word: String) -> Result<(), String> {
+  let mut life = Life::lived(place.record.as_deref(), place.cwd.as_deref(), &stand.stood(), true)?;
   let with = verbs::Rung { word: Some(word), on: Some(life.root.clone()), ..Default::default() };
   let id = life.engine.rung(with).map_err(|no| no.to_string())?.id().to_owned();
   println!("{}", life.settled(&id)?.py_repr());

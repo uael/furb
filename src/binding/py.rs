@@ -1004,10 +1004,10 @@ fn verb_said<'py>(py: Python<'py>, door: &Door, call: &Call) -> PyResult<Bound<'
   made.python.bind(py).getattr(call.verb.as_str())?.call(args, Some(&kwargs))
 }
 
-/// The ear of the provider of models: the catalog makes the models of its roster, every model it offers when none
-/// is named, and a function of python answers them in place of the models when it is given one. The actor is the
-/// default actor, whose effort moves to the nearest one its model takes; `claude` is the path of the claude command
-/// line, and `stall` the seconds a turn of it may go with no progress.
+/// The ear of the provider of models: the catalog makes the model of the default actor and the models of its roster,
+/// or the first model it offers when neither is named, and a function of python answers them in place of the models
+/// when it is given one. The actor is the default actor, whose effort moves to the nearest one its model takes;
+/// `claude` is the path of the claude command line, and `stall` the seconds a turn of it may go with no progress.
 #[pyfunction]
 #[pyo3(signature = (directory, roster = None, actor = None, answer = None, claude = None, stall = None))]
 fn provider(

@@ -208,9 +208,10 @@ impl Catalog {
     Some((self.find(name)?, Some(level)))
   }
 
-  /// The models of a roster, and its default actor: the models the host names, or every model the catalog offers
-  /// when it names none, with the model of the actor first when that one is not among them; and the actor, named
-  /// as the catalog names its model, with its level moved to the nearest one the model takes.
+  /// The models of a roster, and its default actor: the model of the actor, and the models the host names; or, when
+  /// the host names no roster, the model of the actor alone, and the first model the catalog offers when there is no
+  /// actor either. The actor is named as the catalog names its model, with its level moved to the nearest one the
+  /// model takes.
   pub fn roster(
     &self,
     names: Option<&[String]>,
@@ -222,14 +223,13 @@ impl Catalog {
         .iter()
         .map(|name| self.find(name).cloned().ok_or_else(|| unknown(name)))
         .collect::<Result<Vec<_>, _>>()?,
-      None => self.offered().into_iter().cloned().collect(),
+      None if actor.is_none() => self.offered().into_iter().take(1).cloned().collect(),
+      None => Vec::new(),
     };
     let actor = match actor {
       Some(actor) => {
         let (model, level) = self.actor(actor).ok_or_else(|| unknown(actor))?;
-        if !models.iter().any(|one| one.name == model.name) {
-          models.insert(0, model.clone());
-        }
+        models.insert(0, model.clone());
         let efforts: Vec<&str> = model.efforts.iter().map(|(name, _)| name.as_str()).collect();
         Some(match level.and_then(|level| clamp(&efforts, level)) {
           Some(level) => format!("{}/{level}", model.name),

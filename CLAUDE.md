@@ -14,8 +14,8 @@ API of its own:
   record, and the provider of models, which asks each model through rig and streams what it writes. Its catalog
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, and the claude command line when it finds the program. A host
-  names its models from the catalog, or gives a model of its own, and adds its own ears, such as the console of its
-  operator.
+  names its default actor and the rest of its roster from the catalog, or gives a model of its own, and adds its own
+  ears, such as the console of its operator.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate is the type checker of monty. It reads a word on the sheet of the engine,
@@ -27,8 +27,9 @@ API of its own:
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout
   it was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, as Pi does, which
   `docs/rpc.md` says. `prompt`, `turns` and `run` each open one life on the record they are given. Every life runs on
-  the ears of the crate, on every model that the catalog offers, and on a console of the operator. The package
-  `furb` depends on the wheel of `furb-cli`, so `pip install furb` gives the command `furb`.
+  the ears of the crate, on the model of its default actor and the models that `--roster` names, and on a console
+  of the operator. The package `furb` depends on the wheel of `furb-cli`, so `pip install furb` gives the command
+  `furb`.
 
 The suite runs on both engines. `test/outside/test_monty.py` proves what the door carries that no sentence of the
 contract says.
