@@ -174,8 +174,7 @@ def close(value: object, id: str = "") -> None:
         raise CancelledError()
       if not id and question(("prompt", by)):
         id = by
-  id = id or who
-  match get(id):
+  match get(id := id or who):
     case ("prompt", _, _, on, shape, *_) if not isinstance(value, BaseException):
       try:
         fits = isinstance(value, (s := eval(shape, module(on))) or object)
