@@ -15,7 +15,7 @@ import { transcriptOf } from "./transcript.ts";
 
 afterAll(removeDemoDirectories);
 
-test("the real native life drives the feed, the transcript, the palette, and responsive views", () =>
+test("the real native life drives the feed, the transcript, and responsive views", () =>
   composing(
     async ({ session, app, screen, frame }) => {
       expect(screen.captureCharFrame()).toContain("Explore a codebase");
@@ -67,15 +67,6 @@ test("the real native life drives the feed, the transcript, the palette, and res
       session.show("transcript");
       expect(await frame()).toContain('notes = read("README.md")');
       session.show("feed");
-      app.palette();
-      await screen.flush();
-      expect(screen.captureCharFrame()).toContain("Commands");
-      await screen.mockInput.typeText("budget");
-      await screen.flush();
-      expect(screen.captureCharFrame()).toContain("Set budget");
-      screen.mockInput.pressEnter();
-      await screen.flush();
-      expect(app.composer.plainText).toBe("/grant ");
       screen.resize(80, 30);
       await frame();
       // A narrow top line keeps the session, the chain, and the switch of the views, and the sidebar is hidden.
@@ -234,10 +225,6 @@ test("operator answers and program edits act through the binding", () =>
       expect(app.composer.plainText).toContain("close(");
       await session.submit('close("Edited answer")');
       expect(session.editing).toBeUndefined();
-      await session.command("/run this is invalid python !!!");
-      expect(session.error).toBe("");
-      expect(session.findings.join("\n")).toContain("line 1");
-      expect(await frame()).toContain("this is invalid python");
       app.composer.setText("keep the session open");
       screen.mockInput.pressCtrlC();
       await screen.flush();

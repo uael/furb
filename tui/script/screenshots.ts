@@ -11,7 +11,7 @@ import { palettes } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
 import { rasterize } from "./raster.ts";
-import { find, highlighting, home, mount } from "./stage.ts";
+import { click, find, highlighting, home, mount } from "./stage.ts";
 
 // The model of the demo writes slowly, so that its work stays in progress while a capture shows it. The session runs
 // in a worker, which reads the environment once, as it starts.
@@ -412,8 +412,7 @@ try {
   const [researchAt, researchRow] = find(test, "Research");
   await test.mockMouse.click(researchAt + 2, researchRow, 2);
   await capture("49-session-menu");
-  const [renameAt, renameRow] = find(test, "Rename", researchAt);
-  await test.mockMouse.click(renameAt + 1, renameRow);
+  await click(test, "Rename", researchAt);
   await test.flush();
   await test.mockInput.typeText(" notes");
   await rest();

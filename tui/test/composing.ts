@@ -1,15 +1,17 @@
 import { createTestRenderer } from "@opentui/core/testing";
+import * as stage from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
 
 /** What a test of the App holds: the session, the App on it, the test terminal, the frame that the App draws anew,
- * and how many times the App asked to quit. */
+ * a click on the first place of that frame that shows a text, and how many times the App asked to quit. */
 export interface Composing {
   session: Session;
   app: App;
   screen: Awaited<ReturnType<typeof createTestRenderer>>;
   frame: () => Promise<string>;
+  click: (text: string) => Promise<void>;
   quits: () => number;
 }
 
@@ -52,7 +54,11 @@ export async function composing(
   try {
     await screen.flush();
     app.composer.focus();
-    await use({ session, app, screen, frame, quits: () => quits });
+    const click = async (text: string) => {
+      await frame();
+      await stage.click(screen, text);
+    };
+    await use({ session, app, screen, frame, click, quits: () => quits });
   } finally {
     app.dispose();
     screen.renderer.destroy();

@@ -3235,7 +3235,7 @@ export class App {
   private actActions(act: ActRow): void {
     const w = this.session;
     const message = w.isUserPrompt(act) && !asksOperator(act);
-    this.openPalette(`${act.kind === "rung" ? "Rung" : title(act.kind)} ${act.id}`, [
+    this.openPalette(`${title(act.kind)} ${act.id}`, [
       {
         label: "Inspect",
         detail: "Its words, its state, and its value",
@@ -4650,8 +4650,8 @@ export class App {
     const cost = (index: number, first: boolean) => {
       const choice = this.filtered[index];
       if (!choice) return 0;
-      const title = first ? (choice.heading ? 1 : 0) : titled(index) ? 2 : 0;
-      return (this.rich ? (choice.command ? 3 : 2) : 1) + title;
+      const above = first ? (choice.heading ? 1 : 0) : titled(index) ? 2 : 0;
+      return (this.rich ? (choice.command ? 3 : 2) : 1) + above;
     };
     const gap = this.rich ? space.section : 0;
     const span = (from: number, to: number) => {
@@ -4716,16 +4716,16 @@ export class App {
         const bar: Part = [`${selected ? glyph.mark : " "} `, c.accent];
         const width = inner - 2;
         const keys = choice.keys ?? "";
-        const title = this.row();
-        title.add(
+        const top = this.row();
+        top.add(
           this.text([bar, [clip(choice.label, width - Bun.stringWidth(keys) - 2), c.text, bold]], c.text, {
             flexGrow: 1,
             flexShrink: 1,
             truncate: true,
           }),
         );
-        if (keys) title.add(this.text(keys, selected ? c.muted : c.faint, { paddingRight: space.inset }));
-        block.add(title);
+        if (keys) top.add(this.text(keys, selected ? c.muted : c.faint, { paddingRight: space.inset }));
+        block.add(top);
         if (choice.command)
           block.add(this.line([bar, [clip(choice.command, width), selected ? c.accent : c.secondary]]));
         block.add(this.line([bar, [clip(choice.detail.replace(/\s*\n\s*/g, " "), width), c.muted]], c.muted));

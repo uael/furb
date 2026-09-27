@@ -51,8 +51,9 @@ test("a text that a command puts in the composer keeps the draft one undo away",
     expect(app.composer.undo()).toBe(true);
     expect(app.composer.plainText).toBe("a long question I was writing");
     app.palette();
+    expect(await frame()).toContain("Commands");
     await screen.mockInput.typeText("budget");
-    await frame();
+    expect(await frame()).toContain("Set budget");
     screen.mockInput.pressEnter();
     await frame();
     expect(app.composer.plainText).toBe("/grant ");
@@ -179,7 +180,7 @@ test("the completion of a token reads the text before the cursor, whatever the w
 
 test("a click on a suggestion completes the token as it stands when it is clicked", () =>
   composing(
-    async ({ session, app, screen, frame }) => {
+    async ({ session, app, screen, frame, click }) => {
       await session.projectFiles();
       for (const [typed, more, completed] of [
         ["/rewi", "n", "/rewind "],
@@ -189,10 +190,7 @@ test("a click on a suggestion completes the token as it stands when it is clicke
         await screen.mockInput.typeText(typed);
         await frame();
         await screen.mockInput.typeText(more);
-        const lines = (await frame()).split("\n");
-        const label = completed.trim().split(" ").at(-1) ?? "";
-        const row = lines.findIndex((line) => line.includes(label) && !line.includes("│"));
-        await screen.mockMouse.click((lines[row] ?? "").indexOf(label) + 1, row);
+        await click(completed.trim().split(" ").at(-1) ?? "");
         expect(app.composer.plainText).toBe(completed);
       }
     },
@@ -351,14 +349,13 @@ test("⌃Tab rolls to the next chain and ⇧⌃Tab to the one before it, round f
   ));
 
 test("the switch of the views fills the view shown with the accent, names its chord, and a click on a view shows it", () =>
-  composing(async ({ session, screen, frame }) => {
+  composing(async ({ session, frame, click }) => {
     const top = (await frame()).split("\n")[0] ?? "";
     expect(top).toContain("Feed");
     expect(top).toContain("⌥1-3");
-    await screen.mockMouse.click(top.indexOf("Changes") + 1, 0);
+    await click("Changes");
     await until(session, () => session.view === "changes");
-    const again = (await frame()).split("\n")[0] ?? "";
-    await screen.mockMouse.click(again.indexOf("Feed") + 1, 0);
+    await click("Feed");
     await until(session, () => session.view === "feed");
   }));
 
@@ -370,9 +367,8 @@ test("the switch of the input shows Prompt and Python, ⌃R names it, and a clic
     expect(lines[row]).toContain("⌃R");
     await screen.mockMouse.click((lines[row] ?? "").indexOf("Python") + 1, row);
     await until(session, () => session.mode === "python");
-    const after = (await frame()).split("\n");
-    const again = after.findIndex((line) => line.includes("Python") && line.includes("Prompt"));
-    await screen.mockMouse.click((after[again] ?? "").indexOf("Prompt") + 1, again);
+    await frame();
+    await screen.mockMouse.click((lines[row] ?? "").indexOf("Prompt") + 1, row);
     await until(session, () => session.mode === "prompt");
   }));
 
@@ -422,15 +418,13 @@ test("the usage counts each token once, and the context share shows from the fir
   }));
 
 test("a paused chain says so at the end of its feed and in the footer, and Resume wakes it", () =>
-  composing(async ({ session, screen, frame }) => {
+  composing(async ({ session, frame, click }) => {
     await session.submit("/pause");
     await until(session, () => session.paused);
     let shown = await frame();
     expect(shown).toContain("This chain is paused");
     expect(shown).toContain("/wake resume");
-    const lines = shown.split("\n");
-    const row = lines.findIndex((line) => line.includes("Resume") && line.includes("runs what waits"));
-    await screen.mockMouse.click((lines[row] ?? "").indexOf("Resume") + 1, row);
+    await click("Resume");
     await until(session, () => !session.paused);
     shown = await frame();
     expect(shown).not.toContain("This chain is paused");

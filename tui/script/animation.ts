@@ -7,7 +7,7 @@ import { palettes } from "../src/theme.ts";
 import { idle } from "../test/idle.ts";
 import { gif, pack, type Still } from "./gif.ts";
 import { pixels } from "./raster.ts";
-import { find, highlighting, home, mount } from "./stage.ts";
+import { click, highlighting, home, mount } from "./stage.ts";
 
 // The model of the demo writes its words as a stream in the animation, as a real model does.
 process.env.FURB_DEMO_STREAM = "1";
@@ -55,11 +55,6 @@ async function working(delay = 8): Promise<void> {
   await idle(session);
   await session.refresh();
 }
-/** A click on the first place of the screen that shows a text. */
-async function click(text: string): Promise<void> {
-  const [column, row] = find(test, text);
-  await test.mockMouse.click(column + 1, row);
-}
 
 try {
   await loadParsers();
@@ -78,11 +73,11 @@ try {
   await working();
   test.mockInput.pressKey("r", { ctrl: true });
   await still(150);
-  await click("Changes");
+  await click(test, "Changes");
   await still(200);
-  await click("Transcript");
+  await click(test, "Transcript");
   await still(150);
-  await click("Feed");
+  await click(test, "Feed");
   await still(80);
   // The palette finds any action by its name or its slash command.
   test.mockInput.pressKey("p", { ctrl: true });

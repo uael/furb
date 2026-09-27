@@ -74,6 +74,8 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
         (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
       );
       expect(refused?.run?.status).toBe("failed");
+      expect(session.error).toBe("");
+      expect(session.findings.join("\n")).toContain("line 1");
       await session.refresh();
       expect(await frame()).toContain("line 1");
       expect(screen.captureCharFrame()).toContain("failed");

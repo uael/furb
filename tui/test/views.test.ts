@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { type Renderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
+import { find } from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession, removeDemoDirectories } from "../src/demo.ts";
 import type { View } from "../src/session.ts";
@@ -295,27 +296,18 @@ test("the feed left at its end opens at its end, and one left above its end open
     true,
   ));
 
-test("the toggle, the keys of the footer, and the palette answer the mouse, and a drag over a heading selects and copies its text", () =>
+test("the keys of the footer and the palette answer the mouse, and a drag over a heading selects and copies its text", () =>
   composing(
-    async ({ session, app, screen, frame }) => {
-      /** The column and the row of the first place in the frame that shows a text. */
-      const at = async (text: string): Promise<[number, number]> => {
-        const lines = (await frame()).split("\n");
-        const row = lines.findIndex((line) => line.includes(text));
-        if (row < 0) throw new Error(`No ${text} in the frame.`);
-        return [(lines[row] ?? "").indexOf(text) + 1, row];
-      };
+    async ({ session, app, screen, frame, click }) => {
       await idle(session);
-      await screen.mockMouse.click(...(await at("Transcript")));
-      expect(session.view).toBe("transcript");
-      await screen.mockMouse.click(...(await at("Feed ")));
-      expect(session.view).toBe("feed");
-      await screen.mockMouse.click(...(await at("F1 help")));
-      expect((await at("Keys and commands"))[1]).toBeGreaterThan(0);
+      await click("F1 help");
+      await frame();
+      expect(find(screen, "Keys and commands")[1]).toBeGreaterThan(0);
       // The wheel moves the selection of the palette, and a click on a choice runs it.
       app.closeOverlay();
       app.palette();
-      const [x, y] = await at("Transcript view");
+      await frame();
+      const [x, y] = find(screen, "Transcript view");
       await screen.mockMouse.scroll(x, y, "down");
       await screen.flush();
       await screen.mockMouse.click(x, y);
