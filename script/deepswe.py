@@ -716,7 +716,7 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
   what it is and what it may say is the engine, which is its system prompt.
   """
   record = run_dir / "record.jsonl"
-  world, root, held = lived(record, app, args.to, keeps=True)
+  world, root, held = lived(record, app, args.to, keeps=True, extensions=False)
   say(f"[deepswe] life on {app}, root {root}, {len(held)} facts kept")
   if args.ceiling:
     engine.grant(usd=args.ceiling, on=root)
@@ -807,7 +807,7 @@ def turns(args: argparse.Namespace) -> int:
   if not record.is_file():
     say(f"[deepswe] no record at {record}")
     raise SystemExit(1)
-  asyncio.run(turned(record, WORK / args.task / "app", args.to))
+  asyncio.run(turned(record, WORK / args.task / "app", args.to, extensions=False))
   return 0
 
 
