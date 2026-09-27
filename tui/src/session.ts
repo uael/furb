@@ -463,7 +463,7 @@ export class Session extends EventEmitter {
     return this.acts.find((act) => act.id === name);
   }
   async attachImage(path: string): Promise<void> {
-    if (!(await this.host.route(this.actor)).input.includes("image"))
+    if (!(await this.host.sees(this.actor)))
       throw new Error("Choose a model that accepts images before attaching one.");
     const image = await this.host.attachImage(this.path(path));
     const images = this.images[this.selected] ?? [];

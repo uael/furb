@@ -31,14 +31,12 @@ use tokio::{
 
 use super::{Model, runtime, spawned, uuid};
 
-/// The name of the provider, which each response of the command line says.
+/// The name of the command line as a provider: each response of it says this name, and each of its models is named
+/// by it and the alias of its family.
 pub const CLAUDE: &str = "claude-cli";
 
 /// The efforts the command line spends on a turn, from least to most.
 pub const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
-
-/// The name of the command line as a provider of the catalog, before the alias of each of its models.
-pub const PROVIDER: &str = "claude-cli";
 
 /// The models of the command line, by the alias of their family, and the window of each, the one a life stands on
 /// when its host names none first.
@@ -62,6 +60,9 @@ const LINE: usize = 32 * 1024 * 1024;
 
 /// How many characters of what a process wrote on its stderr a failure keeps.
 const TAIL: usize = 2000;
+
+/// The error of the system that says a program is open to be written, which is ETXTBSY.
+const BUSY: i32 = 26;
 
 /// The claude command line: its program, how long a turn may go with no progress, and the conversations it holds.
 ///
@@ -122,7 +123,7 @@ impl Claude {
     FAMILY
       .iter()
       .map(|(alias, window)| {
-        let named = format!("{PROVIDER}:{alias}");
+        let named = format!("{CLAUDE}:{alias}");
         let mut model =
           Model::new(named, *window, self.completion_model(*alias)).conversation("session");
         model.apart = true;
@@ -404,8 +405,17 @@ impl Conversation {
     command.env("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "1");
     command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
     command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
-    let mut child =
-      command.spawn().map_err(|no| failed(format!("{} did not start: {no}", bin.display())))?;
+    // A program that a process holds open to write it is busy, as a new program is for a moment while a fork of
+    // another thread holds it, so it starts at a later try.
+    let mut tries = 0;
+    let mut child = loop {
+      match command.spawn() {
+        Err(no) if no.raw_os_error() == Some(BUSY) && tries < 50 => tries += 1,
+        got => break got,
+      }
+      std::thread::sleep(Duration::from_millis(10));
+    }
+    .map_err(|no| failed(format!("{} did not start: {no}", bin.display())))?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
       (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {

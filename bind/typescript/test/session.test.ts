@@ -1,30 +1,14 @@
-import { afterAll, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createModels, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
-import {
-  actorParts,
-  boot,
-  type Ear,
-  type Fact,
-  inspectRecord,
-  isQuestion,
-  Session,
-  type Turn,
-} from "../src/index.ts";
-import { claudeProvider, cliModel } from "../src/providers/claude.ts";
-import { executable } from "./executable.ts";
+import { actorParts, boot, type Ear, type Fact, inspectRecord, Session, type Turn } from "../src/index.ts";
 import { alive, printPid, remove } from "./processes.ts";
 import { until } from "./until.ts";
 
-// A session with no model puts every prompt to the operator, so a test that asks a model names one, and its `answer`
-// replaces the request, so no CLI runs. A later session that is given the models takes the saved model as its own.
-const offer = claudeProvider();
-const offered = createModels();
-offered.setProvider(offer.provider);
-const modeled = { models: offered, model: "claude-cli:sonnet" };
-afterAll(() => offer.dispose());
+// A session with no model puts every prompt to the operator, so a test that asks a model names one of the catalog of
+// the crate, and its `answer` replaces the request, so no model is asked.
+const modeled = { model: "claude-cli:sonnet" };
 /** A turn of a model whose word is the one given. */
 const said = (word: string): Turn => ["assistant", word, null, null];
 /** What a command has printed so far, as the act table holds it. */
@@ -114,132 +98,109 @@ test("the act table holds an act paused while the last pause or wake that covers
   }
 });
 
-test("the standing takes each model's efforts from its pi-ai metadata", async () => {
-  expect(getSupportedThinkingLevels(cliModel("sonnet"))).toEqual(["low", "medium", "high", "xhigh", "max"]);
+test("an actor names its model and its effort after the last slash that follows the name of a model", () => {
   expect(actorParts("claude-cli:org/plain")).toEqual({ model: "claude-cli:org/plain", effort: "off" });
   expect(actorParts("claude-cli:org/plain/high")).toEqual({ model: "claude-cli:org/plain", effort: "high" });
   expect(actorParts("claude-cli:org/high", ["claude-cli:org/high"])).toEqual({
     model: "claude-cli:org/high",
     effort: "off",
   });
-  const cli = claudeProvider();
-  const models = createModels();
-  models.setProvider({
-    ...cli.provider,
-    getModels: () => [
-      { ...cliModel("org/plain"), reasoning: false },
-      {
-        ...cliModel("focused"),
-        thinkingLevelMap: {
-          off: null,
-          minimal: null,
-          low: "low",
-          medium: null,
-          high: "high",
-          xhigh: null,
-          max: null,
-        },
-      },
-    ],
-  });
-  const session = new Session({ models, model: "claude-cli:org/plain", roster: ["claude-cli:focused"] });
-  try {
-    const engine = session.open();
-    const [roster] = engine.standing() as [[string, string[], number][], string, string];
-    expect(roster.map(([name, efforts]) => [name, efforts])).toEqual([
-      ["claude-cli:org/plain", ["off"]],
-      ["claude-cli:focused", ["low", "high"]],
-      ["operator", []],
-    ]);
-    expect(session.provider.effort).toBe("off");
-    expect(session.provider.route("claude-cli:org/plain/off").id).toBe("org/plain");
-  } finally {
-    await session.dispose();
-    cli.dispose();
-  }
 });
 
 test("a session offers the models its host names, and keeps the model and the effort chosen last as a preference", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-roster-"));
   const record = join(cwd, "session.jsonl");
-  const cli = claudeProvider();
-  const models = createModels();
-  models.setProvider(cli.provider);
   const alone = new Session({ cwd });
   try {
-    expect(alone.provider.roster).toEqual([]);
+    expect(alone.actor).toBe("operator");
     const engine = alone.open();
-    const [, , actor] = engine.standing() as [unknown, string, string];
-    expect(actor).toBe("operator");
-    expect(alone.provider.actor).toBe("operator");
+    const [roster, , actor] = engine.standing() as [[string][], string, string];
+    expect([roster.map(([name]) => name), actor, alone.actor]).toEqual([
+      ["operator"],
+      "operator",
+      "operator",
+    ]);
   } finally {
     await alone.dispose();
   }
-  const first = new Session({
-    cwd,
-    record,
-    models,
-    model: "claude-cli:opus",
-    effort: "high",
-    roster: ["claude-cli:sonnet"],
-  });
+  const first = new Session({ cwd, record, model: "opus", effort: "high", roster: ["claude-cli:sonnet"] });
   try {
-    first.open();
+    const engine = first.open();
+    const [roster] = engine.standing() as [[string, string[], number][]];
+    expect(roster.map(([name, efforts]) => [name, efforts])).toEqual([
+      ["claude-cli:opus", ["low", "medium", "high", "xhigh", "max"]],
+      ["claude-cli:sonnet", ["low", "medium", "high", "xhigh", "max"]],
+      ["operator", []],
+    ]);
+    expect(first.actor).toBe("claude-cli:opus/high");
   } finally {
     await first.dispose();
   }
-  // The record holds the standing of the life, so the companion keeps no roster and no actor.
+  // The record holds the standing of the life, so the companion keeps no roster, and the actor as its parts.
   expect(JSON.parse(await readFile(`${record}.session.json`, "utf8")).options).toEqual({
     cwd,
     model: "claude-cli:opus",
     effort: "high",
   });
-  const second = new Session({ record, models, roster: ["claude-cli:fable"] });
+  const second = new Session({ record, roster: ["claude-cli:fable"], effort: "minimal" });
   try {
-    expect(second.provider.roster).toEqual(["claude-cli:opus", "claude-cli:fable"]);
-    expect(second.provider.actor).toBe("claude-cli:opus/high");
-    expect(second.provider.route("haiku").id).toBe("haiku");
-    expect(() => second.provider.route("nothing")).toThrow("Name one as provider:model");
+    const engine = second.open();
+    const [roster] = engine.standing() as [[string][]];
+    expect(roster.map(([name]) => name)).toEqual(["claude-cli:opus", "claude-cli:fable", "operator"]);
+    expect(second.actor).toBe("claude-cli:opus/low");
   } finally {
     await second.dispose();
-    cli.dispose();
   }
-  // A preference the session cannot route falls away, so an inspection needs no model of the record.
   expect((await inspectRecord(record)).pending).toEqual([]);
-  const third = new Session({ record });
-  try {
-    expect(third.provider.model).toBeUndefined();
-    expect(third.provider.roster).toEqual([]);
-    expect(third.provider.actor).toBe("operator");
-    expect(() => new Session({ cwd, roster: ["claude-cli:opus"] })).toThrow("No model claude-cli:opus");
-    // An answer replaces the request of a model, and a session with no model has none to replace.
-    expect(() => new Session({ cwd, answer: async () => said("close(1)") })).toThrow("offers no model");
-  } finally {
-    await third.dispose();
-    await rm(cwd, { recursive: true, force: true });
-  }
+  expect(() => new Session({ cwd, roster: ["nothing"] }).open()).toThrow("No model is nothing.");
+  await rm(cwd, { recursive: true, force: true });
 });
 
-test("a fenced reply is no python: the gate refuses it and the prompt asks again", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-fence-"));
-  const cli = claudeProvider({ bin: executable(join(import.meta.dir, "fake-claude.ts"), cwd, "claude") });
-  const models = createModels();
-  models.setProvider(cli.provider);
-  const session = new Session({ cwd, models, roster: ["claude-cli:sonnet"] });
+test("what a model writes streams into the session under its rung until its reply is done", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-streams-"));
+  const record = join(cwd, "life.jsonl");
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const seen: unknown[] = [];
+  const session = new Session({
+    cwd,
+    record,
+    ...modeled,
+    answer: async (request, write) => {
+      seen.push(request);
+      write({ thinking: "counting" });
+      write({ text: "close(" });
+      write({ text: "3)" });
+      await held;
+      return ["assistant", "close(3)", [10, 2, 0, 0, 0], null];
+    },
+  });
   try {
     const engine = session.open();
-    const on = engine.root;
-    expect(await engine.prompt("str", { message: "FENCE", on })).toBe("reply 2");
-    const transcript = engine
-      .turns({ on })
-      .map(([, python]) => python)
-      .join("\n");
-    expect(transcript).toContain("```python");
-    expect(transcript).toMatch(/^#rung\d+ refused$/m);
+    const prompt = engine.prompt("int", { message: "count", on: engine.root });
+    await until(session, () => session.streams.get("rung1")?.text === "close(3)");
+    expect(session.streams.get("rung1")).toEqual({
+      chain: engine.root,
+      text: "close(3)",
+      thinking: "counting",
+    });
+    expect(seen).toEqual([
+      {
+        actor: "claude-cli:sonnet/low",
+        chain: engine.root,
+        messages: [expect.objectContaining({ role: "user" })],
+        settings: { effort: "low", session: expect.stringMatching(/\/chain1$/) },
+      },
+    ]);
+    release();
+    expect(await prompt).toBe(3);
+    expect(session.streams.size).toBe(0);
+    expect(session.activity.cost).toBe(0);
   } finally {
     await session.dispose();
-    cli.dispose();
-    await remove(cwd);
+    await rm(cwd, { recursive: true });
   }
 });
 
@@ -254,7 +215,6 @@ test("unfinished model work and waits reopen pending until the host resumes them
   await first.dispose();
   const second = new Session({
     record,
-    models: offered,
     answer: async () => {
       calls++;
       return ["assistant", 'close("resumed")', null, null];
@@ -278,23 +238,8 @@ test("unfinished model work and waits reopen pending until the host resumes them
   }
 });
 
-test("one failed reply is asked again, while two failures in a row pause with a reason", async () => {
+test("a function of the host that throws answers nothing, and two in a row pause the chain with the reason", async () => {
   let calls = 0;
-  const session = boot({
-    ...modeled,
-    answer: async () => {
-      if (++calls === 1) throw new Error("temporary outage");
-      return ["assistant", 'close("recovered")', null, null];
-    },
-  });
-  try {
-    expect(await session.engine.prompt("str", { message: "try", on: session.engine.root })).toBe("recovered");
-    expect(session.facts.some((fact) => fact[0] === "pause")).toBe(false);
-    expect(calls).toBe(2);
-  } finally {
-    await session.dispose();
-  }
-  calls = 0;
   const broken = boot({
     ...modeled,
     answer: async () => {
@@ -311,39 +256,9 @@ test("one failed reply is asked again, while two failures in a row pause with a 
     const reasons = [...broken.activity.acts.values()]
       .filter((act) => act.kind === "rung")
       .map((act) => act.run?.reason);
-    expect(reasons).toContain(`Refused: ${modeled.model}/low answered nothing: Error: unavailable`);
+    expect(reasons).toContain("Refused: claude-cli:sonnet/low answered nothing: ProviderError: unavailable");
   } finally {
     await broken.dispose();
-  }
-});
-
-test("the provider hands the model the python of a user turn as the engine wrote it, and chain accepts its parent", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-python-turn-"));
-  const log = join(cwd, "cli.jsonl");
-  process.env.FURB_FAKE_LOG = log;
-  const cli = claudeProvider({ bin: executable(join(import.meta.dir, "fake-claude.ts"), cwd, "claude") });
-  const models = createModels();
-  models.setProvider(cli.provider);
-  const session = boot({ cwd, models, model: "claude-cli:sonnet" });
-  try {
-    const { engine } = session;
-    const on = engine.root;
-    const child = engine.chain({ label: "child", on });
-    expect(engine.get(child.id)?.[3]).toBe(on);
-    expect(await engine.prompt("str", { message: 'say "hi" <b> && \\n', on })).toBe("reply 1");
-    const [turn] = engine.turns({ on });
-    expect(turn?.[1]).toContain('#prompt1 say "hi" <b> && \\n');
-    const requests = (await readFile(log, "utf8"))
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => JSON.parse(line))
-      .filter((line) => line.type === "user");
-    expect(requests.map((line) => line.message.content)).toEqual([[{ type: "text", text: turn?.[1] }]]);
-  } finally {
-    await session.dispose();
-    cli.dispose();
-    delete process.env.FURB_FAKE_LOG;
-    await remove(cwd);
   }
 });
 
@@ -432,7 +347,7 @@ test("resume wakes no work that a pause of the operator holds, so that pause sta
   engine.pause(engine.root);
   engine.prompt("str", { message: "later", on: engine.root });
   await first.dispose();
-  const second = new Session({ record, models: offered, answer: async () => said('close("x")') });
+  const second = new Session({ record, answer: async () => said('close("x")') });
   try {
     const again = second.open();
     expect(second.pending.size).toBe(0);
@@ -625,37 +540,6 @@ test("an ear of the host that comes before the files takes a read in their place
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
-  }
-});
-
-test("a reply that a cancel ends asks its model for nothing more, and comes to a CancelledError", async () => {
-  const stopped: string[] = [];
-  const session = boot({
-    ...modeled,
-    answer: (_actor, _chain, _turns, signal) =>
-      new Promise<Turn>((_, reject) =>
-        signal.addEventListener(
-          "abort",
-          () => {
-            stopped.push("aborted");
-            reject(new Error("aborted"));
-          },
-          { once: true },
-        ),
-      ),
-  });
-  try {
-    const { engine } = session;
-    const act = engine.prompt("int", { message: "count", on: engine.root });
-    await until(session, () => session.provider.streams.size > 0);
-    engine.cancel(String(act));
-    expect(stopped).toEqual(["aborted"]);
-    const dones = engine
-      .transcript({ on: engine.root })
-      .filter(([kind, id]) => kind === "done" && isQuestion("reply", id));
-    expect(dones.map((fact) => (fact[3] as { is?: string }).is)).toEqual(["CancelledError"]);
-  } finally {
-    await session.dispose();
   }
 });
 

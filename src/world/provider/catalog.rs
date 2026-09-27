@@ -136,7 +136,7 @@ impl Catalog {
 
   /// The catalog with this claude command line, which it offers.
   pub fn with_claude(self, claude: Claude) -> Catalog {
-    let prefix = format!("{}:", claude::PROVIDER);
+    let prefix = format!("{}:", claude::CLAUDE);
     let network = self.models.into_iter().filter(|(model, _)| !model.name.starts_with(&prefix));
     let mut models: Vec<_> = claude.models().into_iter().map(|model| (model, true)).collect();
     models.extend(network);

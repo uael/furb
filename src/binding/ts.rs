@@ -503,33 +503,33 @@ pub struct ModelInfo {
   pub price: Option<Vec<f64>>,
 }
 
-/// The models the catalog of this machine offers, or the ones it names when names are given, each named as the
-/// catalog names it; a name it knows no model by is refused.
-#[napi]
-pub fn models(names: Option<Vec<String>>) -> napi::Result<Vec<ModelInfo>> {
-  let catalog = world::Catalog::load();
-  let found = match names {
-    Some(names) => names
-      .iter()
-      .map(|name| {
-        catalog.find(name).ok_or_else(|| napi::Error::from_reason(format!("No model is {name}.")))
-      })
-      .collect::<napi::Result<Vec<_>>>()?,
-    None => catalog.offered(),
-  };
-  let info = |model: &world::Model| ModelInfo {
+/// A model of the catalog as JavaScript reads it.
+fn info(model: &world::Model) -> ModelInfo {
+  ModelInfo {
     name: model.name().to_owned(),
     efforts: model.efforts().into_iter().map(str::to_owned).collect(),
     window: model.window() as f64,
     images: model.sees(),
     price: model.priced().map(Vec::from),
-  };
-  Ok(found.into_iter().map(info).collect())
+  }
+}
+
+/// The models the catalog of this machine offers, each named as the catalog names it.
+#[napi]
+pub fn models() -> Vec<ModelInfo> {
+  world::Catalog::load().offered().into_iter().map(info).collect()
+}
+
+/// The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, whether it offers
+/// that model or not; nothing when it knows none.
+#[napi]
+pub fn model(name: String) -> Option<ModelInfo> {
+  world::Catalog::load().find(&name).map(info)
 }
 
 /// The levels of effort, from least to most, which an actor names after its model.
 #[napi]
-pub fn efforts() -> Vec<&'static str> {
+pub fn levels() -> Vec<&'static str> {
   world::catalog::LEVELS.to_vec()
 }
 

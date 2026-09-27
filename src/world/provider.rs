@@ -15,7 +15,10 @@ use std::{
   future::Future,
   path::PathBuf,
   pin::Pin,
-  sync::{Arc, OnceLock},
+  sync::{
+    Arc, OnceLock,
+    atomic::{AtomicBool, Ordering},
+  },
   task::{Context, Poll},
 };
 
@@ -298,17 +301,19 @@ impl Provider {
             let chain = a.on().to_owned();
             let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
             let turns = call(&co, "turns", vec![], vec![("on", Object::string(&chain))]).await?;
-            let told = told(writes.as_ref(), a.by(), &chain);
+            let over = Arc::new(AtomicBool::new(false));
+            let told = told(writes.as_ref(), a.by(), &chain, &over);
             let key = format!("{life}/{chain}");
             let asked = requested(&models, &actor, &chain, turns.as_ref(), &key, &mut images, told);
             let again = mute.get(&chain) == Some(&actor);
             let said = Said { voice: voice.clone(), id: about.clone(), chain: chain.clone() };
             let call = spawned(answered(said, actor.clone(), again, asked));
-            replies.insert(about, Reply { chain, actor, call });
+            replies.insert(about, Reply { chain, actor, call, over });
           }
           "done" => {
-            let Some(Reply { chain, actor, call }) = replies.remove(&about) else { continue };
+            let Some(Reply { chain, actor, call, over }) = replies.remove(&about) else { continue };
             drop(call);
+            over.store(true, Ordering::SeqCst);
             voice.hush(&about);
             // A done that the ear said of its own reply ends the row of refusals on the chain with a turn, or adds
             // to it with a refusal, which is what the ear says when it says no turn; a done that a control said
@@ -333,11 +338,13 @@ impl Provider {
   }
 }
 
-/// A reply the ear took: its chain, its actor, and the call of its model, which ends when the reply goes.
+/// A reply the ear took: its chain, its actor, the call of its model, which ends when the reply goes, and whether it
+/// went, after which the host is told nothing more of what a model writes for it.
 struct Reply {
   chain: String,
   actor: String,
   call: Spawned<()>,
+  over: Arc<AtomicBool>,
 }
 
 /// Who says what a reply came to: the voice of the ear, the reply, and the chain it is on.
@@ -347,11 +354,16 @@ struct Said {
   chain: String,
 }
 
-/// What a turn tells as it streams, told to the host under the rung it writes for and the chain of that rung.
-fn told(writes: Option<&Writes>, rung: &str, chain: &str) -> Told {
+/// What a turn tells as it streams, told to the host under the rung it writes for and the chain of that rung, until
+/// its reply is over.
+fn told(writes: Option<&Writes>, rung: &str, chain: &str, over: &Arc<AtomicBool>) -> Told {
   let Some(writes) = writes.cloned() else { return Arc::new(|_, _| {}) };
-  let (rung, chain) = (rung.to_owned(), chain.to_owned());
-  Arc::new(move |text, thinking| writes(&rung, &chain, text, thinking))
+  let (rung, chain, over) = (rung.to_owned(), chain.to_owned(), Arc::clone(over));
+  Arc::new(move |text, thinking| {
+    if !over.load(Ordering::SeqCst) {
+      writes(&rung, &chain, text, thinking);
+    }
+  })
 }
 
 /// What the chains stand on: the models and the operator, the directory, and the default actor.

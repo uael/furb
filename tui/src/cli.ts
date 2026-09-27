@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { efforts, furbDirectory, onConsoleEnd, type SessionOptions } from "@furb/engine";
+import { efforts, furbDirectory, onConsoleEnd } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
 import { follow } from "./app.ts";
 import { demoDirectory, removeDemoDirectories } from "./demo.ts";
@@ -35,7 +35,8 @@ Enter sends a prompt. ⌃J (Control J) adds a line, and so does ⇧Enter (Shift 
 keyboard protocol. ⌃P opens actions. F1 shows all keys that the terminal sends. ⌃ is Control, ⌥ is Option or Alt,
 and ⇧ is Shift.
 The default model is ${defaultModel}, through your Claude CLI subscription.
-Other providers use pi-ai and its environment credentials.`);
+The models of every other provider whose credentials stand in the environment, such as ANTHROPIC_API_KEY, are there
+too, each named as provider:model.`);
   process.exit(0);
 }
 if (values.effort && !efforts.some((effort) => effort === values.effort)) throw new Error("Invalid effort.");
@@ -55,7 +56,7 @@ const directory =
 if (values.demo) await mkdir(directory, { recursive: true });
 const engineOptions: EngineOptions = {
   model: values.model,
-  effort: values.effort as SessionOptions["effort"],
+  effort: values.effort,
   roster: values.roster,
   demo: values.demo,
 };

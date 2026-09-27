@@ -490,3 +490,28 @@ fn a_provider_of_the_network_is_asked_with_its_credential_and_streams_its_turn()
     parts.iter().map(|[_, _, text, thinking]| (text.as_str(), thinking.as_str())).collect();
   assert_eq!(texts, [("", "hm"), ("close(", ""), ("3)", "")]);
 }
+
+#[test]
+fn the_host_is_told_nothing_more_of_what_a_model_writes_once_its_reply_is_over() {
+  // A host writes from a work of its own, which the end of the reply does not end, as JavaScript does.
+  let host: Hosted = Arc::new(|_, told| {
+    told("before", "");
+    thread::spawn(move || {
+      thread::sleep(Duration::from_millis(200));
+      told("after", "");
+    });
+    std::future::pending().boxed()
+  });
+  let (writes, told) = heard();
+  let at = yard("over");
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let mut engine = lived(Provider::new(at.display().to_string(), vec![model]).writes(writes));
+  let id = asked(&mut engine);
+  let parts = |told: &Arc<Mutex<Vec<[String; 4]>>>| told.lock().expect("the parts told").len();
+  assert!(until(&mut engine, |_| parts(&told) == 1), "the model wrote a part");
+  engine.cancel(&id).expect("the prompt is cancelled");
+  assert!(
+    !within(&mut engine, Duration::from_millis(500), |_| parts(&told) > 1),
+    "nothing more is told"
+  );
+}
