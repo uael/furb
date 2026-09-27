@@ -327,3 +327,15 @@ async def test_a_line_that_is_no_value_of_the_shape_closes_the_prompt_with_a_ref
         break
     with pytest.raises(Refused, match="is no int"):
       await got
+
+
+def test_the_ears_of_the_crate_let_go_at_the_end_of_the_world(yard: Path) -> None:
+  """The World lets the ears of the crate go at its end, so the store lets its record go and a later life owns it."""
+  live = world(yard)
+  record = str(yard / "record.jsonl")
+  _, live.ears["store"] = _monty.store(record)
+  with pytest.raises(Refused, match="Another process owns"):
+    _monty.store(record)
+  live.end()
+  _, store = _monty.store(record)
+  store.dispose()

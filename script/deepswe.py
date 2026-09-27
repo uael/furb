@@ -26,10 +26,9 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from real import ready
+from real import lived, ready, say, turned
 
 from furb import engine
-from furb.cli import lived, say, turned
 from furb.provider.claude import cool
 from furb.world import answered, kept
 

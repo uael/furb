@@ -1,10 +1,11 @@
 name: publish
 
-# A tag that names a version publishes that version to PyPI: furb, the engine and the command, and furb-monty, the
-# crate built for python, as one wheel for each machine the gates run on and as its source for any other machine,
-# which builds it with the rust of rust-toolchain.toml. PyPI is told to trust this workflow of this repository for
-# both, so no token is kept anywhere: the job asks GitHub for a short lived identity and PyPI reads it. A run
-# started by hand builds everything and publishes nothing, which is the rehearsal of a release.
+# A tag that names a version publishes that version to PyPI: furb, the engine; furb-cli, the command furb, which is a
+# program of rust; and furb-monty, the crate built for python. Each of the two crates goes as one wheel for each
+# machine the gates run on and as its source for any other machine, which builds it with the rust of
+# rust-toolchain.toml. PyPI is told to trust this workflow of this repository for all three, so no token is kept
+# anywhere: the job asks GitHub for a short lived identity and PyPI reads it. A run started by hand builds everything
+# and publishes nothing, which is the rehearsal of a release.
 on:
   push:
     tags: ["v*"]
@@ -37,13 +38,17 @@ jobs:
           path: dist
 
   wheels:
-    name: furb-monty on ${{ matrix.os }}
+    name: ${{ matrix.crate.name }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        # The extension is built for one interpreter, and the program for none.
+        crate:
+          - { name: furb-monty, path: bind/python, args: --interpreter python3.14 }
+          - { name: furb-cli, path: cli, args: "" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,32 +59,38 @@ jobs:
       # On linux the wheel is built in the manylinux container, so that it installs on any distribution.
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          working-directory: bind/python
+          working-directory: ${{ matrix.crate.path }}
           command: build
-          args: --release --out dist --interpreter python3.14
+          args: --release --out dist ${{ matrix.crate.args }}
           manylinux: auto
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: furb-monty-${{ matrix.os }}
-          path: bind/python/dist
+          name: ${{ matrix.crate.name }}-${{ matrix.os }}
+          path: ${{ matrix.crate.path }}/dist
 
   source:
-    name: furb-monty as source
+    name: ${{ matrix.crate.name }} as source
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        crate:
+          - { name: furb-monty, path: bind/python }
+          - { name: furb-cli, path: cli }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          working-directory: bind/python
+          working-directory: ${{ matrix.crate.path }}
           command: sdist
           args: --out dist
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: furb-monty-source
-          path: bind/python/dist
+          name: ${{ matrix.crate.name }}-source
+          path: ${{ matrix.crate.path }}/dist
 
   publish:
     name: publish

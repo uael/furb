@@ -5,7 +5,7 @@
 //! from the contract when the crate is built, and an act is awaited as an [`Act`]. [`Ear`] is what the engine hears
 //! by, a coroutine that [`ear::ear`] makes, and [`world`] holds the ears the crate writes: files, commands, time,
 //! the store of the record, and the provider of models. The Kernel and the gate are the crate's, and [`PREAMBLE`]
-//! stands in for the ears of the host inside the sandbox.
+//! stands in for the ears of the host inside the sandbox. [`wire`] carries a value as JSON, as the record keeps it.
 
 pub mod ear;
 pub mod engine;
@@ -13,7 +13,7 @@ pub mod fact;
 pub mod gate;
 mod sand;
 pub mod value;
-mod wire;
+pub mod wire;
 pub mod world;
 
 pub mod binding;

@@ -5,6 +5,7 @@ requires-python = ">=3.14"
 [manifest]
 members = [
     "furb",
+    "furb-cli",
     "furb-monty",
 ]
 
@@ -252,6 +253,7 @@ name = "furb"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "furb-cli" },
     { name = "furb-monty" },
     { name = "pydantic" },
     { name = "pydantic-ai-slim" },
@@ -273,6 +275,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "furb-cli", editable = "cli" },
     { name = "furb-monty", editable = "bind/python" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-ai-slim", specifier = ">=2.27.1" },
@@ -291,6 +294,11 @@ dev = [
     { name = "tiktoken", specifier = ">=0.13.0" },
     { name = "ty", specifier = ">=0.0.82" },
 ]
+
+[[package]]
+name = "furb-cli"
+version = "0.1.0"
+source = { editable = "cli" }
 
 [[package]]
 name = "furb-monty"

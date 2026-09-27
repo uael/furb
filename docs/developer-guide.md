@@ -11,9 +11,9 @@ the TUI. When the two differ, `CLAUDE.md` is right, and this guide must change.
 | --- | --- |
 | Python 3.14 or later | The engine and the suite. |
 | [uv](https://docs.astral.sh/uv/) | The Python environment, the hooks, and every Python command. |
-| Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the package `furb-monty`. rustup reads the version from the file. |
+| Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the packages `furb-monty` and `furb-cli`. rustup reads the version from the file. |
 | [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings and the TUI. On Windows, bun 1.3 crashes the TUI. |
-| The `claude` command line, signed in | Only for a real life, such as `bun run tui` or `script/smoke.py`. The demo and the suite need no model. |
+| The `claude` command line, signed in | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`. The demo and the suite need no model. |
 
 Then set up a clone as the [README](../README.md#try-it) says, and install the hooks, which run at each commit:
 
@@ -47,6 +47,20 @@ uv run pre-commit install
 
 A screen must read clearly at first sight. `bun run screenshots` with `FURB_GALLERY_ONLY` set to a pattern, such as
 `^0[1-5]-`, writes only the captures that match.
+
+## Changing the command line
+
+`furb` is the program of the package `furb-cli` in `cli/`. `cargo run -p furb-cli -- --help` runs it from the
+clone, and so does `uv run furb --help` after `uv sync`.
+
+| File | What it holds |
+| --- | --- |
+| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns` and `run`. |
+| `cli/src/life.rs` | One life: the ears it opens on, the prompt of the record it takes up, and how the operator awaits an act. |
+| `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back. |
+| `cli/src/rpc.rs` | The JSON-RPC of `--mode rpc`, which `docs/rpc.md` says. Change the two together. |
+| `cli/src/tui.rs` | How furb finds the TUI and hands the terminal to it. |
+| `cli/tests/furb.rs` | The tests, which run `furb` as a process, on a claude command line that answers from a script. |
 
 ## Where to read next
 

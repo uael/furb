@@ -1,4 +1,5 @@
-//! The wire: a value of the sandbox as JSON, which is how the record keeps a fact and how TypeScript reads one.
+//! The wire: a value of the sandbox as JSON, which is how the record keeps a fact, how TypeScript reads one, and how
+//! a host of rust speaks JSON, as the command line does.
 //!
 //! JSON holds plain data, and the wire keeps the rest whole: a value that JSON holds only in part crosses as a map
 //! that names its type under `is`, with what that type is made again from, so it comes back in as it went out.
@@ -44,10 +45,18 @@ pub(crate) fn inward(value: &Value) -> Result<Object, Fault> {
   })
 }
 
-/// A value of the sandbox, as JavaScript reads it. Every value crosses, so an ear hears every fact.
-#[cfg(feature = "typescript")]
-pub(crate) fn outward(value: ObjectRef<'_>) -> Value {
+/// A value of the sandbox, as JSON reads it, and JavaScript with it: a whole float is a number like any other. Every
+/// value crosses, so an ear hears every fact.
+pub fn outward(value: ObjectRef<'_>) -> Value {
   outward_at(value, 0, false)
+}
+
+/// One value of JSON, read with every number exact, as the sandbox takes it: a number with a point stays a float, and
+/// a map that names its type under `is` comes in as that type, a fault among them.
+pub fn parsed(text: &str) -> Result<Object, Fault> {
+  let raw = serde_json::from_str::<&serde_json::value::RawValue>(text)
+    .map_err(|no| Fault::refused(no.to_string()))?;
+  inward(&decoded(raw, 0)?)
 }
 
 /// A value of the sandbox, as the record holds it: a whole float keeps its mark, so a later life reads a float.

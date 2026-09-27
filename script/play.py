@@ -14,10 +14,9 @@ import tempfile
 import time
 from pathlib import Path
 
-from real import bought, ready, spent
+from real import bought, lived, ready, say, spent
 
 from furb import engine
-from furb.cli import lived, say
 from furb.engine import OPERATOR
 from furb.provider.claude import cool
 from furb.world import kept

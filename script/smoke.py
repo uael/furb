@@ -11,10 +11,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-from real import ready, spent
+from real import again, lived, ready, say, spent
 
 from furb import engine
-from furb.cli import again, lived, say
 from furb.engine import Act
 from furb.provider.claude import cool
 from furb.world import answered, kept
