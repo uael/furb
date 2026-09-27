@@ -674,8 +674,7 @@ def boot(record=(), **outside):
             raise Drift(f"{about} drifts")
           if by not in known and by not in driven:
             if about not in kept:
-              kept[about] = known[about]
-              yield "keep", "", (kept[about],)
+              yield "keep", "", (kept.setdefault(about, known[about]),)
             if a is not known[about]:
               yield "keep", "", (a,)
           if kind == "wake":
