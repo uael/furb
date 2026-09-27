@@ -2,8 +2,8 @@
 //!
 //! With no command, furb hands the terminal to the TUI, or, with `--mode rpc`, serves a client on its stdin and its
 //! stdout. `prompt`, `turns` and `run` each open one life and print what it came to. Every life runs on the engine
-//! of the crate, on the ears of the World that the crate writes, and on the provider of the models of the claude
-//! command line, which are the models the crate offers.
+//! of the crate, on the ears of the World that the crate writes, and on the provider of every model that the catalog
+//! of the crate offers.
 
 mod console;
 mod life;
@@ -63,7 +63,8 @@ enum Command {
   Prompt {
     /// The message, which the actor reads.
     message: String,
-    /// The actor, as model/effort; the default actor of the chain when unsaid.
+    /// The actor, as provider:model/effort, or as an id that one model alone holds; the default actor of the chain
+    /// when unsaid.
     #[arg(long, default_value = "", hide_default_value = true)]
     to: String,
     /// The shape of the response.
@@ -156,6 +157,7 @@ fn main() -> ExitCode {
 fn prompt(place: &Place, shape: Shape, message: String, to: String) -> Result<(), String> {
   let mut life = Life::lived(place.record.as_deref(), place.cwd.as_deref(), true)?;
   let root = life.root.clone();
+  let to = life::actor(&to);
   let id = match life.again(shape.name(), &message, &to) {
     Some(id) => {
       life.engine.wake(&id).map_err(|no| no.to_string())?;
