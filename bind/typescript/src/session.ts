@@ -36,7 +36,7 @@ export interface SessionOptions {
   /** The model a prompt goes to when it names none, as the catalog of the crate names it; the first of the roster
    * when unsaid, and the default of the crate when the roster is unsaid too. */
   model?: string;
-  /** The effort of that model, which moves to the nearest one the model takes; `low` when unsaid. */
+  /** The effort of that model, which moves to the nearest one the model takes; the effort of the crate when unsaid. */
   effort?: string;
   /** The models the session offers beside that one, as the catalog names them. When it is unsaid, the model stands
    * alone, or the first model the catalog offers when the model is unsaid too; a roster that names none, with no
@@ -163,7 +163,7 @@ export class Session extends EventEmitter {
           inspecting: !working,
           extensions: this.options.extensions,
           config: this.options.config,
-          actor: this.options.model && `${this.options.model}/${this.options.effort ?? "low"}`,
+          actor: [this.options.model, this.options.effort].filter(Boolean).join("/") || undefined,
           roster: this.options.roster,
           claude: this.options.claude,
           images: this.imageDirectory,

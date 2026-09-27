@@ -87,8 +87,8 @@ impl Opening {
     Opening { places, ..self }
   }
 
-  /// The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash that
-  /// moves to the nearest one the model takes; the first model of the roster at its least effort when it is unsaid.
+  /// The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
+  /// level as [`world::Model::at`] moves it; the first model of the roster when it is unsaid.
   pub fn actor(self, actor: Option<String>) -> Opening {
     Opening { actor, ..self }
   }

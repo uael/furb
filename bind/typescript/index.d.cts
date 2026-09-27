@@ -260,8 +260,8 @@ export interface OpenOptions {
   /** The config directory of the user, in place of the one of this process. */
   config?: string
   /**
-   * The actor a prompt goes to when it names none, as model/effort, whose effort moves to the nearest one the model
-   * takes; the first model of the roster at its least effort when unsaid.
+   * The actor a prompt goes to when it names none, as model/effort, at its effort as the catalog moves it; the first
+   * model of the roster when unsaid.
    */
   actor?: string
   /**

@@ -50,11 +50,12 @@ chance, and ends a wait. The provider asks the models of the catalog of the crat
 `model(name)` finds, and it preserves provider response blocks in the record. The catalog offers the models of a
 provider when a credential of it stands in the environment, such as `ANTHROPIC_API_KEY`, and the models of the claude
 command line when it finds the program. The host names what the provider offers beside the model of the default actor
-in `roster`, as `provider:id`, and the default actor in `model` and `effort`: the first of the roster, and `low`, when
-unsaid. When the roster is unsaid too, the session stands on the default of the crate, the first model that the
-catalog offers, at its least effort. A roster that names no model, with no model, offers the operator alone, and a
-prompt that names no actor goes to the operator. The standing of every chain tells the roster, so a session offers the
-models it names and not the whole catalog. The effort moves to the nearest one the model takes, among `levels()`. A
+in `roster`, as `provider:id`, and the default actor in `model` and `effort`: the first of the roster when unsaid.
+When the roster is unsaid too, the session stands on the default of the crate, the first model that the catalog
+offers. A roster that names no model, with no model, offers the operator alone, and a prompt that names no actor goes
+to the operator. The standing of every chain tells the roster, so a session offers the models it names and not the
+whole catalog. An actor that names no effort takes `high`, and an effort moves to the nearest one the model takes,
+among `levels()`. A
 name without its provider names the one model of that id. A reopened session offers what its host names now.
 It keeps the model and the effort that the host chose last, and takes that model when the host names none and the
 catalog knows it. The journal keeps each stand and what the provider answered it, and every life stands again as it

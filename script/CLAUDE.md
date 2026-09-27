@@ -35,7 +35,7 @@ once, before you spend money on it.
 `run` takes four options:
 
 - `--to provider:model/effort` is the actor the task is put to. The default is the default actor of the crate,
-  which is `claude-cli:opus/low` when this host holds the claude command line.
+  which is `claude-cli:opus/high` when this host holds the claude command line.
 - `--ceiling` is the dollars the life may spend, 8 by default, and 0 is no ceiling. It is a grant on the root chain,
   so the chain pauses when an answer carries the ledger to the ceiling.
 - `--timeout` is the seconds the run may take, 1800 by default, and 0 is no cap.

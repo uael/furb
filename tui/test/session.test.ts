@@ -97,14 +97,14 @@ test("a snapshot asked before a model choice lands after it, and the choice hold
     await session.command("/model claude-cli:opus");
     release();
     await reading;
-    expect(session.actor).toBe("claude-cli:opus/low");
+    expect(session.actor).toBe("claude-cli:opus/high");
     await session.submit("Which model reads this?");
     const prompt = session.acts.findLast((act) => session.isUserPrompt(act));
-    expect(prompt?.words).toEqual(["str", "Which model reads this?", "claude-cli:opus/low"]);
+    expect(prompt?.words).toEqual(["str", "Which model reads this?", "claude-cli:opus/high"]);
     await idle(session);
     await session.refresh();
-    expect((await session.engine.inspect("actor", session.engine.root)).value).toBe("claude-cli:opus/low");
-    expect(session.actor).toBe("claude-cli:opus/low");
+    expect((await session.engine.inspect("actor", session.engine.root)).value).toBe("claude-cli:opus/high");
+    expect(session.actor).toBe("claude-cli:opus/high");
   } finally {
     release();
     session.host.snapshot = snapshot;

@@ -179,7 +179,7 @@ test("a new standing drops the roster, the directory and the actor that the view
     expect([before.roster.map(([name]) => name), before.directory, before.actor]).toEqual([
       ["claude-cli:sonnet", "operator"],
       cwd,
-      "claude-cli:sonnet/low",
+      "claude-cli:sonnet/high",
     ]);
     // A stand that an ear of the word takes is answered by whoever says its done, here the operator.
     await engine.rung({
