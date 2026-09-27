@@ -557,14 +557,12 @@ def showing(got, show):
 
 def shown(pair, seen):
   match pair:
-    case (Text() as text, show):
-      old, lines = seen.setdefault(text.path, {}), text.lines
+    case (Text(path) as text, show):
+      old, lines = seen.setdefault(path, {}), text.lines
       picked = show(lines)
       new = {i: line for i in picked if old.get(i) != (line := lines[i - 1])}
       old.update(new)
-      return commented(
-        f"{text.path}, {len(picked) - len(new)} known" + "".join(f"\n{i} {line}" for i, line in new.items())
-      )
+      return commented(f"{path}, {len(picked) - len(new)} known" + "".join(f"\n{i} {line}" for i, line in new.items()))
   return pair
 
 
