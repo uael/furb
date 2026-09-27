@@ -3,7 +3,7 @@
 //! With no command, furb hands the terminal to the TUI, or, with `--mode rpc`, serves a client on its stdin and its
 //! stdout. `prompt`, `turns`, `run` and `extensions` each open one life and print what it came to. Every life runs on
 //! the engine of the crate, on the ears of the World that the crate writes, the extensions among them, and on the
-//! provider of every model that the catalog of the crate offers.
+//! provider of the model of its default actor and of the models that `--roster` names, from the catalog of the crate.
 
 mod console;
 mod life;
