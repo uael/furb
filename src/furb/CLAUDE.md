@@ -136,6 +136,14 @@ Each name has one meaning, which the contract's sentences use as given here.
 - drift: an act that, made again, does not agree with the record.
 - pending: what the record shows started and not done when boot returns: a command, a wait, a prompt to the operator
   or a reply that the outside took, which the life holds with no fact until a wake that the life says.
+- extension: python that extends the engine from a rung: its word, which defines its names, and, for one that a host
+  gives a life, its life word, which starts its work; an official one has an ear of the World that answers the
+  questions that its word defines.
+- enable: the fact by which the World turns an extension on in a life, with its name, its word and its life word,
+  which the record keeps; the World plays the extension as a rung on every chain there is when it hears the fact, and
+  after it on each chain at its birth.
+- life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
+  whose origin had the extension, since that chain made the rung of its origin again.
 
 ## Laws no test holds
 
@@ -177,3 +185,12 @@ Each name has one meaning, which the contract's sentences use as given here.
 - The engine owns the order of every run, and nothing of a model runs on the loop of the outside.
 - A chain with a source reads the transcript of its origin as it stands, where the record is what a later life should
   make it from.
+- An extension enters a life as rungs that the World plays, and never enters the module of the engine or the system
+  prompt, so a chain that takes one grows at its end.
+- A life runs every extension that its record enables, whatever the configs say then, since a record is made again by
+  running its words; the World enables at the tip each extension that the host gives it and the record does not hold.
+- An ear that makes acts makes each one while it hears the fact that causes it, from what it heard alone and never
+  from the disk, so a later life makes it again at the same place; what the disk holds reaches a chain through a
+  question that the World answers and that the journal answers again.
+- The word of an extension only defines, holds no sentence and no comment, and binds no name of the engine; its
+  contract holds its laws.

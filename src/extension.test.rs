@@ -1,12 +1,18 @@
 //! What an extension is and where a host finds it: the word of a file, a folder loaded under its name, and the
-//! configs of the user and of the project.
+//! configs of the user and of the project. Then the ear of the extensions, in lives of the real engine on the
+//! record that the store keeps.
 
 use std::{
   fs,
   path::{Path, PathBuf},
 };
 
-use super::{Extension, Places, configured, load, word};
+use super::{Extension, Places, configured, extensions, load, word};
+use crate::{
+  Ear, Engine, Fact, Object,
+  ear::{ear, hear, say},
+  verbs, world,
+};
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> PathBuf {
@@ -119,4 +125,114 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
     format!("No config gives the folder of the extension note: {shown}")
   );
   assert!(refused("{").ends_with(&format!(": {shown}")));
+}
+
+/// The word of the extension of the tests, which reads a file of the directory of the chain.
+const NOTE: &str = "def note(on=\"\"):\n  return read(\"note.txt\", on=on)";
+
+/// The ear that answers a stand with the standing of the tests: the operator alone, in their directory.
+fn standing(at: PathBuf) -> Box<dyn Ear> {
+  ear(move |co, _| async move {
+    loop {
+      let a = hear(&co).await;
+      if a.kind() == "stand" && a.question() {
+        let operator = Object::list([Object::string("operator"), Object::list([]), Object::int(1)]);
+        let here = Object::string(at.display().to_string());
+        let standing = Object::list([Object::list([operator]), here, Object::string("operator")]);
+        say(&co, Fact::says("done", a.about(), [standing])).await;
+      }
+    }
+  })
+}
+
+/// A life in a directory of the tests, on the record that the store keeps there, given these extensions.
+fn lived(at: &Path, given: Vec<Extension>) -> Engine {
+  let (record, store) = world::store(at.join("record.jsonl")).unwrap();
+  let ears = [
+    ("extensions", extensions(given)),
+    ("stand", standing(at.to_owned())),
+    ("files", world::files()),
+    ("store", store),
+  ];
+  let engine = Engine::boot(record, ears).unwrap();
+  assert!(engine.raised().is_none(), "{:?}", engine.raised());
+  engine
+}
+
+/// Each rung that the ear of the extensions made on these chains, and not on an origin of one: its name, its chain
+/// and its word.
+fn played(engine: &mut Engine, chains: &[&str]) -> Vec<(String, String, String)> {
+  let mut out = Vec::new();
+  for chain in chains {
+    let on = verbs::Transcript { on: Some((*chain).to_owned()) };
+    for one in engine.transcript(on).unwrap() {
+      if one.kind() == "rung" && one.by() == "extensions" && one.on() == *chain {
+        let word = one.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+        out.push((one.about().to_owned(), (*chain).to_owned(), word));
+      }
+    }
+  }
+  out
+}
+
+fn rung(id: &str, chain: &str, word: &str) -> (String, String, String) {
+  (id.to_owned(), chain.to_owned(), word.to_owned())
+}
+
+#[test]
+fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_its_life_word() {
+  let at = place("tip");
+  fs::write(at.join("note.txt"), "noted\n").unwrap();
+  let mut engine = lived(&at, vec![note(NOTE)]);
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let facts =
+    kept.iter().map(|one| Fact::of(crate::value::entry(&one.as_ref(), 0).unwrap()).unwrap());
+  let facts = facts.map(|one| (one.kind().to_owned(), one.by().to_owned())).collect::<Vec<_>>();
+  let expected =
+    [("chain", "operator"), ("stand", "operator"), ("done", "stand"), ("enable", "extensions")];
+  assert_eq!(facts[..4], expected.map(|(kind, by)| (kind.to_owned(), by.to_owned())));
+  assert_eq!(
+    facts[4],
+    ("rung".to_owned(), "extensions".to_owned()),
+    "the rung stands after the fact"
+  );
+  let full = format!("{NOTE}\n\nnote()");
+  assert_eq!(played(&mut engine, &["chain1"]), [rung("rung1", "chain1", &full)]);
+  let turns = engine.turns(verbs::Turns { on: Some("chain1".to_owned()) }).unwrap();
+  let told = turns.last().unwrap().as_ref().items().unwrap()[1].as_str().unwrap().to_owned();
+  assert!(told.contains(&format!("#rung1\n{full}\n\n#read note.txt\n")), "{told}");
+}
+
+#[test]
+fn a_chain_takes_each_extension_at_its_birth_and_a_later_life_plays_the_same_rungs_again() {
+  let at = place("later");
+  let full = format!("{NOTE}\n\nnote()");
+  {
+    let mut engine = lived(&at, vec![note(NOTE)]);
+    engine.chain(verbs::Chain { label: Some("two".to_owned()), ..Default::default() }).unwrap();
+    let from = verbs::Chain { source: Some("chain1".to_owned()), ..Default::default() };
+    engine.chain(from).unwrap();
+    // The chain from a source made the rung of its origin again, so it takes the life word alone.
+    let expected = [
+      rung("rung1", "chain1", &full),
+      rung("rung2", "chain2", &full),
+      rung("rung4", "chain3", "note()"),
+    ];
+    assert_eq!(played(&mut engine, &["chain1", "chain2", "chain3"]), expected);
+  }
+  let other = Extension { name: "other".to_owned(), word: "o = 1".to_owned(), life: String::new() };
+  let mut engine = lived(&at, vec![note("x = 0"), other]);
+  let expected = [
+    rung("rung1", "chain1", &full),
+    rung("rung5", "chain1", "o = 1"),
+    rung("rung2", "chain2", &full),
+    rung("rung6", "chain2", "o = 1"),
+    rung("rung4", "chain3", "note()"),
+    rung("rung7", "chain3", "o = 1"),
+  ];
+  assert_eq!(
+    played(&mut engine, &["chain1", "chain2", "chain3"]),
+    expected,
+    "the record wins for a name"
+  );
 }
