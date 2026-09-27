@@ -382,7 +382,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
           spent += dollars
           filled = tokens / (offered(standing()[0], get(about)[4]) or WINDOW)
           yield told(get(about)[2], f"ledger spent={spent} filled={filled}")
-          if (usd is not None and spent >= usd) or (share is not None and filled >= share):
+          if (usd and spent >= usd) or (share and filled >= share):
             pause(here)
 
   return act("grant", on, ending(ear), usd, share)
