@@ -28,8 +28,9 @@ API of its own:
   names of its engine. The gate is the type checker of monty. It reads a word on the sheet of the engine,
   `src/furb/sheet.py`, against the typeshed of the sandbox. The gate of the python package reads through it too.
 - `src/binding/py.rs`, behind the `python` feature, is the door to python: an `Engine` that says each name of the
-  contract by its name, and the ears of the crate. `bind/python` is the package `furb-monty`. Its module `furb_monty.engine` gives every name of the
-  contract over one life in the sandbox, and `FURB_ENGINE=monty` makes `from furb import engine` give it.
+  contract by its name, and the ears of the crate. `bind/python` is the package `furb-monty`. Its module
+  `furb_monty.engine` gives every name of the contract over one life in the sandbox, and `FURB_ENGINE=monty` makes
+  `from furb import engine` give it.
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout
   it was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, as Pi does, which
@@ -161,6 +162,8 @@ prevent this, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 - `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/CLAUDE.md` says how to run.
+- `script/real.py` is no command: it holds what `smoke.py`, `play.py` and `deepswe.py` share, which is the life
+  they open on the engine of this interpreter, the claude they ask, and what the answers of a record cost.
 - `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from
   models.dev and from the data of pi-ai. A life refreshes its own copy of models.dev in the cache of furb once a
   day, and the newer of the two holds for each provider.
