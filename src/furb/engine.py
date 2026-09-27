@@ -258,7 +258,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     asking, unseen, last = "", "", standing()
 
     def takes(roster, where, actor):
-      module(id)["actor"] = actor
+      module()["actor"] = actor
       yield told(id, f"roster {roster!r}", headed(id, f"cwd {where}"), headed(id, f"actor {actor}"))
 
     def replay(of="", words="", writer=""):
@@ -335,7 +335,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("done", about, _, value):
           waiting.pop(about, None)
           if isinstance(value, Exception) and question(("run", about)):
-            module(id)["raised"] = value
+            module()["raised"] = value
           if not isinstance(value, CancelledError) and running.get(get(about)[2]) is False:
             unseen = about
       if a[0] in ("started", "done") and (r := get(a[1])) and r[0] in ("run", "wants"):
@@ -354,7 +354,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       if (
         unseen
         and not any(running.values())
-        and all(peek(x[1], ...) is not ... for x in transcript(id) if x[0] == "prompt" and x[3] == id)
+        and all(peek(x[1], ...) is not ... for x in transcript() if x[0] == "prompt" and x[3] == id)
       ):
         prompt(None, f"{unseen} done")
         unseen = ""
