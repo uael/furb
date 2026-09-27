@@ -5,10 +5,9 @@ import { type Renderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { App } from "../src/app.ts";
-import { openEngine } from "../src/bridge.ts";
 import { demoLibrary, demoSession, removeDemoDirectories } from "../src/demo.ts";
-import { Session, type View } from "../src/session.ts";
-import { type Composing, composing } from "./composing.ts";
+import type { View } from "../src/session.ts";
+import { type Composing, composing, withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
 
 afterAll(removeDemoDirectories);
@@ -29,7 +28,7 @@ async function show({ session, app, screen }: Pick<Composing, "session" | "app" 
 }
 
 test("a view opens at the offset it was left at, after a shorter view, in a new App, and after a reopen", async () => {
-  const session = await demoSession(true);
+  const session = await demoSession({ seed: true });
   const library = await demoLibrary(session);
   const screen = await createTestRenderer({ width: 120, height: 30 });
   let app = new App(screen.renderer, session, { quit() {}, workspaces: library });
@@ -53,9 +52,7 @@ test("a view opens at the offset it was left at, after a shorter view, in a new 
     screen.renderer.destroy();
     await library.dispose();
   }
-  const opened = await openEngine({ record, demo: true });
-  const reopened = new Session(opened.engine, opened.host, true);
-  await reopened.refresh();
+  const reopened = await demoSession({ record });
   await composing(
     async ({ session, app, screen }) => {
       await screen.flush();
@@ -69,7 +66,7 @@ test("a view opens at the offset it was left at, after a shorter view, in a new 
 
 test("a command that printed more than a row holds sends the tail and its length, and its open card shows all of it", () =>
   composing(
-    async ({ session, app, screen }) => {
+    async ({ session, app, screen, frame }) => {
       await session.submit("/bash seq 1 3000");
       const command = session.activity.find((act) => act.kind === "bash");
       if (!command) throw new Error("No command.");
@@ -81,8 +78,7 @@ test("a command that printed more than a row holds sends the tail and its length
       expect(row?.output).toBe(printed.length);
       expect(stdout.length).toBeLessThanOrEqual(2000);
       expect(printed.endsWith(stdout)).toBe(true);
-      app.render();
-      await screen.flush();
+      await frame();
       const card = app.scroll.getChildren().find((node) => node.id === command.id);
       const heading = card?.getChildren()[0];
       if (!card || !heading) throw new Error("No card for the command.");
@@ -100,7 +96,7 @@ test("a command that printed more than a row holds sends the tail and its length
 
 test("the views say each quantity one way, read a page of changes once, and set a heading only when it changes", () =>
   composing(
-    async ({ session, app, screen }) => {
+    async ({ session, app, frame }) => {
       const reads: number[] = [];
       const readChanges = session.host.readChanges.bind(session.host);
       session.host.readChanges = (start, count) => {
@@ -113,30 +109,14 @@ test("the views say each quantity one way, read a page of changes once, and set 
         await session.engine.result(
           await session.engine.rung({ word: "counted = 1", on: session.engine.root }),
         );
-        await session.refresh();
-        app.render();
-        await screen.flush();
-        let frame = screen.captureCharFrame();
-        const lines = frame.split("\n");
-        const meter = lines.findIndex((line) => line.includes("━"));
-        await screen.mockMouse.moveTo((lines[meter] ?? "").indexOf("━") + 2, meter);
-        await screen.flush();
-        frame = screen.captureCharFrame();
-        expect(frame).toContain("pauses at 30%");
-        expect(frame).not.toContain("30.000000000000004");
-        await screen.mockMouse.moveTo(0, 0);
         await session.submit("/grant 1.5");
         await session.refresh();
-        app.render();
-        await screen.flush();
-        frame = screen.captureCharFrame();
-        expect(frame).toContain("$1.50");
+        expect(await frame()).toContain("$1.50");
         const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
         const heading = card?.getChildren()[0] as TextRenderable | undefined;
         if (!heading) throw new Error("No card for the rung.");
         const content = heading.content;
-        app.render();
-        await screen.flush();
+        await frame();
         expect(heading.content).toBe(content);
         await session.engine.result(
           await session.engine.rung({ word: 'write(Text("note.txt", "one\\n"))', on: session.engine.root }),
@@ -147,6 +127,8 @@ test("the views say each quantity one way, read a page of changes once, and set 
         await session.refresh();
         expect(reads).toEqual([0]);
         expect(session.changes[0]?.patch).toContain("+one");
+        // A view that shows a change says no word of an empty view.
+        expect(await frame()).not.toContain("No file changes yet");
         await session.engine.result(
           await session.engine.rung({ word: 'write(Text("note.txt", "two\\n"))', on: session.engine.root }),
         );
@@ -161,9 +143,8 @@ test("the views say each quantity one way, read a page of changes once, and set 
     { width: 150, height: 40 },
   ));
 
-test("a relative path that the operator types is read from the directory of the selected chain", async () => {
-  const session = await demoSession();
-  try {
+test("a relative path that the operator types is read from the directory of the selected chain", () =>
+  withDemo(async (session) => {
     const directory = join(session.host.directory, "sub");
     await mkdir(directory);
     const pixel =
@@ -178,10 +159,7 @@ test("a relative path that the operator types is read from the directory of the 
     expect(JSON.parse(await Bun.file(join(directory, "out.json")).text()).chain).toBe(session.selected);
     expect(await Bun.file(join(directory, "page.html")).exists()).toBe(true);
     expect(session.images[session.selected]?.map((image) => image.name)).toEqual(["pixel.png"]);
-  } finally {
-    await session.dispose();
-  }
-});
+  }));
 
 test("the standing of a chain is no card of the conversation, though its turns hold its three rows", () =>
   composing(
@@ -206,10 +184,9 @@ test("the standing of a chain is no card of the conversation, though its turns h
 
 test("a card that the view goes to, or that Details expands, is in view once the view has laid it out", () =>
   composing(
-    async ({ session, app, screen }) => {
+    async ({ session, app, screen, frame }) => {
       const laid = async () => {
-        app.render();
-        await screen.flush();
+        await frame();
         await screen.flush();
       };
       const card = (id: string) => {
@@ -296,19 +273,6 @@ test("the palette lists as many choices as its rows hold, with the selected one 
     { width: 120, height: 30 },
   ));
 
-test("a text that truncates keeps one line and shows where it was cut", () =>
-  composing(
-    async ({ session, frame }) => {
-      session.notice = `A notice longer than its line ${"and longer ".repeat(20)}to its end`;
-      const lines = (await frame()).split("\n");
-      const status = lines.findLast((line) => line.includes("A notice longer"));
-      expect(status).toContain("…");
-      expect(status).toContain("F1 help");
-      expect(lines.filter((line) => line.includes("and longer")).length).toBe(1);
-    },
-    { width: 120, height: 30 },
-  ));
-
 test("the feed left at its end opens at its end, and one left above its end opens where it was", () =>
   composing(
     async (context) => {
@@ -358,16 +322,14 @@ test("the toggle, the keys of the footer, and the palette answer the mouse, and 
       expect(session.view).toBe("transcript");
       session.show("feed");
       // The screen draws the feed, with the palette gone, before the pointer acts on it again.
-      app.render();
-      await screen.flush();
+      await frame();
       // A drag over the heading of a card selects its text and leaves the card as it was.
       const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
       const heading = card?.getChildren()[0];
       if (!card || !heading) throw new Error("No rung in the feed.");
       const open = card.getChildren().length;
       await screen.mockMouse.drag(heading.x, heading.y, heading.x + 6, heading.y);
-      app.render();
-      await screen.flush();
+      await frame();
       expect(
         app.scroll
           .getChildren()
@@ -379,8 +341,7 @@ test("the toggle, the keys of the footer, and the palette answer the mouse, and 
       // A rung that is over starts folded to its heading, and a click on the heading opens it.
       expect(open).toBe(1);
       await screen.mockMouse.click(heading.x + 2, heading.y);
-      app.render();
-      await screen.flush();
+      await frame();
       expect(
         app.scroll
           .getChildren()

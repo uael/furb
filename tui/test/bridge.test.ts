@@ -4,26 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
-import type { Fact } from "@furb/engine";
 import { HostView } from "../src/bridge.ts";
-
-test("the view of the host takes more facts than one call takes as arguments", () => {
-  const view = new HostView(async () => null);
-  const count = 700_000;
-  view.update({
-    completed: 0,
-    cost: 0,
-    directory: "/tmp",
-    imageDirectory: "/tmp/images",
-    actor: "operator",
-    facts: new Array<Fact>(count).fill(["done", "x", "world", null]),
-    prompts: [],
-    streams: [],
-    pending: [],
-    changes: 0,
-  });
-  expect(view.facts).toHaveLength(count);
-});
 
 test("the view of the host counts the file changes of the session", () => {
   const view = new HostView(async () => null);
@@ -33,7 +14,7 @@ test("the view of the host counts the file changes of the session", () => {
     directory: "/tmp",
     imageDirectory: "/tmp/images",
     actor: "operator",
-    facts: [],
+    facts: 0,
     prompts: [],
     streams: [],
     pending: [],

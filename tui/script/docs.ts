@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { commands } from "../src/commands.ts";
+import { slashes } from "../src/commands.ts";
 import { chords, keys } from "../src/keys.ts";
 
 const path = new URL("../README.md", import.meta.url);
@@ -13,9 +13,7 @@ const tables = {
   commands: [
     "| Command | Action |",
     "| --- | --- |",
-    ...Object.entries(commands).map(
-      ([name, [, args, detail]]) => `| \`/${name}${args ? ` ${args}` : ""}\` | ${detail} |`,
-    ),
+    ...slashes.map(({ usage, detail }) => `| \`${usage}\` | ${detail} |`),
   ],
 };
 let text = await readFile(path, "utf8");

@@ -28,7 +28,7 @@ const state = () => {
     imageDirectory: owner.imageDirectory,
     actor: owner.actor,
     record: owner.record,
-    facts: owner.facts.slice(sentFacts),
+    facts: owner.facts.length - sentFacts,
     prompts: [...owner.console.prompts.values()].map(({ id, shape, message }) => ({ id, shape, message })),
     streams: [...owner.streams],
     pending: [...owner.pending],

@@ -9,13 +9,13 @@ import { until } from "../../bind/typescript/test/until.ts";
 import { type Engine, openEngine } from "../src/bridge.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import { Session } from "../src/session.ts";
+import { withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
 
 afterAll(removeDemoDirectories);
 
-test("an @word that names no file is text of the message, and a word that names a file is read first", async () => {
-  const session = await demoSession();
-  try {
+test("an @word that names no file is text of the message, and a word that names a file is read first", () =>
+  withDemo(async (session) => {
     const message = "Add @dataclass to Point, as @README.md says, and install @types/node for @alice.";
     await session.submit(message);
     await idle(session);
@@ -27,25 +27,20 @@ test("an @word that names no file is text of the message, and a word that names 
     expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
       message,
     ]);
-  } finally {
-    await session.dispose();
-  }
-});
+  }));
 
 test("a view that cannot be read opens the record with the default view and names the file", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-view-"));
   const record = join(directory, "life.jsonl");
   let session: Session | undefined;
   try {
-    let opened = await openEngine({ cwd: directory, record, demo: true });
-    session = new Session(opened.engine, opened.host, true);
+    session = await demoSession({ record });
     session.sessionName = "Named";
     await session.engine.result(await session.engine.rung({ word: "kept = 7", on: session.engine.root }));
     await session.dispose();
     for (const damaged of ["", '{"sessionName": "cut', "[1, 2]"]) {
       await writeFile(`${record}.ui.json`, damaged);
-      opened = await openEngine({ cwd: directory, record, demo: true });
-      session = new Session(opened.engine, opened.host, true);
+      session = await demoSession({ record });
       expect(session.notice).toContain(`Could not read ${record}.ui.json`);
       expect(session.sessionName).toBe(basename(directory));
       expect((await session.engine.inspect("kept", session.selected)).value).toBe(7);
@@ -61,8 +56,7 @@ test("a view that cannot be read opens the record with the default view and name
 test("a session that cannot save its view still ends its life, its commands and its lease", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-dispose-"));
   const record = join(directory, "life.jsonl");
-  const opened = await openEngine({ cwd: directory, record, demo: true });
-  const session = new Session(opened.engine, opened.host, true);
+  const session = await demoSession({ record });
   try {
     const command = await session.engine.bash(`${printPid}; sleep 30`, { on: session.engine.root });
     const pid = () =>
@@ -87,16 +81,10 @@ test("a session that cannot save its view still ends its life, its commands and 
 test("a snapshot asked before a model choice lands after it, and the choice holds for the next prompt", async () => {
   const session = await demoSession();
   const snapshot = session.host.snapshot.bind(session.host);
-  let release = () => {};
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: gate, resolve: release } = Promise.withResolvers<void>();
   try {
     await idle(session);
-    let taken = () => {};
-    const asked = new Promise<void>((resolve) => {
-      taken = resolve;
-    });
+    const { promise: asked, resolve: taken } = Promise.withResolvers<void>();
     session.host.snapshot = async (chain) => {
       session.host.snapshot = snapshot;
       const early = await snapshot(chain);
@@ -189,9 +177,8 @@ test("a follow-up that the operator removes while its files are read is not sent
   }
 });
 
-test("each /feed sends one line, and a /feed with no text closes the input", async () => {
-  const session = await demoSession();
-  try {
+test("each /feed sends one line, and a /feed with no text closes the input", () =>
+  withDemo(async (session) => {
     const command = await session.engine.bash('read -r a; read -r b; echo "a=[$a] b=[$b]"; cat', {
       fed: true,
       on: session.engine.root,
@@ -210,10 +197,7 @@ test("each /feed sends one line, and a /feed with no text closes the input", asy
       code: 0,
       stdout: { content: "a=[yes] b=[two  words]\n" },
     });
-  } finally {
-    await session.dispose();
-  }
-});
+  }));
 
 test("/model finds a model of the roster by the rule of the catalog, and keeps the effort that the model takes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-models-"));
@@ -237,26 +221,6 @@ test("/model finds a model of the roster by the rule of the catalog, and keeps t
   } finally {
     await session.dispose();
     await rm(directory, { recursive: true, force: true });
-  }
-});
-
-test("the answers to the questions of the snapshots stay out of the facts of the host", async () => {
-  const session = await demoSession();
-  try {
-    await session.submit("A question.");
-    await idle(session);
-    for (const view of ["feed", "transcript", "changes"] as const) {
-      session.show(view);
-      await session.refresh();
-    }
-    const acts = new Set(session.acts.map((act) => act.id));
-    expect(
-      session.host.facts.filter(
-        ([kind, id]) => kind === "done" && /^\w+:\/\/operator\.\d+$/.test(id) && !acts.has(id),
-      ),
-    ).toEqual([]);
-  } finally {
-    await session.dispose();
   }
 });
 
@@ -306,9 +270,8 @@ try {
   }
 });
 
-test("an undo leaves out of its branch a grant that came after the message it takes back", async () => {
-  const session = await demoSession();
-  try {
+test("an undo leaves out of its branch a grant that came after the message it takes back", () =>
+  withDemo(async (session) => {
     await session.submit("Explore this project.");
     await idle(session);
     await session.submit("/grant 1.5");
@@ -320,7 +283,4 @@ test("an undo leaves out of its branch a grant that came after the message it ta
     const told = session.turns.map(([, python]) => python).join("\n");
     expect(told).not.toContain(`#${grant.id}`);
     expect(session.activity.some((act) => act.kind === "grant")).toBe(false);
-  } finally {
-    await session.dispose();
-  }
-});
+  }));

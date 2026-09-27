@@ -13,6 +13,19 @@ export interface Composing {
   quits: () => number;
 }
 
+/** A demo session that a test uses, which ends after it. */
+export async function withDemo(
+  use: (session: Session) => Promise<void>,
+  options?: Parameters<typeof demoSession>[0],
+): Promise<void> {
+  const session = await demoSession(options);
+  try {
+    await use(session);
+  } finally {
+    await session.dispose();
+  }
+}
+
 /** A session in an App on a test terminal, which a test uses and which ends after it: a demo session, which the
  * conversation of the demo fills when `opened` is true, or the session that the test opened. A library of its own
  * holds the session, as the command line holds it. */
@@ -21,7 +34,7 @@ export async function composing(
   options: Parameters<typeof createTestRenderer>[0] = { width: 120, height: 44 },
   opened: boolean | Session = false,
 ): Promise<void> {
-  const session = typeof opened === "boolean" ? await demoSession(opened) : opened;
+  const session = typeof opened === "boolean" ? await demoSession({ seed: opened }) : opened;
   const library = await demoLibrary(session);
   const screen = await createTestRenderer(options);
   let quits = 0;

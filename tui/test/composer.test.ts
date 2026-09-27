@@ -135,10 +135,7 @@ test("a sent text leaves its draft at once, and a program under edit opens from 
       expect(app.composer.plainText).toBe("");
       // A draft typed while the text is sent stays in the composer, and the sent text enters the history of its draft.
       const submit = session.submit.bind(session);
-      let release = () => {};
-      const gate = new Promise<void>((resolve) => {
-        release = resolve;
-      });
+      const { promise: gate, resolve: release } = Promise.withResolvers<void>();
       session.submit = async (input) => {
         await gate;
         return submit(input);
@@ -382,9 +379,9 @@ test("the switch of the input shows Prompt and Python, ⌃R names it, and a clic
 test("the meter of the context says its share and where the chain pauses when the pointer is over it", () =>
   composing(
     async ({ session, screen, frame }) => {
-      await session.submit("/context 0.8");
+      await session.submit("/context 0.3");
       await until(session, () =>
-        session.activity.some((act) => act.kind === "grant" && act.words[1] === 0.8),
+        session.activity.some((act) => act.kind === "grant" && act.words[1] === 0.3),
       );
       const lines = (await frame()).split("\n");
       expect(lines.some((line) => line.includes("Pause at"))).toBe(false);
@@ -393,7 +390,8 @@ test("the meter of the context says its share and where the chain pauses when th
       await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("━") + 2, row);
       const tip = await frame();
       expect(tip).toContain("of the context window");
-      expect(tip).toContain("pauses at 80%");
+      expect(tip).toContain("pauses at 30%");
+      expect(tip).not.toContain("30.000000000000004");
     },
     { width: 120, height: 44 },
     true,
@@ -449,12 +447,15 @@ test("a message sent to a paused chain wakes it, and the answer comes", () =>
     await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
   }));
 
-test("a notice cut to the room of the footer shows whole in a tip while the pointer is over it", () =>
+test("a notice cut to the room of the footer keeps one line and the mark of its cut, and shows whole in a tip while the pointer is over it", () =>
   composing(async ({ session, screen, frame }) => {
     session.notice = `A notice longer than its line ${"and longer ".repeat(12)}to its very end`;
     const lines = (await frame()).split("\n");
     const row = lines.findIndex((line) => line.includes("A notice longer"));
     expect(lines[row]).not.toContain("to its very end");
+    expect(lines[row]).toContain("…");
+    expect(lines[row]).toContain("F1 help");
+    expect(lines.filter((line) => line.includes("and longer"))).toHaveLength(1);
     await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("A notice") + 2, row);
     expect(await frame()).toContain("to its very end");
   }));

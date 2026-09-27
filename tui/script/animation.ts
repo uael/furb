@@ -1,10 +1,8 @@
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
-import { openEngine } from "../src/bridge.ts";
-import { removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
+import { demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
-import { Session } from "../src/session.ts";
 import { palettes } from "../src/theme.ts";
 import { idle } from "../test/idle.ts";
 import { gif, pack, type Still } from "./gif.ts";
@@ -21,9 +19,7 @@ const columns = 138,
   zoom = 2;
 const output = resolve(process.env.FURB_ANIMATION_OUT ?? "docs/furb.gif");
 await seedDemoFiles(directory);
-const { engine, host } = await openEngine({ demo: true, cwd: directory });
-const session = new Session(engine, host, true);
-await session.refresh();
+const session = await demoSession({ cwd: directory });
 await session.command("/name Explore project");
 // With the kitty keyboard protocol, an Escape is a key of its own that no key after it joins.
 const test = await createTestRenderer({ width: columns, height: rows, useMouse: true, kittyKeyboard: true });

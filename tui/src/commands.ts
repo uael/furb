@@ -40,3 +40,11 @@ export const commands = {
   extensions: ["Extensions", "", "List the extensions that this life runs"],
   exit: ["Exit", "", "Save every session and quit"],
 } as const;
+/** Each slash command with its name, and as it is typed with its arguments. */
+export const slashes = Object.entries(commands).map(([name, [label, argument, detail]]) => ({
+  name,
+  label,
+  argument,
+  detail,
+  usage: `/${name}${argument ? ` ${argument}` : ""}`,
+}));

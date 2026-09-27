@@ -7,9 +7,9 @@ import { App, sessionDetail } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
-import { Session } from "../src/session.ts";
+import type { Session } from "../src/session.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
-import { composing } from "./composing.ts";
+import { composing, withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
 
@@ -17,22 +17,20 @@ afterAll(removeDemoDirectories);
 
 test("the real native life drives the feed, the transcript, the palette, and responsive views", () =>
   composing(
-    async ({ session, app, screen }) => {
+    async ({ session, app, screen, frame }) => {
       expect(screen.captureCharFrame()).toContain("Explore a codebase");
       expect(session.theme).toBe("github");
       expect(app.scroll.x).toBe(2);
       expect(app.scroll.height).toBeGreaterThanOrEqual(36);
       expect(app.scroll.height).toBeLessThanOrEqual(38);
       app.composer.setText("first line\nsecond line");
-      app.render();
-      await screen.flush();
+      await frame();
       expect(app.composer.height).toBeGreaterThanOrEqual(2);
       app.composer.setText("");
       expect(screen.captureCharFrame()).not.toContain("No budget set");
       expect(screen.captureCharFrame()).not.toContain("Session saved");
       await seedDemo(session);
-      app.render();
-      await screen.flush();
+      await frame();
       // The answer of a prompt stands under the name of the model that gave it, once its markdown is drawn.
       expect(screen.captureCharFrame()).toContain("● sonnet");
       for (
@@ -41,8 +39,7 @@ test("the real native life drives the feed, the transcript, the palette, and res
         pass++
       ) {
         await new Promise((done) => setTimeout(done, 20));
-        app.render();
-        await screen.flush();
+        await frame();
       }
       const conversation = screen.captureCharFrame();
       expect(conversation.indexOf("Explore this project")).toBeLessThan(
@@ -68,9 +65,7 @@ test("the real native life drives the feed, the transcript, the palette, and res
       expect(app.scroll.getChildren().some((child) => /^bash\d+$/.test(child.id))).toBe(true);
       expect(screen.captureCharFrame()).not.toContain("failed");
       session.show("transcript");
-      app.render();
-      await screen.flush();
-      expect(screen.captureCharFrame()).toContain('notes = read("README.md")');
+      expect(await frame()).toContain('notes = read("README.md")');
       session.show("feed");
       app.palette();
       await screen.flush();
@@ -82,8 +77,7 @@ test("the real native life drives the feed, the transcript, the palette, and res
       await screen.flush();
       expect(app.composer.plainText).toBe("/grant ");
       screen.resize(80, 30);
-      app.render();
-      await screen.flush();
+      await frame();
       // A narrow top line keeps the session, the chain, and the switch of the views, and the sidebar is hidden.
       const top = screen.captureCharFrame().split("\n")[0] ?? "";
       expect(top).toContain(`${session.sessionName} › Main`);
@@ -115,7 +109,7 @@ test("model and effort change independently, a model is named by its id alone, a
     await first.submit("/effort low");
     expect(first.actor).toBe("claude-cli:opus/low");
     await first.submit("/theme paper");
-    second = await demoSession(false, new Preferences(first.preferences.path));
+    second = await demoSession({ preferences: new Preferences(first.preferences.path) });
     expect(second.theme).toBe("paper");
     expect(second.host.record).not.toBe(first.host.record);
     expect(first.preferences.path).toBe(join(dirname(first.host.record ?? ""), "ui-preferences.json"));
@@ -125,7 +119,7 @@ test("model and effort change independently, a model is named by its id alone, a
     first.actor = "claude-cli:org/high";
     expect(first.actorChoice).toEqual({ model: "claude-cli:org/high", effort: "off" });
     await writeFile(first.preferences.path, "{");
-    recovered = await demoSession(false, new Preferences(first.preferences.path));
+    recovered = await demoSession({ preferences: new Preferences(first.preferences.path) });
     expect(recovered.theme).toBe("github");
     expect(recovered.preferences.notice).toContain("Could not read preferences");
     expect(await readFile(first.preferences.path, "utf8")).toBe("{");
@@ -138,26 +132,20 @@ test("model and effort change independently, a model is named by its id alone, a
 
 test("refreshes keep content in place, act failures stay in the record, and hidden scrollbars still scroll", () =>
   composing(
-    async ({ session, app, screen }) => {
+    async ({ session, app, screen, frame }) => {
       const snapshot = session.host.snapshot.bind(session.host);
-      let release = () => {};
+      const { promise: gate, resolve: release } = Promise.withResolvers<void>();
       try {
         await idle(session);
         await session.refresh();
-        app.render();
-        await screen.flush();
+        await frame();
         const before = app.scroll.getChildren().map((node) => [node.id, node.y]);
-        const gate = new Promise<void>((resolve) => {
-          release = resolve;
-        });
         session.host.snapshot = async (chain) => {
           await gate;
           return snapshot(chain);
         };
         const reading = session.refresh();
-        app.render();
-        await screen.flush();
-        expect(screen.captureCharFrame()).not.toContain("Loading conversation...");
+        expect(await frame()).not.toContain("Loading conversation...");
         expect(app.scroll.getChildren().map((node) => [node.id, node.y])).toEqual(before);
         release();
         await reading;
@@ -165,10 +153,8 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
 
         await session.submit("/read missing-review-file.txt");
         await session.refresh();
-        app.render();
-        await screen.flush();
         expect(session.error).toBe("");
-        expect(screen.captureCharFrame()).not.toContain("Refresh view");
+        expect(await frame()).not.toContain("Refresh view");
         expect(
           session.activity.some(
             (act) => act.done && act.kind === "rung" && JSON.stringify(act.value).includes("Refused"),
@@ -177,8 +163,7 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
 
         session.show("transcript");
         await session.refresh();
-        app.render();
-        await screen.flush();
+        await frame();
         expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.height);
         expect(app.scroll.verticalScrollBar.visible).toBe(false);
         app.scroll.scrollBy(5);
@@ -189,8 +174,7 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
           throw new Error("Snapshot unavailable");
         };
         await session.refresh().catch(session.fail);
-        app.render();
-        await screen.flush();
+        await frame();
         app.scroll.scrollTo(0);
         await screen.flush();
         expect(screen.captureCharFrame()).toContain("Snapshot unavailable");
@@ -206,34 +190,25 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
 
 test("every view shows an empty result, loading, and an error in its feed", () =>
   composing(
-    async ({ session, app, screen }) => {
+    async ({ session, screen, frame }) => {
       for (const view of ["feed", "transcript", "changes"] as const) {
         session.show(view);
         await session.refresh();
         session.search = "nothing matches this";
-        app.render();
-        await screen.flush();
-        expect(screen.captureCharFrame()).toContain("Nothing matches “nothing matches this”");
+        expect(await frame()).toContain("Nothing matches “nothing matches this”");
         const snapshot = session.host.snapshot.bind(session.host);
-        let release = () => {};
-        const gate = new Promise<void>((resolve) => {
-          release = resolve;
-        });
+        const { promise: gate, resolve: release } = Promise.withResolvers<void>();
         session.host.snapshot = async (chain) => {
           await gate;
           return snapshot(chain);
         };
         const loading = session.refresh();
-        app.render();
-        await screen.flush();
-        expect(screen.captureCharFrame()).toContain(`Loading the ${view}`);
+        expect(await frame()).toContain(`Loading the ${view}`);
         release();
         await loading;
         session.host.snapshot = snapshot;
         session.fail(new Error(`Could not load ${view}`));
-        app.render();
-        await screen.flush();
-        expect(screen.captureCharFrame()).toContain(`Could not load ${view}`);
+        expect(await frame()).toContain(`Could not load ${view}`);
         expect(screen.captureCharFrame()).toContain("Refresh view");
         session.error = "";
       }
@@ -243,7 +218,7 @@ test("every view shows an empty result, loading, and an error in its feed", () =
 
 test("operator answers and program edits act through the binding", () =>
   composing(
-    async ({ session, app, screen }) => {
+    async ({ session, app, screen, frame }) => {
       const id = await session.engine.prompt("bool", {
         message: "Continue with the change?",
         to: "operator",
@@ -251,9 +226,7 @@ test("operator answers and program edits act through the binding", () =>
       });
       await until(session.host, () => session.host.prompts.has(id));
       await session.refresh();
-      app.render();
-      await screen.flush();
-      expect(screen.captureCharFrame()).toContain("Continue with the change?");
+      expect(await frame()).toContain("Continue with the change?");
       await session.submit("yes");
       expect(await session.engine.result(id)).toBe(true);
       await seedDemo(session);
@@ -264,9 +237,7 @@ test("operator answers and program edits act through the binding", () =>
       await session.command("/run this is invalid python !!!");
       expect(session.error).toBe("");
       expect(session.findings.join("\n")).toContain("line 1");
-      app.render();
-      await screen.flush();
-      expect(screen.captureCharFrame()).toContain("this is invalid python");
+      expect(await frame()).toContain("this is invalid python");
       app.composer.setText("keep the session open");
       screen.mockInput.pressCtrlC();
       await screen.flush();
@@ -276,7 +247,7 @@ test("operator answers and program edits act through the binding", () =>
   ));
 
 test("resume preserves chains, programs, theme, and input drafts while unfinished work stays paused", async () => {
-  const first = await demoSession(true);
+  const first = await demoSession({ seed: true });
   let library = await demoLibrary(first);
   const screen = await createTestRenderer({ width: 120, height: 40 });
   const app = new App(screen.renderer, first, { quit() {}, workspaces: library });
@@ -306,9 +277,7 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
   expect(detail).toContain("KiB");
   expect(detail).toContain("Paused");
   await library.dispose();
-  const opened = await openEngine({ record, demo: true });
-  const second = new Session(opened.engine, opened.host, true);
-  await second.refresh();
+  const second = await demoSession({ record });
   await composing(
     async ({ app }) => {
       expect(second.chains.map((chain) => chain.id)).toEqual(ids);
@@ -390,19 +359,17 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
 
 test("a progress tick keeps an in-flight act's card and body in place", () =>
   composing(
-    async ({ session, app, screen }) => {
+    async ({ session, app, screen, frame }) => {
       try {
         const id = await session.engine.wait({ seconds: 60, on: session.engine.root });
         await session.refresh();
-        app.render();
-        await screen.flush();
+        await frame();
         const card = app.scroll.getChildren().find((node) => node.id === id);
         if (!card) throw new Error("No card for the pending wait.");
         const body = card.getChildren().at(-1);
         // The clock moves past a tick of the spinner and a second of the elapsed time, and the card stays.
         setSystemTime(new Date(Date.now() + 1300));
-        app.render();
-        await screen.flush();
+        await frame();
         expect(app.scroll.getChildren().find((node) => node.id === id)).toBe(card);
         expect(card.getChildren().at(-1)).toBe(body);
         expect(screen.captureCharFrame()).toContain("running 1s");
@@ -415,15 +382,13 @@ test("a progress tick keeps an in-flight act's card and body in place", () =>
 
 test("a name inside a transcript tag opens the same live inspector as Python code", () =>
   composing(
-    async ({ session, app, screen }) => {
+    async ({ session, screen, frame }) => {
       await session.engine.result(
         await session.engine.rung({ word: "answer = 17", on: session.engine.root }),
       );
       await session.refresh();
       session.show("transcript");
-      app.render();
-      await screen.flush();
-      const lines = screen.captureCharFrame().split("\n");
+      const lines = (await frame()).split("\n");
       const row = lines.findIndex((line) => line.includes("answer = 17"));
       expect(row).toBeGreaterThanOrEqual(0);
       const column = lines[row]?.indexOf("answer") ?? -1;
@@ -434,20 +399,13 @@ test("a name inside a transcript tag opens the same live inspector as Python cod
     { width: 120, height: 44, useMouse: true },
   ));
 
-test("a delayed snapshot cannot restore the chain selected before a switch", async () => {
-  const session = await demoSession();
-  try {
+test("a delayed snapshot cannot restore the chain selected before a switch", () =>
+  withDemo(async (session) => {
     const child = await session.engine.chain({ label: "next" });
     await session.refresh();
     const original = session.host.snapshot.bind(session.host);
-    let release = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let entered = () => {};
-    const started = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
+    const { promise: gate, resolve: release } = Promise.withResolvers<void>();
+    const { promise: started, resolve: entered } = Promise.withResolvers<void>();
     let first = true;
     session.host.snapshot = async (chain) => {
       if (first) {
@@ -466,13 +424,10 @@ test("a delayed snapshot cannot restore the chain selected before a switch", asy
     await Promise.all([reading, switching]);
     expect(session.selected).toBe(child);
     expect(session.label).toBe("next");
-  } finally {
-    await session.dispose();
-  }
-});
+  }));
 
 test("editing a prompt program is a durable operator rung", async () => {
-  const first = await demoSession(true);
+  const first = await demoSession({ seed: true });
   const prompt = first.activity.find((act) => act.kind === "prompt" && act.by === "operator");
   if (!prompt) throw new Error("No prompt in the fixture.");
   await first.command(`/edit ${prompt.id}`);
@@ -480,8 +435,7 @@ test("editing a prompt program is a durable operator rung", async () => {
   expect((await first.engine.inspect("saved_edit")).value).toBe(42);
   const record = first.host.record;
   await first.dispose();
-  const opened = await openEngine({ record, demo: true });
-  const second = new Session(opened.engine, opened.host, true);
+  const second = await demoSession({ record });
   try {
     await second.refresh();
     expect((await second.engine.inspect("saved_edit")).value).toBe(42);
