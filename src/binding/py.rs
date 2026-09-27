@@ -728,6 +728,37 @@ fn answered<'py>(py: Python<'py>, shape: &str, line: &str) -> PyResult<Bound<'py
   to_python(py, &made, value.as_ref())
 }
 
+/// A model of the catalog as python reads it: its name, its efforts, its window, whether it takes an image, and its
+/// price in dollars for a million tokens read, written, read from the cache and written to it.
+type Info = (String, Vec<String>, u64, bool, Option<Vec<f64>>);
+
+/// A model of the catalog as python reads it.
+fn info(model: &world::Model) -> Info {
+  let efforts = model.efforts().into_iter().map(str::to_owned).collect();
+  (model.name().to_owned(), efforts, model.window(), model.sees(), model.priced().map(Vec::from))
+}
+
+/// The models the catalog of this machine offers, with the claude command line at a path when it is given, each
+/// named as the catalog names it.
+#[pyfunction]
+#[pyo3(signature = (claude=None))]
+fn models(claude: Option<PathBuf>) -> Vec<Info> {
+  world::Catalog::load().claude(claude, None).offered().into_iter().map(info).collect()
+}
+
+/// The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, whether it offers
+/// that model or not; nothing when it knows none.
+#[pyfunction]
+fn model(name: &str) -> Option<Info> {
+  world::Catalog::load().find(name).map(info)
+}
+
+/// The levels of effort, from least to most, which an actor names after its model.
+#[pyfunction]
+fn levels() -> Vec<&'static str> {
+  world::catalog::LEVELS.to_vec()
+}
+
 /// What the engine raised, raised here as the exception it is.
 fn raised(py: Python<'_>, made: &Made, fault: &Fault) -> PyErr {
   match fault_to_python(py, made, fault) {
@@ -1090,6 +1121,9 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(kept, module)?)?;
   module.add_function(wrap_pyfunction!(gate, module)?)?;
   module.add_function(wrap_pyfunction!(answered, module)?)?;
+  module.add_function(wrap_pyfunction!(models, module)?)?;
+  module.add_function(wrap_pyfunction!(model, module)?)?;
+  module.add_function(wrap_pyfunction!(levels, module)?)?;
   module.add("SHAPES", world::SHAPES.to_vec())?;
   module.add("SYSTEM", crate::SYSTEM)?;
   Ok(())

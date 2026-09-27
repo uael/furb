@@ -21,15 +21,16 @@ record, ears = _monty.opened(".", "life.jsonl", actor="claude-cli:opus")
 root = engine.boot(record, world=world, **dict(ears))
 ```
 
-The provider offers the model of its `actor` and the models of its `roster`, or the first model the catalog offers
-when it names neither, and the operator alone when the roster names none and no actor is said. Its `answer`, a
-function, answers each request in place of the models, which the suite of furb does. Its `stream`, a function, is told
-what a model writes as it writes it, and `images` is the directory of the images that a message names. A life that
-is `inspecting` keeps nothing, enables nothing new and asks no model. `files()`, `bash()`, `time()`, `store(path)`,
-`official()`, `extensions(given)`, `memory(config)` and `skills(config)` give the ears one by one, as the suite of each
-extension boots them. `answered(shape, line)` reads a line of the operator as a value of one of the `SHAPES`, by the
-rules that every console of the crate reads a line by. `_monty.SYSTEM` is the system prompt of every model: the
-engine, minified in layout alone.
+The provider offers the model of its `actor` and the models of its `roster`, or the first model the catalog offers when
+it names neither, and the operator alone when the roster names none and no actor is said. Its `answer`, a function,
+answers each request in place of the models, which the suite of furb does. Its `stream`, a function, is told what a
+model writes as it writes it, and `images` is the directory of the images that a message names. A life that is
+`inspecting` keeps nothing, enables nothing new and asks no model. `models(claude)` gives the models the catalog of this
+machine offers, `model(name)` one model by its name, and `levels()` the levels of effort. `files()`, `bash()`, `time()`,
+`store(path)`, `official()`, `extensions(given)`, `memory(config)` and `skills(config)` give the ears one by one, as the
+suite of each extension boots them. `answered(shape, line)` reads a line of the operator as a value of one of the
+`SHAPES`, by the rules that every console of the crate reads a line by. `_monty.SYSTEM` is the system prompt of every
+model: the engine, minified in layout alone.
 
 A generator of this interpreter is heard on a thread of its own, so it may say a verb while it hears, as an ear of
 the engine of python does.

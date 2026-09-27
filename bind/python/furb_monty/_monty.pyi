@@ -115,6 +115,21 @@ def answered(shape: str, line: str) -> object:
   """A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
   line by. It raises Refused for a line that is no value of the shape, and for a shape the operator answers not."""
 
+type Info = tuple[str, list[str], int, bool, list[float] | None]
+"""A model of the catalog: its name, its efforts, its window, whether it takes an image, and its price in dollars for a
+million tokens read, written, read from the cache and written to it."""
+
+def models(claude: str | None = None) -> list[Info]:
+  """The models the catalog of this machine offers, with the claude command line at a path when it is given, each
+  named as the catalog names it."""
+
+def model(name: str) -> Info | None:
+  """The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, whether it offers
+  that model or not; nothing when it knows none."""
+
+def levels() -> list[str]:
+  """The levels of effort, from least to most, which an actor names after its model."""
+
 def files() -> NativeEar:
   """The ear of the files, which reads and writes a path."""
 

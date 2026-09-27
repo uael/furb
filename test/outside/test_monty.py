@@ -228,3 +228,16 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
   assert [name for name, _ in ears] == ["provider", "extensions", "memory", "skills", "files", "bash", "time"]
   root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
   assert [name for name, _, _ in _monty.enabled(engine.transcript(on=root))] == ["memory", "skills"]
+
+
+def test_the_door_gives_the_catalog_of_the_crate(tmp_path: Path) -> None:
+  """The door gives the catalog of the crate, as the door to TypeScript gives it: the levels of effort, a model by
+  its name whether this machine offers it or not, and the models this machine offers."""
+  assert _monty.levels() == ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+  efforts = ["low", "medium", "high", "xhigh", "max"]
+  assert _monty.model("claude-cli:haiku") == ("claude-cli:haiku", efforts, 200000, True, None)
+  assert _monty.model("nobody:none") is None
+  claude = tmp_path / "claude"
+  claude.write_text("#!/bin/sh\n")
+  claude.chmod(0o755)
+  assert ("claude-cli:opus", efforts, 1000000, True, None) in _monty.models(str(claude))
