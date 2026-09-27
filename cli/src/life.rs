@@ -26,12 +26,12 @@ use furb::{
 
 use crate::console;
 
-/// One life, as the operator holds it: its engine, its root, the record it was made again from, each act that record
-/// showed started and not done, with its kind, and what the operator hears of its root.
+/// One life, as the operator holds it: its engine, its root, the facts of the record it was made again from, each act
+/// that record showed started and not done, with its kind, and what the operator hears of its root.
 pub struct Life {
   pub engine: Engine,
   pub root: String,
-  held: Vec<Object>,
+  held: Vec<Fact>,
   left: Vec<(String, String)>,
   quiet: Rc<RefCell<Quiet>>,
 }
@@ -100,6 +100,8 @@ impl Life {
       }
     });
     engine.drive(observer, "observer").map_err(failed)?;
+    let held: Vec<Fact> =
+      held.iter().filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?)).collect();
     let left = left(&held);
     Ok(Life { engine, root, held, left, quiet })
   }
@@ -134,11 +136,11 @@ impl Life {
   /// prompt beside the one that record stands on, and ask a model for what it was answered once.
   pub fn again(&self, shape: &str, message: &str, to: &str) -> Option<String> {
     let wanted = [OPERATOR, self.root.as_str(), shape, message, to];
-    self.held.iter().find_map(|entry| {
-      let fact = entry.as_ref().items()?.first()?.items()?;
-      let words = fact.iter().map(|one| one.as_str()).collect::<Option<Vec<&str>>>()?;
-      (words.len() == 7 && words[0] == "prompt" && words[2..] == wanted)
-        .then(|| words[1].to_owned())
+    self.held.iter().find_map(|a| {
+      let words =
+        a.0.as_ref().items()?.iter().map(|one| one.as_str()).collect::<Option<Vec<_>>>()?;
+      (words.len() == 7 && a.kind() == "prompt" && words[2..] == wanted)
+        .then(|| a.about().to_owned())
     })
   }
 
@@ -170,13 +172,11 @@ impl Life {
   }
 }
 
-/// Each act that the entries of a record show started and not done, as its name and its kind: the journal keeps the
+/// Each act that the facts of a record show started and not done, as its name and its kind: the journal keeps the
 /// started of an act that the outside took, and says the entries again as the life opens.
-fn left(held: &[Object]) -> Vec<(String, String)> {
-  let facts: Vec<Fact> =
-    held.iter().filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?)).collect();
+fn left(facts: &[Fact]) -> Vec<(String, String)> {
   let (mut started, mut done) = (HashSet::new(), HashSet::new());
-  for a in &facts {
+  for a in facts {
     match a.kind() {
       "started" => started.insert(a.about()),
       "done" => done.insert(a.about()),

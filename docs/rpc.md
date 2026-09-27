@@ -11,19 +11,19 @@ furb --mode rpc --record session.jsonl --cwd path/to/project --model claude-cli:
 - `--record` is the record to keep, and to resume from. With no record, the life keeps nothing.
 - `--cwd` is the directory the chains of the life start in. When you do not give it, it is the current directory.
 
-The life runs on the engine of the crate and on the ears of the World that the crate writes: the files, the
-commands, time, the store of the record, the provider of models, and the extensions, which the life enables at its
-start as the configs of the user and of the directory say, and whose words it plays as rungs on each chain. The
-catalog of the crate knows the models, each named `provider:id`, and offers those of the claude command line,
-`claude-cli:opus`, `claude-cli:sonnet`, `claude-cli:haiku` and `claude-cli:fable`, when furb finds the program, and
-those of each provider whose credential, such as `ANTHROPIC_API_KEY`, stands in the environment. The roster of the life holds the model of the default actor,
-the models that `--roster` names, and the operator, which is the client. `--model provider:model/effort` names the
-default actor, and a prompt that names no actor goes to it. When it is not given, the default actor is the first
-model the catalog offers, `claude-cli:opus/high` when furb finds the claude command line. An actor that names no effort
-takes `high`, and an effort moves to the nearest one that its model takes. The
-life refuses a prompt to a model that its roster does not hold. An actor may name its model by the id alone, when
-one model alone holds it, and furb names it as the roster does. `FURB_CLAUDE_BIN` names the claude command line, and
-the `claude` on PATH is used when it is not set.
+The life runs on the engine of the crate and on the ears of the World that the crate writes: the files, the commands,
+time, the store of the record, the provider of models, and the extensions, which the life enables at its start as the
+configs of the user and of the directory say, and whose words it plays as rungs on each chain. The catalog of the crate
+knows the models, each named `provider:id`, and offers those of the claude command line, `claude-cli:opus`,
+`claude-cli:sonnet`, `claude-cli:haiku` and `claude-cli:fable`, when furb finds the program, and those of each provider
+whose credential, such as `ANTHROPIC_API_KEY`, stands in the environment. The roster of the life holds the model of the
+default actor, the models that `--roster` names, and the operator, which is the client. `--model provider:model/effort`
+names the default actor, and a prompt that names no actor goes to it. When it is not given, the default actor is the
+first model the catalog offers, `claude-cli:opus/high` when furb finds the claude command line. An actor that names no
+effort takes `high`, and an effort moves to the nearest one that its model takes. The life refuses a prompt to a model
+that its roster does not hold. An actor may name its model by the id alone, when one model alone holds it, and furb
+names it as the roster does. `FURB_CLAUDE_BIN` names the claude command line, and the `claude` on PATH is used when it
+is not set.
 
 ## Framing
 

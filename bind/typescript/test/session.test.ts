@@ -159,10 +159,7 @@ test("a session offers the models its host names, and keeps the model and the ef
 test("what a model writes streams into the session under its rung until its reply is done", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-streams-"));
   const record = join(cwd, "life.jsonl");
-  let release: () => void = () => {};
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: held, resolve: release } = Promise.withResolvers<void>();
   const seen: unknown[] = [];
   const session = new Session({
     cwd,
@@ -495,10 +492,7 @@ test("an operator answer of a list keeps its numbers exact, and a map in it that
 
 test("a session with no model puts to the operator every prompt that names no actor, the acknowledgment among them", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-operator-alone-"));
-  let acknowledged: (message: string) => void = () => {};
-  const acknowledgment = new Promise<string>((resolve) => {
-    acknowledged = resolve;
-  });
+  const { promise: acknowledgment, resolve: acknowledged } = Promise.withResolvers<string>();
   // The first example of the README, whose callback answers for the operator.
   const session = boot({
     cwd,

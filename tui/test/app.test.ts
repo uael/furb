@@ -309,17 +309,9 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
       // The tree opens in the feed with the pointer on the last message, which Enter gives back on a new branch.
       expect(screen.captureCharFrame()).toContain("Rewind");
       expect(app.scroll.getChildren().some((node) => node.id === `tree-${message?.id}`)).toBe(true);
-      const selected = new Promise<void>((resolve, reject) => {
-        const changed = () => {
-          if (session.selected === source && !session.error) return;
-          session.off("change", changed);
-          if (session.error) reject(new Error(session.error));
-          else resolve();
-        };
-        session.on("change", changed);
-      });
       screen.mockInput.pressEnter();
-      await selected;
+      await until(session, () => session.selected !== source || Boolean(session.error));
+      expect(session.error).toBe("");
       await session.refresh();
       expect(session.selected).not.toBe(source);
       // The message returns to the input once the branch is made.
