@@ -121,9 +121,10 @@ fn within(engine: &mut Engine, time: Duration, holds: impl Fn(&mut Engine) -> bo
 fn the_provider_answers_a_stand_with_its_roster_its_directory_and_its_default_actor() {
   let (mut engine, at) = life("stand", vec![scripted(&MockCompletionModel::new([]))]);
   let standing = engine.standing().expect("the life stands");
+  // Python shows each backslash of a path of Windows twice.
   let expected = format!(
     "[[['m', ['low', 'high'], 1000], ['operator', [], 200000]], '{}', 'm/low']",
-    at.display()
+    at.display().to_string().replace('\\', "\\\\")
   );
   assert_eq!(standing.py_repr(), expected);
 }
