@@ -168,8 +168,7 @@ def cancel(id: str) -> None:
 
 
 def close(value: object, id: str = "") -> None:
-  who = acting()
-  match get(who):
+  match get(who := acting()):
     case ("rung", _, by, _, _, retells, *_):
       if retells:
         raise CancelledError()
