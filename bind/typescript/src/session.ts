@@ -280,6 +280,14 @@ export class Session extends EventEmitter {
     }
   }
 
+  /** The work of a chain cancelled: each prompt, rung, command and wait on it that is not done, with everything each
+   * made. A cancel of the chain itself would end every act on it, and an act that an extension started, such as the
+   * watcher of the memory, is no work of the chain and runs on. */
+  interrupt(chain: string): void {
+    for (const act of this.activity.acts.values())
+      if (act.on === chain && !act.done && WORK.includes(act.kind)) this.engine?.cancel(act.id);
+  }
+
   isPaused(id: string): boolean {
     return this.activity.acts.get(id)?.paused ?? false;
   }

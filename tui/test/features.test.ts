@@ -9,7 +9,6 @@ import { openEngine } from "../src/bridge.ts";
 import { clipboardImage } from "../src/clipboard.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import { externalEditor, opener } from "../src/editor.ts";
-import { Extensions } from "../src/extensions.ts";
 import { fileReferences, projectFiles } from "../src/files.ts";
 import { defaultModel } from "../src/models.ts";
 import { Session } from "../src/session.ts";
@@ -265,11 +264,10 @@ test("a model request failure shows in the feed as the failure of an act, and no
   }
 });
 
-test("file and shell shortcuts, an external editor, extensions, and a safe standalone share use the real session", async () => {
+test("file and shell shortcuts, an external editor, and a safe standalone share use the real session", async () => {
   const session = await demoSession();
   const oldEditor = process.env.EDITOR,
     oldVisual = process.env.VISUAL;
-  const extensions = new Extensions(() => session);
   try {
     const directory = session.host.directory;
     await writeFile(join(directory, "review notes.txt"), "Unique context for this check.");
@@ -312,15 +310,8 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
       ),
     ).toBe("edited outside the TUI");
     expect(transitions).toEqual(["suspend", "resume"]);
-    const extension = join(directory, "extension.ts");
-    await writeFile(
-      extension,
-      'export default (api) => { api.registerCommand("test-extension", { label: "Test extension", description: "Bind a value", async run(_, ctx) { await ctx.engine.result(await ctx.engine.rung({ word: "extension_value = 23", on: ctx.chain })); ctx.notify("Extension finished."); } }); };',
-    );
-    await extensions.load(extension);
-    await extensions.run("test-extension", "");
-    expect((await session.engine.inspect("extension_value", session.selected)).value).toBe(23);
-    expect(session.notice).toBe("Extension finished.");
+    await session.command("/extensions");
+    expect(session.notice).toBe("This life runs no extension.");
     session.sessionName = '<script>alert("name")</script>';
     await session.submit('<script>alert("message")</script> [bad link](javascript:alert(1))');
     await idle(session);
@@ -340,8 +331,33 @@ test("file and shell shortcuts, an external editor, extensions, and a safe stand
     else process.env.EDITOR = oldEditor;
     if (oldVisual === undefined) delete process.env.VISUAL;
     else process.env.VISUAL = oldVisual;
-    await extensions.dispose();
     await session.dispose();
+  }
+});
+
+test("/extensions lists what a life runs, and a cancel of the work of a chain leaves the watcher of its memory", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-extensions-"));
+  try {
+    const opened = await openEngine({ cwd: directory, record: join(directory, "session.jsonl") });
+    await composing(
+      async ({ session, frame }) => {
+        await session.command("/extensions");
+        expect(session.notice).toBe(
+          "This life runs memory with remember(), skills with skills(). Run a word of one with /run.",
+        );
+        await session.command("/run await wait(60)");
+        await session.command("/cancel");
+        await until(session, () => session.activity.every((act) => act.kind !== "wait" || act.done));
+        await session.refresh();
+        // The watcher lives on, and shows no work in the feed.
+        expect((await session.engine.outcome("remember1")).done).toBe(false);
+        expect(await frame()).not.toContain("running");
+      },
+      { width: 140, height: 42 },
+      new Session(opened.engine, opened.host, true),
+    );
+  } finally {
+    await remove(directory);
   }
 });
 

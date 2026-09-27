@@ -260,30 +260,23 @@ test("the answers to the questions of the snapshots stay out of the facts of the
   }
 });
 
-test("a path that starts with ~ is read from the home directory by /share, /export, /image and /extension", async () => {
+test("a path that starts with ~ is read from the home directory by /share, /export and /image", async () => {
   const home = await mkdtemp(join(tmpdir(), "furb-home-"));
   const script = join(home, "run.ts");
   const pixel =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
   try {
     await writeFile(join(home, "pixel.png"), Buffer.from(pixel, "base64"));
-    await writeFile(
-      join(home, "extension.ts"),
-      'export default (api) => api.registerCommand("home-probe", { label: "Home", description: "A probe", run() {} });',
-    );
     // The home directory of a process is read once, so a process of its own gives the test a home of its own.
     await writeFile(
       script,
       `import { demoSession, removeDemoDirectories } from ${JSON.stringify(join(import.meta.dir, "../src/demo.ts"))};
-import { Extensions } from ${JSON.stringify(join(import.meta.dir, "../src/extensions.ts"))};
 const session = await demoSession();
-const extensions = new Extensions(() => { throw new Error("No context is asked."); });
 try {
   await session.submit("/share ~/shared/chat.html");
   await session.submit("/export ~/export.json");
   await session.attachImage("~/pixel.png");
-  await extensions.load(session.path("~/extension.ts"));
-  console.log(JSON.stringify({ images: session.images[session.selected]?.length, commands: [...extensions.commands.keys()] }));
+  console.log(JSON.stringify({ images: session.images[session.selected]?.length }));
 } finally {
   await session.dispose();
   await removeDemoDirectories();
@@ -304,7 +297,7 @@ try {
     ]);
     expect(errors).toBe("");
     expect(code).toBe(0);
-    expect(JSON.parse(output)).toEqual({ images: 1, commands: ["home-probe"] });
+    expect(JSON.parse(output)).toEqual({ images: 1 });
     expect(await readFile(join(home, "shared/chat.html"), "utf8")).toContain("<!doctype html>");
     expect(JSON.parse(await readFile(join(home, "export.json"), "utf8")).chain).toBe("chain1");
     expect(existsSync(join(home, "~"))).toBe(false);

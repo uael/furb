@@ -33,7 +33,6 @@ import { clipboardImage } from "./clipboard.ts";
 import { commands } from "./commands.ts";
 import { conversation } from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
-import type { Extensions } from "./extensions.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
 import { ago, clip, count, dollars, elapsed, graphemes, kibibytes, modelName, share } from "./format.ts";
 import { type Action, bindings, chords, keys, presses, shown } from "./keys.ts";
@@ -49,6 +48,7 @@ import {
   statusLabels,
   type View,
   views,
+  work,
   working,
 } from "./session.ts";
 import { publishShare } from "./share.ts";
@@ -188,7 +188,6 @@ interface TreeRow {
 export interface AppOptions {
   quit(): void | Promise<void>;
   workspaces: Workspaces;
-  extensions?: Extensions;
 }
 
 /** What the picker of the workspaces says of a session: its state, whether it is the current one, the time since
@@ -220,7 +219,7 @@ export function follow(renderer: CliRenderer, options: AppOptions): () => App {
 }
 
 /** The commands whose value is a path of the project, which the suggestions wait for. */
-const pathCommands = new Set(["read", "image", "extension", "cd"]);
+const pathCommands = new Set(["read", "image", "cd"]);
 /** What each effort of a model does, which the picker of the effort says beside it. */
 const efforts: Record<string, string> = {
   off: "Answer with no thought first",
@@ -2149,10 +2148,10 @@ export class App {
   private actState(act: ActRow): State {
     const w = this.session;
     const running = () => ({ word: `running ${this.progress(act.id)}`, mark: spin(), color: c.accent });
-    if (act.kind === "grant")
-      return act.done
-        ? { word: "ended", mark: glyph.ring, color: c.faint }
-        : { word: "", mark: glyph.dot, color: c.accent };
+    if (act.kind === "grant" && act.done) return { word: "ended", mark: glyph.ring, color: c.faint };
+    // Only work moves: an act of another kind that lives, as a grant or the watcher of an extension, lives until
+    // something ends it, as a chain does, and shows a dot.
+    if (!act.done && !work.includes(act.kind)) return { word: "", mark: glyph.dot, color: c.accent };
     // A rung that a pause holds waits for the wake, and says so, where it would otherwise seem to run.
     if (act.kind === "rung")
       return cancelled(act)
@@ -3172,18 +3171,8 @@ export class App {
   };
   /** The commands that the view answers itself, by their text. */
   private async globalCommand(text: string): Promise<boolean> {
-    const extensions = this.options.extensions;
-    if (text.startsWith("/extension ") && extensions) {
-      await extensions.load(this.session.path(text.slice(11).trim()));
-      this.session.notice = "Extension loaded.";
-      return true;
-    }
     const [name, ...words] = text.startsWith("/") ? text.slice(1).split(" ") : [];
     const argument = words.join(" ").trim();
-    if (name && extensions?.commands.has(name)) {
-      await extensions.run(name, words.join(" "));
-      return true;
-    }
     // A command with no argument that opens a picker, and /inspect, which opens the value it names.
     const pickers: Record<string, () => unknown> = {
       details: this.details,
@@ -3502,13 +3491,6 @@ export class App {
         keys: toggle && shown(toggle.key, toggle.binding, kitty).replace("1-3", String(index + 1)),
         run: () => this.showView(view),
       });
-    for (const [name, command] of this.options.extensions?.commands ?? [])
-      choices.push({
-        label: command.label,
-        detail: command.description,
-        command: `/${name}`,
-        run: () => this.action(`/${name}`),
-      });
     for (const [name, [label, argument, detail]] of Object.entries(commands)) {
       if (name === "new") continue;
       const aside = before.get(name);
@@ -3619,10 +3601,6 @@ export class App {
       (this.projectPaths() ?? [])
         .filter((path) => /\.(png|jpe?g|gif|webp)$/i.test(path))
         .map((path) => ({ value: path, detail: "" })),
-    extension: () =>
-      (this.projectPaths() ?? [])
-        .filter((path) => /\.(ts|js|mts|mjs)$/.test(path))
-        .map((path) => ({ value: path, detail: "" })),
     cd: () =>
       [
         ...new Set(
@@ -3696,14 +3674,11 @@ export class App {
       return;
     }
     if (token.kind === "/") {
-      const names = [
-        ...Object.entries(commands).map(([name, [, argument, detail]]) => ({ name, argument, detail })),
-        ...[...(this.options.extensions?.commands ?? [])].map(([name, command]) => ({
-          name,
-          argument: "",
-          detail: command.description,
-        })),
-      ];
+      const names = Object.entries(commands).map(([name, [, argument, detail]]) => ({
+        name,
+        argument,
+        detail,
+      }));
       // The command that the token names whole comes first.
       this.suggestions = names
         .filter(({ name }) => name.startsWith(token.text))

@@ -54,8 +54,9 @@ export const statusLabels: Record<SessionStatus, string> = {
   opening: "Opening",
 };
 /** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
-export const working = (act: ActRow): boolean =>
-  !act.done && !act.paused && ["prompt", "rung", "bash", "wait"].includes(act.kind);
+/** The kinds of the acts that do the work of a chain, which move while they live. */
+export const work = ["prompt", "rung", "bash", "wait"];
+export const working = (act: ActRow): boolean => !act.done && !act.paused && work.includes(act.kind);
 /** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
  * than a cancel. */
 export function failed(act: ActRow): boolean {
@@ -732,9 +733,17 @@ export class Session extends EventEmitter {
         this.notice = "Work resumed.";
         break;
       case "cancel":
-        await this.engine.cancel(argument || this.selected);
+        await (argument ? this.engine.cancel(argument) : this.host.interrupt(this.selected));
         this.notice = "Work cancelled.";
         break;
+      case "extensions": {
+        const enabled = this.host.facts.filter(([kind, about]) => kind === "enable" && about === "chain1");
+        const each = enabled.map(([, , , name, , life]) => (life ? `${name} with ${life}` : String(name)));
+        this.notice = each.length
+          ? `This life runs ${each.join(", ")}. Run a word of one with /run.`
+          : "This life runs no extension.";
+        break;
+      }
       case "chain":
         await this.select(await this.engine.chain({ label: argument || "New chain" }));
         break;

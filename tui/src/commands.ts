@@ -37,6 +37,6 @@ export const commands = {
   sidebar: ["Toggle sidebar", "", "Show or hide the chains, the usage, and the workspaces"],
   delete: ["Delete session", "", "Move a session and its files to the workspace trash"],
   autocollapse: ["Automatic rung collapse", "", "Toggle collapse of completed rungs"],
-  extension: ["Load extension", "<path>", "Load commands from a TypeScript or JavaScript extension"],
+  extensions: ["Extensions", "", "List the extensions that this life runs"],
   exit: ["Exit", "", "Save every session and quit"],
 } as const;

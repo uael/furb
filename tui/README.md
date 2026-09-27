@@ -128,7 +128,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/sidebar` | Show or hide the chains, the usage, and the workspaces |
 | `/delete` | Move a session and its files to the workspace trash |
 | `/autocollapse` | Toggle collapse of completed rungs |
-| `/extension <path>` | Load commands from a TypeScript or JavaScript extension |
+| `/extensions` | List the extensions that this life runs |
 | `/exit` | Save every session and quit |
 
 <!-- commands:end -->
@@ -160,15 +160,13 @@ same durable filter to remove the last user message from a new branch; `/redo` r
 change the model's conversation. The module and filesystem remain current. The TUI does not add a separate
 permission or tool protocol to the engine.
 
-`/share` writes a standalone HTML conversation, including its images and exact transcript. `/share`, `/export`,
-`/image`, and `/extension` read a leading `~` as the home directory, and a relative path from the directory of the
-selected chain. The share dialog
-can open the file, copy its path, or upload the selected conversation to an unlisted GitHub gist through
-`gh`. Upload happens only when chosen. Anyone with its link can read the shared conversation. `/export`
-keeps the structured JSON export. `/context` sets the context ceiling.
+`/share` writes a standalone HTML conversation, including its images and exact transcript. `/share`, `/export`
+and `/image` read a leading `~` as the home directory, and a relative path from the directory of the selected chain.
+The share dialog can open the file, copy its path, or upload the selected conversation to an unlisted GitHub gist
+through `gh`. Upload happens only when chosen. Anyone with its link can read the shared conversation. `/export` keeps
+the structured JSON export. `/context` sets the context ceiling.
 
-Load a local command extension with `--extension <path>` or `/extension <path>`. An extension exports a setup
-function that receives `ExtensionAPI` and registers commands with a label, description, and `run` function.
-Its context gives the current chain, directory, engine, message submission, and notices. Extensions are loaded
-only when named by the user. See [the example](examples/project-summary.ts); loaded commands join the palette
-and slash completion.
+A life runs the extensions that the configs turn on, and each chain shows the rungs of their words in its feed, as it
+shows any rung. The TUI has no part of its own for an extension: `/extensions` lists what the life runs, and `/run`
+runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel of the work of a chain ends its prompts,
+rungs, commands and waits, and not what an extension started on it, such as the watcher of the memory.

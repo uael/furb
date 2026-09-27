@@ -252,7 +252,7 @@ session keeps its name in its saved view, and a workspace in the list of workspa
 
 ## Extensions
 
-An extension adds commands to the palette and to the suggestions.
+`/extensions` lists the extensions that the life runs, and `/run` runs a word of one. The demo runs none.
 
 ![Extension command](screenshots/42-extension-command.png)
 

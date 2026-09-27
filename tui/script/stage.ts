@@ -5,7 +5,6 @@ import { type CliRenderer, CodeRenderable, type Renderable } from "@opentui/core
 import type { createTestRenderer } from "@opentui/core/testing";
 import { type App, follow } from "../src/app.ts";
 import { demoLibrary } from "../src/demo.ts";
-import type { Extensions } from "../src/extensions.ts";
 import type { Session } from "../src/session.ts";
 import type { Workspaces } from "../src/workspaces.ts";
 
@@ -41,12 +40,11 @@ export async function home(name: string, environment: Record<string, string> = {
 export async function mount(
   session: Session,
   renderer: CliRenderer,
-  extensions?: Extensions,
 ): Promise<{ library: Workspaces; app: () => App }> {
   const library = await demoLibrary(session);
   library.preferences.sidebar = true;
   library.preferences.save();
-  return { library, app: follow(renderer, { quit() {}, workspaces: library, extensions }) };
+  return { library, app: follow(renderer, { quit() {}, workspaces: library }) };
 }
 
 /** The highlights of each block of code under a node, which a parser colors off the main thread. */

@@ -92,6 +92,10 @@ export class HostView extends EventEmitter implements Plain {
   resume(): Promise<unknown> {
     return this.request("session", "resume", []);
   }
+  /** The work of a chain cancelled, and not the acts that an extension started on it. */
+  interrupt(chain: string): Promise<unknown> {
+    return this.request("session", "interrupt", [chain]);
+  }
   source(): Promise<string> {
     return this.request("library", "source", []) as Promise<string>;
   }
