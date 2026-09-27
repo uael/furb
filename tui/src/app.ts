@@ -8,6 +8,7 @@ import {
   safeText,
   shapes,
   TIMEOUT,
+  WORK,
 } from "@furb/engine";
 import {
   type BoxOptions,
@@ -49,7 +50,6 @@ import {
   statusLabels,
   type View,
   views,
-  work,
   working,
 } from "./session.ts";
 import { publishShare } from "./share.ts";
@@ -2152,7 +2152,7 @@ export class App {
     if (act.kind === "grant" && act.done) return { word: "ended", mark: glyph.ring, color: c.faint };
     // Only work moves: an act of another kind that lives, as a grant or the watcher of an extension, lives until
     // something ends it, as a chain does, and shows a dot.
-    if (!act.done && !work.includes(act.kind)) return { word: "", mark: glyph.dot, color: c.accent };
+    if (!act.done && !WORK.includes(act.kind)) return { word: "", mark: glyph.dot, color: c.accent };
     // A rung that a pause holds waits for the wake, and says so, where it would otherwise seem to run.
     if (act.kind === "rung")
       return cancelled(act)

@@ -14,6 +14,7 @@ import {
   saveFile,
   shapes,
   WINDOW,
+  WORK,
 } from "@furb/engine";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView } from "./bridge.ts";
@@ -55,9 +56,7 @@ export const statusLabels: Record<SessionStatus, string> = {
   opening: "Opening",
 };
 /** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
-/** The kinds of the acts that do the work of a chain, which move while they live. */
-export const work = ["prompt", "rung", "bash", "wait"];
-export const working = (act: ActRow): boolean => !act.done && !act.paused && work.includes(act.kind);
+export const working = (act: ActRow): boolean => !act.done && !act.paused && WORK.includes(act.kind);
 /** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
  * than a cancel. */
 export function failed(act: ActRow): boolean {
