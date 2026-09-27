@@ -149,7 +149,8 @@ export declare function configDirectory(): string
 
 export declare function decodeRecord(line: string): unknown
 
-export declare function engineSource(): string
+/** The engine: the one file the sandbox runs, as the crate carries it. */
+export declare const ENGINE: string
 
 export interface ExitValue {
   code?: number

@@ -121,11 +121,7 @@ enum Command {
 impl Place {
   /// A life in the directory of this place, on its record, which it keeps what it says to when `keeps` says so.
   fn opening(&self, keeps: bool) -> Opening {
-    let opening = Opening::new(life::directory(self.cwd.as_deref()));
-    match &self.record {
-      Some(record) => opening.record(record, keeps),
-      None => opening,
-    }
+    Opening::new(life::directory(self.cwd.as_deref())).record(self.record.clone(), keeps)
   }
 }
 
@@ -146,8 +142,8 @@ fn main() -> ExitCode {
       prompt(stand.on(place.opening(true)), &shape, message, to)
     }
     Some(Command::Turns { record, cwd, stand }) => {
-      let opening = Opening::new(life::directory(cwd.as_deref())).record(record, false);
-      turns(stand.on(opening.inspecting()))
+      let opening = Opening::new(life::directory(cwd.as_deref())).record(Some(record), false);
+      turns(stand.on(opening.inspecting(true)))
     }
     Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word),
     Some(Command::Extensions { place }) => extensions(place.opening(false)),

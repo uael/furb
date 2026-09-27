@@ -703,7 +703,8 @@ fn opened(
       });
     })
   });
-  let mut opening = Opening::new(directory)
+  let opening = Opening::new(directory)
+    .record(record, keeps)
     .config(config)
     .extending(extensions)
     .actor(actor)
@@ -711,13 +712,8 @@ fn opened(
     .claude(claude, stall)
     .images(images)
     .writes(writes)
-    .answer(answer.map(|answer| hosted(Arc::new(answer))));
-  if let Some(record) = record {
-    opening = opening.record(record, keeps);
-  }
-  if inspecting {
-    opening = opening.inspecting();
-  }
+    .answer(answer.map(|answer| hosted(Arc::new(answer))))
+    .inspecting(inspecting);
   let (record, ears) = opening.parts().map_err(|fault| raised(py, &made, &fault))?;
   let ears = ears.into_iter().map(|(name, ear)| (name, NativeEar::of(ear))).collect();
   Ok((to_python(py, &made, Object::list(record).as_ref())?, ears))

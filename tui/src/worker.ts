@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, SessionOptions, Turn } from "@furb/engine";
-import { Act, actorParts, engineSource, model, models, Session } from "@furb/engine";
+import { Act, actorParts, ENGINE, model, models, Session } from "@furb/engine";
 import type { HostState } from "./bridge.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
@@ -177,7 +177,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     const offered = names.includes(held) || (!demo && models(claude).some((one) => one.name === held));
     return offered ? held : null;
   }
-  if (data.target === "library" && data.method === "source") return engineSource();
+  if (data.target === "library" && data.method === "source") return ENGINE;
   if (data.target === "library" && data.method === "changes")
     return session?.changes.read(Number(data.args[0]), Number(data.args[1]));
   if (data.target === "library" && data.method === "act")

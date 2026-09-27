@@ -22,8 +22,8 @@ use crate::{
 pub type Ears = Vec<(String, Box<dyn Ear>)>;
 
 /// What a life is opened on: the directory it stands on, the record it opens on and whether it keeps what it says
-/// there, whether its ears do work, whether it enables the extensions that the configs turn on, the places of the
-/// user, and what its provider offers.
+/// there, whether it does work or only inspects its record, whether it enables the extensions that the configs turn
+/// on, the places of the user, and what its provider offers.
 pub struct Opening {
   directory: PathBuf,
   record: Option<PathBuf>,
@@ -62,17 +62,17 @@ impl Opening {
     }
   }
 
-  /// A life opened on the record at a path, which keeps what it says there under the lease of the store when it
-  /// keeps, and reads it with no lease when it does not.
-  pub fn record(self, path: impl Into<PathBuf>, keeps: bool) -> Opening {
-    Opening { record: Some(path.into()), keeps, ..self }
+  /// A life opened on the record at a path, when a path is given, which keeps what it says there under the lease of
+  /// the store when it keeps, and reads it with no lease when it does not.
+  pub fn record(self, record: Option<PathBuf>, keeps: bool) -> Opening {
+    Opening { record, keeps, ..self }
   }
 
-  /// A life that inspects its record: it keeps nothing, enables no new extension and asks no model, and the ears that
-  /// do work, the files, the commands and time, are silent under their names, so it runs no command and touches no
-  /// file.
-  pub fn inspecting(self) -> Opening {
-    Opening { keeps: false, works: false, extends: false, ..self }
+  /// A life that inspects its record, when `inspecting` says so: it keeps nothing, enables no new extension and asks
+  /// no model, and the ears that do work, the files, the commands and time, are silent under their names, so it runs
+  /// no command and touches no file.
+  pub fn inspecting(self, inspecting: bool) -> Opening {
+    Opening { works: !inspecting, ..self }
   }
 
   /// A life that enables at its tip the extensions that the configs turn on, or none new when `extends` is false.
@@ -124,12 +124,12 @@ impl Opening {
   /// The record the life opens on, and the ears of the crate, in the order of boot: the provider, the extensions,
   /// each official extension, the files, the commands and time, and the store when the life keeps.
   pub fn parts(self) -> Result<(Vec<Object>, Ears), Fault> {
-    let (record, store) = match (&self.record, self.keeps) {
+    let (record, store) = match (&self.record, self.keeps && self.works) {
       (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
       (Some(path), false) => (world::kept(path)?, None),
       (None, _) => (Vec::new(), None),
     };
-    let extensions = match self.extends {
+    let extensions = match self.extends && self.works {
       true => extension::configured(&self.places, &self.directory)?,
       false => Vec::new(),
     };

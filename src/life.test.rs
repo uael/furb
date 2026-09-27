@@ -20,7 +20,7 @@ fn place(name: &str) -> PathBuf {
 /// the operator alone.
 fn opening(at: &Path, keeps: bool) -> Opening {
   let opening = Opening::new(at).config(Some(at.join("config"))).roster(Some(Vec::new()));
-  opening.record(at.join("record.jsonl"), keeps)
+  opening.record(Some(at.join("record.jsonl")), keeps)
 }
 
 /// The names of the extensions that a life runs.
@@ -57,7 +57,7 @@ fn a_life_that_inspects_its_record_keeps_nothing_enables_nothing_new_and_its_ear
   fs::write(at.join("a.txt"), "one\n").unwrap();
   drop(opening(&at, true).extending(false).boot::<String>([]).unwrap());
   let before = fs::read_to_string(at.join("record.jsonl")).unwrap();
-  let (mut engine, _) = opening(&at, true).inspecting().boot::<String>([]).unwrap();
+  let (mut engine, _) = opening(&at, true).inspecting(true).boot::<String>([]).unwrap();
   let read = verbs::Read { on: Some("chain1".to_owned()), ..Default::default() };
   assert_eq!(engine.read("a.txt", read).unwrap_err().message(), "nothing takes read");
   assert_eq!(names(&mut engine), Vec::<String>::new(), "it enables nothing the record does not");

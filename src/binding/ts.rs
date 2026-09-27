@@ -297,7 +297,8 @@ impl JsEngine {
         told.call(said, ThreadsafeFunctionCallMode::NonBlocking);
       }))
     });
-    let mut opening = Opening::new(options.directory)
+    let opening = Opening::new(options.directory)
+      .record(options.record.map(Into::into), options.keeps.unwrap_or(true))
       .config(options.config.map(Into::into))
       .extending(options.extensions != Some(false))
       .actor(options.actor)
@@ -305,13 +306,8 @@ impl JsEngine {
       .claude(options.claude.map(Into::into), stall)
       .images(options.images.map(Into::into))
       .writes(writes.transpose()?)
-      .answer(options.answer.as_ref().map(hosted).transpose()?);
-    if let Some(record) = options.record {
-      opening = opening.record(record, options.keeps.unwrap_or(true));
-    }
-    if options.inspecting == Some(true) {
-      opening = opening.inspecting();
-    }
+      .answer(options.answer.as_ref().map(hosted).transpose()?)
+      .inspecting(options.inspecting == Some(true));
     let hosted = crate::engine::Hosted::default();
     let door = Door::new(env, hosted.clone())?;
     let (engine, record) = opening.boot_on(hosted, eared(&env, &door, ears)?).map_err(error)?;
@@ -498,11 +494,6 @@ fn error(fault: Fault) -> napi::Error {
   napi::Error::from_reason(fault.to_string())
 }
 
-#[napi]
-pub fn engine_source() -> &'static str {
-  crate::ENGINE
-}
-
 #[napi(ts_return_type = "unknown")]
 pub fn decode_record(line: String) -> napi::Result<Value> {
   let value: &serde_json::value::RawValue = serde_json::from_str(&line)
@@ -587,6 +578,10 @@ pub fn model(name: String) -> Option<ModelInfo> {
 pub fn levels() -> Vec<&'static str> {
   world::catalog::LEVELS.to_vec()
 }
+
+/// The engine: the one file the sandbox runs, as the crate carries it.
+#[napi]
+pub const ENGINE: &str = crate::ENGINE;
 
 /// The window, in tokens, of a model whose roster entry does not say one, as the contract names it.
 #[napi]
