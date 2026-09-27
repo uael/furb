@@ -25,7 +25,7 @@ use serde_json::Value;
 use crate::{
   Ear, Engine, Fault, Heard, Object, Step,
   engine::Hosted,
-  value::{field, marked},
+  value::{field, templated},
   wire::{inward, outward},
 };
 
@@ -190,9 +190,9 @@ impl Door {
         let pairs = held.into_iter().map(|pair| {
           let items = pair.as_ref().items().unwrap_or_default();
           let at = |i: usize| items.get(i).map_or_else(Object::none, |one| one.to_owned());
-          Object::list([at(1), at(0)])
+          (at(1), at(0))
         });
-        return Ok(marked("Templated", [("interpolations", Object::list(pairs))]));
+        return Ok(templated(pairs));
       }
       return Ok(Object::list(held));
     }

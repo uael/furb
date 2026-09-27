@@ -190,10 +190,9 @@ fn text(got: Option<ObjectRef<'_>>) -> String {
 
 /// A template string, as a host says one: each expression beside its value.
 fn templated(pairs: &[(&str, Object)]) -> Object {
-  let held = pairs
-    .iter()
-    .map(|(expression, value)| Object::list([value.clone(), Object::string(*expression)]));
-  marked("Templated", [("interpolations", Object::list(held))])
+  crate::value::templated(
+    pairs.iter().map(|(expression, one)| (one.clone(), Object::string(*expression))),
+  )
 }
 
 /// The words of a verb that have a name, as the map the stand-in reads.
@@ -497,23 +496,19 @@ impl Plain for f64 {
   }
 }
 
-impl Plain for Text {
-  fn plain(got: Object) -> Result<Self, Fault> {
-    Text::of(got.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no text", got.py_repr())))
-  }
+/// A value read as a type of the crate that it makes again, or why it is none.
+macro_rules! made {
+  ($($kind:ty => $what:literal),*) => {$(
+    impl Plain for $kind {
+      fn plain(got: Object) -> Result<Self, Fault> {
+        let no = || Fault::refused(format!("{} is no {}", got.py_repr(), $what));
+        <$kind>::of(got.as_ref()).ok_or_else(no)
+      }
+    }
+  )*};
 }
 
-impl Plain for Exit {
-  fn plain(got: Object) -> Result<Self, Fault> {
-    Exit::of(got.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no exit", got.py_repr())))
-  }
-}
-
-impl Plain for Fact {
-  fn plain(got: Object) -> Result<Self, Fault> {
-    Fact::of(got.as_ref()).ok_or_else(|| Fault::refused(format!("{} is no fact", got.py_repr())))
-  }
-}
+made!(Text => "text", Exit => "exit", Fact => "fact");
 
 impl Plain for Option<Fact> {
   fn plain(got: Object) -> Result<Self, Fault> {

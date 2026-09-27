@@ -28,7 +28,7 @@ use crate::{
   engine::Hosted,
   extension::{self, Extension},
   life::Opening,
-  value::{IS, entry, field, marked},
+  value::{IS, entry, field, marked, templated},
   world,
 };
 
@@ -304,14 +304,7 @@ impl Hearing {
           return Err(raised(py, made, &fault));
         }
         Step::Call(call) => {
-          let args = call.args.iter().map(|one| to_python(py, made, one.as_ref()));
-          let args = PyTuple::new(py, args.collect::<PyResult<Vec<_>>>()?)?;
-          let kwargs = PyDict::new(py);
-          for (key, one) in &call.kwargs {
-            kwargs.set_item(key, to_python(py, made, one.as_ref())?)?;
-          }
-          let verb = made.python.bind(py).getattr(call.verb.as_str());
-          heard = match verb.and_then(|verb| verb.call(args, Some(&kwargs))) {
+          heard = match verb_said(py, &door, &call) {
             Ok(got) => Heard::Value(of_python(&door, &got)?),
             Err(no) => Heard::Raised(fault_of(&door, py, &no)),
           };
@@ -791,16 +784,11 @@ fn to_python<'py>(
         if mark == "dict"
           && let Some(held) = at("args").and_then(|one| entry(&one, 0)).and_then(|one| one.items())
         {
-          let map = PyDict::new(py);
-          for pair in held {
-            let (Some(key), Some(one)) = (entry(&pair, 0), entry(&pair, 1)) else {
-              return Err(PyTypeError::new_err(
-                "a map that goes out as its pairs holds pairs of two",
-              ));
-            };
-            map.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
-          }
-          return Ok(map.into_any());
+          let pairs = held.iter().map(|pair| entry(pair, 0).zip(entry(pair, 1)));
+          let pairs = pairs.collect::<Option<Vec<_>>>().ok_or_else(|| {
+            PyTypeError::new_err("a map that goes out as its pairs holds pairs of two")
+          })?;
+          return Ok(dict(py, made, pairs)?.into_any());
         }
         if mark == "name"
           && let Some(name) = at("name").and_then(|one| one.as_str())
@@ -828,10 +816,7 @@ fn to_python<'py>(
           && let Some(value) = at("value")
         {
           let class = to_python(py, made, class)?;
-          let fields = PyDict::new(py);
-          for (key, one) in value.pairs().unwrap_or_default() {
-            fields.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
-          }
+          let fields = dict(py, made, value.pairs().unwrap_or_default())?;
           return py.import("furb_monty.engine")?.call_method1("instanced", (class, fields));
         }
         // A value as the record keeps it: an instance of a class of the engine or of the interpreter, by the name of
@@ -844,33 +829,19 @@ fn to_python<'py>(
           {
             return made.fault(py, mark, args);
           }
-          let kwargs = PyDict::new(py);
-          for (key, one) in &pairs {
-            if !matches!(key.as_str(), Some(IS | "args")) {
-              kwargs.set_item(to_python(py, made, *key)?, to_python(py, made, *one)?)?;
-            }
-          }
+          let fields = pairs.iter().filter(|(key, _)| !matches!(key.as_str(), Some(IS | "args")));
+          let kwargs = dict(py, made, fields.copied())?;
           return class.call(PyTuple::new(py, args)?, Some(&kwargs));
         }
       }
-      let held = PyDict::new(py);
-      for (key, one) in pairs {
-        held.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
-      }
-      Ok(held.into_any())
+      Ok(dict(py, made, pairs)?.into_any())
     }
     _ => match Fault::of(said) {
       Some(fault) => {
         made.fault(py, &fault.name, each(fault.args.iter().map(Object::as_ref).collect())?)
       }
       None => match said.pairs() {
-        Some(fields) => {
-          let kwargs = PyDict::new(py);
-          for (key, one) in fields {
-            kwargs.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
-          }
-          made.class(py, said.type_name())?.call((), Some(&kwargs))
-        }
+        Some(fields) => made.class(py, said.type_name())?.call((), Some(&dict(py, made, fields)?)),
         // A class of the engine crosses as its name, which python holds as the class its instances are, and a
         // builtin type as the builtin it is; anything else that has no fields, a coroutine, a function that
         // crossed by no mark, shows as what it is.
@@ -896,6 +867,19 @@ fn to_python<'py>(
       },
     },
   }
+}
+
+/// A map of python from pairs of the sandbox, each key and each value as python holds it.
+fn dict<'py, 'a>(
+  py: Python<'py>,
+  made: &Made,
+  pairs: impl IntoIterator<Item = (ObjectRef<'a>, ObjectRef<'a>)>,
+) -> PyResult<Bound<'py, PyDict>> {
+  let map = PyDict::new(py);
+  for (key, one) in pairs {
+    map.set_item(to_python(py, made, key)?, to_python(py, made, one)?)?;
+  }
+  Ok(map)
 }
 
 /// One value of python, as the sandbox takes it: a shape as its name, as the engine names one; a name of the
@@ -962,15 +946,13 @@ fn of_python(door: &Door, value: &Bound<'_, PyAny>) -> PyResult<Object> {
     return Ok(door.0.hosted.callable(Box::new(move |args| called.call(args))));
   }
   if kind == "Template" {
-    let mut pairs = Vec::new();
+    let mut interpolations = Vec::new();
     for one in value.getattr("interpolations")?.try_iter()? {
       let one = one?;
-      pairs.push(Object::tuple([
-        of_python(door, &one.getattr("value")?)?,
-        of_python(door, &one.getattr("expression")?)?,
-      ]));
+      let expression = of_python(door, &one.getattr("expression")?)?;
+      interpolations.push((of_python(door, &one.getattr("value")?)?, expression));
     }
-    return Ok(marked("Templated", [("interpolations", Object::list(pairs))]));
+    return Ok(templated(interpolations));
   }
   if value.is_instance_of::<PyList>() {
     return Ok(Object::list(each(value)?));

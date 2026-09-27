@@ -1,9 +1,5 @@
-//! The claude command line as a model of rig, driven against a command line that answers from a script.
-//!
-//! The fake says the stream of the real one as the TypeScript fake does: each block streams in parts and settles
-//! whole, and the result says the usage and the running cost. It writes, beside itself, the words of each process
-//! it was, the id of each, and each line of input it read. A line that holds FAIL ends it with a failure, a line
-//! that holds WAIT gets no answer, and a line that holds THINK gets a thought before the text.
+//! The claude command line as a model of rig, driven against a command line that answers from a script, which
+//! `fake-claude.sh` says.
 
 use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf, time::Duration};
 
@@ -18,48 +14,8 @@ use serde_json::{Value, json};
 use super::{Claude, Completion};
 use crate::world::provider::runtime;
 
-/// The fake command line.
-const FAKE: &str = r##"#!/bin/sh
-here=$(dirname "$0")
-printf '%s\0' "$@" > "$here/args.$$"
-echo "$$" >> "$here/pids"
-id=none
-last=
-for arg in "$@"; do
-  case $last in --session-id|--resume) id=$arg ;; esac
-  if [ "$arg" = --fork-session ]; then id="$id-forked"; fi
-  last=$arg
-done
-say() { printf '%s\n' "{\"type\":\"stream_event\",\"event\":$1}"; }
-settle() { printf '%s\n' "{\"type\":\"assistant\",\"message\":{\"content\":[$1]}}"; }
-n=0
-while IFS= read -r line; do
-  printf '%s\n' "$line" >> "$here/in"
-  case $line in
-    *FAIL*) echo "deliberate failure" >&2; exit 2 ;;
-    *WAIT*) continue ;;
-  esac
-  n=$((n + 1))
-  say '{"type":"message_start"}'
-  at=0
-  case $line in
-    *THINK*)
-      say '{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}'
-      say '{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hmm"}}'
-      say '{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig"}}'
-      say '{"type":"content_block_stop","index":0}'
-      settle '{"type":"thinking","thinking":"hmm","signature":"sig"}'
-      at=1 ;;
-  esac
-  say "{\"type\":\"content_block_start\",\"index\":$at,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}"
-  say "{\"type\":\"content_block_delta\",\"index\":$at,\"delta\":{\"type\":\"text_delta\",\"text\":\"close(\"}}"
-  say "{\"type\":\"content_block_delta\",\"index\":$at,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\\"reply $n\\\")\"}}"
-  say "{\"type\":\"content_block_stop\",\"index\":$at}"
-  say '{"type":"message_stop"}'
-  settle "{\"type\":\"text\",\"text\":\"close(\\\"reply $n\\\")\"}"
-  printf '%s\n' "{\"type\":\"result\",\"session_id\":\"$id\",\"total_cost_usd\":0.0$n,\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}}"
-done
-"##;
+/// The fake command line, which the tests of the command line of furb run too.
+const FAKE: &str = include_str!("fake-claude.sh");
 
 /// A yard of the test that holds the fake command line and what it wrote.
 pub(crate) struct Yard {

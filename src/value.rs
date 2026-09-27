@@ -195,6 +195,13 @@ pub fn marked<'a>(name: &str, fields: impl IntoIterator<Item = (&'a str, Object)
   Object::dict(held)
 }
 
+/// A template string as the stand-in reads it: each interpolation as its value beside its expression.
+pub(crate) fn templated(interpolations: impl IntoIterator<Item = (Object, Object)>) -> Object {
+  let held =
+    interpolations.into_iter().map(|(value, expression)| Object::list([value, expression]));
+  marked("Templated", [("interpolations", Object::list(held))])
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

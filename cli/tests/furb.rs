@@ -3,7 +3,7 @@
 //!
 //! Every life runs on the real engine and on the real ears of the crate, and a claude command line that answers from
 //! a script stands in for the models, so no test asks one. The fake answers each line of input with the next word the
-//! test gave it, and with `close(None)` once the words run out, and it counts what it answered.
+//! test gave it, and it counts what it answered.
 
 #![cfg(unix)]
 
@@ -20,17 +20,8 @@ use std::{
 
 use serde_json::{Value, json};
 
-/// The fake claude: each turn is one message that the command line says whole, and the result of the turn.
-const FAKE: &str = r#"#!/bin/sh
-here=$(dirname "$0")
-while IFS= read -r line; do
-  n=$(( $(cat "$here/count" 2>/dev/null || echo 0) + 1 ))
-  echo "$n" > "$here/count"
-  word=$(cat "$here/word.$n" 2>/dev/null || printf '"close(None)"')
-  printf '{"type":"assistant","message":{"content":[{"type":"text","text":%s}]}}\n' "$word"
-  printf '{"type":"result","session_id":"fake","total_cost_usd":0,"usage":{"input_tokens":10,"output_tokens":5}}\n'
-done
-"#;
+/// The fake claude of the tests of the crate, which answers the Nth turn with the word of the file word.N beside it.
+const FAKE: &str = include_str!("../../src/world/provider/fake-claude.sh");
 
 /// A word that counts the lines of the file of the yard.
 const COUNT: &str = "close(len(read('a.txt').lines))";
