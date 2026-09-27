@@ -70,16 +70,19 @@ class Live:
 
   `directory` is where the chains of the life start. `actor` is the actor a prompt goes to when it names none, and
   `roster` names the models the life offers beside its model, or the first model the catalog of the crate offers
-  stands alone when neither is said. `answer` answers each request in place of the models, when it is given. `calls` holds every question the World
-  heard that it or the provider answered, in order. `ears` are the ears of the crate the life is booted on beside the
-  provider, which the World lets go at its end. `reader` reads the terminal and `reading` keeps one read of it at a
-  time, since there is one operator.
+  stands alone when neither is said. `answer` answers each request in place of the models, when it is given, and
+  `stream` is told what a model writes as it writes it, on a thread of the models. `images` is the directory of the
+  images that a turn names. `calls` holds every question the World heard that it or the provider answered, in order.
+  `ears` are the ears of the crate the life is booted on beside the provider, which the World lets go at its end.
+  `reader` reads the terminal and `reading` keeps one read of it at a time, since there is one operator.
   """
 
   directory: str
   actor: str | None = None
   roster: list[str] | None = None
   answer: Answer | None = None
+  stream: Callable[[str, str, str, str], None] | None = None
+  images: str | None = None
   calls: list[tuple] = field(default_factory=list)
   reader: asyncio.StreamReader | None = None
   reading: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -88,7 +91,9 @@ class Live:
   def provider(self) -> _monty.NativeEar:
     """The provider of the crate, which answers what the chains stand on and takes each reply, and which the World
     lets go at its end."""
-    self.ears["provider"] = _monty.provider(self.directory, roster=self.roster, actor=self.actor, answer=self.answer)
+    self.ears["provider"] = _monty.provider(
+      self.directory, roster=self.roster, actor=self.actor, answer=self.answer, images=self.images, stream=self.stream
+    )
     return self.ears["provider"]
 
   def end(self) -> None:

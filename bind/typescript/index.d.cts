@@ -238,8 +238,8 @@ export interface ProviderOptions {
    * holds.
    */
   claude?: string
-  /** How many milliseconds a turn of claude may go with no progress. */
-  stallMs?: number
+  /** How many seconds a turn of the claude command line may go with no progress. */
+  stall?: number
   /** The directory of the images that a turn names. */
   images?: string
   /**

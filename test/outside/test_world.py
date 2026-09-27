@@ -40,6 +40,17 @@ async def test_the_world_stands_a_life_on_the_provider_of_the_crate_and_its_mode
   assert "\n\n#prompt1 count\nprompt1: Act[int] = Act('prompt1')\n\n" in request["messages"][0]["content"][0]["text"]
 
 
+async def test_the_world_hands_the_provider_a_stream_that_hears_what_a_model_writes(yard: Path) -> None:
+  """The World hands the provider its stream, which is told what a model writes as it writes it, under the rung the
+  model writes for and the chain of that rung."""
+  heard: list[tuple[str, ...]] = []
+  live = world(yard, faltering(["close(3)"]))
+  live.stream = lambda *said: heard.append(said)
+  root = life(live)
+  assert await engine.prompt(int, "count", on=root) == 3
+  assert heard == [("rung1", root, "a part", "")]
+
+
 def test_the_world_refuses_a_model_that_the_catalog_knows_no_model_by(yard: Path) -> None:
   """A name that the catalog of the crate knows no model by is no model, and the World cannot offer it."""
   live = world(yard, scripted([]))

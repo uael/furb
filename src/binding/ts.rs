@@ -405,8 +405,8 @@ pub struct ProviderOptions<'env> {
   /// The path of the claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine
   /// holds.
   pub claude: Option<String>,
-  /// How many milliseconds a turn of claude may go with no progress.
-  pub stall_ms: Option<f64>,
+  /// How many seconds a turn of the claude command line may go with no progress.
+  pub stall: Option<f64>,
   /// The directory of the images that a turn names.
   pub images: Option<String>,
   /// A function that answers each request in place of the model, with a turn, and may tell what it writes as it
@@ -425,7 +425,7 @@ pub struct ProviderOptions<'env> {
 /// its roster, and a function of the host answers them in place of the models when it gives one.
 #[napi]
 pub fn provider(options: ProviderOptions<'_>) -> napi::Result<NativeEar> {
-  let catalog = catalog(options.claude, options.stall_ms.map(|ms| ms / 1e3));
+  let catalog = catalog(options.claude, options.stall);
   let host = options.answer.as_ref().map(hosted).transpose()?;
   let (roster, actor) = (options.roster.as_deref(), options.actor.as_deref());
   let mut made =
