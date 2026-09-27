@@ -148,10 +148,11 @@ impl Catalog {
     Catalog::of(listed(cached.as_ref()), Claude::found(), |name| env::var(name).ok())
   }
 
-  /// The catalog with the claude command line at a path, which it offers, and whose turn may go with no progress for
-  /// a stall; and the catalog as it stands when no path is given.
+  /// The catalog with the claude command line at a path, or the one of this machine when only a stall is given, which
+  /// it offers, and whose turn may go with no progress for the stall; and the catalog as it stands when neither is
+  /// given, or when it finds no program.
   pub fn claude(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Catalog {
-    let Some(bin) = bin else { return self };
+    let Some(bin) = bin.or_else(|| stall.and_then(|_| claude::located())) else { return self };
     let claude = Claude::with(Some(bin), stall);
     let prefix = format!("{}:", claude::CLAUDE);
     let network = self.models.into_iter().filter(|(model, _)| !model.name.starts_with(&prefix));

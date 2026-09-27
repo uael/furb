@@ -905,7 +905,7 @@ const PROGRAM: &str = if cfg!(windows) { "claude.exe" } else { "claude" };
 
 /// The command line of this machine: the one `FURB_CLAUDE_BIN` names, or the first program named claude on the
 /// PATH, in the local programs of the home, or, on macOS, in the newest version of Claude Desktop.
-fn located() -> Option<PathBuf> {
+pub(super) fn located() -> Option<PathBuf> {
   if let Some(bin) = env::var_os("FURB_CLAUDE_BIN").filter(|one| !one.is_empty()) {
     return Some(bin.into());
   }
