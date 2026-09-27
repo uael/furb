@@ -568,10 +568,7 @@ test("a session enables the extensions of the configs, and a later session on it
   const config = join(cwd, "config");
   await writeFile(join(cwd, "CLAUDE.md"), "Use two spaces.\n");
   /** The names of the extensions that the life of a session runs, which the root says it enabled. */
-  const enabled = (session: Session) =>
-    (session.engine?.transcript({ on: "chain1" }) ?? [])
-      .filter(([kind]) => kind === "enable")
-      .map((fact) => fact[3]);
+  const enabled = (session: Session) => (session.engine?.extensions() ?? []).map(({ name }) => name);
   const first = new Session({ cwd, record, config });
   try {
     first.open();

@@ -623,6 +623,20 @@ fn official() -> Vec<(String, String, String)> {
   extension::official().into_iter().map(|one| (one.name, one.word, one.life)).collect()
 }
 
+/// The extensions that a life runs, in the order it enabled them, as the facts of its root say them, each as its name,
+/// its word and its life word.
+#[pyfunction]
+fn enabled(root: Vec<Bound<'_, PyAny>>) -> Vec<(String, String, String)> {
+  // A fact that enables an extension is text alone.
+  let text = |one: &Bound<'_, PyAny>| one.extract::<Vec<String>>().ok();
+  let facts: Vec<Fact> = root
+    .iter()
+    .filter_map(text)
+    .map(|words| Fact(Object::tuple(words.iter().map(Object::string))))
+    .collect();
+  extension::enabled(&facts).into_iter().map(|one| (one.name, one.word, one.life)).collect()
+}
+
 /// The ear of the extensions, given each extension that the life runs as its name, its word and its life word: it
 /// enables each at the tip of the life, unless the record enables it, and plays each as a rung on each chain.
 #[pyfunction]
@@ -1069,6 +1083,7 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<NativeEar>()?;
   module.add_function(wrap_pyfunction!(official, module)?)?;
   module.add_function(wrap_pyfunction!(extensions, module)?)?;
+  module.add_function(wrap_pyfunction!(enabled, module)?)?;
   module.add_function(wrap_pyfunction!(memory, module)?)?;
   module.add_function(wrap_pyfunction!(skills, module)?)?;
   module.add_function(wrap_pyfunction!(opened, module)?)?;
