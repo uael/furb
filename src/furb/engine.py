@@ -279,7 +279,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 
     if source:
       theirs = transcript(source)
-      picked = (filter or (lambda x: x))([x for x in theirs if question(x)])
+      picked = (filter or list)([x for x in theirs if question(x)])
       yield (
         "prefix",
         id,
