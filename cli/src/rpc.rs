@@ -314,10 +314,13 @@ impl Server {
         let standing = self.life.engine.standing().map_err(failed)?;
         let prompts: Vec<Value> =
           self.client.borrow().prompts.iter().map(|one| Value::Object(one.fields())).collect();
+        let extensions: Vec<String> =
+          self.life.extensions()?.into_iter().map(|one| one.name).collect();
         Ok(json!({
           "root": self.life.root,
           "record": self.record.as_ref().map(|one| one.display().to_string()),
           "standing": wire::outward(standing.as_ref()),
+          "extensions": extensions,
           "paused": self.life.paused(),
           "prompts": prompts,
           "acts": self.awaited,

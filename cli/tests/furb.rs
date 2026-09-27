@@ -71,12 +71,19 @@ impl Yard {
     self.at.join("record.jsonl")
   }
 
-  /// furb with these words, in the yard, on the fake claude, and with no TUI that the machine names.
+  /// furb with these words, in the yard, on the fake claude and on the config directory of the yard, and with no
+  /// TUI that the machine names.
   fn furb(&self, words: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_furb"));
     command.args(words).current_dir(&self.at);
     command.env("FURB_CLAUDE_BIN", self.fake.join("claude")).env_remove("FURB_TUI");
+    command.env("FURB_CONFIG_DIR", self.config());
     command
+  }
+
+  /// The config directory of the user, in the yard.
+  fn config(&self) -> PathBuf {
+    self.fake.with_file_name("config")
   }
 
   /// furb with these words, on the record of the yard.
@@ -120,10 +127,10 @@ fn refused(command: Command, input: &str) -> String {
 }
 
 #[test]
-fn the_command_line_takes_three_commands_of_the_operator() {
+fn the_command_line_takes_four_commands_of_the_operator() {
   let yard = Yard::new("commands");
   let help = printed(yard.furb(&["--help"]), "");
-  for command in ["prompt", "turns", "run"] {
+  for command in ["prompt", "turns", "run", "extensions"] {
     assert!(help.contains(&format!("  {command} ")), "{help}");
   }
   let output = ran(yard.furb(&["prompt", "count", "--shape", "nothing"]), "");
@@ -163,12 +170,35 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let mut turns = yard.furb(&["turns", "--record"]);
   turns.arg(yard.record()).arg("--cwd").arg(&elsewhere);
   let said = printed(turns, "");
-  assert!(said.contains("#rung2 closed 4"), "the turns of a record run every word again: {said}");
+  // The two rungs of the extensions come first, and every word runs again.
+  assert!(said.contains("#rung4 closed 4"), "the turns of a record run every word again: {said}");
   assert_eq!(
     fs::read(yard.record()).expect("the record"),
     before,
     "a life that only reads keeps nothing"
   );
+}
+
+#[test]
+fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs_turn_on() {
+  let yard = Yard::new("extensions");
+  let skill = yard.at.join(".furb/skills/brew/SKILL.md");
+  fs::create_dir_all(skill.parent().expect("a folder")).expect("the folder of a skill");
+  fs::write(&skill, "---\nname: brew\ndescription: Make tea.\n---\n").expect("a skill");
+  fs::write(yard.at.join("CLAUDE.md"), "Use two spaces.\n").expect("a memory file");
+  let every = "memory: remember()\nskills: skills()\n";
+  assert_eq!(printed(yard.furb(&["extensions"]), ""), every, "the official extensions are on");
+  let path = printed(yard.kept(&["run", "close(skill('brew').path)"]), "");
+  assert_eq!(path, format!("{:?}\n", skill.display().to_string()).replace('"', "'"));
+  let mut turns = yard.furb(&["turns", "--record"]);
+  turns.arg(yard.record());
+  let said = printed(turns, "");
+  assert!(said.contains("#memory ") && said.contains("# 1 Use two spaces."), "{said}");
+  fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
+  fs::write(yard.at.join(".furb/config.json"), r#"{"extensions": {"memory": false}}"#)
+    .expect("a config of the project");
+  assert_eq!(printed(yard.furb(&["extensions"]), ""), "skills: skills()\n");
+  assert_eq!(printed(yard.kept(&["extensions"]), ""), every, "a life runs what its record enables");
 }
 
 #[test]
@@ -416,11 +446,16 @@ fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake(
   let mut client = Client::new(&yard);
   assert_eq!(
     client.data("1", json!({"type": "rung", "word": "k = 1\nclose(k + 1)"})),
-    json!({"act": "rung1"})
+    json!({"act": "rung3"}),
+    "the two rungs of the extensions come first"
   );
-  assert_eq!(client.done("rung1")["value"], 2);
+  assert_eq!(client.done("rung3")["value"], 2);
   client.data("2", json!({"type": "pause", "act": "chain1"}));
-  assert_eq!(client.data("3", json!({"type": "state"}))["paused"], true);
+  let state = client.data("3", json!({"type": "state"}));
+  assert_eq!(
+    (&state["paused"], &state["extensions"]),
+    (&json!(true), &json!(["memory", "skills"]))
+  );
   client.data("4", json!({"type": "prompt", "message": "one", "shape": "int"}));
   assert!(
     client.quiet(|one| one["type"] == "done", Duration::from_secs(1)),

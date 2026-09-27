@@ -1,9 +1,9 @@
 //! furb, the command line: the TUI, a JSON-RPC on stdin and stdout, and one command of the operator on one life.
 //!
 //! With no command, furb hands the terminal to the TUI, or, with `--mode rpc`, serves a client on its stdin and its
-//! stdout. `prompt`, `turns` and `run` each open one life and print what it came to. Every life runs on the engine
-//! of the crate, on the ears of the World that the crate writes, and on the provider of every model that the catalog
-//! of the crate offers.
+//! stdout. `prompt`, `turns`, `run` and `extensions` each open one life and print what it came to. Every life runs on
+//! the engine of the crate, on the ears of the World that the crate writes, the extensions among them, and on the
+//! provider of every model that the catalog of the crate offers.
 
 mod console;
 mod life;
@@ -89,6 +89,12 @@ enum Command {
     #[command(flatten)]
     place: Place,
   },
+  /// Print each extension that a life on the record runs: those it enables, then those that the configs of the user
+  /// and of the directory turn on, each with its life word.
+  Extensions {
+    #[command(flatten)]
+    place: Place,
+  },
 }
 
 /// Every shape a prompt of the command line takes, by the name it is given on the line.
@@ -130,6 +136,7 @@ fn main() -> ExitCode {
     Some(Command::Prompt { message, to, shape, place }) => prompt(&place, shape, message, to),
     Some(Command::Turns { record, cwd }) => turns(record, cwd),
     Some(Command::Run { word, place }) => run(&place, word),
+    Some(Command::Extensions { place }) => extensions(&place),
     None if furb.mode == Mode::Rpc => {
       if furb.demo || !furb.more.is_empty() {
         let why = "--demo and the words after -- are for the TUI, and --mode rpc serves no TUI";
@@ -191,5 +198,15 @@ fn run(place: &Place, word: String) -> Result<(), String> {
   let with = verbs::Rung { word: Some(word), on: Some(life.root.clone()), ..Default::default() };
   let id = life.engine.rung(with).map_err(|no| no.to_string())?.id().to_owned();
   println!("{}", life.settled(&id)?.py_repr());
+  Ok(())
+}
+
+/// Each extension that a life on the record runs, as its name and its life word, one on each line. The life only reads
+/// the record, and keeps nothing.
+fn extensions(place: &Place) -> Result<(), String> {
+  let mut life = Life::lived(place.record.as_deref(), place.cwd.as_deref(), false)?;
+  for one in life.extensions()? {
+    println!("{}: {}", one.name, one.life);
+  }
   Ok(())
 }

@@ -68,7 +68,7 @@ clone, and so does `uv run furb --help` after `uv sync`.
 
 | File | What it holds |
 | --- | --- |
-| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns` and `run`. |
+| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `run` and `extensions`. |
 | `cli/src/life.rs` | One life: the ears it opens on, the prompt of the record it takes up, and how the operator awaits an act. |
 | `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back. |
 | `cli/src/rpc.rs` | The JSON-RPC of `--mode rpc`, which `docs/rpc.md` says. Change the two together. |

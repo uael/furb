@@ -15,8 +15,10 @@ use std::{
 use furb::{
   Act, Ear, Engine, Fact, Fault, Object,
   ear::{ear, hear},
+  extension::{self, Extension},
+  life::Opening,
   verbs,
-  world::{self, Catalog},
+  world::Catalog,
 };
 
 use crate::console;
@@ -68,8 +70,9 @@ impl Quiet {
 
 impl Life {
   /// A life on the World of this machine and on a console of the operator: the provider of every model the catalog
-  /// offers, the files, the commands and time, and the store of its record when it keeps one. Each ear is heard
-  /// under the name the TUI hears it by, so the record of one opens in the other.
+  /// offers, then the ears of the crate as every host opens a life on them, which enable at its tip the extensions
+  /// that the configs of the user and of the directory turn on. Each ear is heard under the name the TUI hears it
+  /// by, so the record of one opens in the other.
   ///
   /// The journal says the whole record again before boot returns, so the life stands whole on its record here, and a
   /// life whose record drifted is refused, since it would keep nothing more. `heard` is given every fact said after
@@ -82,27 +85,13 @@ impl Life {
     mut heard: impl FnMut(&Fact) + 'static,
   ) -> Result<Life, String> {
     let failed = |no: Fault| no.to_string();
-    let (held, store) = match record {
-      Some(path) if keeps => {
-        let (held, store) = world::store(path).map_err(failed)?;
-        (held, Some(store))
-      }
-      Some(path) => (world::kept(path).map_err(failed)?, None),
-      None => (Vec::new(), None),
-    };
     let provider = Catalog::load().provider(cwd.display().to_string(), None, None, None)?;
-    let mut ears = vec![
-      ("provider", provider.ear()),
-      ("console", console),
-      ("files", world::files()),
-      ("bash", world::bash()),
-      ("time", world::time()),
-    ];
-    ears.extend(store.map(|store| ("store", store)));
-    let mut engine = Engine::boot(held.clone(), ears).map_err(failed)?;
-    if let Some(no) = engine.raised() {
-      return Err(no.to_string());
+    let mut opening = Opening::new().configured(cwd).map_err(failed)?;
+    if let Some(path) = record {
+      opening = opening.record(path, keeps);
     }
+    let (mut engine, held) =
+      opening.boot([("provider", provider.ear()), ("console", console)]).map_err(failed)?;
     let root = engine.root().to_owned();
     let mut quiet = Quiet::default();
     let facts = engine.transcript(verbs::Transcript { on: Some(root.clone()) }).map_err(failed)?;
@@ -125,6 +114,12 @@ impl Life {
   /// keeps that stand.
   pub fn lived(record: Option<&Path>, cwd: Option<&Path>, keeps: bool) -> Result<Life, String> {
     Life::open(record, keeps, &directory(cwd), console::terminal(), |_| {})
+  }
+
+  /// The extensions that the life runs, in the order it enabled them.
+  pub fn extensions(&mut self) -> Result<Vec<Extension>, String> {
+    let root = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()) });
+    Ok(extension::enabled(&root.map_err(|no| no.to_string())?))
   }
 
   /// Whether a pause stands over the root.
