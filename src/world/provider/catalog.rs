@@ -396,13 +396,16 @@ fn budget(level: &str) -> u64 {
 impl Listed {
   /// The credential of the provider and whether it goes as a bearer, or why the environment holds none. The clients
   /// of Amazon and Google read their credentials themselves: those of Google are its key of an API, or its
-  /// credentials of an application where they stand.
+  /// credentials of an application where its client finds them, under the application data on Windows and under
+  /// the home elsewhere.
   fn credential(&self, env: &impl Fn(&str) -> Option<String>) -> Result<(String, bool), String> {
     let named = self.env.iter().find_map(|name| env(name).map(|key| (name, key)));
     let adc = || {
-      let home = env("HOME").map(PathBuf::from);
-      home.is_some_and(|home| {
-        home.join(".config/gcloud/application_default_credentials.json").is_file()
+      let (root, gcloud) =
+        if cfg!(windows) { ("APPDATA", "gcloud") } else { ("HOME", ".config/gcloud") };
+      let root = env(root).map(PathBuf::from);
+      root.is_some_and(|root| {
+        root.join(gcloud).join("application_default_credentials.json").is_file()
       })
     };
     match (self.rig, named) {

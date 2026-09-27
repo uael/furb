@@ -318,6 +318,17 @@ fn a_provider_is_offered_when_the_environment_holds_its_credential_and_each_plac
   assert!(offered(&["AWS_PROFILE"], "amazon-bedrock:qwen.qwen3"));
   assert!(!offered(&["GOOGLE_CLOUD_API_KEY"], "google-vertex:gemini-pro"), "Google asks a project");
   assert!(offered(&["GOOGLE_CLOUD_API_KEY", "GOOGLE_CLOUD_PROJECT=p"], "google-vertex:gemini-pro"));
+  let home = std::env::temp_dir().join(format!("furb-adc-{}", std::process::id()));
+  let (root, gcloud) =
+    if cfg!(windows) { ("APPDATA", "gcloud") } else { ("HOME", ".config/gcloud") };
+  std::fs::create_dir_all(home.join(gcloud)).expect("the folder of gcloud");
+  std::fs::write(home.join(gcloud).join("application_default_credentials.json"), "{}")
+    .expect("a file");
+  let adc = format!("{root}={}", home.display());
+  assert!(
+    offered(&[&adc, "GOOGLE_CLOUD_PROJECT=p"], "google-vertex:gemini-pro"),
+    "the credentials of an application stand where the client of Google finds them"
+  );
   assert!(offered(&["RADIUS_API_KEY"], "radius:balanced"));
 }
 
