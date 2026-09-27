@@ -394,7 +394,7 @@ def bash(
   on: str = "",
 ) -> Act[Exit]:
   def ear(id):
-    streams, mute = {x: Text(x) for x in (f"{id}/stdout", f"{id}/stderr")}, "" if fed else "not fed"
+    streams, mute = {x: Text(x) for x in (id + "/stdout", id + "/stderr")}, "" if fed else "not fed"
     yield told(id, "" if show is HIDDEN else command, bound(id, "Exit"))
     while True:
       match a := (yield):
@@ -402,7 +402,7 @@ def bash(
           yield "done", qid, show_err is None
         case ("read", qid, *_, path) if path in streams:
           yield "done", qid, streams[path]
-        case ("write", qid, *_, Text(path, text) as took) if path == f"{id}/stdin":
+        case ("write", qid, *_, Text(path, text) as took) if path == id + "/stdin":
           if mute:
             took = Refused(mute)
           else:
@@ -412,7 +412,7 @@ def bash(
         case _ if mute == "ended":
           continue
         case ("out", about, _, text, stream) if about == id:
-          into = f"{id}/{stream if show_err else 'stdout'}"
+          into = id + "/" + (stream if show_err else "stdout")
           streams[into] = streams[into].grow(text)
         case ("done", about, _, Exit(code, out, err)) if about == id:
           mute, streams = "ended", dict(zip(streams, (out, err), strict=True))
