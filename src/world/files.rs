@@ -54,7 +54,7 @@ async fn served(co: &crate::ear::Co, a: &Fact) -> Result<Text, Fault> {
 }
 
 /// The text at a path: a file of utf-8 no larger than a read gives.
-fn read(at: &Path) -> Result<Text, Fault> {
+pub(crate) fn read(at: &Path) -> Result<Text, Fault> {
   let shown = at.display();
   let info = fs::metadata(at).map_err(|no| failed(&no, at))?;
   if !info.is_file() || info.len() > LARGEST {

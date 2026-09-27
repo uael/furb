@@ -13,6 +13,8 @@
 //! that takes one grows at its end, and what a provider caches of it stands. The ear [`extensions`] enables each
 //! extension by a fact that the record keeps, and plays the word and the life word as a rung on each chain.
 
+pub mod skills;
+
 use std::{
   fs,
   io::ErrorKind,
@@ -37,7 +39,10 @@ const ROOT: &str = "chain1";
 const JOURNAL: &str = "journal";
 
 /// The official extensions, each as its manifest and the file of its word, in the order a life runs them.
-const OFFICIAL: [(&str, &str); 0] = [];
+const OFFICIAL: [(&str, &str); 1] = [(
+  include_str!("../extensions/skills/furb.json"),
+  include_str!("../extensions/skills/skills.py"),
+)];
 
 /// The start of each line that imports furb, which the word of a file leaves out.
 const IMPORTS: [&str; 3] = ["from furb ", "from furb.", "import furb"];
@@ -163,7 +168,10 @@ pub fn configured(places: &Places, project: &Path) -> Result<Vec<Extension>, Fau
         }
         Value::Bool(on) => one.2 = *on,
         Value::String(path) if theirs => (one.1, one.2) = (Some(beside(&file, path, places)), true),
-        _ => return Err(refused(format!("The extension {name} is true, false, or a path"))),
+        _ => {
+          let form = "is true, false, or the path of its folder when it is not official";
+          return Err(refused(format!("The extension {name} {form}")));
+        }
       }
     }
   }

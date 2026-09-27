@@ -24,6 +24,7 @@ use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step, Voice,
   ear::{Call, Spoken},
   engine::Hosted,
+  extension::{self, Extension},
   value::{IS, entry, field, marked},
   world,
 };
@@ -620,6 +621,26 @@ fn gate(py: Python<'_>, sheet: &str) -> PyResult<Vec<(usize, String)>> {
   }
 }
 
+/// The official extensions, in the order a life runs them, each as its name, its word and its life word.
+#[pyfunction]
+fn official() -> Vec<(String, String, String)> {
+  extension::official().into_iter().map(|one| (one.name, one.word, one.life)).collect()
+}
+
+/// The ear of the extensions, given each extension that the life runs as its name, its word and its life word: it
+/// enables each at the tip of the life, unless the record enables it, and plays each as a rung on each chain.
+#[pyfunction]
+fn extensions(given: Vec<(String, String, String)>) -> NativeEar {
+  let given = given.into_iter().map(|(name, word, life)| Extension { name, word, life });
+  NativeEar::of(extension::extensions(given.collect()))
+}
+
+/// The ear of the skills extension, which finds skills in the folders of a chain and in the config directory.
+#[pyfunction]
+fn skills(config: std::path::PathBuf) -> NativeEar {
+  NativeEar::of(extension::skills::skills(config))
+}
+
 /// What the engine raised, raised here as the exception it is.
 fn raised(py: Python<'_>, made: &Made, fault: &Fault) -> PyErr {
   match fault_to_python(py, made, fault) {
@@ -980,6 +1001,9 @@ fn bare(shown: &str) -> String {
 fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<PyEngine>()?;
   module.add_class::<NativeEar>()?;
+  module.add_function(wrap_pyfunction!(official, module)?)?;
+  module.add_function(wrap_pyfunction!(extensions, module)?)?;
+  module.add_function(wrap_pyfunction!(skills, module)?)?;
   module.add_function(wrap_pyfunction!(files, module)?)?;
   module.add_function(wrap_pyfunction!(bash, module)?)?;
   module.add_function(wrap_pyfunction!(time, module)?)?;

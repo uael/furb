@@ -10,7 +10,7 @@
 //! its place, and an ear that takes a question and asks it again wraps it.
 
 mod bash;
-mod files;
+pub(crate) mod files;
 mod provider;
 mod store;
 mod time;
@@ -30,7 +30,7 @@ use crate::{
 
 /// The directory a chain stands in, which a path of it resolves against: where the chain went last, resolved against
 /// the directory the life stands on.
-async fn here(co: &Co, on: &str) -> Result<PathBuf, Fault> {
+pub(crate) async fn here(co: &Co, on: &str) -> Result<PathBuf, Fault> {
   let on = vec![("on", Object::string(on))];
   let cwd = call(co, "cwd", vec![], on).await?;
   let standing = call(co, "standing", vec![], vec![]).await?;

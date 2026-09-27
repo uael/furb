@@ -78,24 +78,24 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   let at = place("configs");
   let places = Places { config: at.join("user"), home: Some(at.join("home")) };
   let project = at.join("project");
-  assert_eq!(configured(&places, &project).unwrap(), vec![], "no config turns nothing on");
+  let names = |got: Vec<Extension>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
+  assert_eq!(names(configured(&places, &project).unwrap()), ["skills"], "the official ones are on");
   folder(&at.join("home").join("tilde"), r#"{"name": "tilde", "word": "note.py"}"#, "t = 1");
   folder(&at.join("user").join("near"), r#"{"name": "near", "word": "note.py"}"#, "n = 1");
   folder(&project.join("far"), r#"{"name": "far", "word": "note.py"}"#, "f = 1");
   config(
     &at.join("user").join("config.json"),
-    r#"{"extensions": {"tilde": "~/tilde", "near": "near", "far": false}}"#,
+    r#"{"extensions": {"tilde": "~/tilde", "near": "near", "far": false, "skills": false}}"#,
   );
-  let names = |got: Vec<Extension>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
   assert_eq!(names(configured(&places, &project).unwrap()), ["tilde", "near"]);
   config(
     &project.join(".furb").join("config.json"),
-    r#"{"extensions": {"near": false, "far": "../far", "tilde": true}}"#,
+    r#"{"extensions": {"near": false, "far": "../far", "tilde": true, "skills": true}}"#,
   );
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["tilde", "far"],
-    "each stands where a config first names it"
+    ["skills", "tilde", "far"],
+    "each stands where a config first names it, after the official ones"
   );
 }
 
@@ -110,15 +110,20 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
   };
   let refused = |text: &str| read(text).unwrap_err().message();
   let shown = file.display();
-  assert_eq!(read(r#"{"theme": "dark"}"#).unwrap(), vec![], "a config may name no extension");
+  assert_eq!(read(r#"{"theme": "dark"}"#).unwrap().len(), 1, "a config may name no extension");
   assert_eq!(refused("[]"), format!("A config is a map, whose extensions is a map: {shown}"));
   assert_eq!(
     refused(r#"{"extensions": []}"#),
     format!("A config is a map, whose extensions is a map: {shown}")
   );
+  let form = "is true, false, or the path of its folder when it is not official";
   assert_eq!(
     refused(r#"{"extensions": {"note": 1}}"#),
-    format!("The extension note is true, false, or a path: {shown}")
+    format!("The extension note {form}: {shown}")
+  );
+  assert_eq!(
+    refused(r#"{"extensions": {"skills": "."}}"#),
+    format!("The extension skills {form}: {shown}")
   );
   assert_eq!(
     refused(r#"{"extensions": {"note": true}}"#),

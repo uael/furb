@@ -104,18 +104,25 @@ The suite drives the engine through its public API alone, end to end, from the m
 
 ## The hygiene laws
 
-`test/test_hygiene.py` holds the contract and the suite to these laws, and it must stay green:
+`test/test_hygiene.py` holds each contract and its suite to these laws, and it must stay green. The contracts are
+`engine.pyi`, whose suite is `test/`, and the contract of each extension, `extensions/<name>/<name>.pyi`, whose suite
+is the folder `test` beside it.
 
 1. Every sentence of a definition has exactly one test, in the file of that definition, whose docstring is that
    sentence. A constructor and a property are no definitions of their own: their sentences are the class's.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
-4. The module docstring of `engine.pyi` is empty.
+4. The module docstring of each contract is empty.
 5. `engine.py`, minified in layout alone, costs fewer than 6000 tokens to the model that reads it.
 6. The minified `engine.py` parses to the same program as the file on disk.
 7. No name in `engine.py` is bound again beneath a scope that already binds it: a parameter, a local, a loop
    target or an import never takes the spelling of a name of an enclosing function or of the module. Every word
    keeps one meaning.
+8. The word of an official extension parses to the program of its file less the imports of furb.
+9. The word of an official extension binds no name of the engine, and, read after the engine as one module, binds
+   no name again beneath a scope that already binds it.
+10. The words of the official extensions, with their life words, cost fewer than 600 tokens together to the model
+    that reads them on every chain.
 
 ## Commands
 

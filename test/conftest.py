@@ -10,7 +10,7 @@ import builtins
 import json
 import re
 import sys
-from collections.abc import Generator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import partial
 from pathlib import Path
@@ -22,11 +22,15 @@ import furb.kernel
 import furb_monty.engine
 from furb import engine, sheet
 from furb.engine import OPERATOR, Act, Exit, Refused, Text, site
+from furb_monty import _monty
 
 ENGINE = vars(furb.python)
 """ENGINE is the module of the engine of this interpreter, whose names the Kernel and the gate read."""
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
+SUITES = (HERE, *sorted((HERE.parent / "extensions").glob("*/test")))
+"""SUITES are the suite of the engine and the suite of each extension, whose modules bind the names of the engine
+under test."""
 ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
@@ -347,12 +351,32 @@ def kernel() -> dict[str, Kernel]:
   return {} if engine is not furb.python else {"kernel": Py().kernel(), "gate": Py().gating()}
 
 
-def life(world: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
-  """A life: the engine opened from a record, with the Kernel it takes, a World in memory and a generator that keeps
-  every fact said in it; it gives what was said and the id of the root.
+def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list[tuple], str]:
+  """A life: the engine opened from a record, with the Kernel it takes, a World in memory, a generator that keeps
+  every fact said in it, and the ears it is given after them; it gives what was said and the id of the root.
   """
   log: list[tuple] = []
-  return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears())
+  return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears(), **ears)
+
+
+def extended(name: str, at: Path, ear: Callable[[str], World], *, lives: bool = False) -> str:
+  """A life whose chains stand in the folder work of a directory, which enables at its tip the official extension of
+  that name, with its life word when it lives: it hears the ear of the extension, whose config directory of the user
+  is the folder config of the directory, and the files of the machine after the World of the suite. It gives the
+  root."""
+  one, word, life_word = next(x for x in _monty.official() if x[0] == name)
+  (at / "work").mkdir(exist_ok=True)
+  given = _monty.extensions([(one, word, life_word if lives else "")])
+  sand = sown(stands=[STANDS[0], str(at / "work"), STANDS[2]])
+  return life(sand, (), extensions=given, **{name: ear(str(at / "config"))}, files=_monty.files())[1]
+
+
+def skilled(skills: Path, folder: str, head: str) -> Path:
+  """A skill in a folder of skills, whose SKILL.md file opens with a frontmatter of these lines, and the path of that
+  file."""
+  (skills / folder).mkdir(parents=True, exist_ok=True)
+  (path := skills / folder / "SKILL.md").write_text(f"---\n{head}\n---\nSteps.\n", encoding="utf-8")
+  return path
 
 
 def world_says(kind: str, about: str, *words: object) -> tuple:
@@ -530,22 +554,23 @@ def swapped(to: object) -> None:
   """
   fro = furb_monty.engine if to is furb.python else furb.python
   seen: set[int] = set()
-  for mod in list(sys.modules.values()):
-    file = getattr(mod, "__file__", None)
-    if not file or id(mod) in seen or not str(file).startswith(str(HERE)):
+  # pytest drops the name conftest before it loads each conftest outside a package, so this module may stand under
+  # no name, and it rebinds its own names as well.
+  for names in [globals(), *(vars(mod) for mod in list(sys.modules.values()) if getattr(mod, "__file__", None))]:
+    if id(names) in seen or not any(Path(names["__file__"]).is_relative_to(one) for one in SUITES):
       continue
-    seen.add(id(mod))
-    for key, value in list(vars(mod).items()):
+    seen.add(id(names))
+    for key, value in list(names.items()):
       if value is fro:
-        setattr(mod, key, to)
+        names[key] = to
       elif key in SURFACE and value is getattr(fro, key):
-        setattr(mod, key, getattr(to, key))
+        names[key] = getattr(to, key)
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-  """Every test of the suite runs once on each engine; the hygiene laws read the file and run once."""
+  """Every test of the suites runs once on each engine; the hygiene laws read the files and run once."""
   path = metafunc.definition.path
-  if "engine_of" in metafunc.fixturenames and path.parent == HERE and path.name != "test_hygiene.py":
+  if "engine_of" in metafunc.fixturenames and path.parent in SUITES and path.name != "test_hygiene.py":
     metafunc.parametrize("engine_of", list(ENGINES), indirect=True)
 
 
