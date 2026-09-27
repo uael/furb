@@ -15,6 +15,7 @@ use std::{
 use furb::{
   Act, Ear, Engine, Fact, Fault, Object,
   ear::{ear, hear},
+  engine::OPERATOR,
   extension::{self, Extension},
   life::Opening,
   verbs,
@@ -121,7 +122,7 @@ impl Life {
   /// The engine matches nothing the operator says again, so a life stood up on its own record would open a second
   /// prompt beside the one that record stands on, and ask a model for what it was answered once.
   pub fn again(&self, shape: &str, message: &str, to: &str) -> Option<String> {
-    let wanted = ["operator", self.root.as_str(), shape, message, to];
+    let wanted = [OPERATOR, self.root.as_str(), shape, message, to];
     self.held.iter().find_map(|entry| {
       let fact = entry.as_ref().items()?.first()?.items()?;
       let words = fact.iter().map(|one| one.as_str()).collect::<Option<Vec<&str>>>()?;

@@ -26,15 +26,13 @@ use serde_json::Value;
 
 use crate::{
   ear::{Co, Ear, call, ear, hear, say},
+  engine::ROOT,
   fact::{Fact, named},
   value::{Fault, Object, entry},
 };
 
 /// The kind of the fact that enables an extension in a life: it carries the name, the word and the life word.
 pub const ENABLE: &str = "enable";
-
-/// The root, whose transcript holds each fact that enables an extension, as it holds the standing.
-const ROOT: &str = "chain1";
 
 /// The journal, which says the record again in a later life, so a done it says answers no stand of this life.
 const JOURNAL: &str = "journal";

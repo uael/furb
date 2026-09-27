@@ -443,8 +443,10 @@ impl Engine {
   }
 }
 
-// The verbs of the contract, one method each, which the build makes from the contract.
+// The verbs of the contract, one method each, and its constants that are a number or a text, which the build makes
+// from the contract.
 include!(concat!(env!("OUT_DIR"), "/methods.rs"));
+include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
 impl std::fmt::Debug for Engine {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

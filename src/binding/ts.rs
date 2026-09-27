@@ -578,6 +578,22 @@ pub fn levels() -> Vec<&'static str> {
   world::catalog::LEVELS.to_vec()
 }
 
+/// The window, in tokens, of a model whose roster entry does not say one, as the contract names it.
+#[napi]
+pub const WINDOW: i64 = crate::engine::WINDOW;
+
+/// The name of the operator in the roster and as an actor, as the contract names it.
+#[napi]
+pub const OPERATOR: &str = crate::engine::OPERATOR;
+
+/// The timeout, in seconds, of a command that does not say one, as the contract names it.
+#[napi]
+pub const TIMEOUT: f64 = crate::engine::TIMEOUT;
+
+/// The name of the root, which every life opens first, as the contract names it.
+#[napi]
+pub const ROOT: &str = crate::engine::ROOT;
+
 /// Every shape the operator answers, by its name.
 #[napi]
 pub fn shapes() -> Vec<&'static str> {

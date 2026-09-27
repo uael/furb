@@ -37,14 +37,11 @@ use self::images::Images;
 use crate::{
   SYSTEM,
   ear::{Ear, Voice, call, ear, hear, say},
+  engine::{OPERATOR, WINDOW},
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
   wire,
 };
-
-/// The operator as the roster offers it: the actor that answers in person, with no effort and the window the engine
-/// gives it.
-const OPERATOR: (&str, i64) = ("operator", 200_000);
 
 /// What a turn of a model tells as it streams: what it added to its text, and what it added to its thought.
 pub type Told = Arc<dyn Fn(&str, &str) + Send + Sync>;
@@ -282,7 +279,7 @@ impl Provider {
         Some((effort, _)) => format!("{}/{effort}", model.name),
         None => model.name.clone(),
       },
-      None => OPERATOR.0.to_owned(),
+      None => OPERATOR.to_owned(),
     });
     let mut images = Images::new(images);
     ear(move |co, voice| async move {
@@ -375,8 +372,8 @@ fn standing(models: &[Model], directory: &str, actor: &str) -> Object {
     let window = i64::try_from(model.window).unwrap_or(i64::MAX);
     Object::list([Object::string(&model.name), Object::list(efforts), Object::int(window)])
   });
-  let operator =
-    Object::list([Object::string(OPERATOR.0), Object::list([]), Object::int(OPERATOR.1)]);
+  // The operator answers in person, with no effort, and reads the window of the engine.
+  let operator = Object::list([Object::string(OPERATOR), Object::list([]), Object::int(WINDOW)]);
   let roster = Object::list(offered.chain([operator]));
   Object::list([roster, Object::string(directory), Object::string(actor)])
 }

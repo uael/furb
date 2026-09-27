@@ -277,10 +277,16 @@ export interface OpenOptions {
   stream?: (rung: string, chain: string, text: string, thinking: string) => void
 }
 
+/** The name of the operator in the roster and as an actor, as the contract names it. */
+export declare const OPERATOR: string
+
 export interface Outcome {
   done: boolean
   value: unknown
 }
+
+/** The name of the root, which every life opens first, as the contract names it. */
+export declare const ROOT: string
 
 /** Every shape the operator answers, by its name. */
 export declare function shapes(): Array<string>
@@ -301,3 +307,9 @@ export interface TextValue {
 
 /** The ear of time, which reads the clock, draws a chance, and ends a wait. */
 export declare function time(): NativeEar
+
+/** The timeout, in seconds, of a command that does not say one, as the contract names it. */
+export declare const TIMEOUT: number
+
+/** The window, in tokens, of a model whose roster entry does not say one, as the contract names it. */
+export declare const WINDOW: number

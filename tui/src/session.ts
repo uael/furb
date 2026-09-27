@@ -11,8 +11,10 @@ import {
   imagePath,
   imageReference,
   imageReferences,
+  ROOT,
   saveFile,
   shapes,
+  WINDOW,
 } from "@furb/engine";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView } from "./bridge.ts";
@@ -449,7 +451,7 @@ export class Session extends EventEmitter {
     const asked = this.activity.findLast((act) => act.kind === "prompt" && act.words[2] !== "operator");
     const names = this.roster.map(([name]) => name);
     const { model } = actorParts(String(asked?.words[2] || this.actor), names);
-    const window = Number(this.roster.find(([name]) => name === model)?.[2]) || 200_000;
+    const window = Number(this.roster.find(([name]) => name === model)?.[2]) || WINDOW;
     return usage[0] / window;
   }
   get label(): string {
@@ -748,7 +750,7 @@ export class Session extends EventEmitter {
         this.notice = "Work cancelled.";
         break;
       case "extensions": {
-        const enabled = this.host.facts.filter(([kind, about]) => kind === "enable" && about === "chain1");
+        const enabled = this.host.facts.filter(([kind, about]) => kind === "enable" && about === ROOT);
         const each = enabled.map(([, , , name, , life]) => (life ? `${name} with ${life}` : String(name)));
         this.notice = each.length
           ? `This life runs ${each.join(", ")}. Run a word of one with /run.`

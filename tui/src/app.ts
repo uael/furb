@@ -7,6 +7,7 @@ import {
   imageReferences,
   safeText,
   shapes,
+  TIMEOUT,
 } from "@furb/engine";
 import {
   type BoxOptions,
@@ -2356,7 +2357,7 @@ export class App {
           ] as Part[])
         : []),
       [input === true ? "   input open" : "", c.faint],
-      [typeof timeout === "number" && timeout !== 600 ? `   times out after ${timeout}s` : "", c.faint],
+      [typeof timeout === "number" && timeout !== TIMEOUT ? `   times out after ${timeout}s` : "", c.faint],
     ];
     meta.add(this.text(notes, c.faint));
     details.add(meta);
