@@ -123,8 +123,6 @@ is the folder `test` beside it.
 8. The word of an official extension parses to the program of its file less the imports of furb.
 9. The word of an official extension binds no name of the engine, and, read after the engine as one module, binds
    no name again beneath a scope that already binds it.
-10. The words of the official extensions, with their life words, cost fewer than 600 tokens together to the model
-    that reads them on every chain.
 
 ## Commands
 

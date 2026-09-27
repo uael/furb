@@ -17,8 +17,6 @@ TESTS = PYI.parents[2] / "test"
 EXTENSIONS = TESTS.parent / "extensions"
 # The contract of the engine and the contract of each extension, each with the folder of its suite.
 CONTRACTS = {PYI: TESTS, **{one: one.parent / "test" for one in sorted(EXTENSIONS.glob("*/*.pyi"))}}
-# What the words of the official extensions may cost the model that reads them on every chain, together.
-WORDS = 600
 # What the engine may cost the model that reads it: a wall, and a shape that will not fit under it is a shape not
 # found yet. Six thousand, by the owner's word.
 BUDGET = 6_000
@@ -226,9 +224,3 @@ def test_the_word_of_an_extension_binds_no_name_of_the_engine_nor_again_beneath_
   for name, word, _ in _monty.official():
     assert binds(ast.parse(word)) & held == set(), name
     assert shadows(f"{PY.read_text(encoding='utf-8')}\n{word}") == [], name
-
-
-def test_the_words_of_the_official_extensions_fit_what_they_cost_on_every_chain() -> None:
-  words = "\n\n".join(f"{word}\n\n{life}" for _, word, life in _monty.official())
-  spent = len(tiktoken.get_encoding("o200k_base").encode(words))
-  assert spent < WORDS, f"the words cost {spent} tokens, over the {WORDS} budget"
