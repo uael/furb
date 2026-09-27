@@ -1,16 +1,17 @@
 //! The catalog of models: the models that this machine can ask, and of each its window, its efforts, its price, and
 //! whether it takes an image.
 //!
-//! The crate carries a snapshot of the catalog of models.dev, cut down to the providers that rig serves, which
-//! `script/catalog.py` makes again. A life reads the models of those providers from the cache of furb when a life
-//! before it refreshed the cache, and a life refreshes the cache in the background when it is a day old, so no life
+//! The crate carries a snapshot of the catalog, cut down to the providers that pi-ai serves, which
+//! `script/catalog.py` makes again from models.dev and, for the two providers that models.dev does not list, from the
+//! data of pi-ai. A life reads the models of a provider of models.dev from the cache of furb when the cache holds
+//! them newer than the snapshot, and a life refreshes the cache in the background when it is a day old, so no life
 //! waits on the network and a life with no network reads the snapshot. The claude command line is the provider
 //! `claude-cli`, whose models are opus, sonnet, haiku and fable.
 //!
-//! A model is named `provider:id`. The catalog offers the models of a provider when its credentials stand in the
-//! environment, and the models of the claude command line when it finds the program. An effort is one of [`LEVELS`],
-//! which each provider reads in its own words, and a level that a model does not take moves to the nearest one it
-//! takes.
+//! A model is named `provider:id`. The catalog offers the models of a provider when its credential stands in the
+//! environment, with every name that its address holds a place for, and the models of the claude command line when
+//! it finds the program. An effort is one of [`LEVELS`], which each provider reads in its own words, and a level that
+//! a model does not take moves to the nearest one it takes.
 
 use std::{
   collections::{HashMap, HashSet},
@@ -21,22 +22,15 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use rig_core::{
-  client::CompletionClient,
-  completion::CompletionError,
-  http_client::ReqwestClient,
-  providers::{
-    anthropic, deepseek, gemini, groq, huggingface, minimax, mistral, moonshot, openai, openrouter,
-    together, xai, xiaomimimo, zai,
-  },
-};
+use rig_core::{completion::CompletionError, http_client::ReqwestClient};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::{
   Hosted, Model, Provider, Streams,
   claude::{self, Claude},
-  runtime, streams,
+  clients::{Client, Reach},
+  runtime,
 };
 
 /// The levels of effort, from least to most, which an actor names after its model, as `claude-cli:opus/low`.
@@ -51,14 +45,19 @@ const URL: &str = "https://models.dev/api.json";
 /// How old the cache grows before a life refreshes it.
 const STALE: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// One provider of the snapshot: the client of rig that asks it, the names of its credentials, its address when the
-/// client asks one, and its models.
+/// One provider of the snapshot: the client of rig that asks it, the names of its credential, those whose credential
+/// goes as a bearer, its address, the names of the environment that a place of an address reads before its own, and
+/// its models.
 #[derive(Deserialize)]
 pub(super) struct Listed {
-  rig: String,
+  rig: Client,
   env: Vec<String>,
   #[serde(default)]
+  bearer: Vec<String>,
+  #[serde(default)]
   api: Option<String>,
+  #[serde(default)]
+  aliases: HashMap<String, String>,
   models: IndexMap<String, Listing>,
 }
 
@@ -69,7 +68,8 @@ struct Cached {
   models: IndexMap<String, Listing>,
 }
 
-/// One model of the catalog, in the words of models.dev.
+/// One model of the catalog, in the words of models.dev: `provider` names the package and the address of a model
+/// that its provider serves apart.
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct Listing {
@@ -79,6 +79,17 @@ struct Listing {
   cost: Option<Cost>,
   modalities: Modalities,
   status: Option<String>,
+  last_updated: Option<String>,
+  provider: Option<Own>,
+}
+
+/// The package that asks a model apart from its provider, the address it asks, and the shape of its request.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct Own {
+  npm: String,
+  api: Option<String>,
+  shape: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -111,7 +122,8 @@ struct Modalities {
   output: Vec<String>,
 }
 
-/// How a provider reads an effort: the words of its request that think, and whether it can turn thought off.
+/// How a provider reads an effort: the words of its request that think, and whether it can turn thought off. A
+/// provider of the silent dialect reads no effort.
 #[derive(Clone, Copy, PartialEq)]
 enum Dialect {
   Anthropic,
@@ -119,6 +131,8 @@ enum Dialect {
   Gemini,
   OpenRouter,
   Chat,
+  Pi,
+  Silent,
 }
 
 /// The models this machine can ask, each with whether the catalog offers it.
@@ -144,26 +158,24 @@ impl Catalog {
   }
 
   /// The catalog of these providers and of the claude command line, which it offers when it found the program, and
-  /// each provider offered when a credential of it stands under one of its names.
+  /// each model offered when the environment holds its credential and each name its address holds a place for.
   pub(super) fn of(
     listed: &IndexMap<String, Listed>,
     claude: Option<Claude>,
-    credential: impl Fn(&str) -> Option<String>,
+    env: impl Fn(&str) -> Option<String>,
   ) -> Catalog {
+    let env = |name: &str| env(name).filter(|one| !one.is_empty());
     let found = claude.is_some();
     let claude = claude.unwrap_or_default().models().into_iter();
     let mut models: Vec<_> = claude.map(|model| (model, found)).collect();
     for (provider, one) in listed {
-      let key = one.env.iter().find_map(|name| credential(name).filter(|key| !key.is_empty()));
-      let source = Arc::new(Source {
-        rig: one.rig.clone(),
-        env: one.env.clone(),
-        api: one.api.clone(),
-        key: key.clone(),
-      });
-      let each = one.models.iter().filter(|(_, listing)| listing.kept());
-      models
-        .extend(each.map(|(id, listing)| (model(provider, id, listing, &source), key.is_some())));
+      let credential = one.credential(&env);
+      for (id, listing) in &one.models {
+        let Some(client) = listing.client(one.rig).filter(|_| listing.kept()) else { continue };
+        let reach = credential.clone().and_then(|key| one.reach(id, listing, client, key, &env));
+        let offered = reach.is_ok();
+        models.push((model(provider, id, listing, client, reach), offered));
+      }
     }
     Catalog { models }
   }
@@ -271,6 +283,22 @@ impl Listing {
       && text(&self.modalities.output)
   }
 
+  /// The client of rig that asks the model where its provider stands: the client of its provider, or that of its own
+  /// package; and none for a package that no client of rig serves there. The gateway of Cloudflare asks every model
+  /// itself.
+  fn client(&self, provider: Client) -> Option<Client> {
+    let Some(own) = &self.provider else { return Some(provider) };
+    match (provider, own.npm.as_str()) {
+      (Client::Gateway, _) => Some(Client::Gateway),
+      (Client::Bedrock | Client::Vertex, _) => None,
+      _ if own.shape.as_deref() == Some("completions") => None,
+      (_, "@ai-sdk/anthropic") => Some(Client::Anthropic),
+      (_, "@ai-sdk/openai") => Some(Client::Openai),
+      (_, "@ai-sdk/openai-compatible") => Some(Client::Chat),
+      _ => None,
+    }
+  }
+
   /// Whether its options of reasoning hold one of this type.
   fn reasons(&self, kind: &str) -> bool {
     self.reasoning && self.reasoning_options.iter().any(|one| one.r#type == kind)
@@ -291,6 +319,9 @@ impl Listing {
   /// the model names; a model that counts its thought by a budget takes the levels of a budget where the provider
   /// reads a budget; and a model that can think or not takes `off` too where the provider can turn thought off.
   fn efforts(&self, dialect: Dialect) -> Vec<(String, Map<String, Value>)> {
+    if dialect == Dialect::Silent {
+      return Vec::new();
+    }
     let named = self.named();
     let budgets = matches!(dialect, Dialect::Anthropic | Dialect::Gemini | Dialect::OpenRouter)
       && self.reasons("budget_tokens");
@@ -336,6 +367,9 @@ impl Listing {
       Dialect::OpenRouter if level == "off" => json!({"reasoning": {"enabled": false}}),
       Dialect::OpenRouter => json!({"reasoning": {"max_tokens": budget(level)}}),
       Dialect::Chat => json!({"reasoning_effort": word}),
+      Dialect::Pi if level == "off" => json!({}),
+      Dialect::Pi => json!({"reasoning": level}),
+      Dialect::Silent => json!({}),
     };
     match settings {
       Value::Object(settings) => settings,
@@ -355,87 +389,127 @@ fn budget(level: &str) -> u64 {
   }
 }
 
-/// A provider of the network: the client of rig that asks it, the names of its credentials, its address, and the
-/// credential that stands in the environment.
-struct Source {
-  rig: String,
-  env: Vec<String>,
-  api: Option<String>,
-  key: Option<String>,
+impl Listed {
+  /// The credential of the provider and whether it goes as a bearer, or why the environment holds none. The clients
+  /// of Amazon and Google read their credentials themselves: those of Google are its key of an API, or its
+  /// credentials of an application where they stand.
+  fn credential(&self, env: &impl Fn(&str) -> Option<String>) -> Result<(String, bool), String> {
+    let named = self.env.iter().find_map(|name| env(name).map(|key| (name, key)));
+    let adc = || {
+      let home = env("HOME").map(PathBuf::from);
+      home.is_some_and(|home| {
+        home.join(".config/gcloud/application_default_credentials.json").is_file()
+      })
+    };
+    match (self.rig, named) {
+      (Client::Bedrock, Some(_)) => Ok((String::new(), false)),
+      (Client::Vertex, Some(_)) => Ok((env("GOOGLE_CLOUD_API_KEY").unwrap_or_default(), false)),
+      (Client::Vertex, None) if adc() => Ok((String::new(), false)),
+      (_, Some((name, key))) => Ok((key, self.bearer.contains(name))),
+      (_, None) => {
+        Err(format!("no credential of it stands in the environment: set {}", self.env.join(" or ")))
+      }
+    }
+  }
+
+  /// Where a model of the provider is asked, with its credential: its address, with each place filled from the
+  /// environment, the name that Azure knows it by, and the project and the location of Google; or why the
+  /// environment does not say it.
+  fn reach(
+    &self,
+    id: &str,
+    listing: &Listing,
+    client: Client,
+    (key, bearer): (String, bool),
+    env: &impl Fn(&str) -> Option<String>,
+  ) -> Result<Reach, String> {
+    let own = listing.provider.as_ref().and_then(|own| own.api.clone());
+    let based = env("AZURE_OPENAI_BASE_URL").filter(|_| client == Client::Azure);
+    let api = match based {
+      Some(base) => Some(
+        base.trim_end_matches('/').trim_end_matches("/v1").trim_end_matches("/openai").to_owned(),
+      ),
+      None => own.or_else(|| self.api.clone()).map(|api| self.filled(&api, env)).transpose()?,
+    };
+    // Azure knows a model by the name of its deployment, which the map of the environment gives as `id=name`.
+    let deployments = env("AZURE_OPENAI_DEPLOYMENT_NAME_MAP").filter(|_| client == Client::Azure);
+    let deployed = deployments.unwrap_or_default().split(',').find_map(|one| {
+      let (model, name) = one.split_once('=')?;
+      (model.trim() == id).then(|| name.trim().to_owned())
+    });
+    let project = match client {
+      Client::Vertex => {
+        let project = env("GOOGLE_CLOUD_PROJECT").or_else(|| env("GCLOUD_PROJECT"));
+        let project = project
+          .ok_or("no project of Google stands in the environment: set GOOGLE_CLOUD_PROJECT")?;
+        Some((project, env("GOOGLE_CLOUD_LOCATION").unwrap_or_else(|| "global".to_owned())))
+      }
+      _ => None,
+    };
+    let version = env("AZURE_OPENAI_API_VERSION").filter(|_| client == Client::Azure);
+    let id = deployed.unwrap_or_else(|| id.to_owned());
+    Ok(Reach { key, bearer, api, id, version, project })
+  }
+
+  /// An address with each place `${NAME}` filled from the environment, which reads the name of pi-ai for the place
+  /// before the name itself; or the first name that the environment does not hold.
+  fn filled(&self, api: &str, env: &impl Fn(&str) -> Option<String>) -> Result<String, String> {
+    let mut filled = api.to_owned();
+    while let Some(at) = filled.find("${") {
+      let Some(end) = filled[at..].find('}').map(|end| at + end) else { break };
+      let name = filled[at + 2..end].to_owned();
+      let value = self.aliases.get(&name).and_then(|alias| env(alias)).or_else(|| env(&name));
+      let value =
+        value.ok_or_else(|| format!("its address needs {name}: set it in the environment"))?;
+      filled.replace_range(at..=end, &value);
+    }
+    Ok(filled)
+  }
 }
 
-impl Source {
-  fn dialect(&self) -> Dialect {
-    match self.rig.as_str() {
-      "anthropic" => Dialect::Anthropic,
-      "openai" | "xai" => Dialect::Responses,
-      "gemini" => Dialect::Gemini,
-      "openrouter" => Dialect::OpenRouter,
+impl Client {
+  /// How the provider of this client reads an effort for a model: the models of Anthropic on Amazon read it as
+  /// Anthropic does, and GitHub Copilot and the other models of Amazon read none.
+  fn dialect(self, id: &str) -> Dialect {
+    match self {
+      Client::Anthropic => Dialect::Anthropic,
+      Client::Bedrock if id.contains("anthropic.") => Dialect::Anthropic,
+      Client::Openai | Client::Xai => Dialect::Responses,
+      Client::Gemini | Client::Vertex => Dialect::Gemini,
+      Client::Openrouter => Dialect::OpenRouter,
+      Client::Pi => Dialect::Pi,
+      Client::Bedrock | Client::Copilot => Dialect::Silent,
       _ => Dialect::Chat,
     }
   }
-
-  /// The model of rig that asks this provider for a model, made from its credential.
-  fn streams(&self, id: &str) -> Result<Streams, String> {
-    let Some(key) = self.key.clone() else {
-      return Err(format!(
-        "no credential of it stands in the environment: set {}",
-        self.env.join(" or ")
-      ));
-    };
-    macro_rules! asked {
-      ($client:ty) => {
-        asked!($client, None::<String>)
-      };
-      ($client:ty, $api:expr) => {{
-        let mut builder = <$client>::builder().api_key(key);
-        if let Some(api) = $api {
-          builder = builder.base_url(api);
-        }
-        builder.build().map_err(|no| no.to_string())?.completion_model(id)
-      }};
-    }
-    Ok(match self.rig.as_str() {
-      "anthropic" => {
-        streams(asked!(anthropic::Client, self.api.as_deref()).with_automatic_caching())
-      }
-      "openai" => streams(asked!(openai::Client)),
-      "gemini" => streams(asked!(gemini::Client)),
-      "openrouter" => streams(asked!(openrouter::Client)),
-      "groq" => streams(asked!(groq::Client)),
-      "xai" => streams(asked!(xai::Client)),
-      "mistral" => streams(asked!(mistral::Client)),
-      "deepseek" => streams(asked!(deepseek::Client)),
-      "together" => streams(asked!(together::Client)),
-      "moonshot" => streams(asked!(moonshot::Client)),
-      "zai" => streams(asked!(zai::Client)),
-      "minimax" => streams(asked!(minimax::Client)),
-      "huggingface" => streams(asked!(huggingface::Client)),
-      "xiaomi" => streams(asked!(xiaomimimo::Client)),
-      "chat" => streams(asked!(openai::CompletionsClient, self.api.as_deref())),
-      other => return Err(format!("rig serves no provider {other}")),
-    })
-  }
 }
 
-/// A model of a provider of the network, whose client is made when it is first asked.
-fn model(provider: &str, id: &str, listing: &Listing, source: &Arc<Source>) -> Model {
-  let dialect = source.dialect();
+/// A model of a provider of the network, whose client is made when it is first asked, or why it cannot be. A model
+/// of Anthropic, of Amazon or of pi-ai counts what it read of the cache apart, and is told the most it writes.
+fn model(
+  provider: &str,
+  id: &str,
+  listing: &Listing,
+  client: Client,
+  reach: Result<Reach, String>,
+) -> Model {
+  let dialect = client.dialect(id);
   let made: Arc<OnceLock<Result<Streams, String>>> = Arc::default();
-  let (asked, id) = (Arc::clone(source), id.to_owned());
-  let name = format!("{provider}:{id}");
-  let mut model = Model::lazy(name, listing.limit.context, move || {
-    let got = made.get_or_init(|| asked.streams(&id));
-    got.clone().map_err(|no| CompletionError::ProviderError(no.clone()))
+  let mut model = Model::lazy(format!("{provider}:{id}"), listing.limit.context, move || {
+    let got = made.get_or_init(|| reach.clone().and_then(|reach| client.streams(&reach)));
+    got.clone().map_err(CompletionError::ProviderError)
   });
   model.efforts = listing.efforts(dialect);
   model.images = listing.modalities.input.iter().any(|one| one == "image");
   model.price =
     listing.cost.map(|cost| [cost.input, cost.output, cost.cache_read, cost.cache_write]);
-  model.apart = dialect == Dialect::Anthropic;
-  model.tokens =
-    (dialect == Dialect::Anthropic && listing.limit.output > 0).then_some(listing.limit.output);
-  model
+  model.apart = matches!(client, Client::Anthropic | Client::Bedrock | Client::Pi);
+  let told = matches!(client, Client::Anthropic | Client::Bedrock) && listing.limit.output > 0;
+  model.tokens = told.then_some(listing.limit.output);
+  match client {
+    Client::Pi => model.conversation("sessionId"),
+    _ => model,
+  }
 }
 
 /// The providers of the snapshot, with the models of each that the cache at a path holds, read once in a process;
@@ -452,13 +526,18 @@ fn listed(cached: Option<&PathBuf>) -> &'static IndexMap<String, Listed> {
   })
 }
 
-/// The providers of a snapshot, each with the models the cache holds of it when the cache holds it.
+/// The providers of a snapshot, each with the models of the cache when the cache holds models of it as new as those
+/// of the snapshot or newer. The last day that a model of a list changed says how new the list is.
 pub(super) fn parsed(snapshot: &str, cached: Option<&str>) -> IndexMap<String, Listed> {
   let mut listed: IndexMap<String, Listed> = serde_json::from_str(snapshot)
     .expect("the snapshot of the catalog is the JSON of its providers");
   let cached = cached.and_then(|text| serde_json::from_str::<HashMap<String, Cached>>(text).ok());
+  let newest = |models: &IndexMap<String, Listing>| {
+    models.values().filter_map(|one| one.last_updated.clone()).max()
+  };
   for (provider, one) in cached.into_iter().flatten() {
-    if let Some(held) = listed.get_mut(&provider).filter(|_| !one.models.is_empty()) {
+    let Some(held) = listed.get_mut(&provider) else { continue };
+    if !one.models.is_empty() && newest(&one.models) >= newest(&held.models) {
       held.models = one.models;
     }
   }
@@ -483,7 +562,7 @@ async fn refreshed(at: PathBuf) {
 
 /// The cache of furb on this machine: under `XDG_CACHE_HOME`, `LOCALAPPDATA` on Windows, `Library/Caches` of the
 /// home on macOS, and `.cache` of the home elsewhere.
-fn cache() -> Option<PathBuf> {
+pub(super) fn cache() -> Option<PathBuf> {
   let named = |name: &str| env::var_os(name).filter(|one| !one.is_empty()).map(PathBuf::from);
   let base = named("XDG_CACHE_HOME").or_else(|| {
     if cfg!(windows) {

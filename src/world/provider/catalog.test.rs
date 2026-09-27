@@ -7,14 +7,14 @@ use rig_core::{completion::CompletionRequest, message::Message};
 use serde_json::{Value, json};
 
 use super::{
-  super::{Asked, Told, runtime},
+  super::{Asked, Told, clients::Client, runtime},
   Catalog, SNAPSHOT, clamp, parsed,
 };
 
 /// A snapshot of the tests: a provider of each dialect, and models that think in each way.
 const LISTED: &str = r#"{
 "anthropic": {"rig": "anthropic", "env": ["ANTHROPIC_API_KEY"], "models": {
-"claude-opus-5": {"reasoning": true, "reasoning_options": [{"type": "effort", "values": ["low", "medium", "high", "xhigh", "max"]}], "limit": {"context": 1000000, "output": 128000}, "cost": {"input": 5, "output": 25, "cache_read": 0.5, "cache_write": 6.25}, "modalities": {"input": ["text", "image"], "output": ["text"]}},
+"claude-opus-5": {"reasoning": true, "reasoning_options": [{"type": "effort", "values": ["low", "medium", "high", "xhigh", "max"]}], "limit": {"context": 1000000, "output": 128000}, "cost": {"input": 5, "output": 25, "cache_read": 0.5, "cache_write": 6.25}, "modalities": {"input": ["text", "image"], "output": ["text"]}, "last_updated": "2026-09-01"},
 "claude-haiku-4-5": {"reasoning": true, "reasoning_options": [{"type": "budget_tokens", "min": 1024}], "limit": {"context": 200000, "output": 64000}, "modalities": {"input": ["text"], "output": ["text"]}},
 "claude-sonnet-5": {"reasoning": true, "reasoning_options": [{"type": "toggle"}, {"type": "effort", "values": ["low", "high"]}], "limit": {"context": 1000000, "output": 128000}, "modalities": {"input": ["text"], "output": ["text"]}},
 "claude-old": {"status": "deprecated", "limit": {"context": 100000}, "modalities": {"input": ["text"], "output": ["text"]}}
@@ -33,14 +33,33 @@ const LISTED: &str = r#"{
 }},
 "fireworks-ai": {"rig": "chat", "env": ["FIREWORKS_API_KEY"], "api": "http://127.0.0.1:9/v1", "models": {
 "gpt-4o": {"reasoning": true, "reasoning_options": [{"type": "effort", "values": ["low", "default"]}], "limit": {"context": 8000}, "modalities": {"input": ["text"], "output": ["text"]}}
+}},
+"azure": {"rig": "azure", "env": ["AZURE_OPENAI_API_KEY"], "api": "https://${AZURE_RESOURCE_NAME}.openai.azure.com", "aliases": {"AZURE_RESOURCE_NAME": "AZURE_OPENAI_RESOURCE_NAME"}, "models": {
+"gpt-5-mini": {"limit": {"context": 8000}, "modalities": {"input": ["text"], "output": ["text"]}},
+"claude-in-azure": {"limit": {"context": 8000}, "modalities": {"input": ["text"], "output": ["text"]}, "provider": {"npm": "@ai-sdk/anthropic", "api": "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"}},
+"model-router": {"limit": {"context": 8000}, "modalities": {"input": ["text"], "output": ["text"]}, "provider": {"npm": "@ai-sdk/openai-compatible", "shape": "completions"}}
+}},
+"amazon-bedrock": {"rig": "bedrock", "env": ["AWS_PROFILE", "AWS_ACCESS_KEY_ID"], "models": {
+"us.anthropic.claude-sonnet-5": {"reasoning": true, "reasoning_options": [{"type": "effort", "values": ["low", "high"]}], "limit": {"context": 8000, "output": 4000}, "modalities": {"input": ["text"], "output": ["text"]}},
+"qwen.qwen3": {"reasoning": true, "reasoning_options": [{"type": "effort", "values": ["low", "high"]}], "limit": {"context": 8000}, "modalities": {"input": ["text"], "output": ["text"]}}
+}},
+"google-vertex": {"rig": "vertex", "env": ["GOOGLE_CLOUD_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS"], "models": {
+"gemini-pro": {"limit": {"context": 8000}, "modalities": {"input": ["text"], "output": ["text"]}}
+}},
+"radius": {"rig": "pi", "env": ["RADIUS_API_KEY"], "api": "https://radius.pi.dev/v1", "models": {
+"balanced": {"reasoning": true, "reasoning_options": [{"type": "effort", "values": ["low", "high", "max"]}], "limit": {"context": 8000, "output": 1000}, "modalities": {"input": ["text"], "output": ["text"]}}
 }}
 }"#;
 
-/// The catalog of the snapshot of the tests, with credentials of these names.
-fn catalog(credentials: &[&str]) -> Catalog {
-  let credentials: Vec<String> = credentials.iter().map(|one| (*one).to_owned()).collect();
+/// The catalog of the snapshot of the tests, with an environment that holds these names, each with the value after
+/// its `=`, or `key`.
+fn catalog(environment: &[&str]) -> Catalog {
+  let environment: Vec<(String, String)> = (environment.iter())
+    .map(|one| one.split_once('=').unwrap_or((one, "key")))
+    .map(|(name, value)| (name.to_owned(), value.to_owned()))
+    .collect();
   Catalog::of(&parsed(LISTED, None), None, move |name| {
-    credentials.contains(&name.to_owned()).then(|| "key".to_owned())
+    environment.iter().find(|(held, _)| held == name).map(|(_, value)| value.clone())
   })
 }
 
@@ -244,28 +263,77 @@ fn the_cache_holds_the_models_of_the_providers_of_the_snapshot_and_nothing_more(
 }
 
 #[test]
+fn the_newer_of_the_cache_and_the_snapshot_holds_for_each_provider() {
+  let cached = |day: &str| {
+    let model = json!({"limit": {"context": 9}, "modalities": {"input": ["text"], "output": ["text"]},
+      "last_updated": day});
+    json!({"anthropic": {"models": {"claude-cached": model}}}).to_string()
+  };
+  let held = |day: &str| parsed(LISTED, Some(&cached(day)))["anthropic"].models.len();
+  assert_eq!(held("2026-08-31"), 4, "a cache older than the snapshot hides nothing of it");
+  assert_eq!(held("2026-09-01"), 1);
+  assert_eq!(held("2026-10-01"), 1);
+}
+
+#[test]
 fn the_snapshot_that_the_crate_carries_names_a_client_of_rig_for_each_provider() {
   let listed = parsed(SNAPSHOT, None);
-  let clients = [
-    "anthropic",
-    "openai",
-    "gemini",
-    "openrouter",
-    "groq",
-    "xai",
-    "mistral",
-    "deepseek",
-    "together",
-    "moonshot",
-    "zai",
-    "minimax",
-    "huggingface",
-    "xiaomi",
-    "chat",
-  ];
-  assert!(listed.values().all(|one| clients.contains(&one.rig.as_str()) && !one.env.is_empty()));
-  assert!(listed.values().filter(|one| one.rig == "chat").all(|one| one.api.is_some()));
+  assert!(listed.len() >= 40 && listed.values().all(|one| !one.env.is_empty()));
+  let addressed =
+    |one: &&super::Listed| matches!(one.rig, Client::Chat | Client::Gateway | Client::Pi);
+  assert!(listed.values().filter(addressed).all(|one| one.api.is_some()));
   let catalog = Catalog::of(&listed, None, |_| None);
   let opus = catalog.find("anthropic:claude-opus-5").expect("the snapshot holds opus");
   assert!(opus.window >= 200_000 && opus.images && opus.price.is_some());
+  let radius =
+    catalog.find("radius:balanced").expect("the data of pi-ai gives the models of Radius");
+  assert!(radius.efforts().contains(&"high"));
+}
+
+#[test]
+fn a_provider_is_offered_when_the_environment_holds_its_credential_and_each_place_of_its_address() {
+  let offered = |environment: &[&str], name: &str| {
+    catalog(environment).offered().iter().any(|model| model.name == name)
+  };
+  assert!(
+    !offered(&["AZURE_OPENAI_API_KEY"], "azure:gpt-5-mini"),
+    "the address needs its resource"
+  );
+  assert!(offered(&["AZURE_OPENAI_API_KEY", "AZURE_RESOURCE_NAME=r"], "azure:gpt-5-mini"));
+  assert!(offered(
+    &["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_RESOURCE_NAME=r"],
+    "azure:claude-in-azure"
+  ));
+  assert!(
+    !offered(&["AZURE_OPENAI_API_KEY", "AZURE_RESOURCE_NAME=r"], "azure:model-router"),
+    "no client of rig asks a model of a shape of its own"
+  );
+  assert!(offered(&["AWS_PROFILE"], "amazon-bedrock:qwen.qwen3"));
+  assert!(!offered(&["GOOGLE_CLOUD_API_KEY"], "google-vertex:gemini-pro"), "Google asks a project");
+  assert!(offered(&["GOOGLE_CLOUD_API_KEY", "GOOGLE_CLOUD_PROJECT=p"], "google-vertex:gemini-pro"));
+  assert!(offered(&["RADIUS_API_KEY"], "radius:balanced"));
+}
+
+#[test]
+fn each_client_reads_an_effort_in_the_words_of_its_provider() {
+  let catalog = catalog(&[]);
+  assert_eq!(
+    efforts(&catalog, "amazon-bedrock:us.anthropic.claude-sonnet-5")[1].1,
+    json!({"output_config": {"effort": "high"}, "thinking": {"type": "adaptive"}}),
+    "a model of Anthropic on Amazon reads an effort as Anthropic does"
+  );
+  assert_eq!(
+    efforts(&catalog, "amazon-bedrock:qwen.qwen3"),
+    [],
+    "the other models of Amazon read none"
+  );
+  assert_eq!(
+    efforts(&catalog, "radius:balanced")[2],
+    ("max".to_owned(), json!({"reasoning": "max"}))
+  );
+  let bedrock =
+    catalog.find("amazon-bedrock:us.anthropic.claude-sonnet-5").expect("a model of Amazon");
+  assert_eq!((bedrock.apart, bedrock.tokens), (true, Some(4000)));
+  let radius = catalog.find("radius:balanced").expect("a model of Radius");
+  assert_eq!((radius.apart, radius.conversation.as_deref()), (true, Some("sessionId")));
 }

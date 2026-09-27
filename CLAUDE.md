@@ -12,9 +12,10 @@ API of its own:
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes: the files, the commands, time, the store of the
   record, and the provider of models, which asks each model through rig and streams what it writes. Its catalog
-  knows the models of models.dev and those of the claude command line, and it offers each model whose credential
-  stands in the environment, and the claude command line when it finds the program. A host names its models from
-  the catalog, or gives a model of its own, and adds its own ears, such as the console of its operator.
+  knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
+  model whose credential stands in the environment, and the claude command line when it finds the program. A host
+  names its models from the catalog, or gives a model of its own, and adds its own ears, such as the console of its
+  operator.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate is the type checker of monty. It reads a word on the sheet of the engine,
@@ -144,7 +145,8 @@ Run every command from the root of the repository.
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/CLAUDE.md` says how to run.
 - `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from
-  models.dev. A life refreshes its own copy in the cache of furb once a day.
+  models.dev and from the data of pi-ai. A life refreshes its own copy of models.dev in the cache of furb once a
+  day, and the newer of the two holds for each provider.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint, and the tests of the TypeScript
   side, each of which has thirty seconds. As root, the test of a folder that cannot be read fails, since root reads

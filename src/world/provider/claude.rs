@@ -20,7 +20,7 @@ use rig_core::{
     CompletionError, CompletionModel, CompletionRequest, CompletionResponse, FinishReason, Usage,
   },
   message::{AssistantContent, DocumentSourceKind, Message, MimeType, Reasoning, UserContent},
-  streaming::{RawStreamingChoice, StreamFinal, StreamingCompletionResponse},
+  streaming::{RawStreamingChoice, StreamingCompletionResponse},
 };
 use serde_json::{Value, json};
 use tokio::{
@@ -29,7 +29,7 @@ use tokio::{
   sync::mpsc,
 };
 
-use super::{Model, runtime, spawned, uuid};
+use super::{Model, ended, runtime, spawned, uuid};
 
 /// The name of the command line as a provider: each response of it says this name, and each of its models is named
 /// by it and the alias of its family.
@@ -186,7 +186,8 @@ impl CompletionModel for Completion {
     let (deltas, heard) = mpsc::unbounded_channel();
     let task = spawned(async move {
       let got = held.turn(&name, request, Some(&deltas)).await;
-      let _ = deltas.send(got.map(|response| RawStreamingChoice::FinalResponse(ended(response))));
+      let _ =
+        deltas.send(got.map(|response| RawStreamingChoice::FinalResponse(ended(CLAUDE, response))));
     });
     // The task goes with the stream, so a stream that is dropped ends its turn.
     let stream = futures::stream::unfold((heard, task), |(mut heard, task)| async move {
@@ -194,16 +195,6 @@ impl CompletionModel for Completion {
     });
     Ok(StreamingCompletionResponse::stream(CLAUDE, Box::pin(stream)))
   }
-}
-
-/// The terminal record of a stream, from the response of its turn.
-fn ended(response: CompletionResponse) -> StreamFinal {
-  let mut record = StreamFinal::new(CLAUDE, response.usage);
-  record.finish_reason = response.finish_reason();
-  record.response_id = response.response_id;
-  record.model = response.model;
-  record.raw = response.raw;
-  record
 }
 
 impl Held {
