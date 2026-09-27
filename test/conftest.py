@@ -6,6 +6,7 @@ hear by, so no name of them stands in the globals of the engine. Every fact is a
 """
 
 import asyncio
+import os
 import re
 import sys
 import tempfile
@@ -583,6 +584,12 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
   path = metafunc.definition.path
   if "engine_of" in metafunc.fixturenames and path.parent in SUITES and path.name != "test_hygiene.py":
     metafunc.parametrize("engine_of", list(ENGINES), indirect=True)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def cached(tmp_path_factory: pytest.TempPathFactory) -> None:
+  """The cache that the catalog of each life of the suite reads, of its own, and not the one of the machine."""
+  os.environ["XDG_CACHE_HOME"] = str(tmp_path_factory.mktemp("cache"))
 
 
 @pytest.fixture(autouse=True)

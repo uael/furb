@@ -62,13 +62,13 @@ impl Yard {
     self.at.join("record.jsonl")
   }
 
-  /// furb with these words, in the yard, on the fake claude and on the config directory of the yard, and with no
-  /// TUI that the machine names.
+  /// furb with these words, in the yard, on the fake claude and on the config directory and the cache of the yard,
+  /// and with no TUI that the machine names.
   fn furb(&self, words: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_furb"));
     command.args(words).current_dir(&self.at);
     command.env("FURB_CLAUDE_BIN", self.fake.join("claude")).env_remove("FURB_TUI");
-    command.env("FURB_CONFIG_DIR", self.config());
+    command.env("FURB_CONFIG_DIR", self.config()).env("XDG_CACHE_HOME", self.at.join("cache"));
     command
   }
 
