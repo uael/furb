@@ -338,7 +338,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             module()["raised"] = value
           if not isinstance(value, CancelledError) and running.get(get(about)[2]) is False:
             unseen = about
-      if a[0] in ("started", "done") and (r := get(a[1])) and r[0] in ("run", "wants"):
+      if a[0] in ("started", "done") and (r := get(a[1]))[0] in ("run", "wants"):
         running[r[4] if r[0] == "run" else get(r[2])[4]] = (a[0] == "started") == (r[0] == "run")
       if asking not in waiting and (asking := next((x for x in waiting if not paused(x)), "")):
         maker, to = waiting[asking]
