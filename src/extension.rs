@@ -215,6 +215,17 @@ pub fn word(source: &str) -> String {
   out
 }
 
+/// The extensions that a life runs, in the order it enabled them, as the transcript of its root holds them.
+pub fn enabled(root: &[Fact]) -> Vec<Extension> {
+  let mut out: Vec<Extension> = Vec::new();
+  for one in root.iter().filter(|a| a.kind() == ENABLE).filter_map(Extension::of) {
+    if !out.iter().any(|two| two.name == one.name) {
+      out.push(one);
+    }
+  }
+  out
+}
+
 /// The ear of the extensions, which plays each extension that the life enables as a rung on each chain: on every
 /// chain there is when the life enables it, and after that on each chain at its birth. The rung holds the word and
 /// then the life word, and the life word alone on a chain whose origin had the extension, since that chain made the

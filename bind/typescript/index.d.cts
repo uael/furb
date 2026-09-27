@@ -17,6 +17,14 @@ export declare class Engine {
    * the name the engine hears it by, in the order the engine offers them a question.
    */
   static boot(record: unknown[], ears: Array<[string, Generator<unknown, unknown, unknown> | NativeEar]>): Engine
+  /**
+   * A life opened as every host of the crate opens one: on its record, on these ears of the host, each a generator
+   * of JavaScript or an ear of the crate, and then on the ears of the crate and of the extensions. A life whose
+   * record drifted is refused.
+   */
+  static open(options: OpenOptions, ears: Array<[string, Generator<unknown, unknown, unknown> | NativeEar]>): Engine
+  /** The record the life opened on, which the journal said again whole before boot returned. */
+  get record(): unknown[]
   get root(): string
   /** What boot raised, and nothing when it raised nothing. After a drift the life goes on, with nothing kept. */
   get raised(): { is: string; args: unknown[] } | null
@@ -203,6 +211,25 @@ export declare function models(): Array<ModelInfo>
  * Windows has no such console, and gives this callback no event.
  */
 export declare function onConsoleEnd(callback: (event: "break" | "close" | "logoff" | "shutdown") => void): void
+
+/** What a life is opened on, which every host of the crate shares. */
+export interface OpenOptions {
+  /** The directory of the project, whose config turns extensions on. */
+  directory: string
+  /** The record the life opens on. */
+  record?: string
+  /** Whether the life keeps what it says to its record, under the lease of the store; true when unsaid. */
+  keeps?: boolean
+  /** Whether the life only inspects its record: it keeps nothing, and its files, commands and time do no work. */
+  inspecting?: boolean
+  /**
+   * Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs
+   * what its record enables either way.
+   */
+  extensions?: boolean
+  /** The config directory of the user, in place of the one of this process. */
+  config?: string
+}
 
 export interface Outcome {
   done: boolean

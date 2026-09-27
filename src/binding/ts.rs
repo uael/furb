@@ -25,7 +25,10 @@ use serde_json::Value;
 use host::{Door, Held, Word, refused};
 
 use crate::{
-  Ear, Engine, Fault, Object, wire,
+  Ear, Engine, Fault, Object,
+  extension::Places,
+  life::Opening,
+  wire,
   world::{self, images},
 };
 
@@ -145,6 +148,25 @@ pub struct JsEngine {
   held: Rc<Held>,
   root: String,
   raised: Option<Value>,
+  record: Vec<Value>,
+}
+
+/// What a life is opened on, which every host of the crate shares.
+#[napi(object)]
+pub struct OpenOptions {
+  /// The directory of the project, whose config turns extensions on.
+  pub directory: String,
+  /// The record the life opens on.
+  pub record: Option<String>,
+  /// Whether the life keeps what it says to its record, under the lease of the store; true when unsaid.
+  pub keeps: Option<bool>,
+  /// Whether the life only inspects its record: it keeps nothing, and its files, commands and time do no work.
+  pub inspecting: Option<bool>,
+  /// Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs
+  /// what its record enables either way.
+  pub extensions: Option<bool>,
+  /// The config directory of the user, in place of the one of this process.
+  pub config: Option<String>,
 }
 
 /// An act: its name, which a control takes, and what it comes to, which JavaScript awaits.
@@ -215,22 +237,51 @@ impl JsEngine {
     record: Vec<Value>,
     ears: Vec<(String, Unknown<'_>)>,
   ) -> napi::Result<Self> {
-    let record = record.iter().map(wire::inward).collect::<Result<Vec<_>, _>>().map_err(error)?;
+    let kept = record.iter().map(wire::inward).collect::<Result<Vec<_>, _>>().map_err(error)?;
     let hosted = crate::engine::Hosted::default();
     let door = Door::new(env, hosted.clone())?;
-    let mut given = Vec::new();
-    for (name, value) in ears {
-      let object = value.coerce_to_object()?;
-      let ear = match NativeEar::taken(&env, &object).map_err(error)? {
-        Some(ear) => ear,
-        None => door.ear(object).map_err(error)?,
-      };
-      given.push((name, ear));
-    }
-    let engine = Engine::open(hosted, record, given).map_err(error)?;
+    let engine = Engine::open(hosted, kept, eared(&env, &door, ears)?).map_err(error)?;
     let root = engine.root().to_owned();
     let raised = engine.raised().map(|fault| wire::record(fault.object().as_ref()));
-    Ok(Self { held: Held::new(&env, engine, door)?, root, raised })
+    Ok(Self { held: Held::new(&env, engine, door)?, root, raised, record })
+  }
+
+  /// A life opened as every host of the crate opens one: on its record, on these ears of the host, each a generator
+  /// of JavaScript or an ear of the crate, and then on the ears of the crate and of the extensions. A life whose
+  /// record drifted is refused.
+  #[napi(
+    factory,
+    ts_args_type = "options: OpenOptions, ears: Array<[string, Generator<unknown, unknown, unknown> | NativeEar]>"
+  )]
+  pub fn open(
+    env: Env,
+    options: OpenOptions,
+    ears: Vec<(String, Unknown<'_>)>,
+  ) -> napi::Result<Self> {
+    let mut opening = Opening::new();
+    if let Some(config) = options.config {
+      opening = opening.places(Places { config: config.into(), ..Places::here() });
+    }
+    if let Some(record) = options.record {
+      opening = opening.record(record, options.keeps.unwrap_or(true));
+    }
+    if options.inspecting == Some(true) {
+      opening = opening.inspecting();
+    }
+    if options.extensions != Some(false) {
+      opening = opening.configured(options.directory.as_ref()).map_err(error)?;
+    }
+    let hosted = crate::engine::Hosted::default();
+    let door = Door::new(env, hosted.clone())?;
+    let (engine, record) = opening.boot_on(hosted, eared(&env, &door, ears)?).map_err(error)?;
+    let root = engine.root().to_owned();
+    Ok(Self { held: Held::new(&env, engine, door)?, root, raised: None, record: records(&record) })
+  }
+
+  /// The record the life opened on, which the journal said again whole before boot returned.
+  #[napi(getter, ts_return_type = "unknown[]")]
+  pub fn record(&self) -> Vec<Value> {
+    self.record.clone()
   }
 
   #[napi(getter)]
@@ -373,6 +424,25 @@ impl JsEngine {
 
 // The verbs of the contract, one method each, which the build makes from the contract.
 include!(concat!(env!("OUT_DIR"), "/ts.rs"));
+
+/// The ears JavaScript gave, each as the engine hears it: an ear of the crate as itself, and a generator of JavaScript
+/// through the door.
+fn eared(
+  env: &Env,
+  door: &Door,
+  ears: Vec<(String, Unknown<'_>)>,
+) -> napi::Result<Vec<(String, Box<dyn Ear>)>> {
+  let mut given = Vec::new();
+  for (name, value) in ears {
+    let object = value.coerce_to_object()?;
+    let ear = match NativeEar::taken(env, &object).map_err(error)? {
+      Some(ear) => ear,
+      None => door.ear(object).map_err(error)?,
+    };
+    given.push((name, ear));
+  }
+  Ok(given)
+}
 
 fn error(fault: Fault) -> napi::Error {
   napi::Error::from_reason(fault.to_string())

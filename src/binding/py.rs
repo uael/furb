@@ -24,7 +24,8 @@ use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step, Voice,
   ear::{Call, Spoken},
   engine::Hosted,
-  extension::{self, Extension},
+  extension::{self, Extension, Places},
+  life::Opening,
   value::{IS, entry, field, marked},
   world,
 };
@@ -647,6 +648,38 @@ fn skills(config: std::path::PathBuf) -> NativeEar {
   NativeEar::of(extension::skills::skills(config))
 }
 
+/// The record a life opens on, as python holds it, and the ears of the crate, each under its name.
+type Opened<'py> = (Bound<'py, PyAny>, Vec<(String, NativeEar)>);
+
+/// The record a life opens on, and the ears of the crate that it hears after the ears of the host, as every host of
+/// the crate opens a life: the extensions, which enable at the tip those that the configs of the user and of the
+/// directory turn on unless `extensions` is false, each official extension, the files, the commands, time, and the
+/// store of the record when the life keeps.
+#[pyfunction]
+#[pyo3(signature = (directory, record = None, *, keeps = true, extensions = true, config = None))]
+fn opened(
+  py: Python<'_>,
+  directory: std::path::PathBuf,
+  record: Option<std::path::PathBuf>,
+  keeps: bool,
+  extensions: bool,
+  config: Option<std::path::PathBuf>,
+) -> PyResult<Opened<'_>> {
+  let made = Made::new(py)?;
+  let mut opening = Opening::new();
+  if let Some(config) = config {
+    opening = opening.places(Places { config, ..Places::here() });
+  }
+  if let Some(record) = record {
+    opening = opening.record(record, keeps);
+  }
+  let opening = if extensions { opening.configured(&directory) } else { Ok(opening) };
+  let (record, ears) =
+    opening.and_then(Opening::parts).map_err(|fault| raised(py, &made, &fault))?;
+  let ears = ears.into_iter().map(|(name, ear)| (name, NativeEar::of(ear))).collect();
+  Ok((to_python(py, &made, Object::list(record).as_ref())?, ears))
+}
+
 /// What the engine raised, raised here as the exception it is.
 fn raised(py: Python<'_>, made: &Made, fault: &Fault) -> PyErr {
   match fault_to_python(py, made, fault) {
@@ -1011,6 +1044,7 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(extensions, module)?)?;
   module.add_function(wrap_pyfunction!(memory, module)?)?;
   module.add_function(wrap_pyfunction!(skills, module)?)?;
+  module.add_function(wrap_pyfunction!(opened, module)?)?;
   module.add_function(wrap_pyfunction!(files, module)?)?;
   module.add_function(wrap_pyfunction!(bash, module)?)?;
   module.add_function(wrap_pyfunction!(time, module)?)?;
