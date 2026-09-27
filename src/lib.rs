@@ -9,6 +9,7 @@
 
 pub mod ear;
 pub mod engine;
+pub mod extension;
 pub mod fact;
 pub mod gate;
 mod sand;
