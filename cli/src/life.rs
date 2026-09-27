@@ -3,6 +3,7 @@
 
 use std::{
   cell::RefCell,
+  collections::HashSet,
   future::Future,
   path::{Path, PathBuf},
   pin::Pin,
@@ -25,12 +26,13 @@ use furb::{
 
 use crate::console;
 
-/// One life, as the operator holds it: its engine, its root, the record it was made again from, and what the
-/// operator hears of its root.
+/// One life, as the operator holds it: its engine, its root, the record it was made again from, each act that record
+/// showed started and not done, with its kind, and what the operator hears of its root.
 pub struct Life {
   pub engine: Engine,
   pub root: String,
   held: Vec<Object>,
+  left: Vec<(String, String)>,
   quiet: Rc<RefCell<Quiet>>,
 }
 
@@ -98,7 +100,8 @@ impl Life {
       }
     });
     engine.drive(observer, "observer").map_err(failed)?;
-    Ok(Life { engine, root, held, quiet })
+    let left = left(&held);
+    Ok(Life { engine, root, held, left, quiet })
   }
 
   /// A life for one command of the operator, on the terminal.
@@ -115,6 +118,13 @@ impl Life {
   /// Whether a pause stands over the root.
   pub fn paused(&self) -> bool {
     self.quiet.borrow().paused
+  }
+
+  /// Each act that the record showed started and not done when the life opened and that is still not done, with its
+  /// kind: work that an earlier life began, which waits for a wake.
+  pub fn pending(&mut self) -> Vec<(String, String)> {
+    let left = self.left.iter().filter(|(id, _)| matches!(self.engine.outcome(id), Ok(None)));
+    left.cloned().collect()
   }
 
   /// The name of the prompt the record already holds for this message: of the operator, on the root, of this shape
@@ -158,6 +168,25 @@ impl Life {
       thread::park();
     }
   }
+}
+
+/// Each act that the entries of a record show started and not done, as its name and its kind: the journal keeps the
+/// started of an act that the outside took, and says the entries again as the life opens.
+fn left(held: &[Object]) -> Vec<(String, String)> {
+  let facts: Vec<Fact> =
+    held.iter().filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?)).collect();
+  let (mut started, mut done) = (HashSet::new(), HashSet::new());
+  for a in &facts {
+    match a.kind() {
+      "started" => started.insert(a.about()),
+      "done" => done.insert(a.about()),
+      _ => false,
+    };
+  }
+  let left = facts
+    .iter()
+    .filter(|a| a.question() && started.contains(a.about()) && !done.contains(a.about()));
+  left.map(|a| (a.about().to_owned(), a.kind().to_owned())).collect()
 }
 
 /// A shape as a prompt is given it, by its name: None itself, or the name of a type.
