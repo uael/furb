@@ -67,6 +67,10 @@ class Engine:
 def official() -> list[tuple[str, str, str]]:
   """The official extensions, in the order a life runs them, each as its name, its word and its life word."""
 
+def enabled(root: list[tuple]) -> list[tuple[str, str, str]]:
+  """The extensions that a life runs, in the order it enabled them, as the facts of its root say them, each as its
+  name, its word and its life word."""
+
 def extensions(given: list[tuple[str, str, str]]) -> NativeEar:
   """The ear of the extensions, given each extension that the life runs as its name, its word and its life word: it
   enables each at the tip of the life, unless the record enables it, and plays each as a rung on each chain."""
