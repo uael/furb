@@ -397,7 +397,7 @@ def bash(
     streams, mute = {x: Text(x) for x in (f"{id}/stdout", f"{id}/stderr")}, "" if fed else "not fed"
     yield told(id, "" if show is HIDDEN else command, bound(id, "Exit"))
     while True:
-      match (yield):
+      match a := (yield):
         case ("merged", qid, *_, about) if about == id:
           yield "done", qid, show_err is None
         case ("read", qid, *_, path) if path in streams:
@@ -418,7 +418,7 @@ def bash(
           mute, streams = "ended", dict(zip(streams, (out, err), strict=True))
           if show is not HIDDEN:
             yield told(id, f"exited {code}", *[x for x in ((out, show), (err, show_err)) if x[1] not in (None, HIDDEN)])
-        case ("cancel" | "close", *_) as a if covers(a, id):
+        case ("cancel" | "close", *_) if covers(a, id):
           mute = "ended"
           yield "done", id, ended(a, id)
 
