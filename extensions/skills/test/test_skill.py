@@ -13,7 +13,7 @@ from furb_monty import _monty
 def brewed(tmp_path: Path) -> tuple[str, Path]:
   """A life that stands in the folder work of tmp_path, whose one skill is brew: the root, and the SKILL.md file."""
   path = skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
-  return extended("skills", tmp_path, _monty.skills), path
+  return extended("skills", tmp_path, _monty.skills)[1], path
 
 
 async def test_a_skill_read_into_a_chain(tmp_path: Path) -> None:

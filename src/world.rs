@@ -44,7 +44,7 @@ pub(crate) async fn here(co: &Co, on: &str) -> Result<PathBuf, Fault> {
 
 /// A path resolved against a directory, as a path of the machine: the directory with the path after it, or the path
 /// itself when it is absolute, with every `.` and `..` read.
-fn resolved(directory: &Path, path: &str) -> PathBuf {
+pub(crate) fn resolved(directory: &Path, path: &str) -> PathBuf {
   let mut out = PathBuf::new();
   for part in directory.join(path).components() {
     match part {

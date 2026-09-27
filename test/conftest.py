@@ -359,16 +359,31 @@ def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list
   return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears(), **ears)
 
 
-def extended(name: str, at: Path, ear: Callable[[str], World], *, lives: bool = False) -> str:
-  """A life whose chains stand in the folder work of a directory, which enables at its tip the official extension of
-  that name, with its life word when it lives: it hears the ear of the extension, whose config directory of the user
-  is the folder config of the directory, and the files of the machine after the World of the suite. It gives the
-  root."""
+def extended(
+  name: str, at: Path, ear: Callable[[str], World], *, lives: bool = False, record: Sequence[tuple] = ()
+) -> tuple[Sand, str]:
+  """A life on a record, whose chains stand in the folder work of a directory, which enables at its tip the official
+  extension of that name, with its life word when it lives: it hears the ear of the extension, whose config directory
+  of the user is the folder config of the directory, and the files of the machine after the World of the suite. It
+  gives the World and the root."""
   one, word, life_word = next(x for x in _monty.official() if x[0] == name)
   (at / "work").mkdir(exist_ok=True)
   given = _monty.extensions([(one, word, life_word if lives else "")])
   sand = sown(stands=[STANDS[0], str(at / "work"), STANDS[2]])
-  return life(sand, (), extensions=given, **{name: ear(str(at / "config"))}, files=_monty.files())[1]
+  return sand, life(sand, record, extensions=given, **{name: ear(str(at / "config"))}, files=_monty.files())[1]
+
+
+def noted(folder: Path, text: str, name: str = "CLAUDE.md") -> Path:
+  """A memory file in a folder, which it makes with the folders above it, and the path of that file."""
+  folder.mkdir(parents=True, exist_ok=True)
+  (path := folder / name).write_text(text, encoding="utf-8")
+  return path
+
+
+def recalled(chain: str, at: Path) -> list[str]:
+  """Every paragraph of memory that a chain was told of a file under a directory, in order, since a folder above
+  that directory belongs to the machine."""
+  return [one for one in of(engine.turns(on=chain), "memory") if one.startswith(f"#memory {at}")]
 
 
 def skilled(skills: Path, folder: str, head: str) -> Path:

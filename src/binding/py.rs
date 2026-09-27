@@ -635,6 +635,12 @@ fn extensions(given: Vec<(String, String, String)>) -> NativeEar {
   NativeEar::of(extension::extensions(given.collect()))
 }
 
+/// The ear of the memory extension, which finds the memory of a path in its folders and in the config directory.
+#[pyfunction]
+fn memory(config: std::path::PathBuf) -> NativeEar {
+  NativeEar::of(extension::memory::memory(config))
+}
+
 /// The ear of the skills extension, which finds skills in the folders of a chain and in the config directory.
 #[pyfunction]
 fn skills(config: std::path::PathBuf) -> NativeEar {
@@ -1003,6 +1009,7 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<NativeEar>()?;
   module.add_function(wrap_pyfunction!(official, module)?)?;
   module.add_function(wrap_pyfunction!(extensions, module)?)?;
+  module.add_function(wrap_pyfunction!(memory, module)?)?;
   module.add_function(wrap_pyfunction!(skills, module)?)?;
   module.add_function(wrap_pyfunction!(files, module)?)?;
   module.add_function(wrap_pyfunction!(bash, module)?)?;

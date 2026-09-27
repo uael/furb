@@ -79,6 +79,9 @@ ignore = ["S101"]
 # named as the contract names them, and each sentence of the contract stands on one line of its own.
 "src/furb/engine.pyi" = ["N818", "A002", "E501"]
 "extensions/*/*.pyi" = ["E501"]
+# A word speaks the vocabulary of the engine, which a model reads: the ear of an act takes its id, untyped, as the
+# ears of the engine do.
+"extensions/*/*.py" = ["A002", "ANN001"]
 # The sandbox carries no bound method as a value, so boot binds each read of the life through a lambda.
 "src/furb/engine.py" = ["PLW0108", "S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "FBT001", "FBT002", "ARG001", "ANN", "EM101", "EM102", "TRY003", "PLR0917", "PLR0912", "PLR0915", "SIM105"]
 

@@ -10,7 +10,7 @@ from furb_monty import _monty
 
 async def lines(tmp_path: Path) -> list[str]:
   """The lines of the list of the skills of the root of a life that stands in the folder work of tmp_path."""
-  got = await engine.rung("close(skills())", on=extended("skills", tmp_path, _monty.skills))
+  got = await engine.rung("close(skills())", on=extended("skills", tmp_path, _monty.skills)[1])
   assert isinstance(got, Text)
   return got.lines
 
@@ -19,7 +19,7 @@ async def test_the_skills_of_a_chain_as_a_text_that_the_chain_reads(tmp_path: Pa
   """The skills of a chain, as a text that the chain reads: one line for each skill that the World finds, with its name and what it is for."""
   skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
   skilled(tmp_path / "work" / ".furb" / "skills", "steep", "name: steep\ndescription: Wait for the leaves.")
-  root = extended("skills", tmp_path, _monty.skills)
+  _, root = extended("skills", tmp_path, _monty.skills)
   got = await engine.rung("close(skills())", on=root)
   assert got == Text("skills://", "brew: Make tea.\nsteep: Wait for the leaves.")
 
@@ -27,7 +27,7 @@ async def test_the_skills_of_a_chain_as_a_text_that_the_chain_reads(tmp_path: Pa
 async def test_skills_reads_the_path_skills_on_its_chain(tmp_path: Path) -> None:
   """skills reads the path skills:// on its chain, so it tells the lines of the list that the chain has not seen, as every read does."""
   skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
-  root = extended("skills", tmp_path, _monty.skills)
+  _, root = extended("skills", tmp_path, _monty.skills)
   await engine.rung("skills()", on=root)
   skilled(tmp_path / "work" / ".furb" / "skills", "steep", "name: steep\ndescription: Wait for the leaves.")
   await engine.rung("skills()", on=root)
@@ -71,7 +71,7 @@ async def test_a_chain_that_finds_no_skill_reads_a_list_that_holds_no_line(tmp_p
 async def test_the_life_word_of_the_extension_is_skills(tmp_path: Path) -> None:
   """The life word of the extension is skills(), so a chain tells its skills when the life enables the extension, and a chain born later tells them at its birth."""
   skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
-  root = extended("skills", tmp_path, _monty.skills, lives=True)
+  _, root = extended("skills", tmp_path, _monty.skills, lives=True)
   two = engine.chain("two")
   await settle()
   told = ["#read skills://\n# skills://, 0 known\n# 1 brew: Make tea."]

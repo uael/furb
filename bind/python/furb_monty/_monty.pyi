@@ -71,6 +71,9 @@ def extensions(given: list[tuple[str, str, str]]) -> NativeEar:
   """The ear of the extensions, given each extension that the life runs as its name, its word and its life word: it
   enables each at the tip of the life, unless the record enables it, and plays each as a rung on each chain."""
 
+def memory(config: str) -> NativeEar:
+  """The ear of the memory extension, which finds the memory of a path in its folders and in the config directory."""
+
 def skills(config: str) -> NativeEar:
   """The ear of the skills extension, which finds skills in the folders of a chain and in the config directory."""
 
