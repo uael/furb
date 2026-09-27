@@ -430,17 +430,10 @@ pub fn provider(options: ProviderOptions<'_>) -> napi::Result<NativeEar> {
       options.stall_ms.and_then(|ms| std::time::Duration::try_from_secs_f64(ms / 1e3).ok());
     catalog = catalog.with_claude(world::claude::Claude::with(Some(bin.into()), stall));
   }
-  let (models, actor) = catalog
-    .roster(options.roster.as_deref(), options.actor.as_deref())
-    .map_err(napi::Error::from_reason)?;
-  let models = match options.answer {
-    Some(answer) => {
-      let host = hosted(&answer)?;
-      models.into_iter().map(|model| model.hosted(host.clone())).collect()
-    }
-    None => models,
-  };
-  let mut made = world::Provider::new(options.directory, models).actor(actor);
+  let host = options.answer.as_ref().map(hosted).transpose()?;
+  let (roster, actor) = (options.roster.as_deref(), options.actor.as_deref());
+  let mut made =
+    catalog.provider(options.directory, roster, actor, host).map_err(napi::Error::from_reason)?;
   if let Some(images) = options.images {
     made = made.images(images);
   }

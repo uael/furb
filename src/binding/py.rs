@@ -1023,17 +1023,9 @@ fn provider(
     let stall = stall.and_then(|seconds| std::time::Duration::try_from_secs_f64(seconds).ok());
     catalog = catalog.with_claude(world::claude::Claude::with(Some(bin.into()), stall));
   }
-  let (models, actor) = catalog
-    .roster(roster.as_deref(), actor.as_deref())
-    .map_err(pyo3::exceptions::PyValueError::new_err)?;
-  let models = match answer {
-    Some(answer) => {
-      let host = hosted(Arc::new(answer));
-      models.into_iter().map(|model| model.hosted(host.clone())).collect()
-    }
-    None => models,
-  };
-  Ok(NativeEar::of(world::Provider::new(directory, models).actor(actor).ear()))
+  let host = answer.map(|answer| hosted(Arc::new(answer)));
+  let made = catalog.provider(directory, roster.as_deref(), actor.as_deref(), host);
+  Ok(NativeEar::of(made.map_err(pyo3::exceptions::PyValueError::new_err)?.ear()))
 }
 
 /// A function of python as a model: it is called with the request, as JSON reads it, and a function

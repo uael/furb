@@ -34,7 +34,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::{
-  Model, Streams,
+  Hosted, Model, Provider, Streams,
   claude::{self, Claude},
   runtime, streams,
 };
@@ -229,6 +229,23 @@ impl Catalog {
     let mut seen = HashSet::new();
     models.retain(|model| seen.insert(model.name.clone()));
     Ok((models, actor))
+  }
+
+  /// The provider of a roster of the catalog on a directory, with the default actor of the roster, whose models a
+  /// function of the host answers in place of the models when it gives one.
+  pub fn provider(
+    &self,
+    directory: impl Into<String>,
+    names: Option<&[String]>,
+    actor: Option<&str>,
+    host: Option<Hosted>,
+  ) -> Result<Provider, String> {
+    let (models, actor) = self.roster(names, actor)?;
+    let models = match host {
+      Some(host) => models.into_iter().map(|model| model.hosted(Arc::clone(&host))).collect(),
+      None => models,
+    };
+    Ok(Provider::new(directory, models).actor(actor))
   }
 }
 

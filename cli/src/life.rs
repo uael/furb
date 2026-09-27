@@ -16,7 +16,7 @@ use furb::{
   Act, Ear, Engine, Fact, Fault, Object,
   ear::{ear, hear},
   verbs,
-  world::{self, Catalog, Provider},
+  world::{self, Catalog},
 };
 
 use crate::console;
@@ -90,8 +90,7 @@ impl Life {
       Some(path) => (world::kept(path).map_err(failed)?, None),
       None => (Vec::new(), None),
     };
-    let (models, actor) = Catalog::load().roster(None, None)?;
-    let provider = Provider::new(cwd.display().to_string(), models).actor(actor);
+    let provider = Catalog::load().provider(cwd.display().to_string(), None, None, None)?;
     let mut ears = vec![
       ("provider", provider.ear()),
       ("console", console),
