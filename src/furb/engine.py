@@ -703,7 +703,7 @@ def boot(record=(), **outside):
     if not on and kind != "chain":
       raise Refused(f"no chain for {kind}")
     names = born.setdefault(kind, {})
-    a = (kind, name := names.setdefault((by, made[speaker, kind]), f"{kind}{len(names) + 1}"), by, on, *words)
+    a = (kind, name := names.setdefault((by, made[speaker, kind]), kind + str(len(names) + 1)), by, on, *words)
     if known.setdefault(name, a) is a:
       held.get(on, []).append(a)
       if kind == "chain":
