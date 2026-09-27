@@ -18,8 +18,8 @@ bun run tui -- --resume .furb/sessions/example.jsonl
 after `--`.
 
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
-a new life. With no `--roster`, the TUI offers every model that the catalog of the crate offers, the default model
-first. Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
+a new life. A session offers its model, the default model when you name none, and the models of `--roster`.
+Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
 a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.session.json`, `.changes.jsonl`, and
 `.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory
 too when the session has image attachments. An unfinished session opens paused and offers a resume choice. The
@@ -150,8 +150,12 @@ AppKit, Windows PowerShell, Wayland `wl-paste`, or X11 `xclip`. Attachments have
 copied beside the record. The provider of the session sends them to a model that takes images, with their
 references kept in the prompt.
 Click the attachment row to open or remove an image from the draft.
-`/model` and `/effort` open separate pickers. `/model name` takes `provider:model` or the model's id alone, by
-the rule of the catalog. Each model offers the efforts that the catalog gives it, saved in the chain's roster. A model change keeps the current effort if the new model offers it.
+`/model` and `/effort` open separate pickers. The model picker lists the models of the session, then every
+model that the catalog of the crate offers. `/model name` takes `provider:model` or the model's id alone, by the
+rule of the catalog. A model of the catalog that the session does not offer joins the session: the session saves
+it, opens again on its record, starts again the work that was running, and sends the next prompt of the chain to
+that model. Each model offers the efforts that the catalog gives it, saved in the chain's roster. A model change
+keeps the current effort if the new model offers it.
 
 The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
 historical checkpoint. A branch that the rewind tree makes uses the engine's `take` filter and runs as an operator

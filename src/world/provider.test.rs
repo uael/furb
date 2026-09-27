@@ -409,9 +409,9 @@ fn a_function_of_the_host_answers_a_request_with_a_turn_in_place_of_the_model() 
   assert_eq!(told.lock().expect("the parts told").len(), 1);
 }
 
-/// A provider of chat completions on a port of this machine, which reads one request and streams one turn: a thought,
-/// a word in two parts, and its usage. It gives the request it read.
-fn served(listener: TcpListener) -> std::thread::JoinHandle<String> {
+/// A provider on a port of this machine, which reads one request and streams these events. It gives the request it
+/// read.
+fn served(listener: TcpListener, events: String) -> std::thread::JoinHandle<String> {
   std::thread::spawn(move || {
     let (stream, _) = listener.accept().expect("the provider is asked");
     let mut reader = BufReader::new(stream);
@@ -428,27 +428,52 @@ fn served(listener: TcpListener) -> std::thread::JoinHandle<String> {
       .unwrap_or_default();
     let mut body = vec![0; length];
     reader.read_exact(&mut body).expect("the body of the request");
-    let chunk = |delta: Value, finish: Value| {
-      let one = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "m",
-        "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]});
-      format!("data: {one}\n\n")
-    };
-    let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "m", "choices": [],
-      "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105,
-        "prompt_tokens_details": {"cached_tokens": 40}}});
-    let events = [
-      chunk(json!({"role": "assistant", "reasoning_content": "hm"}), Value::Null),
-      chunk(json!({"content": "close("}), Value::Null),
-      chunk(json!({"content": "3)"}), json!("stop")),
-      format!("data: {usage}\n\ndata: [DONE]\n\n"),
-    ];
     let mut stream = reader.into_inner();
     let head_out =
       "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n";
-    stream
-      .write_all(format!("{head_out}{}", events.concat()).as_bytes())
-      .expect("the turn is streamed");
+    stream.write_all(format!("{head_out}{events}").as_bytes()).expect("the turn is streamed");
     format!("{head}{}", String::from_utf8_lossy(&body))
+  })
+}
+
+/// One turn as chat completions stream it: a thought, a word in two parts, and its usage.
+fn chatted() -> String {
+  let chunk = |delta: Value, finish: Value| {
+    let one = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "m",
+      "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]});
+    format!("data: {one}\n\n")
+  };
+  let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "m", "choices": [],
+    "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105,
+      "prompt_tokens_details": {"cached_tokens": 40}}});
+  let events = [
+    chunk(json!({"role": "assistant", "reasoning_content": "hm"}), Value::Null),
+    chunk(json!({"content": "close("}), Value::Null),
+    chunk(json!({"content": "3)"}), json!("stop")),
+    format!("data: {usage}\n\ndata: [DONE]\n\n"),
+  ];
+  events.concat()
+}
+
+/// A life whose root prompts the one model of a provider of the network, which the catalog makes of this listing
+/// with this environment; and what the prompt came to.
+fn networked(name: &str, listed: &Value, env: &[(&str, &str)]) -> (Engine, Object) {
+  let catalog = Catalog::of(&super::catalog::parsed(&listed.to_string(), None), None, |name| {
+    env.iter().find(|(held, _)| *held == name).map(|(_, value)| (*value).to_owned())
+  });
+  let (models, actor) = catalog.roster(None, None).expect("the model is offered");
+  let mut engine = lived(Provider::new(yard(name).display().to_string(), models).actor(actor));
+  let id = asked(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).unwrap_or_else(|fault| fault.object());
+  (engine, got)
+}
+
+/// The value of a header of a request, by its name in lower case.
+fn header<'a>(request: &'a str, name: &str) -> Option<&'a str> {
+  let head = request.split("\r\n\r\n").next().unwrap_or_default();
+  head.lines().find_map(|line| {
+    let (key, value) = line.split_once(':')?;
+    key.eq_ignore_ascii_case(name).then(|| value.trim())
   })
 }
 
@@ -456,7 +481,7 @@ fn served(listener: TcpListener) -> std::thread::JoinHandle<String> {
 fn a_provider_of_the_network_is_asked_with_its_credential_and_streams_its_turn() {
   let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
   let port = listener.local_addr().expect("the port").port();
-  let asked_of = served(listener);
+  let asked_of = served(listener, chatted());
   let listed = json!({"local": {"rig": "chat", "env": ["FURB_TEST_KEY"], "api": format!("http://127.0.0.1:{port}/v1"),
     "models": {"m": {"reasoning": true, "reasoning_options": [{"type": "effort", "values": ["low", "high"]}],
       "limit": {"context": 1000}, "cost": {"input": 1e4, "output": 2e4},
@@ -493,11 +518,15 @@ fn a_provider_of_the_network_is_asked_with_its_credential_and_streams_its_turn()
 
 #[test]
 fn the_host_is_told_nothing_more_of_what_a_model_writes_once_its_reply_is_over() {
-  // A host writes from a work of its own, which the end of the reply does not end, as JavaScript does.
-  let host: Hosted = Arc::new(|_, told| {
+  // A host writes from a work of its own, which the end of the reply does not end, as JavaScript does: here once the
+  // test says the reply is over.
+  let (go, gone) = std::sync::mpsc::channel::<()>();
+  let gone = Arc::new(Mutex::new(gone));
+  let host: Hosted = Arc::new(move |_, told| {
     told("before", "");
+    let gone = Arc::clone(&gone);
     thread::spawn(move || {
-      thread::sleep(Duration::from_millis(200));
+      let _ = gone.lock().expect("the signal of the test").recv();
       told("after", "");
     });
     std::future::pending().boxed()
@@ -510,8 +539,134 @@ fn the_host_is_told_nothing_more_of_what_a_model_writes_once_its_reply_is_over()
   let parts = |told: &Arc<Mutex<Vec<[String; 4]>>>| told.lock().expect("the parts told").len();
   assert!(until(&mut engine, |_| parts(&told) == 1), "the model wrote a part");
   engine.cancel(&id).expect("the prompt is cancelled");
+  let over = |engine: &mut Engine| {
+    let root = engine.root().to_owned();
+    let facts = engine.transcript(verbs::Transcript { on: on(&root) }).expect("the transcript");
+    facts.iter().any(|one| one.kind() == "done" && one.about().starts_with("reply"))
+  };
+  assert!(until(&mut engine, over), "the reply is over");
+  // The ear hears the done of the reply in the pump that says it, and the pumps after it give it room.
+  within(&mut engine, Duration::from_millis(100), |_| false);
+  go.send(()).expect("the host writes again");
   assert!(
     !within(&mut engine, Duration::from_millis(500), |_| parts(&told) > 1),
     "nothing more is told"
   );
+}
+
+#[test]
+fn a_bearer_of_anthropic_goes_as_its_authorization_and_no_key_of_an_api_goes_with_it() {
+  let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
+  let port = listener.local_addr().expect("the port").port();
+  let events = [
+    json!({"type": "message_start", "message": {"id": "m", "type": "message", "role": "assistant", "model": "c",
+      "content": [], "stop_reason": null, "stop_sequence": null, "usage": {"input_tokens": 10, "output_tokens": 1}}}),
+    json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+    json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "close(1)"}}),
+    json!({"type": "content_block_stop", "index": 0}),
+    json!({"type": "message_delta", "delta": {"stop_reason": "end_turn", "stop_sequence": null},
+      "usage": {"output_tokens": 3}}),
+    json!({"type": "message_stop"}),
+  ];
+  let events: String = events
+    .iter()
+    .map(|one| format!("event: {}\ndata: {one}\n\n", one["type"].as_str().unwrap_or_default()))
+    .collect();
+  let asked_of = served(listener, events);
+  let listed = json!({"anthropic": {"rig": "anthropic", "env": ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"],
+    "bearer": ["ANTHROPIC_AUTH_TOKEN"], "api": format!("http://127.0.0.1:{port}"),
+    "models": {"c": {"limit": {"context": 1000, "output": 100}, "modalities": {"input": ["text"], "output": ["text"]}}}}});
+  let env = [("ANTHROPIC_AUTH_TOKEN", "token"), ("ANTHROPIC_API_KEY", "key")];
+  let (_, got) = networked("bearer", &listed, &env);
+  assert_eq!(got.as_ref().as_int(), Some(1));
+  let request = asked_of.join().expect("the provider read the request");
+  assert!(request.starts_with("POST /v1/messages "), "{request}");
+  assert_eq!(
+    (header(&request, "authorization"), header(&request, "x-api-key")),
+    (Some("Bearer token"), None)
+  );
+}
+
+#[test]
+fn the_gateway_of_cloudflare_takes_the_credential_of_cloudflare_alone_at_the_address_of_the_account()
+ {
+  let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
+  let port = listener.local_addr().expect("the port").port();
+  let asked_of = served(listener, chatted());
+  let api = format!(
+    "http://127.0.0.1:{port}/v1/${{CLOUDFLARE_ACCOUNT_ID}}/${{CLOUDFLARE_GATEWAY_ID}}/compat"
+  );
+  let listed = json!({"cloudflare-ai-gateway": {"rig": "gateway", "env": ["CLOUDFLARE_API_KEY"], "api": api,
+    "models": {"openai/gpt-5": {"limit": {"context": 1000}, "modalities": {"input": ["text"], "output": ["text"]},
+      "provider": {"npm": "@ai-sdk/openai"}}}}});
+  let env = [
+    ("CLOUDFLARE_API_KEY", "cf"),
+    ("CLOUDFLARE_ACCOUNT_ID", "acc"),
+    ("CLOUDFLARE_GATEWAY_ID", "gw"),
+  ];
+  let (_, got) = networked("gateway", &listed, &env);
+  assert_eq!(got.as_ref().as_int(), Some(3));
+  let request = asked_of.join().expect("the provider read the request");
+  assert!(request.starts_with("POST /v1/acc/gw/compat/chat/completions "), "{request}");
+  let credentials = (header(&request, "cf-aig-authorization"), header(&request, "authorization"));
+  assert_eq!(credentials, (Some("Bearer cf"), None));
+}
+
+#[test]
+fn a_gateway_of_the_protocol_of_pi_ai_streams_the_turn_of_its_model_and_what_it_cost() {
+  let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
+  let port = listener.local_addr().expect("the port").port();
+  let events = [
+    json!({"type": "start"}),
+    json!({"type": "thinking_start", "contentIndex": 0}),
+    json!({"type": "thinking_delta", "contentIndex": 0, "delta": "hm"}),
+    json!({"type": "thinking_end", "contentIndex": 0, "content": "hm", "contentSignature": "s"}),
+    json!({"type": "text_start", "contentIndex": 1}),
+    json!({"type": "text_delta", "contentIndex": 1, "delta": "close("}),
+    json!({"type": "text_delta", "contentIndex": 1, "delta": "2)"}),
+    json!({"type": "text_end", "contentIndex": 1, "content": "close(2)"}),
+    json!({"type": "done", "reason": "stop", "usage": {"input": 10, "output": 2, "cacheRead": 4, "cacheWrite": 0,
+      "totalTokens": 16, "cost": {"total": 0.25}}}),
+  ];
+  let events: String = events.iter().map(|one| format!("data: {one}\n\n")).collect();
+  let asked_of = served(listener, events);
+  let listed = json!({"radius": {"rig": "pi", "env": ["RADIUS_API_KEY"], "api": format!("http://127.0.0.1:{port}/v1"),
+    "models": {"balanced": {"reasoning": true, "reasoning_options": [{"type": "effort", "values": ["high"]}],
+      "limit": {"context": 1000, "output": 100}, "modalities": {"input": ["text"], "output": ["text"]}}}}});
+  let (mut engine, got) = networked("pi", &listed, &[("RADIUS_API_KEY", "r")]);
+  assert_eq!(got.as_ref().as_int(), Some(2));
+  let request = asked_of.join().expect("the gateway read the request");
+  assert!(request.starts_with("POST /v1/messages "), "{request}");
+  assert_eq!(header(&request, "authorization"), Some("Bearer r"));
+  let body: Value = serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap_or_default())
+    .expect("a JSON body");
+  assert_eq!((&body["model"], &body["options"]["reasoning"]), (&json!("balanced"), &json!("high")));
+  assert_eq!(body["context"]["systemPrompt"], SYSTEM);
+  assert!(body["options"]["sessionId"].is_string(), "the conversation of a chain is its session");
+  let expected = "('assistant', 'close(2)', (14, 2, 4, 0, 0.25), [";
+  assert!(said(&mut engine)[1].2.starts_with(expected), "{:?}", said(&mut engine)[1]);
+}
+
+#[test]
+fn azure_is_asked_for_the_deployment_of_a_model_at_the_address_and_the_version_of_the_environment()
+{
+  let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
+  let port = listener.local_addr().expect("the port").port();
+  let asked_of = served(listener, chatted());
+  let listed = json!({"azure": {"rig": "azure", "env": ["AZURE_OPENAI_API_KEY"],
+    "api": "https://${AZURE_RESOURCE_NAME}.openai.azure.com", "models": {"gpt-5": {"limit": {"context": 1000},
+      "modalities": {"input": ["text"], "output": ["text"]}}}}});
+  let base = format!("http://127.0.0.1:{port}/openai/v1");
+  let env = [
+    ("AZURE_OPENAI_API_KEY", "az"),
+    ("AZURE_OPENAI_BASE_URL", base.as_str()),
+    ("AZURE_OPENAI_DEPLOYMENT_NAME_MAP", "gpt-4=old, gpt-5=mine"),
+    ("AZURE_OPENAI_API_VERSION", "2025-01-01"),
+  ];
+  let (_, got) = networked("azure", &listed, &env);
+  assert_eq!(got.as_ref().as_int(), Some(3));
+  let request = asked_of.join().expect("azure read the request");
+  let asked = "POST /openai/deployments/mine/chat/completions?api-version=2025-01-01 ";
+  assert!(request.starts_with(asked), "{request}");
+  assert_eq!(header(&request, "api-key"), Some("az"));
 }

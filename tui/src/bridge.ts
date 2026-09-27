@@ -76,7 +76,11 @@ export class HostView extends EventEmitter implements Plain {
   sees(actor: string): Promise<boolean> {
     return this.request("library", "sees", [actor]) as Promise<boolean>;
   }
-  /** The name in the roster of the model that a name gives, and nothing when it gives none. */
+  /** The models the catalog of the crate offers, each as its name, its efforts and its window. */
+  catalog(): Promise<[string, string[], number][]> {
+    return this.request("library", "catalog", []) as Promise<[string, string[], number][]>;
+  }
+  /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
   model(name: string): Promise<string | null> {
     return this.request("library", "model", [name]) as Promise<string | null>;
   }

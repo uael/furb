@@ -21,8 +21,10 @@ provider = _monty.provider(".", actor="claude-cli:opus/low")
 root = engine.boot(record, world=world, provider=provider, **ears)
 ```
 
-`provider` offers every model of the catalog when it names no `roster`. Its `answer`, a function, answers each
-request in place of the models, which the suite of furb does. `_monty.SYSTEM` is the system prompt of every model:
+`provider` offers the model of its `actor` and the models of its `roster`, or the first model the catalog offers
+when it names neither. Its `answer`, a function, answers each request in place of the models, which the suite of
+furb does. Its `stream`, a function, is told what a model writes as it writes it, and `images` is the directory of
+the images that a message names. `_monty.SYSTEM` is the system prompt of every model:
 the engine, minified in layout alone.
 
 A generator of this interpreter is heard on a thread of its own, so it may say a verb while it hears, as an ear of

@@ -1069,12 +1069,17 @@ fn verb_said<'py>(py: Python<'py>, door: &Door, call: &Call) -> PyResult<Bound<'
   made.python.bind(py).getattr(call.verb.as_str())?.call(args, Some(&kwargs))
 }
 
-/// The ear of the provider of models: the catalog makes the models of its roster, every model it offers when none
-/// is named, and a function of python answers them in place of the models when it is given one. The actor is the
-/// default actor, whose effort moves to the nearest one its model takes; `claude` is the path of the claude command
-/// line, and `stall` the seconds a turn of it may go with no progress.
+/// The ear of the provider of models: the catalog makes the model of the default actor and the models of its roster,
+/// or the first model it offers when neither is named, and a function of python answers them in place of the models
+/// when it is given one. The actor is the default actor, whose effort moves to the nearest one its model takes;
+/// `claude` is the path of the claude command line, and `stall` the seconds a turn of it may go with no progress;
+/// `images` is the directory of the images that a turn names; and `stream` is told what a model writes as it writes
+/// it, on a thread of the models.
 #[pyfunction]
-#[pyo3(signature = (directory, roster = None, actor = None, answer = None, claude = None, stall = None))]
+#[pyo3(signature = (
+  directory, roster = None, actor = None, answer = None, claude = None, stall = None, images = None, stream = None
+))]
+#[allow(clippy::too_many_arguments)]
 fn provider(
   directory: String,
   roster: Option<Vec<String>>,
@@ -1082,6 +1087,8 @@ fn provider(
   answer: Option<Py<PyAny>>,
   claude: Option<String>,
   stall: Option<f64>,
+  images: Option<String>,
+  stream: Option<Py<PyAny>>,
 ) -> PyResult<NativeEar> {
   let mut catalog = world::Catalog::load();
   if let Some(bin) = claude {
@@ -1090,7 +1097,20 @@ fn provider(
   }
   let host = answer.map(|answer| hosted(Arc::new(answer)));
   let made = catalog.provider(directory, roster.as_deref(), actor.as_deref(), host);
-  Ok(NativeEar::of(made.map_err(pyo3::exceptions::PyValueError::new_err)?.ear()))
+  let mut made = made.map_err(pyo3::exceptions::PyValueError::new_err)?;
+  if let Some(images) = images {
+    made = made.images(images);
+  }
+  if let Some(stream) = stream {
+    made = made.writes(Arc::new(move |rung, chain, text, thinking| {
+      Python::attach(|py| {
+        if let Err(no) = stream.call1(py, (rung, chain, text, thinking)) {
+          no.write_unraisable(py, None);
+        }
+      });
+    }));
+  }
+  Ok(NativeEar::of(made.ear()))
 }
 
 /// A function of python as a model: it is called with the request, as JSON reads it, and a function

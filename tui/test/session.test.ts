@@ -229,7 +229,7 @@ test("/model finds a model of the roster by the rule of the catalog, and keeps t
     expect(session.actor).toBe("claude-cli:haiku/xhigh");
     await session.submit("/model opus");
     expect(session.actor).toBe("claude-cli:opus/xhigh");
-    expect(String(await session.submit("/model sonnet").catch((error: unknown) => error))).toContain(
+    expect(String(await session.submit("/model nothing").catch((error: unknown) => error))).toContain(
       "Choose one of claude-cli:haiku, claude-cli:opus.",
     );
     await session.submit("/model claude-cli:haiku");

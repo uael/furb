@@ -6,7 +6,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { furbDirectory, saveFile, store } from "@furb/engine";
 import { openEngine } from "./bridge.ts";
 import { expandHome } from "./files.ts";
-import type { EngineOptions } from "./models.ts";
+import { type EngineOptions, roster } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { inspectRecords } from "./records.ts";
 import { Session, type SessionStatus, savedView } from "./session.ts";
@@ -286,6 +286,7 @@ export class Workspaces extends EventEmitter {
     };
     this.subscriptions.set(session, changed);
     session.on("change", changed);
+    session.on("reopen", (command: string) => void this.reopen(row, command).catch(session.fail));
     changed();
     this.save({ directory: group.directory, add: path });
     return row;
@@ -301,8 +302,15 @@ export class Workspaces extends EventEmitter {
       let session: Session | undefined;
       let opened: Awaited<ReturnType<typeof openEngine>> | undefined;
       try {
-        const demo = savedView(entry.path).view.demo ?? this.options.demo ?? false;
-        opened = await openEngine({ ...this.options, cwd: group.directory, record: entry.path, demo });
+        const { view } = savedView(entry.path);
+        const demo = view.demo ?? this.options.demo ?? false;
+        const named = { ...this.options, demo };
+        opened = await openEngine({
+          ...named,
+          cwd: group.directory,
+          record: entry.path,
+          roster: roster(named, view.models),
+        });
         session = new Session(opened.engine, opened.host, demo, this.preferences);
         await session.refresh();
         if (this.closed) throw new Error("The workspace is closed.");
@@ -338,6 +346,16 @@ export class Workspaces extends EventEmitter {
     this.save({ directory: group.directory, collapsed: false });
     this.emit("select", entry.session);
     this.emit("change");
+  }
+  /** Open a session again on its record, as a later life whose roster holds the models the operator added, which
+   * starts again the work that the life before it left, and then runs a command of the operator in it. */
+  async reopen(entry: SessionEntry, command: string): Promise<void> {
+    await this.release(entry);
+    await this.select(entry);
+    const session = entry.session;
+    if (!session) return;
+    if (session.host.pending.size) await session.host.resume();
+    await session.command(command);
   }
   async create(group = this.groupOf(), name?: string): Promise<SessionEntry> {
     if (!group) throw new Error("Add a workspace first.");

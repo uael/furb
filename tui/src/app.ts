@@ -3564,11 +3564,15 @@ export class App {
     model: () => {
       const w = this.session;
       const roster = w.roster.filter(([name]) => name !== "operator");
-      return roster.map(([name, , window]) => {
+      // The models of the catalog that the roster does not hold follow it, and one of them joins the roster when it is
+      // chosen.
+      const added = w.catalog.filter(([name]) => !roster.some(([held]) => held === name));
+      return [...roster, ...added].map(([name, , window], at) => {
         const { provider, id } = modelName(name);
+        const shared = roster.filter(([other]) => modelName(other).id === id).length > 1;
         return {
-          // A model goes by its id alone, unless two providers offer a model of that id.
-          value: roster.filter(([other]) => modelName(other).id === id).length > 1 ? name : id,
+          // A model of the roster goes by its id alone, unless two providers offer a model of that id.
+          value: at < roster.length && !shared ? id : name,
           detail: `${count(window)} tokens of context`,
           current: name === w.actorChoice.model,
           label: id,
@@ -3832,7 +3836,7 @@ export class App {
       { selected: values.findIndex((one) => one.current), note },
     );
   }
-  /** The models of the roster under their providers, with the one the chain uses marked. */
+  /** The models of the roster and of the catalog under their providers, with the one the chain uses marked. */
   models = (): void => this.pick("model", "Model", "The chain sends its next prompt to this model.");
   effortPicker = (): void =>
     this.pick(

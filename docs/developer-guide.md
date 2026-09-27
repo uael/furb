@@ -56,8 +56,10 @@ no network.
 | File | What it holds |
 | --- | --- |
 | `src/world/provider.rs` | The ear: the standing, each reply, the messages of a turn, what a model writes as it writes it, and the usage of a turn. |
-| `src/world/provider/catalog.rs` | The catalog: the snapshot and its cache, which models it offers, the efforts of each kind of request, and the roster. |
-| `src/world/provider/catalog.json` | The snapshot of models.dev, one model on each line, which `script/catalog.py` makes again. |
+| `src/world/provider/catalog.rs` | The catalog: the snapshot and its cache, which models it offers, the credential and the address of each, the efforts of each kind of request, and the roster. |
+| `src/world/provider/catalog.json` | The snapshot of models.dev and of the data of pi-ai, one model on each line, which `script/catalog.py` makes again. |
+| `src/world/provider/clients.rs` | The client of rig that asks each provider, with its credential and its address. |
+| `src/world/provider/pi.rs` | The protocol of pi-ai itself, which the gateway Radius speaks. |
 | `src/world/provider/claude.rs` | The claude command line, as a model of rig. |
 | `src/world/provider/images.rs` | The images that a message names, each kept under the digest of its bytes. |
 

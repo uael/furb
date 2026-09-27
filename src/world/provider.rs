@@ -8,7 +8,9 @@
 
 pub mod catalog;
 pub mod claude;
+mod clients;
 pub mod images;
+mod pi;
 
 use std::{
   collections::{HashMap, HashSet},
@@ -26,7 +28,7 @@ use futures::{StreamExt, future::BoxFuture};
 use rig_core::{
   completion::{CompletionError, CompletionModel, CompletionRequest, CompletionResponse},
   message::{AssistantContent, Message, Text, UserContent},
-  streaming::{StreamedAssistantContent, StreamingCompletionResponse},
+  streaming::{StreamFinal, StreamedAssistantContent, StreamingCompletionResponse},
 };
 use serde_json::{Map, Value, json};
 use tokio::{runtime::Runtime, task::JoinHandle};
@@ -474,6 +476,16 @@ async fn streamed(streams: Streams, asked: Asked) -> Result<CompletionResponse, 
   }
   let raw = stream.response.as_ref().map(|end| end.raw.clone()).unwrap_or_default();
   Ok(CompletionResponse::from(stream).with_raw(raw))
+}
+
+/// The terminal record of a stream of a provider, from a response of it that came whole.
+fn ended(provider: &str, response: CompletionResponse) -> StreamFinal {
+  let mut record = StreamFinal::new(provider, response.usage);
+  record.finish_reason = response.finish_reason();
+  record.response_id = response.response_id;
+  record.model = response.model;
+  record.raw = response.raw;
+  record
 }
 
 /// What a reply came to, said by the voice of the ear: the turn of the model, or the refusal of an actor that

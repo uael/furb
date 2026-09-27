@@ -13,15 +13,20 @@ use std::{
   process::Command,
 };
 
-use crate::Place;
+use crate::{Place, life::Stood};
 
 /// How to get a TUI when none is found.
 const NONE: &str = "no TUI is found: set FURB_TUI to the program of the furb TUI, put furb-tui on PATH, or run furb \
                     from a checkout of furb after `bun install && bun run build`; `furb --mode rpc` needs no TUI";
 
 /// The TUI, run with the words it takes, in the place of furb: on the demo session, on the record and in the
-/// directory furb is given, and with the words after `--`.
-pub fn launch(demo: bool, place: &Place, more: &[String]) -> Result<Infallible, String> {
+/// directory furb is given, on the default actor and the roster furb is given, and with the words after `--`.
+pub fn launch(
+  demo: bool,
+  place: &Place,
+  stood: &Stood,
+  more: &[String],
+) -> Result<Infallible, String> {
   let path = env::var_os("PATH").unwrap_or_default();
   let mut words = found(env::var_os("FURB_TUI"), &path, &checkout())?;
   if demo {
@@ -32,6 +37,12 @@ pub fn launch(demo: bool, place: &Place, more: &[String]) -> Result<Infallible, 
   }
   if let Some(cwd) = &place.cwd {
     words.extend(["--cwd".into(), cwd.into()]);
+  }
+  if let Some(model) = &stood.actor {
+    words.extend(["--model".into(), model.into()]);
+  }
+  for one in &stood.roster {
+    words.extend(["--roster".into(), one.into()]);
   }
   words.extend(more.iter().map(OsString::from));
   let mut command = Command::new(&words[0]);

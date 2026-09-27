@@ -106,6 +106,7 @@ const kept = [
   "drafts",
   "scrolls",
   "folds",
+  "models",
 ] as const;
 /** What `<record>.ui.json` holds: the kept fields of a session, and what the session had cost. */
 export type SavedView = Partial<Pick<Session, (typeof kept)[number]>> & { cost?: number };
@@ -156,6 +157,10 @@ export class Session extends EventEmitter {
   stashes: Record<string, string> = {};
   folds: Record<string, boolean> = {};
   roster: [string, string[], number][] = [];
+  /** The models the catalog of the crate offers, which the operator may add to the roster of the session. */
+  catalog: [string, string[], number][] = [];
+  /** The models the operator added to the roster of the session from the catalog, which each later life offers. */
+  models: string[] = [];
   findings: string[] = [];
   rejectedWord = "";
   queued: FollowUp[] = [];
@@ -204,6 +209,10 @@ export class Session extends EventEmitter {
     host.on("change", this.changed);
     host.on("facts", this.factsChanged);
     host.on("fault", this.fail);
+    void host.catalog().then((catalog) => {
+      this.catalog = catalog;
+      this.emit("change");
+    }, this.fail);
     this.save();
   }
   private changed = () => {
@@ -266,6 +275,8 @@ export class Session extends EventEmitter {
   }
 
   refresh(): Promise<void> {
+    // A session that closed, as one that opens again on its record does, has nothing more to read.
+    if (this.closed) return Promise.resolve();
     this.dirty = true;
     if (this.refreshTask) return this.refreshTask;
     this.loading = true;
@@ -795,6 +806,14 @@ export class Session extends EventEmitter {
         if (!argument) throw new Error("Use /model followed by a model name.");
         const name = await this.host.model(argument);
         const entry = this.roster.find(([candidate]) => candidate === name);
+        // A model of the catalog that the roster does not hold joins the roster of the next life, which the session
+        // opens on its record at once, and which the model goes to.
+        if (!entry && name) {
+          this.models = [...new Set([...this.models, name])];
+          this.save();
+          this.emit("reopen", `/model ${name}`);
+          break;
+        }
         if (!entry)
           throw new Error(
             `Choose one of ${this.roster

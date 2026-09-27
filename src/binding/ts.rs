@@ -465,8 +465,9 @@ pub fn decode_record(line: String) -> napi::Result<Value> {
 pub struct ProviderOptions<'env> {
   /// The directory the life stands on, which each chain stands in until it goes elsewhere.
   pub directory: String,
-  /// The models it offers, each named `provider:id`, or by an id that one model of the catalog alone holds; every
-  /// model that the catalog offers when unsaid.
+  /// The models it offers beside the model of the actor, each named `provider:id`, or by an id that one model of the
+  /// catalog alone holds. When it is unsaid, the model of the actor stands alone, and the first model the catalog
+  /// offers when the actor is unsaid too.
   pub roster: Option<Vec<String>>,
   /// The actor a prompt goes to when it names none, as model/effort, whose effort moves to the nearest one the model
   /// takes; the first model at its first effort when unsaid.
@@ -474,8 +475,8 @@ pub struct ProviderOptions<'env> {
   /// The path of the claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine
   /// holds.
   pub claude: Option<String>,
-  /// How many milliseconds a turn of claude may go with no progress.
-  pub stall_ms: Option<f64>,
+  /// How many seconds a turn of the claude command line may go with no progress.
+  pub stall: Option<f64>,
   /// The directory of the images that a turn names.
   pub images: Option<String>,
   /// A function that answers each request in place of the model, with a turn, and may tell what it writes as it
@@ -494,12 +495,7 @@ pub struct ProviderOptions<'env> {
 /// its roster, and a function of the host answers them in place of the models when it gives one.
 #[napi]
 pub fn provider(options: ProviderOptions<'_>) -> napi::Result<NativeEar> {
-  let mut catalog = world::Catalog::load();
-  if let Some(bin) = options.claude {
-    let stall =
-      options.stall_ms.and_then(|ms| std::time::Duration::try_from_secs_f64(ms / 1e3).ok());
-    catalog = catalog.with_claude(world::claude::Claude::with(Some(bin.into()), stall));
-  }
+  let catalog = catalog(options.claude, options.stall);
   let host = options.answer.as_ref().map(hosted).transpose()?;
   let (roster, actor) = (options.roster.as_deref(), options.actor.as_deref());
   let mut made =
@@ -577,10 +573,20 @@ fn info(model: &world::Model) -> ModelInfo {
   }
 }
 
-/// The models the catalog of this machine offers, each named as the catalog names it.
+/// The catalog of this machine, with the claude command line at a path, whose turn may go with no progress for some
+/// seconds, when a path is given.
+fn catalog(claude: Option<String>, stall: Option<f64>) -> world::Catalog {
+  let catalog = world::Catalog::load();
+  let Some(bin) = claude else { return catalog };
+  let stall = stall.and_then(|seconds| std::time::Duration::try_from_secs_f64(seconds).ok());
+  catalog.with_claude(world::claude::Claude::with(Some(bin.into()), stall))
+}
+
+/// The models the catalog of this machine offers, with the claude command line at a path when it is given, each
+/// named as the catalog names it.
 #[napi]
-pub fn models() -> Vec<ModelInfo> {
-  world::Catalog::load().offered().into_iter().map(info).collect()
+pub fn models(claude: Option<String>) -> Vec<ModelInfo> {
+  catalog(claude, None).offered().into_iter().map(info).collect()
 }
 
 /// The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, whether it offers

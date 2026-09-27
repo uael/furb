@@ -25,17 +25,18 @@ use furb::{
 };
 use serde_json::{Map, Value, json, value::RawValue};
 
-use crate::life::Life;
+use crate::life::{Life, Stood};
 
 /// A life served on stdin and stdout, until stdin ends. It keeps its record when it is given one, and it wakes
 /// nothing: what an earlier life left paused or pending waits for the wake of the client.
-pub fn serve(record: Option<&Path>, cwd: &Path) -> Result<(), String> {
+pub fn serve(record: Option<&Path>, cwd: &Path, stood: &Stood) -> Result<(), String> {
   let client = Rc::new(RefCell::new(Client::default()));
   let facts = Rc::clone(&client);
-  let life = Life::open(record, true, cwd, console(Rc::clone(&client)), move |fact: &Fact| {
-    let fact = wire::outward(fact.0.as_ref());
-    facts.borrow_mut().records.push(json!({"type": "fact", "fact": fact}));
-  })?;
+  let life =
+    Life::open(record, true, cwd, stood, console(Rc::clone(&client)), move |fact: &Fact| {
+      let fact = wire::outward(fact.0.as_ref());
+      facts.borrow_mut().records.push(json!({"type": "fact", "fact": fact}));
+    })?;
   let (sends, heard) = mpsc::channel();
   let reads = sends.clone();
   thread::spawn(move || lines(&reads));

@@ -32,9 +32,9 @@ if (values.help) {
 Enter sends a prompt. ⌃J (Control J) adds a line, and so does ⇧Enter (Shift Enter) in a terminal with the kitty
 keyboard protocol. ⌃P opens actions. F1 shows all keys that the terminal sends. ⌃ is Control, ⌥ is Option or Alt,
 and ⇧ is Shift.
-The default model is ${defaultModel}, through your Claude CLI subscription.
-The models of every other provider whose credentials stand in the environment, such as ANTHROPIC_API_KEY, are there
-too, each named as provider:model.`);
+The default model is ${defaultModel}, through your Claude CLI subscription. A session offers it and the models of
+--roster. /model lists them, and every model of a provider whose credentials stand in the environment, such as
+ANTHROPIC_API_KEY, each named as provider:model. A model of that list joins the session when you choose it.`);
   process.exit(0);
 }
 if (values.effort && !efforts.some((effort) => effort === values.effort)) throw new Error("Invalid effort.");
