@@ -18,11 +18,10 @@ from real import bought, lived, ready, say, spent
 
 from furb import engine
 from furb.engine import OPERATOR
-from furb.provider.claude import cool
 from furb.world import kept
 
-TO = "opus/low"
-"""TO is the actor the play asks, which is opus at the least effort it takes."""
+TO = "claude-cli:opus/low"
+"""TO is the actor the play asks, which is opus of the claude command line at the least effort it takes."""
 CEILING = 4.0
 """CEILING is the dollars the play may spend, on each chain it sees and over all of them together."""
 QUIET = 240.0
@@ -44,7 +43,7 @@ MESSAGE = f"""You have the engine and a directory of your own. Use them, in this
 1. Read the engine at {Path(engine.__file__)} and say in one line what a chain is.
 2. Write a small python module into your directory, run it with bash, and read its stdout.
 3. Open a chain with your own chain as its source and take() as its filter, so the model you ask on it reads
-   none of your work, and end that word without closing anything. In the next word, prompt opus/low on that chain
+   none of your work, and end that word without closing anything. In the next word, prompt claude-cli:opus/low on that chain
    with shape int for a small sum, and await the value. Say in that message that the answer is a close of the number.
 4. Prompt the operator, which is the actor named "operator", with shape str for a word, await it, and hold the
    word it gives back.
@@ -149,7 +148,6 @@ async def first(yard: Path, record: Path) -> list[object]:
   say(f"the working directory moved to {got[5]}")
   say(f"the first life gave {got!r}")
   world.end()
-  await cool()
   return got
 
 
@@ -175,7 +173,6 @@ async def second(yard: Path, record: Path, got: list[object]) -> float:
     return ledger(root, record)
   finally:
     world.end()
-    await cool()
 
 
 def ledger(root: str, record: Path) -> float:
