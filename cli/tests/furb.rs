@@ -547,14 +547,23 @@ fn furb_hands_the_terminal_to_the_tui_with_the_words_it_takes() {
   let tui = yard.at.join("tui");
   program(&tui, "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 3\n");
   let mut command = yard.furb(&[
-    "--demo", "--record", "r.jsonl", "--cwd", "there", "--model", "m", "--roster", "n", "--",
-    "--effort", "high",
+    "--demo",
+    "--record",
+    "r.jsonl",
+    "--cwd",
+    "there",
+    "--model",
+    "sonnet/high",
+    "--roster",
+    "n",
+    "--",
+    "more",
   ]);
   command.env("FURB_TUI", &tui);
   let output = ran(command, "");
   assert_eq!(output.status.code(), Some(3), "furb ends with the code of the TUI");
   let words = String::from_utf8_lossy(&output.stdout);
-  let expected =
-    "--demo\n--record\nr.jsonl\n--cwd\nthere\n--model\nm\n--roster\nn\n--effort\nhigh\n";
+  let expected = "--demo\n--record\nr.jsonl\n--cwd\nthere\n--model\nclaude-cli:sonnet\n--effort\nhigh\n\
+                  --roster\nn\nmore\n";
   assert_eq!(words, expected);
 }

@@ -13,14 +13,15 @@ use std::{
   process::Command,
 };
 
-use crate::{Place, Stand};
+use crate::{Place, Stand, life};
 
 /// How to get a TUI when none is found.
 const NONE: &str = "no TUI is found: set FURB_TUI to the program of the furb TUI, put furb-tui on PATH, or run furb \
                     from a checkout of furb after `bun install && bun run build`; `furb --mode rpc` needs no TUI";
 
 /// The TUI, run with the words it takes, in the place of furb: on the demo session, on the record and in the
-/// directory furb is given, on the default actor and the roster furb is given, and with the words after `--`.
+/// directory furb is given, on the default actor and the roster furb is given, and with the words after `--`. The
+/// TUI takes the model and the effort of the actor apart.
 pub fn launch(
   demo: bool,
   place: &Place,
@@ -38,8 +39,13 @@ pub fn launch(
   if let Some(cwd) = &place.cwd {
     words.extend(["--cwd".into(), cwd.into()]);
   }
-  if let Some(model) = &stand.model {
-    words.extend(["--model".into(), model.into()]);
+  if let Some(to) = &stand.model {
+    let actor = life::actor(to);
+    let model = life::model(to).unwrap_or_else(|| actor.clone());
+    words.extend(["--model".into(), model.as_str().into()]);
+    if let Some(effort) = actor.strip_prefix(&format!("{model}/")) {
+      words.extend(["--effort".into(), effort.into()]);
+    }
   }
   for one in &stand.roster {
     words.extend(["--roster".into(), one.into()]);
