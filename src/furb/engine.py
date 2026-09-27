@@ -101,7 +101,7 @@ def turns(on: str = "") -> list[tuple]:
 def module(on: str = "") -> dict:
   for x in reversed(transcript(on)):
     match x:
-      case ("module", _, _, carried):
+      case ("module", *_, carried):
         return carried
   return {}
 
@@ -112,7 +112,7 @@ def program(on: str = "") -> dict[str, str]:
     match x:
       case ("module", *_):
         words = {}
-      case ("run", _, _, _, which, word, _):
+      case ("run", *_, which, word, _):
         words[which] = word
   return words
 
@@ -150,7 +150,7 @@ def cd(path: str, on: str = "") -> str:
 def cwd(on: str = "") -> str:
   for x in reversed(transcript(on)):
     match x:
-      case ("cd", _, _, _, path):
+      case ("cd", *_, path):
         return path
   return standing()[1]
 
@@ -398,11 +398,11 @@ def bash(
     yield told(id, "" if show is HIDDEN else command, bound(id, "Exit"))
     while True:
       match (yield):
-        case ("merged", qid, _, _, about) if about == id:
+        case ("merged", qid, *_, about) if about == id:
           yield "done", qid, show_err is None
-        case ("read", qid, _, _, path) if path in streams:
+        case ("read", qid, *_, path) if path in streams:
           yield "done", qid, streams[path]
-        case ("write", qid, _, _, Text(path, text) as took) if path == f"{id}/stdin":
+        case ("write", qid, *_, Text(path, text) as took) if path == f"{id}/stdin":
           if mute:
             took = Refused(mute)
           else:
