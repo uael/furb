@@ -156,7 +156,7 @@ Each name has one meaning, which the contract's sentences use as given here.
 - The defaults of every verb are public names in the file.
 - A model knows from the source alone what the engine does with what the model writes.
 - What the engine does to the word of a rung it does to itself.
-- The prompt is the one channel of the engine: every exchange between the operator, the models and a chain is a prompt.
+- The prompt is the one prose channel of the engine: every exchange of prose between the operator, the models and a chain is a prompt.
 - A model extends the engine from a step: an extension writes verbs and ears, shows and filters as callables, and
   rebinds names, and it tells notes of its own, from a door or from a rebound verb.
 - The engine has no registry, no plugin surface, no permission and no REPL: the record shows who made each act.

@@ -170,7 +170,7 @@ The share dialog can open the file, copy its path, or upload the selected conver
 through `gh`. Upload happens only when chosen. Anyone with its link can read the shared conversation. `/export` keeps
 the structured JSON export. `/context` sets the context ceiling.
 
-A life runs the extensions that the configs turn on, and each chain shows the rungs of their words in its feed, as it
-shows any rung. The TUI has no part of its own for an extension: `/extensions` lists what the life runs, and `/run`
+A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
+and each chain shows the rungs of their words in its feed, as it shows any rung. The TUI has no part of its own for an extension: `/extensions` lists what the life runs, and `/run`
 runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel of the work of a chain ends its prompts,
 rungs, commands and waits, and not what an extension started on it, such as the watcher of the memory.
