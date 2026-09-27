@@ -75,13 +75,15 @@ function reply(turn: string): [thinking: string, answer: string] {
 /** The models of the demo, which it names in the catalog of the crate and asks none of. */
 const demoRoster = ["claude-cli:sonnet", "claude-cli:opus", "claude-cli:haiku", "claude-cli:fable"];
 
-/** A session whose models are the demo, which asks no model and answers each turn from the script above. */
+/** A session whose models are the demo, which asks no model and answers each turn from the script above. It enables
+ * no extension, so the demo shows the same on every machine. */
 function scriptedSession(options: SessionOptions): Session {
   const { record, cwd } = options;
   const directory = cwd ?? (record ? dirname(record) : undefined);
   if (!directory) throw new Error("A demo session needs a directory or a record.");
   return new Session({
     ...options,
+    extensions: false,
     roster: options.roster ?? demoRoster,
     cwd: directory,
     record: record ?? join(directory, "demo.jsonl"),

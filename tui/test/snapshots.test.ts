@@ -24,7 +24,8 @@ function traced(engine: Engine, calls: string[]): Engine {
 
 test("idle snapshots add no facts or sandbox calls as the act table grows, and streamed output needs no peek", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-snapshot-"));
-  const session = new Session({ cwd });
+  // The acts of an extension would stand in the act table beside those the test counts.
+  const session = new Session({ cwd, extensions: false });
   try {
     const engine = session.open();
     const calls: string[] = [];

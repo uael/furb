@@ -3,17 +3,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   attachImage,
-  bash,
   Engine,
-  files,
   type ImageAttachment,
-  kept,
   model,
   type NativeEar,
   type ProviderOptions,
   provider,
-  store,
-  time,
 } from "../index.cjs";
 import { Activity, WORK } from "./activity.js";
 import { FileChanges } from "./changes.js";
@@ -55,6 +50,11 @@ export interface SessionOptions {
   /** Ears of the host's own, which come before the ears of the session in the order the engine offers a question,
    * so each takes a question in their place, or wraps it. */
   ears?: Array<[string, Ear | NativeEar]>;
+  /** Whether the life enables at its start the extensions that the configs of the user and of the directory turn
+   * on; true when unsaid. A life runs what its record enables either way. */
+  extensions?: boolean;
+  /** The config directory of the user, in place of the one of this process. */
+  config?: string;
 }
 
 /** What the session keeps beside its record for the next life. */
@@ -65,10 +65,10 @@ interface Saved {
   streams?: [string, Stream][];
 }
 
-/** One session: an engine, and the ears it hears by. The World is ears: files, commands, time, the store of the
- * record and the provider of models, which the crate writes, and the console, which this package writes. The
- * activity keeps every act for the host, and the changes keep every write. A fault event tells what the life refused
- * when the console said what an act came to. */
+/** One session: an engine, and the ears it hears by. The World is ears: the provider of models, and the files, the
+ * commands, time, the store of the record and the extensions, which the crate opens every life on, and the console,
+ * which this package writes. The activity keeps every act for the host, and the changes keep every write. A fault
+ * event tells what the life refused when the console said what an act came to. */
 export class Session extends EventEmitter {
   readonly directory: string;
   /** The path of the record, when the session keeps one. */
@@ -140,14 +140,10 @@ export class Session extends EventEmitter {
     return attachImage(this.imageDirectory, resolve(this.directory, path));
   }
 
-  /** The engine, opened on the record and on the ears of the session, after the ears of the host. An inspection
-   * opens on the record alone, and hears no ear that does work. */
+  /** The engine, opened on the record, on the ears of the host, then on the ears of the session, and then on the
+   * ears of the crate. An inspection keeps nothing, enables no extension, and hears no ear that does work. */
   open(): Engine {
     if (this.engine) throw new Error("This session already owns an engine.");
-    const stored = this.record && !this.options.readOnly ? store(this.record) : undefined;
-    const record = stored?.record ?? (this.record && existsSync(this.record) ? kept(this.record) : []);
-    this.entries = [...(record as Entry[])];
-    this.opened = record.length;
     // A later life hears under the names the life before it heard, since the record says who asked what. An
     // inspection hears each by an ear that does no work, and asks no model.
     const working = !this.options.readOnly;
@@ -174,17 +170,23 @@ export class Session extends EventEmitter {
       ],
       ["console", working ? this.console.ear() : silent()],
       ["changes", working ? this.changes.ear(this.directory, () => this.emit("change")) : silent()],
-      ["files", working ? files() : silent()],
-      ["bash", working ? bash() : silent()],
-      ["time", working ? time() : silent()],
-      ["store", stored?.ear ?? silent()],
     ];
     try {
-      const engine = Engine.boot(record, ears);
+      // The crate refuses a life that drifted, since it keeps nothing more.
+      const engine = Engine.open(
+        {
+          directory: this.directory,
+          record: this.record,
+          inspecting: !working,
+          extensions: working && this.options.extensions !== false,
+          config: this.options.config,
+        },
+        ears,
+      );
       this.engine = this.console.engine = engine;
-      // A life that drifted keeps nothing more, so this session refuses to open on it.
-      const raised = engine.raised;
-      if (raised) throw new Error(`${raised.is}: ${raised.args.map(String).join(" ")}`);
+      // The observer heard the entries that the life kept as it opened, after the record it opened on.
+      this.entries = [...(engine.record as Entry[]), ...this.entries];
+      this.opened = engine.record.length;
       // The journal said the whole record again before boot returned, so every act that is not done now is one the
       // record showed begun and not done.
       for (const act of this.activity.acts.values())
