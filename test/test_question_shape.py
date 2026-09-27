@@ -1,6 +1,6 @@
 """Question, a fact that takes a name of its own and is answered."""
 
-from conftest import Sand, acts, born, life, said, settle
+from conftest import Sand, acts, born, chained, life, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Act, Text
 
@@ -62,8 +62,7 @@ async def test_the_name_of_an_act() -> None:
   await settle()
   assert [a[1] for a in said(log, "prompt")] == ["prompt1", "prompt2", "prompt3"]
   assert all(name.isidentifier() for name in acts(log))
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   assert twin == "chain2"
   assert [a[1] for a in said(log, "bash")] == ["bash1", "bash2"]
 

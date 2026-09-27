@@ -1,9 +1,5 @@
-//! The claude command line as a model of rig, driven against a command line that answers from a script.
-//!
-//! The fake says the stream of the real one as the TypeScript fake does: each block streams in parts and settles
-//! whole, and the result says the usage and the running cost. It writes, beside itself, the words of each process
-//! it was, the id of each, and each line of input it read. A line that holds FAIL ends it with a failure, a line
-//! that holds WAIT gets no answer, and a line that holds THINK gets a thought before the text.
+//! The claude command line as a model of rig, driven against a command line that answers from a script, which
+//! `fake-claude.sh` says.
 
 use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf, time::Duration};
 
@@ -18,48 +14,8 @@ use serde_json::{Value, json};
 use super::{Claude, Completion};
 use crate::world::provider::runtime;
 
-/// The fake command line.
-const FAKE: &str = r##"#!/bin/sh
-here=$(dirname "$0")
-printf '%s\0' "$@" > "$here/args.$$"
-echo "$$" >> "$here/pids"
-id=none
-last=
-for arg in "$@"; do
-  case $last in --session-id|--resume) id=$arg ;; esac
-  if [ "$arg" = --fork-session ]; then id="$id-forked"; fi
-  last=$arg
-done
-say() { printf '%s\n' "{\"type\":\"stream_event\",\"event\":$1}"; }
-settle() { printf '%s\n' "{\"type\":\"assistant\",\"message\":{\"content\":[$1]}}"; }
-n=0
-while IFS= read -r line; do
-  printf '%s\n' "$line" >> "$here/in"
-  case $line in
-    *FAIL*) echo "deliberate failure" >&2; exit 2 ;;
-    *WAIT*) continue ;;
-  esac
-  n=$((n + 1))
-  say '{"type":"message_start"}'
-  at=0
-  case $line in
-    *THINK*)
-      say '{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}'
-      say '{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hmm"}}'
-      say '{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig"}}'
-      say '{"type":"content_block_stop","index":0}'
-      settle '{"type":"thinking","thinking":"hmm","signature":"sig"}'
-      at=1 ;;
-  esac
-  say "{\"type\":\"content_block_start\",\"index\":$at,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}"
-  say "{\"type\":\"content_block_delta\",\"index\":$at,\"delta\":{\"type\":\"text_delta\",\"text\":\"close(\"}}"
-  say "{\"type\":\"content_block_delta\",\"index\":$at,\"delta\":{\"type\":\"text_delta\",\"text\":\"\\\"reply $n\\\")\"}}"
-  say "{\"type\":\"content_block_stop\",\"index\":$at}"
-  say '{"type":"message_stop"}'
-  settle "{\"type\":\"text\",\"text\":\"close(\\\"reply $n\\\")\"}"
-  printf '%s\n' "{\"type\":\"result\",\"session_id\":\"$id\",\"total_cost_usd\":0.0$n,\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}}"
-done
-"##;
+/// The fake command line, which the tests of the command line of furb run too.
+const FAKE: &str = include_str!("fake-claude.sh");
 
 /// A yard of the test that holds the fake command line and what it wrote.
 pub(crate) struct Yard {
@@ -102,7 +58,7 @@ impl Yard {
 }
 
 /// The word after a flag among the words of a process.
-fn after(args: &[String], flag: &str) -> Option<String> {
+pub(crate) fn after(args: &[String], flag: &str) -> Option<String> {
   args.iter().position(|one| one == flag).and_then(|at| args.get(at + 1).cloned())
 }
 
@@ -188,8 +144,77 @@ fn the_next_turn_of_a_conversation_writes_to_its_process_only_what_it_has_not_he
   assert_eq!(heard.len(), 2);
   assert!(heard[1].contains("second") && !heard[1].contains("first"), "{}", heard[1]);
   // The same request again is a turn that failed and is asked again: its last message goes once more.
-  asked(&model, &messages, settings).unwrap();
+  asked(&model, &messages, settings.clone()).unwrap();
   assert!(yard.heard()[2].contains("second") && !yard.heard()[2].contains("first"));
+  // A request that continues nothing the conversation heard begins a new one.
+  asked(&model, &[user("other")], settings).unwrap();
+  let pids = yard.pids();
+  let session = |pid: &str| after(&yard.args(pid), "--session-id");
+  assert_eq!(pids.len(), 2);
+  assert_ne!(session(&pids[0]), session(&pids[1]));
+}
+
+#[test]
+fn a_turn_asked_again_after_it_failed_resumes_its_conversation_once_and_then_begins_anew() {
+  let yard = Yard::new("again");
+  let model = yard.claude(300).completion_model("sonnet");
+  for _ in 0..3 {
+    asked(&model, &[user("WAIT")], json!({"session": "chain"})).unwrap_err();
+  }
+  let pids = yard.pids();
+  let args: Vec<_> = pids.iter().map(|pid| yard.args(pid)).collect();
+  let first = after(&args[0], "--session-id");
+  assert_eq!(after(&args[1], "--resume"), first, "the second try resumes the conversation");
+  assert!(after(&args[2], "--session-id").is_some_and(|one| Some(&one) != first.as_ref()));
+}
+
+#[test]
+fn past_the_warm_processes_the_least_used_one_ends_and_past_the_held_conversations_the_least_used_one_goes()
+ {
+  let yard = Yard::new("pool");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let turn = |at: usize, messages: &[Message]| {
+    asked(&model, messages, json!({"session": format!("s{at}")})).expect("a turn")
+  };
+  let reply = turn(0, &[user("first")]);
+  (1..=8).for_each(|at| drop(turn(at, &[user("first")])));
+  let first = yard.pids().remove(0);
+  assert!(gone(&first), "past eight warm processes the least used one ends");
+  (9..=64).for_each(|at| drop(turn(at, &[user("first")])));
+  let answer = Message::Assistant { id: None, content: reply.choice };
+  turn(0, &[user("first"), answer, user("second")]);
+  let again = yard.args(yard.pids().last().expect("a process"));
+  let id = after(&yard.args(&first), "--session-id");
+  assert_ne!(after(&again, "--resume"), id, "past 64 held conversations the least used one went");
+}
+
+#[test]
+fn an_effort_that_the_command_line_does_not_take_is_refused_before_any_process_starts() {
+  let yard = Yard::new("effort");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let no = asked(&model, &[user("first")], json!({"effort": "huge"})).unwrap_err();
+  let why = "sonnet spends one of low, medium, high, xhigh, max on a turn, never huge.";
+  assert!(no.to_string().contains(why), "{no}");
+  assert!(yard.pids().is_empty());
+}
+
+#[test]
+fn a_result_is_the_text_of_a_reply_that_streamed_no_block_and_fails_the_turn_when_it_says_an_error()
+{
+  let yard = Yard::new("result");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let got = asked(&model, &[user("BARE")], json!({})).unwrap();
+  assert_eq!(got.choice, [AssistantContent::text("close(1)")]);
+  let no = asked(&model, &[user("ERROR")], json!({})).unwrap_err();
+  assert!(no.to_string().contains("the model is overloaded"), "{no}");
+}
+
+#[test]
+fn a_line_longer_than_a_reader_takes_fails_its_turn() {
+  let yard = Yard::new("long");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let no = asked(&model, &[user("LONG")], json!({})).unwrap_err();
+  assert!(no.to_string().contains("Claude wrote a line over 33554432 bytes."), "{no}");
 }
 
 #[test]
@@ -243,11 +268,12 @@ fn a_process_that_exits_fails_its_turn_with_the_tail_of_its_stderr() {
 }
 
 #[test]
-fn a_turn_that_makes_no_progress_fails_at_its_stall_and_ends_its_process() {
+fn a_turn_that_makes_no_progress_fails_at_its_stall_with_the_last_odd_line_and_ends_its_process() {
   let yard = Yard::new("stall");
   let model = yard.claude(300).completion_model("sonnet");
-  let no = asked(&model, &[user("WAIT")], json!({"session": "stall"})).unwrap_err();
-  assert!(no.to_string().contains("Claude made no progress for 0.3s."), "{no}");
+  let no = asked(&model, &[user("ODD")], json!({"session": "stall"})).unwrap_err();
+  let why = "Claude made no progress for 0.3s. The last line it wrote was no line of json";
+  assert!(no.to_string().contains(why), "{no}");
   let pid = yard.pids().remove(0);
   assert!(gone(&pid), "the process of the turn ended");
 }

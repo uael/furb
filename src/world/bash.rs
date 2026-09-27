@@ -4,6 +4,7 @@
 use std::{
   collections::HashMap,
   io::{Read, Write},
+  path::{Path, PathBuf},
   process::{Child, ChildStdin, Command, Stdio},
   sync::{Arc, Mutex, mpsc},
   thread,
@@ -20,6 +21,29 @@ use crate::{
 /// The POSIX shell that runs a command: `/bin/sh`, and on Windows, which has none of its own, the `sh` on PATH, such
 /// as the one of Git for Windows.
 pub const SHELL: &str = if cfg!(windows) { "sh" } else { "/bin/sh" };
+
+/// The first program of a name in these folders, with the endings of a program on Windows.
+pub fn program(name: &str, folders: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
+  let endings: &[&str] = if cfg!(windows) { &[".exe", ".cmd", ""] } else { &[""] };
+  let folders = folders.into_iter().filter(|one| !one.as_os_str().is_empty());
+  folders
+    .flat_map(|one| endings.iter().map(move |end| one.join(format!("{name}{end}"))))
+    .find(|one| runs(one))
+}
+
+/// Whether a path is a program that this machine runs.
+fn runs(path: &Path) -> bool {
+  let Ok(info) = path.metadata() else { return false };
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt;
+    info.is_file() && info.permissions().mode() & 0o111 != 0
+  }
+  #[cfg(not(unix))]
+  {
+    info.is_file()
+  }
+}
 
 /// The ear of commands: it takes a command, says what it writes, feeds it, and says it done with its exit.
 ///

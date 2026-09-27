@@ -1,6 +1,6 @@
 """Fact, what everything said in a life is."""
 
-from conftest import WORLD, acts, born, dones, said, settle, world_says
+from conftest import WORLD, acts, born, chained, dones, said, settle, slow, world_says
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -55,8 +55,7 @@ async def test_a_fact_says_who_said_it() -> None:
 async def test_a_fact_is_on_the_scope_of_the_act_it_is_about() -> None:
   """A fact is on the scope of the act it is about, so the chain it is on is no slot of it."""
   _, log, _ = born()
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   act = engine.bash("echo hi", on=two)
   await act
   theirs = [one for one in log if one[1] == act]
@@ -66,8 +65,7 @@ async def test_a_fact_is_on_the_scope_of_the_act_it_is_about() -> None:
 
 async def test_a_control_is_about_the_act_it_is_over() -> None:
   """A control is about the act it is over, a done, a tell and the facts of the World about the act they settle, tell of or come from, and a question about itself."""
-  _, log, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  _, log, _, act = slow()
   world_says("out", act, "half\n", "stdout")
   engine.cancel(act)
   await settle()
@@ -80,8 +78,7 @@ async def test_a_control_is_about_the_act_it_is_over() -> None:
 async def test_a_verb_takes_a_chain_and_the_act_it_makes_is_on_that_chain() -> None:
   """A verb takes a chain, and the act it makes is on that chain."""
   _, log, root = born()
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   engine.bash("echo hi", on=two)
   engine.bash("echo there", on=root)
   assert [one[3] for one in said(log, "bash")] == [two, root]
@@ -99,8 +96,7 @@ async def test_a_model_calls_a_verb_from_a_rung_and_the_operator_calls_the_same_
 async def test_an_act_is_on_the_chain_that_the_verb_names() -> None:
   """An act is on the chain that the verb names."""
   sand, log, root = born()
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   sand.script[root] = [f"x = bash('elsewhere', on={two!r})\nclose(1)"]
   assert await engine.prompt(int, "run it", on=root) == 1
   assert [one[3] for one in said(log, "bash")] == [two]
@@ -109,8 +105,7 @@ async def test_an_act_is_on_the_chain_that_the_verb_names() -> None:
 async def test_an_act_is_on_a_chain_and_its_facts_are_on_its_scope() -> None:
   """An act is on a chain, and its facts are on its scope."""
   _, log, _ = born()
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   act = engine.bash("echo hi", on=two)
   await settle()
   assert (said(log, "bash")[0][3], engine.scope(act)) == (two, two)
@@ -141,8 +136,7 @@ async def test_the_world_is_given_the_id_of_the_act_and_the_facts_about_the_act_
 async def test_a_prompt_that_a_rung_makes_on_another_chain_is_an_act_of_that_chain() -> None:
   """A prompt that a rung makes on another chain is an act of that chain."""
   sand, log, root = born()
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   sand.script[root] = [f"p = prompt(int, 'hi', on={two!r})\nclose(1)"]
   assert await engine.prompt(int, "delegate", on=root) == 1
   await settle()

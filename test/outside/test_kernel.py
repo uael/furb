@@ -9,7 +9,9 @@ import asyncio
 
 import pytest
 
-from conftest import ENGINE, Py
+import furb
+import furb_monty.engine
+from conftest import ENGINE, Py, kernel, swapped
 from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Refused
 from outside.doubles import booted, heads, settle, worlds
@@ -98,14 +100,22 @@ def test_a_word_binds_a_name_of_the_engine_again_to_any_value() -> None:
   assert said("def mine(path: str) -> str:\n  return path\nread = mine\nclose(read('a'))") == []
 
 
-async def test_a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last() -> None:
-  """The gate finds what the run finds: a rung that bound a name of the engine again leaves that value to the word
-  after it, so a word that calls a name the program bound to a number is refused, and it raises when it runs."""
-  assert said("close(read('a'))", ("read = 1",))[0].startswith("line 1: error[call-non-callable]")
-  root = booted(worlds(STANDS), gated=False)
-  assert await engine.rung("read = 1", on=root) is None
-  with pytest.raises(TypeError, match="not callable"):
-    await engine.rung("close(read('a'))", on=root)
+@pytest.mark.parametrize("which", [furb.python, furb_monty.engine], ids=["python", "monty"])
+async def test_a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last(which: object) -> None:
+  """The gate finds what the run finds, on both engines: a rung that bound a name of the engine again leaves that
+  value to the word after it, so a word that calls it raises when it runs, and the gate refuses a word that calls it
+  where it can see it."""
+  swapped(which)
+  try:
+    root = engine.boot((), world=worlds(STANDS), **kernel())
+    assert await engine.rung("read = 1", on=root) is None
+    with pytest.raises(TypeError, match="not callable"):
+      await engine.rung("f: Any = read\nclose(f('a'))", on=root)
+    assert engine.gate("close(read('a'))", on=root)[0].startswith("line 1: error[call-non-callable]")
+    with pytest.raises(Refused):
+      await engine.rung("close(read('a'))", on=root)
+  finally:
+    swapped(furb.python)
 
 
 def test_a_word_that_imports_the_engine_by_its_package_is_refused() -> None:

@@ -3,8 +3,8 @@ from typing import Literal
 from furb.engine import Act, Text
 
 def memory(path: str = ".", on: str = "") -> list[Text]:
-  """The memory of a path, told to its chain: each memory file that applies to the path and that the chain does not hold as it stands, told whole.
-  memory asks the World a memory question on its chain with the path, and tells each text of the answer in its order, under the header memory and the path of the text, with every line of it.
+  """The memory of a path, told to its chain: each memory file that applies to the path and that the chain does not hold as it stands, read with the show of every line, so the chain holds the whole file, and told by every line that the chain has not seen.
+  memory asks the World a memory question on its chain with the path, and tells each text of the answer in its order, under the header memory and the path of the text, with the show of every line.
   memory gives the texts of the answer, and an empty list when the chain holds every memory file that applies.
   A memory question that the World refuses raises Refused in the caller.
   """

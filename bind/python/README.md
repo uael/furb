@@ -5,39 +5,32 @@ the engine in the sandbox of monty, with the Kernel that the crate loads there, 
 `furb_monty.gate` is the gate of the crate, which the package `furb` reads a word with too.
 
 `furb_monty._monty` is the door itself. Its `Engine` says each name of the contract by its name, with the words
-python gives, as the engine of this interpreter takes them. It also gives the ears of the World that the crate
-writes: `files()`, `bash()`, `time()`, `store(path)`, which gives the record at the path and the ear that keeps it,
-and `provider(directory)`, which answers what the chains stand on and asks the models of the catalog of the crate.
-Each is a `NativeEar`, which `furb_monty.engine.boot` takes beside the generators of this interpreter, and which the
-engine of this interpreter, `furb.python`, steps as a generator of its own:
+python gives, as the engine of this interpreter takes them. `_monty.opened(directory, record)` opens a life as every
+host of the crate opens one: it gives the record and the ears of the crate, which the host boots after its own ears.
+Those ears are the provider of the models, the extensions, which enable at the tip what the configs of the user and
+of the directory turn on unless `extensions=False`, the ear of each official extension, the files, the commands,
+time, and the store when the life keeps. Each is a `NativeEar`, which `furb_monty.engine.boot` takes beside the
+generators of this interpreter, and which the engine of this interpreter, `furb.python`, steps as a generator of its
+own:
 
 ```python
 from furb_monty import _monty, engine
 
-record, store = _monty.store("life.jsonl")
-ears = {"files": _monty.files(), "bash": _monty.bash(), "time": _monty.time(), "store": store}
-provider = _monty.provider(".", actor="claude-cli:opus/low")
+record, ears = _monty.opened(".", "life.jsonl", actor="claude-cli:opus")
 # `world` is an ear of the host that answers the rest, a prompt to the operator among it.
-root = engine.boot(record, world=world, provider=provider, **ears)
+root = engine.boot(record, world=world, **dict(ears))
 ```
 
-`_monty.opened(directory, record)` opens a life as every host of the crate opens one: it gives the record and the
-ears of the crate, which the host boots after its own ears, the provider among them. Those ears are the extensions,
-which enable at the tip what the configs of the user and of the directory turn on unless `extensions=False`, the ear
-of each official extension, the files, the commands, time, and the store when the life keeps. `official()`,
-`extensions(given)`, `memory(config)` and `skills(config)` give the parts of it one by one, as the suite of each
-extension boots them.
-
-```python
-record, ears = _monty.opened(".", "life.jsonl")
-root = engine.boot(record, world=world, provider=provider, **dict(ears))
-```
-
-`provider` offers the model of its `actor` and the models of its `roster`, or the first model the catalog offers
-when it names neither. Its `answer`, a function, answers each request in place of the models, which the suite of
-furb does. Its `stream`, a function, is told what a model writes as it writes it, and `images` is the directory of
-the images that a message names. `_monty.SYSTEM` is the system prompt of every model:
-the engine, minified in layout alone.
+The provider offers the model of its `actor` and the models of its `roster`, or the first model the catalog offers when
+it names neither, and the operator alone when the roster names none and no actor is said. Its `answer`, a function,
+answers each request in place of the models, which the suite of furb does. Its `stream`, a function, is told what a
+model writes as it writes it, and `images` is the directory of the images that a message names. A life that is
+`inspecting` keeps nothing, enables nothing new and asks no model. `models(claude)` gives the models the catalog of this
+machine offers, `model(name)` one model by its name, and `levels()` the levels of effort. `files()`, `bash()`, `time()`,
+`store(path)`, `official()`, `extensions(given)`, `memory(config)` and `skills(config)` give the ears one by one, as the
+suite of each extension boots them. `answered(shape, line)` reads a line of the operator as a value of one of the
+`SHAPES`, by the rules that every console of the crate reads a line by. `_monty.SYSTEM` is the system prompt of every
+model: the engine, minified in layout alone.
 
 A generator of this interpreter is heard on a thread of its own, so it may say a verb while it hears, as an ear of
 the engine of python does.

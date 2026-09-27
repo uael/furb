@@ -1,0 +1,28 @@
+name: setup
+description: The uv, the python and the rust of every gate, with their caches, and the environment that uv syncs.
+
+runs:
+  using: composite
+  steps:
+    # A python restored from the cache on Windows holds a link to its directory that the restore breaks, so uv
+    # install fails there on every run after the first: Windows installs its python each time.
+    - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      with:
+        version: ${{ env.UV_VERSION }}
+        enable-cache: true
+        cache-python: ${{ runner.os != 'Windows' }}
+    # The rust of rust-toolchain.toml, and the cache of what cargo built of the dependencies the last time.
+    # The key of the cache holds the files that tell cargo what to build, because the action does not read them.
+    # Only main saves the cache, and a pull request reads the cache of main.
+    # Only a job that passes saves it. A job that fails or is cancelled holds part of the build, and a key that
+    # matches whole is never saved again, so every later run would build again what that part lacks.
+    - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+      with:
+        cache-key: >-
+          ${{ hashFiles('.github/workflows/gates.yml', '.pre-commit-config.yaml', 'bind/python/pyproject.toml', 'cli/pyproject.toml', 'bind/typescript/build.ts') }}
+        cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+        cache-on-failure: false
+    - run: uv python install
+      shell: bash
+    - run: uv sync --locked
+      shell: bash

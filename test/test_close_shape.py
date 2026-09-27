@@ -2,15 +2,14 @@
 
 from asyncio import CancelledError
 
-from conftest import born, said, settle, stalled
+from conftest import said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR
 
 
 async def test_a_close_is_a_cancel_that_carries_what_the_act_it_names_is_done_with() -> None:
   """A close is a cancel that carries what the act it names is done with, and it is a kind of its own, since a tuple has no slot that may be empty."""
-  _, log, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  _, log, root, act = slow()
   gone = engine.bash("other", on=root)
   engine.close(21, act)
   engine.cancel(gone)

@@ -3,6 +3,7 @@
 
 use std::{
   collections::HashMap,
+  fs,
   path::{Path, PathBuf},
 };
 
@@ -144,7 +145,12 @@ fn folders(here: &Path, target: &Path) -> Vec<PathBuf> {
 }
 
 /// The memory of a folder: its CLAUDE.md file, or its AGENTS.md file when it holds no CLAUDE.md, when the World reads
-/// it as a text.
+/// it as a text. A file holds the memory under that name exactly, on a disk that ignores the case of a name too, so a
+/// folder has the same memory on every machine.
 fn of(folder: &Path) -> Option<Text> {
-  read(&NAMES.iter().map(|one| folder.join(one)).find(|one| one.is_file())?).ok()
+  let exact = |path: &Path| {
+    let held = fs::read_dir(folder).into_iter().flatten().flatten();
+    held.map(|one| one.file_name()).any(|name| Some(name.as_os_str()) == path.file_name())
+  };
+  read(&NAMES.iter().map(|one| folder.join(one)).find(|one| one.is_file() && exact(one))?).ok()
 }

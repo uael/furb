@@ -110,7 +110,7 @@ test("an actor names its model and its effort after the last slash that follows 
 test("a session offers the models its host names, and keeps the model and the effort chosen last as a preference", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-roster-"));
   const record = join(cwd, "session.jsonl");
-  const alone = new Session({ cwd });
+  const alone = new Session({ cwd, roster: [] });
   try {
     expect(alone.actor).toBe("operator");
     const engine = alone.open();
@@ -159,10 +159,7 @@ test("a session offers the models its host names, and keeps the model and the ef
 test("what a model writes streams into the session under its rung until its reply is done", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-streams-"));
   const record = join(cwd, "life.jsonl");
-  let release: () => void = () => {};
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const { promise: held, resolve: release } = Promise.withResolvers<void>();
   const seen: unknown[] = [];
   const session = new Session({
     cwd,
@@ -189,10 +186,10 @@ test("what a model writes streams into the session under its rung until its repl
     });
     expect(seen).toEqual([
       {
-        actor: "claude-cli:sonnet/low",
+        actor: "claude-cli:sonnet/high",
         chain: engine.root,
         messages: [expect.objectContaining({ role: "user" })],
-        settings: { effort: "low", session: expect.stringMatching(/\/chain1$/) },
+        settings: { effort: "high", session: expect.stringMatching(/\/chain1$/) },
       },
     ]);
     release();
@@ -257,7 +254,7 @@ test("a function of the host that throws answers nothing, and two in a row pause
     const reasons = [...broken.activity.acts.values()]
       .filter((act) => act.kind === "rung")
       .map((act) => act.run?.reason);
-    expect(reasons).toContain("Refused: claude-cli:sonnet/low answered nothing: ProviderError: unavailable");
+    expect(reasons).toContain("Refused: claude-cli:sonnet/high answered nothing: ProviderError: unavailable");
   } finally {
     await broken.dispose();
   }
@@ -331,7 +328,7 @@ test("an operator question survives a resume and validates its answer", async ()
     await second.resume();
     await until(second, () => second.console.prompts.has(question));
     expect(second.console.prompts.get(question)?.message).toBe("Continue?");
-    expect(() => second.console.answer(question, "maybe")).toThrow("yes or no");
+    expect(() => second.console.answer(question, "maybe")).toThrow("neither yes nor no");
     second.console.answer(question, "yes");
     expect(await engine.result<boolean>(question)).toBe(true);
   } finally {
@@ -471,8 +468,8 @@ test("an operator answer of a list keeps its numbers exact, and a map in it that
     const on = engine.root;
     const question = engine.prompt("list", { message: "Numbers?", to: "operator", on });
     await until(session, () => session.console.prompts.has(question.id));
-    expect(() => session.console.answer(question.id, "[9007199254740993]")).toThrow("safe integer");
-    session.console.answer(question.id, '[2.0, 3, {"is": "str", "args": [1.0]}]');
+    expect(() => session.console.answer(question.id, "{}")).toThrow('"{}" is no list');
+    session.console.answer(question.id, '[2.0, 9007199254740993, {"is": "str", "args": [1.0]}]');
     const kept = {
       is: "dict",
       args: [
@@ -482,10 +479,11 @@ test("an operator answer of a list keeps its numbers exact, and a map in it that
         ],
       ],
     };
-    expect(await question).toEqual([2, 3, kept]);
+    const big = { is: "int", args: ["9007199254740993"] };
+    expect(await question).toEqual([2, big, kept]);
     await engine.rung({ word: `x = peek(${JSON.stringify(question.id)})`, on });
-    expect(engine.inspect("x").representation).toBe("[2.0, 3, {'is': 'str', 'args': [1.0]}]");
-    expect(engine.inspect("x").value).toEqual([2, 3, kept]);
+    expect(engine.inspect("x").representation).toBe("[2.0, 9007199254740993, {'is': 'str', 'args': [1.0]}]");
+    expect(engine.inspect("x").value).toEqual([2, big, kept]);
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
@@ -494,14 +492,12 @@ test("an operator answer of a list keeps its numbers exact, and a map in it that
 
 test("a session with no model puts to the operator every prompt that names no actor, the acknowledgment among them", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-operator-alone-"));
-  let acknowledged: (message: string) => void = () => {};
-  const acknowledgment = new Promise<string>((resolve) => {
-    acknowledged = resolve;
-  });
+  const { promise: acknowledgment, resolve: acknowledged } = Promise.withResolvers<string>();
   // The first example of the README, whose callback answers for the operator.
   const session = boot({
     cwd,
     record: join(cwd, "work.jsonl"),
+    roster: [],
     operator: async ({ shape, message }) => {
       if (shape === "None") acknowledged(message);
       return shape === "str" ? `You asked: ${message}` : null;
@@ -566,10 +562,7 @@ test("a session enables the extensions of the configs, and a later session on it
   const config = join(cwd, "config");
   await writeFile(join(cwd, "CLAUDE.md"), "Use two spaces.\n");
   /** The names of the extensions that the life of a session runs, which the root says it enabled. */
-  const enabled = (session: Session) =>
-    (session.engine?.transcript({ on: "chain1" }) ?? [])
-      .filter(([kind]) => kind === "enable")
-      .map((fact) => fact[3]);
+  const enabled = (session: Session) => (session.engine?.extensions() ?? []).map(({ name }) => name);
   const first = new Session({ cwd, record, config });
   try {
     first.open();

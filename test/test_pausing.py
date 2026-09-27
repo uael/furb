@@ -3,7 +3,7 @@
 from asyncio import CancelledError
 from collections.abc import Generator
 
-from conftest import born, dones, said, settle, stalled
+from conftest import born, dones, said, settle, slow, stalled
 from furb import engine
 
 
@@ -81,8 +81,7 @@ async def test_a_rung_carries_on_only_while_its_own_chain_is_not_paused() -> Non
 
 async def test_a_control_from_outside_reaches_a_paused_act_at_once() -> None:
   """A control from outside reaches a paused act at once, where what the words of the act say waits for the wake."""
-  _, _, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  _, _, root, act = slow()
   await settle()
   engine.pause(act)
   engine.cancel(act)

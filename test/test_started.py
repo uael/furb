@@ -1,14 +1,13 @@
 """Started, what an ear says to take an act whose done comes later."""
 
-from conftest import WORLD, Sand, born, plain, relived, said, settle
+from conftest import WORLD, Sand, born, plain, relived, said, settle, slow
 from furb import engine
 from furb.engine import Act, Exit
 
 
 async def test_what_an_ear_says_to_take_an_act_whose_done_comes_later() -> None:
   """What an ear says to take an act whose done comes later, and which no ear after it hears."""
-  sand, log, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  sand, log, root, act = slow()
   assert said(log, "started")[-1] == ("started", act, WORLD) and engine.peek(act, ...) is ...
   step = engine.rung("k = 1", on=root)
   assert ("started", step, step) in log and said(sand.calls, "rung") == []

@@ -99,3 +99,5 @@ rights of the user on the engine of CPython, as a word of a model does there.
 - `Session` takes `extensions`, false to enable nothing new, and `config`, the config directory of the user.
 - `_monty.opened` gives the record and the ears of the crate to a python host, and `extensions=False` enables
   nothing new.
+- `Engine.extensions()` in TypeScript, and `_monty.enabled` on the facts of the root in python, give the extensions
+  that a life runs, in the order it enabled them.

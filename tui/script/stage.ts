@@ -66,3 +66,13 @@ export function find(
   if (row < 0) throw new Error(`The screen shows no ${text}.`);
   return [(rows[row] ?? "").indexOf(text, from), row];
 }
+
+/** A click on the first place of the screen that shows a text, at or after a column. */
+export async function click(
+  screen: Awaited<ReturnType<typeof createTestRenderer>>,
+  text: string,
+  from = 0,
+): Promise<void> {
+  const [column, row] = find(screen, text, from);
+  await screen.mockMouse.click(column + 1, row);
+}

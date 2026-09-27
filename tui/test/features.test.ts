@@ -10,7 +10,6 @@ import { clipboardImage } from "../src/clipboard.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import { externalEditor, opener } from "../src/editor.ts";
 import { fileReferences, projectFiles } from "../src/files.ts";
-import { defaultModel } from "../src/models.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
 import { composing } from "./composing.ts";
@@ -23,19 +22,17 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
   let rung = "";
   let record: string | undefined;
   await composing(
-    async ({ session, app, screen }) => {
+    async ({ session, app, screen, frame }) => {
       rung = await session.engine.rung({ word: "await wait(60)", on: session.engine.root });
       await session.refresh();
-      app.render();
-      await screen.flush();
+      await frame();
       let card = app.scroll.getChildren().find((card) => card.id === rung);
       let heading = card?.getChildren()[0];
       if (!heading) throw new Error("No rung header.");
       expect(screen.captureCharFrame()).toContain(`${rung}  by you  running`);
       expect(card?.getChildren().length).toBeGreaterThan(1);
       await screen.mockMouse.click(heading.x + 1, heading.y);
-      app.render();
-      await screen.flush();
+      await frame();
       expect(
         app.scroll
           .getChildren()
@@ -47,9 +44,7 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
       await session.engine.close(null, { id: wait.id });
       await session.engine.result(rung);
       await session.refresh();
-      app.render();
-      await screen.flush();
-      expect(screen.captureCharFrame()).toContain(`✓ ${rung}`);
+      expect(await frame()).toContain(`✓ ${rung}`);
       expect(screen.captureCharFrame()).not.toContain(`${rung}  by you  running`);
       expect(
         app.scroll
@@ -59,18 +54,15 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
       ).toHaveLength(1);
       session.show("transcript");
       await session.refresh();
-      app.render();
-      await screen.flush();
+      await frame();
       session.show("feed");
       await session.refresh();
-      app.render();
-      await screen.flush();
+      await frame();
       card = app.scroll.getChildren().find((card) => card.id === rung);
       expect(card?.getChildren()).toHaveLength(1);
       heading = card?.getChildren()[0];
       if (heading) await screen.mockMouse.click(heading.x + 1, heading.y);
-      app.render();
-      await screen.flush();
+      await frame();
       expect(
         app.scroll
           .getChildren()
@@ -82,19 +74,17 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
         (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
       );
       expect(refused?.run?.status).toBe("failed");
+      expect(session.error).toBe("");
+      expect(session.findings.join("\n")).toContain("line 1");
       await session.refresh();
-      app.render();
-      await screen.flush();
-      expect(screen.captureCharFrame()).toContain("line 1");
+      expect(await frame()).toContain("line 1");
       expect(screen.captureCharFrame()).toContain("failed");
       record = session.host.record;
     },
     { width: 140, height: 42, useMouse: true },
   );
   if (!record) throw new Error("No record.");
-  const reopened = await openEngine({ record, demo: true });
-  const session = new Session(reopened.engine, reopened.host, true);
-  await session.refresh();
+  const session = await demoSession({ record });
   await composing(
     async ({ app }) => {
       expect(session.folds[rung]).toBe(false);
@@ -157,9 +147,7 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     const record = session.host.record;
     if (!record) throw new Error("No record for the queued message.");
     await session.dispose();
-    let reopened = await openEngine({ record, demo: true });
-    session = new Session(reopened.engine, reopened.host, true);
-    await session.refresh();
+    session = await demoSession({ record });
     expect(session.queueHeld).toBe(true);
     expect(session.queued[0]?.text).toBe("Keep this follow-up through exit.");
     await session.submit("/wake");
@@ -178,9 +166,7 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     const stale = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
     stale.queued = saved.queued;
     await writeFile(`${record}.ui.json`, JSON.stringify(stale));
-    reopened = await openEngine({ record, demo: true });
-    session = new Session(reopened.engine, reopened.host, true);
-    await session.refresh();
+    session = await demoSession({ record });
     expect(session.queued).toHaveLength(0);
     expect(session.acts.filter((act) => session.isUserPrompt(act))).toHaveLength(sent);
   } finally {
@@ -244,7 +230,7 @@ test("a model request failure shows in the feed as the failure of an act, and no
       record: join(directory, "session.jsonl"),
       // A claude command line that does not start fails every request, as a model that is not there does.
       claude: join(directory, "missing"),
-      roster: [defaultModel],
+      roster: ["claude-cli:sonnet"],
     });
     await composing(
       async ({ session, frame }) => {
@@ -391,9 +377,7 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
       record,
       `${lines.filter((line) => !(JSON.parse(line)[0][0] === "queue" && JSON.parse(line)[0][3] === "sent")).join("\n")}\n`,
     );
-    let opened = await openEngine({ record, demo: true });
-    session = new Session(opened.engine, opened.host, true);
-    await session.refresh();
+    session = await demoSession({ record });
     expect(session.queued).toHaveLength(0);
     expect(session.dispatched).toContain(entry.id);
     expect(session.acts.filter((act) => act.kind === "prompt")).toHaveLength(1);
@@ -401,9 +385,7 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     await session.dispose();
     await writeFile(record, `${lines.slice(0, begin + 1).join("\n")}\n`);
     await writeFile(`${record}.ui.json`, JSON.stringify(state));
-    opened = await openEngine({ record, demo: true });
-    session = new Session(opened.engine, opened.host, true);
-    await session.refresh();
+    session = await demoSession({ record });
     expect(session.queued).toHaveLength(1);
     const manual = await session.engine.prompt(entry.shape, {
       message: entry.text,

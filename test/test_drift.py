@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import WORLD, Sand, born, life, plain, relived, settle
+from conftest import WORLD, Sand, born, chained, life, plain, relived, settle
 from furb import engine
 from furb.engine import Drift
 
@@ -45,8 +45,7 @@ async def test_a_drift_breaks_the_journal_which_keeps_nothing_more() -> None:
   with pytest.raises(Drift):
     life(later, list(sand.record))
   assert later.record == []
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   assert two == "chain2" and later.record == []
   assert engine.clock(on=two) == 1001.0
   fresh = engine.bash("echo new", on=two)

@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, heads, said, settle, stalled
+from conftest import born, chained, heads, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -85,8 +85,7 @@ async def test_a_rung_closes_a_pending_prompt_of_any_actor() -> None:
 
 async def test_close_is_given_the_result_of_a_pending_act_and_the_id_of_that_act() -> None:
   """close is given the result of a pending act, and the id of that act when it is not the prompt of the running word."""
-  _, _, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  _, _, _, act = slow()
   await settle()
   engine.close("done with it", act)
   await settle()
@@ -129,8 +128,7 @@ async def test_a_prompt_completes_with_the_exception_that_the_word_of_the_prompt
 
 async def test_close_is_given_the_value_first() -> None:
   """close is given the value first, since a word that answers its own prompt names no act at all."""
-  _, log, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  _, log, _, act = slow()
   engine.close(21, act)
   word = said(log, "close")[0]
   assert (word[0], word[1], word[2], word[3]) == ("close", act, OPERATOR, 21)
@@ -205,8 +203,7 @@ async def test_a_close_said_from_a_word_that_retells_reaches_nothing_and_says_no
   assert await act == 21
   await settle()
   command = said(log, "bash")[0][1]
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   copy = next(a[1] for a in said(log, "rung") if a[3] == twin)
   assert engine.module(twin)["k"] == 1 and "j" not in engine.module(twin)
   assert engine.peek(copy) is None

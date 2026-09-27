@@ -10,8 +10,8 @@
 //!
 //! A model is named `provider:id`. The catalog offers the models of a provider when its credential stands in the
 //! environment, with every name that its address holds a place for, and the models of the claude command line when
-//! it finds the program. An effort is one of [`LEVELS`], which each provider reads in its own words, and a level that
-//! a model does not take moves to the nearest one it takes.
+//! it finds the program. An effort is one of [`LEVELS`], which each provider reads in its own words, an actor that
+//! names none takes [`LEVEL`], and a level that a model does not take moves to the nearest one it takes.
 
 use std::{
   collections::{HashMap, HashSet},
@@ -35,6 +35,9 @@ use super::{
 
 /// The levels of effort, from least to most, which an actor names after its model, as `claude-cli:opus/low`.
 pub const LEVELS: [&str; 7] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/// The level of an actor that names none.
+pub const LEVEL: &str = "high";
 
 /// The snapshot of the catalog that the crate carries.
 const SNAPSHOT: &str = include_str!("catalog.json");
@@ -148,8 +151,12 @@ impl Catalog {
     Catalog::of(listed(cached.as_ref()), Claude::found(), |name| env::var(name).ok())
   }
 
-  /// The catalog with this claude command line, which it offers.
-  pub fn with_claude(self, claude: Claude) -> Catalog {
+  /// The catalog with the claude command line at a path, or the one of this machine when only a stall is given, which
+  /// it offers, and whose turn may go with no progress for the stall; and the catalog as it stands when neither is
+  /// given, or when it finds no program.
+  pub fn claude(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Catalog {
+    let Some(bin) = bin.or_else(|| stall.and_then(|_| claude::located())) else { return self };
+    let claude = Claude::with(Some(bin), stall);
     let prefix = format!("{}:", claude::CLAUDE);
     let network = self.models.into_iter().filter(|(model, _)| !model.name.starts_with(&prefix));
     let mut models: Vec<_> = claude.models().into_iter().map(|model| (model, true)).collect();
@@ -210,8 +217,7 @@ impl Catalog {
 
   /// The models of a roster, and its default actor: the model of the actor, and the models the host names; or, when
   /// the host names no roster, the model of the actor alone, and the first model the catalog offers when there is no
-  /// actor either. The actor is named as the catalog names its model, with its level moved to the nearest one the
-  /// model takes.
+  /// actor either. The actor is named as the catalog names its model, at its level as [`Model::at`] moves it.
   pub fn roster(
     &self,
     names: Option<&[String]>,
@@ -230,11 +236,7 @@ impl Catalog {
       Some(actor) => {
         let (model, level) = self.actor(actor).ok_or_else(|| unknown(actor))?;
         models.insert(0, model.clone());
-        let efforts: Vec<&str> = model.efforts.iter().map(|(name, _)| name.as_str()).collect();
-        Some(match level.and_then(|level| clamp(&efforts, level)) {
-          Some(level) => format!("{}/{level}", model.name),
-          None => model.name.clone(),
-        })
+        Some(model.at(level))
       }
       None => None,
     };
@@ -392,13 +394,16 @@ fn budget(level: &str) -> u64 {
 impl Listed {
   /// The credential of the provider and whether it goes as a bearer, or why the environment holds none. The clients
   /// of Amazon and Google read their credentials themselves: those of Google are its key of an API, or its
-  /// credentials of an application where they stand.
+  /// credentials of an application where its client finds them, under the application data on Windows and under
+  /// the home elsewhere.
   fn credential(&self, env: &impl Fn(&str) -> Option<String>) -> Result<(String, bool), String> {
     let named = self.env.iter().find_map(|name| env(name).map(|key| (name, key)));
     let adc = || {
-      let home = env("HOME").map(PathBuf::from);
-      home.is_some_and(|home| {
-        home.join(".config/gcloud/application_default_credentials.json").is_file()
+      let (root, gcloud) =
+        if cfg!(windows) { ("APPDATA", "gcloud") } else { ("HOME", ".config/gcloud") };
+      let root = env(root).map(PathBuf::from);
+      root.is_some_and(|root| {
+        root.join(gcloud).join("application_default_credentials.json").is_file()
       })
     };
     match (self.rig, named) {

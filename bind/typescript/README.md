@@ -19,7 +19,8 @@ import { boot } from "@furb/engine";
 const session = boot({
   cwd: process.cwd(),
   record: ".furb/work.jsonl",
-  // With no model, the provider offers the operator alone, and this callback answers what is put to it.
+  // A roster of no model offers the operator alone, and this callback answers what is put to it.
+  roster: [],
   operator: async ({ message }) => `You asked: ${message}`,
 });
 try {
@@ -37,25 +38,27 @@ try {
 
 A `Session` opens an engine on the ears of the World that the crate writes and on the console of the operator, which
 this package writes. `Engine.open(options, ears)` opens it as every host of the crate opens a life: on the record, on
-the ears of the host, and then on the ears of the crate, which are the extensions, the ear of each official
-extension, the files, the commands, time, and the store of the record. Its `record` getter gives the record it opened
-on. The extensions enable at the start of the life what the configs of the user and of the directory turn on, which
-`docs/extensions.md` says: `SessionOptions.extensions` is false to enable nothing new, and `config` names the config
-directory of the user. A life runs what its record enables either way. The package also gives the ears one by one,
-as `files()`, `bash()`, `time()`, `store(path)` and `provider(options)`, for a host that boots an engine by hand.
-The files read and write a path against the directory where its chain stands. The commands stream what a command
-writes, feed its stdin, and end it at its timeout. Time gives the clock and a chance, and ends a wait. The provider asks
-the models of the catalog of the crate, which `models(claude?)` lists and `model(name)` finds, and it preserves provider
-response blocks in the record. The catalog offers the models of a provider when a credential of it stands in the
-environment, such as `ANTHROPIC_API_KEY`, and the models of the claude command line when it finds the program. The host
-names what the provider offers beside the model of the default actor in `roster`, as `provider:id`, and the default
-actor in `model` and `effort`: the first of the roster, and `low`, when unsaid. The standing of every chain tells the
-roster, so a session offers the models it names and not the whole catalog. The effort moves to the nearest one the model
-takes, among `levels()`. A session given neither offers the operator alone, and a prompt that names no actor goes to the
-operator. A name without its provider names the one model of that id. A reopened session offers what its host names now.
-It keeps the model and the effort that the host chose last, and takes that model when the host names none and the
-catalog knows it. The journal keeps each stand and what the provider answered it, and every life stands again as it
-opens, so a later life tells the new standing on each chain whose standing changed.
+the ears of the host, and then on the ears of the crate, which are the provider of the models, the extensions, the ear
+of each official extension, the files, the commands, time, and the store of the record. Its `record` getter gives the
+record it opened on. The extensions enable at the start of the life what the configs of the user and of the directory
+turn on, which `docs/extensions.md` says: `SessionOptions.extensions` is false to enable nothing new, and `config` names
+the config directory of the user. A life runs what its record enables either way. The package also gives the ears of the
+files, the commands, time and the store one by one, as `files()`, `bash()`, `time()` and `store(path)`, for a host that
+boots an engine by hand. The files read and write a path against the directory where its chain stands. The commands
+stream what a command writes, feed its stdin, and end it at its timeout. Time gives the clock and a chance, and ends a
+wait. The provider asks the models of the catalog of the crate, which `models(claude?)` lists and `model(name)` finds,
+and it preserves provider response blocks in the record. The catalog offers the models of a provider when a credential
+of it stands in the environment, such as `ANTHROPIC_API_KEY`, and the models of the claude command line when it finds
+the program. The host names what the provider offers beside the model of the default actor in `roster`, as
+`provider:id`, and the default actor in `model` and `effort`: the first of the roster when unsaid. When the roster is
+unsaid too, the session stands on the default of the crate, the first model that the catalog offers. A roster that names
+no model, with no model, offers the operator alone, and a prompt that names no actor goes to the operator. The standing
+of every chain tells the roster, so a session offers the models it names and not the whole catalog. An actor that names
+no effort takes `high`, and an effort moves to the nearest one the model takes, among `levels()`. A name without its
+provider names the one model of that id. A reopened session offers what its host names now. It keeps the model and the
+effort that the host chose last, and takes that model when the host names none and the catalog knows it. The journal
+keeps each stand and what the provider answered it, and every life stands again as it opens, so a later life tells the
+new standing on each chain whose standing changed.
 
 The claude command line is the provider `claude-cli` of the catalog, with the models `opus`, `sonnet`, `haiku` and
 `fable`. It follows the pooled session design in [dirt](https://github.com/uael/dirt/tree/main/packages/cli/src/providers).
@@ -75,8 +78,9 @@ const session = new Session({ model: first, effort: "high", roster: others.slice
 Pass `answer` to replace only model requests, or `operator` to supply operator answers. `answer` gets the actor,
 the chain, the messages and the settings of the effort as the provider would send them, and a `write` that tells
 what it writes as it writes it, and gives a turn. The host still names the models that `answer` stands in for. With
-no `operator`, questions stand in `session.console.prompts`; call `session.console.answer(id, text)` to parse and
-validate an answer. `session` emits `change` and `facts`, and `fault` tells what the life refused when the console
+no `operator`, questions stand in `session.console.prompts`; call `session.console.answer(id, text)` to read an
+answer by the rules that every console of the crate reads a line by, which `answered(shape, line)` gives, for each
+of the `shapes()` that the operator answers. `session` emits `change` and `facts`, and `fault` tells what the life refused when the console
 said what an act came to. `session.streams` holds what a model writes for each rung, until the done of its reply.
 `session.facts` holds every fact of the life, every act among them, since the session drives the ear that keeps
 them as an ear of the engine. A view reads the life and says nothing, so a listener that reads the life hears no
@@ -108,7 +112,7 @@ type makes it from under `args`, and comes back in whole: an int past the safe r
 and a map with a key that is no string as `{"is":"dict","args":[[[1,"a"]]]}`. Any other value, and a value
 nested beyond 64 levels, crosses as its Python representation. A map that holds the key `is` crosses as its
 pairs under the same mark, `{"is":"dict","args":[[["is","x"]]]}`, both ways, so no map of a word reads as a
-mark; a host marks its own such map the same way, as `console.answer` does for an answer of the operator. Into the
+mark; a host marks its own such map the same way, as `answered` does for an answer of the operator. Into the
 engine, a whole JavaScript number is an int and a number with a fraction is a float, so a whole float goes in its
 form, `{"is":"float","args":["2"]}`. A whole number past the safe range is refused, since JavaScript holds it
 rounded: send a BigInt, or the `int` form above. A BigInt past 64 bits reaches the engine as its digits in a

@@ -37,14 +37,11 @@ use self::images::Images;
 use crate::{
   SYSTEM,
   ear::{Ear, Voice, call, ear, hear, say},
+  engine::{OPERATOR, WINDOW},
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
   wire,
 };
-
-/// The operator as the roster offers it: the actor that answers in person, with no effort and the window the engine
-/// gives it.
-const OPERATOR: (&str, i64) = ("operator", 200_000);
 
 /// What a turn of a model tells as it streams: what it added to its text, and what it added to its thought.
 pub type Told = Arc<dyn Fn(&str, &str) + Send + Sync>;
@@ -211,6 +208,15 @@ impl Model {
     self.efforts.iter().map(|(name, _)| name.as_str()).collect()
   }
 
+  /// The actor of this model at a level, moved to the nearest one the model takes, and at [`catalog::LEVEL`] when the
+  /// level is unsaid; the model alone when it takes no effort.
+  pub fn at(&self, level: Option<&str>) -> String {
+    match catalog::clamp(&self.efforts(), level.unwrap_or(catalog::LEVEL)) {
+      Some(level) => format!("{}/{level}", self.name),
+      None => self.name.clone(),
+    }
+  }
+
   /// Whether the model takes the images that a turn names.
   pub fn sees(&self) -> bool {
     self.images
@@ -248,8 +254,8 @@ impl Provider {
     Provider { directory: directory.into(), models, actor: None, images: None, writes: None }
   }
 
-  /// The actor a prompt goes to when it names none, which is the first model at its first effort when none is
-  /// given, and the operator when there is no model.
+  /// The actor a prompt goes to when it names none, which is the first model at the level of an actor that names
+  /// none when none is given, and the operator when there is no model.
   pub fn actor(mut self, actor: Option<String>) -> Provider {
     self.actor = actor;
     self
@@ -277,12 +283,8 @@ impl Provider {
   /// chain first. A done of a reply that the ear did not say ends the call of its model.
   pub fn ear(self) -> Box<dyn Ear> {
     let Provider { directory, models, actor, images, writes } = self;
-    let actor = actor.unwrap_or_else(|| match models.first() {
-      Some(model) => match model.efforts.first() {
-        Some((effort, _)) => format!("{}/{effort}", model.name),
-        None => model.name.clone(),
-      },
-      None => OPERATOR.0.to_owned(),
+    let actor = actor.unwrap_or_else(|| {
+      models.first().map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
     let mut images = Images::new(images);
     ear(move |co, voice| async move {
@@ -375,8 +377,8 @@ fn standing(models: &[Model], directory: &str, actor: &str) -> Object {
     let window = i64::try_from(model.window).unwrap_or(i64::MAX);
     Object::list([Object::string(&model.name), Object::list(efforts), Object::int(window)])
   });
-  let operator =
-    Object::list([Object::string(OPERATOR.0), Object::list([]), Object::int(OPERATOR.1)]);
+  // The operator answers in person, with no effort, and reads the window of the engine.
+  let operator = Object::list([Object::string(OPERATOR), Object::list([]), Object::int(WINDOW)]);
   let roster = Object::list(offered.chain([operator]));
   Object::list([roster, Object::string(directory), Object::string(actor)])
 }

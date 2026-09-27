@@ -3,6 +3,7 @@
 
 use std::{
   cell::RefCell,
+  collections::HashSet,
   future::Future,
   path::{Path, PathBuf},
   pin::Pin,
@@ -15,7 +16,9 @@ use std::{
 use furb::{
   Act, Ear, Engine, Fact, Fault, Object,
   ear::{ear, hear},
+  engine::OPERATOR,
   extension::{self, Extension},
+  fact,
   life::Opening,
   verbs,
   world::Catalog,
@@ -23,12 +26,13 @@ use furb::{
 
 use crate::console;
 
-/// One life, as the operator holds it: its engine, its root, the record it was made again from, and what the
-/// operator hears of its root.
+/// One life, as the operator holds it: its engine, its root, the facts of the record it was made again from, each act
+/// that record showed started and not done, with its kind, and what the operator hears of its root.
 pub struct Life {
   pub engine: Engine,
   pub root: String,
-  held: Vec<Object>,
+  held: Vec<Fact>,
+  left: Vec<(String, String)>,
   quiet: Rc<RefCell<Quiet>>,
 }
 
@@ -55,7 +59,7 @@ impl Quiet {
   /// What one more fact says.
   fn heard(&mut self, a: &Fact) {
     let watched = self.acts.iter().any(|one| one == a.about());
-    let reply = a.about().strip_prefix("reply").is_some_and(|n| n.parse::<u64>().is_ok());
+    let reply = fact::named(a.about(), "reply");
     match a.kind() {
       "pause" | "wake" if watched => self.paused = a.kind() == "pause",
       "done" if reply => {
@@ -68,41 +72,20 @@ impl Quiet {
   }
 }
 
-/// What a life stands on: the actor a prompt goes to when it names none, and the models it offers beside the model
-/// of that actor, each as the catalog names it.
-#[derive(Default)]
-pub struct Stood {
-  pub actor: Option<String>,
-  pub roster: Vec<String>,
-}
-
 impl Life {
-  /// A life on the World of this machine and on a console of the operator: the provider of the models it stands on,
-  /// then the ears of the crate as every host opens a life on them, which enable at its tip the extensions that the
-  /// configs of the user and of the directory turn on. Each ear is heard under the name the TUI hears it by, so the
-  /// record of one opens in the other.
+  /// A life as it opens, on a console of the operator, which comes before the ears of the crate. Each ear is heard
+  /// under the name every host hears it by, so the record of one opens in another.
   ///
   /// The journal says the whole record again before boot returns, so the life stands whole on its record here, and a
   /// life whose record drifted is refused, since it would keep nothing more. `heard` is given every fact said after
   /// that, as an ear of the engine hears it.
   pub fn open(
-    record: Option<&Path>,
-    keeps: bool,
-    cwd: &Path,
-    stood: &Stood,
+    opening: Opening,
     console: Box<dyn Ear>,
     mut heard: impl FnMut(&Fact) + 'static,
   ) -> Result<Life, String> {
     let failed = |no: Fault| no.to_string();
-    let roster = (!stood.roster.is_empty()).then_some(stood.roster.as_slice());
-    let directory = cwd.display().to_string();
-    let provider = Catalog::load().provider(directory, roster, stood.actor.as_deref(), None)?;
-    let mut opening = Opening::new().configured(cwd).map_err(failed)?;
-    if let Some(path) = record {
-      opening = opening.record(path, keeps);
-    }
-    let (mut engine, held) =
-      opening.boot([("provider", provider.ear()), ("console", console)]).map_err(failed)?;
+    let (mut engine, held) = opening.boot([("console", console)]).map_err(failed)?;
     let root = engine.root().to_owned();
     let mut quiet = Quiet::default();
     let facts = engine.transcript(verbs::Transcript { on: Some(root.clone()) }).map_err(failed)?;
@@ -117,19 +100,15 @@ impl Life {
       }
     });
     engine.drive(observer, "observer").map_err(failed)?;
-    Ok(Life { engine, root, held, quiet })
+    let held: Vec<Fact> =
+      held.iter().filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?)).collect();
+    let left = left(&held);
+    Ok(Life { engine, root, held, left, quiet })
   }
 
-  /// A life for one command of the operator, on the terminal. It keeps what it says to its record when it keeps, and
-  /// a life that only reads its record keeps nothing, since every life stands as it opens and a life that keeps
-  /// keeps that stand.
-  pub fn lived(
-    record: Option<&Path>,
-    cwd: Option<&Path>,
-    stood: &Stood,
-    keeps: bool,
-  ) -> Result<Life, String> {
-    Life::open(record, keeps, &directory(cwd), stood, console::terminal(), |_| {})
+  /// A life for one command of the operator, on the terminal.
+  pub fn lived(opening: Opening) -> Result<Life, String> {
+    Life::open(opening, console::terminal(), |_| {})
   }
 
   /// The extensions that the life runs, in the order it enabled them.
@@ -143,18 +122,25 @@ impl Life {
     self.quiet.borrow().paused
   }
 
+  /// Each act that the record showed started and not done when the life opened and that is still not done, with its
+  /// kind: work that an earlier life began, which waits for a wake.
+  pub fn pending(&mut self) -> Vec<(String, String)> {
+    let left = self.left.iter().filter(|(id, _)| matches!(self.engine.outcome(id), Ok(None)));
+    left.cloned().collect()
+  }
+
   /// The name of the prompt the record already holds for this message: of the operator, on the root, of this shape
   /// and to this actor; and nothing when it holds none.
   ///
   /// The engine matches nothing the operator says again, so a life stood up on its own record would open a second
   /// prompt beside the one that record stands on, and ask a model for what it was answered once.
   pub fn again(&self, shape: &str, message: &str, to: &str) -> Option<String> {
-    let wanted = ["operator", self.root.as_str(), shape, message, to];
-    self.held.iter().find_map(|entry| {
-      let fact = entry.as_ref().items()?.first()?.items()?;
-      let words = fact.iter().map(|one| one.as_str()).collect::<Option<Vec<&str>>>()?;
-      (words.len() == 7 && words[0] == "prompt" && words[2..] == wanted)
-        .then(|| words[1].to_owned())
+    let wanted = [OPERATOR, self.root.as_str(), shape, message, to];
+    self.held.iter().find_map(|a| {
+      let words =
+        a.0.as_ref().items()?.iter().map(|one| one.as_str()).collect::<Option<Vec<_>>>()?;
+      (words.len() == 7 && a.kind() == "prompt" && words[2..] == wanted)
+        .then(|| a.about().to_owned())
     })
   }
 
@@ -184,6 +170,28 @@ impl Life {
       thread::park();
     }
   }
+}
+
+/// Each act that the facts of a record show started and not done, as its name and its kind: the journal keeps the
+/// started of an act that the outside took, and says the entries again as the life opens.
+fn left(facts: &[Fact]) -> Vec<(String, String)> {
+  let (mut started, mut done) = (HashSet::new(), HashSet::new());
+  for a in facts {
+    match a.kind() {
+      "started" => started.insert(a.about()),
+      "done" => done.insert(a.about()),
+      _ => false,
+    };
+  }
+  let left = facts
+    .iter()
+    .filter(|a| a.question() && started.contains(a.about()) && !done.contains(a.about()));
+  left.map(|a| (a.about().to_owned(), a.kind().to_owned())).collect()
+}
+
+/// A shape as a prompt is given it, by its name: None itself, or the name of a type.
+pub fn shape(name: &str) -> Object {
+  if name == "None" { Object::none() } else { Object::string(name) }
 }
 
 /// An actor as the roster names it: the model the catalog finds by the name, with the effort moved to the nearest

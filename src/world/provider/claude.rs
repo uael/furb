@@ -905,48 +905,30 @@ const PROGRAM: &str = if cfg!(windows) { "claude.exe" } else { "claude" };
 
 /// The command line of this machine: the one `FURB_CLAUDE_BIN` names, or the first program named claude on the
 /// PATH, in the local programs of the home, or, on macOS, in the newest version of Claude Desktop.
-fn located() -> Option<PathBuf> {
+pub(super) fn located() -> Option<PathBuf> {
   if let Some(bin) = env::var_os("FURB_CLAUDE_BIN").filter(|one| !one.is_empty()) {
     return Some(bin.into());
   }
-  let name = PROGRAM;
-  let path = env::var_os("PATH").unwrap_or_default();
-  let mut candidates: Vec<PathBuf> = env::split_paths(&path)
-    .filter(|one| !one.as_os_str().is_empty())
-    .map(|one| one.join(name))
-    .collect();
+  let mut folders: Vec<PathBuf> =
+    env::split_paths(&env::var_os("PATH").unwrap_or_default()).collect();
   if let Some(home) = env::home_dir() {
-    candidates.push(home.join(".local/bin").join(name));
+    folders.push(home.join(".local/bin"));
     if cfg!(target_os = "macos") {
       let desktop = home.join("Library/Application Support/Claude/claude-code");
       let mut versions: Vec<PathBuf> = std::fs::read_dir(&desktop)
         .map(|found| found.filter_map(|one| one.ok().map(|one| one.path())).collect())
         .unwrap_or_default();
       versions.sort_by_key(|one| std::cmp::Reverse(numbered(one)));
-      candidates.extend(versions.iter().map(|one| one.join("claude.app/Contents/MacOS/claude")));
+      folders.extend(versions.iter().map(|one| one.join("claude.app/Contents/MacOS")));
     }
   }
-  candidates.into_iter().find(|one| runs(one))
+  crate::world::program("claude", folders)
 }
 
 /// The numbers of a version, in order, which sort as a version does.
 fn numbered(version: &Path) -> Vec<u64> {
   let name = version.file_name().map(|one| one.to_string_lossy().into_owned()).unwrap_or_default();
   name.split(|one: char| !one.is_ascii_digit()).filter_map(|one| one.parse().ok()).collect()
-}
-
-/// Whether a path is a program that this machine runs.
-fn runs(path: &Path) -> bool {
-  let Ok(info) = std::fs::metadata(path) else { return false };
-  #[cfg(unix)]
-  {
-    use std::os::unix::fs::PermissionsExt;
-    info.is_file() && info.permissions().mode() & 0o111 != 0
-  }
-  #[cfg(not(unix))]
-  {
-    info.is_file()
-  }
 }
 
 #[cfg(all(test, unix))]

@@ -222,7 +222,11 @@ fn a_roster_holds_the_model_of_its_actor_first_and_the_models_a_host_names() {
     catalog.roster(Some(&named), Some("openai:gpt-5/medium")).expect("the actor is named");
   assert_eq!((models.len(), actor.as_deref()), (2, Some("openai:gpt-5/high")));
   let (_, actor) = catalog.roster(Some(&named), Some("claude-opus-5")).expect("the model alone");
-  assert_eq!(actor.as_deref(), Some("anthropic:claude-opus-5"));
+  assert_eq!(
+    actor.as_deref(),
+    Some("anthropic:claude-opus-5/high"),
+    "an actor that names no effort takes high"
+  );
   let no = catalog.roster(Some(&["nothing".to_owned()]), None).err();
   assert_eq!(no.as_deref(), Some("No model is nothing. Name one as provider:id."));
 }
@@ -318,6 +322,17 @@ fn a_provider_is_offered_when_the_environment_holds_its_credential_and_each_plac
   assert!(offered(&["AWS_PROFILE"], "amazon-bedrock:qwen.qwen3"));
   assert!(!offered(&["GOOGLE_CLOUD_API_KEY"], "google-vertex:gemini-pro"), "Google asks a project");
   assert!(offered(&["GOOGLE_CLOUD_API_KEY", "GOOGLE_CLOUD_PROJECT=p"], "google-vertex:gemini-pro"));
+  let home = std::env::temp_dir().join(format!("furb-adc-{}", std::process::id()));
+  let (root, gcloud) =
+    if cfg!(windows) { ("APPDATA", "gcloud") } else { ("HOME", ".config/gcloud") };
+  std::fs::create_dir_all(home.join(gcloud)).expect("the folder of gcloud");
+  std::fs::write(home.join(gcloud).join("application_default_credentials.json"), "{}")
+    .expect("a file");
+  let adc = format!("{root}={}", home.display());
+  assert!(
+    offered(&[&adc, "GOOGLE_CLOUD_PROJECT=p"], "google-vertex:gemini-pro"),
+    "the credentials of an application stand where the client of Google finds them"
+  );
   assert!(offered(&["RADIUS_API_KEY"], "radius:balanced"));
 }
 

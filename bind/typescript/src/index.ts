@@ -1,5 +1,5 @@
 export * from "../index.cjs";
-export { Activity, type LiveAct, type RunState } from "./activity.js";
+export { Activity, type LiveAct, type RunState, WORK } from "./activity.js";
 export type { FileChange } from "./changes.js";
 export { Console, type ConsoleOptions } from "./console.js";
 export { type Call, driving, type Ear, type Saying, speaking } from "./ears.js";
@@ -15,6 +15,5 @@ export {
   paragraphs,
   questionKind,
   safeText,
-  shapes,
   uncommented,
 } from "./types.js";

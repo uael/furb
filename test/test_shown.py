@@ -1,10 +1,8 @@
 """shown, the lines of a text the model has not seen."""
 
+from conftest import THREE
 from furb import engine
 from furb.engine import HEAD, Text, span
-
-THREE = Text("/w/n.txt", "one\ntwo\nthree\n")
-"""A text of three lines."""
 
 
 def test_the_lines_of_the_text_the_model_has_not_seen_and_how_many_of_the_rest_it_knows() -> None:

@@ -43,6 +43,8 @@ export declare class Engine {
    * crosses as every value does, so a map that holds the key `is` crosses as its pairs.
    */
   inspect(name: string, chain?: string | undefined | null): Inspection
+  /** The extensions that the life runs, in the order it enabled them, as the transcript of its root holds them. */
+  extensions(): Array<Extension>
   /** Every name the module of a chain binds, in the order it bound them. */
   names(chain?: string | undefined | null): Array<string>
   /**
@@ -127,20 +129,40 @@ export declare class NativeEar {
   dispose(): void
 }
 
+/**
+ * A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
+ * line by, as the record keeps it, so a whole float stays a float; or an error that says why it is none.
+ */
+export declare function answered(shape: string, line: string): unknown
+
 /** An image copied into a directory of images under the digest of its bytes, as a message attaches it. */
 export declare function attachImage(directory: string, path: string): ImageAttachment
 
 /** The ear of commands, which runs each in a shell of this machine. */
 export declare function bash(): NativeEar
 
+/**
+ * The config directory of the user for this process, where the configs, the extensions of the user and the
+ * preferences of the TUI stand.
+ */
+export declare function configDirectory(): string
+
 export declare function decodeRecord(line: string): unknown
 
-export declare function engineSource(): string
+/** The engine: the one file the sandbox runs, as the crate carries it. */
+export declare const ENGINE: string
 
 export interface ExitValue {
   code?: number
   stdout: TextValue
   stderr: TextValue
+}
+
+/** An extension: its name, its word, and its life word, which is empty when it has none. */
+export interface Extension {
+  name: string
+  word: string
+  life: string
 }
 
 /** The ear of the files, which reads and writes a path. */
@@ -217,13 +239,19 @@ export declare function onConsoleEnd(callback: (event: "break" | "close" | "logo
 
 /** What a life is opened on, which every host of the crate shares. */
 export interface OpenOptions {
-  /** The directory of the project, whose config turns extensions on. */
+  /**
+   * The directory the life stands on, which each chain stands in until it goes elsewhere, and whose config turns
+   * extensions on.
+   */
   directory: string
   /** The record the life opens on. */
   record?: string
   /** Whether the life keeps what it says to its record, under the lease of the store; true when unsaid. */
   keeps?: boolean
-  /** Whether the life only inspects its record: it keeps nothing, and its files, commands and time do no work. */
+  /**
+   * Whether the life only inspects its record: it keeps nothing, enables nothing new, asks no model, and its files,
+   * commands and time do no work.
+   */
   inspecting?: boolean
   /**
    * Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs
@@ -232,34 +260,18 @@ export interface OpenOptions {
   extensions?: boolean
   /** The config directory of the user, in place of the one of this process. */
   config?: string
-}
-
-export interface Outcome {
-  done: boolean
-  value: unknown
-}
-
-/**
- * The ear of the provider of models, which answers a stand and takes each reply: the catalog makes the models of
- * its roster, and a function of the host answers them in place of the models when it gives one.
- */
-export declare function provider(options: ProviderOptions): NativeEar
-
-/** What the provider of the crate stands on and asks. */
-export interface ProviderOptions {
-  /** The directory the life stands on, which each chain stands in until it goes elsewhere. */
-  directory: string
   /**
-   * The models it offers beside the model of the actor, each named `provider:id`, or by an id that one model of the
-   * catalog alone holds. When it is unsaid, the model of the actor stands alone, and the first model the catalog
-   * offers when the actor is unsaid too.
-   */
-  roster?: Array<string>
-  /**
-   * The actor a prompt goes to when it names none, as model/effort, whose effort moves to the nearest one the model
-   * takes; the first model at its first effort when unsaid.
+   * The actor a prompt goes to when it names none, as model/effort, at its effort as the catalog moves it; the first
+   * model of the roster when unsaid.
    */
   actor?: string
+  /**
+   * The models the provider offers beside the model of the actor, each named `provider:id`, or by an id that one
+   * model of the catalog alone holds. When it is unsaid, the model of the actor stands alone, and the first model
+   * the catalog offers when the actor is unsaid too; a roster that names none, with no actor, offers the operator
+   * alone.
+   */
+  roster?: Array<string>
   /**
    * The path of the claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine
    * holds.
@@ -270,7 +282,7 @@ export interface ProviderOptions {
   /** The directory of the images that a turn names. */
   images?: string
   /**
-   * A function that answers each request in place of the model, with a turn, and may tell what it writes as it
+   * A function that answers each request in place of the models, with a turn, and may tell what it writes as it
    * writes it.
    */
   answer?: (request: { actor: string; chain: string; messages: unknown[]; settings: Record<string, unknown> }, write: (delta: { text?: string; thinking?: string }) => void) => Promise<unknown>
@@ -280,6 +292,20 @@ export interface ProviderOptions {
    */
   stream?: (rung: string, chain: string, text: string, thinking: string) => void
 }
+
+/** The name of the operator in the roster and as an actor, as the contract names it. */
+export declare const OPERATOR: string
+
+export interface Outcome {
+  done: boolean
+  value: unknown
+}
+
+/** The name of the root, which every life opens first, as the contract names it. */
+export declare const ROOT: string
+
+/** Every shape the operator answers, by its name. */
+export declare function shapes(): Array<string>
 
 /** The POSIX shell that runs a command of this machine, which a host runs its own commands in too. */
 export declare function shell(): string
@@ -297,3 +323,9 @@ export interface TextValue {
 
 /** The ear of time, which reads the clock, draws a chance, and ends a wait. */
 export declare function time(): NativeEar
+
+/** The timeout, in seconds, of a command that does not say one, as the contract names it. */
+export declare const TIMEOUT: number
+
+/** The window, in tokens, of a model whose roster entry does not say one, as the contract names it. */
+export declare const WINDOW: number

@@ -1,6 +1,6 @@
 """wake, which ends a pause and gives what waited."""
 
-from conftest import Sand, born, gated, heads, paragraphs, plain, ran, relived, said, settle
+from conftest import Sand, born, gated, heads, paragraphs, plain, ran, relived, said, settle, slow
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -10,8 +10,7 @@ TAKEN = ("bash", "wait", "prompt", "reply")
 
 async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_heard() -> None:
   """A wake: it ends the pause over the same act, and what waited is heard."""
-  sand, _, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  sand, _, root, act = slow()
   await settle()
   engine.pause(act)
   sand.exits(act, 3)

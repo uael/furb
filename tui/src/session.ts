@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import type { Fact, FileChange, ImageAttachment, LiveAct, Turn } from "@furb/engine";
+import type { FileChange, ImageAttachment, LiveAct, Turn } from "@furb/engine";
 import {
   actorParts,
   decodeRecord,
@@ -13,6 +13,8 @@ import {
   imageReferences,
   saveFile,
   shapes,
+  WINDOW,
+  WORK,
 } from "@furb/engine";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView } from "./bridge.ts";
@@ -54,9 +56,7 @@ export const statusLabels: Record<SessionStatus, string> = {
   opening: "Opening",
 };
 /** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
-/** The kinds of the acts that do the work of a chain, which move while they live. */
-export const work = ["prompt", "rung", "bash", "wait"];
-export const working = (act: ActRow): boolean => !act.done && !act.paused && work.includes(act.kind);
+export const working = (act: ActRow): boolean => !act.done && !act.paused && WORK.includes(act.kind);
 /** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
  * than a cancel. */
 export function failed(act: ActRow): boolean {
@@ -239,29 +239,10 @@ export class Session extends EventEmitter {
   set theme(value: ThemeName) {
     this.preferences.save(value);
   }
-  private factsChanged = (facts: Fact[]) => {
-    if (
-      facts.some(
-        ([kind, id]) =>
-          [
-            "chain",
-            "prompt",
-            "rung",
-            "bash",
-            "wait",
-            "grant",
-            "reply",
-            "out",
-            "close",
-            "cancel",
-            "pause",
-            "wake",
-            "tell",
-          ].includes(kind) ||
-          (kind === "done" && /^(prompt|rung|bash|wait|grant|reply)\d+$/.test(id)),
-      )
-    )
-      void this.refresh().catch(this.fail);
+  /** Each batch of facts that the host hears reads the view again, whatever kind of act, of the engine or of an
+   * extension, they are about. */
+  private factsChanged = () => {
+    void this.refresh().catch(this.fail);
   };
   fail = (error: unknown) => {
     this.error = error instanceof Error ? error.message : String(error);
@@ -339,14 +320,28 @@ export class Session extends EventEmitter {
     return this.refreshTask;
   }
 
-  private fileList?: { directory: string; read: Promise<string[]> };
+  /** The read of the files of the project the session works in, and the paths or the error it came to. */
+  files?: { directory: string; read: Promise<string[]>; paths?: string[]; error?: string };
   /** The files of the project the session works in: read again when asked fresh or when the directory moved, and
-   * otherwise the read already made, so every reader of one read sees the same list. */
+   * otherwise the read already made, so every reader of one read sees the same list. The end of a read is a change of
+   * the session. */
   projectFiles(fresh = false): Promise<string[]> {
     const directory = this.workingDirectory;
-    if (fresh || this.fileList?.directory !== directory)
-      this.fileList = { directory, read: projectFiles(directory) };
-    return this.fileList.read;
+    if (fresh || this.files?.directory !== directory) {
+      const files: NonNullable<Session["files"]> = { directory, read: projectFiles(directory) };
+      this.files = files;
+      files.read.then(
+        (paths) => {
+          files.paths = paths;
+          this.emit("change");
+        },
+        (error: unknown) => {
+          files.error = error instanceof Error ? error.message : String(error);
+          this.emit("change");
+        },
+      );
+    }
+    return this.files.read;
   }
   /** The directory that the paths of the selected chain resolve against, as the files resolve them. */
   get workingDirectory(): string {
@@ -449,7 +444,7 @@ export class Session extends EventEmitter {
     const asked = this.activity.findLast((act) => act.kind === "prompt" && act.words[2] !== "operator");
     const names = this.roster.map(([name]) => name);
     const { model } = actorParts(String(asked?.words[2] || this.actor), names);
-    const window = Number(this.roster.find(([name]) => name === model)?.[2]) || 200_000;
+    const window = Number(this.roster.find(([name]) => name === model)?.[2]) || WINDOW;
     return usage[0] / window;
   }
   get label(): string {
@@ -748,8 +743,8 @@ export class Session extends EventEmitter {
         this.notice = "Work cancelled.";
         break;
       case "extensions": {
-        const enabled = this.host.facts.filter(([kind, about]) => kind === "enable" && about === "chain1");
-        const each = enabled.map(([, , , name, , life]) => (life ? `${name} with ${life}` : String(name)));
+        const enabled = await this.engine.extensions();
+        const each = enabled.map(({ name, life }) => (life ? `${name} with ${life}` : name));
         this.notice = each.length
           ? `This life runs ${each.join(", ")}. Run a word of one with /run.`
           : "This life runs no extension.";
@@ -849,7 +844,7 @@ export class Session extends EventEmitter {
         break;
       }
       case "shape":
-        if (!shapes.some((name) => name === argument)) throw new Error(`Choose ${shapes.join(", ")}.`);
+        if (!shapes().includes(argument)) throw new Error(`Choose ${shapes().join(", ")}.`);
         this.shape = argument;
         break;
       case "theme":
@@ -861,13 +856,12 @@ export class Session extends EventEmitter {
         this.track(await this.engine.bash(argument, { on: this.selected }));
         this.view = "feed";
         break;
-      case "read": {
-        this.track(await this.engine.rung({ word: `read(${JSON.stringify(argument)})`, on: this.selected }));
-        this.view = "feed";
-        break;
-      }
+      case "read":
       case "cd":
-        this.track(await this.engine.rung({ word: `cd(${JSON.stringify(argument)})`, on: this.selected }));
+        this.track(
+          await this.engine.rung({ word: `${command}(${JSON.stringify(argument)})`, on: this.selected }),
+        );
+        if (command === "read") this.view = "feed";
         break;
       case "edit": {
         // The latest prompt with a program: one of its rungs holds a word the gate let run on this chain.

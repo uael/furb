@@ -51,7 +51,7 @@ furb                                 # The TUI, when furb finds one.
 furb --mode rpc                      # A JSON-RPC on stdin and stdout, with no TUI.
 furb prompt "How many lines does a.txt hold?" --shape int
 furb run "close(1 + 1)"              # A Python word, run on the root chain.
-furb turns --record session.jsonl    # The turns of a record, as the model read them.
+furb turns --record session.jsonl    # The turns of a life made again from its record, which it only reads.
 furb extensions                      # The extensions that a life runs here.
 ```
 

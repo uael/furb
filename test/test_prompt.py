@@ -2,7 +2,23 @@
 
 from asyncio import CancelledError
 
-from conftest import COST, STANDS, WORLD, Sand, born, dones, heads, lived, paragraphs, plain, ran, relived, said, settle
+from conftest import (
+  COST,
+  STANDS,
+  WORLD,
+  Sand,
+  born,
+  chained,
+  dones,
+  heads,
+  lived,
+  paragraphs,
+  plain,
+  ran,
+  relived,
+  said,
+  settle,
+)
 from furb import engine
 from furb.engine import OPERATOR, Act, Exit, Refused, Text
 
@@ -278,8 +294,7 @@ async def test_the_response_of_a_prompt_on_a_chain_with_a_source_comes_to_the_ac
   """The response of a prompt on a chain with a source comes to the act that the caller holds."""
   sand, log, root = born()
   await engine.rung("k = 21", on=root)
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   sand.script[twin] = ["close(k)"]
   act = engine.prompt(int, "what is k", on=twin)
   assert await act == 21 and engine.peek(act) == 21

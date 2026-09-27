@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from conftest import extended, of, settle, skilled
+from conftest import chained, extended, of, skilled
 from furb import engine
 from furb.engine import Text
 from furb_monty import _monty
@@ -72,7 +72,6 @@ async def test_the_life_word_of_the_extension_is_skills(tmp_path: Path) -> None:
   """The life word of the extension is skills(), so a chain tells its skills when the life enables the extension, and a chain born later tells them at its birth."""
   skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
   _, root = extended("skills", tmp_path, _monty.skills, lives=True)
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   told = ["#read skills://\n# skills://, 0 known\n# 1 brew: Make tea."]
   assert (of(engine.turns(on=root), "read"), of(engine.turns(on=two), "read")) == (told, told)

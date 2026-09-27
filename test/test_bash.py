@@ -11,6 +11,7 @@ from conftest import (
   Where,
   acts,
   born,
+  chained,
   dones,
   life,
   paragraphs,
@@ -240,8 +241,7 @@ async def test_a_wake_on_a_chain_with_a_source_starts_no_inherited_command_again
   sand, log, root = born("x = bash('slow')\nclose(1)", auto=False)
   assert await engine.prompt(int, "start one", on=root) == 1
   command = said(log, "bash")[0][1]
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   engine.pause(twin)
   engine.wake(twin)
   await settle()

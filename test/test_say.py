@@ -14,6 +14,7 @@ from conftest import (
   relived,
   said,
   settle,
+  slow,
   world_says,
 )
 from furb import engine
@@ -147,8 +148,7 @@ async def test_while_one_speaks_nobody_hears() -> None:
 
 async def test_a_done_said_of_a_question_that_has_no_outcome_yet_fills_its_outcome() -> None:
   """A done said of a question that has no outcome yet fills its outcome, and a later done of the same question fills nothing."""
-  sand, _, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  sand, _, _, act = slow()
   await settle()
   assert engine.peek(act, ...) is ...
   sand.exits(act, 3)

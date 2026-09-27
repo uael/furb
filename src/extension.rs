@@ -26,15 +26,13 @@ use serde_json::Value;
 
 use crate::{
   ear::{Co, Ear, call, ear, hear, say},
+  engine::ROOT,
   fact::{Fact, named},
   value::{Fault, Object, entry},
 };
 
-/// The kind of the fact that enables an extension in a life: it carries the name, the word and the life word.
+/// The kind of the fact that enables an extension in a life, which [`extensions`] says and reads.
 pub const ENABLE: &str = "enable";
-
-/// The root, whose transcript holds each fact that enables an extension, as it holds the standing.
-const ROOT: &str = "chain1";
 
 /// The journal, which says the record again in a later life, so a done it says answers no stand of this life.
 const JOURNAL: &str = "journal";
@@ -50,6 +48,7 @@ const IMPORTS: [&str; 3] = ["from furb ", "from furb.", "import furb"];
 
 /// An extension: its name, its word, and its life word, which is empty when it has none.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "typescript", napi_derive::napi(object))]
 pub struct Extension {
   pub name: String,
   pub word: String,
@@ -79,7 +78,7 @@ pub struct Places {
 
 impl Places {
   /// The places of this process: the config directory is `FURB_CONFIG_DIR`, else `furb` under `XDG_CONFIG_HOME`,
-  /// under `APPDATA` on Windows, or under `.config` in the home, which is where the TUI keeps its preferences.
+  /// under `APPDATA` on Windows, or under `.config` in the home, where the TUI keeps its preferences too.
   pub fn here() -> Places {
     let var = |key: &str| std::env::var_os(key).map(PathBuf::from);
     let home = std::env::home_dir();
@@ -229,9 +228,13 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 /// The ear of the extensions, which plays each extension that the life enables as a rung on each chain: on every
 /// chain there is when the life enables it, and after that on each chain at its birth. The rung holds the word and
 /// then the life word, and the life word alone on a chain whose origin had the extension, since that chain made the
-/// rung of its origin again. At each stand that this life answers, the first of which is at the tip, the ear
-/// enables each extension it is given that the life does not run yet, by a fact that the record keeps. A later
-/// life says that fact again at its place, and the ear plays the same rungs there, from the fact alone.
+/// rung of its origin again.
+///
+/// The ear enables an extension by the fact `("enable", "chain1", "extensions", name, word, life)`, which no contract
+/// holds, since this ear is its one home. It is about the root. The ear says it once for each extension it is given
+/// that the life does not run yet, at each stand that this life answers, the first of which is at the tip, and the
+/// record keeps it. A later life says it again at its place, and the ear plays the same rungs there, from the fact
+/// alone.
 pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
   ear(move |co, _| async move {
     // What the life enabled, in order, and each chain in the order of its birth, with the extensions it has.

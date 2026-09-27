@@ -34,13 +34,15 @@ once, before you spend money on it.
 
 `run` takes four options:
 
-- `--to provider:model/effort` is the actor the task is put to, and `claude-cli:opus/low` is the default.
+- `--to provider:model/effort` is the actor the task is put to. The default is the default actor of the crate,
+  which is `claude-cli:opus/high` when this host holds the claude command line.
 - `--ceiling` is the dollars the life may spend, 8 by default, and 0 is no ceiling. It is a grant on the root chain,
   so the chain pauses when an answer carries the ledger to the ceiling.
 - `--timeout` is the seconds the run may take, 1800 by default, and 0 is no cap.
 - `--resume` goes on with the checkout and the record that stand, instead of seeding a fresh one.
 
-`turns` takes `--to`, the actor that the folded life stands on, since `turns` opens a life on the record to fold it.
+`turns` runs `furb turns` on the record of the run, which inspects it, and takes `--to`, the actor that the folded
+life stands on.
 
 ## Where everything stands
 

@@ -141,9 +141,9 @@ fn within(engine: &mut Engine, time: Duration, holds: impl Fn(&mut Engine) -> bo
 fn the_provider_answers_a_stand_with_its_roster_its_directory_and_its_default_actor() {
   let (mut engine, at) = life("stand", vec![scripted(&MockCompletionModel::new([]))]);
   let standing = engine.standing().expect("the life stands");
-  // Python shows each backslash of a path of Windows twice.
+  // The default actor is the first model, at the level of an actor that names none. Python shows each backslash of a path of Windows twice.
   let expected = format!(
-    "[[['m', ['low', 'high'], 1000], ['operator', [], 200000]], '{}', 'm/low']",
+    "[[['m', ['low', 'high'], 1000], ['operator', [], 200000]], '{}', 'm/high']",
     at.display().to_string().replace('\\', "\\\\")
   );
   assert_eq!(standing.py_repr(), expected);
@@ -166,7 +166,7 @@ fn a_reply_comes_to_the_turn_of_the_model_with_its_usage_its_dollars_and_its_blo
   assert_eq!(said(&mut engine)[1], ("done".into(), "reply1".into(), expected.into()));
   let request = model.requests().remove(0);
   assert_eq!(request.preamble.as_deref(), Some(SYSTEM));
-  assert_eq!(request.additional_params, Some(json!({"thinking": 1024})));
+  assert_eq!(request.additional_params, Some(json!({"thinking": 8192})));
   let [Message::User { content }] = &request.chat_history[..] else {
     panic!("one user turn: {:?}", request.chat_history)
   };
@@ -211,7 +211,7 @@ fn a_second_refusal_in_a_row_of_an_actor_on_a_chain_pauses_the_chain_before_its_
   asked(&mut engine);
   assert!(until(&mut engine, |engine| said(engine).len() == 5), "{:?}", said(&mut engine));
   let refused =
-    |why: &str| format!("Refused(args=('m/low answered nothing: ProviderError: {why}'))");
+    |why: &str| format!("Refused(args=('m/high answered nothing: ProviderError: {why}'))");
   let expected = [
     ("started", "reply1", String::new()),
     ("done", "reply1", refused("boom")),
@@ -224,6 +224,24 @@ fn a_second_refusal_in_a_row_of_an_actor_on_a_chain_pauses_the_chain_before_its_
   assert_eq!(said(&mut engine), expected);
   let asked_again = within(&mut engine, Duration::from_millis(300), |_| model.request_count() > 2);
   assert!(!asked_again, "the paused chain asks no model");
+}
+
+#[test]
+fn a_turn_between_two_refusals_of_an_actor_on_a_chain_ends_their_row() {
+  let failed = || vec![MockStreamEvent::Error(MockError::provider("boom"))];
+  let turn = |word: &str| vec![MockStreamEvent::text(word)];
+  let model = MockCompletionModel::from_stream_turns([
+    failed(),
+    turn("x = 1"),
+    failed(),
+    turn("close(x + 2)"),
+  ]);
+  let (mut engine, _) = life("row", vec![scripted(&model)]);
+  let id = asked(&mut engine);
+  let answered = until(&mut engine, |engine| engine.outcome(&id).is_ok_and(|got| got.is_some()));
+  assert!(answered, "a row of two refusals paused the chain: {:?}", said(&mut engine));
+  let got = engine.outcome(&id).expect("the prompt is an act").expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(3));
 }
 
 /// A model that never answers, and says when it is asked and when its call is dropped.
@@ -276,7 +294,7 @@ fn a_cancel_over_a_reply_ends_the_call_of_its_model_and_the_ear_says_nothing_mor
 
 #[cfg(unix)]
 #[test]
-fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line() {
+fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_life_its_own() {
   use super::claude::test::Yard;
   let yard = Yard::new("chain");
   let claude = yard.claude(10_000);
@@ -293,12 +311,22 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line() {
   assert_eq!(pids.len(), 1, "one process holds the conversation of the chain");
   let args = yard.args(&pids[0]);
   let after = |flag: &str| args.iter().position(|one| one == flag).map(|at| args[at + 1].as_str());
-  assert_eq!((after("--model"), after("--effort")), (Some("opus"), Some("low")));
+  assert_eq!((after("--model"), after("--effort")), (Some("opus"), Some("high")));
   assert_eq!(after("--system-prompt"), Some(SYSTEM));
   let heard = yard.heard();
   assert_eq!(heard.len(), 2);
   assert!(heard[1].contains("second task") && !heard[1].contains("first task"), "{}", heard[1]);
-  drop((engine, claude));
+  // The ids of chains repeat in every life, and a life on the same command line keeps a conversation of its own.
+  let (mut other, _) = life("claude-other", claude.models());
+  let with =
+    verbs::Prompt { message: Some("first task".into()), on: on(&root), ..Default::default() };
+  block_on(other.prompt(Object::string("str"), with).expect("a prompt is made"))
+    .expect("an answer");
+  let session = |pid: &str| super::claude::test::after(&yard.args(pid), "--session-id");
+  let both = yard.pids();
+  assert_eq!(both.len(), 2);
+  assert_ne!(session(&both[0]), session(&both[1]));
+  drop((engine, other, claude));
   assert!(
     super::claude::test::gone(&pids[0]),
     "the process ends with the last hold of the command line"
@@ -372,7 +400,7 @@ fn a_turn_hands_its_images_to_a_model_that_takes_them_and_a_model_that_takes_non
   prompted(&mut engine);
   assert!(until(&mut engine, |engine| said(engine).len() >= 2), "{:?}", said(&mut engine));
   let refused =
-    "Refused(args=('m/low answered nothing: ProviderError: m does not accept images.'))";
+    "Refused(args=('m/high answered nothing: ProviderError: m does not accept images.'))";
   assert_eq!(said(&mut engine)[1], ("done".into(), "reply1".into(), refused.into()));
   assert_eq!(blind.request_count(), 0, "the model is asked nothing");
 }
@@ -397,8 +425,8 @@ fn a_function_of_the_host_answers_a_request_with_a_turn_in_place_of_the_model() 
   assert_eq!(got.as_ref().as_int(), Some(7));
   let root = engine.root().to_owned();
   let request = requests.lock().expect("the requests")[0].clone();
-  assert_eq!((&request["actor"], &request["chain"]), (&json!("m/low"), &json!(root)));
-  assert_eq!(request["settings"], json!({"thinking": 1024}));
+  assert_eq!((&request["actor"], &request["chain"]), (&json!("m/high"), &json!(root)));
+  assert_eq!(request["settings"], json!({"thinking": 8192}));
   assert_eq!(request["messages"][0]["role"], "user");
   assert!(
     request["messages"][0]["content"][0]["text"]

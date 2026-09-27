@@ -99,12 +99,23 @@ fn read(path: &Path, repair: bool) -> Result<Vec<Object>, Fault> {
   Ok(entries)
 }
 
+/// The lease of a record: the lock on the file beside it, which ends when the lease goes. A process that this one
+/// starts holds a copy of the file until its program runs, so the lease ends the lock itself, and not with the last
+/// copy of the file.
+struct Lease(Handle);
+
+impl Drop for Lease {
+  fn drop(&mut self) {
+    let _ = self.0.as_file().unlock();
+  }
+}
+
 /// The lease of the record at a path, or the refusal when another process holds it.
 ///
 /// The lock is the lease only while its file is the one at the path. A holder that moved or removed the file after
 /// this process opened it leaves a lock that no later process meets, so this process opens the path again. On
 /// Windows the identity of a file holds only while a handle keeps the file open, as both handles do here.
-fn leased(path: &Path) -> Result<Handle, Fault> {
+fn leased(path: &Path) -> Result<Lease, Fault> {
   let lock = PathBuf::from(format!("{}.lock", path.display()));
   let failed = |no: std::io::Error| Fault::refused(format!("{no}: {}", lock.display()));
   if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
@@ -127,7 +138,7 @@ fn leased(path: &Path) -> Result<Handle, Fault> {
     }
     let held = Handle::from_file(file).map_err(failed)?;
     match Handle::from_path(&lock) {
-      Ok(now) if now == held => return Ok(held),
+      Ok(now) if now == held => return Ok(Lease(held)),
       Ok(_) => {}
       Err(no) if no.kind() == ErrorKind::NotFound => {}
       Err(no) => return Err(failed(no)),

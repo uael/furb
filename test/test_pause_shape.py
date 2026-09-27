@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import COST, acts, born, heads, said, settle, stalled
+from conftest import COST, acts, born, heads, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -44,8 +44,7 @@ async def test_a_control_reaches_what_it_is_over_and_whatever_else_its_words_nam
 
 async def test_a_control_is_no_act_it_takes_no_name_of_its_own() -> None:
   """A control is no act: it takes no name of its own, and the record holds it as a fact about the acts it is over."""
-  sand, log, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  sand, log, _, act = slow()
   made = set(acts(log))
   engine.pause(act)
   engine.cancel(act)
@@ -70,8 +69,7 @@ async def test_what_a_control_reaches() -> None:
 
 async def test_it_reaches_by_the_chain_as_well_as_by_the_name() -> None:
   """It reaches by the chain as well as by the name, since an act on a chain is not under it unless the chain made it."""
-  _, _, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  _, _, root, act = slow()
   assert not engine.under(act, root)
   engine.cancel(root)
   await settle()

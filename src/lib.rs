@@ -55,12 +55,4 @@ mod tests {
   fn the_stand_in_carries_the_one_mark_of_the_crossing() {
     assert!(super::PREAMBLE.contains(&format!("IS = {:?}", super::value::IS)));
   }
-
-  #[test]
-  fn the_system_prompt_is_the_engine_in_a_layout_of_its_own() {
-    let lines = super::SYSTEM.lines().collect::<Vec<_>>();
-    assert!(super::SYSTEM.len() < super::ENGINE.len());
-    assert!(lines.iter().all(|one| !one.is_empty() && !one.starts_with(' ')));
-    assert!(lines.contains(&"def pause(id:str)->None:control(\"pause\",\"paused\",id)"));
-  }
 }

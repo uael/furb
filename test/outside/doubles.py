@@ -11,6 +11,7 @@ import os
 import sys
 from collections.abc import Callable, Generator, Iterator, Sequence
 from contextlib import contextmanager
+from pathlib import Path
 
 import conftest
 from furb import engine
@@ -107,10 +108,11 @@ def booted(said: Words, record: Sequence[tuple] = (), *, gated: bool = True, **e
   return engine.boot(record, world=said, **ears, kernel=py.kernel(), gate=py.gating() if gated else blind())
 
 
-def life(live: Live, record: Sequence[tuple] = ()) -> str:
-  """A life on the World under test and on its provider, which is not gated, since reading every word with ty would
-  spend a second of the suite on each of them, so it is driven by the words a model would write."""
-  return booted(live.hears(), record, gated=False, provider=live.provider())
+def life(live: Live, record: Path | None = None) -> str:
+  """A life on the World under test and on the ears of the crate, its provider among them, which enables no extension
+  and is not gated, since reading every word with ty would spend a second of the suite on each of them, so it is
+  driven by the words a model would write."""
+  return booted(live.hears(), live.opened(record, extensions=False), gated=False, **live.ears)
 
 
 async def settle() -> None:

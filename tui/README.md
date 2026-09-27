@@ -14,8 +14,8 @@ bun run tui                  # A real life, on the models of the catalog of the 
 bun run tui -- --resume .furb/sessions/example.jsonl
 ```
 
-`furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, and the words
-after `--`.
+`furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, the model and the
+effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`.
 
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
 a new life. A session offers its model, the default model when you name none, and the models of `--roster`.

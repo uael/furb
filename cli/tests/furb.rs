@@ -3,7 +3,7 @@
 //!
 //! Every life runs on the real engine and on the real ears of the crate, and a claude command line that answers from
 //! a script stands in for the models, so no test asks one. The fake answers each line of input with the next word the
-//! test gave it, and with `close(None)` once the words run out, and it counts what it answered.
+//! test gave it, and it counts what it answered.
 
 #![cfg(unix)]
 
@@ -20,17 +20,8 @@ use std::{
 
 use serde_json::{Value, json};
 
-/// The fake claude: each turn is one message that the command line says whole, and the result of the turn.
-const FAKE: &str = r#"#!/bin/sh
-here=$(dirname "$0")
-while IFS= read -r line; do
-  n=$(( $(cat "$here/count" 2>/dev/null || echo 0) + 1 ))
-  echo "$n" > "$here/count"
-  word=$(cat "$here/word.$n" 2>/dev/null || printf '"close(None)"')
-  printf '{"type":"assistant","message":{"content":[{"type":"text","text":%s}]}}\n' "$word"
-  printf '{"type":"result","session_id":"fake","total_cost_usd":0,"usage":{"input_tokens":10,"output_tokens":5}}\n'
-done
-"#;
+/// The fake claude of the tests of the crate, which answers the Nth turn with the word of the file word.N beside it.
+const FAKE: &str = include_str!("../../src/world/provider/fake-claude.sh");
 
 /// A word that counts the lines of the file of the yard.
 const COUNT: &str = "close(len(read('a.txt').lines))";
@@ -71,13 +62,13 @@ impl Yard {
     self.at.join("record.jsonl")
   }
 
-  /// furb with these words, in the yard, on the fake claude and on the config directory of the yard, and with no
-  /// TUI that the machine names.
+  /// furb with these words, in the yard, on the fake claude and on the config directory and the cache of the yard,
+  /// and with no TUI that the machine names.
   fn furb(&self, words: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_furb"));
     command.args(words).current_dir(&self.at);
     command.env("FURB_CLAUDE_BIN", self.fake.join("claude")).env_remove("FURB_TUI");
-    command.env("FURB_CONFIG_DIR", self.config());
+    command.env("FURB_CONFIG_DIR", self.config()).env("XDG_CACHE_HOME", self.at.join("cache"));
     command
   }
 
@@ -136,7 +127,7 @@ fn the_command_line_takes_four_commands_of_the_operator() {
   let output = ran(yard.furb(&["prompt", "count", "--shape", "nothing"]), "");
   assert_eq!(output.status.code(), Some(2));
   let said = String::from_utf8_lossy(&output.stderr);
-  assert!(said.contains("[possible values: none, str, int, float, bool, list]"), "{said}");
+  assert!(said.contains("[possible values: str, None, bool, int, float, list, dict]"), "{said}");
   assert_eq!(
     ran(yard.furb(&["turns"]), "").status.code(),
     Some(2),
@@ -155,6 +146,9 @@ fn a_word_its_caller_wrote_runs_on_the_root() {
 #[test]
 fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let yard = Yard::new("resumed");
+  fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
+  let off = r#"{"extensions": {"memory": false, "skills": false}}"#;
+  fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "4\n");
   let kinds: Vec<String> = fs::read_to_string(yard.record())
@@ -166,17 +160,13 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   assert_eq!(stands, 2, "each life that keeps keeps its stand: {kinds:?}");
   let before = fs::read(yard.record()).expect("the record");
   let elsewhere = yard.at.join("elsewhere");
-  fs::create_dir_all(&elsewhere).expect("another directory");
+  fs::create_dir_all(&elsewhere).expect("another directory, whose configs turn the extensions on");
   let mut turns = yard.furb(&["turns", "--record"]);
   turns.arg(yard.record()).arg("--cwd").arg(&elsewhere);
   let said = printed(turns, "");
-  // The two rungs of the extensions come first, and every word runs again.
-  assert!(said.contains("#rung4 closed 4"), "the turns of a record run every word again: {said}");
-  assert_eq!(
-    fs::read(yard.record()).expect("the record"),
-    before,
-    "a life that only reads keeps nothing"
-  );
+  assert!(said.contains("#rung2 closed 4"), "the turns of a record run every word again: {said}");
+  assert!(!said.contains("remember()"), "an inspection enables no extension: {said}");
+  assert_eq!(fs::read(yard.record()).expect("the record"), before, "an inspection keeps nothing");
 }
 
 #[test]
@@ -263,7 +253,7 @@ fn a_prompt_the_world_paused_ends_its_command_with_why_and_goes_on_when_it_is_ta
   missing.env("FURB_CLAUDE_BIN", yard.at.join("missing"));
   let said = refused(missing, "");
   assert!(
-    said.contains("furb: prompt1 is paused: claude-cli:opus/low answered nothing: "),
+    said.contains("furb: prompt1 is paused: claude-cli:opus/high answered nothing: "),
     "{said}"
   );
   assert!(said.contains("A wake from the TUI or from `furb --mode rpc` makes it go on."), "{said}");
@@ -422,7 +412,7 @@ fn a_prompt_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
     (&state["root"], &state["paused"], &state["acts"]),
     (&json!("chain1"), &json!(false), &json!(["prompt1"]))
   );
-  assert_eq!(state["standing"][2], "claude-cli:opus/low");
+  assert_eq!(state["standing"][2], "claude-cli:opus/high");
   let wrong = client.asked("3", json!({"type": "close", "act": "prompt2", "value": "seven"}));
   assert_eq!(wrong["success"], false, "a close of the wrong shape is refused: {wrong}");
   client.data("4", json!({"type": "close", "act": "prompt2", "value": 7}));
@@ -469,7 +459,7 @@ fn a_life_offers_the_model_of_its_default_actor_and_the_models_it_names_and_no_m
   assert!(first.ended(), "the record is free for the next life");
   assert_eq!(
     (roster, actor),
-    (vec!["claude-cli:opus".to_owned(), "operator".to_owned()], json!("claude-cli:opus/low"))
+    (vec!["claude-cli:opus".to_owned(), "operator".to_owned()], json!("claude-cli:opus/high"))
   );
   let mut client = Client::with(&yard, &["--model", "sonnet/high", "--roster", "haiku"]);
   let (roster, actor) = names(&mut client);
@@ -552,19 +542,46 @@ fn the_life_ends_with_stdin_and_a_later_life_resumes_its_record() {
 }
 
 #[test]
+fn the_state_names_each_act_that_an_earlier_life_left_started_and_not_done() {
+  let yard = Yard::new("rpc-pending");
+  let mut client = Client::new(&yard);
+  client.data("1", json!({"type": "rung", "word": "await wait(600)"}));
+  client
+    .until(|one| one["type"] == "fact" && one["fact"][0] == "started" && one["fact"][1] == "wait1");
+  let state = client.data("2", json!({"type": "state"}));
+  assert_eq!(state["pending"], json!([]), "the work of this life is no work of an earlier life");
+  assert!(client.ended());
+  let mut later = Client::new(&yard);
+  assert_eq!(later.data("1", json!({"type": "state"}))["pending"], json!([["wait1", "wait"]]));
+  later.data("2", json!({"type": "cancel", "act": "wait1"}));
+  let state = later.data("3", json!({"type": "state"}));
+  assert_eq!(state["pending"], json!([]), "an act that is done is pending no more");
+  assert!(later.ended());
+}
+
+#[test]
 fn furb_hands_the_terminal_to_the_tui_with_the_words_it_takes() {
   let yard = Yard::new("tui");
   let tui = yard.at.join("tui");
   program(&tui, "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 3\n");
   let mut command = yard.furb(&[
-    "--demo", "--record", "r.jsonl", "--cwd", "there", "--model", "m", "--roster", "n", "--",
-    "--effort", "high",
+    "--demo",
+    "--record",
+    "r.jsonl",
+    "--cwd",
+    "there",
+    "--model",
+    "sonnet/high",
+    "--roster",
+    "n",
+    "--",
+    "more",
   ]);
   command.env("FURB_TUI", &tui);
   let output = ran(command, "");
   assert_eq!(output.status.code(), Some(3), "furb ends with the code of the TUI");
   let words = String::from_utf8_lossy(&output.stdout);
-  let expected =
-    "--demo\n--record\nr.jsonl\n--cwd\nthere\n--model\nm\n--roster\nn\n--effort\nhigh\n";
+  let expected = "--demo\n--record\nr.jsonl\n--cwd\nthere\n--model\nclaude-cli:sonnet\n--effort\nhigh\n\
+                  --roster\nn\nmore\n";
   assert_eq!(words, expected);
 }

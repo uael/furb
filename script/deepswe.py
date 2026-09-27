@@ -26,7 +26,7 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from real import ACTOR, lived, ready, say, turned
+from real import lived, ready, say, spent
 
 from furb import engine
 from furb.world import answered, kept
@@ -652,7 +652,7 @@ def numbered(record: Path, began: float) -> dict[str, float]:
     "input": sum(one[0] for one in usage),
     "output": sum(one[1] for one in usage),
     "cache_read": sum(one[2] for one in usage),
-    "usd": sum(one[4] for one in usage),
+    "usd": spent(record),
     "wall_seconds": round(time.monotonic() - began, 1),
   }
 
@@ -716,7 +716,9 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
   what it is and what it may say is the engine, which is its system prompt.
   """
   record = run_dir / "record.jsonl"
-  world, root, held = lived(record, app, args.to, keeps=True, extensions=False)
+  world, root, held = lived(record, app, args.to or None, keeps=True, extensions=False)
+  # The actor that the life stands on is the one the archive names, the default actor of the crate when unsaid.
+  args.to = args.to or str(engine.standing()[2])
   say(f"[deepswe] life on {app}, root {root}, {len(held)} facts kept")
   if args.ceiling:
     engine.grant(usd=args.ceiling, on=root)
@@ -807,8 +809,9 @@ def turns(args: argparse.Namespace) -> int:
   if not record.is_file():
     say(f"[deepswe] no record at {record}")
     raise SystemExit(1)
-  asyncio.run(turned(record, WORK / args.task / "app", args.to, extensions=False))
-  return 0
+  # The furb of the venv that runs the rig, which the rig took out of the PATH.
+  furb = [str(Path(sys.executable).with_name("furb")), "turns", "--record", str(record)]
+  return ran([*furb, "--cwd", str(WORK / args.task / "app"), *(["--model", args.to] if args.to else [])])
 
 
 def freeze(args: argparse.Namespace) -> int:
@@ -865,10 +868,10 @@ def main() -> None:
   verbs.add_parser("grade", parents=[named], help=grade.__doc__).set_defaults(go=grade)
   verbs.add_parser("validate", parents=[named], help=validate.__doc__).set_defaults(go=validate)
   reading = verbs.add_parser("turns", parents=[named], help=turns.__doc__)
-  reading.add_argument("--to", default=ACTOR, help="The actor the folded life stands on.")
+  reading.add_argument("--to", default="", help="The actor the folded life stands on; the default actor when unsaid.")
   reading.set_defaults(go=turns)
   doing = verbs.add_parser("run", parents=[named], help=run.__doc__)
-  doing.add_argument("--to", default=ACTOR, help="The actor the task is put to, as provider:model/effort.")
+  doing.add_argument("--to", default="", help="The actor the task is put to, as provider:model/effort.")
   doing.add_argument("--ceiling", type=float, default=8.0, help="Dollars the life may spend; 0 is no ceiling.")
   doing.add_argument("--timeout", type=float, default=1800.0, help="Seconds the run may take; 0 is no cap.")
   doing.add_argument("--resume", action="store_true", help="Go on with the checkout and the record that stand.")

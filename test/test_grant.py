@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import COST, born, heads, paragraphs, ran, rows, said, settle
+from conftest import COST, born, chained, heads, paragraphs, ran, rows, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -206,8 +206,7 @@ async def test_a_cancel_of_it_lifts_the_ceiling_since_it_is_an_act_like_any_othe
 async def test_a_grant_is_any_callers_on_any_chain() -> None:
   """A grant is any caller's, on any chain."""
   sand, log, root = born()
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   mine = engine.grant(usd=1.0, on=two)
   await settle()
   sand.script[root] = [f"theirs = grant(usd=2.0, on={two!r})\nclose(1)"]
@@ -223,8 +222,7 @@ async def test_a_grant_finds_the_grants_of_its_chain_among_the_acts_of_the_life(
   _, _, root = born()
   first = engine.grant(usd=5.0, on=root)
   await settle()
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   theirs = engine.grant(usd=9.0, on=twin)
   await settle()
   assert engine.peek(first, ...) is ... and engine.peek(theirs, ...) is ...
