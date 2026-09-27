@@ -11,17 +11,20 @@ from furb_monty import _monty
 
 
 async def test_the_memory_of_a_path_told_to_its_chain(tmp_path: Path) -> None:
-  """The memory of a path, told to its chain: each memory file that applies to the path and that the chain does not hold as it stands, told whole."""
+  """The memory of a path, told to its chain: each memory file that applies to the path and that the chain does not hold as it stands, read with the show of every line, so the chain holds the whole file, and told by every line that the chain has not seen."""
   top = noted(tmp_path / "work", "".join(f"{n}\n" for n in range(1, 2101)))
   _, root = extended("memory", tmp_path, _monty.memory)
   await engine.rung("memory()", on=root)
   (told,) = recalled(root, tmp_path)
   assert told.splitlines()[:3] == [f"#memory {top}", f"# {top}, 0 known", "# 1 1"]
   assert told.splitlines()[-1] == "# 2100 2100"
+  top.write_text(top.read_text().replace("\n5\n", "\nfive\n"))
+  await engine.rung("memory()", on=root)
+  assert recalled(root, tmp_path)[1:] == [f"#memory {top}\n# {top}, 2099 known\n# 5 five"]
 
 
 async def test_memory_asks_the_world_a_memory_question_and_tells_each_text(tmp_path: Path) -> None:
-  """memory asks the World a memory question on its chain with the path, and tells each text of the answer in its order, under the header memory and the path of the text, with every line of it."""
+  """memory asks the World a memory question on its chain with the path, and tells each text of the answer in its order, under the header memory and the path of the text, with the show of every line."""
   top = noted(tmp_path / "work", "one\ntwo\n")
   sub = noted(tmp_path / "work" / "sub", "three\n")
   _, root = extended("memory", tmp_path, _monty.memory)
