@@ -164,8 +164,8 @@ Run every command from the root of the repository.
   day, and the newer of the two holds for each provider.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint, and the tests of the TypeScript
-  side, each of which has thirty seconds. The tests read the configs and the cache of `.furb/tests`, and not those of
-  the machine.
+  side. Each test has thirty seconds, and the check and the lint have no limit. The tests read the configs and the
+  cache of `.furb/tests`, and not those of the machine.
   As root, the test of a folder that cannot be read fails, since root reads every folder.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
