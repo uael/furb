@@ -2517,7 +2517,8 @@ export class App {
       grant?.words[1] === null || grant?.words[1] === undefined ? undefined : Number(grant.words[1]);
     const known = window !== undefined && Number.isFinite(window);
     const tokens = spend.input + spend.output + spend.cacheRead + spend.cacheWrite;
-    this.railUsage.visible = tokens > 0 || spend.dollars > 0 || Boolean(grant);
+    // A chain with a source reads the prompt of its origin before it answers once, so its context shows from its birth.
+    this.railUsage.visible = tokens > 0 || spend.dollars > 0 || Boolean(grant) || w.context !== undefined;
     if (this.railUsage.visible) {
       section(
         "Context",
@@ -2542,12 +2543,12 @@ export class App {
       // The last prompt is the whole prompt of the last answer, its system prompt and the reads of the cache included,
       // which the share of the window measures. The fresh input, the output and the cache are what every answer of the
       // chain read past the cache, wrote, and read and wrote in the cache, each token counted once.
+      const prompt = w.context;
+      if (prompt !== undefined)
+        this.tipped(row("Last prompt", count(prompt)), [
+          ["The whole prompt of the last answer, its system prompt and the cache included.", c.text],
+        ]);
       if (tokens > 0) {
-        const prompt = w.context;
-        if (prompt !== undefined)
-          this.tipped(row("Last prompt", count(prompt)), [
-            ["The whole prompt of the last answer, its system prompt and the cache included.", c.text],
-          ]);
         this.tipped(row("Fresh input", count(spend.input)), [
           ["The input of the answers of the chain that the cache did not hold.", c.text],
         ]);

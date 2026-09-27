@@ -429,6 +429,21 @@ test("the usage names the whole prompt of the last answer apart from the fresh i
     expect(shown("Fresh input")).toContain(count(session.spend.input));
   }));
 
+test("the usage of a fork counts the answers of the fork alone, and not those of its origin", () =>
+  composing(async ({ session, frame }) => {
+    await session.submit("Explore this project.");
+    await until(session, () => session.turns.filter((turn) => turn[0] === "assistant").length >= 2);
+    const origin = session.selected;
+    await session.submit("/fork");
+    await until(session, () => session.selected !== origin);
+    await session.refresh();
+    expect(session.turns.filter((turn) => turn[0] === "assistant").length).toBeGreaterThanOrEqual(2);
+    expect(session.spend).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, dollars: 0 });
+    const shown = await frame();
+    expect(shown).toContain("Last prompt");
+    expect(shown).not.toContain("Cache read");
+  }));
+
 test("a paused chain says so at the end of its feed and in the footer, and Resume wakes it", () =>
   composing(async ({ session, frame, click }) => {
     await session.submit("/pause");

@@ -17,7 +17,7 @@ import {
   WORK,
 } from "@furb/engine";
 import { createTwoFilesPatch } from "diff";
-import type { Engine, HostView } from "./bridge.ts";
+import type { Engine, HostView, Usage } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
 import { expandHome, fileReferences, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
@@ -136,6 +136,8 @@ export class Session extends EventEmitter {
   sessionName: string;
   acts: ActRow[] = [];
   turns: Turn[] = [];
+  /** The usage of each answer of the chain itself, which the turns of a chain with a source do not tell apart. */
+  answers: Usage[] = [];
   changes: ShownChange[] = [];
   changePage = 0;
   program: Record<string, string> = {};
@@ -414,13 +416,13 @@ export class Session extends EventEmitter {
   get activity(): ActRow[] {
     return this.acts.filter((act) => act.on === this.selected && act.kind !== "chain");
   }
-  /** What the answers of the chain cost, each token counted once. The first number of the usage of a turn is the
-   * whole prompt of that call, which holds the reads and the writes of the cache, so the fresh input of a turn is
-   * what is left of its prompt after them. */
+  /** What the answers of the chain itself cost, each token counted once: a chain with a source does not count the
+   * answers of its origin again. The first number of the usage of an answer is the whole prompt of that call, which
+   * holds the reads and the writes of the cache, so the fresh input of an answer is what is left of its prompt after
+   * them. */
   get spend(): { input: number; output: number; cacheRead: number; cacheWrite: number; dollars: number } {
     const sum = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, dollars: 0 };
-    for (const [, , usage] of this.turns) {
-      if (!usage) continue;
+    for (const usage of this.answers) {
       const [prompt, output, read, write, dollars] = usage;
       sum.input += Math.max(0, prompt - read - write);
       sum.output += output;
@@ -492,6 +494,7 @@ export class Session extends EventEmitter {
     if (id !== this.selected) {
       this.editing = undefined;
       this.turns = [];
+      this.answers = [];
       this.program = {};
     }
     this.selected = id;

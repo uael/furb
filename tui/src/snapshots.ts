@@ -1,5 +1,5 @@
 import { type Engine, type Fact, isQuestion, type LiveAct, questionKind, type Session } from "@furb/engine";
-import type { Snapshot } from "./bridge.ts";
+import type { Snapshot, Usage } from "./bridge.ts";
 import { queueDispatches } from "./queue.ts";
 import type { ActRow, Exit } from "./session.ts";
 
@@ -32,6 +32,8 @@ function row(act: LiveAct): ActRow {
 /** Views belong to changes of the life, not to frames or refresh requests. */
 export class Snapshots {
   private readonly chains = new Map<string, ChainView>();
+  /** The usage of each answer of each chain, by the chain that the reply stands on. */
+  private readonly answers = new Map<string, Usage[]>();
   private heard = 0;
   private entries = -1;
   private dispatched: string[] = [];
@@ -56,6 +58,15 @@ export class Snapshots {
           actor: undefined,
           turns: undefined,
         });
+    // An answer is of the chain its reply stands on. A chain with a source holds the answers of its origin in its
+    // prefix, and those are not its own.
+    const turn = fact[3];
+    if (answered === "reply" && Array.isArray(turn) && Array.isArray(turn[2])) {
+      const on = this.session.activity.scope(id);
+      const answers = this.answers.get(on) ?? [];
+      answers.push(turn[2] as Usage);
+      this.answers.set(on, answers);
+    }
     // A fact stands in the transcript of the chain its scope names, which is all that view reads.
     const view = this.chains.get(this.session.activity.scope(id));
     if (!view) return;
@@ -102,6 +113,7 @@ export class Snapshots {
       roster: view.roster,
       program: view.program,
       turns: view.turns,
+      answers: [...(this.answers.get(selected) ?? [])],
       directory: view.directory,
       actor: view.actor,
     };

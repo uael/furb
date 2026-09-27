@@ -1,7 +1,11 @@
 import { EventEmitter } from "node:events";
-import type { Act, FileChange, ImageAttachment, LiveAct, Engine as Native, Stream } from "@furb/engine";
+import type { Act, FileChange, ImageAttachment, LiveAct, Engine as Native, Stream, Turn } from "@furb/engine";
 import type { EngineOptions } from "./models.ts";
 import type { ActRow, FollowUp } from "./session.ts";
+
+/** What one answer of a model read and wrote: its whole prompt, its output, the reads and the writes of the cache,
+ * and its dollars. */
+export type Usage = NonNullable<Turn[2]>;
 
 export interface Snapshot {
   dispatched: string[];
@@ -13,6 +17,9 @@ export interface Snapshot {
   count: number;
   selected: string;
   turns: ReturnType<Native["turns"]>;
+  /** The usage of each answer of the chain, in order. A chain with a source reads the answers of its origin in its
+   * turns, and they are not among these. */
+  answers: Usage[];
   program: Record<string, string>;
   actor: string;
   directory: string;
