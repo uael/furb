@@ -311,6 +311,9 @@ struct Conversation {
   resumed: bool,
   /// The messages the command line heard, as their meaning alone, the reply of the last turn among them.
   chain: Vec<String>,
+  /// The last message the command line heard while no reply follows it: the message of a turn that came to no
+  /// reply, which the next request may give again grown at its end.
+  asked: Option<Message>,
   /// The messages of the last request, which a request that follows it continues.
   requested: Vec<String>,
   /// Whether the last request came again whole, which a failed turn does, so a third time begins anew.
@@ -329,6 +332,7 @@ impl Conversation {
       parent: None,
       resumed: false,
       chain: Vec::new(),
+      asked: None,
       requested: Vec::new(),
       again: false,
       process: None,
@@ -340,7 +344,9 @@ impl Conversation {
   ///
   /// A request that continues neither the reply of the last turn nor the last request begins a new conversation. A
   /// request that says again what was said sends its last message again once, since a turn that failed is asked
-  /// again whole, and a second time it begins a new conversation.
+  /// again whole, and a second time it begins a new conversation. A request that gives again a turn that came to no
+  /// reply, with its last message grown by what was told since, sends what that message gained alone, as a new
+  /// message of the same conversation, which keeps its cache.
   async fn turn(
     &mut self,
     messages: &[Message],
@@ -363,12 +369,27 @@ impl Conversation {
       Some(at) if at > 0 && at == incoming.len() => start = None,
       _ => {}
     }
-    if start.is_none() {
+    let last = incoming.len().saturating_sub(1);
+    let grown = match (&self.asked, messages.last()) {
+      (Some(asked), Some(now))
+        if start.is_none()
+          && self.chain.len() == incoming.len()
+          && incoming[..last] == self.chain[..last] =>
+      {
+        gained(asked, now)
+      }
+      _ => None,
+    };
+    if start.is_none() && grown.is_none() {
       *self = Conversation::new(&self.name, self.effort.take(), &self.system);
     }
-    let from = start.unwrap_or_default();
-    let mut flight = Flight { conversation: self, incoming, reply: None };
-    let got = flight.run(&messages[from..], bin, stall, deltas).await;
+    let delta = match &grown {
+      Some(one) => std::slice::from_ref(one),
+      None => &messages[start.unwrap_or_default()..],
+    };
+    let asked = messages.last().cloned();
+    let mut flight = Flight { conversation: self, incoming, asked, heard: false, reply: None };
+    let got = flight.run(delta, bin, stall, deltas).await;
     if let Ok(response) = &got {
       let reply = Message::Assistant { id: None, content: response.choice.clone() };
       flight.reply = Some(canonical(&reply));
@@ -504,11 +525,16 @@ fn last(text: &str) -> &str {
   &text[cut..]
 }
 
-/// A turn in flight. However it ends, the conversation holds the request, and the reply once the turn came to one;
-/// a turn that came to no reply ends its process, whose stream is then at no boundary a later turn can trust.
+/// A turn in flight. However it ends, the conversation holds the request, what the command line heard of it, and
+/// the reply once the turn came to one; a turn that came to no reply ends its process, whose stream is then at no
+/// boundary a later turn can trust.
 struct Flight<'a> {
   conversation: &'a mut Conversation,
   incoming: Vec<String>,
+  /// The last message of the request.
+  asked: Option<Message>,
+  /// Whether the command line heard the line of the turn.
+  heard: bool,
   reply: Option<String>,
 }
 
@@ -516,10 +542,14 @@ impl Drop for Flight<'_> {
   fn drop(&mut self) {
     let held = &mut *self.conversation;
     held.requested = self.incoming.clone();
-    held.chain = self.incoming.clone();
+    if self.heard {
+      held.chain = self.incoming.clone();
+      held.asked = self.asked.take();
+    }
     match self.reply.take() {
       Some(reply) => {
         held.chain.push(reply);
+        held.asked = None;
         held.again = false;
       }
       None => held.process = None,
@@ -554,6 +584,7 @@ impl Flight<'_> {
     if let Err(no) = wrote.await {
       return Err(failed(format!("claude took no input: {no}{}", process.tail())));
     }
+    self.heard = true;
     let mut reply = Reply { deltas, ..Reply::default() };
     let mut odd = String::new();
     let mut due = tokio::time::Instant::now() + stall;
@@ -851,6 +882,24 @@ fn input(messages: &[Message]) -> Result<String, CompletionError> {
   }
   let line = json!({"type": "user", "message": {"role": "user", "content": content}});
   Ok(format!("{line}\n"))
+}
+
+/// What the last message of a request gained over the message the command line heard at its place, as a message of
+/// its own: the text after the text it heard, and the blocks after the blocks it heard. It is none when the message
+/// changed other than at its end, or gained nothing.
+fn gained(heard: &Message, now: &Message) -> Option<Message> {
+  let (Message::User { content: heard }, Message::User { content: now }) = (heard, now) else {
+    return None;
+  };
+  let (Some(UserContent::Text(was)), Some(UserContent::Text(is))) = (heard.first(), now.first())
+  else {
+    return None;
+  };
+  let text = is.text.strip_prefix(was.text.as_str())?.trim_start();
+  let blocks = now[1..].strip_prefix(&heard[1..])?;
+  let text = (!text.is_empty()).then(|| UserContent::text(text));
+  let content: Vec<UserContent> = text.into_iter().chain(blocks.iter().cloned()).collect();
+  (!content.is_empty()).then_some(Message::User { content })
 }
 
 /// One block of a message of the user, as the input of the command line holds it.
