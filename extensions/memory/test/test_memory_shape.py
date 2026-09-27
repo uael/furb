@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from conftest import extended, noted, settle
+from conftest import extended, noted, recalled, settle
 from furb import engine
 from furb.engine import Text
 from furb_monty import _monty
@@ -52,7 +52,7 @@ async def test_the_memory_of_a_folder_is_its_claude_md_file_or_its_agents_md_fil
 async def test_the_world_leaves_out_a_memory_file_whose_content_the_chain_holds(tmp_path: Path) -> None:
   """The World leaves out a memory file whose content the chain holds: one that a memory question told it, or that it read or wrote, with that content, its prefix among them."""
   top = noted(tmp_path / "work", "t\n")
-  noted(tmp_path / "work" / "sub", "s\n")
+  sub = noted(tmp_path / "work" / "sub", "s\n")
   noted(tmp_path / "work" / "other", "o\n")
   _, root = extended("memory", tmp_path, _monty.memory)
   await engine.rung('memory()\nread("sub/CLAUDE.md")\nwrite(Text("other/CLAUDE.md", "o\\n"))', on=root)
@@ -62,6 +62,19 @@ async def test_the_world_leaves_out_a_memory_file_whose_content_the_chain_holds(
   assert await paths(two, tmp_path, "other/c.txt") == []
   top.write_text("t2\n", encoding="utf-8")
   assert await paths(root, tmp_path, ".") == [str(top)]
+  # A question from outside an act tells nothing, so the chain holds nothing of it.
+  three = engine.chain("three")
+  await settle()
+  engine.ask("memory", three, "sub/c.txt")
+  engine.read("sub/CLAUDE.md", on=three)
+  assert await paths(three, tmp_path, "sub/c.txt") == [str(top), str(sub)]
+  # A read in the step whose done the watcher hears first is held all the same.
+  (sub.parent / "c.txt").write_text("c\n", encoding="utf-8")
+  four = engine.chain("four")
+  await settle()
+  await engine.rung("remember()", on=four)
+  await engine.rung('read("sub/c.txt")\nread("sub/CLAUDE.md")', on=four)
+  assert [one.split("\n")[0] for one in recalled(four, tmp_path)] == [f"#memory {top}"]
 
 
 async def test_a_path_of_a_scheme_adds_no_folder_of_its_own(tmp_path: Path) -> None:
