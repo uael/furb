@@ -159,6 +159,33 @@ export interface Outcome {
   value: unknown
 }
 
+/**
+ * The ear of the provider of models, which answers a stand and takes each reply, and whose models are those of the
+ * claude command line.
+ */
+export declare function provider(options: ProviderOptions): NativeEar
+
+/**
+ * What the provider of the crate stands on and asks: the directory of the life, the default actor, and the claude
+ * command line, whose models it offers.
+ */
+export interface ProviderOptions {
+  /** The directory the life stands on, which each chain stands in until it goes elsewhere. */
+  directory: string
+  /**
+   * The actor a prompt goes to when it names none, as model/effort, which is the first model at its first effort
+   * when none is given.
+   */
+  actor?: string
+  /**
+   * The path of the claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine
+   * holds.
+   */
+  claude?: string
+  /** How many milliseconds a turn of claude may go with no progress. */
+  stallMs?: number
+}
+
 /** The POSIX shell that runs a command of this machine, which a host runs its own commands in too. */
 export declare function shell(): string
 

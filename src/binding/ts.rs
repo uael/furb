@@ -383,3 +383,28 @@ pub fn decode_record(line: String) -> napi::Result<Value> {
     .map_err(|error| napi::Error::new(napi::Status::InvalidArg, error.to_string()))?;
   wire::decoded(value, 0).map_err(error)
 }
+
+/// What the provider of the crate stands on and asks: the directory of the life, the default actor, and the claude
+/// command line, whose models it offers.
+#[napi(object)]
+pub struct ProviderOptions {
+  /// The directory the life stands on, which each chain stands in until it goes elsewhere.
+  pub directory: String,
+  /// The actor a prompt goes to when it names none, as model/effort, which is the first model at its first effort
+  /// when none is given.
+  pub actor: Option<String>,
+  /// The path of the claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine
+  /// holds.
+  pub claude: Option<String>,
+  /// How many milliseconds a turn of claude may go with no progress.
+  pub stall_ms: Option<f64>,
+}
+
+/// The ear of the provider of models, which answers a stand and takes each reply, and whose models are those of the
+/// claude command line.
+#[napi]
+pub fn provider(options: ProviderOptions) -> NativeEar {
+  let stall = options.stall_ms.and_then(|ms| std::time::Duration::try_from_secs_f64(ms / 1e3).ok());
+  let claude = world::claude::Claude::with(options.claude.map(std::path::PathBuf::from), stall);
+  NativeEar::of(world::provider(options.directory, claude.models(), options.actor))
+}

@@ -83,3 +83,10 @@ def kept(path: str) -> list[list[list[object]]]:
 def gate(sheet: str) -> list[tuple[int, str]]:
   """The gate of the crate, for the Kernel of this interpreter to read a sheet with: what the checker found on the
   sheet, each error by its line, and no warning. It raises when the checker could not read the sheet."""
+
+def provider(
+  directory: str, actor: str | None = None, claude: str | None = None, stall: float | None = None
+) -> NativeEar:
+  """The ear of the provider of models, whose models are those of the claude command line at the path `claude`: it
+  answers a stand with the standing of the directory and the default actor, and takes each reply, which a model
+  answers with its turn, or refuses when a turn makes no progress for `stall` seconds."""
