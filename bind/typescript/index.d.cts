@@ -141,6 +141,12 @@ export declare function attachImage(directory: string, path: string): ImageAttac
 /** The ear of commands, which runs each in a shell of this machine. */
 export declare function bash(): NativeEar
 
+/**
+ * The config directory of the user for this process, where the configs, the extensions of the user and the
+ * preferences of the TUI stand.
+ */
+export declare function configDirectory(): string
+
 export declare function decodeRecord(line: string): unknown
 
 export declare function engineSource(): string

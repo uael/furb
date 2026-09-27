@@ -604,6 +604,13 @@ pub const TIMEOUT: f64 = crate::engine::TIMEOUT;
 #[napi]
 pub const ROOT: &str = crate::engine::ROOT;
 
+/// The config directory of the user for this process, where the configs, the extensions of the user and the
+/// preferences of the TUI stand.
+#[napi]
+pub fn config_directory() -> String {
+  extension::Places::here().config.display().to_string()
+}
+
 /// Every shape the operator answers, by its name.
 #[napi]
 pub fn shapes() -> Vec<&'static str> {

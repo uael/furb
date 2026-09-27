@@ -78,7 +78,7 @@ pub struct Places {
 
 impl Places {
   /// The places of this process: the config directory is `FURB_CONFIG_DIR`, else `furb` under `XDG_CONFIG_HOME`,
-  /// under `APPDATA` on Windows, or under `.config` in the home, which is where the TUI keeps its preferences.
+  /// under `APPDATA` on Windows, or under `.config` in the home, where the TUI keeps its preferences too.
   pub fn here() -> Places {
     let var = |key: &str| std::env::var_os(key).map(PathBuf::from);
     let home = std::env::home_dir();
