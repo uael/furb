@@ -34,6 +34,64 @@ uv run pre-commit install
 5. What an act does and what it comes to are facts about it. The chain folds its facts into turns, which are the
    Python that the model reads next.
 
+## Changing the engine
+
+| File | What it holds |
+| --- | --- |
+| `src/furb/engine.pyi` | The contract: the typed surface of the engine, and the laws of each definition. Only the owner changes it. |
+| `src/furb/engine.py` | The engine, one file, which is the system prompt of a model. |
+| `src/furb/CLAUDE.md` | The technical names of the engine, and the laws that no test can hold. |
+| `src/furb/__init__.py` | The switch: `FURB_ENGINE` picks the engine that `from furb import engine` gives. |
+| `src/engine.rs`, `src/sand.rs` | One life of `engine.py` in the sandbox of monty, and the verbs that a host says. |
+| `src/ear.rs`, `src/fact.rs` | The ear, the one thing a life hears by, and a fact as the engine says it. |
+| `src/value.rs`, `src/wire.rs` | A value that crosses between the engine and a host, and that value as JSON. |
+| `src/preamble.py` | What runs in the sandbox in the place of the ears of a host. |
+
+## Changing the Kernel and the gate
+
+| File | What it holds |
+| --- | --- |
+| `src/furb/kernel.py` | The Kernel, which runs the word of a rung in the module of its chain. Both engines load it. |
+| `src/furb/sheet.py` | The sheet that the gate reads a word on, and the findings that it reads off it. |
+| `src/gate.rs` | The gate: the type checker of monty, which reads a sheet. |
+
+## Changing the World
+
+| File | What it holds |
+| --- | --- |
+| `src/world.rs` | The ears of the World that the crate writes, one for each concern. |
+| `src/world/files.rs` | The files: a read and a write of a path. |
+| `src/world/bash.rs` | The commands: each runs in a shell of the machine, in the working directory of its chain. |
+| `src/world/time.rs` | The clock, a chance, and a wait. |
+| `src/world/store.rs` | The store: the record on the disk, one fact on each line, which one process at a time owns. |
+| `src/world/operator.rs` | The rules by which every console reads what the operator answers. |
+| `src/world/provider.rs`, `src/world/provider/` | The provider of models, which [Changing the provider](#changing-the-provider) gives file by file. |
+| `src/life.rs` | The opening of a life, which every host shares: the record, the ears of the crate, and the extensions. |
+| `src/furb/world.py` | The World of python: the ears of the crate, and the operator at its terminal. The scripts open a life on it. |
+
+## Changing a door
+
+| File | What it holds |
+| --- | --- |
+| `src/binding.rs` | The doors of the crate, one for each host language, each behind the feature that names it. |
+| `src/binding/py.rs` | The door to python, which `bind/python` makes into the package `furb-monty`. |
+| `bind/python/furb_monty/engine.py` | Every name of the contract over one life of the engine in the sandbox. |
+| `src/binding/ts.rs` | The door to TypeScript through N-API, which also makes the declarations of `bind/typescript`. |
+| `src/binding/ts/host.rs` | The door on the thread of JavaScript: a value as the engine takes it, and a generator heard as an ear. |
+| `src/binding/ts/console.rs` | The end of a process that the console of Windows asks for. |
+
+## Changing the suite
+
+`CLAUDE.md` gives the rules of the suite. These are its files:
+
+| File | What it holds |
+| --- | --- |
+| `test/conftest.py` | The harness: the World in memory, the Kernel of this interpreter, and each helper that several files need. |
+| `test/test_<name>.py` | The tests of one definition of the contract, one test for each sentence. |
+| `test/test_hygiene.py` | The hygiene laws. |
+| `test/outside/` | The tests of the World, the Kernel, the door, and the switch, which stand outside the hygiene laws. |
+| `extensions/conftest.py` | The hooks of the harness for the suite of each extension. |
+
 ## Changing the TUI
 
 | File | What it holds |
