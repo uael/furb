@@ -124,10 +124,9 @@ no network.
 ## Changing an extension
 
 An official extension is a word, a contract and a suite in `extensions/<name>/`, and an ear of the World in
-`src/extension/<name>.rs`, which answers the questions of its word from the disk. The hygiene laws hold the contract
-to its suite as they hold the engine, and the suite runs on both engines. The crate carries the manifest and the word,
-so a change of either needs `uv sync --reinstall-package furb-monty --reinstall-package furb-cli`. [The guide of the extensions](extensions.md)
-says how a life runs one.
+`src/extension/<name>.rs`, which answers the questions of its word from the disk. [The guide of the
+extensions](extensions.md) says which hygiene laws hold it and how a life runs it. The crate carries the manifest and
+the word, so a change of either needs `uv sync --reinstall-package furb-monty --reinstall-package furb-cli`.
 
 ## Changing the command line
 
