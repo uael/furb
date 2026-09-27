@@ -45,8 +45,10 @@ async def test_the_memory_of_a_folder_is_its_claude_md_file_or_its_agents_md_fil
   top = noted(tmp_path / "work", "t\n")
   noted(tmp_path / "work", "a\n", "AGENTS.md")
   sub = noted(tmp_path / "work" / "sub", "s\n", "AGENTS.md")
+  noted(tmp_path / "work" / "low", "l\n", "claude.md")
   _, root = extended("memory", tmp_path, _monty.memory)
-  assert await paths(root, tmp_path, "sub/c.txt") == [str(user), str(top), str(sub)]
+  assert await paths(root, tmp_path, "low/c.txt") == [str(user), str(top)]
+  assert await paths(root, tmp_path, "sub/c.txt") == [str(sub)]
 
 
 async def test_the_world_leaves_out_a_memory_file_whose_content_the_chain_holds(tmp_path: Path) -> None:
