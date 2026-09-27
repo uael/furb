@@ -723,7 +723,7 @@ def boot(record=(), **outside):
         if name not in taken and (f := "journal" in alive and first.get(name)):
           if f[0] == "done":
             with site.set("journal"):
-              says("done", name, *f[3:])
+              says("done", name, f[3])
           else:
             taken.add(name)
             holding.append(name)
