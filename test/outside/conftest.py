@@ -1,4 +1,4 @@
-"""The harness for the three modules around the engine: the World, the Kernel and the provider.
+"""The harness for the modules around the engine: the World, the Kernel and the door.
 
 The engine's own laws are proved in test/, against engine.pyi, sentence for sentence. What is proved here is what
 stands outside it: a World that answers from a script, a model of the provider of the crate that answers from one,
