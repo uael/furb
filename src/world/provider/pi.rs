@@ -143,10 +143,13 @@ impl Heard {
           return Some(Err(ended));
         }
       }
-      let text = String::from_utf8_lossy(&self.buffer).replace("\r\n", "\n");
-      let Some(at) = text.rfind("\n\n") else { continue };
-      self.buffer = text.as_bytes()[at + 2..].to_vec();
-      for block in text[..at].split("\n\n") {
+      // A line ends in a return and a new line, or in a new line; the data of an event holds no return. A chunk may
+      // end within a letter, so only the whole events are read as text, and the bytes after them wait.
+      self.buffer.retain(|one| *one != b'\r');
+      let Some(at) = self.buffer.windows(2).rposition(|two| two == b"\n\n") else { continue };
+      let rest = self.buffer.split_off(at + 2);
+      let whole = std::mem::replace(&mut self.buffer, rest);
+      for block in String::from_utf8_lossy(&whole[..at]).split("\n\n") {
         let data = block.lines().find_map(|line| line.strip_prefix("data:")).map(str::trim);
         let Some(event) =
           data.filter(|one| *one != "[DONE]").and_then(|one| serde_json::from_str(one).ok())
@@ -209,3 +212,7 @@ impl Heard {
     self.parts.push_back(Ok(part));
   }
 }
+
+#[cfg(test)]
+#[path = "pi.test.rs"]
+mod test;
