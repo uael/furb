@@ -13,12 +13,16 @@ async def test_the_memory_of_a_chain_kept(tmp_path: Path) -> None:
   top = noted(tmp_path / "work", "one\n")
   sub = noted(tmp_path / "work" / "sub", "two\n")
   (tmp_path / "work" / "sub" / "a.txt").write_text("a\n", encoding="utf-8")
-  _, root = extended("memory", tmp_path, _monty.memory)
+  sand, root = extended("memory", tmp_path, _monty.memory)
   watcher = await engine.rung("close(remember())", on=root)
   assert isinstance(watcher, str)
   assert recalled(root, tmp_path) == [f"#memory {top}\n# {top}, 0 known\n# 1 one"]
   await engine.rung('read("sub/a.txt")', on=root)
   assert recalled(root, tmp_path)[1:] == [f"#memory {sub}\n# {sub}, 0 known\n# 1 two"]
+  sand.files["note://a"] = "a\n"
+  asked = [a for a in engine.transcript(on=root) if a[0] == "memory"]
+  await engine.rung('read("note://a")', on=root)
+  assert [a for a in engine.transcript(on=root) if a[0] == "memory"] == asked, "a path of a scheme is no folder"
   top.write_text("three\n", encoding="utf-8")
   engine.stand()
   assert recalled(root, tmp_path)[2:] == [f"#memory {top}\n# {top}, 0 known\n# 1 three"]

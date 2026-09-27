@@ -15,7 +15,9 @@ def remember(on: str = "") -> Act:
     memory(on=on)
     while True:
       match (yield):
-        case ("done", about, _, Text(path)) if question(("read", about)) and scope(about) == scope(id):
+        case ("done", about, _, Text(path)) if (
+          question(("read", about)) and scope(about) == scope(id) and "://" not in path
+        ):
           memory(path, on)
         case ("done", about, *_) if question(("stand", about)):
           memory(on=on)
