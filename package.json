@@ -13,7 +13,7 @@
     "animation": "bun run tui/script/animation.ts",
     "docs": "bun run tui/script/docs.ts",
     "check": "tsc --noEmit",
-    "test": "bun test --timeout 30000 bind/typescript/test tui/test",
+    "test": "FURB_CONFIG_DIR=.furb/tests bun test --timeout 30000 bind/typescript/test tui/test",
     "format": "biome format --write bind/typescript tui package.json tsconfig.json biome.json",
     "lint": "biome check bind/typescript tui package.json tsconfig.json biome.json"
   },

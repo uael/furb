@@ -4,7 +4,7 @@
 left behind. The collection is at https://github.com/datacurve-ai/deep-swe, and the rig fetches it once.
 
 The one law of the rig is that no rule of it reaches the model. The system prompt is the engine, minified, and
-nothing else. The message is the instruction of the task as the task wrote it, and one line that asks the model to
+nothing else, and the life enables no extension, so no rung of one reaches the chain. The message is the instruction of the task as the task wrote it, and one line that asks the model to
 close with a float from 0 to 1 for how sure it is that the work is done. Under 0.9, the operator says that the
 level is too low and asks the model to go on, on the same chain. The model reads no other word.
 

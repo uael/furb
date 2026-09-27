@@ -54,13 +54,17 @@ impl Fact {
 
   /// Whether the fact is a question: one whose name is its kind and a number, as every act is named.
   pub fn question(&self) -> bool {
-    self
-      .about()
-      .strip_prefix(self.kind())
-      .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|one| one.is_ascii_digit()))
+    named(self.about(), self.kind())
   }
 
   fn at(&self, i: usize) -> &str {
     entry(&self.0.as_ref(), i).and_then(|one| one.as_str()).unwrap_or_default()
   }
+}
+
+/// Whether a name is the name of an act of a kind: the kind and a number, as `chain1` or `stand3`.
+pub fn named(name: &str, kind: &str) -> bool {
+  name
+    .strip_prefix(kind)
+    .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|one| one.is_ascii_digit()))
 }

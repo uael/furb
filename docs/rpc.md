@@ -12,10 +12,11 @@ furb --mode rpc --record session.jsonl --cwd path/to/project --model claude-cli:
 - `--cwd` is the directory the chains of the life start in. When you do not give it, it is the current directory.
 
 The life runs on the engine of the crate and on the ears of the World that the crate writes: the files, the
-commands, time, the store of the record, and the provider of models. The catalog of the crate knows the models, each
-named `provider:id`, and offers those of the claude command line, `claude-cli:opus`, `claude-cli:sonnet`,
-`claude-cli:haiku` and `claude-cli:fable`, when furb finds the program, and those of each provider whose credential,
-such as `ANTHROPIC_API_KEY`, stands in the environment. The roster of the life holds the model of the default actor,
+commands, time, the store of the record, the provider of models, and the extensions, which the life enables at its
+start as the configs of the user and of the directory say, and whose words it plays as rungs on each chain. The
+catalog of the crate knows the models, each named `provider:id`, and offers those of the claude command line,
+`claude-cli:opus`, `claude-cli:sonnet`, `claude-cli:haiku` and `claude-cli:fable`, when furb finds the program, and
+those of each provider whose credential, such as `ANTHROPIC_API_KEY`, stands in the environment. The roster of the life holds the model of the default actor,
 the models that `--roster` names, and the operator, which is the client. `--model provider:model/effort` names the
 default actor, and a prompt that names no actor goes to it. When it is not given, the default actor is the first
 model the catalog offers at its least effort, `claude-cli:opus/low` when furb finds the claude command line. The
@@ -61,7 +62,7 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
 | `turns` | `on` | `{"turns": [...]}` |
 | `transcript` | `on` | `{"facts": [...]}` |
 | `peek` | `act` | `{"done": false}`, or `{"done": true, "value": ...}`, or `{"done": true, "raised": ...}` |
-| `state` | none | `{"root", "record", "standing", "paused", "prompts", "acts"}` |
+| `state` | none | `{"root", "record", "standing", "extensions", "paused", "prompts", "acts"}` |
 
 - `prompt` prompts an actor on a chain. `message` is what the actor reads, and the actor reads the transcript alone
   when there is no message. `shape` is the name of the type of the response, such as `int`, `str` or `list[str]`,
@@ -79,8 +80,8 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
 - `transcript` gives the facts on a chain, in the order of the log.
 - `peek` gives what an act came to, when it is done.
 - `state` gives the root, the path of the record, the standing, which is the roster, the directory and the default
-  actor, whether a pause stands over the root, each prompt to the operator that waits for a close, and each act that
-  a `prompt` or a `rung` of the client made that is not done.
+  actor, the names of the extensions that the life runs, whether a pause stands over the root, each prompt to the
+  operator that waits for a close, and each act that a `prompt` or a `rung` of the client made that is not done.
 
 ## Responses
 

@@ -67,7 +67,7 @@ ignore = ["S101"]
 [tool.ruff.lint.per-file-ignores]
 # The suite pins the contract's own literals, drives doubles that answer in one sentence where they stand, and
 # names its tests by the sentence they carry.
-"test/**" = ["PLR2004", "EM101", "TRY003", "FBT003", "PT018", "PLR0912", "A002", "E501"]
+"{test,extensions/*/test}/**" = ["PLR2004", "EM101", "TRY003", "FBT003", "PT018", "PLR0912", "A002", "E501"]
 # The stand-in has one arm for each kind of value it makes again, and a life opens on everything it takes: the
 # engine, the sheet, the names, the record, and the two objects of the host. The sandbox makes no class from a
 # class of the interpreter, so the protocols of the two objects are read by ty and never run.
@@ -75,6 +75,10 @@ ignore = ["S101"]
 # The surface speaks the engine's own vocabulary: its parameters shadow builtins on purpose, its exceptions are
 # named as the contract names them, and each sentence of the contract stands on one line of its own.
 "src/furb/engine.pyi" = ["N818", "A002", "E501"]
+"extensions/*/*.pyi" = ["E501"]
+# A word speaks the vocabulary of the engine, which a model reads: the ear of an act takes its id, untyped, as the
+# ears of the engine do.
+"extensions/*/*.py" = ["A002", "ANN001"]
 # The sandbox carries no bound method as a value, so boot binds each read of the life through a lambda.
 "src/furb/engine.py" = ["PLW0108", "S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "FBT001", "FBT002", "ARG001", "ANN", "EM101", "EM102", "TRY003", "PLR0917", "PLR0912", "PLR0915", "SIM105"]
 
@@ -102,7 +106,12 @@ docstring-code-format = true
 skip-magic-trailing-comma = true
 
 [tool.ty.src]
-include = ["src", "test", "script", "bind/python"]
+include = ["src", "test", "script", "bind/python", "extensions"]
+
+# The suite of an extension imports the harness of the engine, as pytest does from its pythonpath, and not the
+# conftest of its own folder, which only hands it the hooks.
+[tool.ty.environment]
+extra-paths = ["test"]
 
 # The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
 # of an act, a task or a standing it reads after the check the sentence beside it makes.
@@ -124,7 +133,7 @@ unresolved-attribute = "ignore"
 unresolved-import = "ignore"
 
 [tool.pytest.ini_options]
-testpaths = ["test"]
+testpaths = ["test", "extensions"]
 pythonpath = [".", "test"]
 # The suite runs on every core: a test opens a life of its own and leaves nothing behind, so the tests are independent.
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-n", "auto", "--cov=furb", "--cov=furb_monty", "--cov-report=term-missing"]

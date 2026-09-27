@@ -5,7 +5,6 @@ import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { removeDemoDirectories, seedDemo, seedDemoFiles } from "../src/demo.ts";
-import { Extensions } from "../src/extensions.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
@@ -42,17 +41,16 @@ let session = await gallerySession();
 const test = await createTestRenderer({ width: 152, height: 46 });
 let app!: () => App;
 let library!: Workspaces;
-const extensions = new Extensions(() => session);
 /** A session on the stage, under the name of a first session when it has no name of its own. */
 async function show(next: Session): Promise<void> {
   session = next;
   if (session.sessionName === basename(session.host.directory)) await session.command("/name Session 1");
-  ({ library, app } = await mount(session, test.renderer, extensions));
+  ({ library, app } = await mount(session, test.renderer));
 }
 await show(session);
 
 /** The shots whose notice tells what the step did, which keep it. The others show no notice of an earlier step. */
-const notices = /^(34|36|37|43|44|45|50)-/;
+const notices = /^(34|36|37|42|43|44|45|50)-/;
 /** The work of the chain completes, and the queue sends what waits in it, until nothing is left to do. */
 async function settle(): Promise<void> {
   await session.refresh();
@@ -290,7 +288,7 @@ try {
   await research.session.submit("/pause");
   await library.select(main);
   session = main.session;
-  app = follow(test.renderer, { quit() {}, workspaces: library, extensions });
+  app = follow(test.renderer, { quit() {}, workspaces: library });
   await until(
     library,
     () =>
@@ -384,12 +382,9 @@ try {
   await capture("41-slash-suggestions");
   app().composer.setText("");
   app().closeOverlay();
-  app().composer.setText(`/extension ${resolve("tui/examples/project-summary.ts")}`);
+  app().composer.setText("/extensions");
   await app().submit();
-  app().palette();
-  await test.mockInput.typeText("Summarize this project");
   await capture("42-extension-command");
-  app().closeOverlay();
   await settle();
   await session.submit("/undo");
   await capture("43-undo-message");
@@ -435,6 +430,5 @@ try {
   app().dispose();
   test.renderer.destroy();
   await library.dispose();
-  await extensions.dispose();
   await removeDemoDirectories();
 }

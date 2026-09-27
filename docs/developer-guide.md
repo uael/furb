@@ -63,6 +63,14 @@ no network.
 | `src/world/provider/claude.rs` | The claude command line, as a model of rig. |
 | `src/world/provider/images.rs` | The images that a message names, each kept under the digest of its bytes. |
 
+## Changing an extension
+
+An official extension is a word, a contract and a suite in `extensions/<name>/`, and an ear of the World in
+`src/extension/<name>.rs`, which answers the questions of its word from the disk. The hygiene laws hold the contract
+to its suite as they hold the engine, and the suite runs on both engines. The crate carries the manifest and the word,
+so a change of either needs `uv sync --reinstall-package furb-monty`. [The guide of the extensions](extensions.md)
+says how a life runs one.
+
 ## Changing the command line
 
 `furb` is the program of the package `furb-cli` in `cli/`. `cargo run -p furb-cli -- --help` runs it from the
@@ -70,7 +78,7 @@ clone, and so does `uv run furb --help` after `uv sync`.
 
 | File | What it holds |
 | --- | --- |
-| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns` and `run`. |
+| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `run` and `extensions`. |
 | `cli/src/life.rs` | One life: the ears it opens on, the prompt of the record it takes up, and how the operator awaits an act. |
 | `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back. |
 | `cli/src/rpc.rs` | The JSON-RPC of `--mode rpc`, which `docs/rpc.md` says. Change the two together. |

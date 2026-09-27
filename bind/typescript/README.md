@@ -35,9 +35,15 @@ try {
 }
 ```
 
-A `Session` opens an engine on the ears of the World that the crate writes, which the package gives as `files()`,
-`bash()`, `time()`, `store(path)` and `provider(options)`, and on the console of the operator, which this package
-writes. The files read and write a path against the directory where its chain stands. The commands stream what a command
+A `Session` opens an engine on the ears of the World that the crate writes and on the console of the operator, which
+this package writes. `Engine.open(options, ears)` opens it as every host of the crate opens a life: on the record, on
+the ears of the host, and then on the ears of the crate, which are the extensions, the ear of each official
+extension, the files, the commands, time, and the store of the record. Its `record` getter gives the record it opened
+on. The extensions enable at the start of the life what the configs of the user and of the directory turn on, which
+`docs/extensions.md` says: `SessionOptions.extensions` is false to enable nothing new, and `config` names the config
+directory of the user. A life runs what its record enables either way. The package also gives the ears one by one,
+as `files()`, `bash()`, `time()`, `store(path)` and `provider(options)`, for a host that boots an engine by hand.
+The files read and write a path against the directory where its chain stands. The commands stream what a command
 writes, feed its stdin, and end it at its timeout. Time gives the clock and a chance, and ends a wait. The provider asks
 the models of the catalog of the crate, which `models(claude?)` lists and `model(name)` finds, and it preserves provider
 response blocks in the record. The catalog offers the models of a provider when a credential of it stands in the
@@ -122,12 +128,14 @@ save that fails throws an error that names the file, with the error of the syste
 own files with it.
 
 `inspectRecord(path)` reads pending work through the same native replay without taking a record lock,
-writing files, or starting a model or command. `session.activity` holds the state of every act a person follows,
-and `session.isPaused(id)` reads it.
+writing files, enabling an extension, or starting a model or command. `session.activity` holds the state of every act
+a person follows, and `session.isPaused(id)` reads it. `session.interrupt(chain)` cancels the work of a chain, each
+prompt, rung, command and wait on it that is not done, and not what an extension started on it.
 
 `session.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type,
 size, and `furb-image://` reference. A session with no record copies it into `.furb/images` of its directory. The
-`.furb` that it makes holds a `.gitignore` that keeps it out of version control, as `furbDirectory` makes it.
+`.furb` that it makes holds a `.gitignore` that keeps it out of version control but its `config.json`, as
+`furbDirectory` makes it.
 Put that reference in the prompt as a Markdown image,
 `![design](furb-image://...)`, which `imageReference(image)` writes and `imageReferences(message)` reads. The
 provider hands the python of the turn as it is, and adds each image that the message of a prompt of that turn

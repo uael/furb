@@ -64,6 +64,27 @@ class Engine:
   def dispose(self) -> None:
     """The engine is gone, and its ears with it."""
 
+def official() -> list[tuple[str, str, str]]:
+  """The official extensions, in the order a life runs them, each as its name, its word and its life word."""
+
+def extensions(given: list[tuple[str, str, str]]) -> NativeEar:
+  """The ear of the extensions, given each extension that the life runs as its name, its word and its life word: it
+  enables each at the tip of the life, unless the record enables it, and plays each as a rung on each chain."""
+
+def memory(config: str) -> NativeEar:
+  """The ear of the memory extension, which finds the memory of a path in its folders and in the config directory."""
+
+def skills(config: str) -> NativeEar:
+  """The ear of the skills extension, which finds skills in the folders of a chain and in the config directory."""
+
+def opened(
+  directory: str, record: str | None = None, *, keeps: bool = True, extensions: bool = True, config: str | None = None
+) -> tuple[list[list[list[object]]], list[tuple[str, NativeEar]]]:
+  """The record a life opens on, and the ears of the crate that it hears after the ears of the host, as every host of
+  the crate opens a life: the extensions, which enable at the tip those that the configs of the user and of the
+  directory turn on unless `extensions` is false, each official extension, the files, the commands, time, and the
+  store of the record when the life keeps."""
+
 def files() -> NativeEar:
   """The ear of the files, which reads and writes a path."""
 

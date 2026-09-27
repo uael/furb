@@ -24,6 +24,8 @@ use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step, Voice,
   ear::{Call, Spoken},
   engine::Hosted,
+  extension::{self, Extension, Places},
+  life::Opening,
   value::{IS, entry, field, marked},
   world,
 };
@@ -620,6 +622,64 @@ fn gate(py: Python<'_>, sheet: &str) -> PyResult<Vec<(usize, String)>> {
   }
 }
 
+/// The official extensions, in the order a life runs them, each as its name, its word and its life word.
+#[pyfunction]
+fn official() -> Vec<(String, String, String)> {
+  extension::official().into_iter().map(|one| (one.name, one.word, one.life)).collect()
+}
+
+/// The ear of the extensions, given each extension that the life runs as its name, its word and its life word: it
+/// enables each at the tip of the life, unless the record enables it, and plays each as a rung on each chain.
+#[pyfunction]
+fn extensions(given: Vec<(String, String, String)>) -> NativeEar {
+  let given = given.into_iter().map(|(name, word, life)| Extension { name, word, life });
+  NativeEar::of(extension::extensions(given.collect()))
+}
+
+/// The ear of the memory extension, which finds the memory of a path in its folders and in the config directory.
+#[pyfunction]
+fn memory(config: std::path::PathBuf) -> NativeEar {
+  NativeEar::of(extension::memory::memory(config))
+}
+
+/// The ear of the skills extension, which finds skills in the folders of a chain and in the config directory.
+#[pyfunction]
+fn skills(config: std::path::PathBuf) -> NativeEar {
+  NativeEar::of(extension::skills::skills(config))
+}
+
+/// The record a life opens on, as python holds it, and the ears of the crate, each under its name.
+type Opened<'py> = (Bound<'py, PyAny>, Vec<(String, NativeEar)>);
+
+/// The record a life opens on, and the ears of the crate that it hears after the ears of the host, as every host of
+/// the crate opens a life: the extensions, which enable at the tip those that the configs of the user and of the
+/// directory turn on unless `extensions` is false, each official extension, the files, the commands, time, and the
+/// store of the record when the life keeps.
+#[pyfunction]
+#[pyo3(signature = (directory, record = None, *, keeps = true, extensions = true, config = None))]
+fn opened(
+  py: Python<'_>,
+  directory: std::path::PathBuf,
+  record: Option<std::path::PathBuf>,
+  keeps: bool,
+  extensions: bool,
+  config: Option<std::path::PathBuf>,
+) -> PyResult<Opened<'_>> {
+  let made = Made::new(py)?;
+  let mut opening = Opening::new();
+  if let Some(config) = config {
+    opening = opening.places(Places { config, ..Places::here() });
+  }
+  if let Some(record) = record {
+    opening = opening.record(record, keeps);
+  }
+  let opening = if extensions { opening.configured(&directory) } else { Ok(opening) };
+  let (record, ears) =
+    opening.and_then(Opening::parts).map_err(|fault| raised(py, &made, &fault))?;
+  let ears = ears.into_iter().map(|(name, ear)| (name, NativeEar::of(ear))).collect();
+  Ok((to_python(py, &made, Object::list(record).as_ref())?, ears))
+}
+
 /// What the engine raised, raised here as the exception it is.
 fn raised(py: Python<'_>, made: &Made, fault: &Fault) -> PyErr {
   match fault_to_python(py, made, fault) {
@@ -980,6 +1040,11 @@ fn bare(shown: &str) -> String {
 fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<PyEngine>()?;
   module.add_class::<NativeEar>()?;
+  module.add_function(wrap_pyfunction!(official, module)?)?;
+  module.add_function(wrap_pyfunction!(extensions, module)?)?;
+  module.add_function(wrap_pyfunction!(memory, module)?)?;
+  module.add_function(wrap_pyfunction!(skills, module)?)?;
+  module.add_function(wrap_pyfunction!(opened, module)?)?;
   module.add_function(wrap_pyfunction!(files, module)?)?;
   module.add_function(wrap_pyfunction!(bash, module)?)?;
   module.add_function(wrap_pyfunction!(time, module)?)?;

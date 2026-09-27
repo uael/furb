@@ -4,9 +4,6 @@
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-only",
-  "exports": {
-    ".": "./src/index.ts"
-  },
   "bin": {
     "furb-tui": "src/cli.ts"
   },

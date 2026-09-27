@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { actorParts, boot, type Ear, type Fact, inspectRecord, Session, type Turn } from "../src/index.ts";
@@ -180,8 +180,9 @@ test("what a model writes streams into the session under its rung until its repl
   try {
     const engine = session.open();
     const prompt = engine.prompt("int", { message: "count", on: engine.root });
-    await until(session, () => session.streams.get("rung1")?.text === "close(3)");
-    expect(session.streams.get("rung1")).toEqual({
+    // The rungs of the two official extensions come first.
+    await until(session, () => session.streams.get("rung3")?.text === "close(3)");
+    expect(session.streams.get("rung3")).toEqual({
       chain: engine.root,
       text: "close(3)",
       thinking: "counting",
@@ -395,9 +396,9 @@ test("record inspection reports pending work when its replay starts or feeds a c
   await first.dispose();
   try {
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
-      "rung1",
+      "rung3",
       "bash1",
-      "rung2",
+      "rung4",
       "bash2",
     ]);
   } finally {
@@ -556,5 +557,39 @@ test("a session opens a record in a directory that does not stand yet, and keeps
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
+  }
+});
+
+test("a session enables the extensions of the configs, and a later session on its record runs them whatever it says", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-extensions-"));
+  const record = join(cwd, "life.jsonl");
+  const config = join(cwd, "config");
+  await writeFile(join(cwd, "CLAUDE.md"), "Use two spaces.\n");
+  /** The names of the extensions that the life of a session runs, which the root says it enabled. */
+  const enabled = (session: Session) =>
+    (session.engine?.transcript({ on: "chain1" }) ?? [])
+      .filter(([kind]) => kind === "enable")
+      .map((fact) => fact[3]);
+  const first = new Session({ cwd, record, config });
+  try {
+    first.open();
+    expect(enabled(first)).toEqual(["memory", "skills"]);
+    const told = first.engine?.turns({ on: "chain1" }).at(-1)?.[1] ?? "";
+    expect(told).toContain(
+      `#memory ${join(cwd, "CLAUDE.md")}\n# ${join(cwd, "CLAUDE.md")}, 0 known\n# 1 Use two spaces.`,
+    );
+  } finally {
+    await first.dispose();
+  }
+  const later = new Session({ cwd, record, config, extensions: false });
+  const fresh = new Session({ cwd, config, extensions: false });
+  try {
+    later.open();
+    fresh.open();
+    expect([enabled(later), enabled(fresh)]).toEqual([["memory", "skills"], []]);
+  } finally {
+    await later.dispose();
+    await fresh.dispose();
+    await rm(cwd, { recursive: true, force: true });
   }
 });

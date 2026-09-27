@@ -7,7 +7,6 @@ import { efforts, furbDirectory, onConsoleEnd } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
 import { follow } from "./app.ts";
 import { demoDirectory, removeDemoDirectories } from "./demo.ts";
-import { Extensions } from "./extensions.ts";
 import { defaultModel, type EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { palettes } from "./theme.ts";
@@ -24,7 +23,6 @@ const { values } = parseArgs({
     record: { type: "string" },
     resume: { type: "string" },
     roster: { type: "string", multiple: true },
-    extension: { type: "string", multiple: true },
   },
 });
 if (values.help) {
@@ -71,17 +69,6 @@ if (record) await library.import(record, group);
 else await library.create(group);
 const initial = library.current?.session;
 if (!initial) throw new Error("The session did not open.");
-const extensions = new Extensions(() => {
-  const session = library.current?.session;
-  if (!session) throw new Error("No session is selected.");
-  return session;
-});
-try {
-  for (const path of values.extension ?? []) await extensions.load(resolve(path));
-} catch (error) {
-  await library.dispose();
-  throw error;
-}
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
   // The TUI ends on a signal by its own quit, since the view saves its draft before the renderer goes.
@@ -99,7 +86,6 @@ const quit = async () => {
   for (const step of [
     () => app().dispose(),
     () => renderer.destroy(),
-    () => extensions.dispose(),
     () => library.dispose(),
     () => removeDemoDirectories(),
   ])
@@ -111,7 +97,7 @@ const quit = async () => {
   for (const error of failures) console.error(error);
   if (failures.length) process.exitCode = 1;
 };
-const app = follow(renderer, { quit, workspaces: library, extensions });
+const app = follow(renderer, { quit, workspaces: library });
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const)
   process.once(signal, () => void quit().finally(() => process.exit()));
 // The runtime gives no signal for Ctrl+Break or for the close of the console of Windows, and ends the process at once.

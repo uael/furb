@@ -21,6 +21,18 @@ provider = _monty.provider(".", actor="claude-cli:opus/low")
 root = engine.boot(record, world=world, provider=provider, **ears)
 ```
 
+`_monty.opened(directory, record)` opens a life as every host of the crate opens one: it gives the record and the
+ears of the crate, which the host boots after its own ears, the provider among them. Those ears are the extensions,
+which enable at the tip what the configs of the user and of the directory turn on unless `extensions=False`, the ear
+of each official extension, the files, the commands, time, and the store when the life keeps. `official()`,
+`extensions(given)`, `memory(config)` and `skills(config)` give the parts of it one by one, as the suite of each
+extension boots them.
+
+```python
+record, ears = _monty.opened(".", "life.jsonl")
+root = engine.boot(record, world=world, provider=provider, **dict(ears))
+```
+
 `provider` offers the model of its `actor` and the models of its `roster`, or the first model the catalog offers
 when it names neither. Its `answer`, a function, answers each request in place of the models, which the suite of
 furb does. Its `stream`, a function, is told what a model writes as it writes it, and `images` is the directory of

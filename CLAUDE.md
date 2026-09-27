@@ -16,6 +16,12 @@ API of its own:
   model whose credential stands in the environment, and the claude command line when it finds the program. A host
   names its default actor and the rest of its roster from the catalog, or gives a model of its own, and adds its own
   ears, such as the console of its operator.
+- `src/extension.rs` says what an extension is and where a host finds the ones that a life runs, and holds the ear
+  `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain.
+  `extensions/` holds the official extensions, `memory` and `skills`, each a word, a contract and a suite, and
+  `src/extension/` holds the ear of the World of each. `docs/extensions.md` says how an extension works.
+- `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate, the extensions among
+  them, after the ears of the host.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate is the type checker of monty. It reads a word on the sheet of the engine,
@@ -26,13 +32,14 @@ API of its own:
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout
   it was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, as Pi does, which
-  `docs/rpc.md` says. `prompt`, `turns` and `run` each open one life on the record they are given. Every life runs on
-  the ears of the crate, on the model of its default actor and the models that `--roster` names, and on a console
-  of the operator. The package `furb` depends on the wheel of `furb-cli`, so `pip install furb` gives the command
-  `furb`.
+  `docs/rpc.md` says. `prompt`, `turns`, `run` and `extensions` each open one life on the record they are given.
+  Every life runs on the ears of the crate, on the model of its default actor and the models that `--roster` names,
+  and on a console of the operator. The package `furb` depends on the wheel of `furb-cli`, so `pip install furb`
+  gives the command `furb`.
 
-The suite runs on both engines. `test/outside/test_monty.py` proves what the door carries that no sentence of the
-contract says.
+The suite runs on both engines, and so does the suite of each extension, `extensions/<name>/test/`, whose conftest,
+`extensions/conftest.py`, hands it the hooks of the harness. `test/outside/test_monty.py` proves what the door
+carries that no sentence of the contract says.
 
 The TypeScript side is a bun workspace at the root, with two packages:
 
@@ -108,18 +115,23 @@ The suite drives the engine through its public API alone, end to end, from the m
 
 ## The hygiene laws
 
-`test/test_hygiene.py` holds the contract and the suite to these laws, and it must stay green:
+`test/test_hygiene.py` holds each contract and its suite to these laws, and it must stay green. The contracts are
+`engine.pyi`, whose suite is `test/`, and the contract of each extension, `extensions/<name>/<name>.pyi`, whose suite
+is the folder `test` beside it.
 
 1. Every sentence of a definition has exactly one test, in the file of that definition, whose docstring is that
    sentence. A constructor and a property are no definitions of their own: their sentences are the class's.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
-4. The module docstring of `engine.pyi` is empty.
+4. The module docstring of each contract is empty.
 5. `engine.py`, minified in layout alone, costs fewer than 6000 tokens to the model that reads it.
 6. The minified `engine.py` parses to the same program as the file on disk.
 7. No name in `engine.py` is bound again beneath a scope that already binds it: a parameter, a local, a loop
    target or an import never takes the spelling of a name of an enclosing function or of the module. Every word
    keeps one meaning.
+8. The word of an official extension parses to the program of its file less the imports of furb.
+9. The word of an official extension binds no name of the engine, and, read after the engine as one module, binds
+   no name again beneath a scope that already binds it.
 
 ## Commands
 
@@ -131,8 +143,8 @@ Run every command from the root of the repository.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole but for the stubs of what boot binds, which the toml excludes with their reason.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
-- `uv run ruff format src test script` then `uv run ruff check src test script`: format and lint. Two spaces of
-  indentation, 120 columns.
+- `uv run ruff format src test script extensions` then `uv run ruff check src test script extensions`: format and
+  lint. Two spaces of indentation, 120 columns.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`:
   the gates of the crate and of the command line. The tests of a module stand beside it, `src/engine.test.rs` beside
@@ -150,8 +162,8 @@ Run every command from the root of the repository.
   day, and the newer of the two holds for each provider.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint, and the tests of the TypeScript
-  side, each of which has thirty seconds. As root, the test of a folder that cannot be read fails, since root reads
-  every folder.
+  side, each of which has thirty seconds. The tests read the configs of `.furb/tests`, and not those of the machine.
+  As root, the test of a folder that cannot be read fails, since root reads every folder.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.
