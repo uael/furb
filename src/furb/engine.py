@@ -42,7 +42,7 @@ def transcript(on: str = "") -> list[tuple]:
 
 
 def ask(kind, on, *words):
-  if isinstance(got := peek(a := act(kind, on, None, *words), Refused(f"{a} not done")), Refused):
+  if isinstance(got := peek(a := act(kind, on, None, *words), Refused(a + " not done")), Refused):
     raise got
   return got
 
@@ -251,7 +251,7 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
 
 def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act:
   if scope(source) != source:
-    raise Refused(f"no chain {source}")
+    raise Refused("no chain " + source)
 
   def ear(id):
     rungs, refused, running, waiting = {}, set(), {}, {}
@@ -356,7 +356,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         and not any(running.values())
         and all(peek(x[1], ...) is not ... for x in transcript() if x[0] == "prompt" and x[3] == id)
       ):
-        prompt(None, f"{unseen} done")
+        prompt(None, unseen + " done")
         unseen = ""
 
   return act("chain", on, ear, label, source)
@@ -475,7 +475,7 @@ class Act[T = object](str):
   def __await__(self) -> Generator[object, Any, T]:
     if acting():
       if question(("chain", self)):
-        raise Refused(f"{self} never settles")
+        raise Refused(self + " never settles")
       return (yield self)
     f = get_running_loop().create_future()
 
@@ -573,7 +573,7 @@ def unquoted(word):
 
 
 def offered(roster, to):
-  return next((w for name, efforts, w in roster if to in (name, *[f"{name}/{x}" for x in efforts])), None)
+  return next((w for name, efforts, w in roster if to in (name, *[name + "/" + x for x in efforts])), None)
 
 
 def covers(a, id):
@@ -660,7 +660,7 @@ def boot(record=(), **outside):
               born.setdefault(kind, {})[name] = name
               continue
             if not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+?\d+", by):
-              raise Drift(f"{name} drifts")
+              raise Drift(name + " drifts")
             with site.set(by):
               try:
                 verb(*words, on=on)
@@ -671,7 +671,7 @@ def boot(record=(), **outside):
       match a := (yield):
         case (kind, about, by, *_) if about in known and by != "journal":
           if a is known[about] and a[4:] != kept.get(about, a)[4:]:
-            raise Drift(f"{about} drifts")
+            raise Drift(about + " drifts")
           if by not in known and by not in driven:
             if about not in kept:
               yield "keep", "", (kept.setdefault(about, known[about]),)
@@ -700,7 +700,7 @@ def boot(record=(), **outside):
     by = (question(("rung", speaker)) and known[speaker][5]) or speaker
     on = on or scope(speaker)
     if not on and kind != "chain":
-      raise Refused(f"no chain for {kind}")
+      raise Refused("no chain for " + kind)
     names = born.setdefault(kind, {})
     a = (kind, name := names.setdefault((by, made[speaker, kind]), kind + str(len(names) + 1)), by, on, *words)
     if known.setdefault(name, a) is a:
@@ -727,7 +727,7 @@ def boot(record=(), **outside):
         offers(a)
         if name not in taken:
           with site.set(name):
-            says("done", name, Refused(f"nothing takes {kind}"))
+            says("done", name, Refused("nothing takes " + kind))
       finally:
         busy.discard(id(a))
       dispatch()
@@ -768,7 +768,7 @@ def boot(record=(), **outside):
 
   def live(g, name):
     if name in alive:
-      raise Refused(f"{name} hears")
+      raise Refused(name + " hears")
     if acting():
       driven.add(name)
     alive[name] = g
