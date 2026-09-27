@@ -169,8 +169,8 @@ pub struct OpenOptions<'env> {
   pub extensions: Option<bool>,
   /// The config directory of the user, in place of the one of this process.
   pub config: Option<String>,
-  /// The actor a prompt goes to when it names none, as model/effort, whose effort moves to the nearest one the model
-  /// takes; the first model of the roster at its least effort when unsaid.
+  /// The actor a prompt goes to when it names none, as model/effort, at its effort as the catalog moves it; the first
+  /// model of the roster when unsaid.
   pub actor: Option<String>,
   /// The models the provider offers beside the model of the actor, each named `provider:id`, or by an id that one
   /// model of the catalog alone holds. When it is unsaid, the model of the actor stands alone, and the first model

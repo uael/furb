@@ -19,7 +19,8 @@ catalog of the crate knows the models, each named `provider:id`, and offers thos
 those of each provider whose credential, such as `ANTHROPIC_API_KEY`, stands in the environment. The roster of the life holds the model of the default actor,
 the models that `--roster` names, and the operator, which is the client. `--model provider:model/effort` names the
 default actor, and a prompt that names no actor goes to it. When it is not given, the default actor is the first
-model the catalog offers at its least effort, `claude-cli:opus/low` when furb finds the claude command line. The
+model the catalog offers, `claude-cli:opus/high` when furb finds the claude command line. An actor that names no effort
+takes `high`, and an effort moves to the nearest one that its model takes. The
 life refuses a prompt to a model that its roster does not hold. An actor may name its model by the id alone, when
 one model alone holds it, and furb names it as the roster does. `FURB_CLAUDE_BIN` names the claude command line, and
 the `claude` on PATH is used when it is not set.

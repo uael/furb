@@ -152,7 +152,7 @@ Run every command from the root of the repository.
   a process, on a claude command line that answers from a script.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
 - `uv run pre-commit run --all-files`: every gate the commit hook runs.
-- `uv run python script/smoke.py`: one real life on claude-cli:opus/low through the claude command line on PATH, or
+- `uv run python script/smoke.py`: one real life on claude-cli:opus/high through the claude command line on PATH, or
   the one `FURB_CLAUDE_BIN` names. It is no test of the suite and spends one prompt.
 - `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
   record.

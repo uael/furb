@@ -10,8 +10,8 @@
 //!
 //! A model is named `provider:id`. The catalog offers the models of a provider when its credential stands in the
 //! environment, with every name that its address holds a place for, and the models of the claude command line when
-//! it finds the program. An effort is one of [`LEVELS`], which each provider reads in its own words, and a level that
-//! a model does not take moves to the nearest one it takes.
+//! it finds the program. An effort is one of [`LEVELS`], which each provider reads in its own words, an actor that
+//! names none takes [`LEVEL`], and a level that a model does not take moves to the nearest one it takes.
 
 use std::{
   collections::{HashMap, HashSet},
@@ -35,6 +35,9 @@ use super::{
 
 /// The levels of effort, from least to most, which an actor names after its model, as `claude-cli:opus/low`.
 pub const LEVELS: [&str; 7] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/// The level of an actor that names none.
+pub const LEVEL: &str = "high";
 
 /// The snapshot of the catalog that the crate carries.
 const SNAPSHOT: &str = include_str!("catalog.json");
@@ -214,8 +217,7 @@ impl Catalog {
 
   /// The models of a roster, and its default actor: the model of the actor, and the models the host names; or, when
   /// the host names no roster, the model of the actor alone, and the first model the catalog offers when there is no
-  /// actor either. The actor is named as the catalog names its model, with its level moved to the nearest one the
-  /// model takes.
+  /// actor either. The actor is named as the catalog names its model, at its level as [`Model::at`] moves it.
   pub fn roster(
     &self,
     names: Option<&[String]>,
@@ -234,11 +236,7 @@ impl Catalog {
       Some(actor) => {
         let (model, level) = self.actor(actor).ok_or_else(|| unknown(actor))?;
         models.insert(0, model.clone());
-        let efforts: Vec<&str> = model.efforts.iter().map(|(name, _)| name.as_str()).collect();
-        Some(match level.and_then(|level| clamp(&efforts, level)) {
-          Some(level) => format!("{}/{level}", model.name),
-          None => model.name.clone(),
-        })
+        Some(model.at(level))
       }
       None => None,
     };

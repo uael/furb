@@ -74,7 +74,7 @@ async def test_a_fault_that_stands_pauses_the_chain_and_the_world_tells_the_oper
     return "is paused" in "".join(told)
 
   assert await until(said)
-  why = "claude-cli:opus/low answered nothing: ProviderError: RuntimeError: the model was not there"
+  why = "claude-cli:opus/high answered nothing: ProviderError: RuntimeError: the model was not there"
   assert "".join(told) == f"{root} is paused: {why}\n"
   assert engine.paused(root)
   assert engine.peek(act, ...) is ...

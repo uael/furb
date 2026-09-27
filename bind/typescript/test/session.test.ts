@@ -189,10 +189,10 @@ test("what a model writes streams into the session under its rung until its repl
     });
     expect(seen).toEqual([
       {
-        actor: "claude-cli:sonnet/low",
+        actor: "claude-cli:sonnet/high",
         chain: engine.root,
         messages: [expect.objectContaining({ role: "user" })],
-        settings: { effort: "low", session: expect.stringMatching(/\/chain1$/) },
+        settings: { effort: "high", session: expect.stringMatching(/\/chain1$/) },
       },
     ]);
     release();
@@ -257,7 +257,7 @@ test("a function of the host that throws answers nothing, and two in a row pause
     const reasons = [...broken.activity.acts.values()]
       .filter((act) => act.kind === "rung")
       .map((act) => act.run?.reason);
-    expect(reasons).toContain("Refused: claude-cli:sonnet/low answered nothing: ProviderError: unavailable");
+    expect(reasons).toContain("Refused: claude-cli:sonnet/high answered nothing: ProviderError: unavailable");
   } finally {
     await broken.dispose();
   }

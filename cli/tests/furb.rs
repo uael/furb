@@ -253,7 +253,7 @@ fn a_prompt_the_world_paused_ends_its_command_with_why_and_goes_on_when_it_is_ta
   missing.env("FURB_CLAUDE_BIN", yard.at.join("missing"));
   let said = refused(missing, "");
   assert!(
-    said.contains("furb: prompt1 is paused: claude-cli:opus/low answered nothing: "),
+    said.contains("furb: prompt1 is paused: claude-cli:opus/high answered nothing: "),
     "{said}"
   );
   assert!(said.contains("A wake from the TUI or from `furb --mode rpc` makes it go on."), "{said}");
@@ -412,7 +412,7 @@ fn a_prompt_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
     (&state["root"], &state["paused"], &state["acts"]),
     (&json!("chain1"), &json!(false), &json!(["prompt1"]))
   );
-  assert_eq!(state["standing"][2], "claude-cli:opus/low");
+  assert_eq!(state["standing"][2], "claude-cli:opus/high");
   let wrong = client.asked("3", json!({"type": "close", "act": "prompt2", "value": "seven"}));
   assert_eq!(wrong["success"], false, "a close of the wrong shape is refused: {wrong}");
   client.data("4", json!({"type": "close", "act": "prompt2", "value": 7}));
@@ -459,7 +459,7 @@ fn a_life_offers_the_model_of_its_default_actor_and_the_models_it_names_and_no_m
   assert!(first.ended(), "the record is free for the next life");
   assert_eq!(
     (roster, actor),
-    (vec!["claude-cli:opus".to_owned(), "operator".to_owned()], json!("claude-cli:opus/low"))
+    (vec!["claude-cli:opus".to_owned(), "operator".to_owned()], json!("claude-cli:opus/high"))
   );
   let mut client = Client::with(&yard, &["--model", "sonnet/high", "--roster", "haiku"]);
   let (roster, actor) = names(&mut client);

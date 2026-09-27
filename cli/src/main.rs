@@ -62,8 +62,8 @@ struct Place {
 /// of that actor. The standing of every chain tells the roster, so a life offers the models it names and no more.
 #[derive(Args, Default)]
 struct Stand {
-  /// The actor a prompt goes to when it names none, as provider:model/effort; the first model the catalog offers,
-  /// at its least effort, when unsaid.
+  /// The actor a prompt goes to when it names none, as provider:model/effort; the first model the catalog offers when
+  /// unsaid.
   #[arg(long)]
   model: Option<String>,
   /// A model the life offers beside the model of that actor, as provider:model; say it again for each model.

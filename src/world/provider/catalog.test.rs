@@ -222,7 +222,11 @@ fn a_roster_holds_the_model_of_its_actor_first_and_the_models_a_host_names() {
     catalog.roster(Some(&named), Some("openai:gpt-5/medium")).expect("the actor is named");
   assert_eq!((models.len(), actor.as_deref()), (2, Some("openai:gpt-5/high")));
   let (_, actor) = catalog.roster(Some(&named), Some("claude-opus-5")).expect("the model alone");
-  assert_eq!(actor.as_deref(), Some("anthropic:claude-opus-5"));
+  assert_eq!(
+    actor.as_deref(),
+    Some("anthropic:claude-opus-5/high"),
+    "an actor that names no effort takes high"
+  );
   let no = catalog.roster(Some(&["nothing".to_owned()]), None).err();
   assert_eq!(no.as_deref(), Some("No model is nothing. Name one as provider:id."));
 }

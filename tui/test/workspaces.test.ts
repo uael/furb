@@ -254,7 +254,7 @@ test("a model of the catalog that the roster does not hold joins the session, wh
     expect(first?.roster.map(([name]) => name)).toEqual(["claude-cli:opus", "operator"]);
     await until(library, () => first?.catalog.some(([name]) => name === "claude-cli:sonnet") ?? false);
     await first?.submit("/model sonnet");
-    await until(library, () => entry.session !== first && entry.session?.actor === "claude-cli:sonnet/low");
+    await until(library, () => entry.session !== first && entry.session?.actor === "claude-cli:sonnet/high");
     expect(entry.session?.roster.map(([name]) => name)).toEqual([
       "claude-cli:opus",
       "claude-cli:sonnet",

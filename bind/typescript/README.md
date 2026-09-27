@@ -41,24 +41,24 @@ this package writes. `Engine.open(options, ears)` opens it as every host of the 
 the ears of the host, and then on the ears of the crate, which are the provider of the models, the extensions, the ear
 of each official extension, the files, the commands, time, and the store of the record. Its `record` getter gives the
 record it opened on. The extensions enable at the start of the life what the configs of the user and of the directory
-turn on, which `docs/extensions.md` says: `SessionOptions.extensions` is false to enable nothing new, and `config`
-names the config directory of the user. A life runs what its record enables either way. The package also gives the
-ears of the files, the commands, time and the store one by one, as `files()`, `bash()`, `time()` and `store(path)`, for
-a host that boots an engine by hand. The files read and write a path against the directory where its chain stands.
-The commands stream what a command writes, feed its stdin, and end it at its timeout. Time gives the clock and a
-chance, and ends a wait. The provider asks the models of the catalog of the crate, which `models(claude?)` lists and
-`model(name)` finds, and it preserves provider response blocks in the record. The catalog offers the models of a
-provider when a credential of it stands in the environment, such as `ANTHROPIC_API_KEY`, and the models of the claude
-command line when it finds the program. The host names what the provider offers beside the model of the default actor
-in `roster`, as `provider:id`, and the default actor in `model` and `effort`: the first of the roster, and `low`, when
-unsaid. When the roster is unsaid too, the session stands on the default of the crate, the first model that the
-catalog offers, at its least effort. A roster that names no model, with no model, offers the operator alone, and a
-prompt that names no actor goes to the operator. The standing of every chain tells the roster, so a session offers the
-models it names and not the whole catalog. The effort moves to the nearest one the model takes, among `levels()`. A
-name without its provider names the one model of that id. A reopened session offers what its host names now.
-It keeps the model and the effort that the host chose last, and takes that model when the host names none and the
-catalog knows it. The journal keeps each stand and what the provider answered it, and every life stands again as it
-opens, so a later life tells the new standing on each chain whose standing changed.
+turn on, which `docs/extensions.md` says: `SessionOptions.extensions` is false to enable nothing new, and `config` names
+the config directory of the user. A life runs what its record enables either way. The package also gives the ears of the
+files, the commands, time and the store one by one, as `files()`, `bash()`, `time()` and `store(path)`, for a host that
+boots an engine by hand. The files read and write a path against the directory where its chain stands. The commands
+stream what a command writes, feed its stdin, and end it at its timeout. Time gives the clock and a chance, and ends a
+wait. The provider asks the models of the catalog of the crate, which `models(claude?)` lists and `model(name)` finds,
+and it preserves provider response blocks in the record. The catalog offers the models of a provider when a credential
+of it stands in the environment, such as `ANTHROPIC_API_KEY`, and the models of the claude command line when it finds
+the program. The host names what the provider offers beside the model of the default actor in `roster`, as
+`provider:id`, and the default actor in `model` and `effort`: the first of the roster when unsaid. When the roster is
+unsaid too, the session stands on the default of the crate, the first model that the catalog offers. A roster that names
+no model, with no model, offers the operator alone, and a prompt that names no actor goes to the operator. The standing
+of every chain tells the roster, so a session offers the models it names and not the whole catalog. An actor that names
+no effort takes `high`, and an effort moves to the nearest one the model takes, among `levels()`. A name without its
+provider names the one model of that id. A reopened session offers what its host names now. It keeps the model and the
+effort that the host chose last, and takes that model when the host names none and the catalog knows it. The journal
+keeps each stand and what the provider answered it, and every life stands again as it opens, so a later life tells the
+new standing on each chain whose standing changed.
 
 The claude command line is the provider `claude-cli` of the catalog, with the models `opus`, `sonnet`, `haiku` and
 `fable`. It follows the pooled session design in [dirt](https://github.com/uael/dirt/tree/main/packages/cli/src/providers).

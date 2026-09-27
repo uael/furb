@@ -16,7 +16,7 @@ own:
 ```python
 from furb_monty import _monty, engine
 
-record, ears = _monty.opened(".", "life.jsonl", actor="claude-cli:opus/low")
+record, ears = _monty.opened(".", "life.jsonl", actor="claude-cli:opus")
 # `world` is an ear of the host that answers the rest, a prompt to the operator among it.
 root = engine.boot(record, world=world, **dict(ears))
 ```
