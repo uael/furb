@@ -376,10 +376,8 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
     yield told(id, f"usd={usd} share={share}", bound(id, "None"))
     while True:
       match (yield):
-        case ("done", about, _, (_, _, (tokens, *_, dollars), _)) if (
-          question(("reply", about)) and scope(about) == here
-        ):
-          spent += dollars
+        case ("done", about, _, (_, _, (tokens, *_, cost), _)) if question(("reply", about)) and scope(about) == here:
+          spent += cost
           filled = tokens / (offered(standing()[0], get(about)[4]) or WINDOW)
           yield told(get(about)[2], f"ledger spent={spent} filled={filled}")
           if (usd and spent >= usd) or (share and filled >= share):
