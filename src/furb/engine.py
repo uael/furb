@@ -254,7 +254,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     raise Refused("no chain " + source)
 
   def ear(id):
-    rungs, refused, running, waiting = {}, set(), {}, {}
+    rungs, refused, running, waiting = program(source), set(), {}, {}
     asking, unseen, last = "", "", standing()
 
     def takes(roster, where, actor):
@@ -292,7 +292,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           )
         ],
       )
-      rungs.update(program(source))
     yield "started", id
     yield told(id, f"{label} from {source}".strip() if source else label, bound(id))
     yield from replay()
