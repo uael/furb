@@ -137,7 +137,9 @@ is the folder `test` beside it.
 
 ## Commands
 
-Run every command from the root of the repository.
+Run every command from the root of the repository. Before it runs a command, `uv run` syncs the environment, and
+after a change of the crate it builds the crate again and says nothing, so a short command can take minutes. To
+prevent this, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
   `furb-monty`, and the command line into the package `furb-cli`. After a change of the crate,
