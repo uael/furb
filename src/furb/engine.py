@@ -281,8 +281,18 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     if source:
       theirs = transcript(source)
       picked = (filter or (lambda x: x))([x for x in theirs if question(x)])
-      picked += [x for x in theirs if x[0] == "reply" and any(under(one[1], x[2]) for one in picked)]
-      yield "prefix", id, [it for it in theirs if it[1] == source or any(under(one[1], it[1]) for one in picked)]
+      yield (
+        "prefix",
+        id,
+        [
+          it
+          for it in theirs
+          if it[1] == source
+          or any(
+            under(one[1], it[1]) or (question(("reply", it[1])) and under(one[1], get(it[1])[2])) for one in picked
+          )
+        ],
+      )
       rungs.update(program(source))
     yield "started", id
     yield told(id, f"{label} from {source}".strip() if source else label, bound(id))
