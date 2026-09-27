@@ -13,7 +13,7 @@ the TUI. When the two differ, `CLAUDE.md` is right, and this guide must change.
 | [uv](https://docs.astral.sh/uv/) | The Python environment, the hooks, and every Python command. |
 | Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the packages `furb-monty` and `furb-cli`. rustup reads the version from the file. |
 | [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings and the TUI. On Windows, bun 1.3 crashes the TUI. |
-| The `claude` command line, signed in | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`. The demo and the suite need no model. |
+| The `claude` command line, signed in, or the credential of a provider | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`. The demo and the suite need no model. |
 
 Then set up a clone as the [README](../README.md#try-it) says, and install the hooks, which run at each commit:
 
@@ -47,6 +47,19 @@ uv run pre-commit install
 
 A screen must read clearly at first sight. `bun run screenshots` with `FURB_GALLERY_ONLY` set to a pattern, such as
 `^0[1-5]-`, writes only the captures that match.
+
+## Changing the provider
+
+The provider of models is an ear of the crate, which every host stands on. Its tests stand beside each module and ask
+no network.
+
+| File | What it holds |
+| --- | --- |
+| `src/world/provider.rs` | The ear: the standing, each reply, the messages of a turn, what a model writes as it writes it, and the usage of a turn. |
+| `src/world/provider/catalog.rs` | The catalog: the snapshot and its cache, which models it offers, the efforts of each kind of request, and the roster. |
+| `src/world/provider/catalog.json` | The snapshot of models.dev, one model on each line, which `script/catalog.py` makes again. |
+| `src/world/provider/claude.rs` | The claude command line, as a model of rig. |
+| `src/world/provider/images.rs` | The images that a message names, each kept under the digest of its bytes. |
 
 ## Changing the command line
 

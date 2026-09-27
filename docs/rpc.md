@@ -12,10 +12,14 @@ furb --mode rpc --record session.jsonl --cwd path/to/project
 - `--cwd` is the directory the chains of the life start in. When you do not give it, it is the current directory.
 
 The life runs on the engine of the crate and on the ears of the World that the crate writes: the files, the
-commands, time, the store of the record, and the provider of models. The models are those of the claude command line:
-fable, opus, sonnet and haiku, each at the efforts low, medium, high, xhigh and max. The roster also holds the
-operator, which is the client. A prompt that names no actor goes to `opus/low`. `FURB_CLAUDE_BIN` names the claude
-command line, and the `claude` on PATH is used when it is not set.
+commands, time, the store of the record, and the provider of models. The models are every model that the catalog of
+the crate offers, each named `provider:id`: those of the claude command line, `claude-cli:opus`, `claude-cli:sonnet`,
+`claude-cli:haiku` and `claude-cli:fable`, when furb finds the program, and those of each provider whose credential,
+such as `ANTHROPIC_API_KEY`, stands in the environment. The roster also holds the operator, which is the client. A
+prompt that names no actor goes to the first model at its least effort, `claude-cli:opus/low` when furb finds the
+claude command line. An actor may name its model by the id alone, when one model alone holds it, and furb names it
+as the roster does. `FURB_CLAUDE_BIN` names the claude command line, and the `claude` on PATH is used when it is not
+set.
 
 ## Framing
 

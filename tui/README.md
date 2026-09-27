@@ -10,7 +10,7 @@ uv sync
 bun install
 bun run build
 bun run demo                 # A local, scripted life. No model request.
-bun run tui                  # Claude CLI through pi-ai.
+bun run tui                  # A real life, on the models of the catalog of the crate.
 bun run tui -- --resume .furb/sessions/example.jsonl
 ```
 
@@ -18,7 +18,8 @@ bun run tui -- --resume .furb/sessions/example.jsonl
 after `--`.
 
 Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
-a new life. Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
+a new life. With no `--roster`, the TUI offers every model that the catalog of the crate offers, the default model
+first. Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
 a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.session.json`, `.changes.jsonl`, and
 `.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory
 too when the session has image attachments. An unfinished session opens paused and offers a resume choice. The
@@ -146,12 +147,11 @@ command. ⌥E or `/editor` edits the current draft with `VISUAL`, then `EDITOR`,
 that runs commands; configure the editor to wait until the file is saved and closed.
 `/image path` attaches a PNG, JPEG, GIF, or WebP file. ⌃V or bare `/image` pastes an image through macOS
 AppKit, Windows PowerShell, Wayland `wl-paste`, or X11 `xclip`. Attachments have a limit of 20 MiB each and are
-copied beside the record. The provider of the session sends them as pi-ai image blocks, with their references kept
-in the prompt.
+copied beside the record. The provider of the session sends them to a model that takes images, with their
+references kept in the prompt.
 Click the attachment row to open or remove an image from the draft.
 `/model` and `/effort` open separate pickers. `/model name` takes `provider:model` or the model's id alone, by
-the rule of the provider. Each model offers the efforts in its pi-ai metadata, saved in
-the chain's roster. A model change keeps the current effort if the new model offers it.
+the rule of the catalog. Each model offers the efforts that the catalog gives it, saved in the chain's roster. A model change keeps the current effort if the new model offers it.
 
 The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
 historical checkpoint. A branch that the rewind tree makes uses the engine's `take` filter and runs as an operator
