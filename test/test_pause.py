@@ -1,6 +1,6 @@
 """pause, which holds what the acts it is over hear until the wake."""
 
-from conftest import born, heads, paragraphs, ran, rows, said, settle, stalled, world_says
+from conftest import born, chained, heads, paragraphs, ran, rows, said, settle, slow, stalled, world_says
 from furb import engine
 
 
@@ -71,8 +71,7 @@ async def test_a_paused_chain_goes_quiet_as_its_in_flight_work_returns() -> None
 
 async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
   """A kind a pause stops: it starts its ear, and while a pause over it stands the ear hears nothing, and at the wake it hears everything that was said meanwhile, in order."""
-  sand, _, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  sand, _, root, act = slow()
   await settle()
   assert [one[1] for one in sand.calls if one[0] == "bash"] == [act]
   assert paragraphs(engine.turns(on=root))[-1] == f"#{act} slow\n{act}: Act[Exit] = Act({act!r})"
@@ -89,8 +88,7 @@ async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
 
 async def test_an_act_made_in_that_time_it_hears_at_once() -> None:
   """An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, so a paused rung takes the wants of its run."""
-  sand, log, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  sand, log, root, act = slow()
   await settle()
   engine.pause(act)
   assert engine.read(f"{act}/stdout", on=root).content == ""
@@ -122,8 +120,7 @@ async def test_a_pause_stands_over_what_is_made_after_it_until_the_wake() -> Non
 async def test_a_control_is_on_the_scope_of_what_it_is_over() -> None:
   """A control is on the scope of what it is over, so it takes no chain of its own."""
   _, log, root = born(auto=False)
-  two = engine.chain("two")
-  await settle()
+  two = await chained("two")
   act = engine.bash("slow", on=two)
   engine.pause(act)
   await settle()

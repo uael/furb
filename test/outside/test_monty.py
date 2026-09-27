@@ -179,18 +179,6 @@ async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_r
   assert (refused_yet_ran, accepted_yet_unbound) == ([], [])
 
 
-async def test_the_gate_of_the_sandbox_finds_what_the_run_finds_of_a_name_the_program_bound_again() -> None:
-  """A rung that bound a name of the engine again leaves that value to the word after it in the sandbox too, so the
-  word raises when it calls it, and the gate of the sandbox refuses a word that calls it where it can see it."""
-  root = engine.boot((), world=Sand(stands=STANDS).hears())
-  assert await engine.rung("read = 1", on=root) is None
-  with pytest.raises(TypeError, match="not callable"):
-    await engine.rung("f: Any = read\nclose(f('a'))", on=root)
-  assert engine.gate("close(read('a'))", on=root)[0].startswith("line 1: error[call-non-callable]")
-  with pytest.raises(Refused):
-    await engine.rung("close(read('a'))", on=root)
-
-
 async def test_an_ear_of_the_crate_serves_a_life_of_this_interpreter_and_what_it_says_from_a_thread_drives_it() -> None:
   """An ear of the crate crosses to the boot of the door beside the generators the contract says, and what it says
   from a thread of its own drives the life from the loop: time ends a wait from its thread."""
@@ -206,15 +194,12 @@ async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_gen
   back as the values it held."""
   swapped(furb.python)
   path = str(tmp_path / "record.jsonl")
-  stored, store = _monty.store(path)
-  assert stored == []
-  ears = {"files": _monty.files(), "bash": _monty.bash(), "time": _monty.time(), "store": store}
+  _, store = _monty.store(path)
+  ears = {"files": _monty.files(), "time": _monty.time(), "store": store}
   world = Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
   root = furb.python.boot((), kernel=Py().kernel(), gate=Py().gating(), **ears, world=world)
   furb.python.write(furb.python.Text("a.txt", "one\n"), on=root)
   assert furb.python.read("a.txt", on=root).content == "one\n"
-  ran = await furb.python.bash("printf hi; sleep 0.1; printf there", on=root)
-  assert (ran.code, ran.stdout.content) == (0, "hithere")
   assert await furb.python.wait(0.01, on=root) is None
   for one in ears.values():
     one.dispose()

@@ -1,6 +1,6 @@
 """grow, the text as more of it is told."""
 
-from conftest import born, said, settle, world_says
+from conftest import said, settle, slow, world_says
 from furb import engine
 from furb.engine import Text
 
@@ -10,8 +10,7 @@ async def test_the_text_as_more_of_it_is_told() -> None:
   grown = Text("/x/stdout").grow("half\n").grow("rest\n")
   assert grown.content == "half\nrest\n" and grown.lines == ["half", "rest"]
   assert grown.before is None and grown.undo() is grown
-  sand, log, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  sand, log, root, act = slow()
   await settle()
   _, command, *_ = said(log, "bash")[0]
   world_says("out", command, "half\n", "stdout")

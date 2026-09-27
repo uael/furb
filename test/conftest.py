@@ -6,12 +6,11 @@ hear by, so no name of them stands in the globals of the engine. Every fact is a
 """
 
 import asyncio
-import builtins
-import json
 import re
 import sys
+import tempfile
 from collections.abc import Callable, Generator, Sequence
-from dataclasses import dataclass, field, fields, is_dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 
@@ -22,6 +21,7 @@ import furb.kernel
 import furb_monty.engine
 from furb import engine, sheet
 from furb.engine import OPERATOR, Act, Exit, Refused, Text, site
+from furb.world import entries
 from furb_monty import _monty
 
 ENGINE = vars(furb.python)
@@ -67,6 +67,12 @@ WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nclose((await x
 BAD = "line 1: error[unresolved-reference] Name `BAD` used when not defined"
 """BAD is what the gate finds against a word whose first line names BAD, which nothing binds."""
 
+TWO = Text("/w/n.txt", "one\ntwo\n")
+"""TWO is a text of two lines."""
+
+THREE = Text("/w/n.txt", "one\ntwo\nthree\n")
+"""THREE is a text of three lines."""
+
 MANY = "".join(f"line {i}\n" for i in range(1, 301))
 """A text of three hundred lines, which is longer than what a tell of a text shows of it."""
 
@@ -84,41 +90,17 @@ DOOR = (
 """A word of a rung that opens an act of an extension, which takes it and answers a read of a door of its own."""
 
 
-def wire(x: object) -> object:
-  """The plain form of a value, as the World of this machine makes it: the same shape world.py writes."""
-  match x:
-    case BaseException():
-      return {"is": type(x).__name__, "args": wire(x.args)}
-    case Text():
-      return {"is": "Text", "path": x.path, "content": x.content}
-    case dict():
-      return {k: wire(v) for k, v in x.items()}
-    case list() | tuple():
-      return [wire(i) for i in x]
-  if is_dataclass(x) and not isinstance(x, type):
-    return {"is": type(x).__name__} | {f.name: wire(getattr(x, f.name)) for f in fields(x)}
-  return x
-
-
-def unwire(x: object) -> object:
-  """The value again from its plain form, as the World of this machine reads it back."""
-  match x:
-    case list():
-      return [unwire(i) for i in x]
-    case {"is": str(name), **rest}:
-      held = rest.pop("args", [])
-      args = [unwire(i) for i in held] if isinstance(held, list) else []
-      return (vars(builtins) | vars(engine))[name](*args, **{str(k): unwire(v) for k, v in rest.items()})
-    case dict():
-      return {k: unwire(v) for k, v in x.items()}
-  return x
-
-
-def plain(record: Sequence[object]) -> list:
-  """A record as a later life is given it: through the wire and back, so every tuple is a list and every text a Text."""
-  got = unwire(json.loads(json.dumps(wire(list(record)))))
-  assert isinstance(got, list)
-  return [(tuple(one),) for (one,) in got]
+def plain(record: Sequence[tuple]) -> list:
+  """A record as a later life is given it: kept by the store of the crate and read again, so every tuple is a list,
+  and every other value is what the crate makes of it."""
+  with tempfile.TemporaryDirectory() as folder:
+    path = str(Path(folder) / "record.jsonl")
+    _, store = _monty.store(path)
+    store.send(None)
+    for entry in record:
+      store.send(("keep", "", "journal", entry))
+    store.dispose()
+    return entries(_monty.kept(path))
 
 
 @dataclass
@@ -409,6 +391,13 @@ async def settle(n: int = 80) -> None:
     await asyncio.sleep(0)
 
 
+async def chained(label: str, source: str = "", n: int = 80) -> str:
+  """A chain of a label, and of a source when it is given one, once the loop gave it room to stand on its origin."""
+  made = engine.chain(label, source)
+  await settle(n)
+  return made
+
+
 def sown(**world: object) -> Sand:
   """The World of the suite: one file and the roster of the suite, with what else a test gives it by keyword."""
   return replace(Sand(files={"/w/a.txt": "one\ntwo\n"}), **world)
@@ -429,6 +418,13 @@ async def lived() -> tuple[Sand, list[tuple], str]:
   assert await engine.prompt(int, "read and run", on=root) == 0
   await settle()
   return sand, log, root
+
+
+def slow() -> tuple[Sand, list[tuple], str, Act[Exit]]:
+  """A life on the World of the suite whose command runs on until the test ends it: the World, what was said, the
+  root and the command."""
+  sand, log, root = born(auto=False)
+  return sand, log, root, engine.bash("slow", on=root)
 
 
 async def stalled() -> tuple[Sand, list[tuple], str, Act[int], str, str]:
@@ -512,7 +508,7 @@ def acts(log: Sequence[tuple]) -> dict[str, tuple]:
 def paragraphs(got: Sequence[tuple]) -> list[str]:
   """Every paragraph the user turns of a fold hold, in order: what one fact that tells stands as. A blank line that a
   header follows is where one paragraph ends, since a word its caller wrote may hold a blank line of its own."""
-  return [one for role, py, _, _ in got if role == "user" and py for one in re.split(r"\n\n(?=#\w)", py)]
+  return [one for role, py, _, _ in got if role == "user" and py for one in re.split(r"\n\n(?=#\S)", py)]
 
 
 def heads(got: Sequence[tuple]) -> list[str]:

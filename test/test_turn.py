@@ -1,6 +1,6 @@
 """Turn, one item of what a model reads of a transcript."""
 
-from conftest import Sand, born, heads, paragraphs, rows, said, settle
+from conftest import Sand, born, chained, heads, paragraphs, rows, said, settle
 from furb import engine
 
 USAGE = (8000, 30, 0, 0, 1.5)
@@ -59,8 +59,7 @@ async def test_an_assistant_turn_keeps_the_role_assistant_for_every_model_that_r
   """An assistant turn keeps the role assistant for every model that reads the turns."""
   sand, _, root = await spoke("a = 1", "close(1)")
   assert [role for role, *_ in sand.turns["reply2"]] == ["user", "assistant", "user"]
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   assert [role for role, *_ in engine.turns(on=twin)] == ["user", "assistant", "user", "assistant", "user"]
 
 

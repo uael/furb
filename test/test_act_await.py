@@ -5,7 +5,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import acts, born, heads, rows, said, settle, stalled
+from conftest import acts, born, heads, rows, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR, Exit, Text
 
@@ -52,8 +52,7 @@ async def test_to_await_an_act_raises_the_exception_that_the_act_completed_with(
 
 async def test_to_await_a_cancelled_act_raises_cancellederror() -> None:
   """To await a cancelled act raises CancelledError."""
-  _, _, root = born(auto=False)
-  one = engine.bash("slow", on=root)
+  _, _, _, one = slow()
   engine.cancel(one)
   with pytest.raises(CancelledError):
     await one

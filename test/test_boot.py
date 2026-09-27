@@ -12,6 +12,7 @@ from conftest import (
   Sand,
   acts,
   born,
+  chained,
   gated,
   heads,
   ids,
@@ -351,8 +352,7 @@ async def test_it_opens_the_root_the_first_act_of_any_record() -> None:
 async def test_what_the_record_holds_of_an_act_made_again_keeps_that_act_from_the_outside() -> None:
   """What the record holds of an act made again keeps that act from the outside: a done that is its first answer the journal says at once, and an act that the outside started the journal holds with no fact, since it cannot run it, so no ear of the outside hears that act, and a chain with a source which asks again what its origin asked is answered from the record too."""
   sand, _, root = await lived()
-  twin = engine.chain("twin", source=root)
-  await settle()
+  twin = await chained("twin", root)
   assert engine.module(twin)["k"] == 2
   dead = Dead()
   again, _ = await relived(dead, list(sand.record))

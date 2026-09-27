@@ -9,6 +9,7 @@ from conftest import (
   Py,
   acts,
   born,
+  chained,
   counted,
   dones,
   gated,
@@ -122,8 +123,7 @@ async def test_a_rung_that_retells_another_rung_names_its_acts_under_that_one() 
   act = engine.prompt(int, "run it", on=root)
   assert await act == 1
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   retold = [a for a in said(log, "rung") if a[3] == twin]
   program = engine.program(root)
   assert [a[5] for a in retold] == list(program) and step in program
@@ -289,8 +289,7 @@ async def test_a_chain_with_a_source_and_its_origin_share_the_one_act() -> None:
   sand, log, root = born("x = bash('echo hi')\nclose(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   _, command, *_ = said(log, "bash")[0]
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   assert [a[1] for a in said(log, "bash")] == [command]
   assert [a[1] for a in said(sand.calls, "bash")] == [command]
   assert engine.module(twin)["x"] == engine.module(root)["x"] == command
@@ -301,8 +300,7 @@ async def test_a_chain_with_a_source_awaits_what_its_origin_started() -> None:
   sand, log, root = born("x = bash('slow')\nclose(1)", auto=False)
   assert await engine.prompt(int, "start one", on=root) == 1
   _, command, *_ = said(log, "bash")[0]
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   sand.script[twin] = ["close((await x).code)"]
   act = engine.prompt(int, "await it", on=twin)
   await settle()
@@ -427,8 +425,7 @@ async def test_a_rung_that_retells_is_done_with_nothing() -> None:
   stopped = engine.rung("raise CancelledError()", on=root)
   with pytest.raises(CancelledError):
     await stopped
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   theirs = {a[5]: type(engine.peek(a[1])).__name__ for a in said(log, "rung") if a[3] == twin}
   assert theirs == {binding: "NoneType", step: "NoneType", hurt: "ValueError", stopped: "NoneType"}
   other = sown()
@@ -462,8 +459,7 @@ async def test_a_rung_that_retells_says_each_question_it_makes_as_the_rung_it_re
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   assert said(log, "read") == [("read", "read1", step, root, "a.txt")]
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   (retold,) = [a[1] for a in said(log, "rung") if a[3] == twin and a[5] == step]
   assert [a for a in acts(log).values() if a[0] == "read"] == [("read", "read1", step, root, "a.txt")]
   assert said(log, "bash") == [("bash", "bash1", step, root, "echo hi", False, 600.0)]
@@ -477,8 +473,7 @@ async def test_what_a_rung_that_retells_asks_is_named_under_the_one_it_retells()
   assert await act == 2
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   asked = [one[1] for one in acts(log).values() if one[0] == "read"]
   assert asked == ["read1"] and engine.under(asked[0], step)
   assert [a[0] for a in sand.calls].count("read") == 1

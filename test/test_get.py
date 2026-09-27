@@ -1,6 +1,6 @@
 """get, which gives an act again from the name of the act."""
 
-from conftest import born, said, settle
+from conftest import born, said, settle, slow
 from furb import engine
 from furb.engine import OPERATOR, Exit
 
@@ -39,8 +39,7 @@ async def test_get_and_peek_enter_nothing_in_the_record() -> None:
 
 async def test_get_and_peek_read_the_record_as_it_stands_where_the_call_is_made() -> None:
   """get and peek read the record as it stands where the call is made."""
-  sand, _, root = born(auto=False)
-  act = engine.bash("slow", on=root)
+  sand, _, _, act = slow()
   await settle()
   match engine.get(act):
     case ("bash", _, _, _, command, *_):

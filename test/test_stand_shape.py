@@ -2,7 +2,22 @@
 
 import pytest
 
-from conftest import LATER, STANDS, WORLD, Sand, born, paragraphs, plain, relived, rows, said, settle, takes, tip
+from conftest import (
+  LATER,
+  STANDS,
+  WORLD,
+  Sand,
+  born,
+  chained,
+  paragraphs,
+  plain,
+  relived,
+  rows,
+  said,
+  settle,
+  takes,
+  tip,
+)
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -101,8 +116,7 @@ async def test_at_its_tip_boot_stands_the_life_again() -> None:
   assert later.record == tip("stand2", root, LATER)
   for one in (root, two, side):
     assert engine.cwd(on=one) == "/z" and engine.module(one)["actor"] == "o/low"
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   assert engine.module(twin)["actor"] == "o/low"
 
 

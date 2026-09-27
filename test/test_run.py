@@ -1,6 +1,6 @@
 """Run, the act of running the word of a rung."""
 
-from conftest import Py, Sand, born, counted, kept, plain, ran, relived, said, settle, sown, watched
+from conftest import Py, Sand, born, chained, counted, kept, plain, ran, relived, said, settle, sown, watched
 from furb import engine
 
 
@@ -42,8 +42,7 @@ async def test_a_run_names_the_rung_that_the_word_retells() -> None:
   log: list[tuple] = []
   root = engine.boot(kernel=kept(Py().kernel()), gate=Py().gating(), probe=watched(log), world=sand.hears())
   await engine.rung("t = read('a.txt')", on=root)
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   mine = [a for a in said(log, "run") if a[3] == twin]
   theirs = [a for a in said(log, "run") if a[3] == root]
   assert [a[6] for a in theirs] == [""] and [a[6] for a in mine] == [theirs[0][4]]
@@ -98,8 +97,7 @@ async def test_the_word_of_a_rung_runs_again_in_every_chain_made_from_its_chain(
   sand, _, root = born("marks = []\nmarks.append(1)\nclose(len(marks))", "close(None)")
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
-  twin = engine.chain("twin", source=root)
-  await settle(300)
+  twin = await chained("twin", root, 300)
   assert engine.module(twin)["marks"] == [1] and engine.module(twin)["marks"] is not engine.module(root)["marks"]
   _, over = await relived(Sand(), plain(sand.record))
   assert engine.module(over)["marks"] == [1]
