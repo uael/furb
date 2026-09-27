@@ -316,8 +316,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           yield "done", about, text
         case ("cd", about, *_, path):
           yield "done", about, path
-        case ("rung", rid, _, _, "", *_):
-          waiting[rid] = a
+        case ("rung", rid, maker, _, "", _, to):
+          waiting[rid] = maker, to
         case ("ready", rid, _, word):
           waiting.pop(rid, None)
           rungs[rid] = word
@@ -341,8 +341,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       if a[0] in ("started", "done") and (r := get(a[1])) and r[0] in ("run", "wants"):
         running[r[4] if r[0] == "run" else get(r[2])[4]] = (a[0] == "started") == (r[0] == "run")
       if asking not in waiting and (asking := next((x for x in waiting if not paused(x)), "")):
-        maker = get(asking)[2]
-        if offered(last[0], to := get(asking)[6]) is None:
+        maker, to = waiting[asking]
+        if offered(last[0], to) is None:
           close(Refused(f"{to} no actor"), maker if question(("prompt", maker)) else asking)
         else:
           yield told(asking, f"advance on {maker}")
