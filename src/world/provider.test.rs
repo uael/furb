@@ -226,6 +226,24 @@ fn a_second_refusal_in_a_row_of_an_actor_on_a_chain_pauses_the_chain_before_its_
   assert!(!asked_again, "the paused chain asks no model");
 }
 
+#[test]
+fn a_turn_between_two_refusals_of_an_actor_on_a_chain_ends_their_row() {
+  let failed = || vec![MockStreamEvent::Error(MockError::provider("boom"))];
+  let turn = |word: &str| vec![MockStreamEvent::text(word)];
+  let model = MockCompletionModel::from_stream_turns([
+    failed(),
+    turn("x = 1"),
+    failed(),
+    turn("close(x + 2)"),
+  ]);
+  let (mut engine, _) = life("row", vec![scripted(&model)]);
+  let id = asked(&mut engine);
+  let answered = until(&mut engine, |engine| engine.outcome(&id).is_ok_and(|got| got.is_some()));
+  assert!(answered, "a row of two refusals paused the chain: {:?}", said(&mut engine));
+  let got = engine.outcome(&id).expect("the prompt is an act").expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(3));
+}
+
 /// A model that never answers, and says when it is asked and when its call is dropped.
 #[derive(Clone, Default)]
 struct Silent {
