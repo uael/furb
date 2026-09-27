@@ -747,10 +747,10 @@ def boot(record=(), **outside):
   def dispatch():
     while not busy:
       if left:
-        hears(*left.pop())
+        hears(*left.pop(0))
       elif log:
         a, heard = log.pop(0)
-        left.extend([(*x, a) for x in ears() if x[0] not in heard][::-1])
+        left.extend((*x, a) for x in ears() if x[0] not in heard)
       else:
         if g := alive.get("journal"):
           hears("journal", g, None)
