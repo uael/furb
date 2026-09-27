@@ -299,6 +299,7 @@ impl Server {
           "paused": self.life.paused(),
           "prompts": prompts,
           "acts": self.awaited,
+          "pending": self.life.pending(),
         }))
       }
       "" => Err("The command needs type.".to_owned()),

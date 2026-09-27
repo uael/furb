@@ -63,7 +63,7 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
 | `turns` | `on` | `{"turns": [...]}` |
 | `transcript` | `on` | `{"facts": [...]}` |
 | `peek` | `act` | `{"done": false}`, or `{"done": true, "value": ...}`, or `{"done": true, "raised": ...}` |
-| `state` | none | `{"root", "record", "standing", "extensions", "paused", "prompts", "acts"}` |
+| `state` | none | `{"root", "record", "standing", "extensions", "paused", "prompts", "acts", "pending"}` |
 
 - `prompt` prompts an actor on a chain. `message` is what the actor reads, and the actor reads the transcript alone
   when there is no message. `shape` is the name of the type of the response, such as `int`, `str` or `list[str]`,
@@ -82,7 +82,9 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
 - `peek` gives what an act came to, when it is done.
 - `state` gives the root, the path of the record, the standing, which is the roster, the directory and the default
   actor, the names of the extensions that the life runs, whether a pause stands over the root, each prompt to the
-  operator that waits for a close, and each act that a `prompt` or a `rung` of the client made that is not done.
+  operator that waits for a close, each act that a `prompt` or a `rung` of the client made that is not done, and each
+  act that the record showed started and not done when the life opened and that is still not done, as its name and
+  its kind, such as `["bash1", "bash"]`.
 
 ## Responses
 
@@ -132,7 +134,7 @@ The life says its events as they happen, after the response of the command that 
 When furb opens on a record, the life says the record again before it serves the first command, and it streams no
 event for what it says again. `transcript` and `turns` read that part. furb wakes nothing when it opens: when the
 record holds a pause of the root, or work that an earlier life started and did not end, that work waits for a `wake`
-of the client. `state` says whether a pause stands over the root.
+of the client. `state` says whether a pause stands over the root, and which work of an earlier life is pending.
 
 ## A session
 
