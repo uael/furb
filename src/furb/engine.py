@@ -369,7 +369,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
       yield "done", id, Refused(f"{usd}/{share} no ceiling")
       return
     yield "started", id
-    spent = 0.0
+    spent = 0
     for old in [x[1] for x in transcript(here) if x[0] == "grant" and x[3] == here and x[1] != id]:
       close(None, old)
     yield told(id, f"usd={usd} share={share}", bound(id, "None"))
