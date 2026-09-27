@@ -294,7 +294,7 @@ fn a_cancel_over_a_reply_ends_the_call_of_its_model_and_the_ear_says_nothing_mor
 
 #[cfg(unix)]
 #[test]
-fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line() {
+fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_life_its_own() {
   use super::claude::test::Yard;
   let yard = Yard::new("chain");
   let claude = yard.claude(10_000);
@@ -316,7 +316,17 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line() {
   let heard = yard.heard();
   assert_eq!(heard.len(), 2);
   assert!(heard[1].contains("second task") && !heard[1].contains("first task"), "{}", heard[1]);
-  drop((engine, claude));
+  // The ids of chains repeat in every life, and a life on the same command line keeps a conversation of its own.
+  let (mut other, _) = life("claude-other", claude.models());
+  let with =
+    verbs::Prompt { message: Some("first task".into()), on: on(&root), ..Default::default() };
+  block_on(other.prompt(Object::string("str"), with).expect("a prompt is made"))
+    .expect("an answer");
+  let session = |pid: &str| super::claude::test::after(&yard.args(pid), "--session-id");
+  let both = yard.pids();
+  assert_eq!(both.len(), 2);
+  assert_ne!(session(&both[0]), session(&both[1]));
+  drop((engine, other, claude));
   assert!(
     super::claude::test::gone(&pids[0]),
     "the process ends with the last hold of the command line"

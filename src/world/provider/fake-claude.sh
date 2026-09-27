@@ -4,7 +4,9 @@
 # the words of each process it was, the id of each, each line of input it read, and how many turns it answered in
 # all. The word of a turn is the JSON text in the file word.N beside it, for the Nth turn of all, and else a close of
 # "reply n", for the nth turn of its process. A line that holds FAIL ends it with a failure, a line that holds WAIT
-# gets no answer, and a line that holds THINK gets a thought before the text.
+# gets no answer, a line that holds ODD gets a line that is no JSON and then no answer, a line that holds LONG gets a
+# line longer than a reader takes, a line that holds ERROR gets a result that says an error, a line that holds BARE
+# gets a result with no block before it, and a line that holds THINK gets a thought before the text.
 here=$(dirname "$0")
 printf '%s\0' "$@" > "$here/args.$$"
 echo "$$" >> "$here/pids"
@@ -24,6 +26,10 @@ while IFS= read -r line; do
   case $line in
     *FAIL*) echo "deliberate failure" >&2; exit 2 ;;
     *WAIT*) continue ;;
+    *ODD*) echo "no line of json"; continue ;;
+    *LONG*) head -c 33554433 /dev/zero | tr '\0' a; echo; continue ;;
+    *ERROR*) echo '{"type":"result","is_error":true,"result":"the model is overloaded"}'; continue ;;
+    *BARE*) echo '{"type":"result","result":"close(1)","usage":{}}'; continue ;;
   esac
   n=$((n + 1))
   count=$(( $(cat "$here/count" 2>/dev/null || echo 0) + 1 ))
