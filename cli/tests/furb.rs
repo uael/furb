@@ -222,7 +222,10 @@ fn a_prompt_the_world_paused_ends_its_command_with_why_and_goes_on_when_it_is_ta
   let mut missing = yard.kept(&counted);
   missing.env("FURB_CLAUDE_BIN", yard.at.join("missing"));
   let said = refused(missing, "");
-  assert!(said.contains("furb: prompt1 is paused: opus/low answered nothing: "), "{said}");
+  assert!(
+    said.contains("furb: prompt1 is paused: claude-cli:opus/low answered nothing: "),
+    "{said}"
+  );
   assert!(said.contains("A wake from the TUI or from `furb --mode rpc` makes it go on."), "{said}");
   yard.words(&[COUNT]);
   assert_eq!(printed(yard.kept(&counted), ""), "3\n", "the command wakes the prompt it takes up");
@@ -374,7 +377,7 @@ fn a_prompt_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
     (&state["root"], &state["paused"], &state["acts"]),
     (&json!("chain1"), &json!(false), &json!(["prompt1"]))
   );
-  assert_eq!(state["standing"][2], "opus/low");
+  assert_eq!(state["standing"][2], "claude-cli:opus/low");
   let wrong = client.asked("3", json!({"type": "close", "act": "prompt2", "value": "seven"}));
   assert_eq!(wrong["success"], false, "a close of the wrong shape is refused: {wrong}");
   client.data("4", json!({"type": "close", "act": "prompt2", "value": 7}));

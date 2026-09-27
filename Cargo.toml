@@ -33,14 +33,19 @@ monty-type-checking = { git = "https://github.com/uael/monty", rev = "b70678d3" 
 monty-types = { git = "https://github.com/uael/monty", rev = "b70678d3" }
 # An ear of the crate is a coroutine: a generator of rust, as an ear of python is a generator of python.
 genawaiter = { version = "0.99", default-features = false }
-# The record: one fact per line, as JSON, whose numbers are read before anything rounds them.
+# The record: one fact per line, as JSON, whose numbers are read before anything rounds them. The catalog of models
+# is JSON too, read into the shapes it holds.
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
+serde = { version = "1", features = ["derive"] }
 indexmap = { version = "2", features = ["serde"] }
 # The chance of the World, drawn by the system.
 getrandom = "0.3"
-# The one interface of the models of the provider, which the claude command line answers too. Its providers of the
-# network take a TLS of rig, which a host turns on as a feature of this same version.
-rig-core = { version = "=0.42.0", default-features = false }
+# The one interface of the models of the provider, which the claude command line answers too, and the clients of the
+# providers of the network, over its TLS.
+rig-core = { version = "=0.42.0", default-features = false, features = ["reqwest", "rustls"] }
+# The digest that names an image of a turn, and the form a request carries it in.
+sha2 = "0.10"
+base64 = "0.22"
 # The runtime that each call of a model runs on, and the processes of the claude command line.
 tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "time", "sync"] }
 futures = "0.3"

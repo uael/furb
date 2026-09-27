@@ -1018,6 +1018,7 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_function(wrap_pyfunction!(kept, module)?)?;
   module.add_function(wrap_pyfunction!(gate, module)?)?;
   module.add_function(wrap_pyfunction!(provider, module)?)?;
+  module.add("SYSTEM", crate::SYSTEM)?;
   Ok(())
 }
 
@@ -1034,17 +1035,55 @@ fn verb_said<'py>(py: Python<'py>, door: &Door, call: &Call) -> PyResult<Bound<'
   made.python.bind(py).getattr(call.verb.as_str())?.call(args, Some(&kwargs))
 }
 
-/// The ear of the provider of models, whose models are those of the claude command line: the directory the life
-/// stands on, the default actor, the path of claude, and the seconds a turn may go with no progress.
+/// The ear of the provider of models: the catalog makes the models of its roster, every model it offers when none
+/// is named, and a function of python answers them in place of the models when it is given one. The actor is the
+/// default actor, whose effort moves to the nearest one its model takes; `claude` is the path of the claude command
+/// line, and `stall` the seconds a turn of it may go with no progress.
 #[pyfunction]
-#[pyo3(signature = (directory, actor = None, claude = None, stall = None))]
+#[pyo3(signature = (directory, roster = None, actor = None, answer = None, claude = None, stall = None))]
 fn provider(
   directory: String,
+  roster: Option<Vec<String>>,
   actor: Option<String>,
+  answer: Option<Py<PyAny>>,
   claude: Option<String>,
   stall: Option<f64>,
-) -> NativeEar {
-  let stall = stall.and_then(|seconds| std::time::Duration::try_from_secs_f64(seconds).ok());
-  let claude = world::claude::Claude::with(claude.map(std::path::PathBuf::from), stall);
-  NativeEar::of(world::provider(directory, claude.models(), actor))
+) -> PyResult<NativeEar> {
+  let mut catalog = world::Catalog::load();
+  if let Some(bin) = claude {
+    let stall = stall.and_then(|seconds| std::time::Duration::try_from_secs_f64(seconds).ok());
+    catalog = catalog.with_claude(world::claude::Claude::with(Some(bin.into()), stall));
+  }
+  let host = answer.map(|answer| hosted(Arc::new(answer)));
+  let made = catalog.provider(directory, roster.as_deref(), actor.as_deref(), host);
+  Ok(NativeEar::of(made.map_err(pyo3::exceptions::PyValueError::new_err)?.ear()))
+}
+
+/// A function of python as a model: it is called with the request, as JSON reads it, and a function
+/// `write(text="", thinking="")` that tells what it writes, on a thread of its own; the turn it gives is the answer,
+/// and what it raised the refusal.
+fn hosted(answer: Arc<Py<PyAny>>) -> world::Hosted {
+  Arc::new(move |request, told| {
+    let answer = Arc::clone(&answer);
+    Box::pin(async move {
+      let called = tokio::task::spawn_blocking(move || {
+        Python::attach(|py| {
+          let json = py.import("json")?;
+          let request = json.call_method1("loads", (request.to_string(),))?;
+          let write = pyo3::types::PyCFunction::new_closure(py, None, None, move |_, kwargs| {
+            let part = |key: &str| -> String {
+              let item = kwargs.and_then(|kwargs| kwargs.get_item(key).ok().flatten());
+              item.and_then(|one| one.extract().ok()).unwrap_or_default()
+            };
+            told(&part("text"), &part("thinking"));
+          })?;
+          let turn = answer.call1(py, (request, write))?;
+          json.call_method1("dumps", (turn,))?.extract::<String>()
+        })
+        .map_err(|no| no.to_string())
+      });
+      let turn = called.await.map_err(|no| no.to_string())??;
+      crate::wire::parsed(&turn).map_err(|fault| fault.message())
+    })
+  })
 }

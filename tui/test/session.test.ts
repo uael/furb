@@ -215,23 +215,25 @@ test("each /feed sends one line, and a /feed with no text closes the input", asy
   }
 });
 
-test("/model finds a model of the roster by the rule of the provider, so an id with a colon names it", async () => {
+test("/model finds a model of the roster by the rule of the catalog, and keeps the effort that the model takes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-models-"));
   const opened = await openEngine({
     cwd: directory,
-    model: "openai:gpt-4o",
-    roster: ["amazon-bedrock:amazon.nova-lite-v1:0"],
+    model: "claude-cli:haiku",
+    effort: "xhigh",
+    roster: ["claude-cli:opus"],
   });
   const session = new Session(opened.engine, opened.host);
   try {
     await session.refresh();
-    await session.submit("/model amazon.nova-lite-v1:0");
-    expect(session.actor).toBe("amazon-bedrock:amazon.nova-lite-v1:0/off");
-    expect(String(await session.submit("/model 0").catch((error: unknown) => error))).toContain(
-      "Choose one of",
+    expect(session.actor).toBe("claude-cli:haiku/xhigh");
+    await session.submit("/model opus");
+    expect(session.actor).toBe("claude-cli:opus/xhigh");
+    expect(String(await session.submit("/model sonnet").catch((error: unknown) => error))).toContain(
+      "Choose one of claude-cli:haiku, claude-cli:opus.",
     );
-    await session.submit("/model gpt-4o");
-    expect(session.actor).toBe("openai:gpt-4o/off");
+    await session.submit("/model claude-cli:haiku");
+    expect(session.actor).toBe("claude-cli:haiku/xhigh");
   } finally {
     await session.dispose();
     await rm(directory, { recursive: true, force: true });

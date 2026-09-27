@@ -16,13 +16,10 @@ use furb::{
   Act, Ear, Engine, Fact, Fault, Object,
   ear::{ear, hear},
   verbs,
-  world::{self, claude::Claude},
+  world::{self, Catalog},
 };
 
 use crate::console;
-
-/// The actor a prompt goes to when it names none, which is opus at the least effort it takes.
-pub const ACTOR: &str = "opus/low";
 
 /// One life, as the operator holds it: its engine, its root, the record it was made again from, and what the
 /// operator hears of its root.
@@ -70,9 +67,9 @@ impl Quiet {
 }
 
 impl Life {
-  /// A life on the World of this machine and on a console of the operator: the provider of the models of the claude
-  /// command line, the files, the commands and time, and the store of its record when it keeps one. Each ear is
-  /// heard under the name the TUI hears it by, so the record of one opens in the other.
+  /// A life on the World of this machine and on a console of the operator: the provider of every model the catalog
+  /// offers, the files, the commands and time, and the store of its record when it keeps one. Each ear is heard
+  /// under the name the TUI hears it by, so the record of one opens in the other.
   ///
   /// The journal says the whole record again before boot returns, so the life stands whole on its record here, and a
   /// life whose record drifted is refused, since it would keep nothing more. `heard` is given every fact said after
@@ -93,10 +90,9 @@ impl Life {
       Some(path) => (world::kept(path).map_err(failed)?, None),
       None => (Vec::new(), None),
     };
-    let models = Claude::new().models();
-    let provider = world::provider(cwd.display().to_string(), models, Some(ACTOR.to_owned()));
+    let provider = Catalog::load().provider(cwd.display().to_string(), None, None, None)?;
     let mut ears = vec![
-      ("provider", provider),
+      ("provider", provider.ear()),
       ("console", console),
       ("files", world::files()),
       ("bash", world::bash()),
@@ -177,6 +173,13 @@ impl Life {
       thread::park();
     }
   }
+}
+
+/// An actor as the roster names it: the model the catalog finds by the name, with the effort moved to the nearest
+/// one that model takes, and the name as it is when the catalog knows no model by it, the operator among them.
+pub fn actor(to: &str) -> String {
+  let named = Catalog::load().roster(Some(&[]), Some(to)).ok().and_then(|(_, actor)| actor);
+  named.unwrap_or_else(|| to.to_owned())
 }
 
 /// The directory a life stands on: the one given, or the current one, as an absolute path.

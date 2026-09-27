@@ -2,9 +2,10 @@
 //!
 //! The contract makes the World the ears of the outside that serve the machine, one or many. These are the ones
 //! every host shares, written once in rust: [`files`] reads and writes a path, [`bash`] runs a command, [`time`]
-//! reads the clock, draws a chance and ends a wait, [`store`] keeps the record on the disk under a lease, and
-//! [`provider`] answers what the chains stand on and asks the models of rig for their turns, the claude command line
-//! among them. The host names the models, and gives the rest, its console, which the crate knows nothing of.
+//! reads the clock, draws a chance and ends a wait, [`store`] keeps the record on the disk under a lease, and the
+//! [`Provider`] answers what the chains stand on and asks the models of rig for their turns, which the [`Catalog`]
+//! knows, the claude command line among them. The host names the models it offers, and gives the rest, its
+//! console, which the crate knows nothing of.
 //!
 //! Each is an ear like any other, so an ear that comes before one of them in the order of boot takes a question in
 //! its place, and an ear that takes a question and asks it again wraps it.
@@ -19,7 +20,11 @@ use std::path::{Component, Path, PathBuf};
 
 pub use bash::{SHELL, bash};
 pub use files::files;
-pub use provider::{Model, claude, provider};
+pub use provider::{
+  Hosted, Model, Provider, Told, Writes,
+  catalog::{self, Catalog},
+  claude, images,
+};
 pub use store::{kept, store};
 pub use time::time;
 

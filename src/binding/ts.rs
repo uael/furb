@@ -7,21 +7,27 @@
 pub mod console;
 mod host;
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
+
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use napi::{
   Env, JsValue,
   bindgen_prelude::{
     ClassInstance, FnArgs, FromNapiValue, Function, JavaScriptClassExt, JsObjectValue,
-    Object as JsObject, Unknown,
+    Object as JsObject, Promise, Unknown,
   },
+  threadsafe_function::ThreadsafeFunctionCallMode,
 };
 use napi_derive::napi;
 use serde_json::Value;
 
 use host::{Door, Held, Word, refused};
 
-use crate::{Ear, Engine, Fault, Object, wire, world};
+use crate::{
+  Ear, Engine, Fault, Object, wire,
+  world::{self, images},
+};
 
 #[napi(object)]
 pub struct TextValue {
@@ -384,27 +390,201 @@ pub fn decode_record(line: String) -> napi::Result<Value> {
   wire::decoded(value, 0).map_err(error)
 }
 
-/// What the provider of the crate stands on and asks: the directory of the life, the default actor, and the claude
-/// command line, whose models it offers.
-#[napi(object)]
-pub struct ProviderOptions {
+/// What the provider of the crate stands on and asks.
+#[napi(object, object_to_js = false)]
+pub struct ProviderOptions<'env> {
   /// The directory the life stands on, which each chain stands in until it goes elsewhere.
   pub directory: String,
-  /// The actor a prompt goes to when it names none, as model/effort, which is the first model at its first effort
-  /// when none is given.
+  /// The models it offers, each named `provider:id`, or by an id that one model of the catalog alone holds; every
+  /// model that the catalog offers when unsaid.
+  pub roster: Option<Vec<String>>,
+  /// The actor a prompt goes to when it names none, as model/effort, whose effort moves to the nearest one the model
+  /// takes; the first model at its first effort when unsaid.
   pub actor: Option<String>,
   /// The path of the claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine
   /// holds.
   pub claude: Option<String>,
   /// How many milliseconds a turn of claude may go with no progress.
   pub stall_ms: Option<f64>,
+  /// The directory of the images that a turn names.
+  pub images: Option<String>,
+  /// A function that answers each request in place of the model, with a turn, and may tell what it writes as it
+  /// writes it.
+  #[napi(
+    ts_type = "(request: { actor: string; chain: string; messages: unknown[]; settings: Record<string, unknown> }, write: (delta: { text?: string; thinking?: string }) => void) => Promise<unknown>"
+  )]
+  pub answer: Option<Function<'env, (), Promise<Value>>>,
+  /// Told what a model writes as it writes it: the rung it writes for, the chain of that rung, and what it added to
+  /// its text and to its thought.
+  #[napi(ts_type = "(rung: string, chain: string, text: string, thinking: string) => void")]
+  pub stream: Option<Function<'env, (), ()>>,
 }
 
-/// The ear of the provider of models, which answers a stand and takes each reply, and whose models are those of the
-/// claude command line.
+/// The ear of the provider of models, which answers a stand and takes each reply: the catalog makes the models of
+/// its roster, and a function of the host answers them in place of the models when it gives one.
 #[napi]
-pub fn provider(options: ProviderOptions) -> NativeEar {
-  let stall = options.stall_ms.and_then(|ms| std::time::Duration::try_from_secs_f64(ms / 1e3).ok());
-  let claude = world::claude::Claude::with(options.claude.map(std::path::PathBuf::from), stall);
-  NativeEar::of(world::provider(options.directory, claude.models(), options.actor))
+pub fn provider(options: ProviderOptions<'_>) -> napi::Result<NativeEar> {
+  let mut catalog = world::Catalog::load();
+  if let Some(bin) = options.claude {
+    let stall =
+      options.stall_ms.and_then(|ms| std::time::Duration::try_from_secs_f64(ms / 1e3).ok());
+    catalog = catalog.with_claude(world::claude::Claude::with(Some(bin.into()), stall));
+  }
+  let host = options.answer.as_ref().map(hosted).transpose()?;
+  let (roster, actor) = (options.roster.as_deref(), options.actor.as_deref());
+  let mut made =
+    catalog.provider(options.directory, roster, actor, host).map_err(napi::Error::from_reason)?;
+  if let Some(images) = options.images {
+    made = made.images(images);
+  }
+  if let Some(stream) = options.stream {
+    let told = stream
+      .build_threadsafe_function::<(String, String, String, String)>()
+      .weak::<true>()
+      .build_callback(|call| Ok(FnArgs::from(call.value)))?;
+    made = made.writes(Arc::new(move |rung, chain, text, thinking| {
+      let said = (rung.to_owned(), chain.to_owned(), text.to_owned(), thinking.to_owned());
+      told.call(said, ThreadsafeFunctionCallMode::NonBlocking);
+    }));
+  }
+  Ok(NativeEar::of(made.ear()))
+}
+
+/// A function of JavaScript as a model: it is called on the thread of JavaScript with the request and a function
+/// that tells what it writes, and the turn its promise gives is the answer, or what it threw is the refusal.
+fn hosted(answer: &Function<'_, (), Promise<Value>>) -> napi::Result<world::Hosted> {
+  /// What a call tells as it writes, as one type, which a future of the call carries to the thread of JavaScript.
+  struct Writing(world::Told);
+  let called = answer
+    .build_threadsafe_function::<(Value, Writing)>()
+    .weak::<true>()
+    .build_callback(|call| {
+      let (request, Writing(told)) = call.value;
+      let request = call.env.to_js_value(&request)?;
+      let write: Function<'_, Value, ()> =
+        call.env.create_function_from_closure("write", move |cx| {
+          let delta: Value = cx.first_arg()?;
+          let part =
+            |key: &str| delta.get(key).and_then(Value::as_str).unwrap_or_default().to_owned();
+          told(&part("text"), &part("thinking"));
+          Ok(())
+        })?;
+      // The values go as they are on the thread of JavaScript, where the call takes them at once.
+      Ok(FnArgs::from((request.raw(), write.raw())))
+    })?;
+  let called = Arc::new(called);
+  Ok(Arc::new(move |request, told| {
+    let called = Arc::clone(&called);
+    let writing = Writing(told);
+    Box::pin(async move {
+      let promise =
+        called.call_async_catch((request, writing)).await.map_err(|no| no.reason.clone())?;
+      let turn = promise.await.map_err(|no| no.reason.clone())?;
+      wire::inward(&turn).map_err(|fault| fault.message())
+    })
+  }))
+}
+
+/// A model of the catalog as JavaScript reads it: its name, its efforts, its window, whether it takes an image, and
+/// its price in dollars for a million tokens read, written, read from the cache and written to it.
+#[napi(object)]
+pub struct ModelInfo {
+  pub name: String,
+  pub efforts: Vec<String>,
+  pub window: f64,
+  pub images: bool,
+  pub price: Option<Vec<f64>>,
+}
+
+/// A model of the catalog as JavaScript reads it.
+fn info(model: &world::Model) -> ModelInfo {
+  ModelInfo {
+    name: model.name().to_owned(),
+    efforts: model.efforts().into_iter().map(str::to_owned).collect(),
+    window: model.window() as f64,
+    images: model.sees(),
+    price: model.priced().map(Vec::from),
+  }
+}
+
+/// The models the catalog of this machine offers, each named as the catalog names it.
+#[napi]
+pub fn models() -> Vec<ModelInfo> {
+  world::Catalog::load().offered().into_iter().map(info).collect()
+}
+
+/// The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, whether it offers
+/// that model or not; nothing when it knows none.
+#[napi]
+pub fn model(name: String) -> Option<ModelInfo> {
+  world::Catalog::load().find(&name).map(info)
+}
+
+/// The levels of effort, from least to most, which an actor names after its model.
+#[napi]
+pub fn levels() -> Vec<&'static str> {
+  world::catalog::LEVELS.to_vec()
+}
+
+/// An image a host attached: the name of its file, the uri a message names it by, its media type, and its size.
+#[napi(object)]
+pub struct ImageAttachment {
+  pub name: String,
+  pub uri: String,
+  pub mime_type: String,
+  pub size: f64,
+}
+
+/// An image copied into a directory of images under the digest of its bytes, as a message attaches it.
+#[napi]
+pub fn attach_image(directory: String, path: String) -> napi::Result<ImageAttachment> {
+  let got = images::attach(directory.as_ref(), path.as_ref()).map_err(napi::Error::from_reason)?;
+  Ok(ImageAttachment {
+    name: got.name,
+    uri: got.uri,
+    mime_type: got.media.to_owned(),
+    size: got.size as f64,
+  })
+}
+
+/// The bytes of the image of a uri, as base64, and its media type, once the bytes have the digest the uri names.
+#[napi(ts_return_type = "{ data: string; mimeType: string }")]
+pub fn image_content(env: &Env, directory: String, uri: String) -> napi::Result<JsObject<'_>> {
+  let (media, bytes) = images::read(directory.as_ref(), &uri).map_err(napi::Error::from_reason)?;
+  let mut got = JsObject::new(env)?;
+  got.set_named_property("data", STANDARD.encode(bytes))?;
+  got.set_named_property("mimeType", media)?;
+  Ok(got)
+}
+
+/// The file that holds the image of a uri, and the digest its bytes have.
+#[napi(ts_return_type = "{ path: string; digest: string }")]
+pub fn image_path(env: &Env, directory: String, uri: String) -> napi::Result<JsObject<'_>> {
+  let (path, digest) = images::path(directory.as_ref(), &uri).map_err(napi::Error::from_reason)?;
+  let mut got = JsObject::new(env)?;
+  got.set_named_property("path", path.display().to_string())?;
+  got.set_named_property("digest", digest)?;
+  Ok(got)
+}
+
+/// How a message names an image: `![name](uri)`.
+#[napi(ts_args_type = "image: { name: string; uri: string }")]
+pub fn image_reference(image: JsObject<'_>) -> napi::Result<String> {
+  let (name, uri): (String, String) =
+    (image.get_named_property("name")?, image.get_named_property("uri")?);
+  Ok(images::reference(&name, &uri))
+}
+
+/// Each image a message names, as its text in the message, its name, and its uri.
+#[napi(ts_return_type = "{ text: string; name: string; uri: string }[]")]
+pub fn image_references(message: String) -> Vec<Value> {
+  let each = images::references(&message).into_iter();
+  each.map(|one| serde_json::json!({"text": one.text, "name": one.name, "uri": one.uri})).collect()
+}
+
+/// The type of an image by its first bytes: its media type and its extension, for a PNG, a JPEG, a GIF or a WebP.
+#[napi(ts_return_type = "{ mimeType: string; extension: string }")]
+pub fn image_type(data: &[u8]) -> napi::Result<Value> {
+  let (media, extension) = images::kind(data).map_err(napi::Error::from_reason)?;
+  Ok(serde_json::json!({"mimeType": media, "extension": extension}))
 }

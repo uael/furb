@@ -119,6 +119,9 @@ export declare class NativeEar {
   dispose(): void
 }
 
+/** An image copied into a directory of images under the digest of its bytes, as a message attaches it. */
+export declare function attachImage(directory: string, path: string): ImageAttachment
+
 /** The ear of commands, which runs each in a shell of this machine. */
 export declare function bash(): NativeEar
 
@@ -135,6 +138,29 @@ export interface ExitValue {
 /** The ear of the files, which reads and writes a path. */
 export declare function files(): NativeEar
 
+/** An image a host attached: the name of its file, the uri a message names it by, its media type, and its size. */
+export interface ImageAttachment {
+  name: string
+  uri: string
+  mimeType: string
+  size: number
+}
+
+/** The bytes of the image of a uri, as base64, and its media type, once the bytes have the digest the uri names. */
+export declare function imageContent(directory: string, uri: string): { data: string; mimeType: string }
+
+/** The file that holds the image of a uri, and the digest its bytes have. */
+export declare function imagePath(directory: string, uri: string): { path: string; digest: string }
+
+/** How a message names an image: `![name](uri)`. */
+export declare function imageReference(image: { name: string; uri: string }): string
+
+/** Each image a message names, as its text in the message, its name, and its uri. */
+export declare function imageReferences(message: string): { text: string; name: string; uri: string }[]
+
+/** The type of an image by its first bytes: its media type and its extension, for a PNG, a JPEG, a GIF or a WebP. */
+export declare function imageType(data: Uint8Array): { mimeType: string; extension: string }
+
 export interface Inspection {
   name: string
   kind: string
@@ -144,6 +170,30 @@ export interface Inspection {
 
 /** What the store kept at a path, read with no lease and changed in nothing. */
 export declare function kept(path: string): unknown[]
+
+/** The levels of effort, from least to most, which an actor names after its model. */
+export declare function levels(): Array<string>
+
+/**
+ * The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, whether it offers
+ * that model or not; nothing when it knows none.
+ */
+export declare function model(name: string): ModelInfo | null
+
+/**
+ * A model of the catalog as JavaScript reads it: its name, its efforts, its window, whether it takes an image, and
+ * its price in dollars for a million tokens read, written, read from the cache and written to it.
+ */
+export interface ModelInfo {
+  name: string
+  efforts: Array<string>
+  window: number
+  images: boolean
+  price?: Array<number>
+}
+
+/** The models the catalog of this machine offers, each named as the catalog names it. */
+export declare function models(): Array<ModelInfo>
 
 /**
  * Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
@@ -160,21 +210,23 @@ export interface Outcome {
 }
 
 /**
- * The ear of the provider of models, which answers a stand and takes each reply, and whose models are those of the
- * claude command line.
+ * The ear of the provider of models, which answers a stand and takes each reply: the catalog makes the models of
+ * its roster, and a function of the host answers them in place of the models when it gives one.
  */
 export declare function provider(options: ProviderOptions): NativeEar
 
-/**
- * What the provider of the crate stands on and asks: the directory of the life, the default actor, and the claude
- * command line, whose models it offers.
- */
+/** What the provider of the crate stands on and asks. */
 export interface ProviderOptions {
   /** The directory the life stands on, which each chain stands in until it goes elsewhere. */
   directory: string
   /**
-   * The actor a prompt goes to when it names none, as model/effort, which is the first model at its first effort
-   * when none is given.
+   * The models it offers, each named `provider:id`, or by an id that one model of the catalog alone holds; every
+   * model that the catalog offers when unsaid.
+   */
+  roster?: Array<string>
+  /**
+   * The actor a prompt goes to when it names none, as model/effort, whose effort moves to the nearest one the model
+   * takes; the first model at its first effort when unsaid.
    */
   actor?: string
   /**
@@ -184,6 +236,18 @@ export interface ProviderOptions {
   claude?: string
   /** How many milliseconds a turn of claude may go with no progress. */
   stallMs?: number
+  /** The directory of the images that a turn names. */
+  images?: string
+  /**
+   * A function that answers each request in place of the model, with a turn, and may tell what it writes as it
+   * writes it.
+   */
+  answer?: (request: { actor: string; chain: string; messages: unknown[]; settings: Record<string, unknown> }, write: (delta: { text?: string; thinking?: string }) => void) => Promise<unknown>
+  /**
+   * Told what a model writes as it writes it: the rung it writes for, the chain of that rung, and what it added to
+   * its text and to its thought.
+   */
+  stream?: (rung: string, chain: string, text: string, thinking: string) => void
 }
 
 /** The POSIX shell that runs a command of this machine, which a host runs its own commands in too. */

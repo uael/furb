@@ -8,8 +8,8 @@ from pathlib import Path
 import tiktoken
 
 from furb import engine
-from furb.world import SYSTEM
 from furb_monty import _monty
+from furb_monty._monty import SYSTEM
 
 PY = Path(engine.__file__)
 PYI = PY.with_suffix(".pyi")

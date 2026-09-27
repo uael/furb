@@ -11,10 +11,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./claude": {
-      "types": "./dist/providers/claude.d.ts",
-      "import": "./dist/providers/claude.js"
     }
   },
   "files": [
@@ -23,12 +19,8 @@
     "index.cjs",
     "index.d.cts",
     "*.node",
-    "system.json",
     "README.md"
   ],
-  "dependencies": {
-    "@earendil-works/pi-ai": "0.87.0"
-  },
   "scripts": {
     "build": "bun run build.ts"
   },

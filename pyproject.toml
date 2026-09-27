@@ -20,9 +20,6 @@ dependencies = [
     "furb-monty==0.1.0",
     # The command furb is a program of rust, which the wheel of furb-cli puts on the PATH of the environment.
     "furb-cli==0.1.0",
-    "pydantic>=2.13.5",
-    "pydantic-ai-slim>=2.27.1",
-    "python-minifier>=3.3.0",
 ]
 
 [project.urls]

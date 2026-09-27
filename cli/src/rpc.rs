@@ -258,7 +258,7 @@ impl Server {
         let shape = command.text("shape")?.filter(|one| one != "None");
         let with = verbs::Prompt {
           message: command.text("message")?,
-          to: command.text("to")?,
+          to: command.text("to")?.map(|to| crate::life::actor(&to)),
           on: Some(on),
         };
         let shape = shape.map_or_else(Object::none, Object::string);
