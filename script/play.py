@@ -41,8 +41,8 @@ MESSAGE = f"""You have the engine and a directory of your own. Use them, in this
 1. Read the engine at {Path(engine.__file__)} and say in one line what a chain is.
 2. Write a small python module into your directory, run it with bash, and read its stdout.
 3. Open a chain with your own chain as its source and take() as its filter, so the model you ask on it reads
-   none of your work, and end that word without closing anything. In the next word, prompt claude-cli:opus/low on that chain
-   with shape int for a small sum, and await the value. Say in that message that the answer is a close of the number.
+   none of your work, and end that word without closing anything. In the next word, prompt that chain with no actor
+   named, with shape int for a small sum, and await the value. Say in that message that the answer is a close of the number.
 4. Prompt the operator, which is the actor named "operator", with shape str for a word, await it, and hold the
    word it gives back.
 5. Debug one value with a template string, and peek at one act you made.
