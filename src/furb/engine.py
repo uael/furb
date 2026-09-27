@@ -142,9 +142,9 @@ def gate(word: str, on: str = "") -> list[str]:
 
 
 def cd(path: str, on: str = "") -> str:
-  got = ask("cd", on, path)
+  ask("cd", on, path)
   tell("cd", path)
-  return got
+  return path
 
 
 def cwd(on: str = "") -> str:
