@@ -511,7 +511,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.
   A write of a door gives the words of that ladder alone, so a rung of the chain that is no rung of that ladder and stands before the first word that differs stands as it did.
   Before every reply the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
-  Where it asks, the chain makes a rung of the statements the turn shows of every act but a rung, which bind the name of each act the turn opened; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its statements already.
+  Where it asks, the chain makes a rung of the statements and the quotes that the turn shows of every act but a rung, which bind the name of each act that the turn opened and each string that the turn quoted; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its statements already.
   The chain takes its own act, since the engine is the one that runs it.
   The chain asks the model of a rung for its word by a reply it makes under the site of that rung, whose one word is the actor.
   """
@@ -655,10 +655,11 @@ type Note = str | Showing
 """One thing a tell says: python as it stands, or a text and its show, which the fold shows as comments by the lines the model has not seen.
 A paragraph is what one fact that tells stands as in a turn: its notes, one after the other, and a blank line between two paragraphs.
 The first line of a paragraph is its header: # and, with no space, the id of the act it is of, or the kind of the read, the write or the cd it tells, then its words, as #bash1 exited 0 or #read a.txt.
-A paragraph may hold more headers of what it is of, each on a line of its own right under the first, and every other comment of it begins with # and a space, so no line of a message or of a text reads as a header.
+A paragraph may hold more headers of what it is of, each on a line of its own right under the first, and every other comment of it begins with # and a space, so no line of a text reads as a header, and a message of more than one line stands in a quote.
 The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write or a cd stands at the place in the run where it was asked.
 The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, roster, cwd, actor, advance, paused, woke, cancelled, and one for each question that tells: read, write and cd.
-A statement that a paragraph shows binds the name of an act in the chain, and a comment binds nothing.
+A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing.
+A note tells a string of more than one line as a quote, whose name is the id of the act, an underscore, and the word of the verb that holds the string, as prompt2_message, bash1_command or prompt2_value.
 """
 type Showing = tuple[Text, Show]
 """A text a note shows, and the show of it, which is what a tell of a text carries and what the fold of the turns makes comments of.
@@ -878,9 +879,9 @@ def tell(name: str, text: object = "", *notes: Note) -> None:
 def tells(id: str) -> bool:
   """Whether an act tells: a rung that its chain made tells nothing, neither its word nor what its word does, since what it would tell stands told already."""
 
-def told(id: str, text: object = "", *notes: Note) -> Tell:
+def told(id: str, text: object = "", *notes: Note, word: str = "text") -> Tell:
   """The open of an act tells the id and what the act says of itself, and no actor and no arguments as such.
-  A closed header tells the act with what it came to, as python shows it.
+  A closed header tells the act with what it came to, as python shows it, and a string of more than one line as a quote under the header.
   told gives the saying of a tell about an act, with one paragraph headed with the id of the act, which an ear yields and a verb says, so a chain holds what it told where it told it.
   """
 
@@ -890,8 +891,8 @@ def control(kind: str, name: str, id: str, *words: object) -> Fact:
   A control is said while the act it names is not done, and a wake while it is paused too, so a control that reaches nothing says nothing.
   """
 
-def headed(name: str, text: object = "") -> str:
-  """The header of a paragraph: # and the name with no space between, then the text, whose later lines are comments."""
+def headed(name: str, text: object = "", word: str = "text") -> str:
+  """The header of a paragraph: # and the name with no space between, then the text when it holds one line, and a quote of the text under the header when it holds more."""
 
 def commented(text: object) -> str:
   """The text as comments: # and a space before each line of it, and # alone for an empty line, so no line of it runs."""
@@ -907,10 +908,10 @@ def shown(pair: Note, seen: dict[str, dict[int, str]]) -> str:
 
 def unquoted(word: str) -> str:
   """What a word is as python: each quote in it bound as a string.
-  A quote is a string a word writes between two marks, <Sn> at the start of a line and </Sn> at the end of a line, n being any number, so nothing in it needs an escape.
+  A quote is a string a word writes between two marks, <s:name> at the start of a line and </s:name> at the end of a line, name being any python name, so nothing in it needs an escape.
   The open mark is looked for line by line from the top, and its close mark from the last line up, so a quote may hold the marks of another.
   The value of a quote is the text between its marks, less a line break just after the open mark.
-  A quote becomes Sn bound to its value as python writes it, on the line of the open mark, and each other line of the quote becomes an empty line, so every line after it keeps its number.
+  A quote becomes its name bound to its value as python writes it, on the line of the open mark, and each other line of the quote becomes an empty line, so every line after it keeps its number.
   An open mark that has no close mark stays as it is, and the gate reads it as the python it is not.
   The engine unquotes a word before the gate reads it and before the Kernel runs it, and the door of a ladder and the turns keep the quotes as the word wrote them.
   """
@@ -1004,3 +1005,5 @@ The program rebinds actor like any name, and the last binding wins.
 raised: BaseException | None
 """raised is the exception object that the last rung raised, rebound at each raise.
 raised is None at the birth of the module of a chain, so a word reads it before any rung raised."""
+doctrine: str
+"""doctrine is the quote after the engine in the system prompt, which says how a model works in furb and holds no law."""

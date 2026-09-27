@@ -531,7 +531,7 @@ async def test_a_prompt_tells_its_message_and_its_binding_where_it_is_made() -> 
   _, log, root = born("a = 1", "close(2)", "close(3)")
   first = engine.prompt(int, "count\nto three", on=root)
   second = engine.prompt(int, "count again", on=root)
-  mine = f"#{first} count\n# to three\n{first}: Act[int] = Act({first!r})"
+  mine = f"#{first}\n<s:{first}_message>\ncount\nto three</s:{first}_message>\n{first}: Act[int] = Act({first!r})"
   theirs = f"#{second} count again\n{second}: Act[int] = Act({second!r})"
   assert [(a[1], a[2]) for a in said(log, "tell") if a[1] in (first, second)] == [(first, first), (second, second)]
   told = next(a for a in said(log, "tell") if a[1] == first)
@@ -542,7 +542,12 @@ async def test_a_prompt_tells_its_message_and_its_binding_where_it_is_made() -> 
   act = engine.prompt(int, "how many?\nsay one", to=OPERATOR, on=root)
   await settle()
   made = log.index(engine.get(act))
-  assert log[made + 1] == ("tell", act, act, [f"#{act} how many?\n# say one", f"{act}: Act[int] = Act({act!r})"])
+  assert log[made + 1] == (
+    "tell",
+    act,
+    act,
+    [f"#{act}\n<s:{act}_message>\nhow many?\nsay one</s:{act}_message>", f"{act}: Act[int] = Act({act!r})"],
+  )
   assert [a for a in said(log, "tell") if a[1] == act] == [log[made + 1]] and len(said(log, "reply")) == 3
 
 

@@ -76,10 +76,10 @@ async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -
 async def test_the_open_of_a_rung_with_a_word_is_its_header_and_then_that_word() -> None:
   """The open of a rung with a word is its header and then that word, as its caller wrote it."""
   _, log, root = born()
-  act = engine.rung("<S1>hi</S1>\nk = S1", on=root)
+  act = engine.rung("<s:hi>hi</s:hi>\nk = hi", on=root)
   await act
-  assert said(log, "tell")[2] == ("tell", act, act, [f"#{act}", "<S1>hi</S1>\nk = S1"])
-  assert of(engine.turns(on=root), act) == [f"#{act}\n<S1>hi</S1>\nk = S1"]
+  assert said(log, "tell")[2] == ("tell", act, act, [f"#{act}", "<s:hi>hi</s:hi>\nk = hi"])
+  assert of(engine.turns(on=root), act) == [f"#{act}\n<s:hi>hi</s:hi>\nk = hi"]
   assert engine.module(root)["k"] == "hi"
 
 

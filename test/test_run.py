@@ -23,17 +23,17 @@ async def test_a_run_is_the_act_of_running_the_word_of_a_rung() -> None:
 async def test_the_word_a_run_carries_is_python_which_unquoted_made_of_the_word_of_the_rung() -> None:
   """The word a run carries is python, which unquoted made of the word of the rung."""
   sand, log, root = born()
-  laid = engine.rung("<S1>\nhi\n</S1>\nk = S1", on=root)
+  laid = engine.rung("<s:hi>\nhi\n</s:hi>\nk = hi", on=root)
   await laid
-  sand.script[root] = ["<S2>it's</S2>\nclose(k + S2)"]
+  sand.script[root] = ["<s:there>it's</s:there>\nclose(k + there)"]
   act = engine.prompt(str, "greet", on=root)
   assert await act == "hi\nit's"
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   words = {a[1]: a[3] for a in said(log, "ready")}
   runs = [(a[4], a[5]) for a in said(log, "run") if a[4] in (laid, step)]
-  assert runs == [(laid, "S1 = 'hi\\n'\n\n\nk = S1"), (step, 'S2 = "it\'s"\nclose(k + S2)')]
+  assert runs == [(laid, "hi = 'hi\\n'\n\n\nk = hi"), (step, 'there = "it\'s"\nclose(k + there)')]
   assert [word for _, word in runs] == [engine.unquoted(words[laid]), engine.unquoted(words[step])]
-  assert [compile(word, "<run>", "exec").co_names for _, word in runs] == [("S1", "k"), ("S2", "close", "k")]
+  assert [compile(word, "<run>", "exec").co_names for _, word in runs] == [("hi", "k"), ("there", "close", "k")]
 
 
 async def test_a_run_names_the_rung_that_the_word_retells() -> None:

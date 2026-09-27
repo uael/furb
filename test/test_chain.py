@@ -990,12 +990,12 @@ async def test_before_every_reply_the_chain_tells_the_last_line_of_the_turn() ->
 
 
 async def test_where_it_asks_the_chain_makes_a_rung_of_the_statements_the_turn_shows() -> None:
-  """Where it asks, the chain makes a rung of the statements the turn shows of every act but a rung, which bind the name of each act the turn opened; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its statements already."""
+  """Where it asks, the chain makes a rung of the statements and the quotes that the turn shows of every act but a rung, which bind the name of each act that the turn opened and each string that the turn quoted; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its statements already."""
   sand, log, root = born()
   laid = engine.rung("k = 1", on=root)
   assert await laid is None
   sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]
-  one = engine.prompt(int, "run it", on=root)
+  one = engine.prompt(int, "run it\nnow", on=root)
   assert await one == 1
   await settle()
   command = said(log, "bash")[0][1]
@@ -1005,10 +1005,12 @@ async def test_where_it_asks_the_chain_makes_a_rung_of_the_statements_the_turn_s
   made = [a[1] for a in engine.transcript(root) if engine.question(a)]
   asks = [made.index(a[1]) for a in said(log, "reply")]
   assert [[one for one in made[:at] if one.startswith("rung")][-1] for at in asks] == binders
-  statements = [binding(root), binding(one, "int"), binding(command, "Exit"), binding(ack, "None")]
-  assert [engine.get(bind)[4] for bind in binders] == ["\n".join(statements[:2]), "\n".join(statements[2:])]
+  quote = f"<s:{one}_message>\nrun it\nnow</s:{one}_message>"
+  statements = [binding(root), quote, binding(one, "int"), binding(command, "Exit"), binding(ack, "None")]
+  assert [engine.get(bind)[4] for bind in binders] == ["\n".join(statements[:3]), "\n".join(statements[3:])]
   shown = [line for part in paragraphs(engine.turns(on=root)) for line in part.split("\n") if line[:1] != "#"]
-  assert shown == [statements[0], "k = 1", *statements[1:]]
+  assert shown == [statements[0], "k = 1", *quote.split("\n"), *statements[2:]]
+  assert engine.module(root)[f"{one}_message"] == "run it\nnow"
   assert [engine.module(root)[name] for name in (root, one, command, ack)] == [root, one, command, ack]
   assert [a[1] for a in said(log, "rung") if a[1] in engine.module(root)] == []
   words = [turn[1] for turn in engine.turns(on=root) if turn[0] == "assistant"]

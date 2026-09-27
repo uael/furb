@@ -73,8 +73,8 @@ async def test_the_engine_sends_the_response_to_the_provider_again_whole() -> No
 
 async def test_the_python_of_a_turn() -> None:
   """The python of an assistant turn is the word the model wrote, quotes and all, and the python of a user turn is the paragraphs told since the reply before it, and nothing else."""
-  _, _, root = await spoke("<S1>\nhi\n</S1>\na = S1", "close(len(a) - 2)")
+  _, _, root = await spoke("<s:hi>\nhi\n</s:hi>\na = hi", "close(len(a) - 2)")
   got = engine.turns(on=root)
-  assert got[1][1] == "<S1>\nhi\n</S1>\na = S1"
+  assert got[1][1] == "<s:hi>\nhi\n</s:hi>\na = hi"
   assert got[2][1] == "#rung3 advance on prompt1"
   assert got[4][1] == "#prompt1 closed 1"
