@@ -323,7 +323,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           rungs[rid] = word
           if not tells(rid):
             found = get(rid)[5] in refused
-          elif found := gate(word, id):
+          elif found := gate(word):
             yield told(rid, "refused", commented("\n".join(found)))
           if found:
             refused.add(rid)
@@ -356,7 +356,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         and not any(running.values())
         and all(peek(x[1], ...) is not ... for x in transcript(id) if x[0] == "prompt" and x[3] == id)
       ):
-        prompt(None, f"{unseen} done", on=id)
+        prompt(None, f"{unseen} done")
         unseen = ""
 
   return act("chain", on, ear, label, source)
