@@ -3,7 +3,7 @@
 import re
 from collections.abc import Sequence
 
-from conftest import born, heads, opened, paragraphs, said, settle, takes, world_says
+from conftest import BAD, born, heads, opened, paragraphs, said, settle, takes, world_says
 from furb import engine
 from furb.engine import OPERATOR, Act, span
 
@@ -24,12 +24,14 @@ EVERY = (
   "chance()\n"
   "gate('k = 9')\n"
   "cd('/x')\n"
+  "wait(on=chain('far'))\n"
   "cwd()\n"
   "debug(t'{1}')\n"
   "close(1)\n"
 )
 EVENTS = {
   "closed",
+  "done",
   "exited",
   "raised",
   "debugged",
@@ -112,7 +114,7 @@ async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> N
 
 
 async def test_the_headers_of_the_file() -> None:
-  """The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled."""
+  """The headers of the file are the open of an act, closed, done, exited, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled."""
   sand, _, root = born()
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
@@ -153,6 +155,13 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   assert shown == [line for word in own for line in word.split("\n")] + ["prompt2_value = 0"]
   assert engine.module(root)["bash1"] == "bash1"
   assert engine.module(root)["prompt1_message"] == "run it\nnow"
+  _, _, fixed = born(
+    "k = 1",
+    "ok = BAD",
+    "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))",
+    "close((k, ok, rung3_findings))",
+  )
+  assert await engine.prompt(object, "fix it", on=fixed) == (1, 2, BAD)
 
 
 async def test_a_paragraph_binds_each_value_that_it_tells_under_a_name() -> None:

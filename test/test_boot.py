@@ -88,7 +88,7 @@ async def test_a_verb_from_a_rung_takes_the_chain_of_the_rung_when_the_call_leav
 async def test_the_kind_of_an_act_is_the_verb_that_made_the_act_or_the_kind_an_ear_made_it_with() -> None:
   """The kind of an act is the verb that made the act, or the kind an ear made it with."""
   _, log, _ = await lived()
-  kinds = {"chain", "stand", "prompt", "rung", "reply", "gate", "run", "read", "bash", "wants", "merged"}
+  kinds = {"chain", "stand", "prompt", "rung", "reply", "gate", "run", "read", "bash", "merged"}
   assert {engine.get(name)[0] for name in ids(log)} == kinds and engine.get("merged1")[2] == WORLD
   assert [name for name in ids(log) if name.rstrip("0123456789") != engine.get(name)[0]] == []
 
@@ -455,7 +455,7 @@ async def test_a_read_the_operator_makes_is_kept_like_any_other_act_of_the_opera
   later = Sand(files={"/w/a.txt": "changed\n"})
   again, _ = await relived(later, list(sand.record))
   assert [a[1:3] for a in said(again, "read")] == [("read1", OPERATOR), ("read2", OPERATOR)]
-  assert [(a[0], a[4:]) for a in later.calls] == [("read", ("gone.txt",)), ("stand", ())]
+  assert [(a[0], a[4:]) for a in later.calls] == [("stand", ())]
   assert engine.peek("read1") == Text("/w/a.txt", "one\ntwo\n") and isinstance(engine.peek("read2"), Refused)
 
 

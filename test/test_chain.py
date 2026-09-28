@@ -145,6 +145,7 @@ async def test_a_chain_given_a_source_stands_on_that_one() -> None:
   """A chain given a source stands on that one: it retells the words of it as they stand, each rung of it retelling a rung of that one, so that it makes the same acts and shares them, and what it holds of the transcript of that one is what its filter kept, though it runs every word all the same, so what it holds bound is more than its turns say."""
   _, log, root = born("x = bash('echo hi')\nn = (await x).code\nclose(1)", "close(None)")
   assert await engine.prompt(int, "run it", on=root) == 1
+  assert await engine.prompt(None, "look", on=root) is None
   await settle()
   command = said(log, "bash")[0][1]
   program = engine.program(root)
@@ -608,6 +609,7 @@ async def test_the_globals_of_a_chain_with_a_source_may_hold_more_than_its_turns
   """The globals of a chain with a source may hold more than its turns say."""
   _, log, root = born("x = bash('echo hi')\nn = (await x).code\nclose(1)", "close(None)")
   assert await engine.prompt(int, "run it", on=root) == 1
+  assert await engine.prompt(None, "look", on=root) is None
   await settle()
   command = said(log, "bash")[0][1]
   narrow = engine.chain("narrow", source=root, filter=take(command, inside=False))
@@ -1065,3 +1067,23 @@ async def test_the_chain_asks_the_model_of_a_rung_for_its_word_by_a_reply() -> N
   (step,) = steps(log, one)
   assert [(a[2], a[3], *a[4:]) for a in said(log, "reply")] == [(step, root, "n/low")]
   assert engine.get(step)[6] == "n/low" and [a[1] for a in said(sand.calls, "reply")] == ["reply1"]
+
+
+async def test_when_an_act_that_a_rung_made_on_another_chain_is_done_the_chain_tells_it() -> None:
+  """When an act that a rung of the chain made on another chain is done while the word of that rung does not run and no word of the chain awaited it, the chain tells it about that rung under the header done, and binds what it came to under the word value, since its model reads no other transcript."""
+  word = "far = chain('far')\nx = prompt(str, 'one', on=far)\ny = prompt(str, 'two', to=OPERATOR, on=far)\nclose(1)"
+  sand, log, root = born(word, "close(await y)")
+  sand.script["chain2"] = ["close('a\\nb')"]
+  act = engine.prompt(int, "fan out", on=root)
+  assert await act == 1
+  await settle()
+  (step,) = steps(log, act)
+  far, (x, y) = "chain2", [next(a[1] for a in said(log, "prompt") if a[5] == message) for message in ("one", "two")]
+  engine.close("c", y)
+  await settle()
+  assert [(a[1], a[2], a[3]) for a in said(log, "tell") if a[3][0].startswith((f"#{x} done", f"#{y} done"))] == [
+    (step, root, [f"#{x} done\n<s:{x}_value>\na\nb</s:{x}_value>"])
+  ]
+  assert f"#{x} done\n<s:{x}_value>\na\nb</s:{x}_value>" in paragraphs(engine.turns(on=root))
+  assert [a[5] for a in said(log, "prompt") if a[3] == root] == ["fan out", f"{x} done"]
+  assert engine.peek(y) == "c" and engine.get(far)[0] == "chain"

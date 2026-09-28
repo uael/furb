@@ -66,8 +66,9 @@ LATER: list = [[[OPERATOR, [], 200000], ["o", ["low"], 200000]], "/z", "o/low"]
 COST = (80000, 0, 0, 0, 1.5)
 """One answer of a model: a dollar and a half, and a fifth of the window of the actor the suite stands on."""
 
-WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nclose((await x).code)"
-"""A word of a rung that reads a file, starts a command and gives back what the command came to."""
+WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nclose(k)"
+"""A word of a rung that reads a file, starts a command and gives back how many lines the file holds, before the
+command is done, so the chain acknowledges the command."""
 
 BAD = "line 1: error[unresolved-reference] Name `BAD` used when not defined"
 """BAD is what the gate finds against a word whose first line names BAD, which nothing binds."""
@@ -392,7 +393,7 @@ def born(*script: str, **world: object) -> tuple[Sand, list[tuple], str]:
 async def lived() -> tuple[Sand, list[tuple], str]:
   """A life that reads a file, runs a command and returns what it came to: the World, what was said and the root."""
   sand, log, root = born(WORD, "close(None)")
-  assert await engine.prompt(int, "read and run", on=root) == 0
+  assert await engine.prompt(int, "read and run", on=root) == 2
   await settle()
   return sand, log, root
 
