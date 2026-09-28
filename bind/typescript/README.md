@@ -9,10 +9,10 @@ with an error that names the engine's fault. A TUI is not part of this package.
 `typescript` feature builds the binding in the existing crate. There is no Rust worker or second crate. The
 `Engine` of the package has one method for each verb of the contract, which the build of the crate makes from
 `src/furb/engine.pyi`, as it makes the methods of the crate: the words that the verb needs, in their order, then an
-object of the words that have a default, where nothing leaves the default of the engine. A verb of the operator names its chain in `on`. The
-package runs on Bun and Node.js 22 or later, on macOS, Linux and Windows. Bun gives no signal on Windows for
-Ctrl+Break or for the close of the console, and ends the process at once: `onConsoleEnd(callback)` hears these
-events there, and the system holds the process until the callback ends it.
+object of the words that have a default, where nothing leaves the default of the engine. A verb of the operator
+names its chain in `on`. The package runs on Bun and Node.js 22 or later, on macOS, Linux and Windows. Bun gives no
+signal on Windows for Ctrl+Break or for the close of the console, and ends the process at once:
+`onConsoleEnd(callback)` hears these events there, and the system holds the process until the callback ends it.
 
 ```ts
 import { boot } from "@furb/engine";
