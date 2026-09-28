@@ -87,7 +87,7 @@ max-line-length = 160
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false
-known-first-party = ["furb", "furb_monty", "conftest"]
+known-first-party = ["furb", "furb_monty", "conftest", "extensions"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -108,8 +108,8 @@ skip-magic-trailing-comma = true
 [tool.ty.src]
 include = ["src", "test", "script", "bind/python", "extensions"]
 
-# The suite of an extension imports the harness of the engine, as pytest does from its pythonpath, and not the
-# conftest of its own folder, which only hands it the hooks.
+# The suite of an extension imports the harness of the engine as conftest, as pytest does from its pythonpath, and
+# its own helpers from extensions.conftest.
 [tool.ty.environment]
 extra-paths = ["test"]
 

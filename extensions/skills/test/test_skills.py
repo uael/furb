@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from conftest import chained, extended, of, skilled
+from conftest import chained, of
+from extensions.conftest import extended, skilled
 from furb import engine
 from furb.engine import Text
 from furb_monty import _monty

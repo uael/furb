@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from conftest import extended, of, skilled
+from conftest import of
+from extensions.conftest import extended, skilled
 from furb import engine
 from furb.engine import Refused, Text
 from furb_monty import _monty

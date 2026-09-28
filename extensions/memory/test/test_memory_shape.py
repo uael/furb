@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from conftest import extended, noted, recalled, settle
+from conftest import settle
+from extensions.conftest import extended, noted, recalled
 from furb import engine
 from furb.engine import Text
 from furb_monty import _monty

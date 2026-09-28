@@ -3,7 +3,8 @@
 from asyncio import CancelledError
 from pathlib import Path
 
-from conftest import extended, heads, noted, plain, recalled, settle
+from conftest import heads, plain, settle
+from extensions.conftest import extended, noted, recalled
 from furb import engine
 from furb_monty import _monty
 
