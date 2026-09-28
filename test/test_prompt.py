@@ -2,6 +2,8 @@
 
 from asyncio import CancelledError
 
+import pytest
+
 from conftest import (
   COST,
   STANDS,
@@ -422,6 +424,19 @@ async def test_the_shape_left_unsaid_is_none() -> None:
   engine.close("anything", act)
   await settle()
   assert (await act) == "anything"
+
+
+async def test_a_prompt_refuses_when_it_is_made_a_shape_that_the_module_of_its_chain_cannot_read() -> None:
+  """A prompt refuses, when it is made, a shape that the module of its chain cannot read, and makes no act."""
+  _, log, root = born()
+  with pytest.raises(Refused, match="Nope no shape"):
+    engine.prompt("Nope", "which?", on=root)
+  with pytest.raises(Refused, match="3 no shape"):
+    engine.prompt("3", "which?", on=root)
+  assert said(log, "prompt") == []
+  await engine.rung("class Nope:\n  pass", on=root)
+  asked = engine.prompt("Nope", "which?", to=OPERATOR, on=root)
+  assert engine.get(asked)[4] == "Nope"
 
 
 async def test_a_prompt_takes_any_shape_which_a_close_is_read_against_as_python_reads_an_instance() -> None:

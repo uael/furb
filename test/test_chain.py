@@ -230,12 +230,18 @@ async def test_the_chain_holds_the_control_it_says_itself() -> None:
   assert closed == [told[0] for _, _, told in shut]
 
 
-async def test_the_engine_binds_the_exception_of_a_raise_in_the_globals_of_the_chain() -> None:
-  """The engine binds the exception of a raise in the globals of the chain, under the name raised."""
+async def test_the_engine_binds_the_exception_of_every_raise_but_a_cancellederror() -> None:
+  """The engine binds the exception of every raise but a CancelledError in the globals of the chain, under the name raised."""
   _, _, root = born("raise ValueError('boom')", "close(1)", "close(None)")
   assert await engine.prompt(int, "try", on=root) == 1
   assert isinstance(engine.module(root)["raised"], ValueError)
   assert str(engine.module(root)["raised"]) == "boom"
+  with pytest.raises(KeyboardInterrupt):
+    await engine.rung("raise KeyboardInterrupt('stop')", on=root)
+  assert isinstance(engine.module(root)["raised"], KeyboardInterrupt)
+  with pytest.raises(CancelledError):
+    await engine.rung("w = wait(5)\ncancel(w)\nawait w", on=root)
+  assert isinstance(engine.module(root)["raised"], KeyboardInterrupt)
 
 
 async def test_the_engine_binds_the_exception_again_at_each_raise() -> None:
