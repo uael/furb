@@ -25,8 +25,9 @@ API of its own:
   python door gives it as `_monty.opened`, and the TypeScript door as `Engine.open`.
 - `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
-  names of its engine. The gate is the type checker of monty. It reads a word on the sheet of the engine,
-  `src/furb/sheet.py`, against the typeshed of the sandbox. The gate of the python package reads through it too.
+  names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
+  engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox
+  of its own, which alone says which module runs. The gate of the python package reads through it too.
 - `src/binding/py.rs`, behind the `python` feature, is the door to python: an `Engine` that says each name of the
   contract by its name, and the ears of the crate. `bind/python` is the package `furb-monty`. Its module `furb_monty.engine` gives every name of the
   contract over one life in the sandbox, and `FURB_ENGINE=monty` makes `from furb import engine` give it.
