@@ -79,10 +79,6 @@ export class Session extends EventEmitter {
   readonly activity = new Activity();
   readonly changes: FileChanges;
   readonly facts: Fact[] = [];
-  /** The acts that the record showed begun and not done when the life opened, and that no pause holds, by their
-   * kind: the engine starts none of them until a wake that this life says, which resume says. One that a pause of
-   * the operator holds waits for the wake of the operator. */
-  readonly pending = new Map<string, string>();
   /** The entries of the record: those the life opened on, and each that the life kept since. */
   entries: Entry[] = [];
   /** How many entries the record held when the life opened on it. */
@@ -176,10 +172,6 @@ export class Session extends EventEmitter {
       // The observer heard the entries that the life kept as it opened, after the record it opened on.
       this.entries = [...(engine.record as Entry[]), ...this.entries];
       this.opened = engine.record.length;
-      // The journal said the whole record again before boot returned, so every act that is not done now is one the
-      // record showed begun and not done.
-      for (const act of this.activity.acts.values())
-        if (WORK.includes(act.kind) && !act.done && !act.paused) this.pending.set(act.id, act.kind);
       this.save();
       return engine;
     } catch (error) {
@@ -199,7 +191,6 @@ export class Session extends EventEmitter {
       yield* this.activity.hear(fact);
       const [kind, id, by, ...words] = fact;
       if (kind === "reply" && isQuestion(kind, id)) this.replies.set(id, by);
-      if (kind === "done") this.pending.delete(id);
       if (kind === "done" && this.streams.delete(this.replies.get(id) ?? "")) this.changed();
       if (kind === "keep") this.entries.push(words[0] as Entry);
       this.heard();
@@ -242,6 +233,12 @@ export class Session extends EventEmitter {
     saveFile(`${this.record}.session.json`, JSON.stringify(saved));
   }
 
+  /** The work that an earlier life left, which waits for a wake that this life says, by the kind of each act, as the
+   * engine of the crate finds it. */
+  get pending(): Map<string, string> {
+    return new Map(this.engine?.pending());
+  }
+
   /** Start the pending work: a wake of each chain that holds some, which the engine answers by starting each
    * command, wait and prompt to the operator of it again, and by asking for each pending rung. */
   async resume(): Promise<void> {
@@ -249,7 +246,6 @@ export class Session extends EventEmitter {
     const engine = this.engine;
     if (!engine) return;
     const chains = new Set([...this.pending.keys()].map((id) => this.activity.acts.get(id)?.on));
-    this.pending.clear();
     for (const chain of chains) if (chain) engine.wake(chain);
     this.emit("change");
   }

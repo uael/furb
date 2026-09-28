@@ -13,7 +13,7 @@ generators are in `tui/script/`.
 An empty feed shows the logo of furb, what it does, the project and the model, three ways to start, and the keys
 to know. A click on a way to start puts its prompt in the input. The top line names the session, the chain, and the
 directory of the chain, and the toggle at its right switches the three views of the chain. The footer says what the
-session does, and each key that it offers is a button. GitHub Dark is the default.
+session does and offers the keys that act now, each a button that does what its key does. GitHub Dark is the default.
 
 ![Welcome](screenshots/01-welcome.png)
 
@@ -190,8 +190,8 @@ it, and `/queue` edits or removes the others.
 
 ## Images, sharing, and sessions
 
-`/image` or ⌃V attaches an image. `/share` writes a standalone HTML conversation. `/delete` moves a session to
-the trash of its workspace.
+`/image` or ⌃V attaches an image. `/share` writes a standalone HTML conversation. `/delete` archives a session, or
+moves it to the trash of its workspace.
 
 ![Image attachment](screenshots/36-image-attachment.png)
 

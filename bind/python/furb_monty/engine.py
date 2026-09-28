@@ -329,6 +329,12 @@ def boot(record: Iterable[object] = (), **outside: object) -> Act:
   return Act(living.engine.root)
 
 
+def pending() -> list[tuple[str, str]]:
+  """The work that an earlier life left, which waits for a wake that this life says, each act by its name and its
+  kind, as the engine of the crate finds it."""
+  return held_engine().pending()
+
+
 def ours(making: object) -> bool:
   """Whether a callable is one of this interpreter: no name of the engine, and no callable the engine made, which go
   back in as themselves."""

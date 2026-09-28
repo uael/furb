@@ -587,7 +587,7 @@ fn the_life_ends_with_stdin_and_a_later_life_resumes_its_record() {
 }
 
 #[test]
-fn the_state_names_each_act_that_an_earlier_life_left_started_and_not_done() {
+fn the_state_names_the_work_that_an_earlier_life_left_pending() {
   let yard = Yard::new("rpc-pending");
   let mut client = Client::new(&yard);
   client.data("1", json!({"type": "rung", "word": "await wait(600)"}));
@@ -597,7 +597,9 @@ fn the_state_names_each_act_that_an_earlier_life_left_started_and_not_done() {
   assert_eq!(state["pending"], json!([]), "the work of this life is no work of an earlier life");
   assert!(client.ended());
   let mut later = Client::new(&yard);
-  assert_eq!(later.data("1", json!({"type": "state"}))["pending"], json!([["wait1", "wait"]]));
+  let state = later.data("1", json!({"type": "state"}));
+  // The rungs of the two official extensions come first, and the rung of the client made the wait.
+  assert_eq!(state["pending"], json!([["rung3", "rung"], ["wait1", "wait"]]));
   later.data("2", json!({"type": "cancel", "act": "wait1"}));
   let state = later.data("3", json!({"type": "state"}));
   assert_eq!(state["pending"], json!([]), "an act that is done is pending no more");

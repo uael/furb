@@ -55,6 +55,10 @@ class Engine:
   def forget(self, n: int) -> None:
     """A callable the engine made, forgotten: python holds its handle no more."""
 
+  def pending(self) -> list[tuple[str, str]]:
+    """The work that an earlier life left, which waits for a wake that this life says, each act by its name and its
+    kind, as the engine of the crate finds it."""
+
   def watch(self, act: str, then: Callable[[object], object]) -> None:
     """What to call when an act is done, with what it came to: at once for one done already, and once otherwise."""
 

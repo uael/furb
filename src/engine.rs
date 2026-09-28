@@ -11,7 +11,7 @@
 
 use std::{
   cell::RefCell,
-  collections::HashMap,
+  collections::{HashMap, HashSet},
   future::Future,
   marker::PhantomData,
   pin::Pin,
@@ -47,6 +47,17 @@ const GATE: u8 = 2;
 
 /// The id of the ears, which hear every ear of the host by name, the other object of the host.
 const EARS: u8 = 3;
+
+/// The kinds of act that are work an operator waits for: a prompt, a rung, a command and a wait.
+const WORK: [&str; 4] = ["prompt", "rung", "bash", "wait"];
+
+/// Whether this life took up an act that the record shows started and not done: the outside says it started, which
+/// it does once a wake that this life says puts the act to it, or the act is done.
+const TOOK: &str =
+  "peek(__id, ...) is not ... or ('started', __id) in [x[:2] for x in transcript(scope(__id))]";
+
+/// Whether an act waits: it is not done, and no pause holds it.
+const WAITS: &str = "peek(__id, ...) is ... and not paused(__id)";
 
 /// The ears and the functions of the host, by the names the sandbox calls them by.
 ///
@@ -167,6 +178,17 @@ impl Hosted {
   }
 }
 
+/// The acts that the entries of a record show started and not done, by name, in the order of the record: work that
+/// the outside took in an earlier life. The record keeps the started of the outside alone, since a later life says
+/// again what an act said.
+fn left(record: &[Object]) -> Vec<String> {
+  let facts: Vec<Fact> =
+    record.iter().filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of)).collect();
+  let done: HashSet<&str> = facts.iter().filter(|a| a.kind() == "done").map(Fact::about).collect();
+  let started = facts.iter().filter(|a| a.kind() == "started" && !done.contains(a.about()));
+  started.map(|a| a.about().to_owned()).collect()
+}
+
 /// A step of an ear, as the stand-in reads it.
 fn replied(step: Step) -> Object {
   match step {
@@ -212,6 +234,9 @@ pub struct Engine {
   watchers: HashMap<String, Vec<Watcher>>,
   root: String,
   raised: Option<Fault>,
+  /// The acts that the record showed started and not done, which the journal holds from the outside and which this
+  /// life has not taken up yet, in the order of the record.
+  holding: Vec<String>,
 }
 
 impl Engine {
@@ -303,9 +328,11 @@ impl Engine {
       hosted.named(name.clone(), ear)?;
       names.push(name);
     }
-    let sand = Sand::new();
-    let (voice, watchers) = (Voice::new(), HashMap::new());
-    let mut engine = Engine { sand, hosted, voice, watchers, root: String::new(), raised: None };
+    let record: Vec<Object> = record.into_iter().collect();
+    let (sand, voice, watchers, holding) =
+      (Sand::new(), Voice::new(), HashMap::new(), left(&record));
+    let (root, raised) = (String::new(), None);
+    let mut engine = Engine { sand, hosted, voice, watchers, root, raised, holding };
     engine.ran(PREAMBLE, vec![])?;
     // The two objects of the host and the two modules are bound as names of the session, which every later piece
     // of code of the stand-in reads.
@@ -372,7 +399,6 @@ impl Engine {
 
   /// One word run in the names of the engine with these values bound, and what it gave, which is how a door reads
   /// what no verb reads.
-  #[cfg_attr(not(any(test, feature = "typescript")), allow(dead_code))]
   pub(crate) fn word(&mut self, word: &str, inputs: Vec<(&str, Object)>) -> Result<Object, Fault> {
     let mut bound = vec![("__word", Object::string(word))];
     bound.extend(inputs);
@@ -405,6 +431,46 @@ impl Engine {
     let value = value.map_or_else(Object::none, Object::string);
     let got = self.run("spoken(__engine, __value)", vec![("__value", value)])?;
     Ok(got.as_ref().as_str().unwrap_or_default().to_owned())
+  }
+
+  /// The work that an earlier life left, which waits for a wake that this life says, in the order of the record, each
+  /// act by its name and its kind. The record shows each act that the outside started and did not end, and the
+  /// journal holds it from the outside until a wake that this life says puts it to the outside again. Such an act is
+  /// pending while it is not done and no pause holds it, and so is each act above it that made it, directly or not,
+  /// when that act is a prompt, a rung, a command or a wait that is not done and that no pause holds.
+  pub fn pending(&mut self) -> Result<Vec<(String, String)>, Fault> {
+    let mut holding = Vec::new();
+    for id in std::mem::take(&mut self.holding) {
+      if !self.whether(TOOK, &id)? {
+        holding.push(id);
+      }
+    }
+    self.holding = holding.clone();
+    let mut pending = Vec::new();
+    for id in holding {
+      if !self.whether(WAITS, &id)? {
+        continue;
+      }
+      let (mut made, mut at) = (Vec::new(), id.clone());
+      while let Some(act) = self.get(&at)? {
+        if WORK.contains(&act.kind()) && self.whether(WAITS, &at)? {
+          made.push((at, act.kind().to_owned()));
+        }
+        at = act.by().to_owned();
+      }
+      for one in made.into_iter().rev() {
+        if !pending.contains(&one) {
+          pending.push(one);
+        }
+      }
+    }
+    Ok(pending)
+  }
+
+  /// Whether a word of the names of the engine is true of an act.
+  fn whether(&mut self, word: &str, id: &str) -> Result<bool, Fault> {
+    let got = self.word(word, vec![("__id", Object::string(id))])?;
+    Ok(got.as_ref().as_bool().unwrap_or_default())
   }
 
   /// What an act came to, once it is done, and nothing while it lives.

@@ -253,6 +253,17 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
   assert [name for name, _, _ in _monty.enabled(engine.transcript(on=root))] == ["memory", "skills"]
 
 
+async def test_the_door_names_the_work_that_an_earlier_life_left_pending(tmp_path: Path) -> None:
+  """A later life on the record of a life that left a wait names that wait, which waits for a wake that this life
+  says, as the engine of the crate finds it."""
+  path = str(tmp_path / "record.jsonl")
+  record, store = _monty.store(path)
+  root = furb_monty.engine.boot(record, time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
+  engine.wait(600, on=root)
+  furb_monty.engine.boot(_monty.kept(path), time=_monty.time(), world=Dead(stands=STANDS).hears())
+  assert furb_monty.engine.pending() == [("wait1", "wait")]
+
+
 def test_the_door_gives_the_catalog_of_the_crate(tmp_path: Path) -> None:
   """The door gives the catalog of the crate, as the door to TypeScript gives it: the levels of effort, a model by
   its name whether this machine offers it or not, and the models this machine offers."""

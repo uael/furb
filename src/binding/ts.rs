@@ -362,6 +362,14 @@ impl JsEngine {
     })
   }
 
+  /// The work that an earlier life left, which waits for a wake that this life says, each act by its name and its
+  /// kind, as the engine of the crate finds it.
+  #[napi(ts_return_type = "[string, string][]")]
+  pub fn pending(&self) -> napi::Result<Vec<Vec<String>>> {
+    let pending = self.held.call(Engine::pending)?;
+    Ok(pending.into_iter().map(|(id, kind)| vec![id, kind]).collect())
+  }
+
   /// One name of a chain, read without calling it, with its type and its representation in the sandbox. The value
   /// crosses as every value does, so a map that holds the key `is` crosses as its pairs.
   #[napi]

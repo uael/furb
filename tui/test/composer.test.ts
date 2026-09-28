@@ -111,6 +111,43 @@ test("a command that the text names whole comes first among its suggestions", ()
     true,
   ));
 
+test("the shape picker marks the shape of the next prompt and runs /shape, and /edit and its picker offer each prompt with a program", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      app.shapes();
+      let shown = await frame();
+      expect(shown).toContain("The engine validates the result against this Python type.");
+      expect(shown).toContain("✓ str");
+      await screen.mockInput.typeText("int");
+      screen.mockInput.pressEnter();
+      await until(session, () => session.shape === "int");
+      await idle(session);
+      // The prompt of the operator, a prompt that a rung made, and the prompt of the chain that tells it done each hold
+      // a program once the model answers it.
+      await session.command('/run prompt("str", message="Summarize the notes.")');
+      await until(session, () => session.activity.some((act) => act.id === "prompt3"));
+      await idle(session);
+      app.ladders();
+      shown = await frame();
+      expect(shown).toContain("Edit a prompt program");
+      expect(shown).toContain("✓ prompt1  Explore this project");
+      expect(shown).toContain("✓ prompt2  Summarize the notes.");
+      expect(shown).toContain("❯ ✓ prompt3  prompt2 done");
+      app.closeOverlay();
+      await screen.mockInput.typeText("/edit ");
+      shown = await frame();
+      expect(shown).toContain("❯ prompt1  Explore this project");
+      expect(shown).toContain("prompt2  Summarize the notes.");
+      expect(shown).toContain("prompt3  prompt2 done");
+      app.composer.setText("/edit");
+      await app.submit();
+      await until(session, () => session.editing !== undefined);
+      expect(session.editing).toBe("prompt3");
+    },
+    undefined,
+    true,
+  ));
+
 test("a sent text leaves its draft at once, and a program under edit opens from its door the next time", () =>
   composing(
     async ({ session, app, screen, frame }) => {
@@ -457,6 +494,50 @@ test("a paused chain says so at the end of its feed and in the footer, and Wake 
     shown = await frame();
     expect(shown).not.toContain("This chain is paused");
   }));
+
+test("the footer offers the keys of the top layer that acts, and a click on one does what its key does", () =>
+  composing(
+    async ({ session, app, screen, frame, click }) => {
+      const footer = async () => ((await frame()).trimEnd().split("\n").at(-1) ?? "").trim();
+      await idle(session);
+      expect(await footer()).toEndWith("⌃P commands   F1 help");
+      const id = await session.engine.prompt("bool", {
+        message: "Continue with the change?",
+        to: "operator",
+        on: session.engine.root,
+      });
+      await until(session.host, () => session.host.prompts.has(id));
+      await session.refresh();
+      expect(await footer()).toEndWith("⌃P commands   ⌃A answer   F1 help");
+      await click("⌃A answer");
+      expect(await frame()).toContain("Answer yes or no");
+      app.closeOverlay();
+      await session.submit("yes");
+      await screen.mockInput.typeText("/mo");
+      expect(await footer()).toEndWith("↑↓ choose   Tab complete   Esc hide");
+      await click("Esc hide");
+      expect(await footer()).toEndWith("⌃P commands   F1 help");
+      app.composer.setText("");
+      app.sessionTree();
+      expect(await footer()).toContain("↑↓ move");
+      expect(await footer()).toEndWith("Esc back");
+      await click("Esc back");
+      expect(await footer()).toEndWith("⌃P commands   F1 help");
+      await session.command("/edit");
+      expect(await footer()).toEndWith("Enter run   Esc leave the program");
+      screen.mockInput.pressEscape();
+      await until(session, () => session.editing === undefined);
+      app.composer.setText("show live progress");
+      await app.submit();
+      await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+      expect(await footer()).toEndWith("⌃P commands   Esc pause   F1 help");
+      screen.mockInput.pressEscape();
+      await until(session, () => session.paused);
+      expect(await footer()).toEndWith("/wake wake the chain   ⌃P commands   F1 help");
+    },
+    undefined,
+    true,
+  ));
 
 test("a message sent to a paused chain wakes it, and the answer comes", () =>
   composing(async ({ session, app }) => {

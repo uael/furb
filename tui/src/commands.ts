@@ -35,7 +35,7 @@ export const commands = {
   export: ["Export transcript", "<path>", "Write the transcript and program to a new JSON file"],
   workspace: ["Open workspace", "[path]", "Choose a workspace or add a project folder"],
   sidebar: ["Toggle sidebar", "", "Show or hide the chains, the usage, and the workspaces"],
-  delete: ["Delete session", "", "Move a session and its files to the workspace trash"],
+  delete: ["Delete session", "", "Archive a session, or move it and its files to the workspace trash"],
   autocollapse: ["Automatic rung collapse", "", "Toggle collapse of completed rungs"],
   extensions: ["Extensions", "", "List the extensions that this life runs"],
   exit: ["Exit", "", "Save every session and quit"],

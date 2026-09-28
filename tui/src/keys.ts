@@ -1,18 +1,20 @@
 import type { commands } from "./commands.ts";
 
-/** One thing that a key does: the presses that do it, the action that they run, and where the palette shows its
- * chord. A press names its key after its modifiers, as ctrl+b, and holds at least those modifiers. The palette shows
- * the chord beside the slash command that does the same, or as a choice of its own before a command. */
+/** One thing that a key does: the presses that do it, the action that they run, and where the palette and the footer
+ * show its chord. A press names its key after its modifiers, as ctrl+b, and holds exactly those modifiers. The palette
+ * shows the chord beside the slash command that does the same, or as a choice of its own before a command. */
 export interface Binding {
   on?: readonly string[];
   /** The name of the action that the App runs. */
   run?: string;
-  /** The chord as the palette shows it, when it is not the chord of the key. */
+  /** The chord as the palette and the footer show it, when it is not the chord of the key. */
   chord?: string;
   command?: keyof typeof commands;
   choice?: { label: string; detail: string; before: keyof typeof commands };
   /** Whether the presses act while a dialog is open. */
   always?: boolean;
+  /** What the footer says the key does, while the key acts. */
+  hint?: string;
 }
 
 /** A key of the TUI, what it does, and each binding that does it. A chord that a terminal sends only with the kitty
@@ -66,9 +68,13 @@ export const keys = [
   {
     chord: "⌃Tab / ⇧⌃Tab",
     action: "Next / previous chain",
-    bindings: [{ on: ["ctrl+tab", "super+tab"], run: "roll" }],
+    bindings: [{ on: ["ctrl+tab", "super+tab", "ctrl+shift+tab", "super+shift+tab"], run: "roll" }],
   },
-  { chord: "⌃P", action: "Search all actions", bindings: [{ on: ["ctrl+p"], run: "palette" }] },
+  {
+    chord: "⌃P",
+    action: "Search all actions",
+    bindings: [{ on: ["ctrl+p"], run: "palette", hint: "commands" }],
+  },
   {
     chord: "⌃B / ⌃N",
     action: "Switch / create a chain",
@@ -164,7 +170,7 @@ export const keys = [
     action: "Edit a prompt program / answer an operator question",
     bindings: [
       { on: ["ctrl+l"], run: "ladders", chord: "⌃L", command: "edit" },
-      { on: ["ctrl+a"], run: "answer" },
+      { on: ["ctrl+a"], run: "answer", chord: "⌃A", hint: "answer" },
     ],
   },
   {
@@ -196,7 +202,11 @@ export const keys = [
     bindings: [{ on: ["ctrl+pageup", "ctrl+pagedown"], run: "page", always: true }],
   },
   { chord: "⌃C", action: "Clear the input, close a dialog, or cancel current work" },
-  { chord: "Esc", action: "Close a dialog or pause current model work" },
+  {
+    chord: "Esc",
+    action: "Close a dialog or pause current model work",
+    bindings: [{ on: ["escape"], run: "pause", hint: "pause" }],
+  },
   {
     chord: "F1 / ⌃Q / ⌃D twice",
     action: "Help / save and quit / save and quit from an empty input",
@@ -205,6 +215,7 @@ export const keys = [
         on: ["f1"],
         run: "help",
         chord: "F1",
+        hint: "help",
         choice: { label: "Help", detail: "Keys, marks, and slash commands", before: "exit" },
       },
       { on: ["ctrl+q"], run: "quit", chord: "⌃Q", command: "exit", always: true },
@@ -229,27 +240,8 @@ export function shown(key: Key, binding: Binding, kitty: boolean): string {
   return binding.chord ?? (kitty ? key.chord : (key.legacy ?? key.chord));
 }
 
-/** Each binding with its key, the bindings with more modifiers first, so that ⌃PageUp pages the changes before
- * PageUp scrolls them. The action of each binding is one that Action names, since Action is read from the table. */
-export const bindings = (keys as readonly Key[])
-  .flatMap((key) =>
-    (key.bindings ?? []).map((binding) => ({ key, binding: binding as Binding & { run?: Action } })),
-  )
-  .sort((one, other) => modifiers(other.binding) - modifiers(one.binding));
-
-function modifiers(binding: Binding): number {
-  return Math.max(0, ...(binding.on ?? []).map((press) => press.split("+").length - 1));
-}
-
-/** Whether a press of a key is one that a binding names: the same key, with at least the modifiers of the binding. */
-export function presses(
-  binding: Binding,
-  key: { name: string; ctrl: boolean; meta: boolean; shift: boolean; super?: boolean },
-): boolean {
-  return (binding.on ?? []).some((press) => {
-    const [name, ...held] = press.split("+").reverse();
-    return (
-      name === key.name && held.every((modifier) => key[modifier as "ctrl" | "meta" | "shift" | "super"])
-    );
-  });
-}
+/** Each binding with its key, in the order of the table. The action of each binding is one that Action names, since
+ * Action is read from the table. */
+export const bindings = (keys as readonly Key[]).flatMap((key) =>
+  (key.bindings ?? []).map((binding) => ({ key, binding: binding as Binding & { run?: Action } })),
+);

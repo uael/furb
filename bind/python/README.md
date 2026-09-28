@@ -32,6 +32,11 @@ suite of each extension boots them. `answered(shape, line)` reads a line of the 
 `SHAPES`, by the rules that every console of the crate reads a line by. `_monty.SYSTEM` is the system prompt of every
 model: the engine, minified in layout alone.
 
+`furb_monty.engine.pending()` names the work that an earlier life left, which waits for a wake that this life says,
+each act by its name and its kind, as the `Engine` of the door finds it: among each act that the outside started and
+did not end, and the acts that made it, each prompt, rung, command and wait that is not done and that no pause holds.
+An act that a wake puts to the outside again is pending no more.
+
 A generator of this interpreter is heard on a thread of its own, so it may say a verb while it hears, as an ear of
 the engine of python does.
 

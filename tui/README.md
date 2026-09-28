@@ -32,11 +32,11 @@ unfinished. The list shows at once, and each saved session shows its state when 
 
 [The gallery](../docs/tui.md) shows each screen of the TUI and what it does.
 
-`/workspace path` adds a folder, and `/new` starts a session in the current workspace. `/delete` moves a chosen
-session and its companions to `.furb/trash`. The trash holds a `restore.json` with the original paths, and its
-record can be opened with `--resume`. Quit saves and closes all open sessions, and SIGINT, SIGTERM, SIGHUP, and
-SIGQUIT quit the same way. On Windows, a console that closes and Ctrl+Break quit the same way. `sidebarWidth` in the
-preferences file sets the width of the sidebar, from 26 to 48 columns. On a terminal narrower than 100 columns the
+`/workspace path` adds a folder, and `/new` starts a session in the current workspace. `/delete` archives a chosen
+session, or moves it and its companions to `.furb/trash`. The trash holds a `restore.json` with the original paths,
+and its record can be opened with `--resume`. Quit saves and closes all open sessions, and SIGINT, SIGTERM, SIGHUP,
+and SIGQUIT quit the same way. On Windows, a console that closes and Ctrl+Break quit the same way. `sidebarWidth` in
+the preferences file sets the width of the sidebar, from 26 to 48 columns. On a terminal narrower than 100 columns the
 sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
 
 Python words have offline Tree-sitter colors. GitHub Dark is the default. Sessions share the theme, and the TUI saves
@@ -126,7 +126,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/export <path>` | Write the transcript and program to a new JSON file |
 | `/workspace [path]` | Choose a workspace or add a project folder |
 | `/sidebar` | Show or hide the chains, the usage, and the workspaces |
-| `/delete` | Move a session and its files to the workspace trash |
+| `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/autocollapse` | Toggle collapse of completed rungs |
 | `/extensions` | List the extensions that this life runs |
 | `/exit` | Save every session and quit |
