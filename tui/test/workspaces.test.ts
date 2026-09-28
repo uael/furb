@@ -525,6 +525,31 @@ test("a right click on a session row opens its menu at the pointer, and Rename t
     expect(savedView(first.path).view.sessionName).toBe("old notes");
   }));
 
+test("Move to trash in the menu of a session row asks what its remove button asks, as /delete does, and moves nothing before a choice", () =>
+  withLibrary(async ({ directory, open, sidebar }) => {
+    const { library, group, first } = await fooAndBar(directory, open);
+    const { screen, app, left, frame, row } = await sidebar(library);
+    await screen.mockMouse.click(left + 8, row("foo"), 2);
+    let lines = await frame();
+    const menu = lines.findIndex((line) => line.slice(left).includes("Move to trash"));
+    await screen.mockMouse.click((lines[menu] ?? "").indexOf("Move to trash") + 1, menu);
+    lines = await frame();
+    expect(lines.join("\n")).toContain("Remove the session “foo”?");
+    expect(group.sessions).toContain(first);
+    app().closeOverlay();
+    app().composer.setText("/delete");
+    await app().submit();
+    await screen.mockInput.typeText("foo");
+    screen.mockInput.pressEnter();
+    lines = await frame();
+    expect(lines.join("\n")).toContain("Remove the session “foo”?");
+    const trash = lines.findIndex(
+      (line) => line.includes("Move to trash") && line.includes("Stop this session"),
+    );
+    await screen.mockMouse.click((lines[trash] ?? "").indexOf("Move to trash") + 1, trash);
+    await until(library, () => !group.sessions.includes(first));
+  }));
+
 test("a workspace row renames its workspace in place, and its remove button takes it off the list and leaves its folder", () =>
   withLibrary(async ({ directory, open, sidebar }) => {
     await mkdir(join(directory, "project"));

@@ -466,6 +466,14 @@ export class Session extends EventEmitter {
   isUserPrompt(act: ActRow): boolean {
     return act.kind === "prompt" && act.by === "operator";
   }
+  /** Whether a prompt has a program that an edit changes and replays: one of its rungs holds a word the gate let run
+   * on this chain. */
+  editable(act: ActRow): boolean {
+    return (
+      act.kind === "prompt" &&
+      this.activity.some((rung) => rung.by === act.id && Object.hasOwn(this.program, rung.id))
+    );
+  }
   /** The act that a name or a door names: the act whose name is the first part of the path. */
   actOf(path: string): ActRow | undefined {
     const [name] = path.split("/");
@@ -867,16 +875,8 @@ export class Session extends EventEmitter {
         if (command === "read") this.view = "feed";
         break;
       case "edit": {
-        // The latest prompt with a program: one of its rungs holds a word the gate let run on this chain.
-        const id =
-          argument ||
-          [...this.activity]
-            .reverse()
-            .find(
-              (act) =>
-                act.kind === "prompt" &&
-                this.activity.some((rung) => rung.by === act.id && Object.hasOwn(this.program, rung.id)),
-            )?.id;
+        // The latest prompt with a program.
+        const id = argument || this.activity.findLast((act) => this.editable(act))?.id;
         if (!id) throw new Error("There is no prompt program to edit.");
         const got = await this.engine.read(id, { on: this.selected });
         this.editing = id;

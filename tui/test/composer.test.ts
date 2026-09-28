@@ -111,6 +111,37 @@ test("a command that the text names whole comes first among its suggestions", ()
     true,
   ));
 
+test("the shape picker marks the shape of the next prompt and runs /shape, and /edit and its picker offer each prompt with a program", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      app.shapes();
+      let shown = await frame();
+      expect(shown).toContain("The engine validates the result against this Python type.");
+      expect(shown).toContain("✓ str");
+      await screen.mockInput.typeText("int");
+      screen.mockInput.pressEnter();
+      await until(session, () => session.shape === "int");
+      await idle(session);
+      // The prompt of the operator and the prompt that the chain made when its command ended each hold a program.
+      app.ladders();
+      shown = await frame();
+      expect(shown).toContain("Edit a prompt program");
+      expect(shown).toContain("✓ prompt1  Explore this project");
+      expect(shown).toContain("❯ ✓ prompt2  bash1 done");
+      app.closeOverlay();
+      await screen.mockInput.typeText("/edit ");
+      shown = await frame();
+      expect(shown).toContain("❯ prompt1  Explore this project");
+      expect(shown).toContain("prompt2  bash1 done");
+      app.composer.setText("/edit");
+      await app.submit();
+      await until(session, () => session.editing !== undefined);
+      expect(session.editing).toBe("prompt2");
+    },
+    undefined,
+    true,
+  ));
+
 test("a sent text leaves its draft at once, and a program under edit opens from its door the next time", () =>
   composing(
     async ({ session, app, screen, frame }) => {

@@ -1063,7 +1063,7 @@ export class App {
             ["returns ", c.faint],
             [w.shape, c.muted],
           ],
-          () => this.shapes(),
+          this.shapes,
         );
       }
     }
@@ -2879,26 +2879,18 @@ export class App {
               detail: "Fold it under Archived. Its record stays, and a click opens it again.",
               run: () => void library.archive(entry).catch(this.report),
             },
-        this.trash(entry),
+        {
+          label: "Move to trash",
+          color: c.danger,
+          detail: "Stop this session and move its saved record to the trash",
+          run: () => library.delete(entry).then(() => {}),
+        },
         { label: "Keep", detail: "Return without changes", run() {} },
       ],
-      { note: `The trash is ${this.trashOf(group)}, where you can get it back.` },
-    );
-  }
-  /** The choice that stops a session and moves its saved record to the trash of its workspace. */
-  private trash(entry: SessionEntry): Choice {
-    return {
-      label: "Move to trash",
-      color: c.danger,
-      detail: "Stop this session and move its saved record to the trash",
-      run: async () => {
-        await this.options.workspaces.delete(entry);
+      {
+        note: `The trash is ${shortenHome(join(group.directory, ".furb", "trash"))}, where you can get it back.`,
       },
-    };
-  }
-  /** Where the trash of a workspace is, as a dialog names it. */
-  private trashOf(group: Workspace): string {
-    return shortenHome(join(group.directory, ".furb", "trash"));
+    );
   }
   /** What names a session or a workspace for as long as it lives: the path of its record, or its folder. */
   private itemKey(item: SessionEntry | Workspace): string {
@@ -2954,7 +2946,7 @@ export class App {
             { label: "New session", detail: "", run: () => library.create(item).then(() => {}) },
             rename,
             { label: item.collapsed ? "Unfold" : "Fold", detail: "", run: () => library.toggle(item) },
-            { label: "Remove from the list", detail: "", run: () => library.remove(item) },
+            { label: "Remove from the list", detail: "", run: () => this.removeItem(item) },
           ]
         : [
             ...(library.current === item
@@ -2964,12 +2956,7 @@ export class App {
             item.archived
               ? { label: "Restore", detail: "", run: () => library.restore(item) }
               : { label: "Archive", detail: "", run: () => library.archive(item) },
-            {
-              label: "Move to trash",
-              detail: "",
-              color: c.danger,
-              run: () => library.delete(item).then(() => {}),
-            },
+            { label: "Move to trash", detail: "", color: c.danger, run: () => this.removeItem(item) },
           ];
     this.openPalette(item.name, choices, { at: { x, y } });
     this.menuItem = item;
@@ -3028,7 +3015,7 @@ export class App {
       queue: this.queuePicker,
       model: this.models,
       effort: this.effortPicker,
-      shape: () => this.shapes(),
+      shape: this.shapes,
       theme: () => this.themes(),
       exit: () => this.options.quit(),
       editor: () => this.editDraft(),
@@ -3058,12 +3045,7 @@ export class App {
           group.sessions.map((entry) => ({
             label: entry.name,
             detail: group.name,
-            run: () =>
-              this.openPalette(
-                `Delete the session “${entry.name}”?`,
-                [{ label: "Keep session", detail: "Return without changes", run() {} }, this.trash(entry)],
-                { note: `It goes to ${this.trashOf(group)}, where you can get it back.` },
-              ),
+            run: () => this.removeItem(entry),
           })),
         ),
       );
@@ -3252,7 +3234,7 @@ export class App {
             value: act.value,
           }),
       },
-      ...(act.kind === "prompt" && !asksOperator(act)
+      ...(w.editable(act)
         ? [
             {
               label: "Edit its program",
@@ -3432,7 +3414,7 @@ export class App {
       })),
     edit: () =>
       this.session.activity
-        .filter((act) => this.session.isUserPrompt(act))
+        .filter((act) => this.session.editable(act))
         .map((act) => ({
           value: act.id,
           detail: clip(String(act.words[1] ?? "").split("\n")[0] ?? "", 48),
@@ -3681,19 +3663,8 @@ export class App {
       { selected: names.indexOf(this.theme), note: "Every session shares this choice." },
     );
   }
-  shapes(): void {
-    this.openPalette(
-      "Response shape",
-      shapes().map((name) => ({
-        label: name,
-        detail: "The engine validates the result against this Python type",
-        run: () => {
-          this.session.shape = name;
-          this.render();
-        },
-      })),
-    );
-  }
+  shapes = (): void =>
+    this.pick("shape", "Response shape", "The engine validates the result against this Python type.");
   toggleMode(): void {
     this.session.mode = this.session.mode === "python" ? "prompt" : "python";
     this.render();
@@ -4058,7 +4029,7 @@ export class App {
   }
   /** The prompts of the chain, whose program an edit changes and replays. */
   ladders(): void {
-    const prompts = this.session.activity.filter((act) => act.kind === "prompt" && !asksOperator(act));
+    const prompts = this.session.activity.filter((act) => this.session.editable(act));
     this.openPalette(
       "Edit a prompt program",
       prompts.map((act) => {

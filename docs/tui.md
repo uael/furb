@@ -190,8 +190,8 @@ it, and `/queue` edits or removes the others.
 
 ## Images, sharing, and sessions
 
-`/image` or ⌃V attaches an image. `/share` writes a standalone HTML conversation. `/delete` moves a session to
-the trash of its workspace.
+`/image` or ⌃V attaches an image. `/share` writes a standalone HTML conversation. `/delete` archives a session, or
+moves it to the trash of its workspace.
 
 ![Image attachment](screenshots/36-image-attachment.png)
 
