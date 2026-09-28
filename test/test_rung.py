@@ -8,16 +8,17 @@ from conftest import (
   WORLD,
   Py,
   acts,
-  bindings,
   born,
   chained,
   counted,
   dones,
+  fresh,
   gated,
   kept,
   of,
   opened,
   paragraphs,
+  prompted,
   ran,
   said,
   settle,
@@ -34,7 +35,7 @@ from furb.engine import Exit, Refused, Text
 
 async def test_the_run_of_a_word_on_a_chain() -> None:
   """The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is."""
-  log, root, laid, act, step, _ = await counted()
+  log, root, laid, act, step = await counted()
   assert [(a[1], a[2], a[3]) for a in said(log, "tell") if a[1] in (laid, step)] == [
     (laid, laid, [written(laid, "k = 1")]),
     (step, root, [f"#{step} advance on {act}"]),
@@ -52,8 +53,8 @@ async def test_a_rung_is_an_act_the_run_of_one_word_in_the_globals_of_its_chain(
   made = said(log, "rung")[0]
   assert made[1] == act and engine.get(act) == made
   assert (made[3], made[4]) == (root, "k = 21")
-  assert [a[4] for a in said(log, "run")] == [act]
-  assert ran(log) == ["k = 21"] and engine.module(root)["k"] == 21
+  assert [a[4] for a in said(log, "run")] == [f"{act}_told", act]
+  assert ran(log) == [fresh(root, written(act, "k = 21")), "k = 21"] and engine.module(root)["k"] == 21
 
 
 async def test_the_engine_tells_what_a_step_raised() -> None:
@@ -91,8 +92,13 @@ async def test_the_open_of_a_rung_with_a_word_tells_that_word_as_a_command_tells
   sand.script[root] = ["close(n)"]
   asking = engine.prompt(int, "count", on=root)
   assert await asking == 2
-  (binding,) = [a[4] for a in said(log, "rung") if a[2] == root]
-  assert binding == bindings(root, asking, "int", "count", written(one, "n = 1"), f"{act}_word = {word!r}")
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == asking]
+  told = [
+    fresh(root, written(one, "n = 1")),
+    written(act, word),
+    f"{prompted(asking, 'int', 'count')}\n\n#{step} advance on {asking}",
+  ]
+  assert [a[5] for a in said(log, "run") if a[4].endswith("_told")] == [engine.unquoted(one) for one in told]
   assert engine.module(root)[f"{act}_word"] == word and engine.module(root)["hi"] == "hi"
 
 
@@ -203,22 +209,33 @@ async def test_the_kernel_gives_nothing_for_a_word_that_ran_to_its_end() -> None
   """The Kernel gives nothing for a word that ran to its end, since a word that answers says a close and stops there."""
   _, log, root = born()
   await engine.rung("close(21)", on=root)
-  assert [isinstance(a[3], CancelledError) for a in dones(log, "run")] == [True]
+  assert [isinstance(a[3], CancelledError) for a in dones(log, "run")] == [False, True]
 
 
 async def test_the_kernel_gives_what_a_word_raised() -> None:
   """The Kernel gives what a word raised, and a top-level return is no python, which the gate refuses as it refuses any word that is not python."""
   _, log, root = born()
-  assert await engine.rung("k = 1", on=root) is None
-  assert [a[3] for a in dones(log, "run")] == [None]
+  ended = engine.rung("k = 1", on=root)
+  assert await ended is None
+  assert [a[3] for a in dones(log, "run")] == [None, None]
+  hurt = engine.rung("raise ValueError('boom')", on=root)
   with pytest.raises(ValueError, match="boom"):
-    await engine.rung("raise ValueError('boom')", on=root)
-  assert isinstance(dones(log, "run")[1][3], ValueError)
+    await hurt
+  assert isinstance(dones(log, "run")[3][3], ValueError)
   with pytest.raises(SyntaxError, match="'return' outside function"):
     compile("return 1", "<rung>", "exec")
+  broken = engine.rung("k = (", on=root)
   with pytest.raises(Refused):
-    await engine.rung("k = (", on=root)
-  assert gated(log)[-1] == "k = (" and ran(log) == ["k = 1", "raise ValueError('boom')"]
+    await broken
+  raised = f"#{hurt} raised\n{hurt}_raised = ValueError('boom')"
+  told = [fresh(root, written(ended, "k = 1")), written(hurt, "raise ValueError('boom')")]
+  assert gated(log)[-1] == "k = (" and ran(log) == [
+    told[0],
+    "k = 1",
+    told[1],
+    "raise ValueError('boom')",
+    f"{raised}\n\n{written(broken, 'k = (')}",
+  ]
 
 
 async def test_the_word_of_a_rung_runs_to_its_next_await_and_continues_when_the_close_it_awaits_comes() -> None:
@@ -263,11 +280,14 @@ async def test_rung_is_given_a_word_and_runs_it_on_a_chain_in_the_globals_of_tha
 async def test_the_gate_reads_the_word_its_caller_wrote_like_any_word() -> None:
   """The gate reads the word its caller wrote like any word."""
   _, log, root = born()
-  await engine.rung("k = 1", on=root)
+  laid = engine.rung("k = 1", on=root)
+  await laid
   assert gated(log) == ["k = 1"]
+  bad = engine.rung("k = BAD", on=root)
   with pytest.raises(Refused):
-    await engine.rung("k = BAD", on=root)
-  assert gated(log) == ["k = 1", "k = BAD"] and ran(log) == ["k = 1"]
+    await bad
+  told = [fresh(root, written(laid, "k = 1")), written(bad, "k = BAD")]
+  assert gated(log) == ["k = 1", "k = BAD"] and ran(log) == [told[0], "k = 1", told[1]]
 
 
 async def test_a_rung_with_a_word_completes_with_what_that_word_raises() -> None:
@@ -315,15 +335,10 @@ async def test_a_chain_with_a_source_awaits_what_its_origin_started() -> None:
 
 async def test_it_says_its_word_may_run_as_soon_as_it_holds_one() -> None:
   """It says its word may run as soon as it holds one, whichever way that word came, and what the chain makes of the word is the chain's."""
-  log, root, laid, act, step, binding = await counted()
-  wrote = bindings(root, act, "int", "count", written(laid, "k = 1"))
-  assert [a[1:] for a in said(log, "ready")] == [
-    (laid, laid, "k = 1"),
-    (binding, binding, wrote),
-    (step, step, "close(k + 1)"),
-  ]
+  log, _, laid, _, step = await counted()
+  assert [a[1:] for a in said(log, "ready")] == [(laid, laid, "k = 1"), (step, step, "close(k + 1)")]
   assert [q[4] for q in acts(log).values() if q[0] == "gate"] == ["k = 1", "close(k + 1)"]
-  assert [a[4] for a in said(log, "run")] == [laid, binding, step]
+  assert [a[4] for a in said(log, "run")] == [f"{laid}_told", laid, f"{step}_told", step]
 
 
 async def test_the_chain_has_the_kernel_begin_it_in_the_module_of_that_chain() -> None:
@@ -359,7 +374,8 @@ async def test_it_is_done_with_what_the_word_gave() -> None:
   hurt = engine.rung("raise ValueError('boom')", on=root)
   with pytest.raises(ValueError, match="boom"):
     await hurt
-  assert [type(a[3]).__name__ for a in dones(log, "run")] == ["NoneType", "CancelledError", "ValueError"]
+  kinds = ["NoneType", "NoneType", "NoneType", "CancelledError", "NoneType", "ValueError"]
+  assert [type(a[3]).__name__ for a in dones(log, "run")] == kinds
   assert engine.peek(ended) is None and engine.peek(answered) == 21
   assert isinstance(engine.peek(hurt), ValueError)
   assert of(engine.turns(on=root), hurt) == [
@@ -402,8 +418,8 @@ async def test_a_replay_makes_a_rung_of_its_own_retelling_each_rung_of_the_donor
   assert mine and all(a[1] != a[5] for a in mine)
 
 
-async def test_a_rung_that_retells_names_the_rung_the_record_holds() -> None:
-  """A rung that retells names the rung the record holds and never another rung that retells it, so a second replay makes the same acts and asks the World nothing twice."""
+async def test_a_rung_that_retells_names_the_rung_that_the_word_first_ran_in() -> None:
+  """A rung that retells names the rung that the word first ran in and never another rung that retells it, so a second replay makes the same acts and asks the World nothing twice."""
   sand, log, root = born()
   act = engine.prompt(int, "read it", to="operator", on=root)
   engine.write(Text(act, "t = read('a.txt')"), on=root)
@@ -413,7 +429,9 @@ async def test_a_rung_that_retells_names_the_rung_the_record_holds() -> None:
   engine.write(Text(act, "t = read('a.txt')\nn = len(t.lines)\nm = n + 1"), on=root)
   await settle()
   laid = said(log, "rung")
-  assert [a[5] for a in laid] == ["", laid[0][1], "", laid[0][1], laid[2][1], ""]
+  first, again, _, second, *_ = [a[1] for a in laid]
+  told = f"{first}_told"
+  assert [a[5] for a in laid] == ["", told, first, "", f"{again}_told", told, first, f"{second}_told", second, ""]
   assert [a[0] for a in sand.calls].count("read") == 1
   assert engine.module(root)["m"] == 3
 
@@ -424,7 +442,6 @@ async def test_a_rung_that_retells_is_done_with_nothing() -> None:
   act = engine.prompt(int, "count", on=root)
   assert await act == 21
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  (binding,) = [a[1] for a in said(log, "rung") if a[2] == root]
   hurt = engine.rung("raise ValueError('boom')", on=root)
   with pytest.raises(ValueError, match="boom"):
     await hurt
@@ -433,7 +450,8 @@ async def test_a_rung_that_retells_is_done_with_nothing() -> None:
     await stopped
   twin = await chained("twin", root, 300)
   theirs = {a[5]: type(engine.peek(a[1])).__name__ for a in said(log, "rung") if a[3] == twin}
-  assert theirs == {binding: "NoneType", step: "NoneType", hurt: "ValueError", stopped: "NoneType"}
+  told = dict.fromkeys([f"{one}_told" for one in (step, hurt, stopped)], "NoneType")
+  assert theirs == {**told, step: "NoneType", hurt: "ValueError", stopped: "NoneType"}
   other = sown()
   mine: list[tuple] = []
   over = engine.boot(kernel=kept(Py().kernel()), gate=Py().gating(), probe=watched(mine), world=other.hears())

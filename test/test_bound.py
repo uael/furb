@@ -12,7 +12,9 @@ async def test_the_statement_that_binds_the_name_of_an_act_to_the_act() -> None:
   _, log, root = born("x = bash('echo hi')\nclose(1)", "close(None)")
   assert await engine.prompt(int, "run it", on=root) == 1
   assert await Act("prompt2") is None
-  assert engine.bound("bash1", "Exit") in [line for a in said(log, "rung") if a[2] == root for line in a[4].split("\n")]
+  assert engine.bound("bash1", "Exit") in [
+    line for a in said(log, "run") if a[4].endswith("_told") for line in a[5].split("\n")
+  ]
   assert engine.module(root)["bash1"] == "bash1"
   assert engine.gate("code = (await bash1).code", on=root) == []
   found = engine.gate("code = (await bash1).nope", on=root)

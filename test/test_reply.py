@@ -118,7 +118,7 @@ async def test_a_reply_the_world_cannot_answer_is_the_worlds_to_refuse() -> None
   await settle()
   assert [type(a[3]).__name__ for a in said(log, "done") if a[1] == first] == ["Refused"]
   assert (await one) == 7
-  assert [a[2] for a in said(log, "reply")] == [a[1] for a in said(log, "rung") if a[2] == one] == [first, "rung3"]
+  assert [a[2] for a in said(log, "reply")] == [a[1] for a in said(log, "rung") if a[2] == one] == [first, "rung2"]
 
 
 async def test_the_life_refuses_a_reply_that_no_ear_owns() -> None:

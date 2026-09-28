@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import BAD, Dead, Sand, World, bindings, born, life, of, paragraphs, said, settle
+from conftest import BAD, Dead, Sand, World, born, fresh, life, of, paragraphs, prompted, said, settle, written
 from furb import engine
 from furb.engine import OPERATOR, Refused, Text
 
@@ -130,8 +130,10 @@ async def test_a_write_to_the_door_of_a_prompt_edits_the_program_of_its_ladder()
   engine.write(Text(act, "k = 21\nk = 22"), on=root)
   await settle()
   first = said(log, "rung")[0][1]
+  bound = fresh(root, prompted(act, "int", "count"), written(first, "k = 21"))
   assert [(a[2], a[4], a[5]) for a in said(log, "rung")] == [
     (act, "k = 21", ""),
+    (root, bound, f"{first}_told"),
     (root, "k = 21", first),
     (act, "k = 22", ""),
   ]
@@ -150,7 +152,8 @@ async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_
   again = engine.write(Text(act, "k = 22"), on=root)
   await settle()
   assert again == Text(act, "k = 22") and engine.read(act, on=root) == Text(act, "k = 22")
-  assert [a[4] for a in said(log, "rung")] == ["k = 21", "k = 22"] and engine.module(root)["k"] == 22
+  bound = fresh(root, prompted(act, "int", "count"), written(said(log, "rung")[0][1], "k = 21"))
+  assert [a[4] for a in said(log, "rung")] == ["k = 21", bound, "k = 22"] and engine.module(root)["k"] == 22
   assert [a[0] for a in sand.calls] == ["stand", "prompt"]
 
 
@@ -165,22 +168,30 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
   act = engine.prompt(object, "fix it", on=root)
   assert await act == (1, 2, "k = 1\nok = 2")
   await settle()
-  binding, first, refused, writer = (a[4] for a in said(log, "run")[:4])
+  binding, first, advance, refusal, writer = (a[4] for a in said(log, "run")[:5])
+  one, bad, _, made, last = [a[1] for a in said(log, "rung") if a[2] == act]
+  bound = fresh(root, prompted(act, "object", "fix it"), f"#{one} advance on {act}")
+  refused = f"#{bad} refused\n{bad}_findings = {BAD!r}\n\n#{bad} closed\n{bad}_value = Refused()"
+  read = engine.unquoted(f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\nok = BAD</s:read1_text>")
   assert [(a[5], a[6]) for a in said(log, "run")] == [
-    (bindings(root, act, "object", "fix it"), ""),
+    (bound, ""),
     ("k = 1", ""),
-    (f"rung3_findings = {BAD!r}\nrung3_value = Refused()", ""),
+    (f"#{bad} advance on {act}", ""),
+    (f"{refused}\n\n#{writer} advance on {act}", ""),
     ("mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))", ""),
-    (bindings(root, act, "object", "fix it"), binding),
+    (read, ""),
+    (bound, binding),
     ("k = 1", first),
-    (f"rung3_findings = {BAD!r}\nrung3_value = Refused()", refused),
+    (f"#{bad} advance on {act}", advance),
+    (f"{refused}\n\n#{writer} advance on {act}", refusal),
+    (written(made, "ok = 2"), ""),
     ("ok = 2", ""),
-    ("read1_path = 'prompt1'\nread1_text = 'k = 1\\nok = BAD'\nrung9_word = 'ok = 2'", ""),
+    (f"#{last} advance on {act}", ""),
     ("close((k, ok, read(get(acting())[2]).content))", ""),
   ]
   program = engine.program(root)
   assert isinstance(program, dict) and writer not in program
-  assert list(program.values()) == [a[5] for a in said(log, "run")[4:]]
+  assert list(program.values()) == [a[5] for a in said(log, "run")[5:]]
   assert engine.read(act, on=root) == Text(act, "k = 1\nok = 2\nclose((k, ok, read(get(acting())[2]).content))")
 
 

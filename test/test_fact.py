@@ -31,7 +31,6 @@ async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_
     "stand1": "stand",
     "prompt1": "prompt",
     "rung1": "rung",
-    "rung2": "rung",
     "reply1": "reply",
     "run1": "run",
     "gate1": "gate",

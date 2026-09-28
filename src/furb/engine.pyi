@@ -206,7 +206,7 @@ def module(on: str = "") -> dict:
   """
 
 def program(on: str = "") -> dict[str, str]:
-  """program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of that rung, in order, as the runs of its transcript say."""
+  """program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its transcript say."""
 
 def standing() -> Standing:
   """standing gives what the chains stand on: the answer of the last stand that the transcript of the root holds, and an empty standing before the first.
@@ -376,7 +376,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
   What a rung that retells asks is named under the one it retells, so the life answers it with what it answered then and the World is asked nothing twice.
   A rung that awaits an act nobody settles waits until the operator cancels it, and holds nothing else of the chain.
   A rung that retells says each question it makes as the rung it retells, so the question it makes at a place is the one that rung made there.
-  A rung that retells names the rung the record holds and never another rung that retells it, so a second replay makes the same acts and asks the World nothing twice.
+  A rung that retells names the rung that the word first ran in and never another rung that retells it, so a second replay makes the same acts and asks the World nothing twice.
   A rung that retells is done with nothing when its word answers, runs to its end or is cancelled, whatever the Kernel makes of the word, and with what that word raised.
   A rung takes its own act, since the engine is the one that runs it.
   A rung with no word holds the word of its model when the reply for it is done, and it is done with the refusal a reply came to.
@@ -506,12 +506,20 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A source that names no chain of the life refuses the call in the caller, and no chain is made.
   A chain with a source reads what its origin stands on, as it stands.
   The chain retells the rungs of its origin through the program of the origin, and it makes the rungs it retells itself, so they tell nothing.
-  A replay makes the rungs of a chain again from its donor: it keeps each rung of the ladder while the words it is given repeat it, it makes one rung of what is left, and every rung of the chain after the first word that differs is gone.
+  A replay makes the rungs of a chain again from its donor: it keeps each rung of the ladder whose word is the next part of the words it is given, it makes one rung of what is left, and every other rung of the ladder is gone.
   A replay makes the module of the chain again, as it was at its birth but on the standing the chain stands on then, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in.
   The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.
-  A write of a door gives the words of that ladder alone, so a rung of the chain that is no rung of that ladder and stands before the first word that differs stands as it did.
+  A write of a door gives the words of that ladder alone, so every rung of the chain that is no rung of that ladder stands as it did.
   Before every reply the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
-  Where it asks, the chain makes a rung of the python that the last user turn shows, unquoted and less its comments, so each act that the turn opened and each value that it told is bound; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its python already.
+  The chain holds the text of each paragraph told on it, in order.
+  At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.
+  Each act that a told paragraph opened and each value that it told is bound for the word of that rung, whoever wrote it.
+  The gate never reads a told rung as a word, since the engine wrote it.
+  The turns do not show a told rung, since the turn shows its python already.
+  A told rung is no act, and the record keeps neither it nor its run.
+  A later life hears the same paragraphs and runs the told rung again.
+  A told rung takes the name of the rung whose first ready runs it, with _told after it, as rung5_told.
+  A rung makes at most one told rung, at its first ready, so no two told rungs share a name.
   The chain takes its own act, since the engine is the one that runs it.
   The chain asks the model of a rung for its word by a reply it makes under the site of that rung, whose one word is the actor.
   When an act that a rung of the chain made on another chain is done while the word of that rung does not run and no word of the chain awaited it, the chain tells it about that rung under the header done, and binds what it came to under the word value, since its model reads no other transcript.
@@ -775,7 +783,7 @@ The word of a rung that extends the engine is part of the program, so the extens
 The old words stay in the program and in the turns after a rung rebinds a name.
 """
 type Run = tuple[Literal["run"], str, str, str, str, str, str]
-"""A run is the act of running the word of a rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs the word as the rung, and says the run done with what the word gave.
+"""A run is the act of running the word of a rung or the text of a told rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs the word as the rung, and says the run done with what the word gave.
 The word a run carries is python, which unquoted made of the word of the rung.
 A run names the rung that the word retells, so a Kernel may answer a retold run from what it kept of that one instead of running the word again.
 Every rung of a chain runs in the globals of the chain, the word of a model and a word its caller wrote alike.

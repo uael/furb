@@ -2,12 +2,21 @@
 
 from asyncio import CancelledError
 
-from conftest import COST, bindings, born, chained, heads, paragraphs, prompted, ran, said, settle
+from conftest import COST, born, chained, fresh, heads, paragraphs, prompted, ran, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
 GRANT = "#grant1\ngrant1_usd = 1.0\ngrant1: Act[None] = Act('grant1')"
 """The paragraph a grant of one dollar tells of its open."""
+
+
+def crossed(log: list[tuple], root: str, act: str, message: str) -> str:
+  """The text that a fresh root runs as the told rung of the answer that crossed a grant of one dollar: the
+  paragraphs of its open, of its standing, of the open of the grant and of the prompt, of the line that says what the
+  answer is for, of the ledger of that answer, and of the pause that the grant said, joined by blank lines."""
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  ledger = "#grant1 ledger\ngrant1_spent = 1.5\ngrant1_filled = 0.2"
+  return fresh(root, GRANT, prompted(act, "int", message), f"#{step} advance on {act}", ledger, f"#{root} paused")
 
 
 async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_both() -> None:
@@ -63,7 +72,7 @@ async def test_the_word_of_the_response_that_crossed_the_ceiling_runs() -> None:
   sand.script[root] = ["a = 1", "close(2)"]
   act = engine.prompt(int, "count", on=root)
   await settle()
-  assert ran(log) == [bindings(root, act, "int", "count", GRANT), "a = 1"] and engine.module(root)["a"] == 1
+  assert ran(log) == [crossed(log, root, act, "count"), "a = 1"] and engine.module(root)["a"] == 1
   assert engine.peek(act, ...) is ...
 
 
@@ -101,7 +110,7 @@ async def test_an_answer_that_carries_the_ledger_past_the_ceiling_pauses_the_cha
   sand.script[root] = ["close(5)"]
   act = engine.prompt(int, "spend", on=root)
   await settle()
-  assert ran(log) == [bindings(root, act, "int", "spend", GRANT), "close(5)"] and engine.peek(act, ...) is ...
+  assert ran(log) == [crossed(log, root, act, "spend"), "close(5)"] and engine.peek(act, ...) is ...
   assert len(said(log, "reply")) == 1
   engine.wake(root)
   await settle()

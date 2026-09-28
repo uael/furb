@@ -11,23 +11,26 @@ from conftest import (
   Dead,
   Sand,
   acts,
-  bindings,
   born,
   chained,
+  fresh,
   gated,
   heads,
   ids,
   keeping,
   life,
   lived,
+  opened,
   pair,
   paragraphs,
   plain,
+  prompted,
   ran,
   relived,
   said,
   settle,
   sown,
+  takes,
   tip,
   world_says,
 )
@@ -254,8 +257,9 @@ async def test_the_rungs_of_the_ladder_run_in_record_order() -> None:
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   again, _ = await relived(Sand(), list(sand.record))
-  bound = bindings(root, "prompt1", "int", "count")
-  assert ran(again) == [bound, "a = 1", "b = a + 1", "close(b)"]
+  bound = fresh(root, prompted("prompt1", "int", "count"), "#rung1 advance on prompt1")
+  told = ["#rung2 advance on prompt1", "#rung3 advance on prompt1"]
+  assert ran(again) == [bound, "a = 1", told[0], "b = a + 1", told[1], "close(b)"]
 
 
 async def test_each_act_a_rung_makes_again_is_the_act_the_record_holds_at_that_place() -> None:
@@ -306,8 +310,8 @@ async def test_in_a_later_life_the_ladder_of_every_chain_runs_again() -> None:
   again, _ = await relived(Sand(), list(sand.record))
   assert sorted(ran(again)) == sorted(
     [
-      bindings(root, "prompt1", "int", "one"),
-      bindings(two, "prompt2", "int", "two").replace(f"{two}_label = 'root'", f"{two}_label = 'two'"),
+      fresh(root, prompted("prompt1", "int", "one"), "#rung1 advance on prompt1"),
+      "\n\n".join([opened(two, "two"), takes(two), prompted("prompt2", "int", "two"), "#rung2 advance on prompt2"]),
       "here = 1\nclose(1)",
       "there = 2\nclose(2)",
     ]
