@@ -26,7 +26,7 @@ use host::{Door, Held, Word, refused};
 
 use crate::{
   Ear, Engine, Fault, Object,
-  ear::{call, hears},
+  ear::call,
   extension::{self, Extension},
   life::Opening,
   value::entry,
@@ -478,8 +478,8 @@ impl JsEngine {
       None => Vec::new(),
     };
     let kwargs: Vec<_> = kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
-    // While the engine hears an ear of JavaScript, the verb is that ear's, and the life that hears it answers.
-    if hears() {
+    // While JavaScript answers a call of the engine, the verb is said by what answers, and the life that waits answers.
+    if Door::answering().is_some() {
       return call(name, args, kwargs).map_err(error);
     }
     self.held.call(|engine| engine.verb(name, args, kwargs))
