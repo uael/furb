@@ -1012,7 +1012,7 @@ fn of_python(door: &Door, value: &Bound<'_, PyAny>) -> PyResult<Object> {
     for (key, one) in held.iter() {
       pairs.push((of_python(door, &key)?, of_python(door, &one)?));
     }
-    // A map that holds the key of the mark goes in as its pairs, so the stand-in never reads it as a mark.
+    // A map that holds the key of the mark goes in as its pairs, so the engine never reads it as a mark.
     if held.contains(IS)? {
       let pairs = pairs.into_iter().map(|(key, one)| Object::tuple([key, one]));
       return Ok(marked("dict", [("args", Object::list([Object::list(pairs)]))]));

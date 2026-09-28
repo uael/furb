@@ -28,6 +28,7 @@ use crate::{
   Ear, Engine, Fault, Object,
   extension::{self, Extension},
   life::Opening,
+  value::entry,
   verbs, wire,
   world::{self, images},
 };
@@ -378,11 +379,17 @@ impl JsEngine {
       let chain = Object::string(chain.unwrap_or_else(|| engine.root().into()));
       let key = Object::string(&name);
       let bound = vec![("__chain", chain), ("__name", key)];
-      let raw = engine.word("module(__chain)[__name]", bound.clone())?;
-      let value = engine.word("outward(module(__chain)[__name], __engine)", bound)?;
+      let shown = "(lambda x: (type(x).__name__, repr(x)))(module(__chain)[__name])";
+      let shown = engine.word(shown, bound.clone())?;
+      let value = engine.word("module(__chain)[__name]", bound)?;
+      let text = |at| {
+        entry(&shown.as_ref(), at)
+          .and_then(|one| one.as_str().map(str::to_owned))
+          .unwrap_or_default()
+      };
       Ok(Inspection {
-        kind: raw.as_ref().type_name().into(),
-        representation: raw.as_ref().py_repr(),
+        kind: text(0),
+        representation: text(1),
         value: Some(wire::outward(value.as_ref())).filter(|value| !value.is_null()),
         name,
       })

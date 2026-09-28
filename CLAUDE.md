@@ -24,7 +24,9 @@ API of its own:
   host, the provider among them, on the default actor and the roster that the host names from the catalog, or on a
   model of its own, and the extensions. A host adds only its own ears, such as the console of its operator. The
   python door gives it as `_monty.opened`, and the TypeScript door as `Engine.open`.
-- `src/preamble.py` runs in the sandbox and stands in for the ears of a host.
+- `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of
+  its own, and it carries each value between the sandbox and a host. An ear of a host is an object of the host in the
+  sandbox, which the engine steps as a generator.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
   engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox

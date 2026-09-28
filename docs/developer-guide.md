@@ -42,10 +42,9 @@ uv run pre-commit install
 | `src/furb/engine.py` | The engine, one file, which is the system prompt of a model. |
 | `src/furb/CLAUDE.md` | The technical names of the engine, and the laws that no test can hold. |
 | `src/furb/__init__.py` | The switch: `FURB_ENGINE` picks the engine that `from furb import engine` gives. |
-| `src/engine.rs`, `src/sand.rs` | One life of `engine.py` in the sandbox of monty, and the verbs that a host says. |
+| `src/engine.rs`, `src/sand.rs` | One life of `engine.py` in the sandbox of monty, how each value crosses, and the verbs that a host says. |
 | `src/ear.rs`, `src/fact.rs` | The ear, the one thing a life hears by, and a fact as the engine says it. |
 | `src/value.rs`, `src/wire.rs` | A value that crosses between the engine and a host, and that value as JSON. |
-| `src/preamble.py` | What runs in the sandbox in the place of the ears of a host. |
 
 ## Changing the Kernel and the gate
 
