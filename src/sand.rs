@@ -87,6 +87,9 @@ impl Sand {
           let refused = refusal("a life waits by a fact and not by a future of the host");
           step = waiting.abort(refused, PrintWriter::Disabled);
         }
+        ReplProgress::Returned { .. } => {
+          unreachable!("the host makes no call into the sandbox before it answers")
+        }
       }
     }
   }
