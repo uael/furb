@@ -204,6 +204,16 @@ pub(crate) enum Spoken {
   Verb(Call),
 }
 
+impl From<Spoken> for Step {
+  /// What the work of an ear says is a step of that ear, which the stand-in reads as it reads each step.
+  fn from(spoken: Spoken) -> Step {
+    match spoken {
+      Spoken::Saying(saying) => Step::Say(saying),
+      Spoken::Verb(call) => Step::Call(call),
+    }
+  }
+}
+
 /// What an engine drains of the voices of its ears: the sayings not yet heard, the acts whose work is hushed, and
 /// the waker of whoever drives the engine.
 #[derive(Default)]

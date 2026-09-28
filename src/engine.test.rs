@@ -529,3 +529,45 @@ fn a_hush_drops_a_verb_that_the_work_of_an_ear_has_not_yet_said() {
   let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
   assert!(facts.iter().all(|one| one.kind() != "pause"), "the hushed verb was never said");
 }
+
+/// An ear that takes each wait and ends it by its voice while it hears, as the work of an ear speaks: it pauses the
+/// chain of the wait, says the wait due, then says it done. The engine hears all three when it is next driven.
+fn voices() -> Box<dyn Ear> {
+  ear(move |co, voice| async move {
+    loop {
+      let a = hear(&co).await;
+      if a.kind() != "wait" || !a.question() {
+        continue;
+      }
+      let (about, on) = (a.about().to_owned(), a.on().to_owned());
+      say(&co, Fact::says("started", &about, [])).await;
+      voice.call(&about, "pause", vec![Object::string(on)], vec![]);
+      voice.say("due", &about, [Object::float(1.0)]);
+      voice.say("done", &about, [Object::none()]);
+    }
+  })
+}
+
+#[test]
+fn what_the_voices_said_between_two_drives_is_one_feed_of_the_sandbox() {
+  let at = std::env::temp_dir().join("furb-engine-drained");
+  let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("voices", voices())];
+  let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
+  let root = engine.root().to_owned();
+  let id = engine.wait(verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap().id().to_owned();
+  let told = Rc::new(RefCell::new(Vec::new()));
+  let held = Rc::clone(&told);
+  engine.watch(&id, move |value| held.borrow_mut().push(value.py_repr())).unwrap();
+  let before = engine.sand.fed();
+  engine.pump(Waker::noop()).unwrap();
+  assert_eq!(engine.sand.fed() - before, 1, "one drain of three things said is one feed");
+  assert_eq!(*told.borrow(), ["None"], "whoever watches the wait is told in that feed");
+  let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let said: Vec<(String, String)> = facts
+    .iter()
+    .filter(|one| one.by() == "voices")
+    .map(|one| (one.kind().to_owned(), one.about().to_owned()))
+    .collect();
+  let expected = [("started", &id), ("pause", &root), ("due", &id), ("done", &id)];
+  assert_eq!(said, expected.map(|(kind, about)| (kind.to_owned(), about.clone())));
+}
