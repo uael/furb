@@ -10,11 +10,12 @@ API of its own:
 
 - `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build.rs`
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
-- `src/world/` holds the ears of the World that the crate writes: the files, the commands, time, the store of the
-  record, and the provider of models, which asks each model through rig and streams what it writes. Its catalog
+- `src/world/` holds the ears of the World that the crate writes, one file each: the files in `files.rs`, the
+  commands in `bash.rs`, time in `time.rs`, the store of the record in `store.rs`, and the provider of models in
+  `provider.rs`, which asks each model through rig and streams what it writes. Its catalog, `provider/catalog.rs`,
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
-  model whose credential stands in the environment, and the claude command line when it finds the program. It also
-  holds the rules by which every console reads what the operator answers.
+  model whose credential stands in the environment, and the claude command line when it finds the program.
+  `operator.rs` holds the rules by which every console reads what the operator answers.
 - `src/extension.rs` says what an extension is and where a host finds the ones that a life runs, and holds the ear
   `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain.
   `extensions/` holds the official extensions, `memory` and `skills`, each a word, a contract and a suite, and
