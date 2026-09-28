@@ -23,8 +23,8 @@ pub fn files() -> Box<dyn Ear> {
         continue;
       }
       let answer = match a.kind() {
-        "cd" => moved(&co, &a).await.map(Object::string),
-        _ => served(&co, &a).await.map(|text| text.object()),
+        "cd" => moved(&a).map(Object::string),
+        _ => served(&a).map(|text| text.object()),
       };
       let answer = answer.unwrap_or_else(|fault| fault.object());
       say(&co, Fact::says("done", a.about(), [answer])).await;
@@ -34,9 +34,9 @@ pub fn files() -> Box<dyn Ear> {
 
 /// The directory a cd came to: its path resolved against the working directory of the chain, when a directory
 /// stands there.
-async fn moved(co: &crate::ear::Co, a: &Fact) -> Result<String, Fault> {
+fn moved(a: &Fact) -> Result<String, Fault> {
   let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
-  let at = resolved(&here(co, a.on()).await?, &path);
+  let at = resolved(&here(a.on())?, &path);
   if !at.is_dir() {
     return Err(Fault::refused(format!("There is no directory at {}.", at.display())));
   }
@@ -44,7 +44,7 @@ async fn moved(co: &crate::ear::Co, a: &Fact) -> Result<String, Fault> {
 }
 
 /// What a read or a write came to.
-async fn served(co: &crate::ear::Co, a: &Fact) -> Result<Text, Fault> {
+fn served(a: &Fact) -> Result<Text, Fault> {
   let (path, content) = match a.kind() {
     "read" => (a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default(), None),
     _ => {
@@ -56,7 +56,7 @@ async fn served(co: &crate::ear::Co, a: &Fact) -> Result<Text, Fault> {
   if path.contains("://") {
     return Err(Fault::refused(format!("No file at {path}.")));
   }
-  let at = resolved(&here(co, a.on()).await?, &path);
+  let at = resolved(&here(a.on())?, &path);
   if let Some(content) = content {
     if let Some(parent) = at.parent() {
       fs::create_dir_all(parent).map_err(|no| failed(&no, &at))?;

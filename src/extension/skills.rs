@@ -35,7 +35,7 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
       }
       let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
       let Some(name) = path.strip_prefix(SCHEME) else { continue };
-      let here = here(&co, a.on()).await?;
+      let here = here(a.on())?;
       let roots = here.ancestors().flat_map(|one| [one.join(".furb"), one.join(".claude")]);
       let found = found(roots.map(|one| one.join("skills")).chain([config.join("skills")]));
       let answer = match found.iter().find(|one| one.name == name) {

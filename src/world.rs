@@ -31,16 +31,16 @@ pub use store::{kept, store};
 pub use time::time;
 
 use crate::{
-  ear::{Co, call},
+  ear::call,
   value::{Fault, Object},
 };
 
 /// The directory a chain stands in, which a path of it resolves against: where the chain went last, resolved against
 /// the directory the life stands on.
-pub(crate) async fn here(co: &Co, on: &str) -> Result<PathBuf, Fault> {
+pub(crate) fn here(on: &str) -> Result<PathBuf, Fault> {
   let on = vec![("on", Object::string(on))];
-  let cwd = call(co, "cwd", vec![], on).await?;
-  let standing = call(co, "standing", vec![], vec![]).await?;
+  let cwd = call("cwd", vec![], on)?;
+  let standing = call("standing", vec![], vec![])?;
   let directory = standing
     .as_ref()
     .items()

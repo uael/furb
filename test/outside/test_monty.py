@@ -1,8 +1,8 @@
 """The door to the engine of monty: what it carries that no sentence of the contract says.
 
 The suite proves the contract on both engines, sentence for sentence. What is proved here is the door itself: an
-ear of this interpreter that says a verb from its thread and is answered with what the verb raised, a show the
-engine made that an ear calls back from its thread, a class a word defined held as a type of this interpreter
+ear of this interpreter that says a verb while it hears and is answered with what the verb raised, a show the
+engine made that an ear calls back while it hears, a class a word defined held as a type of this interpreter
 and its instances as objects of it, both ways, the Kernel of this interpreter refused, since the engine of monty
 holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, an ear the
 crate writes, which serves a life of either engine, and a life longer than the tables of its session could count.
@@ -32,7 +32,7 @@ def on_monty() -> Generator[None]:
 
 
 async def test_an_ear_that_says_a_verb_the_world_refuses_is_answered_with_the_refusal() -> None:
-  """A verb an ear says from its thread raises in the ear what it raised in the life, where the ear said it."""
+  """A verb an ear says while it hears raises in the ear what it raised in the life, where the ear said it."""
   caught: list[str] = []
 
   def asking() -> Generator[tuple | None, tuple | None]:
@@ -49,8 +49,8 @@ async def test_an_ear_that_says_a_verb_the_world_refuses_is_answered_with_the_re
   assert caught == ["a dead World answers no read"]
 
 
-async def test_a_show_the_engine_made_is_called_back_from_the_thread_of_an_ear() -> None:
-  """A show the engine made crosses to an ear as a callable, which the ear calls back from its own thread."""
+async def test_a_show_the_engine_made_is_called_back_by_an_ear_while_it_hears() -> None:
+  """A show the engine made crosses to an ear as a callable, which the ear calls back while it hears."""
   sand = Sand(files={"/w/n.txt": "one\ntwo\n"}, stands=STANDS)
   picked: list[list[int]] = []
 
