@@ -431,7 +431,7 @@ fn a_function_of_the_host_answers_a_request_with_a_turn_in_place_of_the_model() 
   assert!(
     request["messages"][0]["content"][0]["text"]
       .as_str()
-      .is_some_and(|text| text.contains("#prompt1 count"))
+      .is_some_and(|text| text.contains("#prompt1\nprompt1_message = 'count'\n"))
   );
   let expected = "('assistant', 'close(7)', (10, 2, 0, 0, 1.0), None)";
   assert_eq!(said(&mut engine)[1], ("done".into(), "reply1".into(), expected.into()));

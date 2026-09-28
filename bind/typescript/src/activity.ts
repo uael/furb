@@ -1,5 +1,5 @@
 import { type Call, isFault } from "./ears.js";
-import { display, type Fact, isQuestion, uncommented } from "./types.js";
+import { bound, display, type Fact, isQuestion } from "./types.js";
 
 /** The kinds of act that are work which ends later, and the table counts each one that is done. */
 export const WORK = ["prompt", "rung", "bash", "wait"];
@@ -141,10 +141,10 @@ export class Activity {
         }
       }
     } else if (kind === "tell" && act?.kind === "rung" && Array.isArray(fact[3])) {
-      // The chain tells the findings that refused a word under the header refused, one comment for each.
-      const [header, ...findings] = fact[3];
+      // The chain tells the findings that refused a word under the header refused, and binds them one line for each.
+      const [header, ...lines] = String(fact[3][0] ?? "").split("\n");
       if (header === `#${id} refused`) {
-        this.refused.set(id, uncommented(findings.map(String).join("\n").split("\n")));
+        this.refused.set(id, bound(lines, `${id}_findings`) ?? "");
         this.updateRun(act);
       }
     } else if (kind === "out" && act?.kind === "bash" && !act.done) {

@@ -117,7 +117,7 @@ async def test_an_act_said_it_is_begun_and_what_the_call_gives_is_its_name() -> 
   _, _, root = born()
   one = engine.bash("echo hi", on=root)
   assert isinstance(one, Act) and engine.peek(one) is None
-  assert paragraphs(engine.turns(on=root))[-1] == "#bash1 echo hi\nbash1: Act[Exit] = Act('bash1')"
+  assert paragraphs(engine.turns(on=root))[-1] == "#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')"
   assert (await one).code == 0
 
 
@@ -179,8 +179,8 @@ async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fa
   assert engine.get(one) not in heard
   assert paragraphs(engine.turns(on=root))[2:] == [
     "#note1 spoke by yield",
-    "#bash1 echo hi\nbash1: Act[Exit] = Act('bash1')",
-    "#bash1 exited 0\n# bash1/stdout, 0 known\n# 1 ran echo hi",
+    "#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')",
+    "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",
   ]
 
 

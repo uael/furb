@@ -11,6 +11,7 @@ from conftest import (
   Dead,
   Sand,
   acts,
+  bindings,
   born,
   chained,
   gated,
@@ -164,7 +165,9 @@ async def test_an_act_takes_its_name_when_the_act_opens_and_the_name_says_what_m
   _, log, root = await lived()
   command, step = said(log, "bash")[0], said(log, "rung")[0]
   assert command[2] == step[1] and engine.under(command[1], step[1])
-  assert f"#{command[1]} echo hi" in heads(engine.turns(on=root))
+  assert f"#{command[1]}\n{command[1]}_command = 'echo hi'\n{engine.bound(command[1], 'Exit')}" in paragraphs(
+    engine.turns(on=root)
+  )
 
 
 async def test_the_engine_derives_the_transcripts_the_turns_the_globals_and_the_working_directories() -> None:
@@ -251,7 +254,7 @@ async def test_the_rungs_of_the_ladder_run_in_record_order() -> None:
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   again, _ = await relived(Sand(), list(sand.record))
-  bound = f"{root}: Act[object] = Act('{root}')\nprompt1: Act[int] = Act('prompt1')"
+  bound = bindings(root, "prompt1", "int", "count")
   assert ran(again) == [bound, "a = 1", "b = a + 1", "close(b)"]
 
 
@@ -303,8 +306,8 @@ async def test_in_a_later_life_the_ladder_of_every_chain_runs_again() -> None:
   again, _ = await relived(Sand(), list(sand.record))
   assert sorted(ran(again)) == sorted(
     [
-      f"{root}: Act[object] = Act('{root}')\nprompt1: Act[int] = Act('prompt1')",
-      f"{two}: Act[object] = Act('{two}')\nprompt2: Act[int] = Act('prompt2')",
+      bindings(root, "prompt1", "int", "one"),
+      bindings(two, "prompt2", "int", "two").replace(f"{two}_label = 'root'", f"{two}_label = 'two'"),
       "here = 1\nclose(1)",
       "there = 2\nclose(2)",
     ]
@@ -598,7 +601,7 @@ async def test_an_act_whose_maker_is_neither_an_act_nor_an_ear_boot_was_given_is
   assert [name for name, a in acts(log).items() if a[2] == "outside"] == [child]
   assert engine.read(f"{one}/stdout", on=over).content == "ran echo hi\n"
   assert [head for head in heads(engine.turns(on=over)) if head.startswith(f"#{one}")] == [
-    f"#{one} echo hi",
+    f"#{one}",
     f"#{one} exited 0",
   ]
   first, _, root = born()

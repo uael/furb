@@ -4,7 +4,7 @@ import pytest
 
 from conftest import Dead, born, life, of, paragraphs, said, settle
 from furb import engine
-from furb.engine import HEAD, HIDDEN, OPERATOR, Refused, Text, span, take
+from furb.engine import HEAD, HIDDEN, OPERATOR, Refused, Text, span
 
 BIG = "".join(f"line {i}\n" for i in range(1, 2101))
 """A text of two thousand and one hundred lines, which is longer than HEAD."""
@@ -22,12 +22,12 @@ NUMS = (
 
 
 async def test_a_read_whoever_serves_the_path_answers_it_with_the_text_of_it() -> None:
-  """A read: whoever serves the path answers it with the text of it, which the read tells by the lines the model has not seen."""
+  """A read: whoever serves the path answers it with the text of it, which the read tells by the lines its show picks."""
   _, _, root = born("t = read('a.txt')\nsame = read('a.txt')\nclose([len(t.lines), same.content])")
   assert await engine.prompt(list, "read them", on=root) == [2, "one\ntwo\n"]
   assert of(engine.turns(on=root), "read") == [
-    "#read a.txt\n# /w/a.txt, 0 known\n# 1 one\n# 2 two",
-    "#read a.txt\n# /w/a.txt, 2 known",
+    "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>",
+    "#read2\nread2_path = 'a.txt'\n<s:read2_text>\none\ntwo</s:read2_text>",
   ]
 
 
@@ -38,25 +38,6 @@ async def test_a_read_that_the_world_refuses_raises_refused_in_the_caller() -> N
     engine.read("a.txt", on=root)
   word = "try:\n  read('a.txt')\nexcept Refused as no:\n  close(str(no))"
   assert await engine.rung(word, on=root) == "a dead World answers no read"
-
-
-async def test_a_read_on_a_chain_with_a_source_tells_the_lines_of_a_skipped_read_again() -> None:
-  """A read on a chain with a source tells the lines of a skipped read again, since they are not known there."""
-  sand, log, root = born("read('a.txt')\nclose(1)")
-  assert await engine.prompt(int, "read it", on=root) == 1
-  step = said(log, "rung")[0][1]
-  fork = engine.chain("fork", source=root, filter=take(step, inside=False))
-  await settle(300)
-  assert of(engine.turns(on=fork), "read") == []
-  sand.script[fork] = ["read('a.txt')\nclose(2)"]
-  assert await engine.prompt(int, "read it again", on=fork) == 2
-  sand.script[root] = ["read('a.txt')\nclose(3)"]
-  assert await engine.prompt(int, "read it again", on=root) == 3
-  assert of(engine.turns(on=fork), "read") == ["#read a.txt\n# /w/a.txt, 0 known\n# 1 one\n# 2 two"]
-  assert of(engine.turns(on=root), "read") == [
-    "#read a.txt\n# /w/a.txt, 0 known\n# 1 one\n# 2 two",
-    "#read a.txt\n# /w/a.txt, 2 known",
-  ]
 
 
 async def test_the_engine_judges_no_scheme() -> None:
@@ -74,8 +55,8 @@ async def test_read_is_given_a_path_and_a_show() -> None:
   _, _, root = born("read('a.txt', span(2, 2))\nread('a.txt', grep('^o'))\nclose(1)")
   assert await engine.prompt(int, "read them", on=root) == 1
   assert of(engine.turns(on=root), "read") == [
-    "#read a.txt\n# /w/a.txt, 0 known\n# 2 two",
-    "#read a.txt\n# /w/a.txt, 0 known\n# 1 one",
+    "#read1\nread1_path = 'a.txt'\nread1_text = 'two'",
+    "#read2\nread2_path = 'a.txt'\nread2_text = 'one'",
   ]
 
 
@@ -92,8 +73,8 @@ async def test_a_text_without_a_show_is_told_as_head() -> None:
   assert HEAD(BIG.splitlines()) == span(1, 2000)(BIG.splitlines()) == list(range(1, 2001))
   _, _, root = born("read('big.txt')\nclose(1)", files={"/w/big.txt": BIG})
   assert await engine.prompt(int, "read it", on=root) == 1
-  told = ["#read big.txt", "# /w/big.txt, 0 known", *[f"# {i} line {i}" for i in range(1, 2001)]]
-  assert of(engine.turns(on=root), "read") == ["\n".join(told)]
+  told = ["#read1", "read1_path = 'big.txt'", "<s:read1_text>", *[f"line {i}" for i in range(1, 2001)]]
+  assert of(engine.turns(on=root), "read") == ["\n".join(told) + "</s:read1_text>"]
 
 
 async def test_a_read_of_the_name_of_a_prompt_gives_the_program_of_that_ladder() -> None:
@@ -138,23 +119,22 @@ async def test_a_read_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_
   act = engine.prompt(str, "read it", on=root)
   assert await act == "a = 1"
   await settle()
-  assert of(engine.turns(on=root), "read") == [f"#read {act}\n# {act}, 0 known\n# 1 a = 1"]
+  assert of(engine.turns(on=root), "read") == [f"#read1\nread1_path = {act!r}\nread1_text = 'a = 1'"]
   assert engine.read(act, on=root) == Text(act, "a = 1\nclose(read(get(acting())[2]).content)")
 
 
 async def test_one_made_from_inside_an_act_tells_itself() -> None:
-  """One made from inside an act tells itself, with its path and what it was answered, on the scope of that act; one made from outside an act tells nothing, and neither does one whose show is hidden."""
+  """One made from inside an act tells itself under its own name, with its path and what it was answered, on the scope of that act; one made from outside an act tells nothing, and neither does one whose show is hidden."""
   _, log, root = born("read('a.txt')\nread('a.txt', HIDDEN)\nclose(1)")
   assert await engine.prompt(int, "read it", on=root) == 1
   step = said(log, "rung")[0][1]
-  told = [a for a in said(log, "tell") if a[3][0].startswith("#read ")]
-  assert [(a[1], a[2], a[3][0], a[3][1][0]) for a in told] == [
-    (step, step, "#read a.txt", Text("/w/a.txt", "one\ntwo\n"))
-  ]
+  told = [a for a in said(log, "tell") if a[3][0].startswith("#read")]
+  paragraph = "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>"
+  assert [(a[1], a[2], a[3]) for a in told] == [(step, step, [paragraph])]
   held = engine.transcript(root)
   assert engine.scope(step) == root and told[0] in held
   was = engine.turns(on=root)
-  assert of(was, "read") == ["#read a.txt\n# /w/a.txt, 0 known\n# 1 one\n# 2 two"]
+  assert of(was, "read") == [paragraph]
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
   assert engine.read("a.txt", HIDDEN, on=root) == Text("/w/a.txt", "one\ntwo\n")
   assert paragraphs(engine.turns(on=root)) == paragraphs(was)
@@ -164,4 +144,4 @@ async def test_a_read_answered_with_what_is_no_text_gives_that_value() -> None:
   """A read answered with what is no text gives that value, and tells it as python shows it."""
   _, _, root = born(NUMS)
   assert await engine.prompt(list, "a door of my own", on=root) == [1, 2]
-  assert of(engine.turns(on=root), "read") == ["#read nums://a\n# [1, 2]"]
+  assert of(engine.turns(on=root), "read") == ["#read1\nread1_path = 'nums://a'\nread1_value = [1, 2]"]

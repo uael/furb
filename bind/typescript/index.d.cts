@@ -69,13 +69,13 @@ export declare class Engine {
   ask(kind: string, on: string, words?: unknown[]): unknown
   /** span(lo, hi) is the show of the lines lo through hi, where a line under one is counted back from the end, so that span(1, 20) is the first twenty lines and span(-20, -1) is the last twenty. */
   span(lo: number, hi: number): unknown
-  /** grep(pattern) is the show of the lines that the pattern matches, each with its number. */
+  /** grep(pattern) is the show of the lines that the pattern matches. */
   grep(pattern: string): unknown
   /** differs(lines) is the show of the lines that differ from the lines it holds, which is what a write shows of what came back. */
   differs(old: string[]): unknown
   /** take keeps the acts it names and everything they made. */
   take(ids?: string[], options?: { inside?: boolean } | null): unknown
-  /** A read: whoever serves the path answers it with the text of it, which the read tells by the lines the model has not seen. */
+  /** A read: whoever serves the path answers it with the text of it, which the read tells by the lines its show picks. */
   read(path: string, options?: { show?: unknown; on?: string } | null): TextValue
   /** A write: whoever serves the path of the text takes its content. */
   write(text: TextValue, options?: { on?: string } | null): TextValue

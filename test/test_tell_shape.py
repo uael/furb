@@ -10,7 +10,7 @@ async def test_a_tell_carries_notes_about_the_act_it_is_about() -> None:
   act = engine.rung("k = 1", on=root)
   assert await act is None
   told = [a for a in said(log, "tell") if a[1] == act]
-  assert [a[3] for a in told] == [[f"#{act} k = 1"]]
+  assert [a[3] for a in told] == [[f"#{act}\n{act}_word = 'k = 1'"]]
   assert paragraphs(engine.turns(on=root))[2:] == ["\n".join(a[3]) for a in told]
 
 
@@ -42,6 +42,6 @@ async def test_a_fact_that_carries_notes_is_what_the_turns_are_folded_from() -> 
     [f"#{root} paused"],
     [f"#{root} woke"],
     [f"#{held} cancelled"],
-    [f"#{root} closed None"],
+    [f"#{root} closed"],
   ]
   assert paragraphs(engine.turns(on=root)) == ["\n".join(a[4] if a[0] == "close" else a[3]) for a in carrying]

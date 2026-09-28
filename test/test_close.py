@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, chained, heads, said, settle, slow, stalled
+from conftest import born, chained, paragraphs, prompted, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -112,7 +112,10 @@ async def test_the_close_of_the_operator_stands_in_the_transcript_with_the_name_
   await settle()
   held = engine.transcript(root)
   assert [one[2] for one in held if one[0] == "close"] == [OPERATOR]
-  assert heads(engine.turns(on=root))[2:] == [f"#{act} how many?", f"#{act} closed 21"]
+  assert paragraphs(engine.turns(on=root))[2:] == [
+    prompted(act, "int", "how many?"),
+    f"#{act} closed\n{act}_value = 21",
+  ]
 
 
 async def test_a_prompt_completes_with_the_exception_that_the_word_of_the_prompt_gave_to_close() -> None:
@@ -132,7 +135,7 @@ async def test_close_is_given_the_value_first() -> None:
   engine.close(21, act)
   word = said(log, "close")[0]
   assert (word[0], word[1], word[2], word[3]) == ("close", act, OPERATOR, 21)
-  assert word[4] == [f"#{act} closed 21"]
+  assert word[4] == [f"#{act} closed\n{act}_value = 21"]
 
 
 async def test_a_value_closes_an_act_with_that_value_and_a_prompt_with_a_value_that_has_its_shape() -> None:
@@ -156,8 +159,8 @@ async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the
   await settle()
   assert len(said(log, "reply")) == 2
   step = said(log, "reply")[0][2]
-  raised = [line for line in heads(engine.turns(on=root)) if " raised " in line]
-  assert raised == [f"#{step} raised Refused(\"'nope' not int\")"]
+  raised = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].endswith(" raised")]
+  assert raised == [f"#{step} raised\n{step}_raised = Refused(\"'nope' not int\")"]
 
 
 async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:

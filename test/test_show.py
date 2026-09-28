@@ -21,7 +21,10 @@ async def test_a_show_is_any_callable_of_that_shape() -> None:
   assert callable(span(1, 2)) and callable(grep("^t")) and callable(differs(["one"]))
   _, _, root = born(ODD)
   assert await engine.prompt(int, "show the odd lines", on=root) == 1
-  assert engine.turns(on=root)[-1][1] == "#read a.txt\n# /w/a.txt, 0 known\n# 1 one\n\n#prompt1 closed 1"
+  assert (
+    engine.turns(on=root)[-1][1]
+    == "#read1\nread1_path = 'a.txt'\nread1_text = 'one'\n\n#prompt1 closed\nprompt1_value = 1"
+  )
 
 
 async def test_a_show_is_no_word_of_a_fact() -> None:
@@ -33,8 +36,8 @@ async def test_a_show_is_no_word_of_a_fact() -> None:
   assert said(log, "bash")[0][4:] == ("echo hi", False, 600.0)
   assert [a[4:] for a in acts(log).values() if a[0] == "read"] == [("a.txt",)]
   assert [word for (fact,) in sand.record for word in fact if callable(word)] == []
-  told = [one for one in paragraphs(engine.turns(on=root)) if one.startswith(("#read ", f"#{command} exited"))]
+  told = [one for one in paragraphs(engine.turns(on=root)) if one.startswith(("#read1", f"#{command} exited"))]
   assert told == [
-    "#read a.txt\n# /w/a.txt, 0 known\n# 1 one",
-    f"#{command} exited 0\n# {command}/stdout, 0 known\n# 1 ran echo hi",
+    "#read1\nread1_path = 'a.txt'\nread1_text = 'one'",
+    f"#{command} exited 0\n{command}_stdout = 'ran echo hi'",
   ]

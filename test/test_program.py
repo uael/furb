@@ -1,6 +1,6 @@
 """program, the words of the rungs that run on a chain."""
 
-from conftest import bindings, born, said, settle
+from conftest import BAD, bindings, born, said, settle, written
 from furb import engine
 from furb.engine import OPERATOR, Text
 
@@ -15,12 +15,13 @@ async def test_program_gives_the_program_of_a_chain() -> None:
   assert await one == 3
   await settle()
   first, refused, last = [a[1] for a in said(log, "rung") if a[2] == one]
-  (bind,) = [a[1] for a in said(log, "rung") if a[2] == root]
+  bind, again = [a[1] for a in said(log, "rung") if a[2] == root]
   program = engine.program(root)
   assert list(program.items()) == [
     (mine, "mine = 1"),
-    (bind, bindings(root, one, "int")),
+    (bind, bindings(root, one, "int", "count", written(mine, "mine = 1"))),
     (first, "hi = 'hi\\n'\n\n\na = hi"),
+    (again, f"{refused}_findings = {BAD!r}\n{refused}_value = Refused()"),
     (last, "close(len(a))"),
   ]
   assert refused not in program

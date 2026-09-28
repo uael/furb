@@ -1,6 +1,6 @@
 """pause, which holds what the acts it is over hear until the wake."""
 
-from conftest import born, chained, heads, paragraphs, ran, rows, said, settle, slow, stalled, world_says
+from conftest import bindings, born, chained, heads, paragraphs, ran, said, settle, slow, stalled, world_says
 from furb import engine
 
 
@@ -21,7 +21,7 @@ async def test_a_control_tells_a_header_of_its_own_name() -> None:
   _, _, root = born()
   act = engine.bash("echo hi", on=root)
   engine.pause(act)
-  assert heads(engine.turns(on=root)) == [f"#{root} root", rows(root)[0], f"#{act} echo hi", f"#{act} paused"]
+  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing", f"#{act}", f"#{act} paused"]
 
 
 async def test_pause_is_given_the_id_of_a_pending_act_or_the_id_of_a_chain() -> None:
@@ -65,7 +65,7 @@ async def test_a_paused_chain_goes_quiet_as_its_in_flight_work_returns() -> None
   quiet = len(log)
   await settle()
   assert len(log) == quiet and len(said(log, "reply")) == 1
-  assert ran(log) == [f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"]
+  assert ran(log) == [bindings(root, act, "int", "count")]
   assert engine.peek(act, ...) is ...
 
 
@@ -74,7 +74,7 @@ async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
   sand, _, root, act = slow()
   await settle()
   assert [one[1] for one in sand.calls if one[0] == "bash"] == [act]
-  assert paragraphs(engine.turns(on=root))[-1] == f"#{act} slow\n{act}: Act[Exit] = Act({act!r})"
+  assert paragraphs(engine.turns(on=root))[-1] == f"#{act}\n{act}_command = 'slow'\n{act}: Act[Exit] = Act({act!r})"
   engine.pause(root)
   world_says("out", act, "one\n", "stdout")
   world_says("out", act, "two\n", "stdout")
@@ -83,7 +83,7 @@ async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
   assert paragraphs(engine.turns(on=root))[-1] == f"#{root} paused"
   engine.wake(root)
   await settle()
-  assert paragraphs(engine.turns(on=root))[-1] == f"#{act} exited 0\n# {act}/stdout, 0 known\n# 1 one\n# 2 two"
+  assert paragraphs(engine.turns(on=root))[-1] == f"#{act} exited 0\n<s:{act}_stdout>\none\ntwo</s:{act}_stdout>"
 
 
 async def test_an_act_made_in_that_time_it_hears_at_once() -> None:
@@ -126,5 +126,5 @@ async def test_a_control_is_on_the_scope_of_what_it_is_over() -> None:
   await settle()
   held = said(log, "pause")[0]
   assert (held[0], held[1], held[2]) == ("pause", act, engine.OPERATOR) and engine.scope(act) == two
-  assert heads(engine.turns(on=two))[-2:] == [f"#{act} slow", f"#{act} paused"]
-  assert heads(engine.turns(on=root)) == [f"#{root} root", rows(root)[0]]
+  assert heads(engine.turns(on=two))[-2:] == [f"#{act}", f"#{act} paused"]
+  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing"]

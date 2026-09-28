@@ -15,7 +15,6 @@ async def test_tail_is_the_span_of_the_last_250_lines() -> None:
   world_says("out", command, MANY, "stdout")
   sand.exits(command, 0)
   assert (await act).code == 0
-  told = "\n".join(
-    [f"#{command} exited 0", f"# {command}/stdout, 0 known", *[f"# {i} line {i}" for i in range(51, 301)]]
-  )
+  told = "\n".join([f"#{command} exited 0", f"<s:{command}_stdout>", *[f"line {i}" for i in range(51, 301)]])
+  told += f"</s:{command}_stdout>"
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{command} exited")] == [told]

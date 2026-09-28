@@ -196,7 +196,7 @@ async def test_what_a_word_raises_is_what_the_run_came_to() -> None:
   with pytest.raises(ValueError, match="boom"):
     await engine.rung("kept = 1\nraise ValueError('boom')", on=root)
   assert engine.module(root)["kept"] == 1
-  assert [head for head in heads(root) if " raised " in head] == ["#rung1 raised ValueError('boom')"]
+  assert [head for head in heads(root) if " raised" in head] == ["#rung1 raised"]
 
 
 async def test_a_word_the_interpreter_cannot_compile_is_what_the_run_came_to() -> None:
@@ -243,7 +243,7 @@ async def test_the_kernel_speaks_from_the_run_it_steps() -> None:
   root = booted(worlds(STANDS), gated=False)
   waits = engine.rung('x = 3\ndebug(t"{x}")', on=root)
   await waits
-  assert [head for head in heads(root) if " debugged " in head] == [f"#{waits} debugged x = 3"]
+  assert [head for head in heads(root) if " debugged " in head] == [f"#{waits} debugged x"]
 
 
 async def test_a_word_that_awaits_and_then_ends_gives_nothing() -> None:

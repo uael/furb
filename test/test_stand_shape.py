@@ -2,22 +2,7 @@
 
 import pytest
 
-from conftest import (
-  LATER,
-  STANDS,
-  WORLD,
-  Sand,
-  born,
-  chained,
-  paragraphs,
-  plain,
-  relived,
-  rows,
-  said,
-  settle,
-  takes,
-  tip,
-)
+from conftest import LATER, STANDS, WORLD, Sand, born, chained, paragraphs, plain, relived, said, settle, takes, tip
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -44,14 +29,14 @@ async def test_a_change_of_the_world_between_two_lives_enters_the_transcript_of_
   await settle()
   assert paragraphs(engine.turns(on=root))[1] == takes(root)
   _, over = await relived(Sand(stands=LATER), plain(sand.record))
-  standings = [one for one in paragraphs(engine.turns(on=over)) if one.startswith(f"#{over} roster ")]
+  standings = [one for one in paragraphs(engine.turns(on=over)) if one.startswith(f"#{over} standing")]
   assert over == root and standings == [takes(over), takes(over, LATER)]
   held = engine.transcript(over)
-  assert [a for a in said(held, "tell") if a[3][0].startswith(f"#{over} roster ")][-1] == (
+  assert [a for a in said(held, "tell") if a[3][0].startswith(f"#{over} standing")][-1] == (
     "tell",
     over,
     over,
-    rows(over, LATER),
+    [takes(over, LATER)],
   )
   assert engine.cwd(on=over) == "/z" and engine.module(over)["actor"] == "o/low"
 
@@ -76,7 +61,7 @@ async def test_a_model_asked_on_any_chain_of_a_later_life_finds_the_new_roster()
   later.script[over] = ["close(1)"]
   assert await engine.prompt(int, "count", to="o/low", on=over) == 1
   asked = later.turns[said(again, "reply")[-1][1]]
-  assert [one for one in paragraphs(asked) if one.startswith(f"#{over} roster ")] == [takes(over), takes(over, LATER)]
+  assert [one for one in paragraphs(asked) if one.startswith(f"#{over} standing")] == [takes(over), takes(over, LATER)]
 
 
 async def test_the_world_answers_it_with_a_done_at_once() -> None:
@@ -127,19 +112,24 @@ async def test_each_standing_binds_the_default_actor_of_the_chain_under_the_name
   assert engine.module(root)["actor"] == "m/low" == said(log, "reply")[0][4]
 
 
-async def test_the_chain_tells_each_standing_it_takes_in_one_paragraph_of_three_headers() -> None:
-  """The chain tells each standing it takes in one paragraph of three headers, one for each part: the roster under the header roster as python shows it, then the directory under the header cwd and the actor under the header actor, each as it is."""
+async def test_the_chain_tells_each_standing_it_takes_in_one_paragraph_headed_standing() -> None:
+  """The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor."""
   sand, log, root = born()
   answered = next(a[3] for a in said(log, "done") if a[1] == said(log, "stand")[0][1])
   assert answered == STANDS
   assert paragraphs(engine.turns(on=root))[1] == (
-    "#chain1 roster [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
-    "#chain1 cwd /w\n"
-    "#chain1 actor m/low"
+    "#chain1 standing\n"
+    "chain1_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "chain1_cwd = '/w'\n"
+    "chain1_actor = 'm/low'"
   )
+  sand.script[root] = ["close(chain1_cwd)"]
+  assert await engine.prompt(str, "where", on=root) == "/w"
+  assert [engine.module(root)[f"chain1_{word}"] for word in ("roster", "cwd", "actor")] == STANDS
   await relived(Sand(stands=LATER), plain(sand.record))
-  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{root} roster ")][-1] == (
-    "#chain1 roster [['operator', [], 200000], ['o', ['low'], 200000]]\n#chain1 cwd /z\n#chain1 actor o/low"
+  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{root} standing")][-1] == (
+    "#chain1 standing\nchain1_roster = [['operator', [], 200000], ['o', ['low'], 200000]]\n"
+    "chain1_cwd = '/z'\nchain1_actor = 'o/low'"
   )
 
 
@@ -149,7 +139,7 @@ async def test_the_standing_a_chain_tells_is_what_its_transcript_holds_of_it() -
   held = engine.transcript(root)
   stand = said(log, "stand")[0][1]
   assert [a for a in held if a[0] == "tell" and a[1] == stand] == []
-  assert ("tell", root, root, rows(root)) in held
+  assert ("tell", root, root, [takes(root)]) in held
 
 
 async def test_every_chain_hears_the_done_of_every_stand() -> None:
@@ -166,7 +156,12 @@ async def test_every_chain_hears_the_done_of_every_stand() -> None:
     paragraphs(now)[-1]
     == takes(root, LATER)
     == "\n".join(
-      ["#chain1 roster [['operator', [], 200000], ['o', ['low'], 200000]]", "#chain1 cwd /z", "#chain1 actor o/low"]
+      [
+        "#chain1 standing",
+        "chain1_roster = [['operator', [], 200000], ['o', ['low'], 200000]]",
+        "chain1_cwd = '/z'",
+        "chain1_actor = 'o/low'",
+      ]
     )
   )
   assert engine.module(root)["actor"] == "o/low"

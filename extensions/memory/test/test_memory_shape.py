@@ -77,7 +77,7 @@ async def test_the_world_leaves_out_a_memory_file_whose_content_the_chain_holds(
   await settle()
   await engine.rung("remember()", on=four)
   await engine.rung('read("sub/c.txt")\nread("sub/CLAUDE.md")', on=four)
-  assert [one.split("\n")[0] for one in recalled(four, tmp_path)] == [f"#memory {top}"]
+  assert [one.split("\n")[1] for one in recalled(four, tmp_path)] == [f"memory8_path = {str(top)!r}"]
 
 
 async def test_a_path_of_a_scheme_adds_no_folder_of_its_own(tmp_path: Path) -> None:

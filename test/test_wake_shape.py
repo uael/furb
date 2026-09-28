@@ -31,5 +31,5 @@ async def test_a_wake_is_over_the_act_it_names_and_everything_under_it() -> None
   assert f"#{command} exited 0" not in heads(engine.turns(on=root)) and engine.peek(act, ...) is ...
   engine.wake(act)
   await settle()
-  assert heads(engine.turns(on=root))[-2:] == [f"#{command} exited 0", f"#{act} closed 0"]
+  assert heads(engine.turns(on=root))[-2:] == [f"#{command} exited 0", f"#{act} closed"]
   assert await act == 0

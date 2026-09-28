@@ -498,27 +498,44 @@ def named(got: Sequence[tuple]) -> list[str]:
   return [one[1:].split(" ", 1)[0] for one in heads(got)]
 
 
-def rows(id: str, standing: list = STANDS) -> list[str]:
-  """The three headers a chain tells a standing it takes under, in one paragraph: the roster, the directory and the
-  actor."""
-  roster, directory, actor = standing
-  return [f"#{id} roster {roster!r}", f"#{id} cwd {directory}", f"#{id} actor {actor}"]
-
-
 def takes(id: str, standing: list = STANDS) -> str:
-  """The paragraph a chain tells of a standing it takes, whose header is the row of its roster."""
-  return "\n".join(rows(id, standing))
+  """The paragraph a chain tells of a standing it takes: the header standing, then the bindings of its roster, its
+  directory and its actor."""
+  roster, directory, actor = standing
+  return f"#{id} standing\n{id}_roster = {roster!r}\n{id}_cwd = {directory!r}\n{id}_actor = {actor!r}"
+
+
+def opened(id: str, label: str, source: str = "") -> str:
+  """The paragraph a chain tells of its open: its header, the bindings of its label and of its source, and its own
+  binding."""
+  words = [f"{id}_{word} = {value!r}" for word, value in (("label", label), ("source", source)) if value]
+  return "\n".join([f"#{id}", *words, engine.bound(id)])
 
 
 def of(got: Sequence[tuple], name: str) -> list[str]:
-  """Every paragraph of the user turns of a fold whose header names that act, or that kind of query, in order."""
-  return [one for one in paragraphs(got) if one.split("\n", 1)[0].split(" ", 1)[0] == f"#{name}"]
+  """Every paragraph of the user turns of a fold whose header names that act, or an act of that kind, in order: a
+  name that ends with a number is an act, and any other name is a kind."""
+  named = name if name[-1:].isdigit() else rf"{name}\d+"
+  return [one for one in paragraphs(got) if re.fullmatch(f"#{named}", one.split("\n", 1)[0].split(" ", 1)[0])]
 
 
-def bindings(root: str, act: str, shape: str) -> str:
-  """The word of the rung a fresh root writes at its first ask for a prompt: the bindings of the root and of that
-  prompt."""
-  return f"{engine.bound(root)}\n{engine.bound(act, shape)}"
+def prompted(id: str, shape: str, message: str = "") -> str:
+  """The paragraph a prompt tells of its open: its header, the binding of a message of one line, and its own
+  binding."""
+  return "\n".join([f"#{id}", *[f"{id}_message = {message!r}"] * bool(message), engine.bound(id, shape)])
+
+
+def written(id: str, word: str) -> str:
+  """The paragraph a rung tells of a word of one line that its caller wrote: its header and the binding of that
+  word."""
+  return f"#{id}\n{id}_word = {word!r}"
+
+
+def bindings(root: str, act: str, shape: str, message: str, *told: str) -> str:
+  """The word of the rung a fresh root writes at its first ask for a prompt: the python of its open, of its standing,
+  of the paragraphs told after it, and of the open of that prompt."""
+  said = [opened(root, "root"), takes(root), *told, prompted(act, shape, message)]
+  return "\n".join(line for one in said for line in one.split("\n") if not line.startswith("#"))
 
 
 def gatings(log: Sequence[tuple]) -> list[tuple[str, list[str]]]:

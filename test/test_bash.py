@@ -53,9 +53,7 @@ async def test_bash_is_given_one_show_for_each_stream_that_bash_tells() -> None:
   world_says("out", one, "a\nb\n", "stderr")
   sand.exits(one, 0)
   await one
-  assert paragraphs(engine.turns(on=root))[-1] == (
-    f"#{one} exited 0\n# {one}/stdout, 0 known\n# 2 two\n# {one}/stderr, 0 known\n# 2 b"
-  )
+  assert paragraphs(engine.turns(on=root))[-1] == (f"#{one} exited 0\n{one}_stdout = 'two'\n{one}_stderr = 'b'")
 
 
 async def test_a_feed_whose_text_is_none_closes_the_stdin_of_the_command() -> None:
@@ -308,7 +306,7 @@ async def test_without_a_show_of_its_own_the_stderr_of_it_flows_into_its_stdout(
   sand.exits(quiet, 0)
   await quiet
   assert paragraphs(engine.turns(on=root))[2:] == [
-    f"#{one} run\n{one}: Act[Exit] = Act({one!r})",
+    f"#{one}\n{one}_command = 'run'\n{one}: Act[Exit] = Act({one!r})",
     f"#{quiet}\n{quiet}: Act[Exit] = Act({quiet!r})",
   ]
 
@@ -360,7 +358,7 @@ async def test_a_pause_stops_no_command() -> None:
   assert [a[2] for a in dones(log, "bash")] == [WORLD] and paragraphs(engine.turns(on=root))[-1] == f"#{root} paused"
   engine.wake(root)
   await settle()
-  assert paragraphs(engine.turns(on=root))[-1] == f"#{one} exited 0\n# {one}/stdout, 0 known\n# 1 half"
+  assert paragraphs(engine.turns(on=root))[-1] == f"#{one} exited 0\n{one}_stdout = 'half'"
 
 
 async def test_the_stdout_of_a_command_without_a_show_is_told_as_tail() -> None:
@@ -372,8 +370,8 @@ async def test_the_stdout_of_a_command_without_a_show_is_told_as_tail() -> None:
   world_says("out", one, MANY, "stdout")
   sand.exits(one, 0)
   await one
-  told = "".join(f"\n# {i} line {i}" for i in range(51, 301))
-  assert paragraphs(engine.turns(on=root))[-1] == f"#{one} exited 0\n# {one}/stdout, 0 known{told}"
+  told = "\n".join(f"line {i}" for i in range(51, 301))
+  assert paragraphs(engine.turns(on=root))[-1] == f"#{one} exited 0\n<s:{one}_stdout>\n{told}</s:{one}_stdout>"
 
 
 async def test_the_engine_refuses_a_write_to_the_stdin_door_after_the_command_ended() -> None:
@@ -404,9 +402,9 @@ async def test_its_close_tells_what_its_stdout_shows() -> None:
     sand.exits(one, 0)
   await settle()
   assert paragraphs(engine.turns(on=root))[-3:] == [
-    f"#{merged} exited 0\n# {merged}/stdout, 0 known\n# 1 bad",
-    f"#{apart} exited 0\n# {apart}/stdout, 0 known\n# {apart}/stderr, 0 known\n# 1 bad",
-    f"#{quiet} exited 0\n# {quiet}/stdout, 0 known",
+    f"#{merged} exited 0\n{merged}_stdout = 'bad'",
+    f"#{apart} exited 0\n{apart}_stderr = 'bad'",
+    f"#{quiet} exited 0",
   ]
 
 

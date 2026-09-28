@@ -11,4 +11,7 @@ async def test_a_grant_carries_the_ceiling_in_dollars_and_the_ceiling_in_share_o
   act = engine.grant(usd=2.0, share=0.25, on=root)
   await settle()
   assert said(log, "grant") == [("grant", act, OPERATOR, root, 2.0, 0.25)]
-  assert paragraphs(engine.turns(on=root))[-1] == f"#{act} usd=2.0 share=0.25\n{act}: Act[None] = Act({act!r})"
+  assert (
+    paragraphs(engine.turns(on=root))[-1]
+    == f"#{act}\n{act}_usd = 2.0\n{act}_share = 0.25\n{act}: Act[None] = Act({act!r})"
+  )

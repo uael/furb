@@ -15,7 +15,7 @@ async def test_a_close_is_a_cancel_that_carries_what_the_act_it_names_is_done_wi
   engine.cancel(gone)
   await settle()
   shut, over = said(log, "close")[0], said(log, "cancel")[0]
-  assert shut == ("close", act, OPERATOR, 21, [f"#{act} closed 21"])
+  assert shut == ("close", act, OPERATOR, 21, [f"#{act} closed\n{act}_value = 21"])
   assert over == ("cancel", gone, OPERATOR, [f"#{gone} cancelled"])
   assert (len(shut), len(over)) == (5, 4)
   assert engine.peek(act) == 21 and isinstance(engine.peek(gone), CancelledError)
