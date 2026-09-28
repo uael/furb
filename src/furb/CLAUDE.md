@@ -7,7 +7,7 @@ Each name has one meaning, which the contract's sentences use as given here.
 `CLAUDE.md` at the root gives the meanings of fact, question, act, owner, started, query and view, under The
 meanings. The entry of such a name here gives only its form in the engine.
 
-- engine: the program in engine.py, which is the whole system prompt of a model.
+- engine: the program in engine.py, which is the system prompt of a model, with the doctrine at its end.
 - operator: the person or program that calls the engine from outside a rung.
 - outside: a host that makes acts under a site of its own, which is neither the operator nor an act; an act of the
   outside is one that neither the operator nor an act made.
@@ -115,7 +115,10 @@ meanings. The entry of such a name here gives only its form in the engine.
 - text: what read gives, and what write is given and gives back as it landed; a Text, with a path and a content.
 - show: a callable given the lines of a text, which gives the numbers of the lines the engine tells; span, grep and
   differs make the shows of the file.
-- quote: a string a word writes between two marks, <Sn> and </Sn>, which binds Sn when the word runs.
+- quote: a string between two marks, <s:name> and </s:name>, which binds its name when it runs; a word writes one,
+  and the transcript tells each string of more than one line as one.
+- doctrine: the last statement of engine.py, which the system prompt shows as a quote after the engine; it says how
+  a model works in furb, and holds no law.
 - template: a python template string, each interpolation of which carries an expression and its value.
 - debug: the verb that tells the interpolations of a template, a tell and no act.
 - control: a pause, a wake, a cancel or a close; a close is a cancel with a value, and a cancel a close with
@@ -144,7 +147,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 
 - A model does everything with the python that the model writes.
 - The engine hosts itself.
-- The system prompt a model reads is the engine, minified in layout alone, and nothing else.
+- The system prompt a model reads is the engine, minified in layout alone, with the doctrine as a quote at its end,
+  and nothing else.
 - The engine phrases everything that a model reads, as python, and the World renders nothing.
 - Everything that the file defines is public, and what is in engine.py is the API, the same for the model and for the
   operator.
@@ -160,7 +164,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - Compaction is not in the core.
 - engine.pyi is the specification of engine.py: it says what the engine is, what is always true of it and what its
   surface is, and never how it is made; it names the ears and the facts as python reads them, and holds every law, so
-  engine.py holds no sentence and no comment.
+  engine.py holds no sentence and no comment but the doctrine, which holds no law.
 - engine.py depends only on the python interpreter and on the ears of the outside that boot is given, the World, the
   Kernel and the gate among them, which are held by no verb and bound to no name of the engine.
 - A fact is a tuple, its kind first, deconstructed only by match, and nothing of the engine is a class but a text, an

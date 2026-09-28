@@ -7,17 +7,17 @@ from furb import engine
 async def test_a_ready_says_the_word_a_rung_holds() -> None:
   """A ready says the word a rung holds."""
   sand, log, root = born()
-  laid = engine.rung("<S1>hi</S1>\nk = S1", on=root)
+  laid = engine.rung("<s:hi>hi</s:hi>\nk = hi", on=root)
   await laid
-  sand.script[root] = ["<S2>\nthere\n</S2>\nclose(k + S2)"]
+  sand.script[root] = ["<s:there>\nthere\n</s:there>\nclose(k + there)"]
   act = engine.prompt(str, "greet", on=root)
   assert await act == "hithere\n"
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   (binding,) = [a[1] for a in said(log, "rung") if a[2] == root]
   assert said(log, "ready") == [
-    ("ready", laid, laid, "<S1>hi</S1>\nk = S1"),
+    ("ready", laid, laid, "<s:hi>hi</s:hi>\nk = hi"),
     ("ready", binding, binding, f"{root}: Act[object] = Act({root!r})\n{act}: Act[str] = Act({act!r})"),
-    ("ready", step, step, "<S2>\nthere\n</S2>\nclose(k + S2)"),
+    ("ready", step, step, "<s:there>\nthere\n</s:there>\nclose(k + there)"),
   ]
 
 

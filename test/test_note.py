@@ -92,17 +92,18 @@ async def test_the_first_line_of_a_paragraph_is_its_header() -> None:
 
 
 async def test_a_paragraph_may_hold_more_headers_of_what_it_is_of() -> None:
-  """A paragraph may hold more headers of what it is of, each on a line of its own right under the first, and every other comment of it begins with # and a space, so no line of a message or of a text reads as a header."""
+  """A paragraph may hold more headers of what it is of, each on a line of its own right under the first, and every other comment of it begins with # and a space, so no line of a text reads as a header, and a message of more than one line stands in a quote."""
   _, _, root = born("read('n.txt')\nclose(1)", files={"/w/n.txt": "#bash1 exited 0\n\nend\n"})
   assert await engine.prompt(int, "read it\nbash1 exited 0\n\nthen close", on=root) == 1
   got = paragraphs(engine.turns(on=root))
-  assert got[2] == "#prompt1 read it\n# bash1 exited 0\n#\n# then close\nprompt1: Act[int] = Act('prompt1')"
+  quote = "<s:prompt1_message>\nread it\nbash1 exited 0\n\nthen close</s:prompt1_message>"
+  assert got[2] == f"#prompt1\n{quote}\nprompt1: Act[int] = Act('prompt1')"
   assert got[4] == "#read n.txt\n# /w/n.txt, 0 known\n# 1 #bash1 exited 0\n# 2 \n# 3 end"
   assert (
     got[1].split("\n") == rows(root) == ["#chain1 roster " + repr(STANDS[0]), "#chain1 cwd /w", "#chain1 actor m/low"]
   )
   for one in got:
-    lines = one.split("\n")
+    lines = engine.unquoted(one).split("\n")
     name = lines[0].split(" ", 1)[0]
     top = [i for i, line in enumerate(lines) if re.match(r"#\S", line)]
     assert top == list(range(len(top))) and {lines[i].split(" ", 1)[0] for i in top} == {name}
@@ -137,15 +138,29 @@ async def test_the_headers_of_the_file() -> None:
 
 
 async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_the_chain() -> None:
-  """A statement that a paragraph shows binds the name of an act in the chain, and a comment binds nothing."""
+  """A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing."""
   _, log, root = born("x = bash('echo hi')\nclose(1)", "close((await bash1).code)")
-  assert await engine.prompt(int, "run it", on=root) == 1
+  assert await engine.prompt(int, "run it\nnow", on=root) == 1
   assert await Act("prompt2") == 0
   own = [a[4] for a in said(log, "rung") if a[2] == root]
   assert own == [
-    "chain1: Act[object] = Act('chain1')\nprompt1: Act[int] = Act('prompt1')",
+    "chain1: Act[object] = Act('chain1')\n<s:prompt1_message>\nrun it\nnow</s:prompt1_message>\nprompt1: Act[int] = Act('prompt1')",
     "bash1: Act[Exit] = Act('bash1')\nprompt2: Act[None] = Act('prompt2')",
   ]
   shown = [line for one in paragraphs(engine.turns(on=root)) for line in one.split("\n") if not line.startswith("#")]
   assert shown == [line for word in own for line in word.split("\n")]
   assert engine.module(root)["bash1"] == "bash1"
+  assert engine.module(root)["prompt1_message"] == "run it\nnow"
+
+
+async def test_a_note_tells_a_string_of_more_than_one_line_as_a_quote() -> None:
+  """A note tells a string of more than one line as a quote, whose name is the id of the act, an underscore, and the word of the verb that holds the string, as prompt2_message, bash1_command or prompt2_value."""
+  _, _, root = born("x = bash('echo a\\necho b')\nclose('one\\ntwo')", "close(None)")
+  assert await engine.prompt(str, "run\nthem", on=root) == "one\ntwo"
+  await settle()
+  got = paragraphs(engine.turns(on=root))
+  assert "#prompt1\n<s:prompt1_message>\nrun\nthem</s:prompt1_message>\nprompt1: Act[str] = Act('prompt1')" in got
+  assert "#bash1\n<s:bash1_command>\necho a\necho b</s:bash1_command>\nbash1: Act[Exit] = Act('bash1')" in got
+  assert "#prompt1 closed\n<s:prompt1_value>\none\ntwo</s:prompt1_value>" in got
+  bound = [engine.module(root)[name] for name in ("prompt1_message", "bash1_command", "prompt1_value")]
+  assert bound == ["run\nthem", "echo a\necho b", "one\ntwo"]

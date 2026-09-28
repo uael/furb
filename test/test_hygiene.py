@@ -18,8 +18,10 @@ EXTENSIONS = TESTS.parent / "extensions"
 # The contract of the engine and the contract of each extension, each with the folder of its suite.
 CONTRACTS = {PYI: TESTS, **{one: one.parent / "test" for one in sorted(EXTENSIONS.glob("*/*.pyi"))}}
 # What the engine may cost the model that reads it: a wall, and a shape that will not fit under it is a shape not
-# found yet. Six thousand, by the owner's word.
+# found yet. Six thousand, by the owner's word, for the engine alone, and two thousand for the doctrine after it.
 BUDGET = 6_000
+DOCTRINE = 2_000
+ENGINE, _, QUOTE = SYSTEM.partition("\n<s:doctrine>")
 DEFS = (ast.FunctionDef, ast.AsyncFunctionDef)
 SCOPE = (ast.Module, ast.ClassDef, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, *DEFS)
 
@@ -135,13 +137,18 @@ def test_the_module_docstring_is_empty() -> None:
 
 
 def test_the_engine_fits_the_window_it_is_meant_to_be_read_in() -> None:
-  spent = len(tiktoken.get_encoding("o200k_base").encode(SYSTEM))
+  spent = len(tiktoken.get_encoding("o200k_base").encode(ENGINE))
   assert spent < BUDGET, f"the engine the model reads costs {spent} tokens, over the {BUDGET} budget"
+
+
+def test_the_doctrine_fits_the_window_it_is_meant_to_be_read_in() -> None:
+  spent = len(tiktoken.get_encoding("o200k_base").encode(f"<s:doctrine>{QUOTE}"))
+  assert spent <= DOCTRINE, f"the doctrine costs {spent} tokens, over the {DOCTRINE} budget"
 
 
 def test_the_engine_the_model_reads_is_the_engine_that_runs() -> None:
   """Whatever the minifier takes, it may not be meaning: what the model is handed parses to the program on disk."""
-  assert ast.dump(ast.parse(SYSTEM)) == ast.dump(ast.parse(PY.read_text(encoding="utf-8")))
+  assert ast.dump(ast.parse(engine.unquoted(SYSTEM))) == ast.dump(ast.parse(PY.read_text(encoding="utf-8")))
 
 
 def binds(scope: ast.AST) -> set[str]:

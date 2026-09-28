@@ -237,7 +237,7 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
   def ear(id):
     if actor != OPERATOR:
       yield "started", id
-    yield told(id, message, bound(id, named))
+    yield told(id, message, bound(id, named), word="message")
     while True:
       while actor == OPERATOR or paused(id):
         yield
@@ -344,7 +344,10 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           close(Refused(f"{to} no actor"), maker if question(("prompt", maker)) else asking)
         else:
           yield told(asking, f"advance on {maker}")
-          if binds := "\n".join(re.findall(r"(?m)^\w+: Act\[.*\] = Act\('\w+'\)$", turns(id)[-1][1])):
+          if binds := "\n".join(
+            m[0]
+            for m in re.findall(r"(?ms)^(\w+: Act\[.*?\] = Act\('\w+'\)|<s:(\w+\d_\w+)>.*</s:\2>)$", turns(id)[-1][1])
+          ):
             rung(binds)
           with site.set(asking):
             act("reply", id, ending(idle), to)
@@ -368,8 +371,9 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
       return
     yield "started", id
     spent = 0
-    for old in [x[1] for x in transcript(here) if x[0] == "grant" and x[3] == here and x[1] != id]:
-      close(None, old)
+    for x in transcript(here):
+      if x[0] == "grant" and x[3] == here and x[1] != id:
+        close(None, x[1])
     yield told(id, f"usd={usd} share={share}", bound(id, "None"))
     while True:
       match (yield):
@@ -393,7 +397,7 @@ def bash(
 ) -> Act[Exit]:
   def ear(id):
     streams, mute = {x: Text(x) for x in (id + "/stdout", id + "/stderr")}, "" if fed else "not fed"
-    yield told(id, "" if show is HIDDEN else command, bound(id, "Exit"))
+    yield told(id, "" if show is HIDDEN else command, bound(id, "Exit"), word="command")
     while True:
       match a := (yield):
         case ("merged", qid, *_, about) if about == id:
@@ -525,20 +529,21 @@ def tells(id):
   return get(id)[2] != scope(id)
 
 
-def told(id, text="", *notes):
-  return "tell", id, [headed(id, text), *notes]
+def told(id, text="", *notes, word="text"):
+  return "tell", id, [headed(id, text, word), *notes]
 
 
 def control(kind, name, id, *words):
-  return (
-    get(id)
-    and (peek(id, ...) is ... or (kind == "wake" and paused(id)))
-    and say(kind, id, *words, [headed(id, " ".join([name, *map(repr, words)]))])
-  )
+  head = headed(id, " ".join([name, *map(repr, words)]))
+  if words and isinstance(words[0], str) and "\n" in words[0]:
+    head = headed(id, name) + headed(id, words[0], "value")[len(id) + 1 :]
+  return get(id) and (peek(id, ...) is ... or (kind == "wake" and paused(id))) and say(kind, id, *words, [head])
 
 
-def headed(name, text=""):
-  return "#" + commented(f"{name} {text}".rstrip())[2:]
+def headed(name, text="", word="text"):
+  if "\n" in (text := str(text)):
+    return f"#{name}\n<s:{name}_{word}>\n{text}</s:{name}_{word}>"
+  return f"#{name} {text}".rstrip()
 
 
 def commented(text):
@@ -565,7 +570,7 @@ def shown(pair, seen):
 
 
 def unquoted(word):
-  while m := re.search(r"(?ms)^<(S\d+)>\n?(.*)</\1>$", word):
+  while m := re.search(r"(?ms)^<s:(\w+)>\n?(.*)</s:\1>$", word):
     word = word[: m.start()] + f"{m[1]} = {m[2]!r}" + "\n" * m[0].count("\n") + word[m.end() :]
   return word
 
@@ -786,3 +791,40 @@ def boot(record=(), **outside):
   root = Act(ROOT) if known else chain("root")
   stand()
   return root
+
+
+doctrine = """You are an actor of furb. furb reads and writes only Python and quotes.
+
+Your reply
+- Your reply is one word: raw Python, which the chain runs in its module. Write no prose and no markdown fence.
+  The gate refuses a word that is not Python, and the prompt asks you again.
+- Write a long text as a quote: <s:name> at the start of a line, then the text, then </s:name> at the end of a line.
+  The quote binds the name to the text as a str, with no escapes. Give each quote a name that says what it holds.
+- The transcript shows a string of more than one line as a quote under its header, and binds it, as prompt3_message,
+  bash2_command or prompt3_value. Use these names as values, and do not write the string again.
+- The transcript binds the name of each act that it shows. Await an act for its value.
+- A comment in the transcript is what the chain tells you. It binds nothing.
+
+Your prompt
+- The line "#rungN advance on promptM" names the prompt that you answer. Close it with a value of its shape, which
+  its binding shows (promptM: Act[str]): close(value).
+- A word that closes nothing ends its step, and the chain asks you again with all that the word told. Use this to
+  look before you answer.
+- When you need a decision, or the prompt is not clear, prompt the operator: await prompt(str, question, to=OPERATOR).
+
+How to work
+- Read before you write. To see a part of a file, read it with a show: read(path, grep(pattern)) or
+  read(path, span(lo, hi)). The chain knows each line that it told, and a later read does not tell it again.
+- Change a file through the Text that read gave: replace, edit, insert or delete, then write. A write tells only the
+  lines that did not land as you asked.
+- Use bash to run commands and to find paths, as bash("grep -rln pattern src"), and not to show a file. Do not pipe a
+  long command into tail or head: the show of bash picks the lines, and the stream flows while the command runs.
+  Give a long command a timeout that fits.
+- Start all independent acts first, then await them. Give each independent part of a large task its own chain:
+  prompt(str, brief, on=chain(label)). A new chain knows nothing of yours, so its brief says all that it needs.
+- A report of another chain is a claim. Examine a claim before you give it as a fact.
+- Use debug(t"{value}") to see what a word holds. When a word raises, the chain binds the exception as raised.
+- Keep each word small. The chain reads each token that you write again at each reply.
+- Do only what the prompt asks. Before an act that changes what the prompt did not ask for, prompt the operator.
+- Never give a result that no act showed.
+"""

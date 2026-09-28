@@ -1,6 +1,6 @@
 """told, the paragraph that an act tells of itself."""
 
-from conftest import born, heads, said, settle
+from conftest import born, heads, paragraphs, said, settle
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -17,7 +17,7 @@ async def test_the_open_of_an_act_tells_the_id_and_what_the_act_says_of_itself()
 
 
 async def test_a_closed_header_tells_the_act_with_what_it_came_to_as_python_shows_it() -> None:
-  """A closed header tells the act with what it came to, as python shows it."""
+  """A closed header tells the act with what it came to, as python shows it, and a string of more than one line as a quote under the header."""
   _, _, root = born()
   act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   engine.close(21, act)
@@ -25,11 +25,18 @@ async def test_a_closed_header_tells_the_act_with_what_it_came_to_as_python_show
   other = engine.prompt(str, "which?", to=OPERATOR, on=root)
   engine.close("k", other)
   assert await other == "k"
+  lines = engine.prompt(str, "which lines?", to=OPERATOR, on=root)
+  engine.close("one\ntwo", lines)
+  assert await lines == "one\ntwo"
   step = engine.rung("k = 1\nclose(5)", on=root)
   assert await step == 5
   await settle()
   closed = [head for head in heads(engine.turns(on=root)) if " closed" in head]
-  assert closed == [f"#{act} closed 21", f"#{other} closed 'k'", f"#{step} closed 5"]
+  assert closed == [f"#{act} closed 21", f"#{other} closed 'k'", f"#{lines} closed", f"#{step} closed 5"]
+  quote = f"<s:{lines}_value>\none\ntwo</s:{lines}_value>"
+  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{lines} closed")] == [
+    f"#{lines} closed\n{quote}"
+  ]
 
 
 async def test_told_gives_the_saying_of_a_tell_about_an_act() -> None:

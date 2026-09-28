@@ -7,7 +7,9 @@ import {
   type Fact,
   files,
   isQuestion,
+  paragraphs,
   speaking,
+  uncommented,
 } from "../src/index.ts";
 
 const engines: Engine[] = [];
@@ -313,4 +315,14 @@ test("a function of JavaScript that makes an ear gives the ear that an act bring
   expect([String(note), heard]).toEqual(["note1", ["note1"]]);
   engine.close(7, { id: String(note) });
   expect(await note).toBe(7);
+});
+
+test("the text of a paragraph drops the mark of each comment and the two marks of each quote", () => {
+  const [told] = paragraphs(
+    "#prompt1\n<s:prompt1_message>\ncount\n# them\n</s:prompt1_message>\nprompt1: Act[int] = Act('prompt1')",
+  );
+  expect(told?.name).toBe("prompt1");
+  expect(uncommented(told?.lines ?? [])).toBe("count\n# them\nprompt1: Act[int] = Act('prompt1')");
+  expect(uncommented(["# one", "#", "x = 1"])).toBe("one\n\nx = 1");
+  expect(uncommented(["<s:a>", "b</s:a>", "c</s:a>"])).toBe("b</s:a>\nc");
 });
