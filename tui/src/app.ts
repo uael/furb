@@ -34,13 +34,15 @@ import {
   type TextOptions,
   TextRenderable,
 } from "@opentui/core";
+import type { Keymap } from "@opentui/keymap";
+import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { clipboardImage } from "./clipboard.ts";
 import { commands, slashes } from "./commands.ts";
 import { conversation } from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
 import { ago, clip, count, dollars, elapsed, graphemes, kibibytes, modelName, share } from "./format.ts";
-import { type Action, bindings, chords, keys, presses, shown } from "./keys.ts";
+import { type Action, bindings, chords, keys, shown } from "./keys.ts";
 import { loadParsers } from "./parsers.ts";
 import {
   type ActRow,
@@ -109,6 +111,29 @@ const statusMark = (status: SessionStatus): Part =>
   )[status];
 /** The rows that a key moves the pointer of a list by, in the rewind tree and in a dialog. */
 const steps: Record<string, number> = { up: -1, down: 1, pageup: -8, pagedown: 8, home: -1e9, end: 1e9 };
+/** What the footer says of a key: its chord and what it does, each read when the footer is drawn. */
+type Hint = readonly [chord: string | (() => string), action: string | (() => string)];
+/** A command of a layer of keys: the presses that run it, what it does with the key, when it acts, and what the footer
+ * says of it. */
+type KeyCommand = {
+  on: string | readonly string[];
+  /** What the command does with its key, which gives false when it does not act, and the key goes on. */
+  run: (key?: KeyEvent) => unknown;
+  when?: () => boolean;
+  hint?: Hint;
+};
+/** The keymap of each renderer, which lives as long as the renderer: each App on it adds its layers, and takes them
+ * away when it ends. A binding may carry a hint, which the footer reads. */
+const keymaps = new WeakMap<CliRenderer, Keymap<Renderable, KeyEvent>>();
+function keymapOf(renderer: CliRenderer): Keymap<Renderable, KeyEvent> {
+  let keymap = keymaps.get(renderer);
+  if (!keymap) {
+    keymap = createDefaultOpenTuiKeymap(renderer);
+    keymap.registerBindingFields({ hint: (value, field) => field.attr("hint", value) });
+    keymaps.set(renderer, keymap);
+  }
+  return keymap;
+}
 /** A span of seconds as a wait says it: 1 second, 0.2 seconds. */
 const seconds = (value: number) => `${value} ${value === 1 ? "second" : "seconds"}`;
 /** The options of a text, and the action that a click on it runs. */
@@ -265,6 +290,9 @@ export class App {
   private hoverTimer?: ReturnType<typeof setTimeout>;
   private editorVersion = 0;
   private closed = false;
+  /** The keys of the App, as layers of the keymap of its renderer, and what takes each layer away again. */
+  private readonly keymap: Keymap<Renderable, KeyEvent>;
+  private readonly layersOff: (() => void)[];
   /** The sidebar at the right: the session, its chains and its usage, then the workspaces, which scroll. */
   private readonly rail: BoxRenderable;
   private readonly railSession: BoxRenderable;
@@ -560,7 +588,8 @@ export class App {
     session.on("compose", this.compose);
     session.on("resume", this.resume);
     session.on("shared", this.shared);
-    renderer.keyInput.on("keypress", this.key);
+    this.keymap = keymapOf(renderer);
+    this.layersOff = this.layers();
     renderer.on("resize", this.render);
     renderer.on("selection", this.copySelection);
     // A label that moves with time is read again, and no other part of the view is drawn again.
@@ -911,12 +940,11 @@ export class App {
     const w = this.session;
     const changes = w.host.changes;
     const shown = this.tree ? "feed" : w.view;
-    const kitty = this.renderer.capabilities?.kitty_keyboard === true;
     const directory = shortenHome(w.workingDirectory);
     // The top line spends its room in this order: the session and the chain, the switch of the views, the key of the
     // switch, then the directory. A part that finds no room is left out, and a session name that is still too long is
     // cut at its end.
-    const chord = `${kitty ? "⌃" : "⌥"}1-3`;
+    const chord = `${this.kitty ? "⌃" : "⌥"}1-3`;
     const toggle = views.reduce(
       (sum, view) =>
         sum + viewLabels[view].length + 4 + (view === "changes" && changes ? String(changes).length + 1 : 0),
@@ -927,7 +955,7 @@ export class App {
     const hint = head + toggle + chord.length + 2 <= room;
     const folder = head + 3 + Bun.stringWidth(directory) + toggle + (hint ? chord.length + 2 : 0) <= room;
     const name = clip(w.sessionName, Math.max(8, room - toggle - 3 - Bun.stringWidth(w.label)));
-    if (this.paneChanged(this.toggle, [shown, changes, kitty, hint, this.theme])) {
+    if (this.paneChanged(this.toggle, [shown, changes, this.kitty, hint, this.theme])) {
       this.clear(this.toggle);
       this.switcher(
         this.toggle,
@@ -1102,36 +1130,31 @@ export class App {
           ? "The view could not load"
           : "The last act failed"
         : statusLabels[status];
-    const row = this.treeRow();
-    type Key = readonly [chord: string, action: string, run?: () => void];
-    const keys: readonly Key[] = this.tree
-      ? [
-          ["↑↓", "move"],
-          ...(row?.parent ? ([["←→", "fold"]] as const) : []),
-          ["Enter", row?.hint ?? "choose", () => void this.chooseTreeRow()],
-          ["Esc", "back", () => this.closeTree()],
-        ]
-      : this.suggestionBox.visible
-        ? [
-            ["↑↓", "choose"],
-            ["Tab", "complete"],
-            ["Esc", "hide", () => this.dismissSuggestions()],
-          ]
-        : this.session.editing
-          ? [
-              ["Enter", "run", () => void this.submit()],
-              ["Esc", "leave the program", () => this.leaveEdit()],
-            ]
-          : [
-              ...(w.paused ? ([["/wake", "wake the chain", () => this.action("/wake")]] as const) : []),
-              ...(w.operatorPrompt ? ([["⌃A", "answer", () => this.question()]] as const) : []),
-              ...(!w.paused &&
-              w.activity.some((act) => act.kind === "prompt" && !act.done && !asksOperator(act))
-                ? ([["Esc", "pause", () => this.action("/pause")]] as const)
-                : []),
-              ["⌃P", "commands", () => this.palette()],
-              ["F1", "help", () => this.help()],
-            ];
+    // The footer offers the keys of the top layer that offers any, each of which does what its key does, and under
+    // the layer of the table, the wake of a paused chain.
+    type Offer = readonly [chord: string, action: string, run: () => void];
+    const text = (value: string | (() => string)) => (typeof value === "function" ? value() : value);
+    const offered = this.keymap
+      .getActiveKeys({ includeMetadata: true })
+      .flatMap(({ bindingAttrs, command }) => {
+        const hint = bindingAttrs?.hint as readonly [...Hint, group: string] | undefined;
+        return hint && typeof command === "string" ? [{ hint, command }] : [];
+      });
+    const group = offered[0]?.hint[2];
+    const keys: readonly Offer[] = [
+      ...(group === "" && w.paused
+        ? ([["/wake", "wake the chain", () => this.action("/wake")]] as const)
+        : []),
+      ...offered
+        .filter(({ hint }) => hint[2] === group)
+        .map(
+          ({ hint: [chord, action], command }): Offer => [
+            text(chord),
+            text(action),
+            () => void this.keymap.dispatchCommand(command),
+          ],
+        ),
+    ];
     const buttons = keys.map(([chord, action], index): Part[] => [
       [index ? "   " : "", c.faint],
       [chord, c.muted],
@@ -3091,7 +3114,7 @@ export class App {
     const value = await externalEditor(
       this.renderer,
       this.composer.plainText,
-      this.session.mode === "python" || Boolean(this.session.editing),
+      this.writesPython,
       this.session.directory || this.session.host.directory,
     );
     // An editor ends a file with a line end, which the draft leaves out.
@@ -3268,7 +3291,6 @@ export class App {
    * table of keys gives the chord of each command, and each action that has keys and no command, which stands before
    * the command that it goes with. */
   palette(): void {
-    const kitty = this.renderer.capabilities?.kitty_keyboard === true;
     const views_: Record<View, string> = {
       feed: "Messages, the Python each model wrote, and answers",
       transcript: "The exact text that the model reads",
@@ -3277,14 +3299,14 @@ export class App {
     const keysOf = new Map<string, string>();
     const before = new Map<string, Choice>();
     for (const { key, binding } of bindings) {
-      if (binding.command) keysOf.set(binding.command, shown(key, binding, kitty));
+      if (binding.command) keysOf.set(binding.command, shown(key, binding, this.kitty));
       const { choice, run } = binding;
       if (choice && run)
         before.set(choice.before, {
           label: choice.label,
           detail: choice.detail,
           command: "",
-          keys: shown(key, binding, kitty),
+          keys: shown(key, binding, this.kitty),
           run: () => void this.actions[run](),
         });
     }
@@ -3298,7 +3320,7 @@ export class App {
         label: `${viewLabels[view]} view`,
         detail: views_[view],
         command: "",
-        keys: toggle && shown(toggle.key, toggle.binding, kitty).replace("1-3", String(index + 1)),
+        keys: toggle && shown(toggle.key, toggle.binding, this.kitty).replace("1-3", String(index + 1)),
         run: () => this.showView(view),
       });
     for (const { name, label, argument, detail, usage } of slashes) {
@@ -4808,7 +4830,6 @@ export class App {
   }
   /** The keys that this terminal sends, what each mark means, and the commands. */
   help(): void {
-    const kitty = this.renderer.capabilities?.kitty_keyboard === true;
     const legend: [string, RGBA, string][] = [
       [`${spin(0)} Working`, c.accent, "A model or a command runs"],
       [`${glyph.running} Running`, c.accent, "A chain or a session has work in progress"],
@@ -4828,7 +4849,7 @@ export class App {
       keys
         .map(
           (key): Choice => ({
-            label: chords(key, kitty),
+            label: chords(key, this.kitty),
             detail: key.action,
             heading: "Keys",
             run: () => {},
@@ -4854,204 +4875,236 @@ export class App {
       { note: "The chords that this terminal sends, what each mark means, and every command." },
     );
   }
-  private key = (key: KeyEvent): void => {
-    // While a row takes a new name, its input takes the keys, and Escape or Ctrl+C leaves the name as it was.
-    if (this.renaming?.input?.focused) {
-      if (key.name === "escape" || (key.ctrl && key.name === "c")) {
-        key.preventDefault();
-        this.endRename(false);
-      } else if (key.ctrl && key.name === "q") {
-        key.preventDefault();
-        this.endRename(true);
-        void this.options.quit();
-      }
-      return;
-    }
-    const plainKey = !key.ctrl && !key.meta && !key.shift;
-    if (!this.overlay && this.tree && plainKey) {
-      const row = this.treeRow();
-      if (key.name in steps) {
-        key.preventDefault();
-        this.moveTree(steps[key.name] ?? 0);
-        return;
-      }
-      if (key.name === "right" && row?.parent) {
-        key.preventDefault();
-        if (row.folded) this.foldTree(row.id, false);
-        else this.moveTree(1);
-        return;
-      }
-      if (key.name === "left" && row) {
-        key.preventDefault();
-        if (row.parent && !row.folded) this.foldTree(row.id, true);
-        else if (row.up) this.pointTree(row.up);
-        return;
-      }
-      if (["return", "enter"].includes(key.name)) {
-        key.preventDefault();
-        void this.chooseTreeRow();
-        return;
-      }
-      if (key.name === "escape") {
-        key.preventDefault();
-        this.closeTree();
-        return;
-      }
-    }
-    if (!this.overlay && this.suggestionBox.visible && !key.ctrl && !key.meta) {
-      const chosen = this.suggestions[this.suggestionIndex];
-      if (key.name === "up" || key.name === "down") {
-        key.preventDefault();
-        const count = this.suggestions.length;
-        if (count)
-          this.suggestionIndex = (this.suggestionIndex + (key.name === "up" ? count - 1 : 1)) % count;
-        this.renderSuggestions();
-        return;
-      }
-      if (key.name === "tab" && !key.shift && !key.ctrl && !key.super && chosen) {
-        key.preventDefault();
-        this.complete(chosen);
-        return;
-      }
-      if (["return", "enter"].includes(key.name) && !key.shift && chosen) {
-        key.preventDefault();
-        if (chosen.submit) chosen.submit();
-        else this.complete(chosen);
-        return;
-      }
-      if (key.name === "escape") {
-        key.preventDefault();
-        this.dismissSuggestions();
-        return;
-      }
-    }
-    // As in Claude Code: Ctrl+D on an empty input asks once, and exits when it is pressed again while it asks.
-    if (!this.overlay && key.ctrl && key.name === "d" && !this.composer.plainText) {
-      key.preventDefault();
-      if (this.session.notice === exitNotice) void this.options.quit();
-      else this.session.notice = exitNotice;
-      return;
-    }
-    // A key of the table runs its action. While a dialog is open, only a key that acts always runs it.
-    for (const { binding } of bindings)
-      if (
-        binding.run &&
-        (binding.always || !this.overlay) &&
-        presses(binding, key) &&
-        this.actions[binding.run](key) !== false
-      ) {
-        key.preventDefault();
-        return;
-      }
-    // Up on an empty input takes back the last message queued on the chain, and Up and Down at the first and the last
-    // line of the input walk the history of what it sent, as a shell does. Alt+Up and Alt+Down walk it from any line.
-    if (
-      !this.overlay &&
-      this.composer.focused &&
-      ["up", "down"].includes(key.name) &&
-      !key.ctrl &&
-      !key.shift
-    ) {
-      const up = key.name === "up";
-      const queued = this.session.queued.findLast((entry) => entry.chain === this.session.selected);
-      if (up && !key.meta && !this.composer.plainText && queued && this.historyIndex < 0) {
-        key.preventDefault();
-        this.session.removeQueued(queued.id);
-        this.insert(queued.text);
-        this.session.notice = "The queued message is back in the input. ⌥Enter queues it again.";
-        return;
-      }
-      const cursor = this.composer.visualCursor.visualRow;
-      const edge = up ? cursor === 0 : cursor >= this.composer.virtualLineCount - 1;
-      const history = this.history();
-      if ((key.meta || edge) && history.length && (up || this.historyIndex >= 0)) {
-        key.preventDefault();
-        if (this.historyIndex < 0) {
-          this.historyDraft = this.composer.plainText;
-          this.historyIndex = history.length;
-        }
-        this.historyIndex = Math.max(0, Math.min(history.length, this.historyIndex + (up ? -1 : 1)));
-        const text = history[this.historyIndex] ?? this.historyDraft;
-        if (this.historyIndex === history.length) this.historyIndex = -1;
-        this.composer.replaceText(text);
-        return;
-      }
-    }
-    // Ctrl+J arrives as a line feed from a terminal with no kitty keyboard protocol.
-    if (
-      !this.overlay &&
-      (this.session.mode === "python" || this.session.editing) &&
-      ((key.shift && ["return", "enter"].includes(key.name)) ||
-        (key.ctrl && key.name === "j") ||
-        key.name === "linefeed")
-    ) {
-      key.preventDefault();
-      const before = this.beforeCursor().split("\n").at(-1) ?? "";
-      this.composer.insertText(
-        `\n${before.match(/^\s*/)?.[0] ?? ""}${before.trimEnd().endsWith(":") ? "  " : ""}`,
+  /** The layers of the keys of the App, from the top: a layer that holds takes a key before the layers under it, a
+   * command that does not hold lets its key go on, and a key that no layer takes goes to the part that has the focus.
+   * The footer offers the keys of the top layer that offers any. It gives what takes each layer away again. */
+  private layers(): (() => void)[] {
+    const offs: (() => void)[] = [];
+    // Each layer that comes later stands under the ones before it.
+    const layer = (enabled: () => boolean, group: string, keys: KeyCommand[]) =>
+      offs.push(
+        this.keymap.registerLayer({
+          priority: -offs.length,
+          enabled,
+          commands: keys.map(({ run, when }, index) => ({
+            name: `${offs.length}-${index}`,
+            run: ({ event }) => run(event) !== false,
+            ...(when ? { enabled: when } : {}),
+          })),
+          bindings: keys.flatMap(({ on, hint }, index) =>
+            [on].flat().map((key, first) => ({
+              key,
+              cmd: `${offs.length}-${index}`,
+              ...(hint && !first ? { hint: [...hint, group] } : {}),
+            })),
+          ),
+        }),
       );
-      return;
+    const free = () => !this.renaming?.input?.focused;
+    const bare = () => free() && !this.overlay;
+    const row = () => this.treeRow();
+    const chosen = () => Boolean(this.suggestions[this.suggestionIndex]);
+    // The keys of the table, which act while no dialog is open, or at all times.
+    const table = (always: boolean): KeyCommand[] =>
+      bindings.flatMap(({ key, binding }) => {
+        const { run, on = [], hint } = binding;
+        if (!run || Boolean(binding.always) !== always) return [];
+        const offered: Hint | undefined = hint ? [() => shown(key, binding, this.kitty), hint] : undefined;
+        return { on, run: (event) => void this.actions[run](event), when: this.when[run], hint: offered };
+      });
+    // While a row takes a new name, Escape or Ctrl+C leaves the name as it was, and Ctrl+Q keeps it and quits.
+    layer(() => !free(), "rename", [
+      { on: ["escape", "ctrl+c"], run: () => this.endRename(false) },
+      {
+        on: "ctrl+q",
+        run: () => {
+          this.endRename(true);
+          void this.options.quit();
+        },
+      },
+    ]);
+    layer(() => bare() && Boolean(this.tree), "tree", [
+      ...Object.entries(steps).map(
+        ([on, step]): KeyCommand => ({
+          on,
+          run: () => this.moveTree(step),
+          hint: on === "up" ? ["↑↓", "move"] : undefined,
+        }),
+      ),
+      { on: "right", run: () => this.unfoldTree(), when: () => Boolean(row()?.parent), hint: ["←→", "fold"] },
+      { on: "left", run: () => this.foldTreeUp(), when: () => Boolean(row()) },
+      {
+        on: ["return", "enter"],
+        run: () => void this.chooseTreeRow(),
+        hint: ["Enter", () => row()?.hint ?? "choose"],
+      },
+      { on: "escape", run: () => this.closeTree(), hint: ["Esc", "back"] },
+    ]);
+    layer(() => bare() && this.suggestionBox.visible, "suggestions", [
+      { on: "up", run: () => this.stepSuggestion(-1), hint: ["↑↓", "choose"] },
+      { on: "down", run: () => this.stepSuggestion(1) },
+      { on: "tab", run: () => this.takeSuggestion(false), when: chosen, hint: ["Tab", "complete"] },
+      { on: ["return", "enter"], run: () => this.takeSuggestion(true), when: chosen },
+      { on: "escape", run: () => this.dismissSuggestions(), hint: ["Esc", "hide"] },
+    ]);
+    layer(() => bare() && Boolean(this.session.editing), "edit", [
+      { on: ["return", "enter"], run: () => void this.submit(), hint: ["Enter", "run"] },
+      { on: "escape", run: this.escape, hint: ["Esc", "leave the program"] },
+    ]);
+    layer(bare, "", [
+      // As in Claude Code, Ctrl+D acts on an empty input.
+      { on: "ctrl+d", run: () => this.exit(), when: () => !this.composer.plainText },
+      ...table(false),
+      {
+        on: ["up", "down", "meta+up", "meta+down"],
+        run: this.walkHistory,
+        when: () => this.composer.focused,
+      },
+      // Ctrl+J arrives as a line feed from a terminal with no kitty keyboard protocol.
+      {
+        on: ["shift+return", "shift+enter", "ctrl+j", "linefeed"],
+        run: this.newline,
+        when: () => this.writesPython,
+      },
+    ]);
+    layer(free, "", [
+      ...table(true),
+      { on: "ctrl+c", run: () => this.cancel() },
+      { on: "escape", run: this.escape },
+      {
+        on: ["pageup", "pagedown"],
+        run: this.pageQuestion,
+        when: () => Boolean(this.overlay && this.questionDocument),
+      },
+      ...["up", "down", "pageup", "pagedown"].map(
+        (on): KeyCommand => ({
+          on,
+          run: () => this.stepChoice(steps[on] ?? 0),
+          when: () => Boolean(this.overlay),
+        }),
+      ),
+    ]);
+    return offs;
+  }
+  /** Whether this terminal sends the chords of the kitty keyboard protocol. */
+  private get kitty(): boolean {
+    return this.renderer.capabilities?.kitty_keyboard === true;
+  }
+  /** The suggestion a step away from the one chosen, round from the last to the first. */
+  private stepSuggestion(step: number): void {
+    const count = this.suggestions.length;
+    if (count) this.suggestionIndex = (this.suggestionIndex + step + count) % count;
+    this.renderSuggestions();
+  }
+  /** The suggestion chosen, completed in the input, or sent when Enter takes one that sends itself. */
+  private takeSuggestion(enter: boolean): void {
+    const chosen = this.suggestions[this.suggestionIndex];
+    if (enter && chosen?.submit) chosen.submit();
+    else if (chosen) this.complete(chosen);
+  }
+  /** The text that a question asks, scrolled by a page. */
+  private pageQuestion = (key?: KeyEvent) => this.questionDocument?.scrollBy(key?.name === "pageup" ? -8 : 8);
+  /** The choice of the dialog a step away from the one chosen, within the list. */
+  private stepChoice(step: number): void {
+    this.selection = Math.max(0, Math.min(this.filtered.length - 1, this.selection + step));
+    this.renderChoices();
+  }
+  /** The row of the rewind tree unfolded, or the pointer on its first child when it is open. */
+  private unfoldTree(): void {
+    const row = this.treeRow();
+    if (row?.folded) this.foldTree(row.id, false);
+    else this.moveTree(1);
+  }
+  /** The row of the rewind tree folded, or the pointer on the row above it when it is folded. */
+  private foldTreeUp(): void {
+    const row = this.treeRow();
+    if (row?.parent && !row.folded) this.foldTree(row.id, true);
+    else if (row?.up) this.pointTree(row.up);
+  }
+  /** Ctrl+D on an empty input asks once, and exits when it is pressed again while it asks. */
+  private exit(): void {
+    if (this.session.notice === exitNotice) void this.options.quit();
+    else this.session.notice = exitNotice;
+  }
+  /** Whether the input holds Python: Python input, or a program under edit. */
+  private get writesPython(): boolean {
+    return this.session.mode === "python" || Boolean(this.session.editing);
+  }
+  /** A new line in the input, as deep as the line before it, and deeper after a colon. */
+  private newline = (): void => {
+    const before = this.beforeCursor().split("\n").at(-1) ?? "";
+    this.composer.insertText(
+      `\n${before.match(/^\s*/)?.[0] ?? ""}${before.trimEnd().endsWith(":") ? "  " : ""}`,
+    );
+  };
+  /** Ctrl+C closes a dialog or the rewind tree, or clears the input, or cancels the work of the chain. */
+  private cancel(): void {
+    if (this.overlay) this.closeOverlay();
+    else if (this.tree) this.closeTree();
+    else if (this.composer.plainText) this.composer.replaceText("");
+    else this.action("/cancel");
+  }
+  /** Up on an empty input takes back the last message queued on the chain, and Up and Down at the first and the last
+   * line of the input walk the history of what it sent, as a shell does. Alt+Up and Alt+Down walk it from any line.
+   * It gives false when it does nothing, and the input moves its cursor. */
+  private walkHistory = (key?: KeyEvent): boolean => {
+    const up = key?.name === "up";
+    const anywhere = key?.meta;
+    const queued = this.session.queued.findLast((entry) => entry.chain === this.session.selected);
+    if (up && !anywhere && !this.composer.plainText && queued && this.historyIndex < 0) {
+      this.session.removeQueued(queued.id);
+      this.insert(queued.text);
+      this.session.notice = "The queued message is back in the input. ⌥Enter queues it again.";
+      return true;
     }
-    if (key.ctrl && key.name === "c") {
-      key.preventDefault();
-      if (this.overlay) this.closeOverlay();
-      else if (this.tree) this.closeTree();
-      else if (this.composer.plainText) this.composer.replaceText("");
-      else this.action("/cancel");
-      return;
+    const cursor = this.composer.visualCursor.visualRow;
+    const edge = up ? cursor === 0 : cursor >= this.composer.virtualLineCount - 1;
+    const history = this.history();
+    if (!(anywhere || edge) || !history.length || !(up || this.historyIndex >= 0)) return false;
+    if (this.historyIndex < 0) {
+      this.historyDraft = this.composer.plainText;
+      this.historyIndex = history.length;
     }
-    if (key.name === "escape") {
-      key.preventDefault();
-      // One Escape closes what is open, or pauses the model at work. An Escape with nothing to do asks for a second
-      // one, which opens the rewind tree.
-      const open = Boolean(this.overlay || this.searchRow.visible || this.session.editing);
-      const pausing =
-        !open &&
-        !this.session.paused &&
-        this.session.activity.some((act) => act.kind === "prompt" && !act.done && !asksOperator(act));
-      if (pausing) this.action("/pause");
-      else if (!open) {
-        const now = Date.now();
-        if (now - this.escapedAt <= twice) {
-          this.escapedAt = 0;
-          if (this.session.notice === rewindNotice) this.session.notice = "";
-          this.rewind();
-          return;
-        }
-        this.escapedAt = now;
-        this.session.notice = rewindNotice;
-        // The notice lasts as long as a second Escape rewinds.
-        setTimeout(() => {
-          if (!this.closed && this.session.notice === rewindNotice) this.session.notice = "";
-        }, twice).unref();
-      }
-      this.closeOverlay();
-      this.closeSearch();
-      this.leaveEdit();
-      return;
-    }
-    if (this.overlay) {
-      if (this.questionDocument && ["pageup", "pagedown"].includes(key.name)) {
-        key.preventDefault();
-        this.questionDocument.scrollBy(key.name === "pageup" ? -8 : 8);
+    this.historyIndex = Math.max(0, Math.min(history.length, this.historyIndex + (up ? -1 : 1)));
+    const text = history[this.historyIndex] ?? this.historyDraft;
+    if (this.historyIndex === history.length) this.historyIndex = -1;
+    this.composer.replaceText(text);
+    return true;
+  };
+  /** Escape closes what is open, or pauses the model at work. An Escape with nothing to do asks for a second one,
+   * which opens the rewind tree. */
+  private escape = (): void => {
+    const open = Boolean(this.overlay || this.searchRow.visible || this.session.editing);
+    if (!open && this.pausing()) this.action("/pause");
+    else if (!open) {
+      const now = Date.now();
+      if (now - this.escapedAt <= twice) {
+        this.escapedAt = 0;
+        if (this.session.notice === rewindNotice) this.session.notice = "";
+        this.rewind();
         return;
       }
-      if (["up", "down", "pageup", "pagedown"].includes(key.name)) {
-        key.preventDefault();
-        this.selection = Math.max(
-          0,
-          Math.min(this.filtered.length - 1, this.selection + (steps[key.name] ?? 0)),
-        );
-        this.renderChoices();
-      }
+      this.escapedAt = now;
+      this.session.notice = rewindNotice;
+      // The notice lasts as long as a second Escape rewinds.
+      setTimeout(() => {
+        if (!this.closed && this.session.notice === rewindNotice) this.session.notice = "";
+      }, twice).unref();
     }
+    this.closeOverlay();
+    this.closeSearch();
+    this.leaveEdit();
   };
-  /** What each action of the table of keys does. An action that does not apply now gives false, and its key goes on
-   * to the input. */
+  /** Whether Escape pauses the chain: a model is at work on it, and no pause holds it. */
+  private pausing(): boolean {
+    const w = this.session;
+    return !w.paused && w.activity.some((act) => act.kind === "prompt" && !act.done && !asksOperator(act));
+  }
+  /** What each action of the table of keys does, with the key that ran it. */
   private readonly actions: Record<Action, (key?: KeyEvent) => unknown> = {
     queue: () => {
       // The queue holds messages to a model. Python input and a program under edit run when Enter sends them.
-      if (this.session.mode === "python" || this.session.editing) {
+      if (this.writesPython) {
         this.session.notice = "Only a message can wait in the queue. Enter runs this Python now.";
         return;
       }
@@ -5080,10 +5133,7 @@ export class App {
     python: () => this.toggleMode(),
     complete: () => void this.completeNames().catch(this.report),
     ladders: () => this.ladders(),
-    answer: () => {
-      if (!this.session.operatorPrompt) return false;
-      this.question();
-    },
+    answer: () => this.question(),
     names: () => void this.names().catch(this.report),
     copy: () => {
       const selection = this.renderer.getSelection()?.getSelectedText();
@@ -5091,12 +5141,17 @@ export class App {
     },
     back: () => void this.back().catch(this.report),
     jump: (key) => this.jumpMessage(["]", "n"].includes(key?.name ?? "") ? 1 : -1),
-    page: (key) => {
-      if (this.session.view !== "changes") return false;
-      this.changePage(key?.name === "pageup" ? -1 : 1);
-    },
+    page: (key) => this.changePage(key?.name === "pageup" ? -1 : 1),
+    pause: this.escape,
     help: () => this.help(),
     quit: () => void this.options.quit(),
+  };
+  /** When an action of the table acts, where it does not act at all times: a key that does not act goes on to the
+   * input, and the footer does not offer it. */
+  private readonly when: Partial<Record<Action, () => boolean>> = {
+    answer: () => Boolean(this.session.operatorPrompt),
+    page: () => this.session.view === "changes",
+    pause: () => !this.searchRow.visible && this.pausing(),
   };
   /** The view shown, with the rewind tree closed. */
   showView(view: View): void {
@@ -5177,7 +5232,7 @@ export class App {
     this.session.off("compose", this.compose);
     this.session.off("resume", this.resume);
     this.session.off("shared", this.shared);
-    this.renderer.keyInput.off("keypress", this.key);
+    for (const off of this.layersOff) off();
     this.renderer.off("resize", this.render);
     this.renderer.off("selection", this.copySelection);
     this.root.destroyRecursively();
