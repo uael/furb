@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { setRendererCapabilities } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
+import { count } from "../src/format.ts";
 import { composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 
@@ -415,6 +416,32 @@ test("the usage counts each token once, and the context share shows from the fir
     expect(shown).toContain("Cache read");
     expect(shown).not.toContain("Cached");
     expect(shown).toContain("━");
+  }));
+
+test("the usage names the whole prompt of the last answer apart from the fresh input of the chain", () =>
+  composing(async ({ session, frame }) => {
+    await session.submit("Explore this project.");
+    await until(session, () => session.turns.filter((turn) => turn[0] === "assistant").length >= 2);
+    await session.refresh();
+    const lines = (await frame()).split("\n");
+    const shown = (label: string) => lines.find((line) => line.includes(label)) ?? "";
+    expect(shown("Last prompt")).toContain(count(session.context ?? 0));
+    expect(shown("Fresh input")).toContain(count(session.spend.input));
+  }));
+
+test("the usage of a fork counts the answers of the fork alone, and not those of its origin", () =>
+  composing(async ({ session, frame }) => {
+    await session.submit("Explore this project.");
+    await until(session, () => session.turns.filter((turn) => turn[0] === "assistant").length >= 2);
+    const origin = session.selected;
+    await session.submit("/fork");
+    await until(session, () => session.selected !== origin);
+    await session.refresh();
+    expect(session.turns.filter((turn) => turn[0] === "assistant").length).toBeGreaterThanOrEqual(2);
+    expect(session.spend).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, dollars: 0 });
+    const shown = await frame();
+    expect(shown).toContain("Last prompt");
+    expect(shown).not.toContain("Cache read");
   }));
 
 test("a paused chain says so at the end of its feed and in the footer, and Resume wakes it", () =>

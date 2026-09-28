@@ -205,6 +205,100 @@ fn a_turn_asked_again_after_it_failed_resumes_its_conversation_once_and_then_beg
 }
 
 #[test]
+fn a_turn_given_again_with_its_last_message_grown_after_it_failed_sends_what_it_gained_on_its_conversation()
+ {
+  let yard = Yard::new("grown");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let one = asked(&model, &[user("first")], settings.clone()).unwrap();
+  let answer = Message::Assistant { id: None, content: one.choice };
+  asked(&model, &[user("first"), answer.clone(), user("second FAIL")], settings.clone())
+    .unwrap_err();
+  let grown = [user("first"), answer, user("second FAIL\n\n# third")];
+  let got = asked(&model, &grown, settings).unwrap();
+  assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 2);
+  let first = after(&yard.args(&pids[0]), "--session-id");
+  assert_eq!(after(&yard.args(&pids[1]), "--resume"), first, "the same conversation goes on");
+  let line: Value = serde_json::from_str(yard.heard().last().unwrap()).unwrap();
+  assert_eq!(line["message"]["content"], json!([{"type": "text", "text": "# third"}]));
+}
+
+#[test]
+fn a_message_that_the_command_line_did_not_hear_goes_whole_at_the_next_turn() {
+  let yard = Yard::new("unheard");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let one = asked(&model, &[user("first")], settings.clone()).unwrap();
+  let answer = Message::Assistant { id: None, content: one.choice };
+  let turn =
+    |last: &str| asked(&model, &[user("first"), answer.clone(), user(last)], settings.clone());
+  turn("second FAIL").unwrap_err();
+  let bin = yard.at.join("claude");
+  fs::remove_file(&bin).unwrap();
+  turn("second FAIL\n\nthird").unwrap_err();
+  fs::write(&bin, FAKE).unwrap();
+  fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+  turn("second FAIL\n\nthird\n\nfourth").unwrap();
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 2);
+  let first = after(&yard.args(&pids[0]), "--session-id");
+  assert_eq!(after(&yard.args(&pids[1]), "--resume"), first, "the same conversation goes on");
+  let line: Value = serde_json::from_str(yard.heard().last().unwrap()).unwrap();
+  assert_eq!(line["message"]["content"], json!([{"type": "text", "text": "third\n\nfourth"}]));
+}
+
+#[test]
+fn a_turn_given_again_whole_after_its_grown_message_did_not_go_sends_only_what_the_message_gained()
+{
+  let yard = Yard::new("unsent");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let one = asked(&model, &[user("first")], settings.clone()).unwrap();
+  let answer = Message::Assistant { id: None, content: one.choice };
+  let turn =
+    |last: &str| asked(&model, &[user("first"), answer.clone(), user(last)], settings.clone());
+  turn("second FAIL").unwrap_err();
+  let bin = yard.at.join("claude");
+  fs::remove_file(&bin).unwrap();
+  turn("second FAIL\n\nthird").unwrap_err();
+  fs::write(&bin, FAKE).unwrap();
+  fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+  turn("second FAIL\n\nthird").unwrap();
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 2);
+  let first = after(&yard.args(&pids[0]), "--session-id");
+  assert_eq!(after(&yard.args(&pids[1]), "--resume"), first, "the same conversation goes on");
+  let line: Value = serde_json::from_str(yard.heard().last().unwrap()).unwrap();
+  assert_eq!(line["message"]["content"], json!([{"type": "text", "text": "third"}]));
+}
+
+#[test]
+fn a_turn_given_again_grown_that_comes_to_no_reply_again_begins_a_new_conversation_at_the_next_turn()
+ {
+  let yard = Yard::new("regrown");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let one = asked(&model, &[user("first")], settings.clone()).unwrap();
+  let answer = Message::Assistant { id: None, content: one.choice };
+  let turn =
+    |last: &str| asked(&model, &[user("first"), answer.clone(), user(last)], settings.clone());
+  turn("second FAIL").unwrap_err();
+  turn("second FAIL\n\nthird FAIL").unwrap_err();
+  turn("second FAIL\n\nthird FAIL\n\nfourth").unwrap_err();
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 3);
+  let first = after(&yard.args(&pids[0]), "--session-id");
+  assert_eq!(after(&yard.args(&pids[1]), "--resume"), first, "the grown message goes once");
+  let anew = after(&yard.args(&pids[2]), "--session-id");
+  assert!(anew.is_some() && anew != first, "the next time, a new conversation begins");
+  let heard = yard.heard();
+  assert!(heard[2].contains("third FAIL") && !heard[2].contains("second"), "{}", heard[2]);
+  assert!(heard[3].contains("first") && heard[3].contains("fourth"), "{}", heard[3]);
+}
+
+#[test]
 fn past_the_warm_processes_the_least_used_one_ends_and_past_the_held_conversations_the_least_used_one_goes()
  {
   let yard = Yard::new("pool");
@@ -222,6 +316,34 @@ fn past_the_warm_processes_the_least_used_one_ends_and_past_the_held_conversatio
   let again = yard.args(yard.pids().last().expect("a process"));
   let id = after(&yard.args(&first), "--session-id");
   assert_ne!(after(&again, "--resume"), id, "past 64 held conversations the least used one went");
+}
+
+#[test]
+fn a_new_effort_ends_the_process_of_the_conversation_and_the_next_process_resumes_it_at_that_effort()
+ {
+  let yard = Yard::new("efforts");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let turn = |messages: &[Message], effort: &str| {
+    asked(&model, messages, json!({"effort": effort, "session": "chain"})).unwrap()
+  };
+  let mut messages = vec![user("first")];
+  let one = turn(&messages, "high");
+  messages.extend([Message::Assistant { id: None, content: one.choice }, user("second")]);
+  let two = turn(&messages, "low");
+  messages.extend([Message::Assistant { id: None, content: two.choice }, user("third")]);
+  turn(&messages, "high");
+  let pids = yard.pids();
+  assert_eq!(pids.len(), 3);
+  let first = after(&yard.args(&pids[0]), "--session-id");
+  for (pid, effort) in pids[1..].iter().zip(["low", "high"]) {
+    let args = yard.args(pid);
+    assert_eq!(after(&args, "--resume"), first, "the same conversation goes on");
+    assert!(!args.iter().any(|one| one == "--fork-session"), "{args:?}");
+    assert_eq!(after(&args, "--effort").as_deref(), Some(effort));
+  }
+  assert!(gone(&pids[0]) && gone(&pids[1]), "one process of the chain stands at a time");
+  let heard = yard.heard();
+  assert!(heard[2].contains("third") && !heard[2].contains("second"), "{}", heard[2]);
 }
 
 #[test]

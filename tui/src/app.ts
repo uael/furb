@@ -2517,7 +2517,8 @@ export class App {
       grant?.words[1] === null || grant?.words[1] === undefined ? undefined : Number(grant.words[1]);
     const known = window !== undefined && Number.isFinite(window);
     const tokens = spend.input + spend.output + spend.cacheRead + spend.cacheWrite;
-    this.railUsage.visible = tokens > 0 || spend.dollars > 0 || Boolean(grant);
+    // A chain with a source reads the prompt of its origin before it answers once, so its context shows from its birth.
+    this.railUsage.visible = tokens > 0 || spend.dollars > 0 || Boolean(grant) || w.context !== undefined;
     if (this.railUsage.visible) {
       section(
         "Context",
@@ -2539,15 +2540,18 @@ export class App {
         [ceiling === undefined ? "" : `, pauses at ${Number((ceiling * 100).toFixed(1))}%`, c.warning],
       ];
       this.tipped(add(cells), tip);
-      // The input is the whole prompt of the last answer, its system prompt included, which the share of the window
-      // measures. The output and the cache are what every answer of the chain wrote and read, each counted once.
+      // The last prompt is the whole prompt of the last answer, its system prompt and the reads of the cache included,
+      // which the share of the window measures. The fresh input, the output and the cache are what every answer of the
+      // chain read past the cache, wrote, and read and wrote in the cache, each token counted once.
+      const prompt = w.context;
+      if (prompt !== undefined)
+        this.tipped(row("Last prompt", count(prompt)), [
+          ["The whole prompt of the last answer, its system prompt and the cache included.", c.text],
+        ]);
       if (tokens > 0) {
-        const input = w.context;
-        if (input !== undefined)
-          this.tipped(row("Input", count(input)), [
-            ["The whole prompt of the last answer, system prompt included. ", c.text],
-            [`${count(spend.input)} of the input of the chain was fresh.`, c.muted],
-          ]);
+        this.tipped(row("Fresh input", count(spend.input)), [
+          ["The input of the answers of the chain that the cache did not hold.", c.text],
+        ]);
         row("Output", count(spend.output));
         if (spend.cacheRead) row("Cache read", count(spend.cacheRead));
         if (spend.cacheWrite) row("Cache write", count(spend.cacheWrite));
