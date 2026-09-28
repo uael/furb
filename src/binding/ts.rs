@@ -26,6 +26,7 @@ use host::{Door, Held, Word, refused};
 
 use crate::{
   Ear, Engine, Fault, Object,
+  ear::call,
   extension::{self, Extension},
   life::Opening,
   value::entry,
@@ -476,10 +477,12 @@ impl JsEngine {
       Some(options) => door.named(env, options, keys).map_err(error)?,
       None => Vec::new(),
     };
-    self.held.call(|engine| {
-      let kwargs = kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
-      engine.verb(name, args, kwargs)
-    })
+    let kwargs: Vec<_> = kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
+    // While JavaScript answers a call of the engine, the verb is said by what answers, and the life that waits answers.
+    if Door::answering().is_some() {
+      return call(name, args, kwargs).map_err(error);
+    }
+    self.held.call(|engine| engine.verb(name, args, kwargs))
   }
 }
 
@@ -503,6 +506,35 @@ fn eared(
     given.push((name, ear));
   }
   Ok(given)
+}
+
+/// One verb of the engine, called by its name with its words by the ear or the function of JavaScript that the engine
+/// waits on now, and what it gave. An ear of JavaScript calls the engine so while it hears.
+#[napi(
+  js_name = "call",
+  ts_args_type = "verb: string, args?: unknown[], kwargs?: Record<string, unknown>",
+  ts_return_type = "unknown"
+)]
+pub fn verb_called<'env>(
+  env: &'env Env,
+  verb: String,
+  args: Option<Vec<Unknown<'env>>>,
+  kwargs: Option<JsObject<'env>>,
+) -> napi::Result<Unknown<'env>> {
+  let door = Door::answering().ok_or_else(|| {
+    napi::Error::from_reason(format!("{verb} is called while the engine waits on no JavaScript"))
+  })?;
+  let mut words = Vec::new();
+  for one in args.unwrap_or_default() {
+    words.push(door.inward(env, one, Word::Plain, 0).map_err(error)?);
+  }
+  let named = match kwargs {
+    Some(kwargs) => door.named(env, kwargs, &[]).map_err(error)?,
+    None => Vec::new(),
+  };
+  let named = named.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
+  let got = call(&verb, words, named).map_err(error)?;
+  door.outward(env, &got).map_err(error)
 }
 
 fn error(fault: Fault) -> napi::Error {

@@ -1,4 +1,5 @@
-import { type Call, isFault } from "./ears.js";
+import { call } from "../index.cjs";
+import { isFault } from "./ears.js";
 import { bound, display, type Fact, isQuestion } from "./types.js";
 
 /** The kinds of act that are work which ends later, and the table counts each one that is done. */
@@ -20,9 +21,8 @@ export interface LiveAct {
   paused: boolean;
   run?: RunState;
 }
-/** The questions the table asks the engine while it hears a fact. */
-type Hearing<T = void> = Generator<Call, T, unknown>;
-const covers = (control: Fact, id: string): Call => ({ verb: "covers", args: [control, id] });
+/** Whether a pause or a wake covers an act, which the engine answers while the table hears a fact. */
+const covers = (control: Fact, id: string): boolean => Boolean(call("covers", [control, id]));
 /** The questions the engine asks on the way to what an act does, which are no acts a person follows: each is
  * answered for the act that asked it, which shows what it came to. */
 const STEPS = new Set([
@@ -78,7 +78,7 @@ export class Activity {
     this.changed.set(act.id, ++this.changes);
   }
 
-  *hear(fact: Fact): Hearing {
+  hear(fact: Fact): void {
     const [kind, id, by] = fact;
     const question = isQuestion(kind, id);
     if (question) this.scopes.set(id, kind === "chain" ? id : String(fact[3]));
@@ -92,7 +92,7 @@ export class Activity {
         words: fact.slice(4),
         done: false,
         value: null,
-        paused: yield* this.pausedAtBirth(id),
+        paused: this.pausedAtBirth(id),
         ...(kind === "rung" ? { run: { status: "running" as const, reason: "" } } : {}),
       };
       if (kind === "bash")
@@ -114,7 +114,7 @@ export class Activity {
       this.controls.delete(id);
       this.controls.set(id, fact);
       for (const row of [...this.acts.values()])
-        if (!row.done && row.paused !== paused && (yield covers(fact, row.id))) {
+        if (!row.done && row.paused !== paused && covers(fact, row.id)) {
           row.paused = paused;
           this.mark(row);
         }
@@ -156,12 +156,12 @@ export class Activity {
   }
   /** Whether the last control over a new act is a pause. Only a control no older than the oldest pause can make
    * it one. */
-  private *pausedAtBirth(id: string): Hearing<boolean> {
+  private pausedAtBirth(id: string): boolean {
     const controls = [...this.controls.values()];
     const oldest = controls.findIndex(([kind]) => kind === "pause");
     for (let at = controls.length - 1; oldest >= 0 && at >= oldest; at--) {
       const control = controls[at] as Fact;
-      if (yield covers(control, id)) return control[0] === "pause";
+      if (covers(control, id)) return control[0] === "pause";
     }
     return false;
   }

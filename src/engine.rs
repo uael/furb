@@ -37,7 +37,7 @@ use monty_types::{
 
 use crate::{
   ENGINE, KERNEL, SHEET,
-  ear::{Call, Ear, Heard, Said, Spoken, Step, Voice},
+  ear::{Call, Ear, Heard, Said, Spoken, Step, Voice, heard},
   fact::Fact,
   gate::checked,
   sand::{Answer, Host, Nobody, Sand, id, object},
@@ -483,7 +483,7 @@ impl Outside {
   /// it gives comes in as any value comes in, so a function that gives an ear gives the object that stands in for it.
   fn called(&mut self, sand: &mut Sand, name: &str, args: &[Object]) -> Result<Object, Fault> {
     let args = args.iter().map(|one| self.outward(sand, one)).collect::<Result<Vec<_>, _>>()?;
-    let got = self.hosted.call(name, args)?;
+    let got = self.hearing(sand, |hosted| hosted.call(name, args))?;
     self.inward(sand, &got)
   }
 
@@ -520,35 +520,32 @@ impl Outside {
         Err(fault) => return Answer::Abort(fault),
       },
     };
-    let mut step = match self.hosted.resume(&name, heard) {
+    let step = match self.hearing(sand, |hosted| hosted.resume(&name, heard)) {
       Ok(step) => step,
       Err(fault) => return Answer::Abort(fault),
     };
-    loop {
-      let at = match step {
-        // What the ear asked raised: the ear is answered with the raise, and never left waiting.
-        Step::Call(call) => {
-          let heard = self.asked(sand, call).map_or_else(Heard::Raised, Heard::Value);
-          step = match self.hosted.resume(&name, heard) {
-            Ok(step) => step,
-            Err(fault) => return Answer::Abort(fault),
-          };
-          continue;
-        }
-        Step::Say(_) | Step::Wait => At::Waiting,
-        Step::Over | Step::Raised(_) => At::Over,
-      };
-      self.standing.insert(on, (name, at));
-      return match step {
-        Step::Say(saying) => self.inward(sand, &saying.0).map_or_else(Answer::Abort, Answer::Value),
-        Step::Over => Answer::Fault(Fault::new("StopIteration", vec![])),
-        Step::Raised(fault) => self.raising(sand, fault),
-        _ => Answer::Value(Object::none()),
-      };
+    let at = match step {
+      Step::Say(_) | Step::Wait => At::Waiting,
+      Step::Over | Step::Raised(_) => At::Over,
+    };
+    self.standing.insert(on, (name, at));
+    match step {
+      Step::Say(saying) => self.inward(sand, &saying.0).map_or_else(Answer::Abort, Answer::Value),
+      Step::Wait => Answer::Value(Object::none()),
+      Step::Over => Answer::Fault(Fault::new("StopIteration", vec![])),
+      Step::Raised(fault) => self.raising(sand, fault),
     }
   }
 
-  /// What an ear of the host asks of the life, answered on its behalf: who speaks, a callable the engine made, or a
+  /// What the host does in `step`, with this life answering at once each verb that the host calls while it runs,
+  /// since the sandbox takes a call before the call of the sandbox that the host answers.
+  fn hearing<R>(&mut self, sand: &mut Sand, step: impl FnOnce(&Hosted) -> R) -> R {
+    let hosted = self.hosted.clone();
+    let mut answers = |call: Call| self.asked(sand, call);
+    heard(&mut answers, || step(&hosted))
+  }
+
+  /// What the host calls while the life waits on it, answered at once: who speaks, a callable the engine made, or a
   /// verb of the engine, as it goes out.
   fn asked(&mut self, sand: &mut Sand, call: Call) -> Result<Object, Fault> {
     let Call { verb, args, kwargs } = call;

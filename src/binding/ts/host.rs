@@ -44,6 +44,12 @@ const DEEPEST: usize = 64;
 /// The function of JavaScript that calls another, as a method of `self` or alone, and catches what it throws.
 const CAUGHT: &str = "({ step(f, self, args) { try { return { ok: f.apply(self, args) } } catch (no) { return { no } } } })";
 
+thread_local! {
+  /// The doors through which JavaScript answers a call of the engine now, the innermost last: a verb that JavaScript
+  /// calls then goes through the innermost to the life that waits on it.
+  static ANSWERING: RefCell<Vec<Door>> = const { RefCell::new(Vec::new()) };
+}
+
 /// The thread of JavaScript, as the door reaches it: its env, the function that steps what may throw, and the ears
 /// and the functions of the host.
 #[derive(Clone)]
@@ -78,6 +84,11 @@ impl Door {
     self.0.env
   }
 
+  /// The door through which JavaScript answers a call of the engine now, when it answers one.
+  pub fn answering() -> Option<Door> {
+    ANSWERING.with_borrow(|doors| doors.last().cloned())
+  }
+
   /// A function of JavaScript called, as a method of `this` when it is one, with these arguments: what it gave, or
   /// the fault of what it threw.
   fn call<'env>(
@@ -95,7 +106,18 @@ impl Door {
     };
     let step: Function<'env, FnArgs<(Unknown, Unknown, Vec<Unknown>)>, JsObject> =
       holder.get_named_property("step").map_err(refused)?;
-    let got = step.apply(holder, (f, this, args).into()).map_err(refused)?;
+    /// The door answers no more once the call is over, even when it panics.
+    struct Answered;
+    impl Drop for Answered {
+      fn drop(&mut self) {
+        ANSWERING.with_borrow_mut(Vec::pop);
+      }
+    }
+    ANSWERING.with_borrow_mut(|doors| doors.push(self.clone()));
+    let answered = Answered;
+    let got = step.apply(holder, (f, this, args).into()).map_err(refused);
+    drop(answered);
+    let got = got?;
     if got.has_named_property("no").map_err(refused)? {
       let no: Unknown = got.get_named_property("no").map_err(refused)?;
       return Err(self.fault(env, no));
@@ -318,13 +340,11 @@ impl JsEar {
     let env = door.env();
     let held = self.generator.as_ref().ok_or_else(|| Fault::refused("the ear is over"))?;
     let generator = held.get_value(&env).map_err(refused)?;
-    let (method, value) = match heard {
-      Heard::Born(_) => ("next", None),
-      Heard::Fact(fact) => ("next", Some(fact.0)),
-      Heard::Value(value) => ("next", Some(value)),
-      Heard::Raised(fault) => ("throw", Some(fault.object())),
+    let value = match heard {
+      Heard::Born(_) => None,
+      Heard::Fact(fact) => Some(fact.0),
     };
-    let f: Unknown = generator.get_named_property(method).map_err(refused)?;
+    let f: Unknown = generator.get_named_property("next").map_err(refused)?;
     let args = match value {
       Some(one) => vec![door.outward(&env, &one)?],
       None => vec![],
@@ -420,11 +440,11 @@ impl Held {
     }
   }
 
-  /// One call of the engine, which no ear may make while the engine hears it.
+  /// One call of the engine, which an ear the engine hears makes by a verb alone.
   pub fn call<T>(&self, call: impl FnOnce(&mut Engine) -> Result<T, Fault>) -> napi::Result<T> {
     let mut held = self.engine.try_borrow_mut().map_err(|_| {
       napi::Error::from_reason(
-        "An ear yields a call of a verb: the engine cannot be entered while it hears.",
+        "The engine hears an ear, which calls the engine by its verbs alone.",
       )
     })?;
     let engine =

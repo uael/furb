@@ -304,7 +304,7 @@ impl Provider {
             say(&co, Fact::says("started", &about, [])).await;
             let chain = a.on().to_owned();
             let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
-            let turns = call(&co, "turns", vec![], vec![("on", Object::string(&chain))]).await?;
+            let turns = call("turns", vec![], vec![("on", Object::string(&chain))])?;
             let over = Arc::new(AtomicBool::new(false));
             let told = told(writes.as_ref(), a.by(), &chain, &over);
             let key = format!("{life}/{chain}");

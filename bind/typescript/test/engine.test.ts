@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import {
   bound,
+  call,
   decodeRecord,
   display,
   type Ear,
@@ -265,7 +266,7 @@ test("an ear reads the turns of a chain when it takes a reply, which carries non
       if (fact?.[0] === "stand") yield ["done", fact[1], [[["model", ["low"], 200000]], "/tmp", "model/low"]];
       if (fact?.[0] === "reply") {
         yield ["started", fact[1]];
-        read.push(fact, yield { verb: "turns", kwargs: { on: fact[3] } });
+        read.push(fact, call("turns", [], { on: fact[3] }));
       }
     }
   }

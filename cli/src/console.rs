@@ -45,7 +45,7 @@ impl Asked {
       return Ok(Some(asked));
     }
     let no = answered(&asked.shape, "").unwrap_or_else(|no| no.object());
-    call(co, "close", vec![no], vec![("id", Object::string(&asked.about))]).await?;
+    call("close", vec![no], vec![("id", Object::string(&asked.about))])?;
     Ok(None)
   }
 }

@@ -68,6 +68,14 @@ class Engine:
   def dispose(self) -> None:
     """The engine is gone, and its ears with it."""
 
+def hearing() -> bool:
+  """Whether python answers a call of the engine now, so that a verb said here is said by what answers."""
+
+def call(verb: str, args: list[object], kwargs: dict[str, object]) -> object:
+  """One verb of the engine, called by its name with its words by the generator or the function of python that the
+  engine waits on now, and what it gave. Who speaks is the verb `spoken`, and a callable the engine made is the verb
+  `made`, with its number and its words."""
+
 def official() -> list[tuple[str, str, str]]:
   """The official extensions, in the order a life runs them, each as its name, its word and its life word."""
 

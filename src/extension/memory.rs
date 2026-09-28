@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-  ear::{Co, Ear, call, ear, hear, say},
+  ear::{Ear, call, ear, hear, say},
   fact::{Fact, named},
   value::{Fault, Object, ObjectRef, Text},
   world::{files::read, here, resolved},
@@ -35,7 +35,7 @@ pub fn memory(config: PathBuf) -> Box<dyn Ear> {
       match a.kind() {
         "memory" | "read" | "write" if a.question() => {
           let (asks, path) = (a.kind() == "memory", a.word(1).map(named_path).unwrap_or_default());
-          if (asks || remembered(&path)) && tells(&co, a.by()).await? {
+          if (asks || remembered(&path)) && tells(a.by())? {
             unheard.push((about.clone(), on.clone()));
           }
           if !asks {
@@ -46,10 +46,10 @@ pub fn memory(config: PathBuf) -> Box<dyn Ear> {
           let early =
             unheard.iter().filter(|one| one.1 == on && one.0 != about).map(|one| one.0.clone());
           for one in early.collect::<Vec<_>>() {
-            let got = call(&co, "peek", vec![Object::string(&one)], vec![]).await?;
+            let got = call("peek", vec![Object::string(&one)], vec![])?;
             held.entry(on.clone()).or_default().extend(given(&one, Some(got.as_ref())));
           }
-          let here = here(&co, &on).await?;
+          let here = here(&on)?;
           // A path of a scheme adds no folder of its own.
           let target = if path.contains("://") { here.clone() } else { resolved(&here, &path) };
           let chain = held.get(&on);
@@ -70,7 +70,7 @@ pub fn memory(config: PathBuf) -> Box<dyn Ear> {
             continue;
           }
           let known = unheard.extract_if(.., |one| one.0 == about).next().map(|one| one.1);
-          if let Some(chain) = known.or(heard(&co, &about).await?) {
+          if let Some(chain) = known.or(heard(&about)?) {
             held.entry(chain).or_default().extend(got);
           }
         }
@@ -78,7 +78,7 @@ pub fn memory(config: PathBuf) -> Box<dyn Ear> {
           let facts = a.word(0).and_then(|one| one.items()).unwrap_or_default();
           for one in facts.into_iter().filter_map(Fact::of).filter(|one| one.kind() == "done") {
             let got = given(one.about(), one.word(0));
-            if !got.is_empty() && heard(&co, one.about()).await?.is_some() {
+            if !got.is_empty() && heard(one.about())?.is_some() {
               held.entry(about.clone()).or_default().extend(got);
             }
           }
@@ -90,19 +90,19 @@ pub fn memory(config: PathBuf) -> Box<dyn Ear> {
 }
 
 /// Whether an act made something where it tells, since nothing is told from outside an act.
-async fn tells(co: &Co, maker: &str) -> Result<bool, Fault> {
-  let made = call(co, "get", vec![Object::string(maker)], vec![]).await?;
+fn tells(maker: &str) -> Result<bool, Fault> {
+  let made = call("get", vec![Object::string(maker)], vec![])?;
   if made.as_ref().type_name() == "NoneType" {
     return Ok(false);
   }
-  Ok(call(co, "tells", vec![Object::string(maker)], vec![]).await?.as_ref().as_bool() == Some(true))
+  Ok(call("tells", vec![Object::string(maker)], vec![])?.as_ref().as_bool() == Some(true))
 }
 
 /// The chain of a question, when an act that tells made it, so the chain heard what it came to.
-async fn heard(co: &Co, question: &str) -> Result<Option<String>, Fault> {
-  let made = call(co, "get", vec![Object::string(question)], vec![]).await?;
+fn heard(question: &str) -> Result<Option<String>, Fault> {
+  let made = call("get", vec![Object::string(question)], vec![])?;
   let Some(made) = Fact::of(made.as_ref()) else { return Ok(None) };
-  Ok(tells(co, made.by()).await?.then(|| made.on().to_owned()))
+  Ok(tells(made.by())?.then(|| made.on().to_owned()))
 }
 
 /// The path and the content of each memory file that the done of a question gives: the answer of a memory question,

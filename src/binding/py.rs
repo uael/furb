@@ -4,6 +4,7 @@
 //! the sandbox calls back.
 
 use std::{
+  cell::RefCell,
   mem::ManuallyDrop,
   path::PathBuf,
   rc::Rc,
@@ -24,7 +25,7 @@ use pyo3::{
 
 use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step, Voice,
-  ear::{Call, Spoken},
+  ear::{Call, Spoken, call},
   engine::Hosted,
   extension::{self, Extension},
   life::Opening,
@@ -122,6 +123,12 @@ impl Made {
   }
 }
 
+thread_local! {
+  /// The doors through which python answers a call of the engine now, the innermost last: a verb that python calls
+  /// then goes through the innermost to the life that waits on it.
+  static ANSWERING: RefCell<Vec<Door>> = const { RefCell::new(Vec::new()) };
+}
+
 /// The door of python: what makes a value the object it is here, and the ears and the functions of the host, which
 /// a value of python adds to as it goes in.
 #[derive(Clone)]
@@ -135,6 +142,25 @@ struct Doorway {
 impl Door {
   fn made(&self) -> &Made {
     &self.0.made
+  }
+
+  /// What python gives in `answer`, as the answer to a call of the engine through this door: a verb that python calls
+  /// while it answers goes through this door. It answers no more once `answer` is over, even when it panics.
+  fn answers<T>(&self, answer: impl FnOnce() -> T) -> T {
+    struct Answered;
+    impl Drop for Answered {
+      fn drop(&mut self) {
+        ANSWERING.with_borrow_mut(Vec::pop);
+      }
+    }
+    ANSWERING.with_borrow_mut(|doors| doors.push(self.clone()));
+    let _answered = Answered;
+    answer()
+  }
+
+  /// The door through which python answers a call of the engine now, when it answers one.
+  fn answering() -> Option<Door> {
+    ANSWERING.with_borrow(|doors| doors.last().cloned())
   }
 
   /// An ear of python given to boot: an ear of the crate as itself, and a generator heard as an ear.
@@ -168,10 +194,10 @@ fn generator(value: &Bound<'_, PyAny>) -> PyResult<bool> {
   value.py().import("inspect")?.call_method1("isgenerator", (value,))?.is_truthy()
 }
 
-/// A generator of python, heard as an ear: sent what it hears, and thrown in what a verb it said raised.
+/// A generator of python, heard as an ear: sent what it hears.
 ///
-/// It yields a saying, which is a tuple, a call of a verb, which is a map of the verb and its words, or nothing, and
-/// it hears nothing at its birth.
+/// It yields a saying, which is a tuple, or nothing, and it hears nothing at its birth. A verb it says while it hears
+/// goes to the life that hears it.
 struct PyEar {
   door: Door,
   ear: Option<Py<PyAny>>,
@@ -189,12 +215,11 @@ impl PyEar {
   fn step(&mut self, py: Python<'_>, heard: Heard) -> PyResult<Step> {
     let made = self.door.made();
     let ear = self.ear.as_ref().ok_or_else(|| PyTypeError::new_err("the ear is over"))?.bind(py);
-    let got = match heard {
-      Heard::Born(_) => ear.call_method1("send", (py.None(),)),
-      Heard::Fact(fact) => ear.call_method1("send", (to_python(py, made, fact.0.as_ref())?,)),
-      Heard::Value(value) => ear.call_method1("send", (to_python(py, made, value.as_ref())?,)),
-      Heard::Raised(fault) => ear.call_method1("throw", (fault_to_python(py, made, &fault)?,)),
+    let sent = match heard {
+      Heard::Born(_) => py.None().into_bound(py),
+      Heard::Fact(fact) => to_python(py, made, fact.0.as_ref())?,
     };
+    let got = self.door.answers(|| ear.call_method1("send", (sent,)));
     let got = match got {
       Ok(got) => got,
       Err(no) if no.is_instance_of::<PyStopIteration>(py) => {
@@ -284,31 +309,27 @@ impl NativeEar {
 
 impl Hearing {
   /// What the ear does with what it heard, as a generator of this interpreter gives it: a saying, or nothing to
-  /// wait. A verb it calls is said to the engine of this interpreter at once, and what it gave is heard back.
-  fn step(&mut self, py: Python<'_>, mut heard: Heard) -> PyResult<Py<PyAny>> {
+  /// wait. A verb it calls is said to the engine of this interpreter at once, and what it gave is what the call gives.
+  fn step(&mut self, py: Python<'_>, heard: Heard) -> PyResult<Py<PyAny>> {
     let Some((door, ..)) = self.stepped.clone() else {
       unreachable!("an ear is stepped once it is born")
     };
     let made = door.made();
-    loop {
-      let Some(ear) = self.ear.as_mut() else { return Err(PyStopIteration::new_err(())) };
-      match ear.resume(heard) {
-        Step::Wait => return Ok(py.None()),
-        Step::Say(saying) => return Ok(to_python(py, made, saying.0.as_ref())?.unbind()),
-        Step::Over => {
-          self.ear = None;
-          return Err(PyStopIteration::new_err(()));
-        }
-        Step::Raised(fault) => {
-          self.ear = None;
-          return Err(raised(py, made, &fault));
-        }
-        Step::Call(call) => {
-          heard = match verb_said(py, &door, &call) {
-            Ok(got) => Heard::Value(of_python(&door, &got)?),
-            Err(no) => Heard::Raised(fault_of(&door, py, &no)),
-          };
-        }
+    let Some(ear) = self.ear.as_mut() else { return Err(PyStopIteration::new_err(())) };
+    let mut answers = |call: Call| {
+      let got = verb_said(py, &door, &call).map_err(|no| fault_of(&door, py, &no))?;
+      of_python(&door, &got).map_err(|no| fault_of(&door, py, &no))
+    };
+    match crate::ear::heard(&mut answers, || ear.resume(heard)) {
+      Step::Wait => Ok(py.None()),
+      Step::Say(saying) => Ok(to_python(py, made, saying.0.as_ref())?.unbind()),
+      Step::Over => {
+        self.ear = None;
+        Err(PyStopIteration::new_err(()))
+      }
+      Step::Raised(fault) => {
+        self.ear = None;
+        Err(raised(py, made, &fault))
       }
     }
   }
@@ -575,6 +596,36 @@ impl PyEngine {
     self.engine.take();
     self.door.0.hosted.clear();
   }
+}
+
+/// Whether python answers a call of the engine now, so that a verb said here is said by what answers.
+#[pyfunction]
+fn hearing() -> bool {
+  Door::answering().is_some()
+}
+
+/// One verb of the engine, called by its name with its words by the generator or the function of python that the
+/// engine waits on now, and what it gave. Who speaks is the verb `spoken`, and a callable the engine made is the verb
+/// `made`, with its number and its words.
+#[pyfunction(name = "call")]
+fn verb_called<'py>(
+  py: Python<'py>,
+  verb: &str,
+  args: Bound<'py, PyAny>,
+  kwargs: Bound<'py, PyDict>,
+) -> PyResult<Bound<'py, PyAny>> {
+  let Some(door) = Door::answering() else {
+    let why = format!("{verb} is called while the engine waits on no python");
+    return Err(raised(py, &Made::new(py)?, &Fault::refused(why)));
+  };
+  let words = args.try_iter()?.map(|one| of_python(&door, &one?)).collect::<PyResult<Vec<_>>>()?;
+  let mut named = Vec::new();
+  for (key, value) in kwargs.iter() {
+    named.push((key.extract::<String>()?, of_python(&door, &value)?));
+  }
+  let named = named.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
+  let got = call(verb, words, named).map_err(|fault| raised(py, door.made(), &fault))?;
+  to_python(py, door.made(), got.as_ref())
 }
 
 /// The ear of the files, which reads and writes a path.
@@ -1079,7 +1130,7 @@ impl Called {
           .iter()
           .map(|one| to_python(py, self.door.made(), one.as_ref()))
           .collect::<PyResult<Vec<_>>>()?;
-        let got = self.f.bind(py).call1(PyTuple::new(py, args)?)?;
+        let got = self.door.answers(|| self.f.bind(py).call1(PyTuple::new(py, args)?))?;
         of_python(&self.door, &got)
       })();
       got.map_err(|no| fault_of(&self.door, py, &no))
@@ -1114,6 +1165,8 @@ fn bare(shown: &str) -> String {
 fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<PyEngine>()?;
   module.add_class::<NativeEar>()?;
+  module.add_function(wrap_pyfunction!(hearing, module)?)?;
+  module.add_function(wrap_pyfunction!(verb_called, module)?)?;
   module.add_function(wrap_pyfunction!(official, module)?)?;
   module.add_function(wrap_pyfunction!(extensions, module)?)?;
   module.add_function(wrap_pyfunction!(enabled, module)?)?;

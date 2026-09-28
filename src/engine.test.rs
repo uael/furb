@@ -84,7 +84,7 @@ fn provider(
         }
         "reply" => {
           say(&co, Fact::says("started", a.about(), [])).await;
-          let turns = call(&co, "turns", vec![], vec![("on", Object::string(a.on()))]).await?;
+          let turns = call("turns", vec![], vec![("on", Object::string(a.on()))])?;
           read.borrow_mut().push(turns.py_repr());
           let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
           let turn = Object::tuple([

@@ -147,6 +147,12 @@ export declare function attachImage(directory: string, path: string): ImageAttac
 export declare function bash(): NativeEar
 
 /**
+ * One verb of the engine, called by its name with its words by the ear or the function of JavaScript that the engine
+ * waits on now, and what it gave. An ear of JavaScript calls the engine so while it hears.
+ */
+export declare function call(verb: string, args?: unknown[], kwargs?: Record<string, unknown>): unknown
+
+/**
  * The config directory of the user for this process, where the configs, the extensions of the user and the
  * preferences of the TUI stand.
  */

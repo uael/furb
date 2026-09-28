@@ -37,8 +37,8 @@ each act by its name and its kind, as the `Engine` of the door finds it: among e
 did not end, and the acts that made it, each prompt, rung, command and wait that is not done and that no pause holds.
 An act that a wake puts to the outside again is pending no more.
 
-A generator of this interpreter is heard on a thread of its own, so it may say a verb while it hears, as an ear of
-the engine of python does.
+A generator of this interpreter is heard where the engine runs. A verb it says while it hears goes to the life that
+hears it, as a verb that an ear of the engine of python says does.
 
 `FURB_ENGINE=monty` makes `from furb import engine` give `furb_monty.engine`. The suite of furb runs on both
 engines.
