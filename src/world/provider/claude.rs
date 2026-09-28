@@ -2,10 +2,11 @@
 //! stays up between its turns, and each turn writes to it only what it has not heard.
 //!
 //! A conversation is keyed by its model, its system prompt and the conversation the request names, which the provider
-//! names as a chain of its life, so a chain holds one conversation and at most one process at every effort. A process
-//! starts at one effort, so a new effort ends it, and the next process resumes the same conversation. A process that
-//! is gone leaves its conversation on the disk under its id, so a later turn resumes it, and a new conversation that
-//! grows out of one the command line holds forks it. A subscription pays for the turns, and no key is read.
+//! names as a chain of its life, so a chain holds one conversation and at most one process, whatever the effort. A
+//! process spends the effort it started at, so a new effort ends it, and the next process resumes the same
+//! conversation. A process that is gone leaves its conversation on the disk under its id, so a later turn resumes
+//! it, and a new conversation that grows out of one the command line holds forks it. A subscription pays for the
+//! turns, and no key is read.
 
 use std::{
   collections::HashMap,
@@ -226,11 +227,9 @@ impl Held {
       .filter(|one| !matches!(one, Message::System { .. }))
       .collect();
     let key = json!([name, system, session]).to_string();
-    let conversation = self.conversation(&key, &name, effort.clone(), &system, &messages);
-    let mut held = conversation.lock().await;
-    held.spend(effort);
-    let got = held.turn(&messages, &self.bin, self.stall, deltas).await;
-    drop(held);
+    let conversation = self.conversation(&key, &name, &system, &messages);
+    let got =
+      conversation.lock().await.turn(&messages, effort, &self.bin, self.stall, deltas).await;
     self.sweep();
     got
   }
@@ -241,7 +240,6 @@ impl Held {
     &self,
     key: &str,
     name: &str,
-    effort: Option<String>,
     system: &str,
     messages: &[Message],
   ) -> Arc<tokio::sync::Mutex<Conversation>> {
@@ -250,7 +248,7 @@ impl Held {
       return Arc::clone(one);
     }
     let incoming: Vec<String> = messages.iter().map(canonical).collect();
-    let mut made = Conversation::new(name, effort, system);
+    let mut made = Conversation::new(name, system);
     let donor = held
       .values()
       .filter_map(|one| one.try_lock().ok())
@@ -305,7 +303,6 @@ impl Held {
 /// One conversation of the command line: what it is fixed at, its id, where it stands, and its process.
 struct Conversation {
   name: String,
-  effort: Option<String>,
   system: String,
   /// The id of the conversation, which the command line keeps it under.
   id: String,
@@ -320,17 +317,17 @@ struct Conversation {
   asked: Option<Message>,
   /// The messages of the last request, which a request that follows it continues.
   requested: Vec<String>,
-  /// Whether the last request came again whole, which a failed turn does, so a third time begins anew.
+  /// Whether the command line heard the last message given again, whole or grown, and came to no reply again, so
+  /// the next time begins anew.
   again: bool,
   process: Option<Process>,
   used: Instant,
 }
 
 impl Conversation {
-  fn new(name: &str, effort: Option<String>, system: &str) -> Conversation {
+  fn new(name: &str, system: &str) -> Conversation {
     Conversation {
       name: name.to_owned(),
-      effort,
       system: system.to_owned(),
       id: uuid(),
       parent: None,
@@ -344,65 +341,55 @@ impl Conversation {
     }
   }
 
-  /// The effort of the turns to come. A process spends the effort it started at, so a new effort ends the process, and
-  /// the next process resumes the same conversation at the new effort.
-  fn spend(&mut self, effort: Option<String>) {
-    if self.effort != effort {
-      self.effort = effort;
-      self.process = None;
-    }
-  }
-
-  /// One turn: the messages that the command line has not heard, written as one line, and the reply it streams.
+  /// One turn at an effort: the messages that the command line has not heard, written as one line, and the reply it
+  /// streams.
   ///
   /// A request that continues neither the reply of the last turn nor the last request begins a new conversation. A
-  /// request that says again what was said sends its last message again once, since a turn that failed is asked
-  /// again whole, and a second time it begins a new conversation. A request that gives again a turn that came to no
-  /// reply, with its last message grown by what was told since, sends what that message gained alone, as a new
-  /// message of the same conversation, which keeps its cache.
+  /// request that gives again a turn that came to no reply sends its last message again, since a turn that failed is
+  /// asked again whole, or, when that message grew at its end by what was told since, what it gained alone, as a new
+  /// message of the same conversation, which keeps its cache. It does so once: when the command line heard that and
+  /// came to no reply again, the next time begins a new conversation.
   async fn turn(
     &mut self,
     messages: &[Message],
+    effort: Option<String>,
     bin: &Path,
     stall: Duration,
     deltas: Option<&Deltas>,
   ) -> Result<CompletionResponse, CompletionError> {
     let incoming: Vec<String> = messages.iter().map(canonical).collect();
-    let continues = |held: &[String]| incoming.starts_with(held);
-    let mut start = if continues(&self.chain) {
-      Some(self.chain.len())
-    } else {
-      continues(&self.requested).then_some(self.requested.len())
-    };
-    match start {
-      Some(at) if at > 0 && at == incoming.len() && !self.again => {
-        self.again = true;
-        start = Some(at - 1);
-      }
-      Some(at) if at > 0 && at == incoming.len() => start = None,
-      _ => {}
-    }
     let last = incoming.len().saturating_sub(1);
     let grown = match (&self.asked, messages.last()) {
       (Some(asked), Some(now))
-        if start.is_none()
-          && self.chain.len() == incoming.len()
-          && incoming[..last] == self.chain[..last] =>
+        if self.chain.len() == incoming.len() && incoming[..last] == self.chain[..last] =>
       {
         gained(asked, now)
       }
       _ => None,
     };
-    if start.is_none() && grown.is_none() {
-      *self = Conversation::new(&self.name, self.effort.take(), &self.system);
-    }
-    let delta = match &grown {
-      Some(one) => std::slice::from_ref(one),
-      None => &messages[start.unwrap_or_default()..],
+    let continues = |held: &[String]| incoming.starts_with(held);
+    let start = if grown.is_some() {
+      Some(last)
+    } else if continues(&self.chain) {
+      Some(self.chain.len())
+    } else {
+      continues(&self.requested).then_some(self.requested.len())
+    };
+    let again = grown.is_some() || start.is_some_and(|at| at > 0 && at == incoming.len());
+    let anew = start.is_none() || again && self.again;
+    let delta = match (start, &grown) {
+      (Some(_), Some(one)) if !anew => std::slice::from_ref(one),
+      (Some(at), None) if !anew => &messages[if again { last } else { at }..],
+      _ => {
+        *self = Conversation::new(&self.name, &self.system);
+        messages
+      }
     };
     let asked = messages.last().cloned();
-    let mut flight = Flight { conversation: self, incoming, asked, heard: false, reply: None };
-    let got = flight.run(delta, bin, stall, deltas).await;
+    let again = again && !anew;
+    let mut flight =
+      Flight { conversation: self, incoming, asked, again, heard: false, reply: None };
+    let got = flight.run(delta, effort, bin, stall, deltas).await;
     if let Ok(response) = &got {
       let reply = Message::Assistant { id: None, content: response.choice.clone() };
       flight.reply = Some(canonical(&reply));
@@ -410,8 +397,8 @@ impl Conversation {
     got
   }
 
-  /// A process of the conversation: a new one, a resumed one, or the fork of its parent.
-  fn start(&mut self, bin: &Path) -> Result<Process, CompletionError> {
+  /// A process of the conversation at an effort: a new one, a resumed one, or the fork of its parent.
+  fn start(&mut self, bin: &Path, effort: Option<String>) -> Result<Process, CompletionError> {
     let mut command = Command::new(bin);
     command.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json"]);
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
@@ -423,7 +410,7 @@ impl Conversation {
       (Some(parent), false) => command.args(["--resume", parent, "--fork-session"]),
       (None, false) => command.args(["--session-id", &self.id]),
     };
-    if let Some(effort) = &self.effort {
+    if let Some(effort) = &effort {
       command.args(["--effort", effort]);
     }
     // The command line serves completions alone, so its skills and its traffic of no use go.
@@ -451,7 +438,7 @@ impl Conversation {
     let tailing = Some(tokio::spawn(tailed(stderr, Arc::clone(&hurt))));
     let (said, lines) = mpsc::unbounded_channel();
     tokio::spawn(listened(stdout, said));
-    Ok(Process { child, stdin, lines, hurt, tailing, paid: 0.0 })
+    Ok(Process { effort, child, stdin, lines, hurt, tailing, paid: 0.0 })
   }
 }
 
@@ -463,9 +450,11 @@ enum Line {
   Over(Option<String>),
 }
 
-/// One process of the command line: the child, its stdin, what its stdout says, the tail of its stderr, and the
-/// running cost it said last, since it says the cost of all its turns.
+/// One process of the command line: the effort it spends, the child, its stdin, what its stdout says, the tail of its
+/// stderr, and the running cost it said last, since it says the cost of all its turns.
 struct Process {
+  /// The effort of each turn of the process, which it started at.
+  effort: Option<String>,
   child: Child,
   stdin: ChildStdin,
   lines: mpsc::UnboundedReceiver<Line>,
@@ -546,6 +535,8 @@ struct Flight<'a> {
   incoming: Vec<String>,
   /// The last message of the request.
   asked: Option<Message>,
+  /// Whether the turn gives again the last message of a turn that came to no reply, whole or grown.
+  again: bool,
   /// Whether the command line heard the line of the turn.
   heard: bool,
   reply: Option<String>,
@@ -558,6 +549,7 @@ impl Drop for Flight<'_> {
     if self.heard {
       held.chain = self.incoming.clone();
       held.asked = self.asked.take();
+      held.again = self.again;
     }
     match self.reply.take() {
       Some(reply) => {
@@ -575,17 +567,19 @@ impl Flight<'_> {
   async fn run(
     &mut self,
     delta: &[Message],
+    effort: Option<String>,
     bin: &Path,
     stall: Duration,
     deltas: Option<&Deltas>,
   ) -> Result<CompletionResponse, CompletionError> {
     let line = input(delta)?;
     let held = &mut *self.conversation;
-    if held.process.as_mut().is_some_and(|one| !one.stands()) {
+    // A process spends the effort it started at, so a turn at another effort ends it.
+    if held.process.as_mut().is_some_and(|one| one.effort != effort || !one.stands()) {
       held.process = None;
     }
     if held.process.is_none() {
-      held.process = Some(held.start(bin)?);
+      held.process = Some(held.start(bin, effort)?);
     }
     let Conversation { process: Some(process), id, name, .. } = held else {
       return Err(failed("claude is not running"));
