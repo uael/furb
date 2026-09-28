@@ -62,6 +62,10 @@ napi-derive = { version = "3", optional = true }
 # The identity of a file on every system: the device and inode on Unix, and the volume serial number and file index
 # on Windows, which the standard library reads only in an unstable API.
 same-file = "1"
+# The parser of the checker, which finds each import of a sheet for the sandbox to run.
+ruff_python_parser = "0.0.9"
+ruff_python_ast = "0.0.9"
+ruff_text_size = "0.0.9"
 
 [target.'cfg(unix)'.dependencies]
 # The process group of a command, which the World ends whole.
