@@ -455,7 +455,7 @@ async def test_a_read_the_operator_makes_is_kept_like_any_other_act_of_the_opera
   later = Sand(files={"/w/a.txt": "changed\n"})
   again, _ = await relived(later, list(sand.record))
   assert [a[1:3] for a in said(again, "read")] == [("read1", OPERATOR), ("read2", OPERATOR)]
-  assert [(a[0], a[4:]) for a in later.calls] == [("read", ("gone.txt",)), ("stand", ())]
+  assert [(a[0], a[4:]) for a in later.calls] == [("stand", ())]
   assert engine.peek("read1") == Text("/w/a.txt", "one\ntwo\n") and isinstance(engine.peek("read2"), Refused)
 
 

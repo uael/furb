@@ -21,6 +21,13 @@ async def test_what_a_life_fails_with_when_an_act_of_it_is_not_the_one_the_recor
   await settle()
   with pytest.raises(Drift, match=r"^bash1 drifts$"):
     life(Sand(), [e for e in torn.record if e[0][1] != step])
+  wrote, _, root = born()
+  await engine.rung("made = write(Text('made.txt', 'x'))", on=root)
+  engine.read("a.txt", on=root)
+  later = Sand()
+  with pytest.raises(Drift, match=r"^write1 drifts$"):
+    life(later, [e for e in wrote.record if e[0][1] != "write1"])
+  assert "/w/made.txt" not in later.files and [a for a in later.calls if a[0] == "write"] == []
 
 
 async def test_an_act_whose_words_are_not_the_ones_the_record_holds_is_a_drift() -> None:
@@ -52,3 +59,12 @@ async def test_a_drift_breaks_the_journal_which_keeps_nothing_more() -> None:
   await settle()
   assert fresh == "bash2" and [a[4] for a in later.calls if a[0] == "bash"] == ["echo new"]
   assert (await fresh).code == 0 and later.record == []
+  sand, _, root = born("import random\nx = bash(f'echo {random.random()}')", "close(None)")
+  await engine.prompt(None, "roll", on=root)
+  await settle()
+  left = Sand()
+  with pytest.raises(Drift, match=r"^bash1 drifts$"):
+    life(left, list(sand.record))
+  await chained("two")
+  await settle(200)
+  assert [a[0] for a in left.calls] == []
