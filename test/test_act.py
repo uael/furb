@@ -107,9 +107,15 @@ async def test_an_act_that_no_ear_takes_is_refused() -> None:
   one = engine.act("note", root, noting([], takes=False))
   got = engine.peek(one)
   assert isinstance(got, Refused) and str(got) == "nothing takes note"
-  assert said(log, "done")[-1] == ("done", one, one, got)
+  assert said(log, "done")[-1] == ("done", one, "", got)
   with pytest.raises(Refused, match="nothing takes nothing"):
     engine.ask("nothing", root)
+  sand, _, root = born()
+  await engine.rung("nope = act('nope', '', None)", on=root)
+  engine.read("a.txt", on=root)
+  again, _ = await relived(Sand(), plain(sand.record))
+  (answered,) = [a for a in again if a[:2] == ("done", "nope1")]
+  assert answered[2] == "journal" and str(answered[3]) == "nothing takes nope"
 
 
 async def test_an_act_said_it_is_begun_and_what_the_call_gives_is_its_name() -> None:
