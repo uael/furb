@@ -112,8 +112,8 @@ def program(on: str = "") -> dict[str, str]:
     match x:
       case ("module", *_):
         words = {}
-      case ("run", *_, which, word, _):
-        words[which] = word
+      case ("run", *_, which, word, donor):
+        words[donor or which] = word
   return words
 
 
@@ -258,7 +258,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 
   def ear(id):
     rungs, refused, running, waiting = program(source), set(), {}, {}
-    asking, unseen, last = "", "", standing()
+    asking, unseen, last, heard = "", "", standing(), []
 
     def takes(roster, where, actor):
       module()["actor"] = actor
@@ -267,14 +267,11 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     def replay(of="", words="", writer=""):
       yield "module", id, {**globals(), "__name__": id, "actor": last[2] if last else ""}
       for whose, said in rungs.items():
-        donor = get(whose)[5] or whose
-        if under(donor, of):
-          if whose == writer:
-            continue
-          if not (words + "\n").startswith(said + "\n"):
+        if under(whose, of):
+          if whose == writer or not (words + "\n").startswith(said + "\n"):
             continue
           words = words[len(said) + 1 :]
-        rung(said, donor)
+        rung(said, whose)
       rungs.clear()
       if words:
         with site.set(of):
@@ -317,21 +314,22 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         continue
       match a:
         case ("read", about, by, _, path) if question(("prompt", path)) and scope(path) == id:
-          yield (
-            "done",
-            about,
-            Text(path, "\n".join(w for x, w in rungs.items() if x != by and under(get(x)[5] or x, path))),
-          )
+          yield "done", about, Text(path, "\n".join(w for x, w in rungs.items() if x != by and under(x, path)))
         case ("write", about, by, _, Text(path, content) as text) if question(("prompt", path)) and scope(path) == id:
           yield from replay(path, content, by)
           yield "done", about, text
         case ("rung", rid, maker, _, "", _, to):
           waiting[rid] = maker, to
+        case (kind, *_, notes) if kind in ("tell", "pause", "wake", "cancel", "close"):
+          heard.append("\n".join(notes))
         case ("ready", rid, _, word):
           waiting.pop(rid, None)
-          rungs[rid] = word
+          if heard:
+            act("run", id, None, rid + "_told", unquoted(rungs.setdefault(rid + "_told", "\n\n".join(heard))), "")
+            heard.clear()
+          rungs[origin := get(rid)[5] or rid] = word
           if not tells(rid):
-            found = get(rid)[5] in refused
+            found = origin in refused
           elif found := gate(word):
             yield told(rid, "refused", findings="\n".join(found))
           if found:
@@ -357,8 +355,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           close(Refused(f"{to} no actor"), maker if question(("prompt", maker)) else asking)
         else:
           yield told(asking, f"advance on {maker}")
-          if code := "\n".join(x for x in unquoted(turns(id)[-1][1]).splitlines() if x and x[0] != "#"):
-            rung(code)
           with site.set(asking):
             act("reply", id, ending(idle), to)
           unseen = ""

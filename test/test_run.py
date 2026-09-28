@@ -5,12 +5,13 @@ from asyncio import CancelledError
 from conftest import (
   Py,
   Sand,
-  bindings,
   born,
   chained,
   counted,
+  fresh,
   kept,
   plain,
+  prompted,
   ran,
   relived,
   said,
@@ -23,19 +24,21 @@ from furb import engine
 
 
 async def test_a_run_is_the_act_of_running_the_word_of_a_rung() -> None:
-  """A run is the act of running the word of a rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs the word as the rung, and says the run done with what the word gave."""
-  log, root, laid, act, step, binding = await counted()
-  wrote = bindings(root, act, "int", "count", written(laid, "k = 1"))
+  """A run is the act of running the word of a rung or the text of a told rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs the word as the rung, and says the run done with what the word gave."""
+  log, root, laid, act, step = await counted()
+  first = fresh(root, written(laid, "k = 1"))
+  second = f"{prompted(act, 'int', 'count')}\n\n#{step} advance on {act}"
   assert [a[2:] for a in said(log, "run")] == [
+    (root, root, f"{laid}_told", first, ""),
     (root, root, laid, "k = 1", ""),
-    (root, root, binding, wrote, ""),
+    (root, root, f"{step}_told", second, ""),
     (root, root, step, "close(k + 1)", ""),
   ]
   runs = [a[1] for a in said(log, "run")]
   owned = [(a[0], a[1]) for a in log if a[1] in runs and a[0] in ("started", "done") and a[2] == a[1]]
   assert sorted(owned) == sorted((kind, run) for run in runs for kind in ("started", "done"))
-  assert [type(engine.peek(run)).__name__ for run in runs] == ["NoneType", "NoneType", "CancelledError"]
-  assert ran(log) == ["k = 1", wrote, "close(k + 1)"] and engine.module(root)["k"] == 1
+  assert [type(engine.peek(run)).__name__ for run in runs] == ["NoneType", "NoneType", "NoneType", "CancelledError"]
+  assert ran(log) == [first, "k = 1", second, "close(k + 1)"] and engine.module(root)["k"] == 1
 
 
 async def test_the_word_a_run_carries_is_python_which_unquoted_made_of_the_word_of_the_rung() -> None:
@@ -63,7 +66,7 @@ async def test_a_run_names_the_rung_that_the_word_retells() -> None:
   twin = await chained("twin", root, 300)
   mine = [a for a in said(log, "run") if a[3] == twin]
   theirs = [a for a in said(log, "run") if a[3] == root]
-  assert [a[6] for a in theirs] == [""] and [a[6] for a in mine] == [theirs[0][4]]
+  assert [a[6] for a in theirs] == ["", ""] and [a[6] for a in mine] == ["", theirs[0][4], theirs[1][4]]
   assert [a[0] for a in sand.calls].count("read") == 1
   assert engine.module(twin)["t"] == engine.module(root)["t"]
 
@@ -153,8 +156,11 @@ async def test_the_chain_runs_one_word_at_a_time() -> None:
   first = engine.rung("x = bash('echo hi')\nclose(await x)", on=root)
   second = engine.rung("k = 2\nclose(k)", on=root)
   await settle()
-  assert ran(log) == ["x = bash('echo hi')\nclose(await x)", "k = 2\nclose(k)"]
-  (run, _) = [a[1] for a in said(log, "run")]
+  one, two = "x = bash('echo hi')\nclose(await x)", "k = 2\nclose(k)"
+  opens = f"#bash1\nbash1_command = 'echo hi'\n{engine.bound('bash1', 'Exit')}"
+  told = [engine.unquoted(fresh(root, written(first, one))), engine.unquoted(f"{opens}\n\n{written(second, two)}")]
+  assert ran(log) == [told[0], one, told[1], two]
+  (_, run, _, _) = [a[1] for a in said(log, "run")]
   spoken = [(a[0], a[2]) for a in log if a[0] in ("bash", "wants", "close")]
   assert spoken == [("bash", first), ("wants", run), ("close", second)]
   sand.exits(said(log, "bash")[0][1], 0)

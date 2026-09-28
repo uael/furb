@@ -414,17 +414,16 @@ async def stalled() -> tuple[Sand, list[tuple], str, Act[int], str, str]:
   return sand, log, root, act, said(log, "rung")[0][1], said(log, "bash")[0][1]
 
 
-async def counted() -> tuple[list[tuple], str, Act, Act[int], str, str]:
+async def counted() -> tuple[list[tuple], str, Act, Act[int], str]:
   """A life whose prompt counts on what a rung its caller wrote bound: what was said, the root, that rung, the
-  prompt, the rung of the prompt, and the rung of the bindings that the chain wrote for it."""
+  prompt and the rung of the prompt."""
   _, log, root = born("close(k + 1)")
   laid = engine.rung("k = 1", on=root)
   await laid
   act = engine.prompt(int, "count", on=root)
   assert await act == 2
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  (binding,) = [a[1] for a in said(log, "rung") if a[2] == root]
-  return log, root, laid, act, step, binding
+  return log, root, laid, act, step
 
 
 async def relived(sand: Sand, record: Sequence[tuple]) -> tuple[list[tuple], str]:
@@ -527,16 +526,15 @@ def prompted(id: str, shape: str, message: str = "") -> str:
 
 
 def written(id: str, word: str) -> str:
-  """The paragraph a rung tells of a word of one line that its caller wrote: its header and the binding of that
-  word."""
-  return f"#{id}\n{id}_word = {word!r}"
+  """The paragraph a rung tells of a word that its caller wrote: its header and the binding of that word, as a quote
+  when the word holds more than one line."""
+  return f"#{id}\n<s:{id}_word>\n{word}</s:{id}_word>" if "\n" in word else f"#{id}\n{id}_word = {word!r}"
 
 
-def bindings(root: str, act: str, shape: str, message: str, *told: str) -> str:
-  """The word of the rung a fresh root writes at its first ask for a prompt: the python of its open, of its standing,
-  of the paragraphs told after it, and of the open of that prompt."""
-  said = [opened(root, "root"), takes(root), *told, prompted(act, shape, message)]
-  return "\n".join(line for one in said for line in one.split("\n") if not line.startswith("#"))
+def fresh(root: str, *told: str) -> str:
+  """The text that a fresh root runs as the told rung of its first rung: the paragraph of its open, the paragraph of
+  its standing, and each paragraph told after them, joined by blank lines."""
+  return "\n\n".join([opened(root, "root"), takes(root), *told])
 
 
 def gatings(log: Sequence[tuple]) -> list[tuple[str, list[str]]]:

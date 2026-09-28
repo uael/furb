@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import acts, born, chained, heads, paragraphs, said, settle, written
+from conftest import acts, born, chained, heads, paragraphs, prompted, said, settle, written
 from furb import engine
 from furb.engine import Refused
 
@@ -90,9 +90,11 @@ async def test_a_rung_binds_one_list_of_what_it_debugged() -> None:
   ]
   assert engine.module(root)[f"{step}_debug"] == ["1", "2", "9"]
   sand.script[root] = ["close(1)"]
-  assert await engine.prompt(int, "again", on=root) == 1
-  bind = said(log, "run")[-2][5]
-  assert f"{step}_debug = ['1', '2']\n{step}_debug[2:] = ['9']" in bind
+  again = engine.prompt(int, "again", on=root)
+  assert await again == 1
+  (asking,) = [a[1] for a in said(log, "rung") if a[2] == again]
+  opens = [prompted(again, "int", "again"), f"#{asking} advance on {again}"]
+  assert said(log, "run")[-2][5] == "\n\n".join([*told, *opens])
   assert engine.module(root)[f"{step}_debug"] == ["1", "2", "9"]
 
 
@@ -109,8 +111,11 @@ async def test_rungn_debug_holds_the_repr_of_each_value_as_a_str() -> None:
   ]
   assert engine.module(root)[f"{step}_debug"] == ["<p>", "1", "<p>"]
   sand.script[root] = ["close(1)"]
-  assert await engine.prompt(int, "again", on=root) == 1
-  assert f"{step}_debug = ['<p>']\n{step}_debug[1:] = ['1', '<p>']" in said(log, "run")[-2][5]
+  again = engine.prompt(int, "again", on=root)
+  assert await again == 1
+  (asking,) = [a[1] for a in said(log, "rung") if a[2] == again]
+  opens = [prompted(again, "int", "again"), f"#{asking} advance on {again}"]
+  assert said(log, "run")[-2][5] == "\n\n".join([*told, *opens])
   assert engine.module(root)[f"{step}_debug"] == ["<p>", "1", "<p>"]
 
 

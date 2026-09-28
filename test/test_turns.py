@@ -121,8 +121,8 @@ async def test_the_turns_are_folded_whole_at_each_reply() -> None:
     ["user", "assistant", "user", "assistant", "user"],
   ]
   assert [one[: len(asks[1])] for one in asks[1:]] == [asks[1]] * 2
-  assert heads(asks[1][-1:]) == ["#bash1", "#rung3 advance on prompt1"]
-  assert heads(asks[2][-1:]) == ["#bash1 exited 0", "#rung5 advance on prompt1"]
+  assert heads(asks[1][-1:]) == ["#bash1", "#rung2 advance on prompt1"]
+  assert heads(asks[2][-1:]) == ["#bash1 exited 0", "#rung3 advance on prompt1"]
   assert said(log, "bash")[0][1] == "bash1"
 
 
@@ -141,7 +141,7 @@ async def test_the_next_reply_tells_everything_that_the_step_told() -> None:
   assert await engine.prompt(int, "try", on=root) == 1
   await settle()
   second = sand.turns["reply2"]
-  assert paragraphs(second[-1:]) == ["#rung1 raised\nrung1_raised = ValueError('boom')", "#rung3 advance on prompt1"]
+  assert paragraphs(second[-1:]) == ["#rung1 raised\nrung1_raised = ValueError('boom')", "#rung2 advance on prompt1"]
 
 
 async def test_the_turns_hold_every_answer_of_the_model_as_the_turn_it_is() -> None:

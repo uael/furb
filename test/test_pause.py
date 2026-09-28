@@ -1,6 +1,6 @@
 """pause, which holds what the acts it is over hear until the wake."""
 
-from conftest import bindings, born, chained, heads, paragraphs, ran, said, settle, slow, stalled, world_says
+from conftest import born, chained, heads, paragraphs, ran, said, settle, slow, stalled, world_says
 from furb import engine
 
 
@@ -65,7 +65,7 @@ async def test_a_paused_chain_goes_quiet_as_its_in_flight_work_returns() -> None
   quiet = len(log)
   await settle()
   assert len(log) == quiet and len(said(log, "reply")) == 1
-  assert ran(log) == [bindings(root, act, "int", "count")]
+  assert ran(log) == []
   assert engine.peek(act, ...) is ...
 
 
