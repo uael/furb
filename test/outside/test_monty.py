@@ -4,8 +4,9 @@ The suite proves the contract on both engines, sentence for sentence. What is pr
 ear of this interpreter that says a verb from its thread and is answered with what the verb raised, a show the
 engine made that an ear calls back from its thread, a class a word defined held as a type of this interpreter
 and its instances as objects of it, both ways, the Kernel of this interpreter refused, since the engine of monty
-holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, and an ear the
-crate writes, which serves a life of either engine. What the ears of the crate do, the crate proves.
+holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, an ear the
+crate writes, which serves a life of either engine, and a life longer than the tables of its session could count.
+What the ears of the crate do, the crate proves.
 """
 
 import builtins
@@ -138,6 +139,28 @@ async def test_a_map_that_holds_the_key_is_crosses_both_ways_as_the_map_it_is() 
   assert await engine.rung(f"close(peek({act!r}) == {refusal!r})", on=root) is True
   verb = {"is": "name", "name": "bash"}
   assert await engine.rung(f"close({verb!r})", on=root) == verb
+
+
+@pytest.mark.timeout(600)
+async def test_a_life_runs_a_word_after_more_names_and_functions_than_a_u16_counts() -> None:
+  """A life is one session of monty for its whole length, and the session keeps a name for each piece of code the host
+  fed it, and each name, literal and function that a rung compiled. After more of each than a u16 counts, a word that
+  names what the session never saw still runs, since the interpreter bounds an operand by the code that holds it."""
+  root = engine.boot((), world=Sand(stands=STANDS).hears())
+  # Each saying of the operator is one piece of code that the host feeds the session.
+  for _ in range(66_000):
+    engine.say("tick", root)
+  # Each rung makes 10 000 functions that each read a new attribute and hold a function of their own. The source is
+  # built as the rung runs, since the gate reads the whole program again for each word.
+  for k in range(7):
+    word = (
+      f"exec(''.join(f'def f{k}_{{i}}(x):\\n  def g():\\n    pass\\n  return x.a{k}_{{i}}\\n'"
+      " for i in range(10_000)), {})"
+    )
+    await engine.rung(word, on=root)
+  word = "class Fresh:\n  fresh_attr = 1\ndef never_seen():\n  return Fresh()\nclose(never_seen().fresh_attr)"
+  assert await engine.rung(word, on=root) == 1
+  assert engine.module(root)["raised"] is None
 
 
 async def test_boot_refuses_a_kernel_or_a_gate_of_this_interpreter() -> None:
