@@ -39,6 +39,11 @@ export declare class Engine {
   /** What an act came to, and whether it is done. */
   outcome(id: string): Outcome
   /**
+   * The work that an earlier life left, which waits for a wake that this life says, each act by its name and its
+   * kind, as the engine of the crate finds it.
+   */
+  pending(): [string, string][]
+  /**
    * One name of a chain, read without calling it, with its type and its representation in the sandbox. The value
    * crosses as every value does, so a map that holds the key `is` crosses as its pairs.
    */

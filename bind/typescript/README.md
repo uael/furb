@@ -125,8 +125,10 @@ precision before JavaScript can round a number. Every act the host makes enters 
 a later life makes it again at its place. A view enters nothing. `Session.open` refuses a record whose replay
 drifts.
 
-`session.pending` holds the work that the record showed begun and not done when the life opened, except the work
-that a pause of the operator holds, and `session.resume()` wakes each chain that holds some. The streams that a
+`session.pending` names the work that an earlier life left, which waits for a wake that this life says, by the kind of
+each act, as `engine.pending()` finds it: among each act that the outside started and did not end, and the acts that
+made it, each prompt, rung, command and wait that is not done and that no pause holds. `session.resume()` wakes each
+chain that holds some, and an act that a wake puts to the outside again is pending no more. The streams that a
 model wrote in part live in the record's `.session.json` companion. File snapshots append to `.changes.jsonl`;
 `session.changes.read` loads a page of them. Keep both companions with the JSONL record. The session saves
 `.session.json` whole with `saveFile(path, text)`, which writes `<path>.tmp` and gives it the name of the file. A

@@ -539,6 +539,12 @@ impl PyEngine {
     self.call(py, |engine| engine.forget(n))
   }
 
+  /// The work that an earlier life left, which waits for a wake that this life says, each act by its name and its
+  /// kind, as the engine of the crate finds it.
+  fn pending(&mut self, py: Python<'_>) -> PyResult<Vec<(String, String)>> {
+    self.call(py, Engine::pending)
+  }
+
   /// What to call when an act is done, with what it came to: at once for one done already, and once otherwise.
   fn watch(&mut self, py: Python<'_>, act: &str, then: Py<PyAny>) -> PyResult<()> {
     let door = self.door.clone();

@@ -1,8 +1,7 @@
 import { type Call, isFault } from "./ears.js";
 import { display, type Fact, isQuestion, uncommented } from "./types.js";
 
-/** The kinds of act that are work which ends later: the table counts each one that is done, and the record may show
- * one begun and not done, which waits for a wake. */
+/** The kinds of act that are work which ends later, and the table counts each one that is done. */
 export const WORK = ["prompt", "rung", "bash", "wait"];
 
 export interface RunState {

@@ -487,6 +487,32 @@ fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
   assert_eq!(second.settled(&id).unwrap().as_ref().as_int(), Some(2));
 }
 
+#[test]
+fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
+  let root = {
+    let mut first = Lived::new("pending", &[], true).unwrap();
+    let root = first.root();
+    let word = Some("await wait(600)".to_owned());
+    first.engine.rung(verbs::Rung { word, on: on(&root), ..Default::default() }).unwrap();
+    let apart = first.engine.chain(verbs::Chain::default()).unwrap().id().to_owned();
+    first.engine.pause(&apart).unwrap();
+    first.engine.wait(verbs::Wait { seconds: Some(600.0), on: on(&apart) }).unwrap();
+    assert!(
+      first.engine.pending().unwrap().is_empty(),
+      "the work of a life is no work of an earlier one"
+    );
+    root
+  };
+  let mut second = Lived::new("pending", &[], false).unwrap();
+  second.engine.wait(verbs::Wait { seconds: Some(600.0), on: on(&root) }).unwrap();
+  // The wait of the chain that a pause holds waits for the wake of that chain, and the wait of this life is its own.
+  let pending =
+    second.engine.pending().unwrap().into_iter().map(|(id, kind)| format!("{id} {kind}"));
+  assert_eq!(pending.collect::<Vec<_>>(), ["rung1 rung", "wait1 wait"]);
+  second.engine.wake(&root).unwrap();
+  assert!(second.engine.pending().unwrap().is_empty(), "the wake put that work to the World again");
+}
+
 /// An ear that takes each wait and ends it from its own thread: it pauses the chain of the wait by its voice, then
 /// says the wait done; or, when told to hush, it hushes the wait before its thread speaks, and says the done itself.
 fn pauser(hushes: bool) -> Box<dyn Ear> {
