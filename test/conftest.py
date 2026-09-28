@@ -10,7 +10,7 @@ import os
 import re
 import sys
 import tempfile
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Generator, Sequence
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -29,9 +29,13 @@ ENGINE = vars(furb.python)
 """ENGINE is the module of the engine of this interpreter, whose names the Kernel and the gate read."""
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
-SUITES = (HERE, *sorted((HERE.parent / "extensions").glob("*/test")))
-"""SUITES are the suite of the engine and the suite of each extension, whose modules bind the names of the engine
-under test."""
+EXTENSIONS = HERE.parent / "extensions"
+"""EXTENSIONS is the folder of the extensions, whose conftest holds the helpers that only their suites need."""
+SUITES = (HERE, *sorted(EXTENSIONS.glob("*/test")))
+"""SUITES are the suite of the engine and the suite of each extension, each test of which runs on both engines."""
+BOUND = (*SUITES, EXTENSIONS / "conftest.py")
+"""BOUND are the files whose modules bind the names of the engine under test: the suites, and the conftest of the
+suites of the extensions."""
 ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
@@ -349,41 +353,6 @@ def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list
   return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears(), **ears)
 
 
-def extended(
-  name: str, at: Path, ear: Callable[[str], World], *, lives: bool = False, record: Sequence[tuple] = ()
-) -> tuple[Sand, str]:
-  """A life on a record, whose chains stand in the folder work of a directory, which enables at its tip the official
-  extension of that name, with its life word when it lives: it hears the ear of the extension, whose config directory
-  of the user is the folder config of the directory, and the files of the machine after the World of the suite. It
-  gives the World and the root."""
-  one, word, life_word = next(x for x in _monty.official() if x[0] == name)
-  (at / "work").mkdir(exist_ok=True)
-  given = _monty.extensions([(one, word, life_word if lives else "")])
-  sand = sown(stands=[STANDS[0], str(at / "work"), STANDS[2]])
-  return sand, life(sand, record, extensions=given, **{name: ear(str(at / "config"))}, files=_monty.files())[1]
-
-
-def noted(folder: Path, text: str, name: str = "CLAUDE.md") -> Path:
-  """A memory file in a folder, which it makes with the folders above it, and the path of that file."""
-  folder.mkdir(parents=True, exist_ok=True)
-  (path := folder / name).write_text(text, encoding="utf-8")
-  return path
-
-
-def recalled(chain: str, at: Path) -> list[str]:
-  """Every paragraph of memory that a chain was told of a file under a directory, in order, since a folder above
-  that directory belongs to the machine."""
-  return [one for one in of(engine.turns(on=chain), "memory") if one.startswith(f"#memory {at}")]
-
-
-def skilled(skills: Path, folder: str, head: str) -> Path:
-  """A skill in a folder of skills, whose SKILL.md file opens with a frontmatter of these lines, and the path of that
-  file."""
-  (skills / folder).mkdir(parents=True, exist_ok=True)
-  (path := skills / folder / "SKILL.md").write_text(f"---\n{head}\n---\nSteps.\n", encoding="utf-8")
-  return path
-
-
 def world_says(kind: str, about: str, *words: object) -> tuple:
   """A fact the World says from its own loop, under its own name, as a command, a wait or a model answers later."""
   token = site.set(WORLD)
@@ -576,7 +545,7 @@ def swapped(to: object) -> None:
   # pytest drops the name conftest before it loads each conftest outside a package, so this module may stand under
   # no name, and it rebinds its own names as well.
   for names in [globals(), *(vars(mod) for mod in list(sys.modules.values()) if getattr(mod, "__file__", None))]:
-    if id(names) in seen or not any(Path(names["__file__"]).is_relative_to(one) for one in SUITES):
+    if id(names) in seen or not any(Path(names["__file__"]).is_relative_to(one) for one in BOUND):
       continue
     seen.add(id(names))
     for key, value in list(names.items()):

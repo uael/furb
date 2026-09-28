@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from conftest import STANDS, Dead, extended, life, noted, recalled
+from conftest import STANDS, Dead, life
+from extensions.conftest import extended, noted, recalled
 from furb import engine
 from furb.engine import Refused, Text
 from furb_monty import _monty

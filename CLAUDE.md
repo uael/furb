@@ -41,10 +41,11 @@ API of its own:
   and on a console of the operator. The package `furb` depends on the wheel of `furb-cli`, so `pip install furb`
   gives the command `furb`.
 
-The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a
-Kernel of this interpreter, and the engine of monty holds its own. The suite of each extension,
-`extensions/<name>/test/`, runs on both engines too, and its conftest, `extensions/conftest.py`, hands it the hooks
-of the harness. `test/outside/test_monty.py` proves what the door carries that no sentence of the contract says.
+The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
+of this interpreter, and the engine of monty holds its own. The suite of each extension, `extensions/<name>/test/`, runs
+on both engines too, and its conftest, `extensions/conftest.py`, hands it the hooks of the harness and the helpers that
+only the suites of the extensions need. `test/outside/test_monty.py` proves what the door carries that no sentence of
+the contract says.
 
 The TypeScript side is a bun workspace at the root, with two packages:
 
@@ -114,7 +115,7 @@ The suite drives the engine through its public API alone, end to end, from the m
   and the calls of the doubles. It reads a fact by position, as the contract declares it, and never weakens an
   assertion to pass: a sentence the engine fails stays red until the engine, or the sentence, is right.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
-  `test/conftest.py`.
+  `test/conftest.py`, and one that only the suites of the extensions need lives in `extensions/conftest.py`.
 - `test/outside/` holds the tests of the World, the Kernel, the door, and the switch of the package that
   `FURB_ENGINE` sets. These tests stand outside the hygiene laws.
 

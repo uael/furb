@@ -86,11 +86,11 @@ uv run pre-commit install
 
 | File | What it holds |
 | --- | --- |
-| `test/conftest.py` | The harness: the World in memory, the Kernel of this interpreter, and each helper that several files need. |
+| `test/conftest.py` | The harness: the World in memory, the Kernel of this interpreter, and each helper that several files of `test/` need. |
 | `test/test_<name>.py` | The tests of one definition of the contract, one test for each sentence. |
 | `test/test_hygiene.py` | The hygiene laws. |
 | `test/outside/` | The tests of the World, the Kernel, the door, and the switch, which stand outside the hygiene laws. |
-| `extensions/conftest.py` | The hooks of the harness for the suite of each extension. |
+| `extensions/conftest.py` | The hooks of the harness for the suite of each extension, and the helpers that only those suites need. |
 
 ## Changing the TUI
 
