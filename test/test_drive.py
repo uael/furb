@@ -112,13 +112,13 @@ async def test_a_generator_that_yields_a_saying_is_given_the_fact_as_the_bus_sai
 
   def asking() -> Generator[tuple | None, tuple | None]:
     """An ear that says one saying of its own and then waits for what is said after it."""
-    got.append((yield "tell", root, [("noted", [], None)]))
+    got.append((yield "tell", root, ["noted"]))
     while True:
       got.append((yield))
 
   at = len(log)
   engine.drive(asking(), "asker")
-  assert got[0] == ("tell", root, "asker", [("noted", [], None)]) == log[at]
+  assert got[0] == ("tell", root, "asker", ["noted"]) == log[at]
   engine.bash("echo hi", on=root)
   await settle()
   assert got[1:] == log[at:]

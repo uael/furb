@@ -1,6 +1,6 @@
 """transcript, the facts on a chain."""
 
-from conftest import born, heads, lasting, paragraphs, said, settle
+from conftest import born, fresh, heads, lasting, paragraphs, said, settle, written
 from furb import engine
 
 
@@ -32,10 +32,13 @@ async def test_transcript_gives_a_new_list_at_each_call() -> None:
 async def test_the_transcript_is_the_whole_state_of_a_chain() -> None:
   """The transcript is the whole state of a chain: its module, its program, its working directory and its turns are read off it, and the standing is read off the transcript of the root."""
   _, _, root = born()
-  await engine.rung("k = 1\ncd('/x')", on=root)
+  word = "k = 1\ncd('/x')"
+  laid = engine.rung(word, on=root)
+  await laid
   held = engine.transcript(root)
   assert engine.module(root) == [a[3] for a in held if a[0] == "module"][-1]
-  assert engine.program(root) == {a[4]: a[5] for a in held if a[0] == "run"} == {"rung1": "k = 1\ncd('/x')"}
+  program = {f"{laid}_told": engine.unquoted(fresh(root, written(laid, word))), laid: word}
+  assert engine.program(root) == {a[4]: a[5] for a in held if a[0] == "run"} == program
   assert engine.cwd(on=root) == [a[4] for a in held if a[0] == "cd"][-1] == "/x"
   assert paragraphs(engine.turns(on=root)) == ["\n".join(a[3]) for a in said(held, "tell")]
   assert engine.standing() == next(a[3] for a in engine.transcript(engine.ROOT) if a[:2] == ("done", "stand1"))

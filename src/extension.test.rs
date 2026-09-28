@@ -237,7 +237,7 @@ fn a_chain_takes_each_extension_at_its_birth_and_a_later_life_plays_the_same_run
     let expected = [
       rung("rung1", "chain1", &full),
       rung("rung2", "chain2", &full),
-      rung("rung4", "chain3", "note()"),
+      rung("rung5", "chain3", "note()"),
     ];
     assert_eq!(played(&mut engine, &["chain1", "chain2", "chain3"]), expected);
   }
@@ -245,11 +245,11 @@ fn a_chain_takes_each_extension_at_its_birth_and_a_later_life_plays_the_same_run
   let mut engine = lived(&at, vec![note("x = 0"), other]);
   let expected = [
     rung("rung1", "chain1", &full),
-    rung("rung5", "chain1", "o = 1"),
+    rung("rung6", "chain1", "o = 1"),
     rung("rung2", "chain2", &full),
-    rung("rung6", "chain2", "o = 1"),
-    rung("rung4", "chain3", "note()"),
-    rung("rung7", "chain3", "o = 1"),
+    rung("rung7", "chain2", "o = 1"),
+    rung("rung5", "chain3", "note()"),
+    rung("rung8", "chain3", "o = 1"),
   ];
   assert_eq!(
     played(&mut engine, &["chain1", "chain2", "chain3"]),

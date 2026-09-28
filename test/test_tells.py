@@ -13,7 +13,7 @@ async def test_whether_an_act_tells() -> None:
   with pytest.raises(ValueError, match="boom"):
     await step
   twin = await chained("twin", root, 300)
-  (again,) = [a[1] for a in said(log, "rung") if a[3] == twin]
+  (again,) = [a[1] for a in said(log, "rung") if a[3] == twin and a[5] == step]
   assert engine.tells(step) and not engine.tells(again) and engine.get(again)[2] == twin
   told = [a[3][0].split("\n")[0] for a in said(engine.transcript(root), "tell") if a[1] == step]
   assert told == [f"#{step}", "#read1", f"#{step} raised"]

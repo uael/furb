@@ -193,10 +193,10 @@ async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_tha
   mine = engine.rung("close(9)", on=root)
   assert await mine == 9
   assert [one[1] for one in said(log, "close")] == [act, mine]
-  sand.script[root] = ["close(5, 'rung4')", "close(6)"]
+  sand.script[root] = ["close(5, 'rung3')", "close(6)"]
   named = engine.prompt(int, "count", on=root)
   assert await named == 6
-  assert [one[1] for one in said(log, "close")][2:] == ["rung4", named] and engine.peek("rung4") == 5
+  assert [one[1] for one in said(log, "close")][2:] == ["rung3", named] and engine.peek("rung3") == 5
 
 
 async def test_a_close_said_from_a_word_that_retells_reaches_nothing_and_says_nothing() -> None:

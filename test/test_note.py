@@ -135,31 +135,26 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   _, log, root = born("x = bash('echo hi')\nclose(1)", "close((await bash1).code)")
   assert await engine.prompt(int, "run it\nnow", on=root) == 1
   assert await Act("prompt2") == 0
-  own = [a[4] for a in said(log, "rung") if a[2] == root]
-  assert own == [
-    "\n".join(
-      [
-        *[line for one in (opened(root, "root"), takes(root)) for line in one.split("\n")[1:]],
-        "prompt1_message = 'run it\\nnow'\nprompt1: Act[int] = Act('prompt1')",
-      ]
-    ),
-    "bash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')\nprompt1_value = 1\n"
-    "prompt2_message = 'bash1 done'\nprompt2: Act[None] = Act('prompt2')\nbash1_stdout = 'ran echo hi'",
+  own = [a[5] for a in said(log, "run") if a[4].endswith("_told")]
+  asked = "#prompt1\n<s:prompt1_message>\nrun it\nnow</s:prompt1_message>\nprompt1: Act[int] = Act('prompt1')"
+  told = [
+    "#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')",
+    "#prompt1 closed\nprompt1_value = 1",
+    "#prompt2\nprompt2_message = 'bash1 done'\nprompt2: Act[None] = Act('prompt2')",
+    "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",
+    "#rung2 advance on prompt2",
   ]
-  shown = [
-    line
-    for one in paragraphs(engine.turns(on=root))
-    for line in engine.unquoted(one).split("\n")
-    if line and line[0] != "#"
-  ]
-  assert shown == [line for word in own for line in word.split("\n")] + ["prompt2_value = 0"]
+  words = ["\n\n".join([opened(root, "root"), takes(root), asked, "#rung1 advance on prompt1"]), "\n\n".join(told)]
+  assert own == [engine.unquoted(word) for word in words]
+  shown = "\n\n".join(paragraphs(engine.turns(on=root)))
+  assert shown == "\n\n".join([*words, "#prompt2 closed\nprompt2_value = 0"])
   assert engine.module(root)["bash1"] == "bash1"
   assert engine.module(root)["prompt1_message"] == "run it\nnow"
   _, _, fixed = born(
     "k = 1",
     "ok = BAD",
     "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))",
-    "close((k, ok, rung3_findings))",
+    "close((k, ok, rung2_findings))",
   )
   assert await engine.prompt(object, "fix it", on=fixed) == (1, 2, BAD)
 
