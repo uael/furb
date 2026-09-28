@@ -203,7 +203,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
     yield "started", id
     if word:
       if tells(id):
-        yield told(id, "", word)
+        yield told(id, word, word="word")
       yield "ready", id, word
     while True:
       match (yield):
@@ -344,11 +344,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           close(Refused(f"{to} no actor"), maker if question(("prompt", maker)) else asking)
         else:
           yield told(asking, f"advance on {maker}")
-          if binds := "\n".join(
-            m[0]
-            for m in re.findall(r"(?ms)^(\w+: Act\[.*?\] = Act\('\w+'\)|<s:(\w+\d_\w+)>.*</s:\2>)$", turns(id)[-1][1])
-          ):
-            rung(binds)
+          if code := "\n".join(x for x in unquoted(turns(id)[-1][1]).splitlines() if x and x[0] != "#"):
+            rung(code)
           with site.set(asking):
             act("reply", id, ending(idle), to)
           unseen = ""
@@ -542,6 +539,8 @@ def control(kind, name, id, *words):
 
 def headed(name, text="", word="text"):
   if "\n" in (text := str(text)):
+    while f"</s:{name}_{word}>\n" in text + "\n":
+      word += "_"
     return f"#{name}\n<s:{name}_{word}>\n{text}</s:{name}_{word}>"
   return f"#{name} {text}".rstrip()
 
@@ -570,7 +569,7 @@ def shown(pair, seen):
 
 
 def unquoted(word):
-  while m := re.search(r"(?ms)^<s:(\w+)>\n?(.*)</s:\1>$", word):
+  while m := re.search(r"(?ms)^<s:(\w+)>\n?(.*?)</s:\1>$", word):
     word = word[: m.start()] + f"{m[1]} = {m[2]!r}" + "\n" * m[0].count("\n") + word[m.end() :]
   return word
 

@@ -268,7 +268,7 @@ async def test_the_turns_of_a_chain_tell_the_standing_and_the_acts_of_the_operat
   assert paragraphs(engine.turns(on=root)) == [
     opened(root, "root"),
     takes(root),
-    f"#{step}\nk = 1",
+    f"#{step} k = 1",
     f"#{one} how many?\n{binding(one, 'int')}",
   ]
 
@@ -691,7 +691,7 @@ async def test_a_filter_that_skips_a_rung_its_caller_wrote_keeps_it_out_of_the_t
   twin = engine.chain("twin", source=root, filter=take(laid, inside=False))
   await settle()
   assert engine.module(twin)["k"] == 1
-  assert paragraphs(engine.turns(on=root)) == [opened(root, "root"), takes(root), f"#{laid}\nk = 1"]
+  assert paragraphs(engine.turns(on=root)) == [opened(root, "root"), takes(root), f"#{laid} k = 1"]
   assert paragraphs(engine.turns(on=twin)) == [opened(root, "root"), takes(root), opened(twin, f"twin from {root}")]
 
 
@@ -714,7 +714,7 @@ async def test_a_chain_with_a_source_reads_nothing_that_its_origin_did_after_tha
   await settle()
   assert engine.turns(on=twin) == told == [("user", "\n\n".join(paragraphs(told)), None, None)]
   assert paragraphs(told) == [opened(root, "root"), takes(root), opened(twin, f"twin from {root}")]
-  assert "after" not in engine.module(twin) and paragraphs(engine.turns(on=root))[-1:] == [f"#{after}\nafter = 1"]
+  assert "after" not in engine.module(twin) and paragraphs(engine.turns(on=root))[-1:] == [f"#{after} after = 1"]
 
 
 async def test_what_a_rung_of_a_chain_with_a_source_binds_lands_on_that_chain() -> None:
@@ -758,7 +758,7 @@ async def test_it_holds_the_transcript_of_its_origin_first_and_tells_its_own_ope
   assert paragraphs(engine.turns(on=twin)) == [
     opened(root, "root"),
     takes(root),
-    f"#{step}\nk = 1",
+    f"#{step} k = 1",
     opened(twin, f"twin from {root}"),
   ]
 
@@ -989,8 +989,8 @@ async def test_before_every_reply_the_chain_tells_the_last_line_of_the_turn() ->
   assert engine.module(root)["k"] == 2
 
 
-async def test_where_it_asks_the_chain_makes_a_rung_of_the_statements_the_turn_shows() -> None:
-  """Where it asks, the chain makes a rung of the statements and the quotes that the turn shows of every act but a rung, which bind the name of each act that the turn opened and each string that the turn quoted; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its statements already."""
+async def test_where_it_asks_the_chain_makes_a_rung_of_the_python_that_the_last_user_turn_shows() -> None:
+  """Where it asks, the chain makes a rung of the python that the last user turn shows, unquoted and less its comments, so each act that the turn opened and each string that it quoted is bound; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its python already."""
   sand, log, root = born()
   laid = engine.rung("k = 1", on=root)
   assert await laid is None
@@ -1005,11 +1005,12 @@ async def test_where_it_asks_the_chain_makes_a_rung_of_the_statements_the_turn_s
   made = [a[1] for a in engine.transcript(root) if engine.question(a)]
   asks = [made.index(a[1]) for a in said(log, "reply")]
   assert [[one for one in made[:at] if one.startswith("rung")][-1] for at in asks] == binders
-  quote = f"<s:{one}_message>\nrun it\nnow</s:{one}_message>"
+  quote = f"{one}_message = 'run it\\nnow'"
   statements = [binding(root), quote, binding(one, "int"), binding(command, "Exit"), binding(ack, "None")]
   assert [engine.get(bind)[4] for bind in binders] == ["\n".join(statements[:3]), "\n".join(statements[3:])]
-  shown = [line for part in paragraphs(engine.turns(on=root)) for line in part.split("\n") if line[:1] != "#"]
-  assert shown == [statements[0], "k = 1", *quote.split("\n"), *statements[2:]]
+  turns = engine.turns(on=root)
+  shown = [line for part in paragraphs(turns) for line in engine.unquoted(part).split("\n") if line and line[0] != "#"]
+  assert shown == statements and f"#{laid} k = 1" in paragraphs(turns)
   assert engine.module(root)[f"{one}_message"] == "run it\nnow"
   assert [engine.module(root)[name] for name in (root, one, command, ack)] == [root, one, command, ack]
   assert [a[1] for a in said(log, "rung") if a[1] in engine.module(root)] == []

@@ -324,5 +324,5 @@ test("the text of a paragraph drops the mark of each comment and the two marks o
   expect(told?.name).toBe("prompt1");
   expect(uncommented(told?.lines ?? [])).toBe("count\n# them\nprompt1: Act[int] = Act('prompt1')");
   expect(uncommented(["# one", "#", "x = 1"])).toBe("one\n\nx = 1");
-  expect(uncommented(["<s:a>", "b</s:a>", "c</s:a>"])).toBe("b</s:a>\nc");
+  expect(uncommented(["<s:a>", "b</s:a>", "c</s:a>"])).toBe("b\nc</s:a>");
 });

@@ -216,7 +216,10 @@ fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_
   assert_eq!(played(&mut engine, &["chain1"]), [rung("rung1", "chain1", &full)]);
   let turns = engine.turns(verbs::Turns { on: Some("chain1".to_owned()) }).unwrap();
   let told = turns.last().unwrap().as_ref().items().unwrap()[1].as_str().unwrap().to_owned();
-  assert!(told.contains(&format!("#rung1\n{full}\n\n#read note.txt\n")), "{told}");
+  assert!(
+    told.contains(&format!("#rung1\n<s:rung1_word>\n{full}</s:rung1_word>\n\n#read note.txt\n")),
+    "{told}"
+  );
 }
 
 #[test]

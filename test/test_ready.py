@@ -7,7 +7,8 @@ from furb import engine
 async def test_a_ready_says_the_word_a_rung_holds() -> None:
   """A ready says the word a rung holds."""
   sand, log, root = born()
-  laid = engine.rung("<s:hi>hi</s:hi>\nk = hi", on=root)
+  word = "<s:hi>hi</s:hi>\nk = hi"
+  laid = engine.rung(word, on=root)
   await laid
   sand.script[root] = ["<s:there>\nthere\n</s:there>\nclose(k + there)"]
   act = engine.prompt(str, "greet", on=root)
@@ -16,7 +17,12 @@ async def test_a_ready_says_the_word_a_rung_holds() -> None:
   (binding,) = [a[1] for a in said(log, "rung") if a[2] == root]
   assert said(log, "ready") == [
     ("ready", laid, laid, "<s:hi>hi</s:hi>\nk = hi"),
-    ("ready", binding, binding, f"{root}: Act[object] = Act({root!r})\n{act}: Act[str] = Act({act!r})"),
+    (
+      "ready",
+      binding,
+      binding,
+      f"{root}: Act[object] = Act({root!r})\n{laid}_word = {word!r}\n{act}: Act[str] = Act({act!r})",
+    ),
     ("ready", step, step, "<s:there>\nthere\n</s:there>\nclose(k + there)"),
   ]
 
@@ -65,4 +71,4 @@ async def test_the_old_words_stay_in_the_program_and_in_the_turns_after_a_rung_r
     laid: new,
   }
   assert [turn[1] for turn in engine.turns(on=root) if turn[0] == "assistant"] == [old]
-  assert engine.turns(on=root)[-1][1].endswith(f"#{laid}\n{new}")
+  assert engine.turns(on=root)[-1][1].endswith(f"#{laid}\n<s:{laid}_word>\n{new}</s:{laid}_word>")

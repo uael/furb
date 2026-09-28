@@ -345,7 +345,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
   A rung is an act: the run of one word in the globals of its chain, which the chain has the Kernel run.
   The engine tells what a step raised.
   A step that raised nothing and debugged nothing tells nothing.
-  The open of a rung with a word is its header and then that word, as its caller wrote it.
+  The open of a rung with a word tells that word as a command tells its command: in its header when it holds one line, and as a quote under its header when it holds more, so no word that ran runs again.
   A rung with no word tells nothing where it is made, since the chain tells it as the last line of the turn it asks for it with.
   A rung with no word and no actor takes the default actor of its chain when it is made, and writes it into its actor word, so its reply and its ledger read the one actor.
   The raised header tells the exception as python shows it, which says its type and its message.
@@ -360,7 +360,6 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
   The word of a rung runs to its next await and continues when the close it awaits comes.
   The word of a rung answers its prompt with close, which carries the value the prompt is done with.
   The turns of the chain of another prompt tell the rung of a word its caller wrote.
-  A word its caller wrote stands in a user turn as python, under the header of its rung.
   rung is given a word and runs it on a chain in the globals of that chain.
   The gate reads the word its caller wrote like any word.
   A rung with a word completes with what that word raises, and with nothing when the word runs to its end.
@@ -511,7 +510,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.
   A write of a door gives the words of that ladder alone, so a rung of the chain that is no rung of that ladder and stands before the first word that differs stands as it did.
   Before every reply the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
-  Where it asks, the chain makes a rung of the statements and the quotes that the turn shows of every act but a rung, which bind the name of each act that the turn opened and each string that the turn quoted; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its statements already.
+  Where it asks, the chain makes a rung of the python that the last user turn shows, unquoted and less its comments, so each act that the turn opened and each string that it quoted is bound; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its python already.
   The chain takes its own act, since the engine is the one that runs it.
   The chain asks the model of a rung for its word by a reply it makes under the site of that rung, whose one word is the actor.
   """
@@ -660,6 +659,7 @@ The header of a paragraph names the act it is of by its id, what the act tells a
 The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, roster, cwd, actor, advance, paused, woke, cancelled, and one for each question that tells: read, write and cd.
 A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing.
 A note tells a string of more than one line as a quote, whose name is the id of the act, an underscore, and the word of the verb that holds the string, as prompt2_message, bash1_command or prompt2_value.
+A quote that a note tells takes one more underscore in its name for as long as its string holds the close mark of that name at the end of a line, so the first close mark after it is its own.
 """
 type Showing = tuple[Text, Show]
 """A text a note shows, and the show of it, which is what a tell of a text carries and what the fold of the turns makes comments of.
@@ -909,7 +909,7 @@ def shown(pair: Note, seen: dict[str, dict[int, str]]) -> str:
 def unquoted(word: str) -> str:
   """What a word is as python: each quote in it bound as a string.
   A quote is a string a word writes between two marks, <s:name> at the start of a line and </s:name> at the end of a line, name being any python name, so nothing in it needs an escape.
-  The open mark is looked for line by line from the top, and its close mark from the last line up, so a quote may hold the marks of another.
+  The open mark is looked for line by line from the top, and its close mark from the open mark down, so a quote may hold the marks of a quote of another name.
   The value of a quote is the text between its marks, less a line break just after the open mark.
   A quote becomes its name bound to its value as python writes it, on the line of the open mark, and each other line of the quote becomes an empty line, so every line after it keeps its number.
   An open mark that has no close mark stays as it is, and the gate reads it as the python it is not.
