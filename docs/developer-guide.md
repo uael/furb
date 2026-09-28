@@ -25,8 +25,8 @@ uv run pre-commit install
 
 1. A prompt asks a model for a response of a shape, such as `str`.
 2. The model answers with Python. That answer is a word, and a rung runs it.
-3. The gate reads the word first: a type checker reads it, and a sandbox runs each of its imports. A word that it refuses does not run, and the model reads the
-   reason in its next turn.
+3. The gate reads the word first: a type checker reads it, and a sandbox runs each of its imports. A word that it
+   refuses does not run, and the model reads the reason in its next turn.
 4. The Kernel runs the word in the module of its chain. Each call such as `read`, `bash`, `prompt`, or `wait`
    makes an act, which goes to the ears in turn until one owns it: the ear of the act, or an ear of the World,
    which reaches the disk, the machine, the models, the operator, or the record. The owner answers the act: now, or
