@@ -89,7 +89,7 @@ def turns(on: str = "") -> list[tuple]:
     match it:
       case ("reply", *_):
         cut = len(user)
-      case ("done", about, _, (_, _, _, _) as turn) if question(("reply", about)):
+      case ("done", about, _, [*_] as turn) if question(("reply", about)):
         folded += [("user", "\n\n".join(user[:cut]), None, None), turn]
         del user[:cut]
       case (kind, *_, notes) if kind in ("tell", "pause", "wake", "cancel", "close"):
@@ -205,8 +205,8 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
         case ("done", about, _, value) if question(("reply", about)) and get(about)[2] == id:
           if isinstance(value, BaseException):
             yield "done", id, value
-            return
-          yield "ready", id, value[1]
+          else:
+            yield "ready", id, value[1]
         case ("wants", about, by, _, call) if get(by)[4] == id:
           yield "started", about
           while (yield)[:2] != ("done", call):
@@ -223,7 +223,6 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
             if tells(id):
               yield told(id, "raised", raised=value)
           yield "done", id, value
-          return
 
   if not (word or actor):
     actor = module(on).get("actor", "")
@@ -299,9 +298,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       match a := (yield):
         case ("done", about, *_) if question(("stand", about)) and standing() != last:
           yield takes(*(last := standing()))
-        case ("done", about, _, value) if running.get(maker := (get(about) or a)[2]) is False and about not in [
-          x[4] for x in transcript() if x[0] == "wants"
-        ]:
+        case ("done", about, _, value) if running.get(maker := (get(about) or a)[2]) is False and all(
+          x[4] != about for x in transcript() if x[0] == "wants"
+        ):
           if scope(about) != id:
             yield "tell", maker, [headed(about, "done", value=value)]
           if not isinstance(value, CancelledError):
@@ -319,7 +318,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case (kind, *_, notes) if kind in ("tell", "pause", "wake", "cancel", "close"):
           heard.append("\n".join(notes))
         case ("ready", rid, _, word):
-          waiting.pop(rid, None)
           if heard:
             act("run", id, None, name := rid + "_told", unquoted(rungs.setdefault(name, "\n\n".join(heard))), "")
             heard = []
@@ -335,10 +333,13 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             act("run", id, None, rid, unquoted(word), donor)
         case ("done", about, by, Refused()) if not by and question(("reply", about)):
           pause(id)
-        case ("done", about, *_):
-          waiting.pop(about, None)
-      if (r := get(a[1]))[0] in ("run", "wants"):
-        running[r[4] if r[0] == "run" else get(r[2])[4]] = (a[0] == "started") == (r[0] == "run")
+      if a[0] in ("ready", "done"):
+        waiting.pop(a[1], None)
+      match get(a[1]):
+        case ("run", _, _, _, rid, *_):
+          running[rid] = a[0] == "started"
+        case ("wants", _, run, *_):
+          running[get(run)[4]] = a[0] != "started"
       if any(running.values()):
         continue
       if asking not in waiting and (asking := next((x for x in waiting if not paused(x)), "")):
@@ -776,8 +777,7 @@ def boot(record=(), **outside):
   def live(g, name):
     if name in alive:
       raise Refused(name + " hears")
-    if acting():
-      driven.add(name)
+    acting() and driven.add(name)
     alive[name] = g
     hears(name, g, None)
     dispatch()
