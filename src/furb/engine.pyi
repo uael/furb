@@ -511,7 +511,13 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.
   A write of a door gives the words of that ladder alone, so every rung of the chain that is no rung of that ladder stands as it did.
   Before every reply the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
-  The chain holds the text of each paragraph told on it, in order, and at the first ready of the next rung of the chain it runs that text as the told rung of that rung, before its word, and holds nothing more, so each act that a paragraph opened and each value that it told is bound for that word, whoever wrote it; the gate does not read the told rung, since the engine wrote it, the turns do not show it, since the turn shows its python already, and it is no act, and the record keeps neither it nor its run, so it moves no name that the record holds, and a later life hears the same paragraphs and runs it again.
+  The chain holds the text of each paragraph told on it, in order.
+  At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.
+  Each act that a told paragraph opened and each value that it told is bound for the word of that rung, whoever wrote it.
+  The gate never reads a told rung as a word, since the engine wrote it.
+  The turns do not show a told rung, since the turn shows its python already.
+  A told rung is no act, and the record keeps neither it nor its run.
+  A later life hears the same paragraphs and runs the told rung again.
   A told rung takes the name of the rung whose first ready runs it, with _told after it, as rung5_told.
   A rung makes at most one told rung, at its first ready, so no two told rungs share a name.
   The chain takes its own act, since the engine is the one that runs it.

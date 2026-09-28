@@ -59,6 +59,17 @@ def defined(text: str) -> set[str]:
   return {s.get_name() for s in table.get_symbols() if s.is_assigned() or s.is_imported()}
 
 
+async def told_read() -> tuple[Sand, list[tuple], str, Act, Act]:
+  """A life whose root reads a file, then reads the text that the read told: the World, what was said, the root, and
+  the two rungs."""
+  sand, log, root = born()
+  first = engine.rung("t = read('a.txt')", on=root)
+  assert await first is None
+  second = engine.rung("got = read1_text", on=root)
+  assert await second is None
+  return sand, log, root, first, second
+
+
 async def test_chain_says_what_a_chain_does() -> None:
   """chain says what a chain does: how it is opened, what it tells, and what it answers for."""
   _, _, root = born()
@@ -1040,18 +1051,49 @@ async def test_before_every_reply_the_chain_tells_the_last_line_of_the_turn() ->
 
 
 async def test_the_chain_holds_the_text_of_each_paragraph_told_on_it() -> None:
-  """The chain holds the text of each paragraph told on it, in order, and at the first ready of the next rung of the chain it runs that text as the told rung of that rung, before its word, and holds nothing more, so each act that a paragraph opened and each value that it told is bound for that word, whoever wrote it; the gate does not read the told rung, since the engine wrote it, the turns do not show it, since the turn shows its python already, and it is no act, and the record keeps neither it nor its run, so it moves no name that the record holds, and a later life hears the same paragraphs and runs it again."""
-  sand, log, root = born()
-  first = engine.rung("t = read('a.txt')", on=root)
-  assert await first is None
-  second = engine.rung("got = read1_text", on=root)
-  assert await second is None
-  assert engine.module(root)["got"] == "one\ntwo"
+  """The chain holds the text of each paragraph told on it, in order."""
+  _, log, root, first, second = await told_read()
   told = [a[5] for a in said(log, "run") if a[4] in (f"{first}_told", f"{second}_told")]
   assert "\n\n".join(told) == engine.unquoted("\n\n".join(paragraphs(engine.turns(on=root))))
+
+
+async def test_at_the_first_ready_of_the_next_rung_the_chain_runs_that_text() -> None:
+  """At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more."""
+  _, log, _, first, second = await told_read()
+  runs = said(log, "run")
+  assert [a[4] for a in runs] == [f"{first}_told", first, f"{second}_told", second]
+  assert not runs[2][5].startswith(runs[0][5])
+
+
+async def test_each_act_that_a_told_paragraph_opened_and_each_value_that_it_told_is_bound() -> None:
+  """Each act that a told paragraph opened and each value that it told is bound for the word of that rung, whoever wrote it."""
+  _, _, root, _, _ = await told_read()
+  assert engine.module(root)["got"] == "one\ntwo"
+
+
+async def test_the_gate_never_reads_a_told_rung_as_a_word() -> None:
+  """The gate never reads a told rung as a word, since the engine wrote it."""
+  _, log, _, _, _ = await told_read()
   assert [word for word, _ in gatings(log)] == ["t = read('a.txt')", "got = read1_text"]
+
+
+async def test_the_turns_do_not_show_a_told_rung() -> None:
+  """The turns do not show a told rung, since the turn shows its python already."""
+  _, _, root, first, second = await told_read()
+  turns = engine.turns(on=root)
+  assert f"{first}_told" not in turns and f"{second}_told" not in turns
+
+
+async def test_a_told_rung_is_no_act() -> None:
+  """A told rung is no act, and the record keeps neither it nor its run."""
+  sand, _, _, first, second = await told_read()
   assert engine.get(f"{first}_told") is None and engine.get(f"{second}_told") is None
   assert [e for e in sand.record if "_told" in str(e[0][:2])] == []
+
+
+async def test_a_later_life_hears_the_same_paragraphs_and_runs_the_told_rung_again() -> None:
+  """A later life hears the same paragraphs and runs the told rung again."""
+  sand, _, root, _, _ = await told_read()
   await relived(Sand(), list(sand.record))
   assert engine.module(root)["got"] == "one\ntwo"
 
