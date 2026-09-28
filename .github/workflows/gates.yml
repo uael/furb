@@ -58,8 +58,9 @@ jobs:
   typescript:
     name: the bindings and the TUI on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    # A pull request finds no cache of Windows until main saves one, so its first run on Windows builds every crate.
-    timeout-minutes: ${{ matrix.os == 'windows-latest' && 45 || 25 }}
+    # A change of the lock or of this file makes every system build each crate from nothing, and main saves the cache
+    # only from a job that passes. A limit shorter than that build fails every later run too, since none finds a cache.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
