@@ -121,7 +121,9 @@ async def test_a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last(wh
 def test_a_word_that_imports_the_engine_by_its_package_is_refused() -> None:
   """The gate gives the checker the engine under a name that the sheet alone says, so a word that imports the
   engine by the name of its package is refused, as it is where the engine runs in the sandbox."""
-  assert said("import furb\nclose(furb)") == ["line 1: error[unresolved-import] Cannot resolve imported module `furb`"]
+  assert said("import furb\nclose(furb)") == [
+    "line 1: error[unresolved-import] ModuleNotFoundError: No module named 'furb'"
+  ]
   assert said("from furb.engine import read\nclose(read)")[0].startswith("line 1: error[unresolved-import]")
 
 
@@ -141,12 +143,17 @@ def test_a_rung_that_raised_leaves_what_it_bound_and_the_rungs_after_it_to_the_w
 
 
 def test_a_word_that_imports_what_the_sandbox_does_not_run_is_refused() -> None:
-  """The gate reads a word against the typeshed of the sandbox, so a word that imports what monty does not run is
-  refused before it runs, and a word that imports what it runs is not."""
+  """The sandbox says which import runs, so a word that imports what monty does not run is refused before it runs,
+  though the typeshed of the sandbox holds a stub of it, and a word that imports what monty runs is not, though the
+  typeshed holds none."""
   assert said("import subprocess\nclose(subprocess.run)") == [
-    "line 1: error[unresolved-import] Cannot resolve imported module `subprocess`"
+    "line 1: error[unresolved-import] ModuleNotFoundError: No module named 'subprocess'"
+  ]
+  assert said("import types\nclose(types.SimpleNamespace)") == [
+    "line 1: error[unresolved-import] ModuleNotFoundError: No module named 'types'"
   ]
   assert said("import re\nclose(re.compile('a'))") == []
+  assert said("import ast\nclose(ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)") == []
 
 
 def test_a_return_inside_a_word_is_the_scope_it_stands_in() -> None:
