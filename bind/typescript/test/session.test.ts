@@ -569,7 +569,7 @@ test("a session enables the extensions of the configs, and a later session on it
     expect(enabled(first)).toEqual(["memory", "skills"]);
     const told = first.engine?.turns({ on: "chain1" }).at(-1)?.[1] ?? "";
     expect(told).toContain(
-      `#memory1\nmemory1_path = '${join(cwd, "CLAUDE.md")}'\nmemory1_text = 'Use two spaces.'`,
+      `#memory1\nmemory1_path = '${join(cwd, "CLAUDE.md").replaceAll("\\", "\\\\")}'\nmemory1_text = 'Use two spaces.'`,
     );
   } finally {
     await first.dispose();
