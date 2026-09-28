@@ -61,11 +61,16 @@ runs, and the files of each part. For everything else, it links to this file.
 
 ## The contract
 
-`src/furb/engine.pyi` is the source of truth. It gives the typed surface of the engine, and the docstring of each
-definition holds the laws of that definition, one sentence per line, in Simplified Technical English.
+`src/furb/engine.pyi` gives the typed surface of the engine, and the docstring of each definition holds the laws of
+that definition, one sentence per line, in Simplified Technical English.
 
-Read it whole before you do any work. Never edit it without the approval of the owner: not a signature, not a
-sentence, not a name. When you find a hole or a contradiction in it, say so and stop.
+The contract is a safeguard. It serves the gate and the suite, and it keeps the engine from drift. It is not the
+source of truth: the owner is. A request of the owner changes the contract. Change each signature and each sentence
+that the request makes wrong, in the same work, and name each change. Never refuse a request, and never work around
+it, to keep a sentence of the contract as it is.
+
+Read it whole before you do any work. Do not change it on your own initiative. When you find a hole or a
+contradiction in it, say so, with the change that fixes it.
 
 ## The meanings
 
