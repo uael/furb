@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Engine, Session, type SessionOptions } from "@furb/engine";
@@ -86,7 +86,7 @@ test("idle snapshots add no facts or sandbox calls as the act table grows, and s
   ));
 
 test("a take reads the program, the turns and the directory of a chain again once a rung changes them", () =>
-  withLife(async ({ engine, snapshots }) => {
+  withLife(async ({ engine, snapshots, cwd }) => {
     snapshots.take(engine.root);
     await engine.rung({ word: "answer = 17", on: engine.root });
     await Promise.resolve();
@@ -94,9 +94,10 @@ test("a take reads the program, the turns and the directory of a chain again onc
     expect(Object.values(view.program)).toContain("answer = 17");
     expect(view.turns.map(([, python]) => python).join("\n")).toContain("answer = 17");
     // A cd the operator asks is of the moment, and the engine keeps no answer of it, so the cd is a rung, as /cd is.
-    await engine.rung({ word: 'cd("/")', on: engine.root });
+    await mkdir(join(cwd, "sub"));
+    await engine.rung({ word: 'cd("sub")', on: engine.root });
     await Promise.resolve();
-    expect(snapshots.take(engine.root).directory).toBe("/");
+    expect(snapshots.take(engine.root).directory).toBe(join(cwd, "sub"));
   }));
 
 test("an act of a kind an extension defines joins the act table, and what it tells reaches the view", () =>
