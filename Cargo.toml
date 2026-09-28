@@ -32,9 +32,9 @@ typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build", "dep:windows-sys"
 # The sandbox the engine runs in, and its type checker, which is the gate of the
 # Kernel. A revision of the fork, since the interpreter the engine needs is not
 # released, and a revision reads the same interpreter at every build.
-monty = { git = "https://github.com/uael/monty", rev = "63a8db44" }
-monty-type-checking = { git = "https://github.com/uael/monty", rev = "63a8db44" }
-monty-types = { git = "https://github.com/uael/monty", rev = "63a8db44" }
+monty = { git = "https://github.com/uael/monty", rev = "b4a19363" }
+monty-type-checking = { git = "https://github.com/uael/monty", rev = "b4a19363" }
+monty-types = { git = "https://github.com/uael/monty", rev = "b4a19363" }
 # An ear of the crate is a coroutine: a generator of rust, as an ear of python is a generator of python.
 genawaiter = { version = "0.99", default-features = false }
 # The record: one fact per line, as JSON, whose numbers are read before anything rounds them. The catalog of models
