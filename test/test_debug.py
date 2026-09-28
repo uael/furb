@@ -88,9 +88,9 @@ async def test_debug_tells_nothing_but_the_interpolations() -> None:
   two = engine.rung("debug(t'nothing at all')", on=root)
   await two
   assert paragraphs(engine.turns(on=root))[2:] == [
-    f"#{one}\nn = 1\ndebug(t'before {{n}} after')",
+    f"#{one}\n<s:{one}_word>\nn = 1\ndebug(t'before {{n}} after')</s:{one}_word>",
     f"#{one} debugged n = 1",
-    f"#{two}\ndebug(t'nothing at all')",
+    f"#{two} debug(t'nothing at all')",
   ]
 
 
@@ -146,7 +146,7 @@ async def test_a_tell_is_on_the_scope_of_the_act_it_is_of_so_debug_takes_no_chai
   step = engine.rung("debug(t'{1}')", on=two)
   await step
   assert [one for one in said(log, "tell") if one[1] == step] == [
-    ("tell", step, step, [f"#{step}", "debug(t'{1}')"]),
+    ("tell", step, step, [f"#{step} debug(t'{{1}}')"]),
     ("tell", step, step, [f"#{step} debugged 1 = 1"]),
   ]
   assert engine.scope(step) == two

@@ -3,8 +3,8 @@ import { type ActRow, failed } from "./session.ts";
 
 /** One thing the conversation shows, read off the python of the turns of a chain.
  *
- * - `python`: a word, which an assistant turn holds, or which the open of a rung its caller wrote tells, with the
- *   rung it is the word of.
+ * - `python`: a word, which an assistant turn holds, or which the open of a rung its caller wrote tells in its header
+ *   or as a quote, with the rung it is the word of.
  * - `prompt`: the open of a prompt, which tells its message.
  * - `result`: the close of a prompt, and whether other prompts closed in the same turn.
  * - `act`: the open or the end of any other act, which the conversation shows once.
@@ -43,13 +43,17 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
       const shown = () => items.push(note(key, paragraph, act, word, rest.join(" ")));
       if (word === "ledger") continue;
       if (act?.kind === "rung") {
-        if (word === "advance") rung = act;
-        else if (!paragraph.words) {
-          // The open of a rung its caller wrote: its header, and then that word.
+        if (writes(act, paragraph)) {
           rung = act;
           seen.add(act.id);
-          items.push({ type: "python", key, code: paragraph.lines.join("\n"), rung: act });
-        } else if (word === "closed") {
+          items.push({
+            type: "python",
+            key,
+            code: paragraph.words || uncommented(paragraph.lines),
+            rung: act,
+          });
+        } else if (word === "advance") rung = act;
+        else if (word === "closed") {
           if (failed(act) && !seen.has(act.id)) items.push({ type: "act", key: act.id, act });
           seen.add(act.id);
         } else if (!(["raised", "refused"].includes(word) && failed(act) && seen.has(act.id))) shown();
@@ -68,6 +72,15 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
     }
   }
   return items;
+}
+
+/** Whether a paragraph is the open of a rung its caller wrote, which tells that word in its header when it holds one
+ * line, and as the quote rungN_word under its header when it holds more. */
+function writes(act: ActRow, paragraph: Paragraph): boolean {
+  const word = String(act.words[0] ?? "");
+  if (!word) return false;
+  if (paragraph.words) return paragraph.words === word;
+  return new RegExp(`^<s:${act.id}_word_*>$`).test(paragraph.lines[0] ?? "");
 }
 
 /** A paragraph as a note: the word of its header after the name of an act, or the kind of its query, as its label. */

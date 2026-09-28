@@ -19,7 +19,7 @@ async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
   assert got == [
-    ("user", f"#{root} root\n{root}: Act[object] = Act({root!r})\n\n{takes(root)}\n\n#rung1\nk = 1", None, None)
+    ("user", f"#{root} root\n{root}: Act[object] = Act({root!r})\n\n{takes(root)}\n\n#rung1 k = 1", None, None)
   ]
 
 
@@ -71,7 +71,7 @@ async def test_turns_reads_the_transcript_of_the_chain_and_asks_nothing() -> Non
   made, kept = dict(acts(log)), len(sand.record)
   got = engine.turns(on=root)
   assert [role for role, *_ in got] == ["user"]
-  assert heads(got) == [f"#{root} root", rows(root)[0], "#rung1", "#cd /x"]
+  assert heads(got) == [f"#{root} root", rows(root)[0], "#rung1 cd('/x')", "#cd /x"]
   assert acts(log) == made and len(sand.record) == kept
 
 
@@ -81,7 +81,7 @@ async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_las
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
   assert len(got) == 1
-  assert heads(got) == ["#chain1 root", rows("chain1")[0], "#rung1"]
+  assert heads(got) == ["#chain1 root", rows("chain1")[0], "#rung1 k = 1"]
   assert got[0][1] == "\n\n".join(paragraphs(got))
 
 

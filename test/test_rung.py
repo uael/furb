@@ -34,7 +34,7 @@ async def test_the_run_of_a_word_on_a_chain() -> None:
   """The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is."""
   log, root, laid, act, step, _ = await counted()
   assert [(a[1], a[2], a[3]) for a in said(log, "tell") if a[1] in (laid, step)] == [
-    (laid, laid, [f"#{laid}", "k = 1"]),
+    (laid, laid, [f"#{laid} k = 1"]),
     (step, root, [f"#{step} advance on {act}"]),
   ]
   assert [(a[2], a[3]) for a in said(log, "reply")] == [(step, root)]
@@ -73,14 +73,24 @@ async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -
   assert [of(engine.turns(on=root), step) for step in steps] == [[f"#{step} advance on {act}"] for step in steps]
 
 
-async def test_the_open_of_a_rung_with_a_word_is_its_header_and_then_that_word() -> None:
-  """The open of a rung with a word is its header and then that word, as its caller wrote it."""
-  _, log, root = born()
-  act = engine.rung("<s:hi>hi</s:hi>\nk = hi", on=root)
+async def test_the_open_of_a_rung_with_a_word_tells_that_word_as_a_command_tells_its_command() -> None:
+  """The open of a rung with a word tells that word as a command tells its command: in its header when it holds one line, and as a quote under its header when it holds more, so no word that ran runs again."""
+  sand, log, root = born()
+  one = engine.rung("n = 1", on=root)
+  await one
+  word = "<s:hi>hi</s:hi>\nn = n + 1"
+  act = engine.rung(word, on=root)
   await act
-  assert said(log, "tell")[2] == ("tell", act, act, [f"#{act}", "<s:hi>hi</s:hi>\nk = hi"])
-  assert of(engine.turns(on=root), act) == [f"#{act}\n<s:hi>hi</s:hi>\nk = hi"]
-  assert engine.module(root)["k"] == "hi"
+  assert [a[3] for a in said(log, "tell") if a[1] in (one, act)] == [
+    [f"#{one} n = 1"],
+    [f"#{act}\n<s:{act}_word>\n{word}</s:{act}_word>"],
+  ]
+  sand.script[root] = ["close(n)"]
+  asking = engine.prompt(int, "count", on=root)
+  assert await asking == 2
+  (binding,) = [a[4] for a in said(log, "rung") if a[2] == root]
+  assert binding == f"{engine.bound(root)}\n{act}_word = {word!r}\n{engine.bound(asking, 'int')}"
+  assert engine.module(root)[f"{act}_word"] == word and engine.module(root)["hi"] == "hi"
 
 
 async def test_a_rung_with_no_word_tells_nothing_where_it_is_made() -> None:
@@ -114,7 +124,7 @@ async def test_the_raised_header_tells_the_exception_as_python_shows_it() -> Non
   with pytest.raises(ValueError, match="boom"):
     await engine.rung("raise ValueError('boom')", on=root)
   (act,) = [a[1] for a in said(log, "rung")]
-  assert of(engine.turns(on=root), act) == [f"#{act}\nraise ValueError('boom')", f"#{act} raised ValueError('boom')"]
+  assert of(engine.turns(on=root), act) == [f"#{act} raise ValueError('boom')", f"#{act} raised ValueError('boom')"]
 
 
 async def test_a_rung_that_retells_another_rung_names_its_acts_under_that_one() -> None:
@@ -232,20 +242,9 @@ async def test_the_turns_of_the_chain_of_another_prompt_tell_the_rung_of_a_word_
   assert paragraphs(engine.turns(on=two)) == [
     f"#{two} two\n{two}: Act[object] = Act({two!r})",
     takes(two),
-    f"#{helper}\nhelper = 2",
+    f"#{helper} helper = 2",
   ]
   assert of(engine.turns(on=root), helper) == []
-
-
-async def test_a_word_its_caller_wrote_stands_in_a_user_turn_as_python_under_the_header_of_its_rung() -> None:
-  """A word its caller wrote stands in a user turn as python, under the header of its rung."""
-  _, _, root = born()
-  act = engine.rung("k = 1", on=root)
-  await act
-  role, py, usage, blocks = engine.turns(on=root)[-1]
-  assert (role, usage, blocks) == ("user", None, None)
-  assert py.split("\n\n")[2:] == [f"#{act}\nk = 1"]
-  compile(py, "<turn>", "exec")
 
 
 async def test_rung_is_given_a_word_and_runs_it_on_a_chain_in_the_globals_of_that_chain() -> None:
@@ -359,7 +358,7 @@ async def test_it_is_done_with_what_the_word_gave() -> None:
   assert [type(a[3]).__name__ for a in dones(log, "run")] == ["NoneType", "CancelledError", "ValueError"]
   assert engine.peek(ended) is None and engine.peek(answered) == 21
   assert isinstance(engine.peek(hurt), ValueError)
-  assert of(engine.turns(on=root), hurt) == [f"#{hurt}\nraise ValueError('boom')", f"#{hurt} raised ValueError('boom')"]
+  assert of(engine.turns(on=root), hurt) == [f"#{hurt} raise ValueError('boom')", f"#{hurt} raised ValueError('boom')"]
 
 
 async def test_of_the_acts_its_word_made_and_read_at_once_it_tells_nothing() -> None:

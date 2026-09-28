@@ -25,11 +25,12 @@ async def test_a_quote_is_a_string_a_word_writes_between_two_marks() -> None:
   assert engine.module(root)["k"] == f"{text}\n"
 
 
-async def test_the_open_mark_is_looked_for_from_the_top_and_its_close_mark_from_the_last_line_up() -> None:
-  """The open mark is looked for line by line from the top, and its close mark from the last line up, so a quote may hold the marks of another."""
+async def test_the_open_mark_is_looked_for_from_the_top_and_its_close_mark_from_the_open_mark_down() -> None:
+  """The open mark is looked for line by line from the top, and its close mark from the open mark down, so a quote may hold the marks of a quote of another name."""
   word = "<s:a>\n<s:b>\nin\n</s:b>\n</s:a>\n<s:b>two</s:b>"
   assert engine.unquoted(word) == "a = '<s:b>\\nin\\n</s:b>\\n'\n\n\n\n\nb = 'two'"
-  assert engine.unquoted("<s:a>\na</s:a>\nb</s:a>") == "a = 'a</s:a>\\nb'\n\n"
+  assert engine.unquoted("<s:a>\na</s:a>\nb</s:a>") == "a = 'a'\n\nb</s:a>"
+  assert engine.unquoted("<s:a>\nx</s:a>\n<s:a>\ny</s:a>") == "a = 'x'\n\na = 'y'\n"
 
 
 async def test_the_value_of_a_quote_is_the_text_between_its_marks() -> None:

@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 from conftest import STANDS, TWO, born, heads, paragraphs, rows, said, settle
 from furb import engine
-from furb.engine import Act
+from furb.engine import OPERATOR, Act
 
 EVERY = (
   "x = bash('echo hi')\n"
@@ -79,7 +79,7 @@ async def test_a_paragraph_is_what_one_fact_that_tells_stands_as_in_a_turn() -> 
   assert await act is None
   got = engine.turns(on=root)
   assert got[-1][1] == "\n\n".join("\n".join(a[3]) for a in said(log, "tell"))
-  assert paragraphs(got)[2:] == [f"#{act}\nk = 1\nj = 2"]
+  assert paragraphs(got)[2:] == [f"#{act}\n<s:{act}_word>\nk = 1\nj = 2</s:{act}_word>"]
 
 
 async def test_the_first_line_of_a_paragraph_is_its_header() -> None:
@@ -144,10 +144,15 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   assert await Act("prompt2") == 0
   own = [a[4] for a in said(log, "rung") if a[2] == root]
   assert own == [
-    "chain1: Act[object] = Act('chain1')\n<s:prompt1_message>\nrun it\nnow</s:prompt1_message>\nprompt1: Act[int] = Act('prompt1')",
+    "chain1: Act[object] = Act('chain1')\nprompt1_message = 'run it\\nnow'\nprompt1: Act[int] = Act('prompt1')",
     "bash1: Act[Exit] = Act('bash1')\nprompt2: Act[None] = Act('prompt2')",
   ]
-  shown = [line for one in paragraphs(engine.turns(on=root)) for line in one.split("\n") if not line.startswith("#")]
+  shown = [
+    line
+    for one in paragraphs(engine.turns(on=root))
+    for line in engine.unquoted(one).split("\n")
+    if line and line[0] != "#"
+  ]
   assert shown == [line for word in own for line in word.split("\n")]
   assert engine.module(root)["bash1"] == "bash1"
   assert engine.module(root)["prompt1_message"] == "run it\nnow"
@@ -164,3 +169,18 @@ async def test_a_note_tells_a_string_of_more_than_one_line_as_a_quote() -> None:
   assert "#prompt1 closed\n<s:prompt1_value>\none\ntwo</s:prompt1_value>" in got
   bound = [engine.module(root)[name] for name in ("prompt1_message", "bash1_command", "prompt1_value")]
   assert bound == ["run\nthem", "echo a\necho b", "one\ntwo"]
+
+
+async def test_a_quote_that_a_note_tells_takes_one_more_underscore_while_its_string_holds_its_close_mark() -> None:
+  """A quote that a note tells takes one more underscore in its name for as long as its string holds the close mark of that name at the end of a line, so the first close mark after it is its own."""
+  first, second = "a</s:prompt1_message>\nb</s:prompt1_message_>\nc", "d</s:prompt1_message__>\ne"
+  _, _, root = born("close(None)")
+  engine.prompt(None, first, to=OPERATOR, on=root)
+  engine.prompt(None, second, to=OPERATOR, on=root)
+  assert await engine.prompt(None, "go", on=root) is None
+  got = paragraphs(engine.turns(on=root))
+  assert (
+    got[2] == f"#prompt1\n<s:prompt1_message__>\n{first}</s:prompt1_message__>\nprompt1: Act[None] = Act('prompt1')"
+  )
+  assert got[3] == f"#prompt2\n<s:prompt2_message>\n{second}</s:prompt2_message>\nprompt2: Act[None] = Act('prompt2')"
+  assert [engine.module(root)[name] for name in ("prompt1_message__", "prompt2_message")] == [first, second]

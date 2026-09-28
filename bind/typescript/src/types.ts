@@ -53,14 +53,15 @@ export function opens(paragraph: Paragraph): boolean {
   return paragraph.lines.at(-1)?.startsWith(`${paragraph.name}: Act[`) ?? false;
 }
 /** The lines of a paragraph as their text: a comment without its mark, a quote as the text between its two marks,
- * and python as it stands. The close mark of a quote is the last line that ends with it, as the engine reads one. */
+ * and python as it stands. The close mark of a quote is the first line after its open mark that ends with it, as the
+ * engine reads one. */
 export function uncommented(lines: readonly string[]): string {
   const text: string[] = [];
   for (let at = 0; at < lines.length; at++) {
     const line = lines[at] ?? "";
     const name = /^<s:(\w+)>$/.exec(line)?.[1];
     let close = -1;
-    for (let end = lines.length - 1; name && end > at && close < 0; end--)
+    for (let end = at + 1; name && end < lines.length && close < 0; end++)
       if (lines[end]?.endsWith(`</s:${name}>`)) close = end;
     if (name && close > at) {
       const quoted = lines.slice(at + 1, close + 1).join("\n");
