@@ -23,7 +23,7 @@ use monty_types::{MontyUuid, NamedValues};
 
 use crate::{
   ENGINE, KERNEL, PREAMBLE, SHEET,
-  ear::{Call, Ear, Heard, Spoken, Step, Voice},
+  ear::{Ear, Heard, Step, Voice},
   fact::Fact,
   gate::checked,
   sand::{Sand, id, object},
@@ -216,11 +216,42 @@ pub struct Engine {
 
 impl Engine {
   /// One piece of code of the stand-in, run in the sandbox with these names bound, each as it goes in; and then
-  /// whoever watches an act that is done now is told.
+  /// whoever watches an act that is done now is told, even when the code raised.
   fn run(&mut self, code: &str, inputs: Vec<(&str, Object)>) -> Result<Object, Fault> {
-    let got = self.ran(code, inputs)?;
-    self.told()?;
-    Ok(got)
+    match self.fed(code, inputs) {
+      Ok(got) => Ok(got),
+      Err(fault) => self.told().and(Err(fault)),
+    }
+  }
+
+  /// Whoever watches an act that is done now is told.
+  fn told(&mut self) -> Result<(), Fault> {
+    if self.watchers.is_empty() {
+      return Ok(());
+    }
+    self.fed("None", vec![]).map(drop)
+  }
+
+  /// One feed of the sandbox: the code, then what every watched act came to, read in the same feed, since the
+  /// session holds a name for each feed until the life ends. Each watcher of an act that is done is told once.
+  fn fed(&mut self, code: &str, mut inputs: Vec<(&str, Object)>) -> Result<Object, Fault> {
+    let ids: Vec<String> = self.watchers.keys().cloned().collect();
+    inputs.push(("__watched", Object::list(ids.iter().map(Object::string))));
+    let got = self.ran(&format!("({code}, outcomes_of(__engine, __watched))"), inputs)?;
+    let got = got.as_ref();
+    let outcomes = entry(&got, 1).expect("a feed gives what the watched acts came to");
+    for (i, id) in ids.iter().enumerate() {
+      if let Some(done) = entry(&outcomes, i)
+        && done.type_name() != "NoneType"
+        && let Some(value) = entry(&done, 0)
+      {
+        let value = value.to_owned();
+        for mut watcher in self.watchers.remove(id).unwrap_or_default() {
+          watcher(&value);
+        }
+      }
+    }
+    Ok(entry(&got, 0).expect("a feed gives what its code gave").to_owned())
   }
 
   fn ran(&mut self, code: &str, inputs: Vec<(&str, Object)>) -> Result<Object, Fault> {
@@ -232,59 +263,20 @@ impl Engine {
     sand.run(code, named, &mut |on, name, args| hosted.called(voice, on, name, args))
   }
 
-  /// What every watched act came to, in one reading, and each watcher told once.
-  fn told(&mut self) -> Result<(), Fault> {
-    if self.watchers.is_empty() {
-      return Ok(());
-    }
-    let ids: Vec<String> = self.watchers.keys().cloned().collect();
-    let got = self.ran(
-      "outcomes_of(__engine, __ids)",
-      vec![("__ids", Object::list(ids.iter().map(Object::string)))],
-    )?;
-    let got = got.as_ref();
-    for (i, id) in ids.iter().enumerate() {
-      if let Some(done) = entry(&got, i)
-        && done.type_name() != "NoneType"
-        && let Some(value) = entry(&done, 0)
-      {
-        let value = value.to_owned();
-        for mut watcher in self.watchers.remove(id).unwrap_or_default() {
-          watcher(&value);
-        }
-      }
-    }
-    Ok(())
-  }
-
-  /// What the voices said since the engine was last driven, said into it, each under the name of its ear, until
-  /// they say nothing more; and the waker to wake when they do. An awaited act drives the engine so, and a door
-  /// that awaits in the loop of its own language drives it so too.
+  /// What the voices said since the engine was last driven, said into it in one run, each under the name of its
+  /// ear, until they say nothing more; and the waker to wake when they do. An awaited act drives the engine so,
+  /// and a door that awaits in the loop of its own language drives it so too.
   pub(crate) fn pump(&mut self, waker: &Waker) -> Result<(), Fault> {
     loop {
       let said = self.voice.drained(waker);
       if said.is_empty() {
         return Ok(());
       }
-      for one in said {
-        match one.spoken {
-          Spoken::Saying(saying) => {
-            let inputs = vec![("__by", Object::string(one.by)), ("__saying", saying.0)];
-            self.run("said(__engine, __ears, __by, __saying)", inputs)?;
-          }
-          Spoken::Verb(call) => self.uttered(&one.by, call)?,
-        }
-      }
+      let said = said
+        .into_iter()
+        .map(|one| Object::tuple([Object::string(one.by), replied(one.spoken.into())]));
+      self.run("said(__engine, __ears, __said)", vec![("__said", Object::list(said))])?;
     }
-  }
-
-  /// One verb that the work of an ear said, said under the name of that ear, as the ear says a verb while it hears.
-  fn uttered(&mut self, by: &str, call: Call) -> Result<(), Fault> {
-    let before = self.site(Some(by))?;
-    let kwargs = call.kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
-    let got = self.verb(&call.verb, call.args, kwargs);
-    self.site(Some(&before))?;
-    got.map(drop)
   }
 
   /// An engine, opened from the record, on these ears, each under the name the engine hears it by, in the order
@@ -408,6 +400,7 @@ impl Engine {
   }
 
   /// Who speaks in the life, and who speaks from now on when a value is given: `site`, read and set where it stands.
+  #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
   pub(crate) fn site(&mut self, value: Option<&str>) -> Result<String, Fault> {
     let value = value.map_or_else(Object::none, Object::string);
     let got = self.run("spoken(__engine, __value)", vec![("__value", value)])?;

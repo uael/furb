@@ -353,12 +353,20 @@ class Templated:
     self.interpolations = interpolations
 
 
-def said(engine: Names, ears: Ears, by: str, saying: object) -> None:
-  """One saying of the work of an ear, said into the life once the hearing that began that work is over, under the
-  name of that ear."""
+def said(engine: Names, ears: Ears, spoken: list) -> None:
+  """What the work of the ears said once the hearing that began that work was over, said into the life in the order
+  it was said, each under the name of its ear: a saying, or a verb, whose value goes nowhere. The first that raises
+  ends it."""
   site = engine["site"]
   assert isinstance(site, ContextVar)
-  made = again(saying, engine, ears)
-  assert isinstance(made, tuple)
-  with site.set(by):
-    verb(engine, "say")(*made)
+  for by, step in spoken:
+    with site.set(by):
+      match step:
+        case ("say", tuple(saying)):
+          made = again(saying, engine, ears)
+          assert isinstance(made, tuple)
+          verb(engine, "say")(*made)
+        case ("calls", str(which), list(args), dict(kwargs)):
+          called(engine, ears, which, args, kwargs)
+        case _:
+          raise AssertionError(step)

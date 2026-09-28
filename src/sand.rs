@@ -27,13 +27,21 @@ pub(crate) type Answering<'a> =
 pub(crate) struct Sand {
   /// The session, which is taken out for the length of a run and put back when the run is over.
   repl: Option<MontyRepl>,
+  /// How many pieces of code the session was fed. It holds a name for each one until the life ends.
+  fed: usize,
 }
 
 impl Sand {
   /// A sandbox with the limits of monty, and nothing in it yet.
   pub(crate) fn new() -> Self {
     let limits = ResourceTracker::new(ResourceLimits::default());
-    Self { repl: Some(MontyRepl::new("furb", limits, CompileOptions::default())) }
+    Self { repl: Some(MontyRepl::new("furb", limits, CompileOptions::default())), fed: 0 }
+  }
+
+  /// How many pieces of code the session was fed.
+  #[cfg_attr(not(test), allow(dead_code))]
+  pub(crate) fn fed(&self) -> usize {
+    self.fed
   }
 
   /// One piece of code, run in the sandbox with these names bound, and what its last expression gave.
@@ -45,6 +53,7 @@ impl Sand {
     inputs: NamedValues,
     host: &mut Answering<'_>,
   ) -> Result<Object, Fault> {
+    self.fed += 1;
     let mut step = self.repl().feed_start(code, inputs, PrintWriter::Disabled);
     loop {
       let progress = match step {
