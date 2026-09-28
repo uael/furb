@@ -45,7 +45,7 @@ type Saying = tuple[str, str, *tuple[object, ...]]
 """What an ear says: the kind of the fact, the act it is about, and the words, and nothing of who says it, which the bus fills in from whoever is speaking."""
 type Ear = Generator[Saying | None, Fact]
 """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by.
-The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
+The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
 The World performs any fact that an extension defines and that the World knows.
 The facts that the World says of its own are for the acts that complete later.
 An ear speaks by yielding a saying, and the work it began speaks later by say, under the site of the ear that began it.
@@ -240,15 +240,15 @@ def gate(word: str, on: str = "") -> list[str]:
   """
 
 def cd(path: str, on: str = "") -> str:
-  """A cd: the paths of its chain resolve against its path from then on, and it does nothing else.
+  """A cd: the paths of its chain resolve against the directory it came to from then on, and it does nothing else.
   cd completes at once and gives the new working directory.
-  The chain answers it with the path it was given, and holds it, so what a chain heard is where its working directory stands.
+  The World answers it with the directory that its path names, resolved against the working directory of the chain, and refuses a path that names no directory, so a refused cd moves nothing.
   It is a question and no fact, since a fact a running word says is heard when the word yields, where a question is answered at once, so the paths of that word resolve against the new directory from then on.
-  cd tells the path it was given.
+  cd tells the directory it came to.
   """
 
 def cwd(on: str = "") -> str:
-  """The working directory of a chain is the closest cd back in its transcript.
+  """The working directory of a chain is the directory that the closest cd back in its transcript came to.
   The working directory of a chain is the directory of the standing it stands on while no cd stands in its transcript, so a later standing moves no chain that a cd moved.
   The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads.
   cwd gives the working directory that the paths of the chain resolve against.
@@ -771,6 +771,7 @@ No prompt that a pause is over asks a model.
 A paused chain makes no new reply after a held response.
 No model is asked for a rung the journal answered, since a later life asks again for nothing it was answered once.
 It asks for no rung a pause stands over, whether the pause is over that rung or over the chain, so a paused chain asks no model until the wake.
+The chain asks no model while a word of the chain runs, so every word that is ready runs before a model is asked.
 The chain asks one model at a time, which it reads from its transcript, the rung that has waited the longest among those it heard on itself that nothing has been said of, handing it the turns as they stand, for the World to hand its provider as it likes, so that many chains ask many models at once.
 """
 type Ready = tuple[Literal["ready"], str, str, str]
@@ -793,6 +794,7 @@ A rung whose word rebinds a broken name repairs the chain, since the last rung t
 A prompt after such a rung finds what it bound.
 The chain runs one word at a time.
 A word that waits for an act gives the chain to the next word, which runs while it waits, and the waiting word runs on at the done of what it awaits.
+A run whose rung is done when the Kernel begins it never begins its word, and is done with CancelledError.
 """
 type Wants = tuple[Literal["wants"], str, str, str, str]
 """A wants is the act that a run makes when its word waits for an act that is not done: the rung takes it, and answers it with what that act came to when the rung hears its done, so a pause over the rung holds the word."""
@@ -839,7 +841,7 @@ A refused word of a rung stands in the ladder of its prompt, which its door show
 The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the prompt of it asks again as it does for a word that gave no value.
 """
 type Cd = tuple[Literal["cd"], str, str, str, str]
-"""A cd is a question that answers with its path, which the chain holds."""
+"""A cd is the question of the directory a path names, which the World answers and the transcript of the chain holds."""
 type Merged = tuple[Literal["merged"], str, str, str, str]
 """A merged is the question of whether the stderr of a command flows into its stdout, which the command answers from what its verb was given, and which the World asks when it takes the command."""
 type Wait = tuple[Literal["wait"], str, str, str, float]
@@ -888,7 +890,7 @@ def told(id: str, text: object = "", *notes: Note, word: str = "text") -> Tell:
 def control(kind: str, name: str, id: str, *words: object) -> Fact:
   """A control said over the act it names, with a header of its name headed with that act, which is how pause, wake, cancel and close say theirs.
   The call gives the control as the life made it whole, so a close that named no act reads which act it is over.
-  A control is said while the act it names is not done, and a wake while it is paused too, so a control that reaches nothing says nothing.
+  A control is said while the act it names is not done, and a wake also while that act is paused, done or not, so a control that reaches nothing says nothing.
   """
 
 def headed(name: str, text: object = "", word: str = "text") -> str:

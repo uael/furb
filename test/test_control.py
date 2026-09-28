@@ -27,7 +27,7 @@ async def test_the_call_gives_the_control_as_the_life_made_it_whole() -> None:
 
 
 async def test_a_control_is_said_while_it_is_over_an_act_that_is_not_done() -> None:
-  """A control is said while the act it names is not done, and a wake while it is paused too, so a control that reaches nothing says nothing."""
+  """A control is said while the act it names is not done, and a wake also while that act is paused, done or not, so a control that reaches nothing says nothing."""
   sand, log, root = born("x = bash('slow')\nclose(7)", auto=False)
   act = engine.prompt(int, "go", on=root)
   assert await act == 7

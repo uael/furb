@@ -114,7 +114,8 @@ class Sand:
   `stands` is what a chain stands on, STANDS unless a test gives another, or the refusal it answers a stand with,
   `cost` the usage of one answer, and `auto` says whether a command tells a line and exits at once. `tick` counts
   the readings of its clock and the chances it drew, so a later life reads what the life before it read. `outs`
-  holds each command it runs: whether its stderr flows into its stdout, and its two streams as they came. `loop` is
+  holds each command it runs: whether its stderr flows into its stdout, and its two streams as they came. `gone`
+  names the directories that are not there, which a cd into is refused; every other directory is there. `loop` is
   the loop of the life it hears.
   """
 
@@ -129,6 +130,7 @@ class Sand:
   tick: int = 0
   turns: dict[str, list] = field(default_factory=dict)
   outs: dict[str, list] = field(default_factory=dict)
+  gone: set[str] = field(default_factory=set)
   loop: asyncio.AbstractEventLoop = field(init=False, repr=False, compare=False)
 
   def exits(self, about: str, code: int | None) -> None:
@@ -145,7 +147,7 @@ class Sand:
     self.loop = asyncio.get_running_loop()
     while True:
       a = yield
-      if a[0] in ("bash", "wait", "prompt", "reply", "stand", "read", "write", "feed", "clock", "chance"):
+      if a[0] in ("bash", "wait", "prompt", "reply", "stand", "cd", "read", "write", "feed", "clock", "chance"):
         self.calls.append(a)
       yield from self.hear(a)
 
@@ -179,6 +181,9 @@ class Sand:
           engine.close(Refused(f"the operator answers no {shape}"), about)
       case ("stand", qid, *_):
         yield "done", qid, self.stands
+      case ("cd", qid, _, on, path):
+        full = resolved(engine.cwd(on=on), path)
+        yield "done", qid, Refused(f"No directory at {full}.") if full in self.gone else full
       case ("read", qid, _, on, path) if (full := resolved(engine.cwd(on=on), path)) in self.files:
         yield "done", qid, Text(full, self.files[full])
       case ("write", qid, _, on, Text(path=path, content=content)) if (
@@ -232,11 +237,13 @@ class Where(Sand):
   where: list[str] = field(default_factory=list)
 
   def hears(self) -> World:
-    """The World that reads, writes and starts a command, each against the directory it asks the chain for."""
+    """The World that moves, reads, writes and starts a command, each against the directory it asks the chain for."""
     while True:
       match (yield):
         case ("stand", qid, *_):
           yield "done", qid, self.stands
+        case ("cd", qid, *_, path):
+          yield "done", qid, path
         case ("read", qid, _, on, path):
           full = f"{engine.cwd(on=on)}/{path}"
           yield "done", qid, Text(full, self.files.get(full, ""))

@@ -1,5 +1,7 @@
 """Run, the act of running the word of a rung."""
 
+from asyncio import CancelledError
+
 from conftest import Py, Sand, born, chained, counted, kept, plain, ran, relived, said, settle, sown, watched
 from furb import engine
 
@@ -166,3 +168,14 @@ async def test_a_word_that_waits_for_an_act_gives_the_chain_to_the_next_word() -
     ("done", wants[1]),
     ("done", slow),
   ]
+
+
+async def test_a_run_whose_rung_is_done_when_the_kernel_begins_it_never_begins_its_word() -> None:
+  """A run whose rung is done when the Kernel begins it never begins its word, and is done with CancelledError."""
+  _, _, root = born()
+  assert await engine.rung("r = rung('ran = 1')\ncancel(r)", on=root) is None
+  await settle()
+  inner = engine.module(root)["r"]
+  (run,) = [a[1] for a in engine.transcript(root) if a[0] == "run" and a[4] == inner]
+  assert "ran" not in engine.module(root)
+  assert isinstance(engine.peek(inner), CancelledError) and isinstance(engine.peek(run), CancelledError)

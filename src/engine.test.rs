@@ -246,10 +246,27 @@ fn a_command_that_outlives_its_timeout_ends_with_no_code() {
 }
 
 #[test]
+fn a_cd_comes_to_the_directory_that_stands_there_and_a_cd_where_none_stands_is_refused() {
+  let mut lived = Lived::new("moved", &[], true).unwrap();
+  let root = lived.root();
+  let into = lived.at.join("into");
+  fs::create_dir_all(&into).expect("a directory of the test");
+  let into = into.display().to_string();
+  assert_eq!(lived.engine.cd(&into, verbs::Cd { on: on(&root) }).unwrap(), into);
+  let no = lived.engine.cd("nowhere", verbs::Cd { on: on(&root) }).unwrap_err();
+  assert_eq!(no.name, "Refused");
+  assert!(no.message().contains("There is no directory at"), "{no}");
+  assert_eq!(lived.engine.cwd(verbs::Cwd { on: on(&root) }).unwrap(), into);
+}
+
+#[test]
 fn a_command_that_does_not_start_is_closed_with_why_and_the_chain_is_told() {
   let mut lived = Lived::new("unstarted", &[], true).unwrap();
   let root = lived.root();
-  lived.engine.cd("nowhere", verbs::Cd { on: on(&root) }).unwrap();
+  let gone = lived.at.join("gone");
+  fs::create_dir_all(&gone).expect("a directory of the test");
+  lived.engine.cd(&gone.display().to_string(), verbs::Cd { on: on(&root) }).unwrap();
+  fs::remove_dir(&gone).expect("the directory goes");
   let with = verbs::Bash { on: on(&root), ..Default::default() };
   let no = block_on(lived.engine.bash("echo hi", with).unwrap()).unwrap_err();
   assert_eq!(no.name, "Refused");
