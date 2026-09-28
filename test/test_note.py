@@ -24,12 +24,14 @@ EVERY = (
   "chance()\n"
   "gate('k = 9')\n"
   "cd('/x')\n"
+  "wait(on=chain('far'))\n"
   "cwd()\n"
   "debug(t'{1}')\n"
   "close(1)\n"
 )
 EVENTS = {
   "closed",
+  "done",
   "exited",
   "raised",
   "debugged",
@@ -112,7 +114,7 @@ async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> N
 
 
 async def test_the_headers_of_the_file() -> None:
-  """The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled."""
+  """The headers of the file are the open of an act, closed, done, exited, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled."""
   sand, _, root = born()
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()

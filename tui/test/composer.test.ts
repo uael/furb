@@ -398,7 +398,7 @@ test("the usage counts each token once, and the context share shows from the fir
   composing(async ({ session, frame }) => {
     // Each answer of the demo reads a prompt of 3240 tokens, 2800 of them from the cache, and writes 184.
     await session.submit("Explore this project.");
-    await until(session, () => session.turns.filter((turn) => turn[0] === "assistant").length >= 2);
+    await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
     await session.refresh();
     const answers = session.turns.filter((turn) => turn[0] === "assistant").length;
     expect(session.spend).toEqual({
@@ -421,7 +421,7 @@ test("the usage counts each token once, and the context share shows from the fir
 test("the usage names the whole prompt of the last answer apart from the fresh input of the chain", () =>
   composing(async ({ session, frame }) => {
     await session.submit("Explore this project.");
-    await until(session, () => session.turns.filter((turn) => turn[0] === "assistant").length >= 2);
+    await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
     await session.refresh();
     const lines = (await frame()).split("\n");
     const shown = (label: string) => lines.find((line) => line.includes(label)) ?? "";
@@ -432,12 +432,13 @@ test("the usage names the whole prompt of the last answer apart from the fresh i
 test("the usage of a fork counts the answers of the fork alone, and not those of its origin", () =>
   composing(async ({ session, frame }) => {
     await session.submit("Explore this project.");
-    await until(session, () => session.turns.filter((turn) => turn[0] === "assistant").length >= 2);
+    await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
     const origin = session.selected;
+    const answered = session.turns.filter((turn) => turn[0] === "assistant").length;
     await session.submit("/fork");
     await until(session, () => session.selected !== origin);
     await session.refresh();
-    expect(session.turns.filter((turn) => turn[0] === "assistant").length).toBeGreaterThanOrEqual(2);
+    expect(session.turns.filter((turn) => turn[0] === "assistant").length).toBe(answered);
     expect(session.spend).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, dollars: 0 });
     const shown = await frame();
     expect(shown).toContain("Last prompt");
