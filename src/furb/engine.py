@@ -272,7 +272,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           if whose == writer:
             continue
           if not (words + "\n").startswith(said + "\n"):
-            break
+            continue
           words = words[len(said) + 1 :]
         rung(said, donor)
       rungs.clear()

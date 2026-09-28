@@ -165,7 +165,7 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
   act = engine.prompt(object, "fix it", on=root)
   assert await act == (1, 2, "k = 1\nok = 2")
   await settle()
-  binding, first, _, writer = (a[4] for a in said(log, "run")[:4])
+  binding, first, refused, writer = (a[4] for a in said(log, "run")[:4])
   assert [(a[5], a[6]) for a in said(log, "run")] == [
     (bindings(root, act, "object", "fix it"), ""),
     ("k = 1", ""),
@@ -173,8 +173,9 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
     ("mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))", ""),
     (bindings(root, act, "object", "fix it"), binding),
     ("k = 1", first),
+    (f"rung3_findings = {BAD!r}\nrung3_value = Refused()", refused),
     ("ok = 2", ""),
-    ("read1_path = 'prompt1'\nread1_text = 'k = 1\\nok = BAD'\nrung8_word = 'ok = 2'", ""),
+    ("read1_path = 'prompt1'\nread1_text = 'k = 1\\nok = BAD'\nrung9_word = 'ok = 2'", ""),
     ("close((k, ok, read(get(acting())[2]).content))", ""),
   ]
   program = engine.program(root)

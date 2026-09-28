@@ -3,7 +3,7 @@
 import re
 from collections.abc import Sequence
 
-from conftest import born, heads, opened, paragraphs, said, settle, takes, world_says
+from conftest import BAD, born, heads, opened, paragraphs, said, settle, takes, world_says
 from furb import engine
 from furb.engine import OPERATOR, Act, span
 
@@ -153,6 +153,13 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   assert shown == [line for word in own for line in word.split("\n")] + ["prompt2_value = 0"]
   assert engine.module(root)["bash1"] == "bash1"
   assert engine.module(root)["prompt1_message"] == "run it\nnow"
+  _, _, fixed = born(
+    "k = 1",
+    "ok = BAD",
+    "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))",
+    "close((k, ok, rung3_findings))",
+  )
+  assert await engine.prompt(object, "fix it", on=fixed) == (1, 2, BAD)
 
 
 async def test_a_paragraph_binds_each_value_that_it_tells_under_a_name() -> None:
