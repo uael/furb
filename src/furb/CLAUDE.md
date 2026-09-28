@@ -116,7 +116,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - show: a callable given the lines of a text, which gives the numbers of the lines the engine tells; span, grep and
   differs make the shows of the file.
 - quote: a string between two marks, <s:name> and </s:name>, which binds its name when it runs; a word writes one,
-  and the transcript tells each text of more than one line as one.
+  and the transcript tells each string of more than one line as one.
 - doctrine: the last statement of engine.py, which the system prompt shows as a quote after the engine; it says how
   a model works in furb, and holds no law.
 - template: a python template string, each interpolation of which carries an expression and its value.

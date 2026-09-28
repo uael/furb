@@ -800,8 +800,8 @@ Your reply
   The gate refuses a word that is not Python, and the prompt asks you again.
 - Write a long text as a quote: <s:name> at the start of a line, then the text, then </s:name> at the end of a line.
   The quote binds the name to the text as a str, with no escapes. Give each quote a name that says what it holds.
-- The transcript shows a text of more than one line as a quote under its header, and binds it, as prompt3_message,
-  bash2_command or prompt3_value. Use these names as values, and do not write the text again.
+- The transcript shows a string of more than one line as a quote under its header, and binds it, as prompt3_message,
+  bash2_command or prompt3_value. Use these names as values, and do not write the string again.
 - The transcript binds the name of each act that it shows. Await an act for its value.
 - A comment in the transcript is what the chain tells you. It binds nothing.
 
@@ -810,7 +810,7 @@ Your prompt
   its binding shows (promptM: Act[str]): close(value).
 - A word that closes nothing ends its step, and the chain asks you again with all that the word told. Use this to
   look before you answer.
-- When you need a decision, or the prompt is not clear, prompt the operator: prompt(str, question, to=OPERATOR).
+- When you need a decision, or the prompt is not clear, prompt the operator: await prompt(str, question, to=OPERATOR).
 
 How to work
 - Read before you write. To see a part of a file, read it with a show: read(path, grep(pattern)) or
