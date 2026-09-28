@@ -69,10 +69,6 @@ ignore = ["S101"]
 # The suite pins the contract's own literals, drives doubles that answer in one sentence where they stand, and
 # names its tests by the sentence they carry.
 "{test,extensions/*/test}/**" = ["PLR2004", "EM101", "TRY003", "FBT003", "PT018", "PLR0912", "A002", "E501"]
-# The stand-in has one arm for each kind of value it makes again, and a life opens on everything it takes: the
-# engine, the sheet, the names, the record, and the two objects of the host. The sandbox makes no class from a
-# class of the interpreter, so the protocols of the two objects are read by ty and never run.
-"src/preamble.py" = ["PLR0911", "PLR0913", "PLR0917", "TID251"]
 # The surface speaks the engine's own vocabulary: its parameters shadow builtins on purpose, its exceptions are
 # named as the contract names them, and each sentence of the contract stands on one line of its own.
 "src/furb/engine.pyi" = ["N818", "A002", "E501"]

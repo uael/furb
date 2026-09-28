@@ -9,7 +9,7 @@
 //!
 //! The way in is narrower than the way out: monty makes no instance of a class of the sandbox on a host's behalf.
 //! So an instance of a class of the engine goes in as its name and its fields, in a map marked `is`, and the
-//! stand-in in the sandbox makes the instance. That is the one rule of the crossing that is not monty's own.
+//! engine makes the instance in the sandbox. That is the one rule of the crossing that is not monty's own.
 
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 pub use monty_types::{MontyObject as Object, ObjectRef};
@@ -195,7 +195,7 @@ pub fn marked<'a>(name: &str, fields: impl IntoIterator<Item = (&'a str, Object)
   Object::dict(held)
 }
 
-/// A template string as the stand-in reads it: each interpolation as its value beside its expression.
+/// A template string as the engine reads it: each interpolation as its value beside its expression.
 pub(crate) fn templated(interpolations: impl IntoIterator<Item = (Object, Object)>) -> Object {
   let held =
     interpolations.into_iter().map(|(value, expression)| Object::list([value, expression]));

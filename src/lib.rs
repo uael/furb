@@ -6,8 +6,7 @@
 //! by, a coroutine that [`ear::ear`] makes, and [`world`] holds the ears the crate writes: files, commands, time,
 //! the store of the record, and the provider of models. [`extension`] says what an extension is and plays the ones a
 //! life runs as rungs, and [`life::Opening`] opens a life on the record and on the ears of the crate, to which a host
-//! adds its own. The Kernel and the gate are the crate's, and [`PREAMBLE`] stands in for the ears of the host inside
-//! the sandbox. [`wire`] carries a value as JSON, as the record keeps it.
+//! adds its own. The Kernel and the gate are the crate's. [`wire`] carries a value as JSON, as the record keeps it.
 
 pub mod ear;
 pub mod engine;
@@ -45,14 +44,3 @@ pub const SHEET: &str = include_str!("furb/sheet.py");
 
 /// The Kernel, which the sandbox loads in a module of its own, as the python package imports it.
 pub const KERNEL: &str = include_str!("furb/kernel.py");
-
-/// The stand-in, which runs in the sandbox in a module of its own.
-pub const PREAMBLE: &str = include_str!("preamble.py");
-
-#[cfg(test)]
-mod tests {
-  #[test]
-  fn the_stand_in_carries_the_one_mark_of_the_crossing() {
-    assert!(super::PREAMBLE.contains(&format!("IS = {:?}", super::value::IS)));
-  }
-}

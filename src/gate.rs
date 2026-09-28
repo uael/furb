@@ -24,7 +24,11 @@ use ruff_python_ast::{
 use ruff_python_parser::parse_module;
 use ruff_text_size::{Ranged, TextRange};
 
-use crate::{ENGINE, sand::Sand, value::Fault};
+use crate::{
+  ENGINE,
+  sand::{Nobody, Sand},
+  value::Fault,
+};
 
 /// The sheet, which is the one file the checker reads.
 const SHEET: &str = "sheet.py";
@@ -117,10 +121,7 @@ fn unrun(sheet: &str) -> Vec<(usize, String)> {
 
 /// One import, run in a sandbox of its own, which calls no host.
 fn ran(import: &str) -> Result<(), Fault> {
-  let mut host = |_, name: &str, _| {
-    Err(Fault::refused(format!("an import calls no host, and it called {name}")))
-  };
-  Sand::new().run(import, NamedValues::new(), &mut host).map(drop)
+  Sand::new().run(import, NamedValues::new(), &mut Nobody("an import")).map(drop)
 }
 
 /// The imports of a body and of every body beneath it, each by where it stands.
@@ -141,26 +142,22 @@ mod tests {
 
   use super::*;
   use crate::{
-    PREAMBLE, SHEET as SOURCE,
-    sand::Sand,
+    SHEET as SOURCE,
+    sand::{Nobody, Sand},
     value::{Object, entry},
   };
 
   /// The sheet of one word after a program, and how many lines stand above the word, as `furb.sheet` writes it in
   /// the sandbox from the module of the engine, made as a life makes it.
   fn sheet(program: &[&str], word: &str) -> (String, usize) {
-    let code = "__engine = loaded(__source, {**MODULE})\n__sheet = loaded(__sheet_source, {})\n__sheet['sheet'](__engine, __program, __word)";
+    let code = "__engine = {}\nexec(__source, __engine)\n__sheet = {}\nexec(__sheet_source, __sheet)\n__sheet['sheet'](__engine, __program, __word)";
     let mut named = NamedValues::new();
     named.push("__source", Object::string(ENGINE));
     named.push("__sheet_source", Object::string(SOURCE));
     named.push("__program", Object::list(program.iter().map(|one| Object::string(*one))));
     named.push("__word", Object::string(word));
-    let mut host = |_, name: &str, _| -> Result<Object, Fault> {
-      Err(Fault::refused(format!("the sheet calls no host, and it called {name}")))
-    };
-    let mut sand = Sand::new();
-    sand.run(PREAMBLE, NamedValues::new(), &mut host).expect("the preamble runs");
-    let got = sand.run(code, named, &mut host).expect("furb.sheet writes the sheet");
+    let got =
+      Sand::new().run(code, named, &mut Nobody("the sheet")).expect("furb.sheet writes the sheet");
     let got = got.as_ref();
     let text = entry(&got, 0).and_then(|one| one.as_str()).expect("a sheet is a text").to_owned();
     let above =
