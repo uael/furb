@@ -269,12 +269,10 @@ dev = [
 
 [[package]]
 name = "furb-cli"
-version = "0.1.0"
 source = { editable = "cli" }
 
 [[package]]
 name = "furb-monty"
-version = "0.1.0"
 source = { editable = "bind/python" }
 dependencies = [
     { name = "furb" },

@@ -1,6 +1,6 @@
 [package]
 name = "furb"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 rust-version = "1.95"
 description = "The core of an AI harness: the engine in a sandbox, behind an async API, with a World of your own."
@@ -10,6 +10,10 @@ repository = "https://github.com/uael/furb"
 [workspace]
 # The command line is a program of its own on this crate, so the library takes none of its dependencies.
 members = ["cli"]
+
+# The one version of furb: each crate takes it, and maturin gives it to the wheel of each crate.
+[workspace.package]
+version = "0.1.0"
 
 [lib]
 name = "furb"

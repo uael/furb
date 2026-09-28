@@ -20,7 +20,7 @@ use std::{
 
 use furb::{
   Act, Ear, Fact, Fault, Object,
-  ear::{ear, hear, say},
+  ear::{ear, hear},
   life::Opening,
   verbs, wire,
 };
@@ -73,8 +73,7 @@ fn console(client: Rc<RefCell<Client>>) -> Box<dyn Ear> {
   ear(move |co, _| async move {
     loop {
       let a = hear(&co).await;
-      if let Some(asked) = Asked::of(&a) {
-        say(&co, Fact::says("started", &asked.about, [])).await;
+      if let Some(asked) = Asked::taken(&co, &a).await? {
         let mut event = fields(&asked);
         event["type"] = json!("prompt");
         let mut client = client.borrow_mut();
@@ -232,7 +231,8 @@ impl Server {
     let on = command.text("on")?.unwrap_or_else(|| self.life.root.clone());
     match kind {
       "prompt" => {
-        let shape = life::shape(&command.text("shape")?.unwrap_or_default());
+        let shape = command.text("shape")?.filter(|name| !name.is_empty());
+        let shape = life::shape(shape.as_deref().unwrap_or(life::SHAPE));
         let with = verbs::Prompt {
           message: command.text("message")?,
           to: command.text("to")?.map(|to| life::actor(&to)),

@@ -189,6 +189,10 @@ fn left(facts: &[Fact]) -> Vec<(String, String)> {
   left.map(|a| (a.about().to_owned(), a.kind().to_owned())).collect()
 }
 
+/// The shape of a prompt of the operator that names none: a str, so the model works until it closes the prompt with
+/// its report.
+pub const SHAPE: &str = "str";
+
 /// A shape as a prompt is given it, by its name: None itself, or the name of a type.
 pub fn shape(name: &str) -> Object {
   if name == "None" { Object::none() } else { Object::string(name) }
