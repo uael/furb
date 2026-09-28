@@ -86,7 +86,7 @@ async def test_the_awaiter_of_a_cancelled_command_raises_cancellederror_in_its_s
   engine.cancel(command)
   await settle()
   assert isinstance(engine.peek(step), CancelledError)
-  raised = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].endswith(" raised")]
-  assert raised == [f"#{step} raised\n{step}_raised = CancelledError()"]
+  ends = [one for one in paragraphs(engine.turns(on=root)) if one.split()[1:2] in (["raised"], ["cancelled"])]
+  assert ends == [f"#{command} cancelled", f"#{step} cancelled"]
   assert engine.peek(one) is None
   engine.cancel(one)

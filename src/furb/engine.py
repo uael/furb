@@ -171,11 +171,7 @@ def close(value: object, id: str = "") -> None:
         id = by
   match get(id := id or who):
     case ("prompt", _, _, on, shape, *_) if not isinstance(value, BaseException):
-      try:
-        fits = isinstance(value, (s := eval(shape, module(on))) or object)
-      except TypeError:
-        fits = isinstance(value, s.__origin__)
-      if not fits:
+      if not isinstance(value, eval(shape.split("[")[0], module(on)) or object):
         raise Refused(f"{value!r} not {shape}")
   control("close", "closed", id, value)
   if under(who, id):
@@ -217,10 +213,15 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
             pass
           yield "done", about, peek(call)
         case ("done", about, _, value) if question(("run", about)) and get(about)[4] == id:
-          if retells and isinstance(value, CancelledError):
-            value = None
-          if isinstance(value, BaseException) and tells(id):
-            yield told(id, "raised", raised=value)
+          if isinstance(value, CancelledError):
+            if retells:
+              value = None
+            elif tells(id):
+              yield told(id, "cancelled")
+          elif isinstance(value, BaseException):
+            module()["raised"] = value
+            if tells(id):
+              yield told(id, "raised", raised=value)
           yield "done", id, value
           return
 
@@ -232,6 +233,10 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
 def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str = "") -> Act[T]:
   named = shape if isinstance(shape, str) else re.sub(r"<class '|'>|[\w.:/]*\.", "", repr(shape))
   actor = to or module(on).get("actor")
+  try:
+    isinstance(None, eval(named.split("[")[0], module(on)) or object)
+  except Exception:
+    raise Refused(named + " no shape") from None
 
   def ear(id):
     if actor != OPERATOR:
@@ -330,10 +335,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             act("run", id, None, rid, unquoted(word), donor)
         case ("done", about, by, Refused()) if not by and question(("reply", about)):
           pause(id)
-        case ("done", about, _, value):
+        case ("done", about, *_):
           waiting.pop(about, None)
-          if isinstance(value, Exception) and question(("run", about)):
-            module()["raised"] = value
       if (r := get(a[1]))[0] in ("run", "wants"):
         running[r[4] if r[0] == "run" else get(r[2])[4]] = (a[0] == "started") == (r[0] == "run")
       if any(running.values()):

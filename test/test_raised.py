@@ -1,5 +1,7 @@
 """raised, the exception that the last rung of a chain raised."""
 
+from asyncio import CancelledError
+
 import pytest
 
 from conftest import born
@@ -8,7 +10,7 @@ from furb.engine import Refused
 
 
 async def test_raised_is_the_exception_object_that_the_last_rung_raised_rebound_at_each_raise() -> None:
-  """raised is the exception object that the last rung raised, rebound at each raise."""
+  """raised is the exception object that the last rung raised, rebound at each raise but a CancelledError."""
   _, _, root = born()
   assert engine.module(root)["raised"] is None
   with pytest.raises(ValueError, match="one"):
@@ -21,6 +23,9 @@ async def test_raised_is_the_exception_object_that_the_last_rung_raised_rebound_
   assert isinstance(second, KeyError) and second is not first
   with pytest.raises(Refused):
     await engine.rung("k = BAD", on=root)
+  assert engine.module(root)["raised"] is second
+  with pytest.raises(CancelledError):
+    await engine.rung("w = wait(5)\ncancel(w)\nawait w", on=root)
   assert engine.module(root)["raised"] is second
   assert await engine.rung("close(str(raised))", on=root) == "'two'"
 
