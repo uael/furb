@@ -34,8 +34,12 @@ struct Yard {
 
 impl Yard {
   fn new(name: &str) -> Yard {
-    let root = std::env::temp_dir().join(format!("furb-cli-{name}"));
-    let _ = fs::remove_dir_all(&root);
+    // A process that starts in the yard reads its directory as the system gives it, with no link in it: on macOS the
+    // temporary directory is under /var, a link to /private/var. So the yard is that path too.
+    let base = std::env::temp_dir().join(format!("furb-cli-{name}"));
+    let _ = fs::remove_dir_all(&base);
+    fs::create_dir_all(&base).expect("the root of the yard");
+    let root = fs::canonicalize(&base).expect("the root of the yard, with no link");
     let (at, fake) = (root.join("work"), root.join("fake"));
     fs::create_dir_all(&at).expect("a yard of the test");
     fs::create_dir_all(&fake).expect("a home of the fake");

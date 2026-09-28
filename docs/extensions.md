@@ -71,14 +71,18 @@ journal answers again in a later life, so a replay is exact and the World is ask
 - `skills` defines `skills()`, which reads `skills://`: one line for each skill that the World finds in
   `.furb/skills` and `.claude/skills` of the working directory of the chain and of each folder above it, then in
   `skills` of the config directory. `skill(name)` reads the `SKILL.md` file of a skill. Its life word is `skills()`.
-- `memory` defines `memory(path)`, which tells the chain the `CLAUDE.md` files that apply to a path, or the
-  `AGENTS.md` of a folder that holds no `CLAUDE.md`, whole, and `remember()`, an act that tells the memory of the
-  working directory when it is made, then the memory of the folder of each file that the chain reads, and the memory
-  that changed at each stand. Its life word is `remember()`.
+- `memory` defines `memory(path)`, which tells the chain the memory files that apply to a path: the memory of the
+  user, in the config directory, then that of each folder from the root down to the working directory of the chain,
+  then that of each folder under it down to the folder of the path, when the path is under it. The memory of a
+  folder is its `CLAUDE.md`, or its `AGENTS.md` when the folder holds no `CLAUDE.md`. A memory file enters the chain
+  whole the first time, and after that only when it changed, and then only by the lines that changed. `remember()`
+  is an act that tells the memory of the working directory when it is made, then the memory of the folder of each
+  file that the chain reads, and the memory that changed at each stand. Its life word is `remember()`.
 
-Each has a contract, `extensions/<name>/<name>.pyi`, which the hygiene laws hold to its suite as they hold the engine,
-and an ear of the World in the crate, `src/extension/<name>.rs`, which answers its questions from the disk. The suite
-runs on both engines.
+Each has a contract, `extensions/<name>/<name>.pyi`, which the hygiene laws 1 to 4 of `CLAUDE.md` hold to its suite
+as they hold the engine. Laws 5 to 7 are for `engine.py` alone, and laws 8 and 9 hold the word of each extension.
+Each also has an ear of the World in the crate, `src/extension/<name>.rs`, which answers its questions from the
+disk. The suite runs on both engines.
 
 ## A third party extension
 

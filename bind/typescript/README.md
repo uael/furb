@@ -4,14 +4,15 @@ The same Rust crate and Monty sandbox, through N-API. Views, queries and control
 an `id`, converts to its name as a string, and can be awaited. Its Promise resolves with its outcome or rejects
 with an error that names the engine's fault. A TUI is not part of this package.
 
-`napi-rs` builds `furb.node` and generates `index.d.cts` from `src/binding/ts.rs`, and `index.cjs` loads it. The optional `typescript` feature
-builds the binding in the existing crate. There is no Rust worker or second crate. The `Engine` of the package has
-one method for each verb of the contract, which the build of the crate makes from `src/furb/engine.pyi`, as it
-makes the methods of the crate: the words that the verb needs, in their order, then an object of the words that have
-a default, where nothing leaves the default of the engine. A verb of the operator names its chain in `on`. The
-package runs on Bun and Node.js 22 or later, on macOS, Linux and Windows. Bun gives no signal on Windows for
-Ctrl+Break or for the close of the console, and ends the process at once: `onConsoleEnd(callback)` hears these
-events there, and the system holds the process until the callback ends it.
+`napi-rs` builds `furb.node` from the door in `src/binding/ts.rs` and its modules `src/binding/ts/host.rs` and
+`src/binding/ts/console.rs`, and generates `index.d.cts` from them. `index.cjs` loads `furb.node`. The optional
+`typescript` feature builds the binding in the existing crate. There is no Rust worker or second crate. The
+`Engine` of the package has one method for each verb of the contract, which the build of the crate makes from
+`src/furb/engine.pyi`, as it makes the methods of the crate: the words that the verb needs, in their order, then an
+object of the words that have a default, where nothing leaves the default of the engine. A verb of the operator
+names its chain in `on`. The package runs on Bun and Node.js 22 or later, on macOS, Linux and Windows. Bun gives no
+signal on Windows for Ctrl+Break or for the close of the console, and ends the process at once:
+`onConsoleEnd(callback)` hears these events there, and the system holds the process until the callback ends it.
 
 ```ts
 import { boot } from "@furb/engine";

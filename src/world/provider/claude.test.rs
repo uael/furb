@@ -1,9 +1,19 @@
 //! The claude command line as a model of rig, driven against a command line that answers from a script, which
 //! `fake-claude.sh` says.
 
-use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf, time::Duration};
+use std::{
+  fs,
+  os::unix::fs::PermissionsExt,
+  path::{Path, PathBuf},
+  process::{Command, Stdio},
+  sync::OnceLock,
+  time::Duration,
+};
 
-use futures::StreamExt;
+use futures::{
+  StreamExt,
+  future::{Either, select},
+};
 use rig_core::{
   completion::{CompletionModel, CompletionRequest},
   message::{AssistantContent, Message, Reasoning, Text, UserContent},
@@ -27,9 +37,7 @@ impl Yard {
     let at = std::env::temp_dir().join(format!("furb-claude-{name}"));
     let _ = fs::remove_dir_all(&at);
     fs::create_dir_all(&at).expect("a yard of the test");
-    let bin = at.join("claude");
-    fs::write(&bin, FAKE).expect("the fake is written");
-    fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).expect("the fake runs");
+    fs::hard_link(ran(), at.join("claude")).expect("the fake is linked");
     Yard { at }
   }
 
@@ -55,6 +63,34 @@ impl Yard {
     let heard = fs::read_to_string(self.at.join("in")).unwrap_or_default();
     heard.lines().map(str::to_owned).collect()
   }
+}
+
+/// The fake, written once for all the tests of this process, after it ran once. The system examines a new program
+/// the first time it runs it. On macOS this takes more than a tenth of a second when the machine is idle, and much
+/// more when many tests start new programs at the same time. The result holds for the file, so each yard links to
+/// this file, and no clock of a test includes that examination.
+fn ran() -> &'static Path {
+  static RAN: OnceLock<PathBuf> = OnceLock::new();
+  RAN.get_or_init(|| {
+    let at = std::env::temp_dir().join("furb-claude-fake");
+    let _ = fs::remove_dir_all(&at);
+    fs::create_dir_all(&at).expect("the folder of the fake");
+    let bin = at.join("claude");
+    fs::write(&bin, FAKE).expect("the fake is written");
+    fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).expect("the fake runs");
+    // A new program is busy for a moment while the fork of another thread holds it open to write. The crate starts
+    // its programs in the same way.
+    let mut tries = 0;
+    let status = loop {
+      match Command::new(&bin).stdin(Stdio::null()).stdout(Stdio::null()).status() {
+        Err(no) if no.kind() == std::io::ErrorKind::ExecutableFileBusy && tries < 50 => tries += 1,
+        got => break got,
+      }
+      std::thread::sleep(Duration::from_millis(10));
+    };
+    assert!(status.expect("the fake starts").success(), "the fake ran once");
+    bin
+  })
 }
 
 /// The word after a flag among the words of a process.
@@ -157,9 +193,9 @@ fn the_next_turn_of_a_conversation_writes_to_its_process_only_what_it_has_not_he
 #[test]
 fn a_turn_asked_again_after_it_failed_resumes_its_conversation_once_and_then_begins_anew() {
   let yard = Yard::new("again");
-  let model = yard.claude(300).completion_model("sonnet");
+  let model = yard.claude(10_000).completion_model("sonnet");
   for _ in 0..3 {
-    asked(&model, &[user("WAIT")], json!({"session": "chain"})).unwrap_err();
+    asked(&model, &[user("FAIL")], json!({"session": "chain"})).unwrap_err();
   }
   let pids = yard.pids();
   let args: Vec<_> = pids.iter().map(|pid| yard.args(pid)).collect();
@@ -283,9 +319,19 @@ fn a_turn_that_is_dropped_ends_its_process() {
   let yard = Yard::new("dropped");
   let model = yard.claude(10_000).completion_model("sonnet");
   let turn = model.completion(request("ENGINE ONLY", &[user("WAIT")], json!({})));
-  let waited =
-    runtime().block_on(async { tokio::time::timeout(Duration::from_millis(300), turn).await });
-  assert!(waited.is_err(), "the turn was still in flight");
+  // The turn drops when the fake heard its line, after it wrote its id, however long it took to start.
+  let heard = async {
+    while !yard.heard().iter().any(|one| one.contains("WAIT")) {
+      tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+  };
+  let raced = runtime().block_on(async {
+    tokio::time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
+  });
+  let Ok(Either::Right(((), turn))) = raced else {
+    panic!("the turn was still in flight when the fake heard its line")
+  };
+  drop(turn);
   let pid = yard.pids().remove(0);
   assert!(gone(&pid), "the process of the dropped turn ended");
 }

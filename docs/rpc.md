@@ -10,6 +10,7 @@ furb --mode rpc --record session.jsonl --cwd path/to/project --model claude-cli:
 
 - `--record` is the record to keep, and to resume from. With no record, the life keeps nothing.
 - `--cwd` is the directory the chains of the life start in. When you do not give it, it is the current directory.
+- `--demo` and the words after `--` are for the TUI. With `--mode rpc`, furb refuses them and exits with an error.
 
 The life runs on the engine of the crate and on the ears of the World that the crate writes: the files, the commands,
 time, the store of the record, the provider of models, and the extensions, which the life enables at its start as the

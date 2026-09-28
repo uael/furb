@@ -28,8 +28,9 @@ API of its own:
   names of its engine. The gate is the type checker of monty. It reads a word on the sheet of the engine,
   `src/furb/sheet.py`, against the typeshed of the sandbox. The gate of the python package reads through it too.
 - `src/binding/py.rs`, behind the `python` feature, is the door to python: an `Engine` that says each name of the
-  contract by its name, and the ears of the crate. `bind/python` is the package `furb-monty`. Its module `furb_monty.engine` gives every name of the
-  contract over one life in the sandbox, and `FURB_ENGINE=monty` makes `from furb import engine` give it.
+  contract by its name, and the ears of the crate. `bind/python` is the package `furb-monty`. Its module
+  `furb_monty.engine` gives every name of the contract over one life in the sandbox, and `FURB_ENGINE=monty` makes
+  `from furb import engine` give it.
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout
   it was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, as Pi does, which
@@ -38,9 +39,10 @@ API of its own:
   and on a console of the operator. The package `furb` depends on the wheel of `furb-cli`, so `pip install furb`
   gives the command `furb`.
 
-The suite runs on both engines, and so does the suite of each extension, `extensions/<name>/test/`, whose conftest,
-`extensions/conftest.py`, hands it the hooks of the harness. `test/outside/test_monty.py` proves what the door
-carries that no sentence of the contract says.
+The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a
+Kernel of this interpreter, and the engine of monty holds its own. The suite of each extension,
+`extensions/<name>/test/`, runs on both engines too, and its conftest, `extensions/conftest.py`, hands it the hooks
+of the harness. `test/outside/test_monty.py` proves what the door carries that no sentence of the contract says.
 
 The TypeScript side is a bun workspace at the root, with two packages:
 
@@ -111,7 +113,8 @@ The suite drives the engine through its public API alone, end to end, from the m
   assertion to pass: a sentence the engine fails stays red until the engine, or the sentence, is right.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
   `test/conftest.py`.
-- `test/outside/` holds the tests of the World, the Kernel and the door, which stand outside the hygiene laws.
+- `test/outside/` holds the tests of the World, the Kernel, the door, and the switch of the package that
+  `FURB_ENGINE` sets. These tests stand outside the hygiene laws.
 
 ## The hygiene laws
 
@@ -135,7 +138,11 @@ is the folder `test` beside it.
 
 ## Commands
 
-Run every command from the root of the repository.
+Run every command from the root of the repository. Before it runs a command, `uv run` syncs the environment. The
+sync builds a package of the workspace again when the environment does not hold it, as in a new checkout, or when
+its `pyproject.toml` changed, so a short command can take minutes. A change of the crate alone starts no build, so
+after it, run the `uv sync` with `--reinstall-package` below. To run with no sync, use `uv run --no-sync`, or run
+the tools in `.venv/bin`.
 
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
   `furb-monty`, and the command line into the package `furb-cli`. After a change of the crate,
@@ -157,13 +164,15 @@ Run every command from the root of the repository.
 - `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/CLAUDE.md` says how to run.
+- `script/real.py` is no command: it holds what `smoke.py`, `play.py` and `deepswe.py` share, which is the life
+  they open on the engine of this interpreter, the claude they ask, and what the answers of a record cost.
 - `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from
   models.dev and from the data of pi-ai. A life refreshes its own copy of models.dev in the cache of furb once a
   day, and the newer of the two holds for each provider.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint, and the tests of the TypeScript
-  side, each of which has thirty seconds. The tests read the configs and the cache of `.furb/tests`, and not those of
-  the machine.
+  side. Each test has thirty seconds, and the check and the lint have no limit. The tests read the configs and the
+  cache of `.furb/tests`, and not those of the machine.
   As root, the test of a folder that cannot be read fails, since root reads every folder.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
