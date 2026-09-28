@@ -13,7 +13,7 @@ mod tui;
 use std::{path::PathBuf, process::ExitCode};
 
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
-use furb::{life::Opening, value::entry, verbs, world::SHAPES};
+use furb::{life::Opening, value::entry, verbs};
 
 use crate::life::Life;
 
@@ -82,8 +82,9 @@ enum Command {
     /// when unsaid.
     #[arg(long, default_value = "", hide_default_value = true)]
     to: String,
-    /// The shape of the response, as python names it.
-    #[arg(long, default_value = "None", value_parser = SHAPES)]
+    /// The shape of the response, as python names it. A model answers any shape, and the console refuses a shape
+    /// that the operator does not answer.
+    #[arg(long, default_value = life::SHAPE)]
     shape: String,
     #[command(flatten)]
     place: Place,

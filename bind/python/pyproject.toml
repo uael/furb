@@ -1,6 +1,7 @@
 [project]
 name = "furb-monty"
-version = "0.1.0"
+# maturin takes the version of the crate, which is the version of the workspace.
+dynamic = ["version"]
 description = "furb for python, with the engine in monty: every name of engine.pyi, over one life in the sandbox."
 readme = "README.md"
 requires-python = ">=3.14"

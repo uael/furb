@@ -66,10 +66,11 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
 | `peek` | `act` | `{"done": false}`, or `{"done": true, "value": ...}`, or `{"done": true, "raised": ...}` |
 | `state` | none | `{"root", "record", "standing", "extensions", "paused", "prompts", "acts", "pending"}` |
 
-- `prompt` prompts an actor on a chain. `message` is what the actor reads, and the actor reads the transcript alone
-  when there is no message. `shape` is the name of the type of the response, such as `int`, `str` or `list[str]`,
-  and a prompt with no shape, or with `None`, wants nothing. `to` is the actor, as `opus/high` or `operator`, and a
-  prompt with no actor goes to the default actor of its chain.
+- `prompt` prompts an actor on a chain. `message` is what the actor reads, and the actor reads the transcript alone when
+  there is no message. `shape` is the name of the type of the response, such as `int`, `str` or `list[str]`. A prompt
+  with no shape wants a `str`, so the model works until it closes the prompt with its report, and a prompt with the
+  shape `None` wants nothing. `to` is the actor, as `opus/high` or `operator`, and a prompt with no actor goes to the
+  default actor of its chain.
 - `rung` runs `word`, which is python, as a rung on a chain, in the globals of that chain. The act is done with what
   the word gave to `close`, and with nothing when the word runs to its end.
 - `close` ends an act with `value`, which is none when the command does not give it. It is how the client answers a
@@ -116,7 +117,9 @@ The life says its events as they happen, after the response of the command that 
   ```
 
 - `prompt`: each prompt to the operator, which the client answers with `close`. It comes from a `prompt` of the
-  client to `operator`, or from a word of a model that asks the operator.
+  client to `operator`, or from a word of a model that asks the operator. The operator answers the shapes `str`,
+  `None`, `bool`, `int`, `float`, `list` and `dict`, as at the terminal. A prompt to the operator of another shape
+  is not sent: furb closes it at once with a refusal, such as `the operator answers no set`.
 
   ```json
   {"type": "prompt", "act": "prompt2", "on": "chain1", "shape": "int", "message": "how many?"}

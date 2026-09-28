@@ -1,5 +1,6 @@
 [project]
 name = "furb"
+# uv_build takes no version from another file, so this is the version of the workspace of Cargo.toml, written again.
 version = "0.1.0"
 description = "The core of an AI harness, in one python file."
 readme = "README.md"

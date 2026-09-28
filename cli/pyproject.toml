@@ -1,6 +1,7 @@
 [project]
 name = "furb-cli"
-version = "0.1.0"
+# maturin takes the version of the crate, which is the version of the workspace.
+dynamic = ["version"]
 description = "furb, the command line: the TUI, a JSON-RPC on stdin and stdout, and one command on one life."
 requires-python = ">=3.14"
 # The license of the repository stands over this too; maturin reads no file above its own directory, so the

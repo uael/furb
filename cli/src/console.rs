@@ -13,7 +13,7 @@ use std::{
 
 use furb::{
   Ear, Fact, Fault, Object, Voice,
-  ear::{call, ear, hear, say},
+  ear::{Co, call, ear, hear, say},
   world::{SHAPES, answered},
 };
 
@@ -26,15 +26,27 @@ pub struct Asked {
 }
 
 impl Asked {
-  /// The prompt a fact asks the operator, when it is one that no ear before the console took.
-  pub fn of(a: &Fact) -> Option<Asked> {
+  /// The prompt a fact asks the operator, when it is one that no ear before the console took, as a console takes it:
+  /// the console says its started, and closes at once a prompt of a shape outside SHAPES, with the refusal of that
+  /// shape, and gives it not. So every console of furb puts to the operator the same shapes.
+  pub async fn taken(co: &Co, a: &Fact) -> Result<Option<Asked>, Fault> {
+    if a.kind() != "prompt" || !a.question() {
+      return Ok(None);
+    }
     let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
-    (a.kind() == "prompt" && a.question()).then(|| Asked {
+    let asked = Asked {
       about: a.about().to_owned(),
       on: a.on().to_owned(),
       shape: word(1).unwrap_or_default(),
       message: word(2).unwrap_or_default(),
-    })
+    };
+    say(co, Fact::says("started", &asked.about, [])).await;
+    if SHAPES.contains(&asked.shape.as_str()) {
+      return Ok(Some(asked));
+    }
+    let no = answered(&asked.shape, "").unwrap_or_else(|no| no.object());
+    call(co, "close", vec![no], vec![("id", Object::string(&asked.about))]).await?;
+    Ok(None)
   }
 }
 
@@ -49,15 +61,7 @@ pub fn terminal() -> Box<dyn Ear> {
     let mut taken = HashSet::new();
     loop {
       let a = hear(&co).await;
-      if let Some(asked) = Asked::of(&a) {
-        say(&co, Fact::says("started", &asked.about, [])).await;
-        // A prompt of a shape that the operator answers not is shown not, and closed at once with what no line comes
-        // to, which is the refusal of its shape.
-        if !SHAPES.contains(&asked.shape.as_str()) {
-          let no = answered(&asked.shape, "").unwrap_or_else(|no| no.object());
-          call(&co, "close", vec![no], vec![("id", Object::string(&asked.about))]).await?;
-          continue;
-        }
+      if let Some(asked) = Asked::taken(&co, &a).await? {
         taken.insert(asked.about.clone());
         let _ = asks.send(asked);
       } else if a.kind() == "done" && taken.remove(a.about()) {

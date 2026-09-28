@@ -128,10 +128,6 @@ fn the_command_line_takes_four_commands_of_the_operator() {
   for command in ["prompt", "turns", "run", "extensions"] {
     assert!(help.contains(&format!("  {command} ")), "{help}");
   }
-  let output = ran(yard.furb(&["prompt", "count", "--shape", "nothing"]), "");
-  assert_eq!(output.status.code(), Some(2));
-  let said = String::from_utf8_lossy(&output.stderr);
-  assert!(said.contains("[possible values: str, None, bool, int, float, list, dict]"), "{said}");
   assert_eq!(
     ran(yard.furb(&["turns"]), "").status.code(),
     Some(2),
@@ -203,7 +199,8 @@ fn a_prompt_of_the_operator_is_answered_at_the_terminal() {
   assert_eq!(String::from_utf8_lossy(&output.stdout), "'a word'\n");
   let asked = String::from_utf8_lossy(&output.stderr);
   assert_eq!(asked, "prompt1 wants a str: say a word\n> ");
-  assert_eq!(printed(yard.furb(&["prompt", "say nothing", "--to", "operator"]), "\n"), "None\n");
+  let nothing = ["prompt", "say nothing", "--to", "operator", "--shape", "None"];
+  assert_eq!(printed(yard.furb(&nothing), "\n"), "None\n");
   let said =
     refused(yard.furb(&["prompt", "count", "--to", "operator", "--shape", "int"]), "many\n");
   assert!(said.ends_with("furb: Refused: \"many\" is no int\n"), "{said}");
@@ -211,6 +208,28 @@ fn a_prompt_of_the_operator_is_answered_at_the_terminal() {
   assert!(
     said.ends_with("furb: Refused: the operator cannot be read: the input is over\n"),
     "{said}"
+  );
+  let said = refused(yard.furb(&["prompt", "a set", "--to", "operator", "--shape", "set"]), "");
+  assert_eq!(
+    said, "furb: Refused: the operator answers no set\n",
+    "a shape outside SHAPES is not shown"
+  );
+}
+
+#[test]
+fn a_prompt_of_the_operator_that_names_no_shape_wants_a_str() {
+  let yard = Yard::new("no-shape");
+  yard.words(&["close(None)", "close('done')"]);
+  assert_eq!(printed(yard.furb(&["prompt", "work"]), ""), "'done'\n");
+}
+
+#[test]
+fn a_model_answers_a_prompt_of_any_shape() {
+  let yard = Yard::new("any-shape");
+  yard.words(&["close(['a', 'b'])"]);
+  assert_eq!(
+    printed(yard.furb(&["prompt", "two words", "--shape", "list[str]"]), ""),
+    "['a', 'b']\n"
   );
 }
 
@@ -399,6 +418,20 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
 }
 
 #[test]
+fn a_prompt_of_the_client_with_no_shape_wants_a_str() {
+  let yard = Yard::new("rpc-no-shape");
+  yard.words(&["close('done')"]);
+  let mut client = Client::new(&yard);
+  client.data("1", json!({"type": "prompt", "message": "work", "shape": ""}));
+  let fact = client.until(|one| one["type"] == "fact" && one["fact"][0] == "prompt");
+  assert_eq!(fact["fact"], json!(["prompt", "prompt1", "operator", "chain1", "str", "work", ""]));
+  assert_eq!(client.done("prompt1"), json!({"type": "done", "act": "prompt1", "value": "done"}));
+  let more = client.data("2", json!({"type": "prompt", "message": "more"}))["act"].clone();
+  let fact = client.until(|one| one["type"] == "fact" && one["fact"][1] == more);
+  assert_eq!(fact["fact"][4], "str", "a prompt that says no shape wants a str");
+}
+
+#[test]
 fn a_prompt_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
   let yard = Yard::new("rpc-operator");
   yard.words(&["close(await prompt(int, 'how many?', 'operator'))"]);
@@ -446,6 +479,12 @@ fn a_prompt_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
     refusal,
     "an exception closes a prompt with that exception"
   );
+  let set = json!({"type": "prompt", "message": "a set", "shape": "set", "to": "operator"});
+  let set = client.data("12", set)["act"].as_str().expect("the act").to_owned();
+  let raised = json!({"is": "Refused", "args": ["the operator answers no set"]});
+  assert_eq!(client.done(&set)["raised"], raised, "a shape outside SHAPES is refused at once");
+  let sent = client.held.iter().any(|one| one["type"] == "prompt" && one["act"] == set);
+  assert!(!sent, "a prompt the operator answers not is sent not");
 }
 
 #[test]
