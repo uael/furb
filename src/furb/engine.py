@@ -304,6 +304,15 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       a = yield
       if a[0] == "done" and question(("stand", a[1])) and (stood := standing()) != last:
         yield from takes(*(last := stood))
+      if (
+        a[0] == "done"
+        and running.get(maker := (get(a[1]) or a)[2]) is False
+        and a[1] not in [x[4] for x in transcript() if x[0] == "wants"]
+      ):
+        if scope(a[1]) != id:
+          yield "tell", maker, [headed(a[1], "done", value=a[3])]
+        if not isinstance(a[3], CancelledError):
+          unseen = a[1]
       if scope(a[1]) != id:
         continue
       match a:
@@ -336,8 +345,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           waiting.pop(about, None)
           if isinstance(value, Exception) and question(("run", about)):
             module()["raised"] = value
-          if not isinstance(value, CancelledError) and running.get(get(about)[2]) is False:
-            unseen = about
       if a[0] in ("started", "done") and (r := get(a[1]))[0] in ("run", "wants"):
         running[r[4] if r[0] == "run" else get(r[2])[4]] = (a[0] == "started") == (r[0] == "run")
       if (

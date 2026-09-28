@@ -465,8 +465,9 @@ async def test_the_turns_of_the_chain_hold_the_result_of_the_command_the_acknowl
   ack = said(log, "prompt")[-1][1]
   assert said(log, "prompt")[-1][5] == f"{command} done"
   told = paragraphs(engine.turns(on=root))
-  result = told.index(f"#{command} exited 0\n{command}_stdout = 'ran echo hi'")
-  assert result < told.index(prompted(ack, "None", f"{command} done"))
+  answered = [one for one in told if one.startswith("#") and one.endswith(f" advance on {ack}")]
+  assert told.index(f"#{command} exited 0\n{command}_stdout = 'ran echo hi'") < told.index(answered[0])
+  assert told.index(prompted(ack, "None", f"{command} done")) < told.index(answered[0])
 
 
 async def test_a_cancelled_result_is_no_orphan() -> None:
@@ -492,8 +493,8 @@ async def test_the_response_of_an_acknowledgment_is_no_orphan() -> None:
 
 
 async def test_when_an_act_a_rung_of_the_chain_made_is_done_the_chain_prompts_nothing() -> None:
-  """When an act that a rung of the chain made is done while the word of that rung does not run, no reply has shown it, no prompt it heard on itself is open and no word of the chain is running, the chain prompts nothing, so that the model sees it."""
-  sand, log, root = born("x = bash('slow')\nclose(1)", auto=False)
+  """When an act that a rung of the chain made is done while the word of that rung does not run, no word of the chain awaited it, no reply has shown it, no prompt it heard on itself is open and no word of the chain is running, the chain prompts nothing, so that the model sees it."""
+  sand, log, root = born("x = bash('slow')\nclose(1)", "close(None)", "close((await bash('slow')).code)", auto=False)
   act = engine.prompt(int, "start one", on=root)
   await settle()
   command = said(log, "bash")[0][1]
@@ -502,6 +503,12 @@ async def test_when_an_act_a_rung_of_the_chain_made_is_done_the_chain_prompts_no
   sand.exits(command, 0)
   await settle()
   assert [one[5] for one in said(log, "prompt")] == ["start one", f"{command} done"]
+  awaited = engine.prompt(int, "await one", on=root)
+  await settle()
+  sand.exits(said(log, "bash")[1][1], 0)
+  assert (await awaited) == 0
+  await settle()
+  assert [one[5] for one in said(log, "prompt")] == ["start one", f"{command} done", "await one"]
 
 
 async def test_a_pause_stands_over_the_close_that_answers_a_prompt_too() -> None:

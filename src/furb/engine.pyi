@@ -425,7 +425,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The turns of the chain hold the result of the command that the acknowledgment names.
   A cancelled result is no orphan.
   The response of an acknowledgment is no orphan.
-  When an act that a rung of the chain made is done while the word of that rung does not run, no reply has shown it, no prompt it heard on itself is open and no word of the chain is running, the chain prompts nothing, so that the model sees it.
+  When an act that a rung of the chain made is done while the word of that rung does not run, no word of the chain awaited it, no reply has shown it, no prompt it heard on itself is open and no word of the chain is running, the chain prompts nothing, so that the model sees it.
   A pause stands over the close that answers a prompt too, so what a word gave waits for the wake.
   A prompt tells its message and its binding where it is made, as every act tells its open, whether a model or the operator answers it.
   """
@@ -514,6 +514,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   Where it asks, the chain makes a rung of the python that the last user turn shows, unquoted and less its comments, so each act that the turn opened and each value that it told is bound; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its python already.
   The chain takes its own act, since the engine is the one that runs it.
   The chain asks the model of a rung for its word by a reply it makes under the site of that rung, whose one word is the actor.
+  When an act that a rung of the chain made on another chain is done while the word of that rung does not run and no word of the chain awaited it, the chain tells it about that rung under the header done, and binds what it came to under the word value, since its model reads no other transcript.
   """
 
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
@@ -657,7 +658,7 @@ A paragraph is what one fact that tells stands as in a turn: its notes, one afte
 The first line of a paragraph is its header: # and, with no space, the id of the act it is of, then what happened to the act, as #bash1 exited 0 or #prompt1, and no text that the act tells.
 Every other line of a paragraph is python: a binding of each value that the act tells, and the binding of the act on its open.
 The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write or a cd stands at the place in the run where it was asked.
-The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled.
+The headers of the file are the open of an act, closed, done, exited, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled.
 A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing.
 A paragraph binds each value that it tells under a name: the id of the act, an underscore, and the word that holds the value, as prompt2_message, bash1_command, read3_text or prompt2_value.
 A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr.

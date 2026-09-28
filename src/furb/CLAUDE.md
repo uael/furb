@@ -178,7 +178,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   record is made again by running its words.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
-  asks a model for, with the message of the prompt each advances, and of the prompts and the words it refuses.
+  asks a model for, with the message of the prompt each advances, of the prompts and the words it refuses, and of
+  the done of an act that one of its rungs made on another chain.
 - A drift is a hard error.
 - The engine owns the order of every run, and nothing of a model runs on the loop of the outside.
 - A chain with a source reads the transcript of its origin as it stands, where the record is what a later life should

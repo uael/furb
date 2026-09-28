@@ -134,14 +134,14 @@ async def test_the_kernel_takes_a_run_as_that_run() -> None:
   assert await engine.prompt(int, "run it", on=root) == 0
   await settle()
   runs = said(log, "run")
-  assert [(a[1], a[4]) for a in runs] == [("run1", "rung2"), ("run2", "rung1"), ("run3", "rung4")]
+  assert [(a[1], a[4]) for a in runs] == [("run1", "rung2"), ("run2", "rung1")]
   assert [(a[0], a[2]) for a in log if a[1] == "run2" and a[0] in ("started", "done")] == [
     ("started", "run2"),
     ("done", "run2"),
   ]
   assert [(a[1], a[2], a[4]) for a in said(log, "wants")] == [("wants1", "run2", "bash1")]
   assert [(a[2], type(a[3]).__name__) for a in dones(log, "wants")] == [("rung1", "Exit")]
-  assert [type(engine.peek(a[1])) for a in runs] == [type(None), CancelledError, type(None)]
+  assert [type(engine.peek(a[1])) for a in runs] == [type(None), CancelledError]
   out = engine.module(root)["out"]
   assert isinstance(out, Exit) and out.code == 0
 
