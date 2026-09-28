@@ -122,21 +122,27 @@ test("the shape picker marks the shape of the next prompt and runs /shape, and /
       screen.mockInput.pressEnter();
       await until(session, () => session.shape === "int");
       await idle(session);
-      // The prompt of the operator and the prompt that the chain made when its command ended each hold a program.
+      // The prompt of the operator, a prompt that a rung made, and the prompt of the chain that tells it done each hold
+      // a program once the model answers it.
+      await session.command('/run prompt("str", message="Summarize the notes.")');
+      await until(session, () => session.activity.some((act) => act.id === "prompt3"));
+      await idle(session);
       app.ladders();
       shown = await frame();
       expect(shown).toContain("Edit a prompt program");
       expect(shown).toContain("✓ prompt1  Explore this project");
-      expect(shown).toContain("❯ ✓ prompt2  bash1 done");
+      expect(shown).toContain("✓ prompt2  Summarize the notes.");
+      expect(shown).toContain("❯ ✓ prompt3  prompt2 done");
       app.closeOverlay();
       await screen.mockInput.typeText("/edit ");
       shown = await frame();
       expect(shown).toContain("❯ prompt1  Explore this project");
-      expect(shown).toContain("prompt2  bash1 done");
+      expect(shown).toContain("prompt2  Summarize the notes.");
+      expect(shown).toContain("prompt3  prompt2 done");
       app.composer.setText("/edit");
       await app.submit();
       await until(session, () => session.editing !== undefined);
-      expect(session.editing).toBe("prompt2");
+      expect(session.editing).toBe("prompt3");
     },
     undefined,
     true,
