@@ -23,34 +23,22 @@ async def test_the_paragraph_of_an_act() -> None:
   engine.cancel(asking)
 
 
-async def test_headed_binds_a_value_by_its_repr_when_that_repr_is_python_that_runs_in_the_chain_of_the_act() -> None:
-  """headed binds a value by its repr when that repr is python that runs in the chain of the act, and binds any other value by what reads says, or by a peek of the act when reads says nothing."""
+async def test_headed_binds_each_value_by_its_repr_with_no_check() -> None:
+  """headed binds each value by its repr with no check, since every value that reaches it is a wire value, and the repr of a wire value is python."""
   _, _, root = born()
   word = (
     "class P:\n"
     "  def __repr__(self):\n"
     "    return '<p>'\n"
     "\n"
-    "peeks = headed(acting(), 'closed', value=P())\n"
-    "reads = headed(acting(), 'closed', 'held[0]', value=P())\n"
-    "plain = headed(acting(), 'closed', 'held[0]', value=[1, 'b', Refused('no')])\n"
-    "class Q:\n"
-    "  def __repr__(self):\n"
-    "    return 'Q()'\n"
-    "\n"
-    "mine = headed(acting(), 'closed', value=Q())\n"
-    "theirs = headed('chain2', 'closed', value=Q())"
+    "live = headed(acting(), 'closed', value=P())\n"
+    "wire = headed(acting(), 'closed', value=[1, 'b', Refused('no')])"
   )
-  two = engine.chain("two")
   step = engine.rung(word, on=root)
   await step
-  got = [engine.module(root)[name] for name in ("peeks", "reads", "plain", "mine", "theirs")]
-  assert got == [
-    f"#{step} closed <p>\n{step}_value = peek({step!r})",
-    f"#{step} closed <p>\n{step}_value = held[0]",
+  assert [engine.module(root)[name] for name in ("live", "wire")] == [
+    f"#{step} closed\n{step}_value = <p>",
     f"#{step} closed\n{step}_value = [1, 'b', Refused('no')]",
-    f"#{step} closed\n{step}_value = Q()",
-    f"#{two} closed Q()\n{two}_value = peek({two!r})",
   ]
 
 

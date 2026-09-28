@@ -190,13 +190,12 @@ def close(value: object, id: str = "") -> None:
 def debug(template: Template) -> None:
   if not (who := acting()):
     raise Refused("no act")
-  got = module().setdefault(name := who + "_debug", [])
+  got = module().setdefault(who + "_debug", [])
   at = f"[{len(got)}:]" if got else ""
-  said = [x.value for x in template.interpolations]
+  said = [repr(x.value) for x in template.interpolations]
   got += said
   if tells(who) and said:
-    head = "debugged " + " ".join(x.expression for x in template.interpolations)
-    say("tell", who, [headed(who, head, name + at, **{"debug" + at: said})])
+    say(*told(who, "debugged " + " ".join(x.expression for x in template.interpolations), **{"debug" + at: said}))
 
 
 def wait(seconds: float = 0.0, on: str = "") -> Act[None]:
@@ -555,24 +554,16 @@ def control(kind, name, id, *words):
   )
 
 
-def headed(id, what="", reads="", **words):
+def headed(id, what="", **words):
   lines = [f"#{id} {what}".rstrip()]
   for word, value in words.items():
     name = f"{id}_{word}"
-    if value in (None, ""):
-      continue
     if isinstance(value, str) and "\n" in value:
       while f"</s:{name}>\n" in value + "\n":
         name += "_"
       lines.append(f"<s:{name}>\n{value}</s:{name}>")
-    else:
-      said = re.sub(r"^[\w.]+\.(?=[A-Z]\w*\()", "", repr(value))
-      try:
-        eval(said, module(scope(id)))
-      except Exception:
-        lines[0] += " " + said
-        said = reads or f"peek({id!r})"
-      lines.append(f"{name} = {said}")
+    elif value not in (None, ""):
+      lines.append(f"{name} = " + re.sub(r"^[\w.]+\.(?=[A-Z]\w*\()", "", repr(value)))
   return "\n".join(lines)
 
 

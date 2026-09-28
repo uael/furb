@@ -170,7 +170,7 @@ async def test_a_paragraph_binds_each_value_that_it_tells_under_a_name() -> None
 
 
 async def test_a_paragraph_binds_a_string_of_more_than_one_line_as_a_quote() -> None:
-  """A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr when that repr is python in the chain."""
+  """A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr."""
   sand, _, root = born("x = bash('echo a\\necho b')\nclose('one\\ntwo')", "close(None)")
   assert await engine.prompt(str, "run\nthem", on=root) == "one\ntwo"
   sand.script[root] = ["close([1, 'b', Refused('no')])", "close(None)"]
@@ -186,18 +186,6 @@ async def test_a_paragraph_binds_a_string_of_more_than_one_line_as_a_quote() -> 
   bound = [engine.module(root)[name] for name in ("prompt1_message", "bash1_command", "prompt1_value")]
   assert bound == ["run\nthem", "echo a\necho b", "one\ntwo"]
   assert engine.module(root)[f"{one}_value"][:2] == [1, "b"]
-
-
-async def test_a_value_whose_repr_is_not_python_stands_as_that_repr_in_its_header() -> None:
-  """A value whose repr is not python stands as that repr in its header, and its binding reads the act, as prompt3_value = peek('prompt3')."""
-  sand, _, root = born("class P:\n  def __repr__(self):\n    return '<p>'\n\nclose(P())", "close(None)")
-  one = engine.prompt(object, "make one", on=root)
-  await settle()
-  sand.script[root] = ["close(1)"]
-  assert await engine.prompt(int, "then bind it", on=root) == 1
-  assert type(engine.peek(one)).__name__ == "P"
-  assert f"#{one} closed <p>\n{one}_value = peek({one!r})" in paragraphs(engine.turns(on=root))
-  assert type(engine.module(root)[f"{one}_value"]).__name__ == "P"
 
 
 async def test_a_value_that_is_none_or_an_empty_string_is_not_told() -> None:

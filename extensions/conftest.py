@@ -36,12 +36,13 @@ def recalled(chain: str, at: Path) -> list[str]:
   return [one for one in of(engine.turns(on=chain), "memory") if f"_path = {str(at)!r}"[:-1] in one.split("\n")[1]]
 
 
-def memorized(id: str, path: Path, text: str) -> str:
+def memorized(question: str, path: Path, text: str) -> str:
   """The paragraph that a memory question tells of one memory file: its header, the binding of the path of the file,
   and the binding of its text, as a quote when it holds more than one line."""
   lines = text.splitlines()
-  told = f"<s:{id}_text>\n{'\n'.join(lines)}</s:{id}_text>" if len(lines) > 1 else f"{id}_text = {lines[0]!r}"
-  return f"#{id}\n{id}_path = {str(path)!r}\n{told}"
+  name = question + "_text"
+  told = f"<s:{name}>\n{'\n'.join(lines)}</s:{name}>" if len(lines) > 1 else f"{name} = {lines[0]!r}"
+  return f"#{question}\n{question}_path = {str(path)!r}\n{told}"
 
 
 def skilled(skills: Path, folder: str, head: str) -> Path:

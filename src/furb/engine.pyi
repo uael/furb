@@ -320,13 +320,13 @@ def close(value: object, id: str = "") -> None:
 def debug(template: Template) -> None:
   """What a word tells of itself as it runs: each interpolation of a template, with its expression and its value.
   The engine tells what a step debugged.
-  A debugged header names the expression of each interpolation of a debug, in order, and the paragraph binds their values in the list of the rung, as #rung5 debugged i len(y) and rung5_debug = [3, 7].
+  A debugged header names the expression of each interpolation of a debug, in order, and the paragraph binds the repr of each value in the list of the rung, as #rung5 debugged i len(y) and rung5_debug = ['3', '7'].
   A raised header and a debugged header stand at the place in the run where they happened.
   The transcript holds between the entries what the run of each word raised and debugged.
   debug is given a python template string.
   debug tells each interpolation of the template, with its expression and its value.
-  A rung binds one list of what it debugged, rungN_debug, in the order debugged across all its debug calls: debug adds each value to the list in the module of the chain, and its paragraph binds the part that it added, as rung5_debug[2:] = [9] after two values.
-  A debug whose values are not all python tells them in its header as python shows them, and its binding reads the list itself, so a binding that runs again leaves each value as debug bound it.
+  A rung binds one list of what it debugged, rungN_debug, in the order debugged across all its debug calls: debug adds the repr of each value to the list in the module of the chain, and its paragraph binds the part that it added, as rung5_debug[2:] = ['9'] after two values.
+  rungN_debug holds the repr of each value as a str, since a debugged value is a live object of the chain and a tell holds only wire values, so the binding and the list in the module hold the same strings.
   debug tells nothing but the interpolations.
   debug enters nothing in the record.
   It is no act and it enters no record, and it stands in the turns at the place in the run where it happened.
@@ -660,8 +660,7 @@ The header of a paragraph names the act it is of by its id, what the act tells a
 The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled.
 A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing.
 A paragraph binds each value that it tells under a name: the id of the act, an underscore, and the word that holds the value, as prompt2_message, bash1_command, read3_text or prompt2_value.
-A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr when that repr is python in the chain.
-A value whose repr is not python stands as that repr in its header, and its binding reads the act, as prompt3_value = peek('prompt3').
+A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr.
 A value that is None or an empty string is not told.
 A quote that a paragraph tells takes one more underscore in its name for as long as its string holds the close mark of that name at the end of a line, so the first close mark after it is its own.
 The engine applies a show before it writes a line, so a quote holds the lines that its show picked, as they are, and no number of a line.
@@ -889,9 +888,9 @@ def control(kind: str, name: str, id: str, *words: object) -> Fact:
   A control is said while the act it names is not done, and a wake also while that act is paused, done or not, so a control that reaches nothing says nothing.
   """
 
-def headed(id: str, what: str = "", reads: str = "", **words: object) -> str:
+def headed(id: str, what: str = "", **words: object) -> str:
   """The paragraph of an act: its header, # and the id with no space between, then what happened, and under it the binding of each word, in order.
-  headed binds a value by its repr when that repr is python that runs in the chain of the act, and binds any other value by what reads says, or by a peek of the act when reads says nothing.
+  headed binds each value by its repr with no check, since every value that reaches it is a wire value, and the repr of a wire value is python.
   headed shows a value as python shows it, less the path of the module before the name of its class, since a chain binds a class by its name alone.
   """
 

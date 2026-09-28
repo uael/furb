@@ -21,7 +21,7 @@ async def test_what_a_question_answered_now_that_shows_a_text_or_changes_a_state
   assert told == [
     ["#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>"],
     ["#cd1\ncd1_path = '/x'"],
-    [f"#{step} debugged seen[2]\n{step}_debug = [1001.0]"],
+    [f"#{step} debugged seen[2]\n{step}_debug = ['1001.0']"],
   ]
   assert "#cd1\ncd1_path = '/x'\n\n#bash1\nbash1_command = 'echo hi'" in engine.turns(on=root)[-1][1]
   assert [one for one in named(engine.turns(on=root)) if one in ("clock", "chance", "gate")] == []
