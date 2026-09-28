@@ -94,9 +94,9 @@ test("a take reads the program, the turns and the directory of a chain again onc
     expect(Object.values(view.program)).toContain("answer = 17");
     expect(view.turns.map(([, python]) => python).join("\n")).toContain("answer = 17");
     // A cd the operator asks is of the moment, and the engine keeps no answer of it, so the cd is a rung, as /cd is.
-    await engine.rung({ word: 'cd("another-directory")', on: engine.root });
+    await engine.rung({ word: 'cd("/")', on: engine.root });
     await Promise.resolve();
-    expect(snapshots.take(engine.root).directory).toBe("another-directory");
+    expect(snapshots.take(engine.root).directory).toBe("/");
   }));
 
 test("an act of a kind an extension defines joins the act table, and what it tells reaches the view", () =>

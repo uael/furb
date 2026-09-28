@@ -24,7 +24,7 @@ class Knows(Sand):
 
 
 async def test_the_world_hears_every_fact() -> None:
-  """The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model."""
+  """The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model."""
   sand, log, root = born(files={"/w/a.txt": "one\n"}, auto=False)
   assert engine.cwd(on=root) == "/w"
   assert engine.clock(on=root) == 1001.0
@@ -43,6 +43,7 @@ async def test_the_world_hears_every_fact() -> None:
   assert isinstance(engine.peek(fed), CancelledError)
   short = engine.bash("slow", timeout=0.05, on=root)
   assert (await short).code is None
+  assert engine.cd("sub", on=root) == "/w/sub"
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "count", on=root) == 1
   asking = engine.prompt(Text, "a text?", to=OPERATOR, on=root)

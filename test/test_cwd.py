@@ -5,8 +5,8 @@ from furb import engine
 from furb.engine import Text
 
 
-async def test_the_working_directory_of_a_chain_is_the_closest_cd_back_in_its_transcript() -> None:
-  """The working directory of a chain is the closest cd back in its transcript."""
+async def test_the_working_directory_of_a_chain_is_the_directory_that_the_closest_cd_came_to() -> None:
+  """The working directory of a chain is the directory that the closest cd back in its transcript came to."""
   _, _, root = born()
   engine.cd("/x", on=root)
   assert engine.cwd(on=root) == "/x"

@@ -313,6 +313,17 @@ async def test_it_asks_for_no_rung_a_pause_stands_over() -> None:
   assert (await one) == 1 and len(said(log, "reply")) == 1
 
 
+async def test_the_chain_asks_no_model_while_a_word_of_the_chain_runs() -> None:
+  """The chain asks no model while a word of the chain runs, so every word that is ready runs before a model is asked."""
+  _, log, root = born("close(1)")
+  laid = engine.rung("k = 1", on=root)
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 1
+  (run,) = [a[1] for a in engine.transcript(root) if a[0] == "run" and a[4] == laid]
+  ended = log.index(next(a for a in log if a[:2] == ("done", run)))
+  assert ended < log.index(said(log, "reply")[0])
+
+
 async def test_the_chain_asks_one_model_at_a_time() -> None:
   """The chain asks one model at a time, which it reads from its transcript, the rung that has waited the longest among those it heard on itself that nothing has been said of, handing it the turns as they stand, for the World to hand its provider as it likes, so that many chains ask many models at once."""
   sand, log, root = born("close(1)", "close(2)")

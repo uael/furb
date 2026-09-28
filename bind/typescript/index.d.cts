@@ -92,9 +92,9 @@ export declare class Engine {
   chance(options?: { on?: string } | null): number
   /** Whether the word of a rung may run: the gate reads it after the program of its chain, and it finds nothing when the word may run. */
   gate(word: string, options?: { on?: string } | null): string[]
-  /** A cd: the paths of its chain resolve against its path from then on, and it does nothing else. */
+  /** A cd: the paths of its chain resolve against the directory it came to from then on, and it does nothing else. */
   cd(path: string, options?: { on?: string } | null): string
-  /** The working directory of a chain is the closest cd back in its transcript. */
+  /** The working directory of a chain is the directory that the closest cd back in its transcript came to. */
   cwd(options?: { on?: string } | null): string
   /** The act again, from its name: whoever holds the name of an act is given the act the life holds under it, whole as it stands. */
   get(about: string): [string, string, string, ...unknown[]] | null

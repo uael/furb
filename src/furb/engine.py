@@ -5,7 +5,7 @@ from collections.abc import Callable, Generator
 from contextvars import ContextVar
 from dataclasses import dataclass
 from string.templatelib import Template
-from typing import Any
+from typing import Any, Never
 
 WINDOW = 200000
 OPERATOR = "operator"
@@ -142,7 +142,7 @@ def gate(word: str, on: str = "") -> list[str]:
 
 
 def cd(path: str, on: str = "") -> str:
-  ask("cd", on, path)
+  path = ask("cd", on, path)
   tell("cd", path)
   return path
 
@@ -150,7 +150,7 @@ def cd(path: str, on: str = "") -> str:
 def cwd(on: str = "") -> str:
   for x in reversed(transcript(on)):
     match x:
-      case ("cd", *_, path):
+      case ("done", about, _, str() as path) if question(("cd", about)):
         return path
   return standing()[1]
 
@@ -248,7 +248,7 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
   return act("prompt", on, pausing(ending(ear)), named, message, to)
 
 
-def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act:
+def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act[Never]:
   if scope(source) != source:
     raise Refused("no chain " + source)
 
@@ -312,8 +312,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("write", about, by, _, Text(path, content) as text) if question(("prompt", path)) and scope(path) == id:
           yield from replay(path, content, by)
           yield "done", about, text
-        case ("cd", about, *_, path):
-          yield "done", about, path
         case ("rung", rid, maker, _, "", _, to):
           waiting[rid] = maker, to
         case ("ready", rid, _, word):
@@ -338,7 +336,11 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             unseen = about
       if a[0] in ("started", "done") and (r := get(a[1]))[0] in ("run", "wants"):
         running[r[4] if r[0] == "run" else get(r[2])[4]] = (a[0] == "started") == (r[0] == "run")
-      if asking not in waiting and (asking := next((x for x in waiting if not paused(x)), "")):
+      if (
+        not any(running.values())
+        and asking not in waiting
+        and (asking := next((x for x in waiting if not paused(x)), ""))
+      ):
         maker, to = waiting[asking]
         if offered(last[0], to) is None:
           close(Refused(f"{to} no actor"), maker if question(("prompt", maker)) else asking)

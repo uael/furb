@@ -152,7 +152,7 @@ test("a relative path that the operator types is read from the directory of the 
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
     await writeFile(join(directory, "pixel.png"), Buffer.from(pixel, "base64"));
     await session.submit("/cd sub");
-    await until(session, () => session.directory === "sub");
+    await until(session, () => session.directory === directory);
     expect(session.path("out.json")).toBe(join(directory, "out.json"));
     await session.submit("/export out.json");
     await session.submit("/share page.html");

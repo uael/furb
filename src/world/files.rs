@@ -1,4 +1,4 @@
-//! The files of the machine: a read and a write of a path that nobody of the engine serves.
+//! The files of the machine: a cd, a read and a write of a path that nobody of the engine serves.
 
 use std::{fs, io::ErrorKind, path::Path};
 
@@ -6,28 +6,41 @@ use super::{here, resolved};
 use crate::{
   ear::{Ear, ear, hear, say},
   fact::Fact,
-  value::{Fault, Text},
+  value::{Fault, Object, Text},
 };
 
 /// The largest text a read gives, in bytes.
 const LARGEST: u64 = 524_288;
 
-/// The ear of the files: it answers a read with the text at the path and a write with the text as it stands after,
-/// each resolved against the working directory of the chain, or with the refusal.
+/// The ear of the files: it answers a cd with the directory that the path names, a read with the text at the path
+/// and a write with the text as it stands after, each resolved against the working directory of the chain, or with
+/// the refusal.
 pub fn files() -> Box<dyn Ear> {
   ear(|co, _| async move {
     loop {
       let a = hear(&co).await;
-      if !a.question() || !matches!(a.kind(), "read" | "write") {
+      if !a.question() || !matches!(a.kind(), "cd" | "read" | "write") {
         continue;
       }
-      let answer = match served(&co, &a).await {
-        Ok(text) => text.object(),
-        Err(fault) => fault.object(),
+      let answer = match a.kind() {
+        "cd" => moved(&co, &a).await.map(Object::string),
+        _ => served(&co, &a).await.map(|text| text.object()),
       };
+      let answer = answer.unwrap_or_else(|fault| fault.object());
       say(&co, Fact::says("done", a.about(), [answer])).await;
     }
   })
+}
+
+/// The directory a cd came to: its path resolved against the working directory of the chain, when a directory
+/// stands there.
+async fn moved(co: &crate::ear::Co, a: &Fact) -> Result<String, Fault> {
+  let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+  let at = resolved(&here(co, a.on()).await?, &path);
+  if !at.is_dir() {
+    return Err(Fault::refused(format!("There is no directory at {}.", at.display())));
+  }
+  Ok(at.display().to_string())
 }
 
 /// What a read or a write came to.
