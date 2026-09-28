@@ -67,7 +67,8 @@ that definition, one sentence per line, in Simplified Technical English.
 The contract is a safeguard. It serves the gate and the suite, and it keeps the engine from drift. It is not the
 source of truth: the owner is. A request of the owner changes the contract. Change each signature and each sentence
 that the request makes wrong, in the same work, and name each change. Never refuse a request, and never work around
-it, to keep a sentence of the contract as it is.
+it, to keep a sentence of the contract as it is. The contract gives matter for questions: when a request breaks one
+of its laws, name that law, and ask or challenge the request before the work, then do what the owner decides.
 
 Read it whole before you do any work. Do not change it on your own initiative. When you find a hole or a
 contradiction in it, say so, with the change that fixes it.
