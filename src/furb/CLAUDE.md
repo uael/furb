@@ -4,6 +4,9 @@
 
 Each name has one meaning, which the contract's sentences use as given here.
 
+`CLAUDE.md` at the root gives the meanings of fact, question, act, owner, started, query and view, under The
+meanings. The entry of such a name here gives only its form in the engine.
+
 - engine: the program in engine.py, which is the whole system prompt of a model.
 - operator: the person or program that calls the engine from outside a rung.
 - outside: a host that makes acts under a site of its own, which is neither the operator nor an act; an act of the
@@ -34,20 +37,12 @@ Each name has one meaning, which the contract's sentences use as given here.
 - boot: the life, given the record and the generators of the outside, which binds say, act, drive, get, peek and
   transcript, and gives the root.
 - bus: what boot binds for every verb to speak through: say for a fact, act for an act, and drive for a generator.
-- view: a read of the life that makes nothing and keeps nothing: get, peek and transcript, and every read derived
-  from them.
-- fact: what is said to the life, inert, with no response, which every ear hears in the order of the log; a tuple
-  of its kind, the act it is about, who said it, and its words.
+- fact: a tuple of its kind, the act it is about, who said it, and its words.
 - site: who is speaking, which every fact is said from: the generator while it speaks, the run while it is
   stepped, the operator otherwise.
 - kind: the first slot of a fact; for a question, the verb that made it.
-- question: a fact that is asked, which is an act: it takes a name when it is said, its first word is the chain it
-  is on, and what it came to the life holds under its name.
-- act: a question, answered now or later, which goes to the ears in turn until one owns it, and is over at its
-  done.
-- owner: the ear that took an act by saying a started or a done about it, which answers it.
-- started: the fact by which an ear takes an act whose done comes later.
-- query: an act that no ear started, which its owner answers with a done at once.
+- question: a fact that is asked, whose first word is the chain it is on.
+- act: a question, which is over at its done.
 - life: one run of the engine, which boot opens and a second boot ends; every act, name and outcome is of it.
 - ear: a generator that hears the facts of the life and speaks by yielding one; the ear of an act is given the name
   of the act, and a verb makes it with pausing and ending. An ear of the engine hears every fact and every act; an

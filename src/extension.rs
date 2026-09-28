@@ -225,16 +225,13 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
   out
 }
 
-/// The ear of the extensions, which plays each extension that the life enables as a rung on each chain: on every
-/// chain there is when the life enables it, and after that on each chain at its birth. The rung holds the word and
-/// then the life word, and the life word alone on a chain whose origin had the extension, since that chain made the
-/// rung of its origin again.
+/// The ear of the extensions, which says and hears the fact enable. `src/furb/CLAUDE.md` says what the fact means and
+/// when a life says it, under the names enable and life word and in its laws.
 ///
-/// The ear enables an extension by the fact `("enable", "chain1", "extensions", name, word, life)`, which no contract
-/// holds, since this ear is its one home. It is about the root. The ear says it once for each extension it is given
-/// that the life does not run yet, at each stand that this life answers, the first of which is at the tip, and the
-/// record keeps it. A later life says it again at its place, and the ear plays the same rungs there, from the fact
-/// alone.
+/// The fact is `("enable", "chain1", "extensions", name, word, life)`. No contract holds it, so this is the one home
+/// of its shape. The ear says it once for each extension it is given that the life does not run yet, at each stand
+/// that this life answers, the first of which is at the tip. The ear plays the rungs from the fact alone, so a later
+/// life plays the same rungs where the journal says the fact again.
 pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
   ear(move |co, _| async move {
     // What the life enabled, in order, and each chain in the order of its birth, with the extensions it has.

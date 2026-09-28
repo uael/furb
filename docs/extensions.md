@@ -52,16 +52,11 @@ form, a folder with no manifest, a manifest of another name, and a missing word 
 
 ## How a life runs its extensions
 
-A life enables each extension by a fact, `enable`, which the record keeps, with the name, the word and the life
-word. The ear `extensions` of the crate says it at the tip of the life, for each extension that the configs turn on
-and the record does not enable yet. While it hears that fact, it plays the extension on every chain there is: one
-rung, whose word is the word of the extension and then its life word. After that, it plays the extension on each
-chain at its birth. A chain with a source made the rung of its origin again, so it has the word, and the ear plays
-the life word alone on it, which starts its own work there.
-
-A later life says each `enable` again at its place, and the ear plays the same rungs there. So a life runs what its
-record enables, whatever its configs say then, and the configs only add at the tip. A host that turns the extensions
-off, as the DeepSWE rig does, enables nothing new, and runs what its record enables all the same.
+A life enables each extension by a fact, `enable`, which the record keeps. [`src/furb/CLAUDE.md`](../src/furb/CLAUDE.md)
+says what the fact means and when a life says it, under the names enable and life word and in its laws.
+The ear `extensions` of [`src/extension.rs`](../src/extension.rs) says the fact and plays it, and its documentation
+gives the shape of the fact. The extensions that a host gives the ear are those that the configs turn on. A host
+that turns the extensions off, as the DeepSWE rig does, gives the ear none.
 
 Anything that comes from the disk reaches a chain through a question that an ear of the World answers, which the
 journal answers again in a later life, so a replay is exact and the World is asked nothing twice.
