@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import STANDS, Sand, born, life, paragraphs, plain, rows, said, settle, takes
+from conftest import STANDS, Sand, born, life, paragraphs, plain, said, settle, takes
 from furb import engine
 from furb.engine import Drift
 
@@ -26,13 +26,16 @@ async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_
   assert await engine.prompt(int, "count", on=root) == 1
   told = takes(root)
   assert told == (
-    "#chain1 roster [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
-    "#chain1 cwd /w\n"
-    "#chain1 actor m/low"
+    "#chain1 standing\n"
+    "chain1_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "chain1_cwd = '/w'\n"
+    "chain1_actor = 'm/low'"
   )
   assert [paragraphs(sand.turns[a[1]])[1] for a in said(log, "reply")] == [told]
   held = engine.transcript(root)
-  assert [a for a in said(held, "tell") if a[3][0].startswith(f"#{root} roster ")] == [("tell", root, root, rows(root))]
+  assert [a for a in said(held, "tell") if a[3][0].startswith(f"#{root} standing")] == [
+    ("tell", root, root, [takes(root)])
+  ]
 
 
 async def test_a_standing_holds_no_source() -> None:

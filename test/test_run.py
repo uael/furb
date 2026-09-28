@@ -2,14 +2,30 @@
 
 from asyncio import CancelledError
 
-from conftest import Py, Sand, born, chained, counted, kept, plain, ran, relived, said, settle, sown, watched
+from conftest import (
+  Py,
+  Sand,
+  bindings,
+  born,
+  chained,
+  counted,
+  kept,
+  plain,
+  ran,
+  relived,
+  said,
+  settle,
+  sown,
+  watched,
+  written,
+)
 from furb import engine
 
 
 async def test_a_run_is_the_act_of_running_the_word_of_a_rung() -> None:
   """A run is the act of running the word of a rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs the word as the rung, and says the run done with what the word gave."""
   log, root, laid, act, step, binding = await counted()
-  wrote = f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"
+  wrote = bindings(root, act, "int", "count", written(laid, "k = 1"))
   assert [a[2:] for a in said(log, "run")] == [
     (root, root, laid, "k = 1", ""),
     (root, root, binding, wrote, ""),

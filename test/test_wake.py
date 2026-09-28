@@ -1,6 +1,6 @@
 """wake, which ends a pause and gives what waited."""
 
-from conftest import Sand, born, gated, heads, paragraphs, plain, ran, relived, said, settle, slow
+from conftest import Sand, bindings, born, gated, heads, paragraphs, plain, ran, relived, said, settle, slow
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -19,11 +19,7 @@ async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_hea
   engine.wake(act)
   await settle()
   assert (await act).code == 3
-  assert paragraphs(engine.turns(on=root))[-3:] == [
-    f"#{act} paused",
-    f"#{act} woke",
-    f"#{act} exited 3\n# {act}/stdout, 0 known",
-  ]
+  assert paragraphs(engine.turns(on=root))[-3:] == [f"#{act} paused", f"#{act} woke", f"#{act} exited 3"]
 
 
 async def test_delivery_carries_on_the_rungs_that_await_the_result_on_whatever_chain() -> None:
@@ -103,7 +99,7 @@ async def test_a_wake_gates_and_runs_a_held_response() -> None:
   act = engine.prompt(int, "count", on=root)
   engine.pause(root)
   await settle()
-  bound = f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"
+  bound = bindings(root, act, "int", "count")
   assert gated(log) == [] and ran(log) == [bound]
   engine.wake(root)
   await settle()

@@ -24,8 +24,9 @@ export interface OperatorPrompt {
   reject(error: Error): void;
 }
 
-/** What one fact that tells stands as in a user turn: its header, `#` and the name of the act it is of, or the kind
- * of a query, then its words; and the lines after the header. */
+/** What one fact that tells stands as in a user turn: its header, `#` and the name of the act it is of, then the
+ * words that say what happened to the act; and the lines after the header, which are python: a binding of each value
+ * that the act tells, and the binding of the act on its open. */
 export interface Paragraph {
   name: string;
   words: string;
@@ -52,10 +53,10 @@ export function paragraphs(python: string): Paragraph[] {
 export function opens(paragraph: Paragraph): boolean {
   return paragraph.lines.at(-1)?.startsWith(`${paragraph.name}: Act[`) ?? false;
 }
-/** The lines of a paragraph as their text: a comment without its mark, a quote as the text between its two marks,
- * and python as it stands. The close mark of a quote is the first line after its open mark that ends with it, as the
- * engine reads one. */
-export function uncommented(lines: readonly string[]): string {
+/** The lines of a paragraph as a reader sees them: a quote as the text between its two marks, and any other line as
+ * it stands. The close mark of a quote is the first line after its open mark that ends with it, as the engine reads
+ * one. */
+export function plain(lines: readonly string[]): string {
   const text: string[] = [];
   for (let at = 0; at < lines.length; at++) {
     const line = lines[at] ?? "";
@@ -67,9 +68,28 @@ export function uncommented(lines: readonly string[]): string {
       const quoted = lines.slice(at + 1, close + 1).join("\n");
       text.push(quoted.slice(0, -`</s:${name}>`.length).replace(/\n$/, ""));
       at = close;
-    } else text.push(line === "#" ? "" : line.startsWith("# ") ? line.slice(2) : line);
+    } else text.push(line);
   }
   return text.join("\n");
+}
+/** The string that the lines of a paragraph bind to a name: the text of its quote, whose name may take more
+ * underscores, or the string of its statement as python writes it; and nothing when they bind none. */
+export function bound(lines: readonly string[], name: string): string | undefined {
+  const text = lines.join("\n");
+  const quote = new RegExp(`^<s:(${name}_*)>\\n([\\s\\S]*?)</s:\\1>$`, "m").exec(text);
+  if (quote) return quote[2];
+  const statement = new RegExp(`^${name} = (['"].*['"])$`, "m").exec(text)?.[1];
+  return statement === undefined ? undefined : literal(statement);
+}
+/** A string as python writes it, read back: the text between its quotes, with each escape as the character it
+ * stands for. */
+function literal(python: string): string {
+  const escapes: Record<string, string> = { n: "\n", r: "\r", t: "\t" };
+  return python
+    .slice(1, -1)
+    .replace(/\\(x[0-9a-f]{2}|u[0-9a-f]{4}|U[0-9a-f]{8}|.)/g, (_, one: string) =>
+      one.length > 1 ? String.fromCodePoint(Number.parseInt(one.slice(1), 16)) : (escapes[one] ?? one),
+    );
 }
 /** Whether a name is the name of a question of that kind: the kind and a number, as every act is named. */
 export function isQuestion(kind: string, id: string): boolean {

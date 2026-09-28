@@ -2,7 +2,21 @@
 
 import pytest
 
-from conftest import BAD, Sand, bindings, born, findings, gated, gatings, paragraphs, ran, relived, said, settle
+from conftest import (
+  BAD,
+  Sand,
+  bindings,
+  born,
+  findings,
+  gated,
+  gatings,
+  paragraphs,
+  ran,
+  relived,
+  said,
+  settle,
+  written,
+)
 from furb import engine
 from furb.engine import Refused
 
@@ -15,7 +29,10 @@ async def test_whether_the_word_of_a_rung_may_run() -> None:
   act = engine.prompt(int, "count", on=root)
   assert await act == 2
   await settle()
-  assert gatings(log) == [("k = 1", []), ("close(k + 1)", ["k = 1", bindings(root, act, "int")])]
+  assert gatings(log) == [
+    ("k = 1", []),
+    ("close(k + 1)", ["k = 1", bindings(root, act, "int", "count", written("rung1", "k = 1"))]),
+  ]
   assert findings(log) == [[], []]
 
 
@@ -31,7 +48,8 @@ async def test_the_word_of_a_rung_runs_only_if_the_gate_accepts_the_word_or_if_t
   sand.script[root] = ["close(k)"]
   act = engine.prompt(int, "count", on=root)
   assert await act == 1
-  wrote = bindings(root, act, "int")
+  refused = f"{written('rung1', 'k = BAD')}\nrung1_findings = {BAD!r}\nrung1_value = Refused()"
+  wrote = bindings(root, act, "int", "count", refused, written("rung2", "k = 1"))
   assert [a[4] for a in said(log, "rung") if a[2] == root] == [wrote]
   assert [word for word, _ in gatings(log)] == ["k = BAD", "k = 1", "close(k)"]
   assert ran(log) == ["k = 1", wrote, "close(k)"] and engine.module(root)[act] == act
@@ -68,10 +86,11 @@ async def test_a_response_that_is_not_python_is_a_finding_like_any_other() -> No
   step = said(log, "rung")[0][1]
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{step} ")] == [
     f"#{step} advance on {act}",
-    f"#{step} refused\n# {found}",
-    f"#{step} closed Refused()",
+    f"#{step} refused\n{step}_findings = {found!r}",
+    f"#{step} closed\n{step}_value = Refused()",
   ]
-  assert ran(log) == [bindings(root, act, "int"), "close(1)"]
+  again = f"{step}_findings = {found!r}\n{step}_value = Refused()"
+  assert ran(log) == [bindings(root, act, "int", "try"), again, "close(1)"]
 
 
 async def test_the_gate_gives_no_finding_when_the_gate_accepts_the_rung() -> None:

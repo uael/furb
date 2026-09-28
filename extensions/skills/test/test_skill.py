@@ -25,16 +25,18 @@ async def test_a_skill_read_into_a_chain(tmp_path: Path) -> None:
 
 async def test_skill_reads_the_path_skills_and_the_name_with_its_show(tmp_path: Path) -> None:
   """skill reads the path skills:// and the name, with its show, so its lines stand in the turns as the lines of any read."""
-  root, path = brewed(tmp_path)
+  root, _ = brewed(tmp_path)
   await engine.rung('skill("brew", span(1, 1))', on=root)
-  assert of(engine.turns(on=root), "read") == [f"#read skills://brew\n# {path}, 0 known\n# 1 ---"]
+  assert of(engine.turns(on=root), "read") == ["#read1\nread1_path = 'skills://brew'\nread1_text = '---'"]
 
 
 async def test_the_world_answers_it_with_the_text_of_the_skill_md_file(tmp_path: Path) -> None:
-  """The World answers it with the text of the SKILL.md file at the path of that file, so a later read of that path tells no line that the chain knows."""
+  """The World answers it with the text of the SKILL.md file at the path of that file, so the text of a skill is the text of a read of that path."""
   root, path = brewed(tmp_path)
   await engine.rung(f'skill("brew")\nread({str(path)!r})', on=root)
-  assert of(engine.turns(on=root), "read")[1] == f"#read {path}\n# {path}, 5 known"
+  one, two = of(engine.turns(on=root), "read")
+  assert one.split("\n", 2)[2].replace("read1_", "read2_") == two.split("\n", 2)[2]
+  assert await engine.rung('close(skill("brew").path)', on=root) == str(path)
 
 
 async def test_a_skill_of_a_name_that_no_skill_has_raises_refused(tmp_path: Path) -> None:

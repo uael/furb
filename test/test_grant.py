@@ -2,12 +2,12 @@
 
 from asyncio import CancelledError
 
-from conftest import COST, born, chained, heads, paragraphs, ran, rows, said, settle
+from conftest import COST, bindings, born, chained, heads, paragraphs, prompted, ran, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
-BOUND = "chain1: Act[object] = Act('chain1')\ngrant1: Act[None] = Act('grant1')\nprompt1: Act[int] = Act('prompt1')"
-"""The rung the root writes at its first ask, which binds the acts its first turn opened: itself, a grant, a prompt."""
+GRANT = "#grant1\ngrant1_usd = 1.0\ngrant1: Act[None] = Act('grant1')"
+"""The paragraph a grant of one dollar tells of its open."""
 
 
 async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_both() -> None:
@@ -17,12 +17,12 @@ async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_bot
   sand.script[root] = ["a = 1", "b = 2", "close(a + b)"]
   assert await engine.prompt(int, "count", on=root) == 3
   await settle()
-  one, two, three = [a[2] for a in said(log, "reply")]
+  assert len(said(log, "reply")) == 3
   final = engine.turns(on=root)
-  assert [line for line in heads(final) if " ledger " in line] == [
-    f"#{one} ledger spent=1.5 filled=0.2",
-    f"#{two} ledger spent=3.0 filled=0.2",
-    f"#{three} ledger spent=4.5 filled=0.2",
+  assert [one for one in paragraphs(final) if one.startswith("#grant1 ledger")] == [
+    "#grant1 ledger\ngrant1_spent = 1.5\ngrant1_filled = 0.2",
+    "#grant1 ledger\ngrant1_spent = 3.0\ngrant1_filled = 0.2",
+    "#grant1 ledger\ngrant1_spent = 4.5\ngrant1_filled = 0.2",
   ]
   assert [final[: len(turns)] == turns for turns in sand.turns.values()] == [True, True, True]
 
@@ -63,7 +63,7 @@ async def test_the_word_of_the_response_that_crossed_the_ceiling_runs() -> None:
   sand.script[root] = ["a = 1", "close(2)"]
   act = engine.prompt(int, "count", on=root)
   await settle()
-  assert ran(log) == [BOUND, "a = 1"] and engine.module(root)["a"] == 1
+  assert ran(log) == [bindings(root, act, "int", "count", GRANT), "a = 1"] and engine.module(root)["a"] == 1
   assert engine.peek(act, ...) is ...
 
 
@@ -101,7 +101,7 @@ async def test_an_answer_that_carries_the_ledger_past_the_ceiling_pauses_the_cha
   sand.script[root] = ["close(5)"]
   act = engine.prompt(int, "spend", on=root)
   await settle()
-  assert ran(log) == [BOUND, "close(5)"] and engine.peek(act, ...) is ...
+  assert ran(log) == [bindings(root, act, "int", "spend", GRANT), "close(5)"] and engine.peek(act, ...) is ...
   assert len(said(log, "reply")) == 1
   engine.wake(root)
   await settle()
@@ -148,13 +148,13 @@ async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one
   got = [engine.peek(act) for act in (none, below, beyond)]
   assert [type(one) for one in got] == [Refused, Refused, Refused]
   assert [str(one) for one in got] == ["None/None no ceiling", "-1.0/None no ceiling", "None/1.5 no ceiling"]
-  assert heads(engine.turns(on=root)) == [f"#{root} root", rows(root)[0]]
+  assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing"]
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
   assert isinstance(engine.peek(ghost), Refused) and said(log, "reply") == []
   assert paragraphs(engine.turns(on=root))[2:] == [
-    f"#{ghost} hi\n{ghost}: Act[int] = Act({ghost!r})",
-    f"#{ghost} closed Refused('ghost no actor')",
+    prompted(ghost, "int", "hi"),
+    f"#{ghost} closed\n{ghost}_value = Refused('ghost no actor')",
   ]
 
 
@@ -175,17 +175,20 @@ async def test_a_later_grant_that_stands_closes_every_grant_of_the_chain_before_
   engine.wake(root)
   assert await act == 3
   await settle()
-  one, two, three = [a[2] for a in said(log, "reply")]
-  final = heads(engine.turns(on=root))
-  assert [line for line in final if " ledger " in line] == [
-    f"#{one} ledger spent=1.5 filled=0.2",
-    f"#{two} ledger spent=3.0 filled=0.2",
-    f"#{three} ledger spent=1.5 filled=0.2",
+  assert len(said(log, "reply")) == 3
+  assert [one for one in paragraphs(engine.turns(on=root)) if " ledger" in one.split("\n")[0]] == [
+    f"#{ceiling} ledger\n{ceiling}_spent = 1.5\n{ceiling}_filled = 0.2",
+    f"#{ceiling} ledger\n{ceiling}_spent = 3.0\n{ceiling}_filled = 0.2",
+    f"#{top} ledger\n{top}_spent = 1.5\n{top}_filled = 0.2",
   ]
-  assert [line for line in final if line.split(" ")[0] in (f"#{ceiling}", f"#{top}", f"#{none}")] == [
-    f"#{ceiling} usd=2.0 share=None",
-    f"#{ceiling} closed None",
-    f"#{top} usd=4.0 share=None",
+  assert [
+    one
+    for one in paragraphs(engine.turns(on=root))
+    if one.split(" ")[0].split("\n")[0] in (f"#{ceiling}", f"#{top}", f"#{none}") and " ledger" not in one
+  ] == [
+    f"#{ceiling}\n{ceiling}_usd = 2.0\n{ceiling}: Act[None] = Act({ceiling!r})",
+    f"#{ceiling} closed",
+    f"#{top}\n{top}_usd = 4.0\n{top}: Act[None] = Act({top!r})",
   ]
 
 

@@ -164,7 +164,10 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let mut turns = yard.furb(&["turns", "--record"]);
   turns.arg(yard.record()).arg("--cwd").arg(&elsewhere);
   let said = printed(turns, "");
-  assert!(said.contains("#rung2 closed 4"), "the turns of a record run every word again: {said}");
+  assert!(
+    said.contains("#rung2 closed\nrung2_value = 4"),
+    "the turns of a record run every word again: {said}"
+  );
   assert!(!said.contains("remember()"), "an inspection enables no extension: {said}");
   assert_eq!(fs::read(yard.record()).expect("the record"), before, "an inspection keeps nothing");
 }
@@ -183,7 +186,7 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
   let mut turns = yard.furb(&["turns", "--record"]);
   turns.arg(yard.record());
   let said = printed(turns, "");
-  assert!(said.contains("#memory ") && said.contains("# 1 Use two spaces."), "{said}");
+  assert!(said.contains("\nmemory1_text = 'Use two spaces.'"), "{said}");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
   fs::write(yard.at.join(".furb/config.json"), r#"{"extensions": {"memory": false}}"#)
     .expect("a config of the project");
@@ -261,9 +264,8 @@ fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
   let mut turns = yard.furb(&["turns", "--record"]);
   turns.arg(yard.record());
   let said = printed(turns, "");
-  assert!(said.starts_with("[user] #chain1 root\n"), "{said}");
-  let paragraphs =
-    "\n\n#prompt1 say a number\nprompt1: Act[int] = Act('prompt1')\n\n#prompt1 closed 7";
+  assert!(said.starts_with("[user] #chain1\nchain1_label = 'root'\n"), "{said}");
+  let paragraphs = "\n\n#prompt1\nprompt1_message = 'say a number'\nprompt1: Act[int] = Act('prompt1')\n\n#prompt1 closed\nprompt1_value = 7";
   assert!(said.contains(paragraphs), "the turns of a root as a model read them: {said}");
   assert!(said.contains(&format!("\n[assistant] {COUNT}\n")), "{said}");
 }

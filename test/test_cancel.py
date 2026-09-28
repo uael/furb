@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, chained, heads, said, settle, slow, stalled
+from conftest import born, chained, paragraphs, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -86,6 +86,7 @@ async def test_the_awaiter_of_a_cancelled_command_raises_cancellederror_in_its_s
   engine.cancel(command)
   await settle()
   assert isinstance(engine.peek(step), CancelledError)
-  assert [line for line in heads(engine.turns(on=root)) if " raised " in line] == [f"#{step} raised CancelledError()"]
+  raised = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].endswith(" raised")]
+  assert raised == [f"#{step} raised\n{step}_raised = CancelledError()"]
   assert engine.peek(one) is None
   engine.cancel(one)

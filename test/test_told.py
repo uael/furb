@@ -1,6 +1,6 @@
 """told, the paragraph that an act tells of itself."""
 
-from conftest import born, heads, paragraphs, said, settle
+from conftest import born, paragraphs, said, settle
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -12,12 +12,12 @@ async def test_the_open_of_an_act_tells_the_id_and_what_the_act_says_of_itself()
   assert (await act).code == 0
   await settle()
   opened = next(a[3] for a in said(log, "tell") if a[1] == act)
-  assert opened == [f"#{act} echo hi", f"{act}: Act[Exit] = Act('{act}')"]
+  assert opened == [f"#{act}\n{act}_command = 'echo hi'", f"{act}: Act[Exit] = Act('{act}')"]
   assert said(log, "bash")[0][4:] == ("echo hi", True, 9.0)
 
 
-async def test_a_closed_header_tells_the_act_with_what_it_came_to_as_python_shows_it() -> None:
-  """A closed header tells the act with what it came to, as python shows it, and a string of more than one line as a quote under the header."""
+async def test_a_closed_paragraph_binds_what_the_act_came_to_under_the_word_value() -> None:
+  """A closed paragraph binds what the act came to under the word value."""
   _, _, root = born()
   act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   engine.close(21, act)
@@ -31,11 +31,12 @@ async def test_a_closed_header_tells_the_act_with_what_it_came_to_as_python_show
   step = engine.rung("k = 1\nclose(5)", on=root)
   assert await step == 5
   await settle()
-  closed = [head for head in heads(engine.turns(on=root)) if " closed" in head]
-  assert closed == [f"#{act} closed 21", f"#{other} closed 'k'", f"#{lines} closed", f"#{step} closed 5"]
-  quote = f"<s:{lines}_value>\none\ntwo</s:{lines}_value>"
-  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{lines} closed")] == [
-    f"#{lines} closed\n{quote}"
+  closed = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].endswith(" closed")]
+  assert closed == [
+    f"#{act} closed\n{act}_value = 21",
+    f"#{other} closed\n{other}_value = 'k'",
+    f"#{lines} closed\n<s:{lines}_value>\none\ntwo</s:{lines}_value>",
+    f"#{step} closed\n{step}_value = 5",
   ]
 
 
@@ -45,10 +46,10 @@ async def test_told_gives_the_saying_of_a_tell_about_an_act() -> None:
   act = engine.rung("k = 1", on=root)
   assert await act is None
   told = [a for a in said(log, "tell") if a[1] == act]
-  assert [a[3] for a in told] == [[f"#{act} k = 1"]]
-  saying = engine.told(act, "said", "# more")
-  assert saying == ("tell", act, [f"#{act} said", "# more"])
+  assert [a[3] for a in told] == [[f"#{act}\n{act}_word = 'k = 1'"]]
+  saying = engine.told(act, "said", "more = 1", count=2)
+  assert saying == ("tell", act, [f"#{act} said\n{act}_count = 2", "more = 1"])
   made = engine.say(*saying)
-  assert made == ("tell", act, OPERATOR, [f"#{act} said", "# more"])
+  assert made == ("tell", act, OPERATOR, [f"#{act} said\n{act}_count = 2", "more = 1"])
   held = engine.transcript(root)
   assert [a for a in held if a[0] == "tell" and a[1] == act] == [*told, made]

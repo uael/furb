@@ -1,6 +1,6 @@
 """turns, what a model reads of a chain."""
 
-from conftest import acts, born, heads, paragraphs, rows, said, settle, takes
+from conftest import acts, born, heads, of, opened, paragraphs, said, settle, takes, written
 from furb import engine
 from furb.engine import span
 
@@ -18,9 +18,7 @@ async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
   _, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
-  assert got == [
-    ("user", f"#{root} root\n{root}: Act[object] = Act({root!r})\n\n{takes(root)}\n\n#rung1 k = 1", None, None)
-  ]
+  assert got == [("user", f"{opened(root, 'root')}\n\n{takes(root)}\n\n{written('rung1', 'k = 1')}", None, None)]
 
 
 async def test_the_turns_of_what_a_chain_has_heard() -> None:
@@ -49,7 +47,7 @@ async def test_the_turns_of_what_a_chain_has_heard() -> None:
 
 
 async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operator() -> None:
-  """The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines it has not seen, which the one that tells it says the show of."""
+  """The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines that the show of the one that tells it picks."""
   sand, log, root = born(files={"/w/n.txt": "one\ntwo\n"})
   word = "read('n.txt', span(2, 2))\nclose(1)"
   sand.script[root] = [word]
@@ -60,7 +58,7 @@ async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operato
   assert (
     got[1] == engine.peek(said(log, "reply")[0][1]) == ("assistant", word, (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
   )
-  assert got[2][1] == "#read n.txt\n# /w/n.txt, 0 known\n# 2 two\n\n#prompt1 closed 1"
+  assert got[2][1] == "#read1\nread1_path = 'n.txt'\nread1_text = 'two'\n\n#prompt1 closed\nprompt1_value = 1"
   assert span(2, 2)(["one", "two"]) == [2]
 
 
@@ -71,7 +69,7 @@ async def test_turns_reads_the_transcript_of_the_chain_and_asks_nothing() -> Non
   made, kept = dict(acts(log)), len(sand.record)
   got = engine.turns(on=root)
   assert [role for role, *_ in got] == ["user"]
-  assert heads(got) == [f"#{root} root", rows(root)[0], "#rung1 cd('/x')", "#cd /x"]
+  assert heads(got) == [f"#{root}", f"#{root} standing", "#rung1", "#cd1"]
   assert acts(log) == made and len(sand.record) == kept
 
 
@@ -81,7 +79,7 @@ async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_las
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
   assert len(got) == 1
-  assert heads(got) == ["#chain1 root", rows("chain1")[0], "#rung1 k = 1"]
+  assert heads(got) == ["#chain1", "#chain1 standing", "#rung1"]
   assert got[0][1] == "\n\n".join(paragraphs(got))
 
 
@@ -123,7 +121,7 @@ async def test_the_turns_are_folded_whole_at_each_reply() -> None:
     ["user", "assistant", "user", "assistant", "user"],
   ]
   assert [one[: len(asks[1])] for one in asks[1:]] == [asks[1]] * 2
-  assert heads(asks[1][-1:]) == ["#bash1 slow", "#rung3 advance on prompt1"]
+  assert heads(asks[1][-1:]) == ["#bash1", "#rung3 advance on prompt1"]
   assert heads(asks[2][-1:]) == ["#bash1 exited 0", "#rung5 advance on prompt1"]
   assert said(log, "bash")[0][1] == "bash1"
 
@@ -143,7 +141,7 @@ async def test_the_next_reply_tells_everything_that_the_step_told() -> None:
   assert await engine.prompt(int, "try", on=root) == 1
   await settle()
   second = sand.turns["reply2"]
-  assert heads(second[-1:]) == ["#rung1 raised ValueError('boom')", "#rung3 advance on prompt1"]
+  assert paragraphs(second[-1:]) == ["#rung1 raised\nrung1_raised = ValueError('boom')", "#rung3 advance on prompt1"]
 
 
 async def test_the_turns_hold_every_answer_of_the_model_as_the_turn_it_is() -> None:
@@ -162,9 +160,9 @@ async def test_the_turns_of_a_chain_show_every_act_the_model_made() -> None:
   await settle()
   _, command, *_ = said(log, "bash")[0]
   got = engine.turns(on=root)
-  assert [one for one in paragraphs(got) if one.startswith(f"#{command} ")] == [
-    f"#{command} echo hi\n{command}: Act[Exit] = Act('{command}')",
-    f"#{command} exited 0\n# {command}/stdout, 0 known\n# 1 ran echo hi",
+  assert of(got, command) == [
+    f"#{command}\n{command}_command = 'echo hi'\n{command}: Act[Exit] = Act('{command}')",
+    f"#{command} exited 0\n{command}_stdout = 'ran echo hi'",
   ]
 
 

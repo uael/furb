@@ -1,6 +1,6 @@
 """Actor, an actor the World offers."""
 
-from conftest import STANDS, born, heads, paragraphs, said, settle
+from conftest import STANDS, born, paragraphs, said, settle
 from furb import engine
 from furb.engine import Refused
 
@@ -13,10 +13,10 @@ async def test_an_actor_the_world_offers() -> None:
   assert one in STANDS[0]
   _, _, root = born()
   assert paragraphs(engine.turns(on=root)) == [
-    "#chain1 root\nchain1: Act[object] = Act('chain1')",
-    "#chain1 roster [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
-    "#chain1 cwd /w\n"
-    "#chain1 actor m/low",
+    "#chain1\nchain1_label = 'root'\nchain1: Act[object] = Act('chain1')",
+    "#chain1 standing\nchain1_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "chain1_cwd = '/w'\n"
+    "chain1_actor = 'm/low'",
   ]
 
 
@@ -29,10 +29,10 @@ async def test_the_window_that_a_roster_entry_leaves_unsaid_is_the_window_that_t
     engine.grant(share=0.9, on=root)
     assert await engine.prompt(int, "count", on=root) == 1
     await settle()
-    ledgers += [one for one in heads(engine.turns(on=root)) if one.startswith("#rung1 ledger ")]
+    ledgers += [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#grant1 ledger")]
   assert ledgers == [
-    f"#rung1 ledger spent=0.0 filled={100000 / engine.WINDOW}",
-    f"#rung1 ledger spent=0.0 filled={100000 / 400000}",
+    f"#grant1 ledger\ngrant1_spent = 0.0\ngrant1_filled = {100000 / engine.WINDOW}",
+    f"#grant1 ledger\ngrant1_spent = 0.0\ngrant1_filled = {100000 / 400000}",
   ]
 
 

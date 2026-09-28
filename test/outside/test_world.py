@@ -37,7 +37,8 @@ async def test_the_world_stands_a_life_on_the_provider_of_the_crate_and_its_mode
   (request,) = seen
   assert (request["actor"], request["chain"], request["settings"]["effort"]) == ("claude-cli:opus/xhigh", root, "xhigh")
   assert [message["role"] for message in request["messages"]] == ["user"]
-  assert "\n\n#prompt1 count\nprompt1: Act[int] = Act('prompt1')\n\n" in request["messages"][0]["content"][0]["text"]
+  opened = "\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act[int] = Act('prompt1')\n\n"
+  assert opened in request["messages"][0]["content"][0]["text"]
 
 
 async def test_the_world_hands_the_provider_a_stream_that_hears_what_a_model_writes(yard: Path) -> None:

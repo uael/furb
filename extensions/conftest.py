@@ -33,7 +33,16 @@ def noted(folder: Path, text: str, name: str = "CLAUDE.md") -> Path:
 def recalled(chain: str, at: Path) -> list[str]:
   """Every paragraph of memory that a chain was told of a file under a directory, in order, since a folder above
   that directory belongs to the machine."""
-  return [one for one in of(engine.turns(on=chain), "memory") if one.startswith(f"#memory {at}")]
+  return [one for one in of(engine.turns(on=chain), "memory") if f"_path = {str(at)!r}"[:-1] in one.split("\n")[1]]
+
+
+def memorized(question: str, path: Path, text: str) -> str:
+  """The paragraph that a memory question tells of one memory file: its header, the binding of the path of the file,
+  and the binding of its text, as a quote when it holds more than one line."""
+  lines = text.splitlines()
+  name = question + "_text"
+  told = f"<s:{name}>\n{'\n'.join(lines)}</s:{name}>" if len(lines) > 1 else f"{name} = {lines[0]!r}"
+  return f"#{question}\n{question}_path = {str(path)!r}\n{told}"
 
 
 def skilled(skills: Path, folder: str, head: str) -> Path:

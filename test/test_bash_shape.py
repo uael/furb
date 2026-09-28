@@ -13,6 +13,4 @@ async def test_a_bash_carries_the_command_the_fed_flag_and_the_timeout() -> None
   got = await one
   assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", True, 5.0)]
   assert got.stdout.content == "ran echo hi\n"
-  assert paragraphs(engine.turns(on=root))[-1] == (
-    f"#{one} exited 0\n# {one}/stdout, 0 known\n# 1 ran echo hi\n# {one}/stderr, 0 known"
-  )
+  assert paragraphs(engine.turns(on=root))[-1] == (f"#{one} exited 0\n{one}_stdout = 'ran echo hi'")

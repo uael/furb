@@ -26,15 +26,15 @@ async def test_the_skills_of_a_chain_as_a_text_that_the_chain_reads(tmp_path: Pa
 
 
 async def test_skills_reads_the_path_skills_on_its_chain(tmp_path: Path) -> None:
-  """skills reads the path skills:// on its chain, so it tells the lines of the list that the chain has not seen, as every read does."""
+  """skills reads the path skills:// on its chain, so it tells the list as every read does."""
   skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
   _, root = extended("skills", tmp_path, _monty.skills)
   await engine.rung("skills()", on=root)
   skilled(tmp_path / "work" / ".furb" / "skills", "steep", "name: steep\ndescription: Wait for the leaves.")
   await engine.rung("skills()", on=root)
   assert of(engine.turns(on=root), "read") == [
-    "#read skills://\n# skills://, 0 known\n# 1 brew: Make tea.",
-    "#read skills://\n# skills://, 1 known\n# 2 steep: Wait for the leaves.",
+    "#read1\nread1_path = 'skills://'\nread1_text = 'brew: Make tea.'",
+    "#read2\nread2_path = 'skills://'\n<s:read2_text>\nbrew: Make tea.\nsteep: Wait for the leaves.</s:read2_text>",
   ]
 
 
@@ -74,5 +74,7 @@ async def test_the_life_word_of_the_extension_is_skills(tmp_path: Path) -> None:
   skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
   _, root = extended("skills", tmp_path, _monty.skills, lives=True)
   two = await chained("two")
-  told = ["#read skills://\n# skills://, 0 known\n# 1 brew: Make tea."]
-  assert (of(engine.turns(on=root), "read"), of(engine.turns(on=two), "read")) == (told, told)
+  assert (of(engine.turns(on=root), "read"), of(engine.turns(on=two), "read")) == (
+    ["#read1\nread1_path = 'skills://'\nread1_text = 'brew: Make tea.'"],
+    ["#read2\nread2_path = 'skills://'\nread2_text = 'brew: Make tea.'"],
+  )

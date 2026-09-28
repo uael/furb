@@ -1,6 +1,6 @@
 """Turn, one item of what a model reads of a transcript."""
 
-from conftest import Sand, born, chained, heads, paragraphs, rows, said, settle
+from conftest import Sand, born, chained, heads, paragraphs, said, settle
 from furb import engine
 
 USAGE = (8000, 30, 0, 0, 1.5)
@@ -44,7 +44,7 @@ async def test_a_turn_is_a_role_python_a_usage_and_blocks() -> None:
   assert [len(turn) for turn in got] == [4, 4, 4]
   role, py, usage, blocks = got[0]
   assert (role, usage, blocks) == ("user", None, None)
-  assert heads(got[:1]) == ["#chain1 root", rows("chain1")[0], "#prompt1 count", "#rung1 advance on prompt1"]
+  assert heads(got[:1]) == ["#chain1", "#chain1 standing", "#prompt1", "#rung1 advance on prompt1"]
   assert py == "\n\n".join(paragraphs(got[:1]))
 
 
@@ -77,4 +77,4 @@ async def test_the_python_of_a_turn() -> None:
   got = engine.turns(on=root)
   assert got[1][1] == "<s:hi>\nhi\n</s:hi>\na = hi"
   assert got[2][1] == "#rung3 advance on prompt1"
-  assert got[4][1] == "#prompt1 closed 1"
+  assert got[4][1] == "#prompt1 closed\nprompt1_value = 1"

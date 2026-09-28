@@ -5,7 +5,7 @@ def memory(path: str = ".", on: str = "") -> list[Text]:
   got = ask("memory", on, path)
   assert isinstance(got, list)
   for one in got:
-    tell("memory", one.path, (one, span(1, -1)))
+    tell("memory", on, one.path, one, span(1, -1))
   return got
 
 

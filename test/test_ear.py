@@ -3,7 +3,7 @@
 from asyncio import CancelledError
 from collections.abc import Generator
 
-from conftest import WORLD, Py, Sand, Where, World, born, dones, life, ran, said, settle, sown
+from conftest import WORLD, Py, Sand, Where, World, bindings, born, dones, life, ran, said, settle, sown, written
 from furb import engine
 from furb.engine import OPERATOR, Exit, Refused, Text
 
@@ -111,10 +111,7 @@ async def test_an_ear_is_any_generator_of_that_shape() -> None:
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
   assert [a[0] for a in sand.calls] == ["stand", "reply", "read", "read"]
   runs = [a[1] for a in kept if a[0] == "started" and engine.question(("run", a[1]))]
-  assert [engine.get(run)[5] for run in runs] == [
-    "chain1: Act[object] = Act('chain1')\nprompt1: Act[int] = Act('prompt1')",
-    "close(1)",
-  ]
+  assert [engine.get(run)[5] for run in runs] == [bindings(root, "prompt1", "int", "work"), "close(1)"]
   assert [a[4] for a in kept if a[0] == "read"] == ["note://one"]
   assert {"started", "ready", "done"} <= {a[0] for a in kept} and not {"reply", "run"} & {a[0] for a in kept}
 
@@ -126,11 +123,7 @@ async def test_the_chain_has_the_gate_read_and_the_kernel_begin_every_rung() -> 
   sand.script[root] = ["close(k + 1)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
-  assert ran(log) == [
-    "k = 1",
-    "chain1: Act[object] = Act('chain1')\nprompt1: Act[int] = Act('prompt1')",
-    "close(k + 1)",
-  ]
+  assert ran(log) == ["k = 1", bindings(root, "prompt1", "int", "count", written("rung1", "k = 1")), "close(k + 1)"]
   assert [one[2] for one in said(log, "done") if one[1].startswith("gate")] == ["gate", "gate"]
   assert [(one[1], one[2]) for one in said(log, "rung") if one[4]] == [("rung1", "operator"), ("rung3", root)]
 

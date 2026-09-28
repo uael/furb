@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import Dead, Sand, World, born, life, of, paragraphs, said, settle
+from conftest import BAD, Dead, Sand, World, bindings, born, life, of, paragraphs, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Refused, Text
 
@@ -89,14 +89,14 @@ async def test_the_engine_tells_of_a_write_of_a_text_only_the_lines_that_differ(
   _, root = life(sand)
   assert await engine.rung("write(Text('b.txt', 'one\\ntwo\\n'))", on=root) is None
   assert sand.files == {"b.txt": "one\ntwo\nEND\n"}
-  assert of(engine.turns(on=root), "write") == ["#write b.txt\n# b.txt, 0 known\n# 3 END"]
+  assert of(engine.turns(on=root), "write") == ["#write1\nwrite1_path = 'b.txt'\nwrite1_text = 'END'"]
   _, _, two = born(KEPT)
   assert await engine.prompt(int, "a door of my own", on=two) == 7
-  assert of(engine.turns(on=two), "write") == ["#write nums://a\n# 7"]
+  assert of(engine.turns(on=two), "write") == ["#write1\nwrite1_path = 'nums://a'\nwrite1_value = 7"]
 
 
 async def test_a_write_takes_no_show() -> None:
-  """A write takes no show, since what a write would show the word of the model already said: it tells the lines of what came back that differ from what it asked for, and of those, the lines the model has not seen, so a write that the disk took as it was asked tells nothing at all."""
+  """A write takes no show, since what a write would show the word of the model already said: it tells the lines of what came back that differ from what it asked for, so a write that the disk took as it was asked tells nothing at all."""
   _, _, root = born()
   assert await engine.rung("write(Text('b.txt', 'one\\ntwo\\n'))", on=root) is None
   assert of(engine.turns(on=root), "write") == []
@@ -105,13 +105,16 @@ async def test_a_write_takes_no_show() -> None:
 
 
 async def test_a_door_that_answers_a_write_with_more_than_it_was_asked_for() -> None:
-  """A door that answers a write with more than it was asked for tells the lines it added and no line the model read before."""
+  """A door that answers a write with more than it was asked for tells each line of what came back that differs from the line it was asked for at the same place."""
   sand = Hoard(files={"b.txt": "one\ntwo\n"})
   _, root = life(sand)
   assert await engine.rung("read('b.txt')\nwrite(Text('b.txt', 'three\\n'))", on=root) is None
   await settle()
-  told = [one for one in paragraphs(engine.turns(on=root)) if one.startswith(("#read ", "#write "))]
-  assert told == ["#read b.txt\n# b.txt, 0 known\n# 1 one\n# 2 two", "#write b.txt\n# b.txt, 2 known\n# 3 three"]
+  told = [one for one in paragraphs(engine.turns(on=root)) if one.startswith(("#read", "#write"))]
+  assert told == [
+    "#read1\nread1_path = 'b.txt'\n<s:read1_text>\none\ntwo</s:read1_text>",
+    "#write1\nwrite1_path = 'b.txt'\n<s:write1_text>\none\ntwo\nthree</s:write1_text>",
+  ]
 
 
 async def test_a_write_to_the_door_of_a_prompt_edits_the_program_of_its_ladder() -> None:
@@ -162,19 +165,21 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
   act = engine.prompt(object, "fix it", on=root)
   assert await act == (1, 2, "k = 1\nok = 2")
   await settle()
-  binding, first, writer = (a[4] for a in said(log, "run")[:3])
+  binding, first, _, writer = (a[4] for a in said(log, "run")[:4])
   assert [(a[5], a[6]) for a in said(log, "run")] == [
-    (f"chain1: Act[object] = Act('chain1')\n{act}: Act[object] = Act({act!r})", ""),
+    (bindings(root, act, "object", "fix it"), ""),
     ("k = 1", ""),
+    (f"rung3_findings = {BAD!r}\nrung3_value = Refused()", ""),
     ("mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))", ""),
-    (f"chain1: Act[object] = Act('chain1')\n{act}: Act[object] = Act({act!r})", binding),
+    (bindings(root, act, "object", "fix it"), binding),
     ("k = 1", first),
     ("ok = 2", ""),
+    ("read1_path = 'prompt1'\nread1_text = 'k = 1\\nok = BAD'\nrung8_word = 'ok = 2'", ""),
     ("close((k, ok, read(get(acting())[2]).content))", ""),
   ]
   program = engine.program(root)
   assert isinstance(program, dict) and writer not in program
-  assert list(program.values()) == [a[5] for a in said(log, "run")[3:]]
+  assert list(program.values()) == [a[5] for a in said(log, "run")[4:]]
   assert engine.read(act, on=root) == Text(act, "k = 1\nok = 2\nclose((k, ok, read(get(acting())[2]).content))")
 
 
