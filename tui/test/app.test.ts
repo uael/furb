@@ -293,7 +293,7 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
       app.rewind();
       app.rewind();
       await screen.flush();
-      expect(screen.captureCharFrame()).toContain("Resume this chain before rewinding");
+      expect(screen.captureCharFrame()).toContain("Wake this chain before rewinding");
       await session.refresh();
       expect(session.activity.map((act) => act.id)).toEqual(pausedActs);
       app.closeOverlay();

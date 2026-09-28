@@ -444,14 +444,14 @@ test("the usage of a fork counts the answers of the fork alone, and not those of
     expect(shown).not.toContain("Cache read");
   }));
 
-test("a paused chain says so at the end of its feed and in the footer, and Resume wakes it", () =>
+test("a paused chain says so at the end of its feed and in the footer, and Wake wakes it", () =>
   composing(async ({ session, frame, click }) => {
     await session.submit("/pause");
     await until(session, () => session.paused);
     let shown = await frame();
     expect(shown).toContain("This chain is paused");
-    expect(shown).toContain("/wake resume");
-    await click("Resume");
+    expect(shown).toContain("/wake wake the chain");
+    await click("Wake");
     await until(session, () => !session.paused);
     shown = await frame();
     expect(shown).not.toContain("This chain is paused");
@@ -464,7 +464,7 @@ test("a message sent to a paused chain wakes it, and the answer comes", () =>
     app.composer.setText("Explore this project.");
     await app.submit();
     expect(session.paused).toBe(false);
-    expect(session.notice).toBe("The paused chain resumed with this message.");
+    expect(session.notice).toBe("This message woke the paused chain.");
     await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
   }));
 

@@ -116,8 +116,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/details` | Expand or collapse an act in the current view |
 | `/grant <dollars>` | Pause at a dollar ceiling |
 | `/context <fraction>` | Pause at a share of the model window |
-| `/pause [id]` | Hold delivery while work completes |
-| `/wake [id]` | Deliver pending work |
+| `/pause [act or chain]` | Hold delivery while work completes |
+| `/wake [act or chain]` | Deliver pending work |
 | `/cancel [id]` | End an act or the selected chain's work |
 | `/feed <id> [text]` | Send a line of input to a command; no text closes its input |
 | `/close <id> <json>` | Close an act with a JSON value |

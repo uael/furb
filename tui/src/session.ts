@@ -625,7 +625,7 @@ export class Session extends EventEmitter {
    * through the act, or up to a message of the operator, whose text returns to the composer to be sent again. The
    * module and the files keep the state they have. */
   async rewind(id: string, label?: string): Promise<string> {
-    if (this.paused) throw new Error("Resume this chain before rewinding.");
+    if (this.paused) throw new Error("Wake this chain before rewinding.");
     const chain = this.acts.find((act) => act.id === id)?.on;
     if (!chain) throw new Error(`There is no act ${id} to rewind to.`);
     if (chain !== this.selected) await this.select(chain);

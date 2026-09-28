@@ -90,7 +90,7 @@ const stateOf = (state: "failed" | "cancelled" | "done" | "held"): State =>
     failed: { word: "failed", mark: glyph.failed, color: c.danger },
     cancelled: { word: "cancelled", mark: glyph.cancelled, color: c.faint },
     done: { word: "", mark: glyph.done, color: c.success },
-    held: { word: "waits for resume", mark: glyph.held, color: c.warning },
+    held: { word: "waits for a wake", mark: glyph.held, color: c.warning },
   })[state];
 /** The mark of a state in its color, one shape for each: at work, waiting on the operator, paused, failed, finished
  * and not yet seen, and at rest. */
@@ -740,7 +740,7 @@ export class App {
       if (!(await this.globalCommand(content.trim()))) {
         const woke = !content.startsWith("/") && (await this.session.wakeForInput());
         await this.session.submit(python ? `/run ${content}` : content);
-        if (woke) this.session.notice = "The paused chain resumed with this message.";
+        if (woke) this.session.notice = "This message woke the paused chain.";
       }
       const history = this.session.histories[key] ?? [];
       this.session.histories[key] = history;
@@ -1123,7 +1123,7 @@ export class App {
               ["Esc", "leave the program", () => this.leaveEdit()],
             ]
           : [
-              ...(w.paused ? ([["/wake", "resume", () => this.action("/wake")]] as const) : []),
+              ...(w.paused ? ([["/wake", "wake the chain", () => this.action("/wake")]] as const) : []),
               ...(w.operatorPrompt ? ([["⌃A", "answer", () => this.question()]] as const) : []),
               ...(!w.paused &&
               w.activity.some((act) => act.kind === "prompt" && !act.done && !asksOperator(act))
@@ -1726,7 +1726,7 @@ export class App {
         );
       }
       // A paused chain says so at the end of its feed, with the reason that the last failure gave, and a button that
-      // resumes it, since nothing new runs on it until then.
+      // wakes it, since nothing new runs on it until then.
       if (w.paused && !w.search) {
         const failure = w.activity.findLast((act) => act.kind === "rung" && act.run?.status === "failed")?.run
           ?.reason;
@@ -1737,7 +1737,7 @@ export class App {
             [
               [`${glyph.held} `, c.warning],
               ["This chain is paused", c.text, bold],
-              ["  New work waits until it resumes.", c.muted],
+              ["  New work waits for a wake.", c.muted],
             ],
             failure
               ? this.whole(
@@ -1745,7 +1745,7 @@ export class App {
                   () => shortenHomes(failure),
                 )
               : undefined,
-            ["Resume", "runs what waits, once the cause is fixed", () => this.action("/wake")],
+            ["Wake", "runs what waits, once the cause is fixed", () => this.action("/wake")],
           ),
         );
         items++;
@@ -4077,12 +4077,12 @@ export class App {
     );
   }
   /** The rewind tree in the feed, with the pointer on the last message of the chain: Enter then gives that message
-   * back on a new branch that has not read it. A paused chain is resumed first. */
+   * back on a new branch that has not read it. A paused chain is woken first. */
   rewind = (): void => {
     if (this.session.paused) {
-      this.openPalette("Resume this chain before rewinding", [
+      this.openPalette("Wake this chain before rewinding", [
         {
-          label: "Resume chain",
+          label: "Wake chain",
           detail: "Then choose the point that the new branch starts from.",
           run: () => (this.session.host.pending.size ? this.resume() : this.action("/wake")),
         },
