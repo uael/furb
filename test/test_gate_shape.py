@@ -29,27 +29,31 @@ async def test_a_gate_carries_the_word_alone() -> None:
   act = engine.prompt(int, "edit", on=root)
   assert await act == 3
   await settle()
-  bind = bindings(root, act, "int")
+  bind = bindings(root, act, "int", "edit")
   assert [len(e[0]) for e in sand.record if e[0][0] == "gate"] == [5] * 6
+  bad = f"rung3_findings = {BAD!r}\nrung3_value = Refused()"
+  wrote = (
+    "read1_path = 'prompt1'\nread1_text = 'k = 1\\nx = BAD\\ny = 2'\nrung11_word = 'k = 3'\nrung9_value = Refused()"
+  )
   assert gatings(log) == [
     ("k = 1", [bind]),
     ("x = BAD", [bind, "k = 1"]),
-    ("y = 2", [bind, "k = 1"]),
-    ("write(read(get(acting())[2]).replace('y = 2', 'k = 3'))", [bind, "k = 1", "y = 2"]),
-    ("k = 3", [bind, "k = 1"]),
-    ("close(k)", [bind, "k = 1", "k = 3"]),
+    ("y = 2", [bind, "k = 1", bad]),
+    ("write(read(get(acting())[2]).replace('y = 2', 'k = 3'))", [bind, "k = 1", bad, "y = 2"]),
+    ("k = 3", [bind, "k = 1", bad]),
+    ("close(k)", [bind, "k = 1", bad, "k = 3", wrote]),
   ]
 
 
-async def test_the_refused_paragraph_holds_the_findings_that_refused_the_word_of_a_rung() -> None:
-  """The refused paragraph holds the findings that refused the word of a rung, one comment for each."""
+async def test_the_refused_paragraph_binds_the_findings_that_refused_the_word_of_a_rung() -> None:
+  """The refused paragraph binds the findings that refused the word of a rung, one line for each, as rungN_findings."""
   _, log, root = born("k = BAD\nj = WORSE", "close(7)")
   assert await engine.prompt(int, "try", on=root) == 7
   worse = "line 2: error[unresolved-reference] Name `WORSE` used when not defined"
   assert findings(log) == [[BAD, worse], []]
   step = said(log, "rung")[0][1]
   refused = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n", 1)[0].endswith(" refused")]
-  assert refused == [f"#{step} refused\n# {BAD}\n# {worse}"]
+  assert refused == [f"#{step} refused\n<s:{step}_findings>\n{BAD}\n{worse}</s:{step}_findings>"]
 
 
 async def test_the_chain_has_the_word_of_a_rung_gated_before_it_runs() -> None:
@@ -57,10 +61,11 @@ async def test_the_chain_has_the_word_of_a_rung_gated_before_it_runs() -> None:
   _, log, root = born("k = BAD", "close(7)", "close(None)")
   act = engine.prompt(int, "try", on=root)
   assert await act == 7
-  bind = bindings(root, act, "int")
-  assert [a[4] for a in said(log, "rung") if a[2] == root] == [bind]
+  bind = bindings(root, act, "int", "try")
+  again = f"{said(log, 'rung')[0][1]}_findings = {BAD!r}\n{said(log, 'rung')[0][1]}_value = Refused()"
+  assert [a[4] for a in said(log, "rung") if a[2] == root] == [bind, again]
   assert gated(log) == ["k = BAD", "close(7)"] and findings(log) == [[BAD], []]
-  assert ran(log) == [bind, "close(7)"]
+  assert ran(log) == [bind, again, "close(7)"]
   assert "k" not in engine.module(root)
 
 
@@ -71,7 +76,8 @@ async def test_a_refused_word_of_a_rung_stands_in_the_ladder_of_its_prompt() -> 
   assert await act == 7
   assert engine.read(act, on=root).content == "k = BAD\nclose(7)"
   program = engine.program(root)
-  assert list(program.values()) == [bindings(root, act, "int"), "close(7)"] == ran(log)
+  again = f"rung1_findings = {BAD!r}\nrung1_value = Refused()"
+  assert list(program.values()) == [bindings(root, act, "int", "try"), again, "close(7)"] == ran(log)
 
 
 async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells_stood() -> None:
@@ -82,23 +88,31 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
   await settle()
   engine.write(engine.read(act, on=root), on=root)
   await settle(300)
-  bind = bindings(root, act, "int")
+  bind = bindings(root, act, "int", "count")
   assert gated(log) == ["k = 1", "x = BAD", "close(k)"]
   assert [a[4] for a in acts(log).values() if a[0] == "gate"] == ["k = 1", "x = BAD", "close(k)"]
   first = [a[1] for a in said(log, "rung") if not a[5]]
   copies = [(a[1], a[4], a[5]) for a in said(log, "rung") if a[5]]
+  bad = f"rung3_findings = {BAD!r}\nrung3_value = Refused()"
   assert [(word, donor) for _, word, donor in copies] == [
     (bind, first[1]),
     ("k = 1", first[0]),
     ("x = BAD", first[2]),
+    (bad, first[4]),
     ("close(k)", first[3]),
   ]
-  assert [type(engine.peek(one)).__name__ for one, *_ in copies] == ["NoneType", "NoneType", "Refused", "NoneType"]
-  assert [(a[1], a[3][0]) for a in said(log, "tell") if a[3][0].endswith(" refused")] == [
+  kinds = ["NoneType", "NoneType", "Refused", "NoneType", "NoneType"]
+  assert [type(engine.peek(one)).__name__ for one, *_ in copies] == kinds
+  assert [(a[1], a[3][0].split("\n")[0]) for a in said(log, "tell") if " refused" in a[3][0]] == [
     (first[2], f"#{first[2]} refused")
   ]
   assert engine.read(act, on=root).content == "k = 1\nx = BAD\nclose(k)"
-  assert engine.program(root) == {copies[0][0]: bind, copies[1][0]: "k = 1", copies[3][0]: "close(k)"}
+  assert engine.program(root) == {
+    copies[0][0]: bind,
+    copies[1][0]: "k = 1",
+    copies[3][0]: bad,
+    copies[4][0]: "close(k)",
+  }
 
 
 async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:
@@ -107,17 +121,14 @@ async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:
   act = engine.prompt(int, "work", on=root)
   assert await act == 1
   await settle()
-  first, _, again = (a[1] for a in said(log, "rung"))
+  first, _, again, _ = (a[1] for a in said(log, "rung"))
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{first} ")] == [
     f"#{first} advance on {act}",
-    f"#{first} refused\n# {BAD}",
-    f"#{first} closed Refused()",
+    f"#{first} refused\n{first}_findings = {BAD!r}",
+    f"#{first} closed\n{first}_value = Refused()",
   ]
   refusal = engine.peek(first)
   assert isinstance(refusal, Refused) and refusal.args == ()
-  assert heads(engine.turns(on=root))[-3:] == [
-    f"#{first} closed Refused()",
-    f"#{again} advance on {act}",
-    f"#{act} closed 1",
-  ]
-  assert ran(log) == [bindings(root, act, "int"), "close(1)"]
+  assert heads(engine.turns(on=root))[-3:] == [f"#{first} closed", f"#{again} advance on {act}", f"#{act} closed"]
+  again = f"{first}_findings = {BAD!r}\n{first}_value = Refused()"
+  assert ran(log) == [bindings(root, act, "int", "work"), again, "close(1)"]

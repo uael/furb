@@ -72,7 +72,7 @@ async def test_a_control_is_about_the_act_it_is_over() -> None:
   assert [one[1] for one in said(log, "cancel")] == [act]
   assert {one[0] for one in log if one[1] == act} == {"bash", "started", "out", "tell", "done", "cancel"}
   told = [one for one in said(log, "tell") if one[1] == act]
-  assert [one[3][0] for one in told] == ["#bash1 slow"]
+  assert [one[3][0] for one in told] == ["#bash1\nbash1_command = 'slow'"]
 
 
 async def test_a_verb_takes_a_chain_and_the_act_it_makes_is_on_that_chain() -> None:

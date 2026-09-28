@@ -13,10 +13,11 @@ from conftest import (
   dones,
   heads,
   life,
+  opened,
   paragraphs,
   plain,
+  prompted,
   relived,
-  rows,
   said,
   settle,
   takes,
@@ -59,8 +60,7 @@ async def test_the_request_of_a_reply_is_the_transcript_of_the_chain_as_turns() 
     == [
       (
         "user",
-        f"#{root} root\n{root}: Act[object] = Act({root!r})\n\n{takes(root)}\n\n"
-        f"#{act} count\n{act}: Act[int] = Act({act!r})\n\n#{step} advance on {act}",
+        f"{opened(root, 'root')}\n\n{takes(root)}\n\n{prompted(act, 'int', 'count')}\n\n#{step} advance on {act}",
         None,
         None,
       )
@@ -257,11 +257,11 @@ async def test_a_new_prompt_reads_the_whole_transcript_of_the_chain_the_cancelle
   assert await second == 2
   (step,) = [a[1] for a in said(log, "rung") if a[2] == second]
   assert heads(sand.turns["reply1"]) == [
-    f"#{root} root",
-    rows(root)[0],
-    f"#{first} one",
+    f"#{root}",
+    f"#{root} standing",
+    f"#{first}",
     f"#{first} cancelled",
-    f"#{second} two",
+    f"#{second}",
     f"#{step} advance on {second}",
   ]
 

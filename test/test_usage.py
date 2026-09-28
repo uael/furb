@@ -1,6 +1,6 @@
 """Usage, what one answer of a model cost."""
 
-from conftest import STANDS, Sand, born, heads, relived, said, settle, world_says
+from conftest import STANDS, Sand, born, paragraphs, relived, said, settle, world_says
 from furb import engine
 
 USAGE = (80000, 30, 200, 10, 1.5)
@@ -25,15 +25,14 @@ async def test_a_usage_holds_the_token_counts_and_the_dollars_of_one_model_respo
 
 async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_the_window_of_the_actor() -> None:
   """The share of the window it filled is the words it read against the window of the actor its rung names, in the standing where the answer lands, so no word of it says the share."""
-  sand, log, root = born(cost=USAGE)
+  sand, _, root = born(cost=USAGE)
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
   sand.script[root] = ["a = 1", "close(2)"]
   assert await engine.prompt(int, "count", on=root) == 2
-  one, two = [a[2] for a in said(log, "reply")]
-  assert [line for line in heads(engine.turns(on=root)) if " ledger " in line] == [
-    f"#{one} ledger spent=1.5 filled=0.2",
-    f"#{two} ledger spent=3.0 filled=0.2",
+  assert [line for line in paragraphs(engine.turns(on=root)) if line.startswith("#grant1 ledger")] == [
+    "#grant1 ledger\ngrant1_spent = 1.5\ngrant1_filled = 0.2",
+    "#grant1 ledger\ngrant1_spent = 3.0\ngrant1_filled = 0.2",
   ]
   assert engine.offered(STANDS[0], "m/low") == 400000 and USAGE[0] / 400000 == 0.2
   engine.cancel(ceiling)
@@ -42,7 +41,8 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   engine.rung("actor = 'n/low'", on=root)
   later = engine.grant(usd=10.0, on=root)
   assert await asked == 2
-  assert [line.split("filled=")[1] for line in heads(engine.turns(on=root)) if " ledger " in line] == ["0.2"]
+  ledgers = [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{later} ledger")]
+  assert [one.split(f"{later}_filled = ")[1] for one in ledgers] == ["0.2"]
   engine.cancel(later)
   first, _, root = born(cost=USAGE)
   engine.prompt(int, "count", on=root)
@@ -52,8 +52,9 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   step = said(heard, "rung")[0]
   assert step[6] == "m/low" and [a[1] for a in said(heard, "stand")] == ["stand1", "stand2"]
   assert engine.offered(wider[0], "m/low") == 800000
-  engine.grant(share=0.9, on=root)
+  share = engine.grant(share=0.9, on=root)
   (asked,) = [a for a in engine.transcript(root) if a[0] == "reply"]
   world_says("done", asked[1], ("assistant", "close(3)", USAGE, None))
   await settle()
-  assert [line.split("filled=")[1] for line in heads(engine.turns(on=root)) if " ledger " in line] == ["0.1"]
+  ledgers = [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{share} ledger")]
+  assert [one.split(f"{share}_filled = ")[1] for one in ledgers] == ["0.1"]

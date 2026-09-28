@@ -1,10 +1,10 @@
-import { opens, type Paragraph, paragraphs, type Turn, uncommented } from "@furb/engine";
+import { bound, opens, type Paragraph, paragraphs, plain, type Turn } from "@furb/engine";
 import { type ActRow, failed } from "./session.ts";
 
 /** One thing the conversation shows, read off the python of the turns of a chain.
  *
- * - `python`: a word, which an assistant turn holds, or which the open of a rung its caller wrote tells in its header
- *   or as a quote, with the rung it is the word of.
+ * - `python`: a word, which an assistant turn holds, or which the open of a rung its caller wrote binds as rungN_word,
+ *   with the rung it is the word of.
  * - `prompt`: the open of a prompt, which tells its message.
  * - `result`: the close of a prompt, and whether other prompts closed in the same turn.
  * - `act`: the open or the end of any other act, which the conversation shows once.
@@ -49,7 +49,7 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
           items.push({
             type: "python",
             key,
-            code: paragraph.words || uncommented(paragraph.lines),
+            code: String(act.words[0]),
             rung: act,
           });
         } else if (word === "advance") rung = act;
@@ -64,7 +64,7 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
       } else if (act && ["chain", "grant"].includes(act.kind)) {
         // The inspector shows what the chain stands on, so its standing, headed by its roster, is no card of the
         // conversation.
-        if (!opens(paragraph) && !ENDS.includes(word) && word !== "roster") shown();
+        if (!opens(paragraph) && !ENDS.includes(word) && word !== "standing") shown();
       } else if (act && (opens(paragraph) || ENDS.includes(word))) {
         if (!seen.has(act.id)) items.push({ type: "act", key: act.id, act });
         seen.add(act.id);
@@ -74,32 +74,32 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
   return items;
 }
 
-/** Whether a paragraph is the open of a rung its caller wrote, which tells that word in its header when it holds one
- * line, and as the quote rungN_word under its header when it holds more. */
+/** Whether a paragraph is the open of a rung its caller wrote, which binds that word as rungN_word under a header
+ * that says nothing more. */
 function writes(act: ActRow, paragraph: Paragraph): boolean {
-  const word = String(act.words[0] ?? "");
-  if (!word) return false;
-  if (paragraph.words) return paragraph.words === word;
-  return new RegExp(`^<s:${act.id}_word_*>$`).test(paragraph.lines[0] ?? "");
+  return (
+    Boolean(act.words[0]) && !paragraph.words && bound(paragraph.lines, `${act.id}_word`) === act.words[0]
+  );
 }
 
-/** A paragraph as a note: the word of its header after the name of an act, or the kind of its query, as its label. */
+/** A paragraph as a note: the word of its header after the name of an act, or the kind of that act when its header
+ * says nothing more, as its label. */
 function note(key: string, paragraph: Paragraph, act: ActRow | undefined, word: string, rest: string): Item {
   return act
-    ? { type: "note", key, label: word, detail: rest, body: uncommented(paragraph.lines), act }
+    ? { type: "note", key, label: word || act.kind, detail: rest, body: plain(paragraph.lines), act }
     : {
         type: "note",
         key,
         label: paragraph.name,
         detail: paragraph.words,
-        body: uncommented(paragraph.lines),
+        body: plain(paragraph.lines),
       };
 }
 
-/** The findings that refused the word of a rung, one for each comment of the paragraph its chain told of it. */
+/** The findings that refused the word of a rung, one for each line that the paragraph its chain told of it binds. */
 export function refusal(turns: readonly Turn[], rung: string): string[] {
   const told = turns
     .flatMap(([role, python]) => (role === "user" ? paragraphs(python) : []))
     .find((paragraph) => paragraph.name === rung && paragraph.words === "refused");
-  return told ? uncommented(told.lines).split("\n") : [];
+  return told ? (bound(told.lines, `${rung}_findings`) ?? "").split("\n") : [];
 }

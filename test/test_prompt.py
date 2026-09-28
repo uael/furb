@@ -7,6 +7,7 @@ from conftest import (
   STANDS,
   WORLD,
   Sand,
+  bindings,
   born,
   chained,
   dones,
@@ -14,6 +15,7 @@ from conftest import (
   lived,
   paragraphs,
   plain,
+  prompted,
   ran,
   relived,
   said,
@@ -49,8 +51,8 @@ async def test_the_engine_asks_the_model_again_after_a_refusal() -> None:
   first, second = [a[1] for a in said(log, "rung") if a[2] == act]
   assert [a[2] for a in said(log, "reply")] == [first, second]
   assert engine.turns(on=root)[2][1] == (
-    f"#{first} refused\n# line 1: error[unresolved-reference] Name `BAD` used when not defined\n\n"
-    f"#{first} closed Refused()\n\n#{second} advance on {act}"
+    f"#{first} refused\n{first}_findings = 'line 1: error[unresolved-reference] Name `BAD` used when not defined'\n\n"
+    f"#{first} closed\n{first}_value = Refused()\n\n#{second} advance on {act}"
   )
 
 
@@ -143,7 +145,7 @@ async def test_none_is_a_shape_of_its_own() -> None:
   act = engine.prompt(None, "work", on=root)
   assert await act is None
   assert said(log, "prompt")[0][4] == "None"
-  assert paragraphs(engine.turns(on=root))[2] == f"#{act} work\n{act}: Act[None] = Act({act!r})"
+  assert paragraphs(engine.turns(on=root))[2] == prompted(act, "None", "work")
 
 
 async def test_without_a_message_the_actor_reads_the_transcript_alone() -> None:
@@ -221,10 +223,9 @@ async def test_the_binding_of_a_prompt_gives_the_shape_as_python_shows_the_expre
   engine.prompt(list[Text], "some texts?", to=OPERATOR, on=root)
   engine.prompt(Text | None, "a text", to="m/low", on=root)
   await settle()
-  bindings = [
-    line for one in paragraphs(engine.turns(on=root)) for line in one.split("\n") if line.startswith("prompt")
-  ]
+  bindings = [line for one in paragraphs(engine.turns(on=root)) for line in one.split("\n") if ": Act[" in line]
   assert bindings == [
+    "chain1: Act[object] = Act('chain1')",
     "prompt1: Act[int] = Act('prompt1')",
     "prompt2: Act[list[Text]] = Act('prompt2')",
     "prompt3: Act[Text | None] = Act('prompt3')",
@@ -323,7 +324,7 @@ async def test_a_word_written_to_its_door_is_a_rung_of_it() -> None:
   await settle()
   engine.write(Text(act, "a = 1\nclose(5)"), on=root)
   await settle()
-  bind = f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"
+  bind = bindings(root, act, "int", "count")
   assert (await act) == 5 and ran(log) == [bind, "a = 1", bind, "a = 1", "close(5)"]
   assert [a[2] for a in said(log, "rung") if a[4] == "close(5)"] == [act]
 
@@ -363,8 +364,11 @@ async def test_its_close_tells_what_closed_it_from_outside() -> None:
   hurt, step = [a[1] for a in said(log, "rung") if a[2] == other]
   assert [(a[1], a[2]) for a in said(log, "close")] == [(act, OPERATOR), (other, step)]
   told = heads(engine.turns(on=root))
-  assert [one for one in told if one.split(" ")[1:2] == ["closed"]] == [f"#{act} closed 21", f"#{other} closed 7"]
-  assert [(a[2], a[3]) for a in said(log, "tell") if a[1] == hurt][-1] == (hurt, [f"#{hurt} raised ValueError('boom')"])
+  assert [one for one in told if one.split(" ")[1:2] == ["closed"]] == [f"#{act} closed", f"#{other} closed"]
+  closed = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].endswith(" closed")]
+  assert closed == [f"#{act} closed\n{act}_value = 21", f"#{other} closed\n{other}_value = 7"]
+  raised = (hurt, [f"#{hurt} raised\n{hurt}_raised = ValueError('boom')"])
+  assert [(a[2], a[3]) for a in said(log, "tell") if a[1] == hurt][-1] == raised
 
 
 async def test_a_paused_prompt_makes_no_rung_until_the_wake() -> None:
@@ -430,8 +434,8 @@ async def test_a_prompt_takes_any_shape_which_a_close_is_read_against_as_python_
   assert await engine.prompt(Text | None, "a text or nothing", on=root) is None
   assert await engine.prompt(int, "a number", on=root) == 2
   (no,) = [a[1] for a in said(log, "ready") if a[3] == "close('no')"]
-  raised = [one for one in heads(engine.turns(on=root)) if one.split(" ")[1:2] == ["raised"]]
-  assert raised == [f"#{no} raised Refused(\"'no' not int\")"]
+  raised = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].endswith(" raised")]
+  assert raised == [f"#{no} raised\n{no}_raised = Refused(\"'no' not int\")"]
 
 
 async def test_a_prompt_carries_the_name_of_its_shape_as_a_word() -> None:
@@ -461,8 +465,8 @@ async def test_the_turns_of_the_chain_hold_the_result_of_the_command_the_acknowl
   ack = said(log, "prompt")[-1][1]
   assert said(log, "prompt")[-1][5] == f"{command} done"
   told = paragraphs(engine.turns(on=root))
-  result = told.index(f"#{command} exited 0\n# {command}/stdout, 0 known\n# 1 ran echo hi")
-  assert result < told.index(f"#{ack} {command} done\n{ack}: Act[None] = Act({ack!r})")
+  result = told.index(f"#{command} exited 0\n{command}_stdout = 'ran echo hi'")
+  assert result < told.index(prompted(ack, "None", f"{command} done"))
 
 
 async def test_a_cancelled_result_is_no_orphan() -> None:
@@ -532,7 +536,7 @@ async def test_a_prompt_tells_its_message_and_its_binding_where_it_is_made() -> 
   first = engine.prompt(int, "count\nto three", on=root)
   second = engine.prompt(int, "count again", on=root)
   mine = f"#{first}\n<s:{first}_message>\ncount\nto three</s:{first}_message>\n{first}: Act[int] = Act({first!r})"
-  theirs = f"#{second} count again\n{second}: Act[int] = Act({second!r})"
+  theirs = prompted(second, "int", "count again")
   assert [(a[1], a[2]) for a in said(log, "tell") if a[1] in (first, second)] == [(first, first), (second, second)]
   told = next(a for a in said(log, "tell") if a[1] == first)
   assert log.index(said(log, "prompt")[0]) < log.index(told) < log.index(said(log, "prompt")[1])

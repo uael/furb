@@ -73,19 +73,19 @@ def take(*ids: str, inside: bool = True) -> Filter:
 def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   got = ask("read", on, path)
   if show is not HIDDEN:
-    tell("read", path, *showing(got, show))
+    tell("read", on, path, got, show)
   return got
 
 
 def write(text: Text, on: str = "") -> Text:
   got = ask("write", on, Text(text.path, text.content))
   if not isinstance(got, Text) or got.lines != text.lines:
-    tell("write", text.path, *showing(got, differs(text.lines)))
+    tell("write", on, text.path, got, differs(text.lines))
   return got
 
 
 def turns(on: str = "") -> list[tuple]:
-  seen, folded, user, cut = {}, [], [], 0
+  folded, user, cut = [], [], 0
   for it in transcript(on):
     match it:
       case ("reply", *_):
@@ -93,8 +93,8 @@ def turns(on: str = "") -> list[tuple]:
       case ("done", about, _, (_, _, _, _) as turn) if question(("reply", about)):
         folded += [("user", "\n\n".join(user[:cut]), None, None), turn]
         del user[:cut]
-      case (kind, *_, notes) if kind in ("tell", "pause", "wake", "cancel", "close") and notes:
-        user.append("\n".join([shown(x, seen) for x in notes]))
+      case (kind, *_, notes) if kind in ("tell", "pause", "wake", "cancel", "close"):
+        user.append("\n".join(notes))
   return [*folded, ("user", "\n\n".join(user), None, None)]
 
 
@@ -143,7 +143,7 @@ def gate(word: str, on: str = "") -> list[str]:
 
 def cd(path: str, on: str = "") -> str:
   path = ask("cd", on, path)
-  tell("cd", path)
+  tell("cd", on, path)
   return path
 
 
@@ -190,8 +190,13 @@ def close(value: object, id: str = "") -> None:
 def debug(template: Template) -> None:
   if not (who := acting()):
     raise Refused("no act")
-  for i in template.interpolations:
-    tell(who, f"debugged {i.expression} = {i.value!r}")
+  got = module().setdefault(name := who + "_debug", [])
+  at = f"[{len(got)}:]" if got else ""
+  said = [x.value for x in template.interpolations]
+  got += said
+  if tells(who) and said:
+    head = "debugged " + " ".join(x.expression for x in template.interpolations)
+    say("tell", who, [headed(who, head, name + at, **{"debug" + at: said})])
 
 
 def wait(seconds: float = 0.0, on: str = "") -> Act[None]:
@@ -203,7 +208,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
     yield "started", id
     if word:
       if tells(id):
-        yield told(id, word, word="word")
+        yield told(id, word=word)
       yield "ready", id, word
     while True:
       match (yield):
@@ -221,7 +226,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
           if retells and isinstance(value, CancelledError):
             value = None
           if isinstance(value, BaseException) and tells(id):
-            yield told(id, "raised " + re.sub(r"^[\w.]*\.", "", repr(value)))
+            yield told(id, "raised", raised=value)
           yield "done", id, value
           return
 
@@ -237,7 +242,7 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
   def ear(id):
     if actor != OPERATOR:
       yield "started", id
-    yield told(id, message, bound(id, named), word="message")
+    yield told(id, "", bound(id, named), message=message)
     while True:
       while actor == OPERATOR or paused(id):
         yield
@@ -258,7 +263,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
 
     def takes(roster, where, actor):
       module()["actor"] = actor
-      yield told(id, f"roster {roster!r}", headed(id, f"cwd {where}"), headed(id, f"actor {actor}"))
+      yield told(id, "standing", roster=roster, cwd=where, actor=actor)
 
     def replay(of="", words="", writer=""):
       yield "module", id, {**globals(), "__name__": id, "actor": last[2] if last else ""}
@@ -292,7 +297,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         ],
       )
     yield "started", id
-    yield told(id, f"{label} from {source}".strip() if source else label, bound(id))
+    yield told(id, "", bound(id), label=label, source=source)
     yield from replay()
     if last and not source:
       yield from takes(*last)
@@ -320,7 +325,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           if not tells(rid):
             found = get(rid)[5] in refused
           elif found := gate(word):
-            yield told(rid, "refused", commented("\n".join(found)))
+            yield told(rid, "refused", findings="\n".join(found))
           if found:
             refused.add(rid)
             close(Refused(), rid)
@@ -373,13 +378,13 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
     for x in transcript(here):
       if x[0] == "grant" and x[3] == here and x[1] != id:
         close(None, x[1])
-    yield told(id, f"usd={usd} share={share}", bound(id, "None"))
+    yield told(id, "", bound(id, "None"), usd=usd, share=share)
     while True:
       match (yield):
         case ("done", about, _, (_, _, (tokens, *_, cost), _)) if question(("reply", about)) and scope(about) == here:
           spent += cost
           filled = tokens / (offered(standing()[0], get(about)[4]) or WINDOW)
-          yield told(get(about)[2], f"ledger spent={spent} filled={filled}")
+          yield told(id, "ledger", spent=spent, filled=filled)
           if (usd and spent >= usd) or (share and filled >= share):
             pause(here)
 
@@ -396,7 +401,7 @@ def bash(
 ) -> Act[Exit]:
   def ear(id):
     streams, mute = {x: Text(x) for x in (id + "/stdout", id + "/stderr")}, "" if fed else "not fed"
-    yield told(id, "" if show is HIDDEN else command, bound(id, "Exit"), word="command")
+    yield told(id, "", bound(id, "Exit"), command="" if show is HIDDEN else command)
     while True:
       match a := (yield):
         case ("merged", qid, *_, about) if about == id:
@@ -418,7 +423,7 @@ def bash(
         case ("done", about, _, Exit(code, out, err)) if about == id:
           mute, streams = "ended", dict(zip(streams, (out, err), strict=True))
           if show is not HIDDEN:
-            yield told(id, f"exited {code}", *[x for x in ((out, show), (err, show_err)) if x[1] not in (None, HIDDEN)])
+            yield told(id, f"exited {code}", stdout=shown(out, show), stderr=show_err and shown(err, show_err))
         case ("cancel" | "close", *_) if covers(a, id):
           mute = "ended"
           yield "done", id, ended(a, id)
@@ -519,55 +524,64 @@ def scope(name):
   return ""
 
 
-def tell(name, text="", *notes):
+def tell(kind, on, path, got=None, show=HEAD):
   if (who := acting()) and tells(who):
-    say("tell", who, [headed(name, text), *notes])
+    say(
+      "tell",
+      who,
+      [
+        headed(
+          [x[1] for x in transcript(on) if x[0] == kind and x[2] == who][-1],
+          path=path,
+          **{"text": shown(got, show)} if isinstance(got, Text) else {"value": got},
+        )
+      ],
+    )
 
 
 def tells(id):
   return get(id)[2] != scope(id)
 
 
-def told(id, text="", *notes, word="text"):
-  return "tell", id, [headed(id, text, word), *notes]
+def told(id, what="", *notes, **words):
+  return "tell", id, [headed(id, what, **words), *notes]
 
 
 def control(kind, name, id, *words):
-  head = headed(id, " ".join([name, *map(repr, words)]))
-  if words and isinstance(words[0], str) and "\n" in words[0]:
-    head = headed(id, name) + headed(id, words[0], "value")[len(id) + 1 :]
-  return get(id) and (peek(id, ...) is ... or (kind == "wake" and paused(id))) and say(kind, id, *words, [head])
+  return (
+    get(id)
+    and (peek(id, ...) is ... or (kind == "wake" and paused(id)))
+    and say(kind, id, *words, [headed(id, name, value=(*words, None)[0])])
+  )
 
 
-def headed(name, text="", word="text"):
-  if "\n" in (text := str(text)):
-    while f"</s:{name}_{word}>\n" in text + "\n":
-      word += "_"
-    return f"#{name}\n<s:{name}_{word}>\n{text}</s:{name}_{word}>"
-  return f"#{name} {text}".rstrip()
-
-
-def commented(text):
-  return "\n".join(f"# {x}" if x else "#" for x in str(text).split("\n"))
+def headed(id, what="", reads="", **words):
+  lines = [f"#{id} {what}".rstrip()]
+  for word, value in words.items():
+    name = f"{id}_{word}"
+    if value in (None, ""):
+      continue
+    if isinstance(value, str) and "\n" in value:
+      while f"</s:{name}>\n" in value + "\n":
+        name += "_"
+      lines.append(f"<s:{name}>\n{value}</s:{name}>")
+    else:
+      said = re.sub(r"^[\w.]+\.(?=[A-Z]\w*\()", "", repr(value))
+      try:
+        eval(said, module(scope(id)))
+      except Exception:
+        lines[0] += " " + said
+        said = reads or f"peek({id!r})"
+      lines.append(f"{name} = {said}")
+  return "\n".join(lines)
 
 
 def bound(id, of="object"):
   return f"{id}: Act[{of}] = Act({id!r})"
 
 
-def showing(got, show):
-  return [(got, show) if isinstance(got, Text) else commented(repr(got))]
-
-
-def shown(pair, seen):
-  match pair:
-    case (Text(path) as text, show):
-      old, lines = seen.setdefault(path, {}), text.lines
-      picked = show(lines)
-      new = {i: line for i in picked if old.get(i) != (line := lines[i - 1])}
-      old.update(new)
-      return commented(f"{path}, {len(picked) - len(new)} known" + "".join(f"\n{i} {line}" for i, line in new.items()))
-  return pair
+def shown(text, show):
+  return "\n".join(text.lines[i - 1] for i in show(text.lines))
 
 
 def unquoted(word):
@@ -803,8 +817,8 @@ Your reply
   it with assert or isinstance: assert isinstance(got, Exit).
 - Write a long text as a quote: <s:name> at the start of a line, then the text, then </s:name> at the end of a line.
   The quote binds the name to the text as a str, with no escapes. Give each quote a name that says what it holds.
-- The transcript shows a string of more than one line as a quote under its header, and binds it, as bash2_command or
-  prompt3_value. Use these names as the values that they hold.
+- The transcript binds each value that it tells under a name, as bash2_command or prompt3_value: a string of more than
+  one line as a quote, and any other value as a statement. Use these names as the values that they hold.
 - The transcript binds the name of each act that it shows. Await an act for its value.
 - A comment in the transcript is what the chain tells you. It binds nothing.
 
@@ -825,7 +839,7 @@ Your prompt
 
 How to work
 - Read before you write. To see a file, read it, with a show for a part of it: read(path, grep(pattern)) or
-  read(path, span(lo, hi)). The chain knows each line that it told, and a later read tells only new lines.
+  read(path, span(lo, hi)). A read shows lines without their numbers: text.find(pattern) gives the number of a line.
 - Change a file through the Text that read gave: replace, edit, insert or delete, then write. A write tells the lines
   that landed otherwise than you asked.
 - Use bash to run commands and to find paths, as bash("grep -rln pattern src"). Let its show pick the lines of a long

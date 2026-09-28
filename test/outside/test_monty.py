@@ -56,11 +56,11 @@ async def test_a_show_the_engine_made_is_called_back_from_the_thread_of_an_ear()
 
   def looking() -> Generator[tuple | None, tuple | None]:
     while True:
-      if (a := (yield)) is not None and a[0] == "tell":
-        picked.extend(show(text.lines) for note in a[3] if isinstance(note, tuple) for text, show in [note])
+      if (a := (yield)) is not None and a[0] == "shown":
+        picked.append(a[3](["one", "two"]))
 
   root = engine.boot((), world=sand.hears(), looking=looking())
-  sand.script[root] = ["read('n.txt', span(2, 2))\nclose(1)"]
+  sand.script[root] = ["say('shown', acting(), span(2, 2))\nclose(1)"]
   assert await engine.prompt(int, "read it", on=root) == 1
   assert picked == [[2]]
 

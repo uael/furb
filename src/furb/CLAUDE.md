@@ -20,7 +20,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - share: the part of a window that one model response used.
 - standing: what the chains stand on, which the World answers a stand with: the roster, the directory and the default
   actor; its one home is the transcript of the root, where the done of the last stand holds it, and a chain tells
-  each standing it takes in one paragraph, under the headers roster, cwd and actor.
+  each standing it takes in one paragraph headed standing, which binds the roster, the directory and the actor.
 - stand: the act that asks the World for the standing, which boot makes on the root as a life opens and again at
   the tip of a later life.
 - tip: the point of a later life where the journal has said the record again whole, at which boot stands the life
@@ -72,18 +72,17 @@ meanings. The entry of such a name here gives only its form in the engine.
 - module: the fact that carries the globals of a chain, which the chain says at its birth and at each replay.
 - prefix: the fact that carries what a chain with a source holds of the transcript of its origin, which the chain
   says at its birth, before its open; the transcript of the chain holds those facts where the prefix stands.
-- note: one thing a tell says: python as it stands, or a text and its show.
+- note: one thing a tell says: a paragraph, or the binding of an act.
 - paragraph: what one fact that tells stands as in a turn: its notes, with a blank line between two paragraphs.
-- header: the first line of a paragraph: # and, with no space, the id of the act it is of, or the kind of a query,
-  whose id no chain binds, then its words.
+- header: the first line of a paragraph: # and, with no space, the id of the act it is of, then what happened to
+  the act, and no text that the act tells.
 - advance: the header the chain tells last before a reply, which names the rung it asks for and the prompt that
   rung advances.
-- binding: a statement that binds the name of an act to the act, which a turn shows and a rung the chain writes
-  runs.
+- binding: a statement that binds the name of an act to the act, or a value that the act tells to the id of the act
+  and the word of the value, as bash1_command, which a turn shows and a rung the chain writes runs.
 - tell: a fact that carries notes about the act it is of, which the turns are folded from and the journal keeps
   none of.
 - turn: one item of what a model reads of a transcript, folded from the tells: a role, python, a usage and blocks.
-- known: a line that a model was told, in the transcript of its chain.
 - prompt: the act that sends a message to an actor and wants a response of a shape.
 - message: the text a prompt carries.
 - shape: the python type of a response, which a prompt carries by its name.

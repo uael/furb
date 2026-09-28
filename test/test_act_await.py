@@ -5,7 +5,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import acts, born, heads, rows, said, settle, slow, stalled
+from conftest import acts, born, heads, paragraphs, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR, Exit, Text
 
@@ -64,14 +64,15 @@ async def test_a_word_that_awaits_a_chain_raises_refused_where_it_waited() -> No
   assert await engine.prompt(int, "fork", on=root) == 2
   await settle()
   assert heads(engine.turns(on=root)) == [
-    "#chain1 root",
-    rows("chain1")[0],
-    "#prompt1 fork",
+    "#chain1",
+    "#chain1 standing",
+    "#prompt1",
     "#rung1 advance on prompt1",
-    "#rung1 raised Refused('chain2 never settles')",
+    "#rung1 raised",
     "#rung3 advance on prompt1",
-    "#prompt1 closed 2",
+    "#prompt1 closed",
   ]
+  assert "#rung1 raised\nrung1_raised = Refused('chain2 never settles')" in paragraphs(engine.turns(on=root))
   assert [(a[1], a[4]) for a in said(log, "chain")] == [("chain1", "root"), ("chain2", "sub")]
 
 

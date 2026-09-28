@@ -8,14 +8,15 @@ from conftest import (
   WORLD,
   Py,
   acts,
+  bindings,
   born,
   chained,
   counted,
   dones,
   gated,
-  heads,
   kept,
   of,
+  opened,
   paragraphs,
   ran,
   said,
@@ -25,6 +26,7 @@ from conftest import (
   takes,
   watched,
   world_says,
+  written,
 )
 from furb import engine
 from furb.engine import Exit, Refused, Text
@@ -34,7 +36,7 @@ async def test_the_run_of_a_word_on_a_chain() -> None:
   """The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is."""
   log, root, laid, act, step, _ = await counted()
   assert [(a[1], a[2], a[3]) for a in said(log, "tell") if a[1] in (laid, step)] == [
-    (laid, laid, [f"#{laid} k = 1"]),
+    (laid, laid, [written(laid, "k = 1")]),
     (step, root, [f"#{step} advance on {act}"]),
   ]
   assert [(a[2], a[3]) for a in said(log, "reply")] == [(step, root)]
@@ -60,7 +62,8 @@ async def test_the_engine_tells_what_a_step_raised() -> None:
   act = engine.prompt(int, "try", on=root)
   assert await act == 1
   first, second = [a[1] for a in said(log, "rung") if a[2] == act]
-  assert engine.turns(on=root)[2][1] == f"#{first} raised ValueError('boom')\n\n#{second} advance on {act}"
+  raised = f"#{first} raised\n{first}_raised = ValueError('boom')"
+  assert engine.turns(on=root)[2][1] == f"{raised}\n\n#{second} advance on {act}"
 
 
 async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -> None:
@@ -74,7 +77,7 @@ async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -
 
 
 async def test_the_open_of_a_rung_with_a_word_tells_that_word_as_a_command_tells_its_command() -> None:
-  """The open of a rung with a word tells that word as a command tells its command: in its header when it holds one line, and as a quote under its header when it holds more, so no word that ran runs again."""
+  """The open of a rung with a word tells that word as a command tells its command, bound as rungN_word, so no word that ran runs again."""
   sand, log, root = born()
   one = engine.rung("n = 1", on=root)
   await one
@@ -82,14 +85,14 @@ async def test_the_open_of_a_rung_with_a_word_tells_that_word_as_a_command_tells
   act = engine.rung(word, on=root)
   await act
   assert [a[3] for a in said(log, "tell") if a[1] in (one, act)] == [
-    [f"#{one} n = 1"],
+    [written(one, "n = 1")],
     [f"#{act}\n<s:{act}_word>\n{word}</s:{act}_word>"],
   ]
   sand.script[root] = ["close(n)"]
   asking = engine.prompt(int, "count", on=root)
   assert await asking == 2
   (binding,) = [a[4] for a in said(log, "rung") if a[2] == root]
-  assert binding == f"{engine.bound(root)}\n{act}_word = {word!r}\n{engine.bound(asking, 'int')}"
+  assert binding == bindings(root, asking, "int", "count", written(one, "n = 1"), f"{act}_word = {word!r}")
   assert engine.module(root)[f"{act}_word"] == word and engine.module(root)["hi"] == "hi"
 
 
@@ -115,16 +118,21 @@ async def test_a_rung_with_no_word_and_no_actor_takes_the_default_actor_of_its_c
   world_says("done", asked[1], ("assistant", "k = 1", (80000, 0, 0, 0, 0.0), None))
   await settle()
   assert [a[6] for a in said(log, "rung") if a[1] == bare] == ["m/low"] == [a[4] for a in said(log, "reply")]
-  assert [one for one in heads(engine.turns(on=root)) if " ledger " in one] == [f"#{bare} ledger spent=0.0 filled=0.2"]
+  assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#grant1 ledger")] == [
+    "#grant1 ledger\ngrant1_spent = 0.0\ngrant1_filled = 0.2"
+  ]
 
 
-async def test_the_raised_header_tells_the_exception_as_python_shows_it() -> None:
-  """The raised header tells the exception as python shows it, which says its type and its message."""
+async def test_the_raised_paragraph_binds_the_exception_as_rungn_raised() -> None:
+  """The raised paragraph binds the exception as rungN_raised, as python shows it, which says its type and its message."""
   _, log, root = born()
   with pytest.raises(ValueError, match="boom"):
     await engine.rung("raise ValueError('boom')", on=root)
   (act,) = [a[1] for a in said(log, "rung")]
-  assert of(engine.turns(on=root), act) == [f"#{act} raise ValueError('boom')", f"#{act} raised ValueError('boom')"]
+  assert of(engine.turns(on=root), act) == [
+    f"#{act}\n{act}_word = \"raise ValueError('boom')\"",
+    f"#{act} raised\n{act}_raised = ValueError('boom')",
+  ]
 
 
 async def test_a_rung_that_retells_another_rung_names_its_acts_under_that_one() -> None:
@@ -239,11 +247,7 @@ async def test_the_turns_of_the_chain_of_another_prompt_tell_the_rung_of_a_word_
   assert await engine.prompt(int, "delegate", on=root) == 1
   await settle()
   (helper,) = [a[1] for a in said(log, "rung") if a[4] == "helper = 2"]
-  assert paragraphs(engine.turns(on=two)) == [
-    f"#{two} two\n{two}: Act[object] = Act({two!r})",
-    takes(two),
-    f"#{helper} helper = 2",
-  ]
+  assert paragraphs(engine.turns(on=two)) == [opened(two, "two"), takes(two), written(helper, "helper = 2")]
   assert of(engine.turns(on=root), helper) == []
 
 
@@ -312,7 +316,7 @@ async def test_a_chain_with_a_source_awaits_what_its_origin_started() -> None:
 async def test_it_says_its_word_may_run_as_soon_as_it_holds_one() -> None:
   """It says its word may run as soon as it holds one, whichever way that word came, and what the chain makes of the word is the chain's."""
   log, root, laid, act, step, binding = await counted()
-  wrote = f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"
+  wrote = bindings(root, act, "int", "count", written(laid, "k = 1"))
   assert [a[1:] for a in said(log, "ready")] == [
     (laid, laid, "k = 1"),
     (binding, binding, wrote),
@@ -358,7 +362,10 @@ async def test_it_is_done_with_what_the_word_gave() -> None:
   assert [type(a[3]).__name__ for a in dones(log, "run")] == ["NoneType", "CancelledError", "ValueError"]
   assert engine.peek(ended) is None and engine.peek(answered) == 21
   assert isinstance(engine.peek(hurt), ValueError)
-  assert of(engine.turns(on=root), hurt) == [f"#{hurt} raise ValueError('boom')", f"#{hurt} raised ValueError('boom')"]
+  assert of(engine.turns(on=root), hurt) == [
+    f"#{hurt}\n{hurt}_word = \"raise ValueError('boom')\"",
+    f"#{hurt} raised\n{hurt}_raised = ValueError('boom')",
+  ]
 
 
 async def test_of_the_acts_its_word_made_and_read_at_once_it_tells_nothing() -> None:
@@ -368,7 +375,7 @@ async def test_of_the_acts_its_word_made_and_read_at_once_it_tells_nothing() -> 
   assert await act == 1
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   told = engine.turns(on=root)
-  assert told[2][1] == f"#read a.txt\n# /w/a.txt, 0 known\n# 1 one\n\n#{act} closed 1"
+  assert told[2][1] == f"#read1\nread1_path = 'a.txt'\nread1_text = 'one'\n\n#{act} closed\n{act}_value = 1"
   assert of(told, step) == [f"#{step} advance on {act}"]
 
 

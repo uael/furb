@@ -2,7 +2,7 @@
 
 from collections.abc import Generator
 
-from conftest import STANDS, Sand, born, heads, kernel, relived, said, settle
+from conftest import STANDS, Sand, born, kernel, paragraphs, relived, settle
 from furb import engine
 
 
@@ -30,15 +30,14 @@ async def test_standing_gives_what_the_chains_stand_on() -> None:
 
 async def test_it_reads_the_transcript_of_the_root_as_it_stands_where_the_call_is_made() -> None:
   """It reads the transcript of the root as it stands where the call is made, so a grant reads the window of an actor off the standing where the answer of its reply lands, and a later life reads at each place of the record the standing that the record held there."""
-  sand, log, root = born("close(1)", cost=(200000, 0, 0, 0, 0.0))
+  sand, _, root = born("close(1)", cost=(200000, 0, 0, 0, 0.0))
   engine.grant(share=0.9, on=root)
   one = engine.prompt(int, "count", on=root)
   assert await one == 1
   await settle()
-  (answered,) = [a[1] for a in said(log, "rung") if a[2] == one]
-  ledger = [f"#{answered} ledger spent=0.0 filled=0.5"]
-  assert [a for a in heads(engine.turns(on=root)) if " ledger " in a] == ledger
+  ledger = ["#grant1 ledger\ngrant1_spent = 0.0\ngrant1_filled = 0.5"]
+  assert [a for a in paragraphs(engine.turns(on=root)) if a.startswith("#grant1 ledger")] == ledger
   later = Sand(stands=[[STANDS[0][0]], "/z", "operator"])
   await relived(later, list(sand.record))
   assert engine.standing() == later.stands
-  assert [a for a in heads(engine.turns(on=root)) if " ledger " in a] == ledger
+  assert [a for a in paragraphs(engine.turns(on=root)) if a.startswith("#grant1 ledger")] == ledger

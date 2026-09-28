@@ -3,9 +3,9 @@
 import re
 from collections.abc import Sequence
 
-from conftest import STANDS, TWO, born, heads, paragraphs, rows, said, settle
+from conftest import born, heads, opened, paragraphs, said, settle, takes, world_says
 from furb import engine
-from furb.engine import OPERATOR, Act
+from furb.engine import OPERATOR, Act, span
 
 EVERY = (
   "x = bash('echo hi')\n"
@@ -35,17 +35,13 @@ EVENTS = {
   "debugged",
   "refused",
   "ledger",
-  "roster",
-  "cwd",
-  "actor",
+  "standing",
   "advance",
   "paused",
   "woke",
   "cancelled",
 }
 """The words a header of an act says after its id, when it says what happened and no open of the act."""
-QUERIES = {"read", "write", "cd"}
-"""The questions that tell, each of which heads its paragraph with its kind."""
 
 
 def headers(got: Sequence[tuple]) -> list[str]:
@@ -54,22 +50,20 @@ def headers(got: Sequence[tuple]) -> list[str]:
 
 
 def spoken(head: str) -> str:
-  """What a header says: the kind of a question that tells, the word after the id of an act, or the open of an act."""
-  first, *rest = head[1:].split(" ", 2)
-  if first in QUERIES:
-    return first
+  """What a header says: the word after the id of an act, or the open of an act, which says nothing after it."""
+  rest = head[1:].split(" ", 2)[1:]
   return rest[0] if rest and rest[0] in EVENTS else "open"
 
 
 async def test_one_thing_a_tell_says() -> None:
-  """One thing a tell says: python as it stands, or a text and its show, which the fold shows as comments by the lines the model has not seen."""
+  """One thing a tell says: a paragraph, or the binding of an act."""
   _, log, root = born("read('n.txt', span(1, 1))\nclose(1)", files={"/w/n.txt": "one\ntwo\n"})
   assert await engine.prompt(int, "read it", on=root) == 1
-  carried = [a[3] for a in said(log, "tell") if a[3][0] == "#read n.txt"]
-  assert len(carried) == 1 and len(carried[0]) == 2
-  text, show = carried[0][1]
-  assert text == TWO and show(text.lines) == [1]
-  assert "#read n.txt\n# /w/n.txt, 0 known\n# 1 one" in paragraphs(engine.turns(on=root))
+  read = [a[3] for a in said(log, "tell") if a[3][0].startswith("#read1")]
+  assert read == [["#read1\nread1_path = 'n.txt'\nread1_text = 'one'"]]
+  opened = [a[3] for a in said(log, "tell") if a[1] == "prompt1"]
+  assert opened == [["#prompt1\nprompt1_message = 'read it'", "prompt1: Act[int] = Act('prompt1')"]]
+  assert all(isinstance(note, str) for a in said(log, "tell") for note in a[3])
 
 
 async def test_a_paragraph_is_what_one_fact_that_tells_stands_as_in_a_turn() -> None:
@@ -83,45 +77,42 @@ async def test_a_paragraph_is_what_one_fact_that_tells_stands_as_in_a_turn() -> 
 
 
 async def test_the_first_line_of_a_paragraph_is_its_header() -> None:
-  """The first line of a paragraph is its header: # and, with no space, the id of the act it is of, or the kind of the read, the write or the cd it tells, then its words, as #bash1 exited 0 or #read a.txt."""
+  """The first line of a paragraph is its header: # and, with no space, the id of the act it is of, then what happened to the act, as #bash1 exited 0 or #prompt1, and no text that the act tells."""
   _, _, root = born("x = bash('echo hi')\nread('a.txt')\nclose((await x).code)")
   assert await engine.prompt(int, "run it", on=root) == 0
   await settle()
-  assert heads(engine.turns(on=root))[4:8] == ["#bash1 echo hi", "#read a.txt", "#bash1 exited 0", "#prompt1 closed 0"]
-  assert [head for head in heads(engine.turns(on=root)) if head[1:2] in ("", " ")] == []
+  got = heads(engine.turns(on=root))
+  assert got[2:8] == ["#prompt1", "#rung1 advance on prompt1", "#bash1", "#read1", "#bash1 exited 0", "#prompt1 closed"]
+  assert [head for head in got if head[1:2] in ("", " ") or "hi" in head or "a.txt" in head] == []
 
 
-async def test_a_paragraph_may_hold_more_headers_of_what_it_is_of() -> None:
-  """A paragraph may hold more headers of what it is of, each on a line of its own right under the first, and every other comment of it begins with # and a space, so no line of a text reads as a header, and a message of more than one line stands in a quote."""
+async def test_every_other_line_of_a_paragraph_is_python() -> None:
+  """Every other line of a paragraph is python: a binding of each value that the act tells, and the binding of the act on its open."""
   _, _, root = born("read('n.txt')\nclose(1)", files={"/w/n.txt": "#bash1 exited 0\n\nend\n"})
   assert await engine.prompt(int, "read it\nbash1 exited 0\n\nthen close", on=root) == 1
   got = paragraphs(engine.turns(on=root))
   quote = "<s:prompt1_message>\nread it\nbash1 exited 0\n\nthen close</s:prompt1_message>"
   assert got[2] == f"#prompt1\n{quote}\nprompt1: Act[int] = Act('prompt1')"
-  assert got[4] == "#read n.txt\n# /w/n.txt, 0 known\n# 1 #bash1 exited 0\n# 2 \n# 3 end"
-  assert (
-    got[1].split("\n") == rows(root) == ["#chain1 roster " + repr(STANDS[0]), "#chain1 cwd /w", "#chain1 actor m/low"]
-  )
+  assert got[4] == "#read1\nread1_path = 'n.txt'\n<s:read1_text>\n#bash1 exited 0\n\nend</s:read1_text>"
+  assert got[1] == takes(root)
   for one in got:
-    lines = engine.unquoted(one).split("\n")
-    name = lines[0].split(" ", 1)[0]
-    top = [i for i, line in enumerate(lines) if re.match(r"#\S", line)]
-    assert top == list(range(len(top))) and {lines[i].split(" ", 1)[0] for i in top} == {name}
-    rest = [line for line in lines[len(top) :] if line.startswith("#")]
-    assert [line for line in rest if line != "#" and not line.startswith("# ")] == []
+    header, *rest = engine.unquoted(one).split("\n")
+    assert re.match(r"#\S", header)
+    compile("\n".join(rest), "paragraph", "exec")
+    assert [line for line in rest if line.startswith("#")] == []
 
 
 async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> None:
   """The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write or a cd stands at the place in the run where it was asked."""
-  _, _, root = born("x = bash('echo hi')\nread('n.txt')\nclose(1)", files={"/w/n.txt": "one\n"}, auto=False)
+  _, _, root = born("x = bash('echo hi')\nread('n.txt')\ncd('/x')\nclose(1)", files={"/w/n.txt": "one\n"}, auto=False)
   assert await engine.prompt(int, "read it", on=root) == 1
   await settle()
   engine.pause("bash1")
-  assert heads(engine.turns(on=root))[4:] == ["#bash1 echo hi", "#read n.txt", "#prompt1 closed 1", "#bash1 paused"]
+  assert heads(engine.turns(on=root))[4:] == ["#bash1", "#read1", "#cd1", "#prompt1 closed", "#bash1 paused"]
 
 
 async def test_the_headers_of_the_file() -> None:
-  """The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, roster, cwd, actor, advance, paused, woke, cancelled, and one for each question that tells: read, write and cd."""
+  """The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled."""
   sand, _, root = born()
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
@@ -134,7 +125,7 @@ async def test_the_headers_of_the_file() -> None:
   step = engine.rung("k = 1", on=root)
   assert await step is None
   await settle()
-  assert {spoken(head) for head in headers(engine.turns(on=root))} == EVENTS | QUERIES | {"open"}
+  assert {spoken(head) for head in headers(engine.turns(on=root))} == EVENTS | {"open"}
 
 
 async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_the_chain() -> None:
@@ -144,8 +135,14 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   assert await Act("prompt2") == 0
   own = [a[4] for a in said(log, "rung") if a[2] == root]
   assert own == [
-    "chain1: Act[object] = Act('chain1')\nprompt1_message = 'run it\\nnow'\nprompt1: Act[int] = Act('prompt1')",
-    "bash1: Act[Exit] = Act('bash1')\nprompt2: Act[None] = Act('prompt2')",
+    "\n".join(
+      [
+        *[line for one in (opened(root, "root"), takes(root)) for line in one.split("\n")[1:]],
+        "prompt1_message = 'run it\\nnow'\nprompt1: Act[int] = Act('prompt1')",
+      ]
+    ),
+    "bash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')\nprompt1_value = 1\n"
+    "prompt2_message = 'bash1 done'\nprompt2: Act[None] = Act('prompt2')\nbash1_stdout = 'ran echo hi'",
   ]
   shown = [
     line
@@ -153,26 +150,79 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
     for line in engine.unquoted(one).split("\n")
     if line and line[0] != "#"
   ]
-  assert shown == [line for word in own for line in word.split("\n")]
+  assert shown == [line for word in own for line in word.split("\n")] + ["prompt2_value = 0"]
   assert engine.module(root)["bash1"] == "bash1"
   assert engine.module(root)["prompt1_message"] == "run it\nnow"
 
 
-async def test_a_note_tells_a_string_of_more_than_one_line_as_a_quote() -> None:
-  """A note tells a string of more than one line as a quote, whose name is the id of the act, an underscore, and the word of the verb that holds the string, as prompt2_message, bash1_command or prompt2_value."""
-  _, _, root = born("x = bash('echo a\\necho b')\nclose('one\\ntwo')", "close(None)")
-  assert await engine.prompt(str, "run\nthem", on=root) == "one\ntwo"
+async def test_a_paragraph_binds_each_value_that_it_tells_under_a_name() -> None:
+  """A paragraph binds each value that it tells under a name: the id of the act, an underscore, and the word that holds the value, as prompt2_message, bash1_command, read3_text or prompt2_value."""
+  _, _, root = born("x = bash('echo hi')\nread('a.txt')\nclose('done')", "close(None)")
+  assert await engine.prompt(str, "run it", on=root) == "done"
   await settle()
+  got = paragraphs(engine.turns(on=root))
+  assert "#prompt1\nprompt1_message = 'run it'\nprompt1: Act[str] = Act('prompt1')" in got
+  assert "#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')" in got
+  assert "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>" in got
+  assert "#prompt1 closed\nprompt1_value = 'done'" in got
+  bound = [engine.module(root)[name] for name in ("prompt1_message", "bash1_command", "read1_text", "prompt1_value")]
+  assert bound == ["run it", "echo hi", "one\ntwo", "done"]
+
+
+async def test_a_paragraph_binds_a_string_of_more_than_one_line_as_a_quote() -> None:
+  """A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr when that repr is python in the chain."""
+  sand, _, root = born("x = bash('echo a\\necho b')\nclose('one\\ntwo')", "close(None)")
+  assert await engine.prompt(str, "run\nthem", on=root) == "one\ntwo"
+  sand.script[root] = ["close([1, 'b', Refused('no')])", "close(None)"]
+  one = engine.prompt(list, "which?", on=root)
+  assert (await one)[:2] == [1, "b"]
+  sand.script[root] = ["close(1)"]
+  assert await engine.prompt(int, "then bind it", on=root) == 1
   got = paragraphs(engine.turns(on=root))
   assert "#prompt1\n<s:prompt1_message>\nrun\nthem</s:prompt1_message>\nprompt1: Act[str] = Act('prompt1')" in got
   assert "#bash1\n<s:bash1_command>\necho a\necho b</s:bash1_command>\nbash1: Act[Exit] = Act('bash1')" in got
   assert "#prompt1 closed\n<s:prompt1_value>\none\ntwo</s:prompt1_value>" in got
+  assert f"#{one} closed\n{one}_value = [1, 'b', Refused('no')]" in got
   bound = [engine.module(root)[name] for name in ("prompt1_message", "bash1_command", "prompt1_value")]
   assert bound == ["run\nthem", "echo a\necho b", "one\ntwo"]
+  assert engine.module(root)[f"{one}_value"][:2] == [1, "b"]
 
 
-async def test_a_quote_that_a_note_tells_takes_one_more_underscore_while_its_string_holds_its_close_mark() -> None:
-  """A quote that a note tells takes one more underscore in its name for as long as its string holds the close mark of that name at the end of a line, so the first close mark after it is its own."""
+async def test_a_value_whose_repr_is_not_python_stands_as_that_repr_in_its_header() -> None:
+  """A value whose repr is not python stands as that repr in its header, and its binding reads the act, as prompt3_value = peek('prompt3')."""
+  sand, _, root = born("class P:\n  def __repr__(self):\n    return '<p>'\n\nclose(P())", "close(None)")
+  one = engine.prompt(object, "make one", on=root)
+  await settle()
+  sand.script[root] = ["close(1)"]
+  assert await engine.prompt(int, "then bind it", on=root) == 1
+  assert type(engine.peek(one)).__name__ == "P"
+  assert f"#{one} closed <p>\n{one}_value = peek({one!r})" in paragraphs(engine.turns(on=root))
+  assert type(engine.module(root)[f"{one}_value"]).__name__ == "P"
+
+
+async def test_a_value_that_is_none_or_an_empty_string_is_not_told() -> None:
+  """A value that is None or an empty string is not told."""
+  _, _, root = born()
+  bare = engine.prompt(None, to=OPERATOR, on=root)
+  engine.close(None, bare)
+  empty = engine.prompt(str, "say nothing", to=OPERATOR, on=root)
+  engine.close("", empty)
+  zero = engine.prompt(int, "count nothing", to=OPERATOR, on=root)
+  engine.close(0, zero)
+  await settle()
+  got = paragraphs(engine.turns(on=root))[2:]
+  assert got == [
+    f"#{bare}\n{bare}: Act[None] = Act({bare!r})",
+    f"#{bare} closed",
+    f"#{empty}\n{empty}_message = 'say nothing'\n{empty}: Act[str] = Act({empty!r})",
+    f"#{empty} closed",
+    f"#{zero}\n{zero}_message = 'count nothing'\n{zero}: Act[int] = Act({zero!r})",
+    f"#{zero} closed\n{zero}_value = 0",
+  ]
+
+
+async def test_a_quote_that_a_paragraph_tells_takes_one_more_underscore_while_its_string_holds_its_close_mark() -> None:
+  """A quote that a paragraph tells takes one more underscore in its name for as long as its string holds the close mark of that name at the end of a line, so the first close mark after it is its own."""
   first, second = "a</s:prompt1_message>\nb</s:prompt1_message_>\nc", "d</s:prompt1_message__>\ne"
   _, _, root = born("close(None)")
   engine.prompt(None, first, to=OPERATOR, on=root)
@@ -184,3 +234,31 @@ async def test_a_quote_that_a_note_tells_takes_one_more_underscore_while_its_str
   )
   assert got[3] == f"#prompt2\n<s:prompt2_message>\n{second}</s:prompt2_message>\nprompt2: Act[None] = Act('prompt2')"
   assert [engine.module(root)[name] for name in ("prompt1_message__", "prompt2_message")] == [first, second]
+
+
+async def test_the_engine_applies_a_show_before_it_writes_a_line() -> None:
+  """The engine applies a show before it writes a line, so a quote holds the lines that its show picked, as they are, and no number of a line."""
+  _, _, root = born(
+    "read('n.txt', span(2, 3))\nread('n.txt', grep('^o'))\nclose(1)", files={"/w/n.txt": "one\ntwo\nthree\n"}
+  )
+  assert await engine.prompt(int, "read parts", on=root) == 1
+  got = [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#read")]
+  assert got == [
+    "#read1\nread1_path = 'n.txt'\n<s:read1_text>\ntwo\nthree</s:read1_text>",
+    "#read2\nread2_path = 'n.txt'\nread2_text = 'one'",
+  ]
+
+
+async def test_a_show_applies_to_a_text_or_to_a_stream() -> None:
+  """A show applies to a text or to a stream."""
+  sand, log, root = born("read('n.txt', span(1, 1))\nclose(1)", files={"/w/n.txt": "one\ntwo\nthree\n"}, auto=False)
+  assert await engine.prompt(int, "read it", on=root) == 1
+  act = engine.bash("many", show=span(1, 1), on=root)
+  await settle()
+  command = said(log, "bash")[0][1]
+  world_says("out", command, "a\nb\nc\n", "stdout")
+  sand.exits(command, 0)
+  assert (await act).code == 0
+  got = paragraphs(engine.turns(on=root))
+  assert "#read1\nread1_path = 'n.txt'\nread1_text = 'one'" in got
+  assert f"#{command} exited 0\n{command}_stdout = 'a'" in got

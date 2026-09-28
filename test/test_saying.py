@@ -26,4 +26,4 @@ async def test_what_an_ear_says() -> None:
   assert len(fact) == len(saying) + 1 and fact[2] == "note"
   act = engine.bash("echo hi", on=root)
   opened = next(one for one in said(log, "tell") if one[1] == act)
-  assert opened == ("tell", "bash1", "bash1", ["#bash1 echo hi", "bash1: Act[Exit] = Act('bash1')"])
+  assert opened == ("tell", "bash1", "bash1", ["#bash1\nbash1_command = 'echo hi'", "bash1: Act[Exit] = Act('bash1')"])

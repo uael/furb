@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  bound,
   decodeRecord,
   display,
   type Ear,
@@ -8,8 +9,8 @@ import {
   files,
   isQuestion,
   paragraphs,
+  plain,
   speaking,
-  uncommented,
 } from "../src/index.ts";
 
 const engines: Engine[] = [];
@@ -275,7 +276,7 @@ test("an ear reads the turns of a chain when it takes a reply, which carries non
   const [reply, turns] = read;
   expect((reply as Fact).slice(3)).toEqual([on, "model/low"]);
   expect(turns).toEqual(engine.turns({ on }));
-  expect(engine.turns({ on })[0]?.[1]).toContain("#prompt1 hi");
+  expect(engine.turns({ on })[0]?.[1]).toContain("#prompt1\nprompt1_message = 'hi'\n");
 });
 
 test("an ear that throws raises in the life, and an ear of the crate hears in one engine", () => {
@@ -317,12 +318,16 @@ test("a function of JavaScript that makes an ear gives the ear that an act bring
   expect(await note).toBe(7);
 });
 
-test("the text of a paragraph drops the mark of each comment and the two marks of each quote", () => {
+test("the text of a paragraph drops the two marks of each quote, and a binding reads back the string it binds", () => {
   const [told] = paragraphs(
     "#prompt1\n<s:prompt1_message>\ncount\n# them\n</s:prompt1_message>\nprompt1: Act[int] = Act('prompt1')",
   );
   expect(told?.name).toBe("prompt1");
-  expect(uncommented(told?.lines ?? [])).toBe("count\n# them\nprompt1: Act[int] = Act('prompt1')");
-  expect(uncommented(["# one", "#", "x = 1"])).toBe("one\n\nx = 1");
-  expect(uncommented(["<s:a>", "b</s:a>", "c</s:a>"])).toBe("b\nc</s:a>");
+  expect(plain(told?.lines ?? [])).toBe("count\n# them\nprompt1: Act[int] = Act('prompt1')");
+  expect(plain(["x = 1", "<s:a>", "b</s:a>", "c</s:a>"])).toBe("x = 1\nb\nc</s:a>");
+  expect(bound(told?.lines ?? [], "prompt1_message")).toBe("count\n# them\n");
+  expect(bound(["<s:a__>", "b</s:a_>", "c</s:a__>"], "a")).toBe("b</s:a_>\nc");
+  expect(bound(["x = 1", "a = 'it\\'s\\n\\x07\\u00e9\\\\'", 'b = "it\'s"'], "a")).toBe("it's\n\x07é\\");
+  expect(bound(['b = "it\'s"'], "b")).toBe("it's");
+  expect(bound(["x = 1"], "x")).toBeUndefined();
 });

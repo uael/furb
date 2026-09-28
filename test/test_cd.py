@@ -56,6 +56,6 @@ async def test_cd_tells_the_directory_it_came_to() -> None:
   _, _, root = born("cd('x')\nclose(1)")
   assert await engine.prompt(int, "move", on=root) == 1
   await settle()
-  assert engine.turns(on=root)[-1][1] == "#cd /w/x\n\n#prompt1 closed 1"
+  assert engine.turns(on=root)[-1][1] == "#cd1\ncd1_path = '/w/x'\n\n#prompt1 closed\nprompt1_value = 1"
   was = paragraphs(engine.turns(on=root))
   assert engine.cd("/y", on=root) == "/y" and paragraphs(engine.turns(on=root)) == was

@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import COST, acts, born, heads, said, settle, slow, stalled
+from conftest import COST, acts, born, heads, paragraphs, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -81,7 +81,7 @@ async def test_a_control_carries_the_header_it_tells() -> None:
   sand, log, root = born(cost=COST)
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
-  closed = f"#{ghost} closed Refused('ghost no actor')"
+  closed = f"#{ghost} closed\n{ghost}_value = Refused('ghost no actor')"
   shut = said(log, "close")[0]
   assert shut[:3] == ("close", ghost, root) and shut[4] == [closed]
   assert isinstance(shut[3], Refused) and str(shut[3]) == "ghost no actor"
@@ -90,7 +90,7 @@ async def test_a_control_carries_the_header_it_tells() -> None:
   engine.prompt(int, "count", on=root)
   await settle()
   assert said(log, "pause") == [("pause", root, ceiling, [f"#{root} paused"])]
-  assert [line for line in heads(engine.turns(on=root)) if line in (closed, f"#{root} paused")] == [
+  assert [line for line in paragraphs(engine.turns(on=root)) if line in (closed, f"#{root} paused")] == [
     closed,
     f"#{root} paused",
   ]

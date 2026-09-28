@@ -4,6 +4,7 @@ from conftest import (
   DOOR,
   WORLD,
   Dead,
+  bindings,
   born,
   findings,
   keeping,
@@ -30,7 +31,7 @@ async def test_the_way_to_say_a_fact_from_what_is_no_ear() -> None:
   assert made == ("tell", "chain1", OPERATOR, ["#chain1 noted"])
   assert said(log, "tell")[-1] == made
   assert await engine.rung("cd('sub')", on=root) is None
-  assert said(log, "tell")[-1] == ("tell", "rung1", "rung1", ["#cd /w/sub"])
+  assert said(log, "tell")[-1] == ("tell", "rung1", "rung1", ["#cd1\ncd1_path = '/w/sub'"])
   assert (
     world_says("tell", root, ["#chain1 later"]) == said(log, "tell")[-1] == ("tell", root, WORLD, ["#chain1 later"])
   )
@@ -57,10 +58,7 @@ async def test_a_fact_reaches_the_world_the_kernel_and_the_journal_only_through_
   assert await engine.prompt(str, "read it", on=root) == "one\ntwo\n"
   assert [a[0] for a in sand.calls] == ["stand", "reply", "read"]
   assert findings(log) == [[]]
-  assert ran(log) == [
-    "chain1: Act[object] = Act('chain1')\nprompt1: Act[str] = Act('prompt1')",
-    "close(read('a.txt').content)",
-  ]
+  assert ran(log) == [bindings(root, "prompt1", "str", "read it"), "close(read('a.txt').content)"]
   assert [entry[0][4] for entry in sand.record if entry[0][0] == "read"] == ["a.txt"]
 
 

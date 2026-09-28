@@ -26,7 +26,7 @@ NAMES = vars(python)
 """NAMES are the names of the engine of this interpreter."""
 PURE = frozenset({
   "span", "grep", "differs", "HEAD", "TAIL", "HIDDEN",
-  "question", "headed", "commented", "bound", "showing", "shown", "unquoted", "offered", "ended", "idle",
+  "question", "bound", "shown", "unquoted", "offered", "ended", "idle",
 })  # fmt: skip
 """PURE are the callables of the engine that read no life, so the engine of this interpreter answers them."""
 ACTS = frozenset({"wait", "rung", "prompt", "chain", "grant", "bash", "act"})

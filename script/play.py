@@ -55,12 +55,12 @@ MESSAGE = f"""You have the engine and a directory of your own. Use them, in this
 
 
 def heads(root: str, name: str) -> list[str]:
-  """Every header in the turns of a chain whose kind or whose event is that name, as #cd /x or #rung3 debugged."""
+  """Every header in the turns of a chain whose event is that name, as #rung3 debugged."""
   return [
     line
     for _, py, _, _ in engine.turns(on=root)
     for line in py.split("\n")
-    if line[1:2].isalnum() and name in [line.split()[0][1:], *line.split()[1:2]]
+    if line[:1] == "#" and line[1:2].isalnum() and line.split()[1:2] == [name]
   ]
 
 

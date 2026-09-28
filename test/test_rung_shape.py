@@ -1,6 +1,6 @@
 """Rung, the word, the rung it retells and the actor of the run of one word."""
 
-from conftest import born, chained, said, settle
+from conftest import bindings, born, chained, said, settle, written
 from furb import engine
 
 
@@ -15,7 +15,7 @@ async def test_a_rung_carries_the_word_the_rung_it_retells_and_the_actor() -> No
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   (binding,) = [a[1] for a in said(log, "rung") if a[2] == root]
-  wrote = f"{root}: Act[object] = Act({root!r})\n{act}: Act[int] = Act({act!r})"
+  wrote = bindings(root, act, "int", "count", written(laid, "k = 21"))
   assert [a[4:] for a in said(log, "rung")] == [("k = 21", "", ""), ("", "", "m/high"), (wrote, "", "")]
   assert [a[1] for a in said(log, "rung")] == [laid, step, binding]
   twin = await chained("twin", root, 300)

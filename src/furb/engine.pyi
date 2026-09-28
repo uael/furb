@@ -126,7 +126,7 @@ def span(lo: int, hi: int) -> Show:
   """
 
 def grep(pattern: str) -> Show:
-  """grep(pattern) is the show of the lines that the pattern matches, each with its number."""
+  """grep(pattern) is the show of the lines that the pattern matches."""
 
 def differs(old: list[str]) -> Show:
   """differs(lines) is the show of the lines that differ from the lines it holds, which is what a write shows of what came back."""
@@ -146,9 +146,8 @@ def take(*ids: str, inside: bool = True) -> Filter:
   """
 
 def read(path: str, show: Show = HEAD, on: str = "") -> Text:
-  """A read: whoever serves the path answers it with the text of it, which the read tells by the lines the model has not seen.
+  """A read: whoever serves the path answers it with the text of it, which the read tells by the lines its show picks.
   A read that the World refuses raises Refused in the caller.
-  A read on a chain with a source tells the lines of a skipped read again, since they are not known there.
   The engine judges no scheme, so a path of an unknown scheme goes to the World too.
   read is given a path and a show.
   read gives a Text.
@@ -157,7 +156,7 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   Whether a name is one of the prompts a chain has heard on itself, which is what its doors serve and no other path, a path of no name being none of them.
   A prompt is the door of the program of its ladder, so a read of its name gives the word of every rung of it in order, the words the gate refused among them, which are none at all for a prompt that ran no word.
   A read of a door that a rung of that ladder says leaves the word of that rung out, since a rung is no part of the program it reads.
-  One made from inside an act tells itself, with its path and what it was answered, on the scope of that act; one made from outside an act tells nothing, and neither does one whose show is hidden.
+  One made from inside an act tells itself under its own name, with its path and what it was answered, on the scope of that act; one made from outside an act tells nothing, and neither does one whose show is hidden.
   A read answered with what is no text gives that value, and tells it as python shows it.
   """
 
@@ -166,8 +165,8 @@ def write(text: Text, on: str = "") -> Text:
   write is given a text, and gives the text as it is on disk after the write.
   A write that the World refuses raises Refused in the caller.
   The engine tells of a write of a text only the lines that differ from what the caller asked, and of a write a door answers with a value, that value.
-  A write takes no show, since what a write would show the word of the model already said: it tells the lines of what came back that differ from what it asked for, and of those, the lines the model has not seen, so a write that the disk took as it was asked tells nothing at all.
-  A door that answers a write with more than it was asked for tells the lines it added and no line the model read before.
+  A write takes no show, since what a write would show the word of the model already said: it tells the lines of what came back that differ from what it asked for, so a write that the disk took as it was asked tells nothing at all.
+  A door that answers a write with more than it was asked for tells each line of what came back that differs from the line it was asked for at the same place.
   A write to the door of a prompt edits the program of its ladder, so the door and the verb are one act.
   The chain answers a write of the door of one of its prompts with the text it took, and makes its rungs again from it.
   A write of a door that a rung of that ladder says leaves the word of that rung out, and that rung is no rung of the chain after it.
@@ -188,7 +187,7 @@ def peek(at: str, waiting: object = None) -> object:
 def turns(on: str = "") -> list[Turn]:
   """The turns of a chain, folded from what it has heard.
   The turns of what a chain has heard: every fact that carries notes stands as a paragraph of them, and nothing else stands at all.
-  The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines it has not seen, which the one that tells it says the show of.
+  The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines that the show of the one that tells it picks.
   turns reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing.
   A user turn packs one paragraph for each thing told since the last reply, in order.
   The turns of a chain only grow.
@@ -321,11 +320,13 @@ def close(value: object, id: str = "") -> None:
 def debug(template: Template) -> None:
   """What a word tells of itself as it runs: each interpolation of a template, with its expression and its value.
   The engine tells what a step debugged.
-  A debugged header tells one interpolation of a debug, its expression and its value.
+  A debugged header names the expression of each interpolation of a debug, in order, and the paragraph binds their values in the list of the rung, as #rung5 debugged i len(y) and rung5_debug = [3, 7].
   A raised header and a debugged header stand at the place in the run where they happened.
   The transcript holds between the entries what the run of each word raised and debugged.
   debug is given a python template string.
   debug tells each interpolation of the template, with its expression and its value.
+  A rung binds one list of what it debugged, rungN_debug, in the order debugged across all its debug calls: debug adds each value to the list in the module of the chain, and its paragraph binds the part that it added, as rung5_debug[2:] = [9] after two values.
+  A debug whose values are not all python tells them in its header as python shows them, and its binding reads the list itself, so a binding that runs again leaves each value as debug bound it.
   debug tells nothing but the interpolations.
   debug enters nothing in the record.
   It is no act and it enters no record, and it stands in the turns at the place in the run where it happened.
@@ -345,10 +346,10 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
   A rung is an act: the run of one word in the globals of its chain, which the chain has the Kernel run.
   The engine tells what a step raised.
   A step that raised nothing and debugged nothing tells nothing.
-  The open of a rung with a word tells that word as a command tells its command: in its header when it holds one line, and as a quote under its header when it holds more, so no word that ran runs again.
+  The open of a rung with a word tells that word as a command tells its command, bound as rungN_word, so no word that ran runs again.
   A rung with no word tells nothing where it is made, since the chain tells it as the last line of the turn it asks for it with.
   A rung with no word and no actor takes the default actor of its chain when it is made, and writes it into its actor word, so its reply and its ledger read the one actor.
-  The raised header tells the exception as python shows it, which says its type and its message.
+  The raised paragraph binds the exception as rungN_raised, as python shows it, which says its type and its message.
   A rung that retells another rung names its acts under that one, so it makes the same acts and shares them.
   A cancel of a rung is the Kernel's to do, since the Kernel is the one running the word.
   The word of a model is python code and nothing else.
@@ -438,7 +439,7 @@ def prompt(shape: object, message: str = "", to: str = "", on: str = "") -> Act:
 def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act[Never]:
   """chain says what a chain does: how it is opened, what it tells, and what it answers for.
   boot gives the root, and chain gives the chain, which never settles.
-  The header of a chain with a source carries its label and its source.
+  The open of a chain with a source binds its label and its source.
   The entry that opens a chain with a source carries its label, after the prefix.
   chain gives the new chain, which never completes.
   boot gives the root as an act of Never, and the root never completes.
@@ -510,7 +511,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.
   A write of a door gives the words of that ladder alone, so a rung of the chain that is no rung of that ladder and stands before the first word that differs stands as it did.
   Before every reply the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
-  Where it asks, the chain makes a rung of the python that the last user turn shows, unquoted and less its comments, so each act that the turn opened and each string that it quoted is bound; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its python already.
+  Where it asks, the chain makes a rung of the python that the last user turn shows, unquoted and less its comments, so each act that the turn opened and each value that it told is bound; the gate does not read that rung, since the engine wrote it, and the turns do not show it, since the turn shows its python already.
   The chain takes its own act, since the engine is the one that runs it.
   The chain asks the model of a rung for its word by a reply it makes under the site of that rung, whose one word is the actor.
   """
@@ -650,28 +651,21 @@ class Drift(Exception):
   A drift breaks the journal, which keeps nothing more, and the life runs on with nothing kept.
   """
 
-type Note = str | Showing
-"""One thing a tell says: python as it stands, or a text and its show, which the fold shows as comments by the lines the model has not seen.
+type Note = str
+"""One thing a tell says: a paragraph, or the binding of an act.
 A paragraph is what one fact that tells stands as in a turn: its notes, one after the other, and a blank line between two paragraphs.
-The first line of a paragraph is its header: # and, with no space, the id of the act it is of, or the kind of the read, the write or the cd it tells, then its words, as #bash1 exited 0 or #read a.txt.
-A paragraph may hold more headers of what it is of, each on a line of its own right under the first, and every other comment of it begins with # and a space, so no line of a text reads as a header, and a message of more than one line stands in a quote.
+The first line of a paragraph is its header: # and, with no space, the id of the act it is of, then what happened to the act, as #bash1 exited 0 or #prompt1, and no text that the act tells.
+Every other line of a paragraph is python: a binding of each value that the act tells, and the binding of the act on its open.
 The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write or a cd stands at the place in the run where it was asked.
-The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, roster, cwd, actor, advance, paused, woke, cancelled, and one for each question that tells: read, write and cd.
+The headers of the file are the open of an act, closed, exited, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled.
 A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing.
-A note tells a string of more than one line as a quote, whose name is the id of the act, an underscore, and the word of the verb that holds the string, as prompt2_message, bash1_command or prompt2_value.
-A quote that a note tells takes one more underscore in its name for as long as its string holds the close mark of that name at the end of a line, so the first close mark after it is its own.
-"""
-type Showing = tuple[Text, Show]
-"""A text a note shows, and the show of it, which is what a tell of a text carries and what the fold of the turns makes comments of.
-The paragraph of an exited command holds one showing for each text told.
-A tell shows each showing it holds, and each other note stands as it is.
-A showing stands as a comment of the path of its text and of how many of the lines the show picked the chain knows, then a comment for each other line it picked, with its number.
-The engine applies a show before it writes a line, so the paragraph holds the picked lines alone.
+A paragraph binds each value that it tells under a name: the id of the act, an underscore, and the word that holds the value, as prompt2_message, bash1_command, read3_text or prompt2_value.
+A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr when that repr is python in the chain.
+A value whose repr is not python stands as that repr in its header, and its binding reads the act, as prompt3_value = peek('prompt3').
+A value that is None or an empty string is not told.
+A quote that a paragraph tells takes one more underscore in its name for as long as its string holds the close mark of that name at the end of a line, so the first close mark after it is its own.
+The engine applies a show before it writes a line, so a quote holds the lines that its show picked, as they are, and no number of a line.
 A show applies to a text or to a stream.
-A line told once on a chain is known there, by its path, its number and its content.
-read tells a line again after the content of the line changed.
-A text costs its size once on a chain.
-A second read of a text tells the model no line that an earlier read of the chain told.
 """
 type Usage = tuple[int, int, int, int, float]
 """What one answer of a model cost: the words it read and wrote, of which the words it read again and the words it kept to read again, and its dollars.
@@ -822,7 +816,7 @@ The journal keeps each stand and its answer, so a later life says them again at 
 At its tip, once the record is said again whole, boot stands the life again, so a change of the World reaches every chain after what it replayed.
 Every chain hears the done of every stand, and a chain whose standing that answer changes binds its default actor and tells it there, so the transcript grows at one end.
 Each standing binds the default actor of the chain, under the name actor.
-The chain tells each standing it takes in one paragraph of three headers, one for each part: the roster under the header roster as python shows it, then the directory under the header cwd and the actor under the header actor, each as it is.
+The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor.
 The standing a chain tells is what its transcript holds of it, and the stand itself tells nothing.
 """
 type Module = tuple[Literal["module"], str, str, dict[str, object]]
@@ -834,7 +828,7 @@ The transcript of the chain holds the facts of its prefix where the prefix stand
 type Gate = tuple[Literal["gate"], str, str, str, str]
 """A gate is the question of whether a word may run, which the ear named gate answers with its findings, apart from the Kernel, so a word may ask it while the Kernel runs that word.
 A gate carries the word alone, and the gate reads the program of the chain before that rung when it takes the gate, and the word after it, so the Kernel keeps no ladder of its own, the journal keeps no program, and a word of a program made again is read after the rungs that stand.
-The refused paragraph holds the findings that refused the word of a rung, one comment for each.
+The refused paragraph binds the findings that refused the word of a rung, one line for each, as rungN_findings.
 The chain has the word of a rung gated before it runs, but a word it wrote itself, and a refused word runs never.
 A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a copy of a refused word is refused again and tells its findings not again.
 A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run.
@@ -873,17 +867,19 @@ def question(a: Saying) -> bool:
 def scope(name: str) -> str:
   """The scope of a question, from its name: the chain it is on, and itself for a chain, and nothing for a name of no question of the life."""
 
-def tell(name: str, text: object = "", *notes: Note) -> None:
-  """What a question answered now that shows a text or changes a state tells of itself: a paragraph headed with its kind, its words and what it was answered, said on the run that asked it, and nothing at all outside a run; one that only reads a value tells nothing, since the word that asked it holds the value, which it debugs to see.
+def tell(kind: str, on: str, path: str, got: object = None, show: Show = HEAD) -> None:
+  """What a question answered now that shows a text or changes a state tells of itself: a paragraph headed with the name of the question, which binds its path and what it was answered, said on the run that asked it, and nothing at all outside a run; one that only reads a value tells nothing, since the word that asked it holds the value, which it debugs to see.
   A question is put to the ears of the engine before those of the outside, so the World is asked for nothing that the engine knows.
+  The question that tell names is the last one of its kind on its chain that the run made.
+  A text is told by the lines that its show picks, under the word text, and any other answer under the word value.
   """
 
 def tells(id: str) -> bool:
   """Whether an act tells: a rung that its chain made tells nothing, neither its word nor what its word does, since what it would tell stands told already."""
 
-def told(id: str, text: object = "", *notes: Note, word: str = "text") -> Tell:
+def told(id: str, what: str = "", *notes: Note, **words: object) -> Tell:
   """The open of an act tells the id and what the act says of itself, and no actor and no arguments as such.
-  A closed header tells the act with what it came to, as python shows it, and a string of more than one line as a quote under the header.
+  A closed paragraph binds what the act came to under the word value.
   told gives the saying of a tell about an act, with one paragraph headed with the id of the act, which an ear yields and a verb says, so a chain holds what it told where it told it.
   """
 
@@ -893,20 +889,17 @@ def control(kind: str, name: str, id: str, *words: object) -> Fact:
   A control is said while the act it names is not done, and a wake also while that act is paused, done or not, so a control that reaches nothing says nothing.
   """
 
-def headed(name: str, text: object = "", word: str = "text") -> str:
-  """The header of a paragraph: # and the name with no space between, then the text when it holds one line, and a quote of the text under the header when it holds more."""
-
-def commented(text: object) -> str:
-  """The text as comments: # and a space before each line of it, and # alone for an empty line, so no line of it runs."""
+def headed(id: str, what: str = "", reads: str = "", **words: object) -> str:
+  """The paragraph of an act: its header, # and the id with no space between, then what happened, and under it the binding of each word, in order.
+  headed binds a value by its repr when that repr is python that runs in the chain of the act, and binds any other value by what reads says, or by a peek of the act when reads says nothing.
+  headed shows a value as python shows it, less the path of the module before the name of its class, since a chain binds a class by its name alone.
+  """
 
 def bound(id: str, of: str = "object") -> str:
   """The statement that binds the name of an act to the act, with the type of what the act comes to, as bash1: Act[Exit] = Act('bash1'), so the gate knows what an await of it gives."""
 
-def showing(got: object, show: Show) -> list[Note]:
-  """What a paragraph shows of what a door answered: the text by the lines the model has not seen, and anything that is no text as a comment of how python shows it."""
-
-def shown(pair: Note, seen: dict[str, dict[int, str]]) -> str:
-  """The lines of the text the model has not seen, and how many of the rest it knows."""
+def shown(text: Text, show: Show) -> str:
+  """The lines of a text that a show picks, as they are, one on each line."""
 
 def unquoted(word: str) -> str:
   """What a word is as python: each quote in it bound as a string.

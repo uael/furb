@@ -8,12 +8,13 @@ export { type Answer, boot, inspectRecord, Session, type SessionOptions, type St
 export type { Entry, Fact, Paragraph, Turn } from "./types.js";
 export {
   actorParts,
+  bound,
   display,
   efforts,
   isQuestion,
   opens,
   paragraphs,
+  plain,
   questionKind,
   safeText,
-  uncommented,
 } from "./types.js";
