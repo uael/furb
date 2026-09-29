@@ -664,7 +664,8 @@ test.serial("an input that has the focus takes the colors of a theme chosen afte
       );
     },
     { width: 120, height: 30 },
-  ));
+  ),
+);
 
 test("the inspector shows the definition of a name as the line that binds it", () =>
   composing(async ({ app, session, frame }) => {
@@ -703,6 +704,27 @@ test("the rewind tree names each act as the feed does, and no act by its name in
       expect(shown).not.toMatch(/\b(?:rung|thread|bash|chain|wait)\d+\b/);
     },
     { width: 140, height: 44 },
+  ));
+
+test("a folded word shows each command under the step that ran it", () =>
+  composing(
+    async ({ session, frame }) => {
+      await seedDemo(session);
+      const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
+      if (!thread) throw new Error("No thread of the operator.");
+      await session.open(thread.id);
+      const shown = await frame();
+      const rows = [
+        "Find each caller of search",
+        "$ grep -rn",
+        "Run the checks of the project",
+        "$ bun run check",
+        "All three checks pass",
+      ].map((text) => shown.indexOf(text));
+      expect(rows.every((row) => row >= 0)).toBe(true);
+      expect(rows).toEqual([...rows].sort((one, other) => one - other));
+    },
+    { width: 145, height: 45 },
   ));
 
 test("a heading of markdown inside a quote of a word is text of the quote, and no step of the word", () =>

@@ -55,6 +55,7 @@ import {
   operatorNote,
   refusal,
   steps,
+  stepsOf,
 } from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
@@ -2417,28 +2418,44 @@ export class App {
     // The fold of the word marks its first line, so that its steps read as work that Enter opens, apart from what
     // someone said.
     const fold = `${how.closed ? glyph.closed : glyph.open} `;
-    for (const [at, line] of said.entries())
-      inner.add(
-        this.step(
-          [rung?.id, item.key].flatMap((one) => (one ? [`${one}:${at}`] : [])),
-          line,
-          tone,
-          shape,
-          at ? "  " : fold,
-        ),
+    // Folded, each command stands under the step that ran it, and a step after a command stands apart from it by one
+    // line, as each panel does.
+    const commands = how.closed ? actsOf(item).filter((act) => act.kind === "bash") : [];
+    const placed = stepsOf(
+      code,
+      commands.map((act) => String(act.words[0] ?? "")),
+    );
+    const lines = new Set<Renderable>();
+    const blocksUnder = (at: number) => {
+      for (const [index, act] of commands.entries())
+        if ((placed[index] ?? 0) === at) this.commandBlock(inner, act, false);
+    };
+    for (const [at, line] of said.entries()) {
+      const row = this.step(
+        [rung?.id, item.key].flatMap((one) => (one ? [`${one}:${at}`] : [])),
+        line,
+        tone,
+        shape,
+        at ? "  " : fold,
       );
-    if (!said.length)
-      inner.add(
-        this.text(
-          [
-            [fold, c.faint],
-            [this.firstLine(code), c.faint],
-          ],
-          c.faint,
-          { truncate: true, ...shape },
-        ),
+      if (!lines.has(inner.getChildren().at(-1) as Renderable) && at) row.marginTop = space.section;
+      inner.add(row);
+      lines.add(row);
+      blocksUnder(at);
+    }
+    if (!said.length) {
+      const first = this.text(
+        [
+          [fold, c.faint],
+          [this.firstLine(code), c.faint],
+        ],
+        c.faint,
+        { truncate: true, ...shape },
       );
-    const lines = inner.getChildren().length;
+      inner.add(first);
+      lines.add(first);
+      blocksUnder(0);
+    }
     if (!how.closed) {
       const detail = this.box({ marginTop: space.section, gap: space.stack });
       if (code) detail.add(this.numbered(code, { fg: c.faint, minWidth: 3 }));
@@ -2464,14 +2481,13 @@ export class App {
       inner.add(detail);
     } else
       for (const act of actsOf(item))
-        if (act.kind === "bash") this.commandBlock(inner, act, false);
-        else if (working(act)) this.made(inner, act, [], false);
+        if (act.kind !== "bash" && working(act)) this.made(inner, act, [], false);
     this.diffs(inner, how.changes);
     // A word that a later word replaced says so in one line, and what refused it, or what it raised, no longer counts.
     // Each line stands under the text of the steps, after the fold.
     const under = this.box({
       marginLeft: Bun.stringWidth(fold),
-      marginTop: inner.getChildren().length > lines ? space.section : 0,
+      marginTop: lines.has(inner.getChildren().at(-1) as Renderable) ? 0 : space.section,
     });
     if (rung?.run?.status === "failed" && !cancelled(rung) && how.retried)
       under.add(

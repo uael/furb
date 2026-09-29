@@ -43,19 +43,47 @@ const ENDS = ["closed", "exited", "cancelled"];
 /** Whether an act is a question to the operator: a thread whose actor is the operator. */
 export const asksOperator = (act: ActRow) => act.kind === "thread" && act.words[2] === OPERATOR;
 
-/** The comments of a word, in order: each line that is `#`, a space and text, which says a step as one line of
- * markdown. A quote is text, from `<s:name>` at the start of a line to `</s:name>` at the end of a line, so a heading
- * of markdown that it holds is no step. */
-export function steps(word: string): string[] {
-  const said: string[] = [];
+/** The comments of a word, in order, each with the index of its line: each line that is `#`, a space and text, which
+ * says a step as one line of markdown. A quote is text, from `<s:name>` at the start of a line to `</s:name>` at the
+ * end of a line, so a heading of markdown that it holds is no step. */
+function stepLines(word: string): [line: number, text: string][] {
+  const said: [number, string][] = [];
   let quote = "";
-  for (const line of word.split("\n")) {
+  for (const [index, line] of word.split("\n").entries()) {
     const opened = quote ? undefined : /^<s:(\w+)>/.exec(line)?.[1];
     if (opened) quote = opened;
-    else if (!quote) said.push(...(/^\s*# (.*\S.*)$/.exec(line)?.slice(1) ?? []));
+    else if (!quote)
+      said.push(
+        ...(/^\s*# (.*\S.*)$/.exec(line)?.slice(1) ?? []).map((text): [number, string] => [index, text]),
+      );
     if (quote && line.endsWith(`</s:${quote}>`)) quote = "";
   }
   return said;
+}
+
+/** The steps of a word, in order. */
+export const steps = (word: string): string[] => stepLines(word).map(([, text]) => text);
+
+/** The step under which each command of a word stands, in the order the word ran them: the last step above the line
+ * that holds the command, from the line of the command before it on. A line holds a command that it writes as a
+ * string, or that it builds, when it calls bash with anything but a plain string, as a loop or an f-string does. */
+export function stepsOf(word: string, commands: readonly string[]): number[] {
+  const lines = word.split("\n");
+  const at = stepLines(word).map(([line]) => line);
+  const built = (text: string) => /\bbash\((?!\s*["'])/.test(text);
+  let from = 0;
+  return commands.map((command) => {
+    const written = [command, JSON.stringify(command).slice(1, -1)].flatMap((one) => [`"${one}`, `'${one}`]);
+    const holds = (text: string) => written.some((one) => text.includes(one));
+    const line = [holds, built]
+      .map((rule) => lines.findIndex((text, index) => index >= from && rule(text)))
+      .find((one) => one >= 0);
+    if (line !== undefined) from = line;
+    return Math.max(
+      0,
+      at.findLastIndex((step) => step <= from),
+    );
+  });
 }
 
 /** Whether a word is a note: it holds a comment, and no line of it is anything but a comment or blank. */
