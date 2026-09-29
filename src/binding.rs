@@ -16,12 +16,7 @@ pub mod py;
 #[cfg(feature = "typescript")]
 pub mod ts;
 
-use std::{
-  collections::HashMap,
-  mem::ManuallyDrop,
-  sync::{Arc, Mutex},
-  thread::{self, ThreadId},
-};
+use std::{collections::HashMap, sync::Arc};
 
 #[cfg(feature = "typescript")]
 use napi_derive::napi;
@@ -51,48 +46,16 @@ pub struct Said(pub Option<Vec<String>>);
 /// A function of the host that is told the name of an event, from any thread, and whether the host was told.
 pub struct Told(pub Arc<dyn Fn(&str) -> bool + Send + Sync>);
 
-/// What one thread owns: an ear of rust holds what the thread that made it may touch alone. A host may drop the
-/// object that holds it on any thread, as python collects a cycle there, so a drop on another thread frees nothing,
-/// which leaves memory alone once the ear is disposed.
-struct Owned<T> {
-  thread: ThreadId,
-  held: ManuallyDrop<T>,
-}
-
-// SAFETY: what an Owned holds is touched on the thread that made it alone: every reach of it refuses another thread,
-// and a drop on another thread leaves it as it is.
-unsafe impl<T> Send for Owned<T> {}
-unsafe impl<T> Sync for Owned<T> {}
-
-impl<T> Owned<T> {
-  fn new(held: T) -> Self {
-    Owned { thread: thread::current().id(), held: ManuallyDrop::new(held) }
-  }
-
-  fn get_mut(&mut self) -> Result<&mut T, Fault> {
-    if thread::current().id() != self.thread {
-      return Err(Fault::refused("an ear of the crate is heard on the thread that made it"));
-    }
-    Ok(&mut self.held)
-  }
-}
-
-impl<T> Drop for Owned<T> {
-  fn drop(&mut self) {
-    if thread::current().id() == self.thread {
-      // SAFETY: the value is dropped once, here, on the thread that owns it.
-      unsafe { ManuallyDrop::drop(&mut self.held) }
-    }
-  }
-}
-
 /// An ear that the crate writes: given once, to the boot of an engine or to a verb that takes an ear. It is let go
 /// when it is disposed, so what it holds goes: a command ends, a wait ends, and a store lets its record go. The
 /// engine of python steps it as a generator of its own too.
-#[cfg_attr(feature = "python", pyo3::pyclass(module = "furb_monty._monty", weakref))]
+///
+/// It stays on the thread that made it: python refuses a reach of it from another thread, and a drop of it on
+/// another thread frees nothing, which leaves memory alone once the ear is disposed.
+#[cfg_attr(feature = "python", pyo3::pyclass(module = "furb_monty._monty", weakref, unsendable))]
 #[cfg_attr(feature = "typescript", napi)]
 pub struct NativeEar {
-  hearing: Owned<Hearing>,
+  hearing: Hearing,
 }
 
 /// The ear, and what the engine of python steps it with once it is born there.
@@ -109,12 +72,12 @@ impl NativeEar {
       #[cfg(feature = "python")]
       stepped: None,
     };
-    NativeEar { hearing: Owned::new(hearing) }
+    NativeEar { hearing }
   }
 
   /// The ear, taken out, since an ear hears in one engine.
   fn taken(&mut self) -> Result<Box<dyn Ear>, Fault> {
-    let hearing = self.hearing.get_mut()?;
+    let hearing = &mut self.hearing;
     #[cfg(feature = "python")]
     if hearing.stepped.is_some() {
       return Err(Fault::refused("an ear of the crate hears in one engine, and this one hears"));
@@ -133,7 +96,7 @@ impl NativeEar {
   /// ends, a wait ends, and a store lets its record go.
   #[cfg_attr(feature = "typescript", napi)]
   pub fn dispose(&mut self) -> Result<(), Fault> {
-    self.hearing.get_mut()?.ear.take();
+    self.hearing.ear.take();
     Ok(())
   }
 }
@@ -465,9 +428,6 @@ fn words(
   (args, kwargs.iter().flatten().map(|(key, one)| (key.as_str(), one.0.clone())).collect())
 }
 
-/// The callback of the host that hears the end of the console, which a later callback replaces.
-static ENDING: Mutex<Option<Told>> = Mutex::new(None);
-
 /// Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
 /// and at a shutdown, with the name of the event: `break`, `close`, `logoff` or `shutdown`. The system holds the
 /// process until the callback ends it, or, at a close, a logoff or a shutdown, until the system's own limit. A later
@@ -481,9 +441,10 @@ static ENDING: Mutex<Option<Told>> = Mutex::new(None);
   )
 )]
 pub fn on_console_end(callback: Told) -> Result<(), Fault> {
-  *ENDING.lock().map_err(|_| Fault::refused("the console callback is poisoned"))? = Some(callback);
   #[cfg(windows)]
-  console::listen()?;
+  console::listen(callback)?;
+  #[cfg(not(windows))]
+  drop(callback);
   Ok(())
 }
 
@@ -499,11 +460,43 @@ mod console {
     core::BOOL,
   };
 
-  use super::ENDING;
-  use crate::Fault;
+  use tokio::sync::{mpsc, oneshot};
 
-  /// The handler of this module, added to the handlers of the process, once.
-  pub fn listen() -> Result<(), Fault> {
+  use super::Told;
+  use crate::{Fault, ear};
+
+  /// What the keeper of the callback of the console is told: a callback, which replaces the one before it, or an
+  /// event, whose answer says whether the host was told.
+  enum Ending {
+    Callback(Told),
+    Event(&'static str, oneshot::Sender<bool>),
+  }
+
+  /// The keeper of the callback of the host that hears the end of the console, which it owns alone.
+  fn ending() -> &'static mpsc::UnboundedSender<Ending> {
+    static ENDING: OnceLock<mpsc::UnboundedSender<Ending>> = OnceLock::new();
+    ENDING.get_or_init(|| {
+      let (tells, mut told) = mpsc::unbounded_channel();
+      ear::reactor().spawn(async move {
+        let mut callback: Option<Told> = None;
+        while let Some(one) = told.recv().await {
+          match one {
+            Ending::Callback(one) => callback = Some(one),
+            Ending::Event(name, answer) => {
+              let _ = answer.send(callback.as_ref().is_some_and(|one| (one.0)(name)));
+            }
+          }
+        }
+      });
+      tells
+    })
+  }
+
+  /// The callback, kept, and the handler of this module, added to the handlers of the process, once.
+  pub fn listen(callback: Told) -> Result<(), Fault> {
+    ending()
+      .send(Ending::Callback(callback))
+      .map_err(|_| Fault::refused("the keeper of the console callback is gone"))?;
     static ADDED: OnceLock<bool> = OnceLock::new();
     // The system calls the handlers from the last added to the first, so this one comes before those of the
     // runtime, which end the process at once.
@@ -525,8 +518,8 @@ mod console {
       CTRL_SHUTDOWN_EVENT => "shutdown",
       _ => return 0,
     };
-    let told = ENDING.lock().ok().and_then(|slot| slot.as_ref().map(|one| one.0.clone()));
-    if !told.is_some_and(|told| told(name)) {
+    let (answer, told) = oneshot::channel();
+    if ending().send(Ending::Event(name, answer)).is_err() || told.blocking_recv() != Ok(true) {
       return 0;
     }
     loop {

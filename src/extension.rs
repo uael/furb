@@ -234,11 +234,11 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 /// that this life answers, the first of which is at the tip. The ear plays the rungs from the fact alone, so a later
 /// life plays the same rungs where the journal says the fact again.
 pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
-  ear(move |co| async move {
+  ear(move |mut co| async move {
     // What the life enabled, in order, and each chain in the order of its birth, with the extensions it has.
     let (mut enabled, mut chains) = (Vec::<Extension>::new(), Vec::<(String, Vec<String>)>::new());
     loop {
-      let a = hear(&co).await;
+      let a = hear(&mut co).await;
       let runs = |one: &Extension| enabled.iter().any(|two| two.name == one.name);
       let new: Vec<Extension> = match a.kind() {
         // A chain says its started at its birth, and it has what its origin had, which it made again.
@@ -262,7 +262,7 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
       };
       for one in new {
         if a.kind() != ENABLE {
-          say(&co, one.enable()).await;
+          say(&mut co, one.enable()).await;
         }
         for chain in &mut chains {
           play(&one, chain)?;

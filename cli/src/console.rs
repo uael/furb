@@ -30,7 +30,7 @@ impl Asked {
   /// The prompt a fact asks the operator, when it is one that no ear before the console took, as a console takes it:
   /// the console says its started, and closes at once a prompt of a shape outside SHAPES, with the refusal of that
   /// shape, and gives it not. So every console of furb puts to the operator the same shapes.
-  pub async fn taken<W: 'static>(co: &Co<W>, a: &Fact) -> Result<Option<Asked>, Fault> {
+  pub async fn taken<W: 'static>(co: &mut Co<W>, a: &Fact) -> Result<Option<Asked>, Fault> {
     if a.kind() != "prompt" || !a.question() {
       return Ok(None);
     }
@@ -58,7 +58,7 @@ type Input = Lines<BufReader<Stdin>>;
 /// the operator writes back, or with why no line came. A prompt that is done before its line comes, by a cancel, is
 /// shown no more, and the line goes to the next.
 pub fn terminal() -> Box<dyn Ear> {
-  ear(|co: Co<Read>| async move {
+  ear(|mut co: Co<Read>| async move {
     // The lines of stdin, while no read holds them.
     let mut lines = Some(BufReader::new(tokio::io::stdin()).lines());
     let mut waiting: VecDeque<Asked> = VecDeque::new();
@@ -78,7 +78,7 @@ pub fn terminal() -> Box<dyn Ear> {
       }
       match co.next().await {
         Next::Heard(a) => {
-          if let Some(asked) = Asked::taken(&co, &a).await? {
+          if let Some(asked) = Asked::taken(&mut co, &a).await? {
             waiting.push_back(asked);
           } else if a.kind() == "done" {
             waiting.retain(|one| one.about != a.about());
@@ -96,7 +96,7 @@ pub fn terminal() -> Box<dyn Ear> {
             Err(no) => Err(Fault::refused(format!("the operator cannot be read: {no}"))),
           };
           let value = value.unwrap_or_else(|no| no.object());
-          tell(&co, "close", vec![value], vec![("id", Object::string(&about))]).await;
+          tell(&mut co, "close", vec![value], vec![("id", Object::string(&about))]);
         }
       }
     }

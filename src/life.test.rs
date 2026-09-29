@@ -104,12 +104,12 @@ fn the_ears_of_the_crate_come_after_the_ears_of_the_host_each_under_the_name_eve
 
 /// An ear of the host that takes a read of a path of its own, which the files refuse.
 fn mine() -> Box<dyn Ear> {
-  ear(|co| async move {
+  ear(|mut co| async move {
     loop {
-      let a = hear(&co).await;
+      let a = hear(&mut co).await;
       let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
       if a.question() && a.kind() == "read" && path.starts_with("mine://") {
-        say(&co, Fact::says("done", a.about(), [Text::new(path, "mine\n").object()])).await;
+        say(&mut co, Fact::says("done", a.about(), [Text::new(path, "mine\n").object()])).await;
       }
     }
   })

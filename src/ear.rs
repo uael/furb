@@ -18,22 +18,22 @@
 //! life was doing; and whatever a work waits for wakes whoever drives.
 
 use std::{
-  cell::{Cell, RefCell},
+  cell::Cell,
   collections::VecDeque,
   future::{Future, poll_fn},
   pin::Pin,
   ptr::NonNull,
-  rc::Rc,
   sync::OnceLock,
   task::{Context, Poll},
   thread,
 };
 
 use futures::{
-  Stream, StreamExt,
+  FutureExt, Stream, StreamExt,
   stream::{LocalBoxStream, SelectAll},
 };
 use tokio::runtime::Handle;
+use unsync::spsc;
 
 use crate::{
   fact::Fact,
@@ -114,76 +114,95 @@ pub enum Next<W> {
   Worked(W),
 }
 
-/// What a coroutine of rust and its body share: the facts it heard and has not taken, the fact given back for what
-/// it said, what it yields, its works, whether it hears now, and whether it began a work while it heard.
-struct Mailbox<W> {
-  heard: VecDeque<Fact>,
-  given: Option<Fact>,
-  spoken: Option<Spoken>,
+/// What the coroutine of an ear tells its body: a fact heard, the fact given back for what the body said, or that
+/// the life drives the ear, which lets its works go on until it hears again.
+enum Event {
+  Heard(Fact),
+  Given(Fact),
+  Driven,
+}
+
+/// What the body of an ear of rust hears, says and works through, which the body owns: what the coroutine tells it,
+/// what it says to the coroutine, its works, the facts it heard and has not taken, whether the life drives it, and
+/// whether it began a work while it heard. `W` is what each of its works gives.
+pub struct Co<W = ()> {
+  events: spsc::Receiver<Event>,
+  spoken: spsc::Sender<Spoken>,
   works: SelectAll<LocalBoxStream<'static, W>>,
-  hearing: bool,
+  heard: VecDeque<Fact>,
+  driven: bool,
   began: bool,
 }
 
-/// What the body of an ear of rust hears, says and works through. `W` is what each of its works gives.
-pub struct Co<W = ()>(Rc<RefCell<Mailbox<W>>>);
-
-impl<W> Clone for Co<W> {
-  fn clone(&self) -> Self {
-    Co(Rc::clone(&self.0))
-  }
-}
-
 impl<W: 'static> Co<W> {
-  fn new() -> Co<W> {
-    let mailbox = Mailbox {
-      heard: VecDeque::new(),
-      given: None,
-      spoken: None,
-      works: SelectAll::new(),
-      hearing: false,
-      began: false,
-    };
-    Co(Rc::new(RefCell::new(mailbox)))
+  /// One work of the ear, whose every item [`Co::next`] gives, and which ends at the end of its stream. A work goes
+  /// on only while the life drives the ear, never while the ear hears; one begun while the ear hears wakes whoever
+  /// drives, so it begins.
+  pub fn work(&mut self, work: impl Stream<Item = W> + 'static) {
+    self.began |= !self.driven;
+    self.works.push(work.boxed_local());
   }
 
-  /// One work of the ear, whose every item [`Co::next`] gives, and which ends at the end of its stream. A work is
-  /// polled only when the life is driven, never while the ear hears; one begun while the ear hears wakes whoever
-  /// drives once the ear heard, so it begins.
-  pub fn work(&self, work: impl Stream<Item = W> + 'static) {
-    let mut mailbox = self.0.borrow_mut();
-    mailbox.began |= mailbox.hearing;
-    mailbox.works.push(work.boxed_local());
-  }
-
-  /// What the ear takes next: the next fact it heard, and when it heard all, what one of its works came to, when
-  /// the life is driven.
-  pub async fn next(&self) -> Next<W> {
+  /// What the ear takes next: the next fact it heard, and when it heard all, what one of its works came to, while
+  /// the life drives it.
+  pub async fn next(&mut self) -> Next<W> {
     poll_fn(|cx| {
-      let mut mailbox = self.0.borrow_mut();
-      if let Some(fact) = mailbox.heard.pop_front() {
+      self.told();
+      if let Some(fact) = self.heard.pop_front() {
         return Poll::Ready(Next::Heard(fact));
       }
-      if mailbox.hearing {
+      if std::mem::take(&mut self.began) {
+        cx.waker().wake_by_ref();
+      }
+      if !self.driven {
         return Poll::Pending;
       }
-      match mailbox.works.poll_next_unpin(cx) {
+      match self.works.poll_next_unpin(cx) {
         Poll::Ready(Some(worked)) => Poll::Ready(Next::Worked(worked)),
         _ => Poll::Pending,
       }
     })
     .await
   }
+
+  /// What the coroutine told since, taken. The coroutine polls the body each time it tells it something, so the body
+  /// takes what it was told then, and waits for no event.
+  fn told(&mut self) -> Option<Fact> {
+    let mut given = None;
+    while let Some(Some(event)) = self.events.recv().now_or_never() {
+      given = self.took(event).or(given);
+    }
+    given
+  }
+
+  /// One event, taken: a fact heard waits to be taken, and the life drives the ear until it hears again.
+  fn took(&mut self, event: Event) -> Option<Fact> {
+    match event {
+      Event::Heard(fact) => {
+        self.driven = false;
+        self.heard.push_back(fact);
+      }
+      Event::Given(fact) => return Some(fact),
+      Event::Driven => self.driven = true,
+    }
+    None
+  }
+
+  /// What the ear says or tells, to the coroutine.
+  fn spoke(&mut self, spoken: Spoken) {
+    let _ = self.spoken.try_send(spoken);
+  }
 }
 
 type Body = Pin<Box<dyn Future<Output = Result<(), Fault>>>>;
 
-/// An ear of rust: its body, polled when it hears and when the life is driven, how it ended, which the next resume
-/// gives, and what the next fact a resume gives is: the one given back for what the ear answered, or its own fact
-/// as the log gives it, after it said something of its own accord.
-struct Coroutine<W> {
-  co: Co<W>,
+/// An ear of rust: its body, what it tells the body, what the body says, how the body ended, which the next resume
+/// gives, and what the next fact a resume gives is: the one given back for what the ear answered, or its own fact as
+/// the log gives it, after it said something of its own accord.
+struct Coroutine {
   body: Option<Body>,
+  events: spsc::Sender<Event>,
+  spoken: spsc::Receiver<Spoken>,
   ended: Option<Step>,
   next: Given,
 }
@@ -200,29 +219,19 @@ enum Given {
   Both,
 }
 
-impl<W: 'static> Ear for Coroutine<W> {
+impl Ear for Coroutine {
   fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
     if let Heard::Fact(fact) = heard {
-      let mut mailbox = self.co.0.borrow_mut();
       match std::mem::replace(&mut self.next, Given::Heard) {
-        Given::Heard => mailbox.heard.push_back(fact),
-        Given::Back => mailbox.given = Some(fact),
+        Given::Heard => self.tell(Event::Heard(fact)),
+        Given::Back => self.tell(Event::Given(fact)),
         Given::Both => {
-          mailbox.given = Some(fact.clone());
-          mailbox.heard.push_back(fact);
+          self.tell(Event::Given(fact.clone()));
+          self.tell(Event::Heard(fact));
         }
       }
     }
-    self.co.0.borrow_mut().hearing = true;
     let step = self.heard(cx);
-    let began = {
-      let mut mailbox = self.co.0.borrow_mut();
-      mailbox.hearing = false;
-      std::mem::take(&mut mailbox.began)
-    };
-    if began {
-      cx.waker().wake_by_ref();
-    }
     if matches!(step, Step::Say(_)) {
       self.next = Given::Back;
     }
@@ -230,6 +239,7 @@ impl<W: 'static> Ear for Coroutine<W> {
   }
 
   fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
+    self.tell(Event::Driven);
     let spoken = self.stepped(cx);
     if let Poll::Ready(Spoken::Saying(_)) = spoken {
       self.next = Given::Both;
@@ -238,7 +248,12 @@ impl<W: 'static> Ear for Coroutine<W> {
   }
 }
 
-impl<W: 'static> Coroutine<W> {
+impl Coroutine {
+  /// One event, told to the body.
+  fn tell(&mut self, event: Event) {
+    let _ = self.events.try_send(event);
+  }
+
   /// What the ear does with what it heard: what it says, each verb it tells said at once, until it waits.
   fn heard(&mut self, cx: &mut Context<'_>) -> Step {
     loop {
@@ -262,14 +277,21 @@ impl<W: 'static> Coroutine<W> {
     }
   }
 
-  /// What the body yields when it is polled once, and how it ended when it ended.
+  /// What the body said and the coroutine has not taken, or what it says when it is polled once; and how it ended
+  /// when it ended.
   fn stepped(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
+    if let Some(Some(spoken)) = self.spoken.recv().now_or_never() {
+      return Poll::Ready(spoken);
+    }
     let Some(body) = self.body.as_mut() else { return Poll::Pending };
     if let Poll::Ready(done) = body.as_mut().poll(cx) {
       self.body = None;
       self.ended = Some(done.map_or_else(Step::Raised, |()| Step::Over));
     }
-    self.co.0.borrow_mut().spoken.take().map_or(Poll::Pending, Poll::Ready)
+    match self.spoken.recv().now_or_never() {
+      Some(Some(spoken)) => Poll::Ready(spoken),
+      _ => Poll::Pending,
+    }
   }
 }
 
@@ -281,17 +303,28 @@ where
   B: FnOnce(Co<W>) -> F,
   F: Future<Output = Result<(), Fault>> + 'static,
 {
-  let co = Co::new();
+  let (told, events) = spsc::unbounded();
+  let (spoken, said) = spsc::unbounded();
+  let co = Co {
+    events,
+    spoken,
+    works: SelectAll::new(),
+    heard: VecDeque::new(),
+    driven: false,
+    began: false,
+  };
+  let body = Box::pin(body(co));
   Box::new(Coroutine {
-    body: Some(Box::pin(body(co.clone()))),
-    co,
+    body: Some(body),
+    events: told,
+    spoken: said,
     ended: None,
     next: Given::Heard,
   })
 }
 
 /// The next fact the ear hears, which is `a = yield` of python, for an ear with no work.
-pub async fn hear(co: &Co) -> Fact {
+pub async fn hear(co: &mut Co) -> Fact {
   loop {
     if let Next::Heard(fact) = co.next().await {
       return fact;
@@ -300,23 +333,22 @@ pub async fn hear(co: &Co) -> Fact {
 }
 
 /// One saying, said, and the fact the bus made of it, given back, which is `a = yield saying` of python.
-pub async fn say<W>(co: &Co<W>, saying: Fact) -> Fact {
-  yielded(co, Spoken::Saying(saying)).await;
-  poll_fn(|_| co.0.borrow_mut().given.take().map_or(Poll::Pending, Poll::Ready)).await
+pub async fn say<W: 'static>(co: &mut Co<W>, saying: Fact) -> Fact {
+  co.spoke(Spoken::Saying(saying));
+  poll_fn(|_| co.told().map_or(Poll::Pending, Poll::Ready)).await
 }
 
 /// One verb of the engine, told with its words under the name of the ear, whose value goes nowhere. An ear that
 /// speaks of its own accord tells a verb so, since no life hears it then: a control that it must say before a done,
-/// such as a pause. While the ear hears, the verb is said at once.
-pub async fn tell<W>(co: &Co<W>, verb: &str, args: Vec<Object>, kwargs: Vec<(&str, Object)>) {
+/// such as a pause. While the ear hears, the verb is said at once, and in either case before what the ear says next.
+pub fn tell<W: 'static>(
+  co: &mut Co<W>,
+  verb: &str,
+  args: Vec<Object>,
+  kwargs: Vec<(&str, Object)>,
+) {
   let kwargs = kwargs.into_iter().map(|(key, one)| (key.to_owned(), one)).collect();
-  yielded(co, Spoken::Verb(Call { verb: verb.to_owned(), args, kwargs })).await;
-}
-
-/// What the ear yields, taken by what steps it.
-async fn yielded<W>(co: &Co<W>, spoken: Spoken) {
-  co.0.borrow_mut().spoken = Some(spoken);
-  poll_fn(|_| if co.0.borrow().spoken.is_some() { Poll::Pending } else { Poll::Ready(()) }).await;
+  co.spoke(Spoken::Verb(Call { verb: verb.to_owned(), args, kwargs }));
 }
 
 /// What answers a verb that an ear calls while it hears: the life that hears the ear.

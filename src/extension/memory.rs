@@ -24,13 +24,13 @@ const NAMES: [&str; 2] = ["CLAUDE.md", "AGENTS.md"];
 /// texts of the answer of each memory question, the text of each read and each write of a memory file, and what the
 /// prefix of a chain holds of them, each when an act that tells made the question, since nothing else is told.
 pub fn memory(config: PathBuf) -> Box<dyn Ear> {
-  ear(move |co| async move {
+  ear(move |mut co| async move {
     // What each chain holds of the memory files, by path, and each question of one that an act that tells made and
     // whose done the ear has not heard yet, with its chain.
     let mut held: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut unheard: Vec<(String, String)> = Vec::new();
     loop {
-      let a = hear(&co).await;
+      let a = hear(&mut co).await;
       let (about, on) = (a.about().to_owned(), a.on().to_owned());
       match a.kind() {
         "memory" | "read" | "write" if a.question() => {
@@ -62,7 +62,8 @@ pub fn memory(config: PathBuf) -> Box<dyn Ear> {
               told.push(one);
             }
           }
-          say(&co, Fact::says("done", &about, [Object::list(told.iter().map(Text::object))])).await;
+          say(&mut co, Fact::says("done", &about, [Object::list(told.iter().map(Text::object))]))
+            .await;
         }
         "done" => {
           let got = given(&about, a.word(0));

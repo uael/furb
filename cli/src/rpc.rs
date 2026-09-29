@@ -6,13 +6,11 @@
 //! says each command and each event. The life ends when stdin ends.
 
 use std::{
-  cell::RefCell,
   collections::HashMap,
   future::{Future, poll_fn},
   io::{self, Write},
   path::{Path, PathBuf},
   pin::Pin,
-  rc::Rc,
   task::{Context, Poll},
 };
 
@@ -22,6 +20,7 @@ use furb::{
   life::Opening,
   verbs, wire,
 };
+use futures::channel::mpsc;
 use serde_json::{Value, json, value::RawValue};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
@@ -33,18 +32,18 @@ use crate::{
 /// A life served on stdin and stdout, until stdin ends, on the record it keeps when it is given one. It wakes
 /// nothing: what an earlier life left paused or pending waits for the wake of the client.
 pub fn serve(opening: Opening, record: Option<&Path>) -> Result<(), String> {
-  let client = Rc::new(RefCell::new(Client::default()));
-  let facts = Rc::clone(&client);
-  let life = Life::open(opening, console(Rc::clone(&client)), move |fact: &Fact| {
-    let fact = wire::outward(fact.0.as_ref());
-    facts.borrow_mut().records.push(json!({"type": "fact", "fact": fact}));
+  let (events, heard) = mpsc::unbounded();
+  let facts = events.clone();
+  let life = Life::open(opening, console(events), move |fact: &Fact| {
+    let _ = facts.unbounded_send(Event::Fact(fact.clone()));
   })?;
   let mut server = Server {
     life,
-    client,
+    client: Client::default(),
+    heard,
     record: record.map(|one| std::path::absolute(one).unwrap_or_else(|_| one.to_path_buf())),
     awaited: Vec::new(),
-    out: io::BufWriter::new(io::stdout().lock()),
+    out: io::BufWriter::new(io::stdout()),
   };
   reactor().block_on(server.served()).map_err(|no| no.to_string())
 }
@@ -57,6 +56,14 @@ struct Client {
   prompts: Vec<Asked>,
 }
 
+/// What the life tells the server, in the order it happened: a fact it said, a prompt put to the operator, or the
+/// done of a prompt.
+enum Event {
+  Fact(Fact),
+  Prompt(Asked),
+  Over(String),
+}
+
 /// A prompt put to the operator as the client reads it.
 fn fields(asked: &Asked) -> Value {
   json!({"act": asked.about, "on": asked.on, "shape": asked.shape, "message": asked.message})
@@ -64,18 +71,14 @@ fn fields(asked: &Asked) -> Value {
 
 /// The console of the client, as an ear of the World: it takes each prompt put to the operator and sends it to the
 /// client, whose close answers it.
-fn console(client: Rc<RefCell<Client>>) -> Box<dyn Ear> {
-  ear(move |co| async move {
+fn console(events: mpsc::UnboundedSender<Event>) -> Box<dyn Ear> {
+  ear(move |mut co| async move {
     loop {
-      let a = hear(&co).await;
-      if let Some(asked) = Asked::taken(&co, &a).await? {
-        let mut event = fields(&asked);
-        event["type"] = json!("prompt");
-        let mut client = client.borrow_mut();
-        client.records.push(event);
-        client.prompts.push(asked);
+      let a = hear(&mut co).await;
+      if let Some(asked) = Asked::taken(&mut co, &a).await? {
+        let _ = events.unbounded_send(Event::Prompt(asked));
       } else if a.kind() == "done" {
-        client.borrow_mut().prompts.retain(|one| one.about != a.about());
+        let _ = events.unbounded_send(Event::Over(a.about().to_owned()));
       }
     }
   })
@@ -97,16 +100,37 @@ impl Command {
   }
 }
 
-/// The server of one life: the life, the client, the acts its commands made that are not done, and stdout.
+/// The server of one life: the life, the client, what the life tells it, the acts its commands made that are not
+/// done, and stdout.
 struct Server {
   life: Life,
-  client: Rc<RefCell<Client>>,
+  client: Client,
+  heard: mpsc::UnboundedReceiver<Event>,
   record: Option<PathBuf>,
   awaited: Vec<String>,
-  out: io::BufWriter<io::StdoutLock<'static>>,
+  out: io::BufWriter<io::Stdout>,
 }
 
 impl Server {
+  /// What the life told since, taken into the client.
+  fn heard(&mut self) {
+    while let Ok(one) = self.heard.try_recv() {
+      match one {
+        Event::Fact(fact) => {
+          let fact = wire::outward(fact.0.as_ref());
+          self.client.records.push(json!({"type": "fact", "fact": fact}));
+        }
+        Event::Prompt(asked) => {
+          let mut event = fields(&asked);
+          event["type"] = json!("prompt");
+          self.client.records.push(event);
+          self.client.prompts.push(asked);
+        }
+        Event::Over(about) => self.client.prompts.retain(|one| one.about != about),
+      }
+    }
+  }
+
   /// The loop: the life is driven while the next line of stdin comes, and each line is answered, until stdin ends. A
   /// line is split at a line feed alone, and without a carriage return before it.
   async fn served(&mut self) -> io::Result<()> {
@@ -133,6 +157,7 @@ impl Server {
     if let Poll::Ready(Err(no)) = Pin::new(&mut root).poll(cx) {
       eprintln!("furb: {no}");
     }
+    self.heard();
     let mut waiting = Vec::new();
     for id in std::mem::take(&mut self.awaited) {
       match self.life.engine.outcome(&id).unwrap_or_else(|no| Some(no.object())) {
@@ -140,7 +165,7 @@ impl Server {
           let mut done = json!({"type": "done", "act": id});
           let (key, value) = outcome(&got);
           done[key] = value;
-          self.client.borrow_mut().records.push(done);
+          self.client.records.push(done);
         }
         None => waiting.push(id),
       }
@@ -154,7 +179,7 @@ impl Server {
 
   /// Every record written to the client.
   fn written(&mut self) -> io::Result<()> {
-    let records = std::mem::take(&mut self.client.borrow_mut().records);
+    let records = std::mem::take(&mut self.client.records);
     for one in records {
       writeln!(self.out, "{one}")?;
     }
@@ -163,6 +188,8 @@ impl Server {
 
   /// One command, answered: its response is written first, and the events it caused after it.
   fn answer(&mut self, line: &[u8]) -> io::Result<()> {
+    // A command reads the prompts as the life last told them.
+    self.heard();
     if line.iter().all(u8::is_ascii_whitespace) {
       return Ok(());
     }
@@ -254,7 +281,7 @@ impl Server {
       }
       "state" => {
         let standing = self.life.engine.standing().map_err(failed)?;
-        let prompts: Vec<Value> = self.client.borrow().prompts.iter().map(fields).collect();
+        let prompts: Vec<Value> = self.client.prompts.iter().map(fields).collect();
         let extensions: Vec<String> =
           self.life.extensions()?.into_iter().map(|one| one.name).collect();
         Ok(json!({
@@ -285,8 +312,7 @@ impl Server {
   fn closing(&self, act: &str, command: &Command) -> Result<Object, String> {
     let raw = command.0.get("value").map_or("null", |one| one.get());
     let value = wire::parsed(raw).map_err(|no| no.to_string())?;
-    let float =
-      self.client.borrow().prompts.iter().any(|one| one.about == act && one.shape == "float");
+    let float = self.client.prompts.iter().any(|one| one.about == act && one.shape == "float");
     Ok(match value.as_ref().as_int() {
       Some(n) if float => Object::float(n as f64),
       _ => value,

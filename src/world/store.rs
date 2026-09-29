@@ -26,10 +26,10 @@ pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Faul
   let entries = read(&path, true)?;
   let failed = |no: std::io::Error| Fault::refused(format!("{no}: {}", path.display()));
   let mut file = OpenOptions::new().create(true).append(true).open(&path).map_err(failed)?;
-  let kept = ear(move |co| async move {
+  let kept = ear(move |mut co| async move {
     let _lease = lease;
     loop {
-      let a = hear(&co).await;
+      let a = hear(&mut co).await;
       if a.kind() != "keep" {
         continue;
       }

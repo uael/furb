@@ -443,11 +443,11 @@ fn a_turn_that_is_dropped_ends_its_process() {
 /// Whether the process of an id is gone, within a time, as a process ends a moment after it is killed. A process
 /// that ended and that nothing reaped yet is gone too.
 pub(crate) fn gone(pid: &str) -> bool {
-  let Ok(pid) = pid.parse::<libc::pid_t>() else { return false };
+  let Some(pid) = pid.parse().ok().and_then(rustix::process::Pid::from_raw) else { return false };
   for _ in 0..100 {
-    // SAFETY: a signal of zero sends nothing, and says whether the process is there.
-    let there = unsafe { libc::kill(pid, 0) } == 0;
-    let status = fs::read_to_string(format!("/proc/{pid}/status")).unwrap_or_default();
+    let there = rustix::process::test_kill_process(pid).is_ok();
+    let status =
+      fs::read_to_string(format!("/proc/{}/status", pid.as_raw_nonzero())).unwrap_or_default();
     if !there || status.contains("State:\tZ") {
       return true;
     }

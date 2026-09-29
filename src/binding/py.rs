@@ -327,7 +327,7 @@ impl NativeEar {
   fn send(slf: &Bound<'_, Self>, a: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let py = slf.py();
     let python = made(py)?.python.bind(py);
-    let born = slf.borrow_mut().hearing.get_mut()?.stepped.is_none();
+    let born = slf.borrow_mut().hearing.stepped.is_none();
     let heard = if born {
       let name: String = python.getattr("site")?.call_method0("get")?.extract()?;
       let weak = py.import("weakref")?.getattr("ref")?.call1((slf,))?.unbind();
@@ -335,7 +335,7 @@ impl NativeEar {
         Ok(ear) => pump(ear),
         Err(_) => Ok(()),
       })?;
-      slf.borrow_mut().hearing.get_mut()?.stepped = Some(Stepped { name, waker });
+      slf.borrow_mut().hearing.stepped = Some(Stepped { name, waker });
       Heard::Born
     } else {
       let fact =
@@ -343,7 +343,7 @@ impl NativeEar {
       Heard::Fact(fact)
     };
     let mut held = slf.borrow_mut();
-    let hearing = held.hearing.get_mut()?;
+    let hearing = &mut held.hearing;
     let Some(ear) = hearing.ear.as_mut() else { return Err(PyStopIteration::new_err(())) };
     let waker =
       hearing.stepped.as_ref().map_or_else(|| Waker::noop().clone(), |one| one.waker.clone());
@@ -371,8 +371,7 @@ fn pump(ear: &Bound<'_, NativeEar>) -> PyResult<()> {
   let py = ear.py();
   let python = made(py)?.python.bind(py);
   let (site, say) = (python.getattr("site")?, python.getattr("say")?);
-  let Some(name) = ear.borrow_mut().hearing.get_mut()?.stepped.as_ref().map(|one| one.name.clone())
-  else {
+  let Some(name) = ear.borrow_mut().hearing.stepped.as_ref().map(|one| one.name.clone()) else {
     return Ok(());
   };
   loop {
@@ -395,7 +394,7 @@ fn pump(ear: &Bound<'_, NativeEar>) -> PyResult<()> {
 /// What an ear of the crate says of its own accord now, polled with what wakes the loop.
 fn polled(ear: &Bound<'_, NativeEar>) -> PyResult<Poll<Spoken>> {
   let mut held = ear.borrow_mut();
-  let hearing = held.hearing.get_mut()?;
+  let hearing = &mut held.hearing;
   let (Some(stepped), Some(one)) = (hearing.stepped.as_ref(), hearing.ear.as_mut()) else {
     return Ok(Poll::Pending);
   };

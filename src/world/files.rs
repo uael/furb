@@ -16,9 +16,9 @@ const LARGEST: u64 = 524_288;
 /// and a write with the text as it stands after, each resolved against the working directory of the chain, or with
 /// the refusal.
 pub fn files() -> Box<dyn Ear> {
-  ear(|co| async move {
+  ear(|mut co| async move {
     loop {
-      let a = hear(&co).await;
+      let a = hear(&mut co).await;
       if !a.question() || !matches!(a.kind(), "cd" | "read" | "write") {
         continue;
       }
@@ -27,7 +27,7 @@ pub fn files() -> Box<dyn Ear> {
         _ => served(&a).map(|text| text.object()),
       };
       let answer = answer.unwrap_or_else(|fault| fault.object());
-      say(&co, Fact::says("done", a.about(), [answer])).await;
+      say(&mut co, Fact::says("done", a.about(), [answer])).await;
     }
   })
 }

@@ -77,11 +77,13 @@ ruff_text_size = "0.0.9"
 
 [target.'cfg(unix)'.dependencies]
 # The process group of a command, which the World ends whole.
-libc = "0.2"
+rustix = { version = "1", features = ["process"] }
 
 [target.'cfg(windows)'.dependencies]
-# The console of Windows, whose end a host hears through a door, and the job that holds every process of a command.
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Console", "Win32_System_JobObjects"] }
+# The console of Windows, whose end a host hears through a door.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console"] }
+# The job that holds every process of a command, and ends them when it closes.
+win32job = "2"
 
 [dev-dependencies]
 # The model of rig that answers from a script, which the tests of the provider ask.

@@ -133,6 +133,9 @@ export type JsEngine = Engine
  * An ear that the crate writes: given once, to the boot of an engine or to a verb that takes an ear. It is let go
  * when it is disposed, so what it holds goes: a command ends, a wait ends, and a store lets its record go. The
  * engine of python steps it as a generator of its own too.
+ *
+ * It stays on the thread that made it: python refuses a reach of it from another thread, and a drop of it on
+ * another thread frees nothing, which leaves memory alone once the ear is disposed.
  */
 export declare class NativeEar {
   /**

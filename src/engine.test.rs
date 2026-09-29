@@ -63,9 +63,9 @@ fn provider(
   words: Rc<RefCell<VecDeque<String>>>,
   read: Rc<RefCell<Vec<String>>>,
 ) -> Box<dyn Ear> {
-  ear(move |co| async move {
+  ear(move |mut co| async move {
     loop {
-      let a = hear(&co).await;
+      let a = hear(&mut co).await;
       if !a.question() {
         continue;
       }
@@ -84,10 +84,10 @@ fn provider(
             Object::string(at.display().to_string()),
             Object::string("m/low"),
           ]);
-          say(&co, done(a.about(), standing)).await;
+          say(&mut co, done(a.about(), standing)).await;
         }
         "reply" => {
-          say(&co, Fact::says("started", a.about(), [])).await;
+          say(&mut co, Fact::says("started", a.about(), [])).await;
           let turns = call("turns", vec![], vec![("on", Object::string(a.on()))])?;
           read.borrow_mut().push(turns.py_repr());
           let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
@@ -97,7 +97,7 @@ fn provider(
             Object::none(),
             Object::list([]),
           ]);
-          say(&co, done(a.about(), turn)).await;
+          say(&mut co, done(a.about(), turn)).await;
         }
         _ => {}
       }
@@ -493,7 +493,7 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
 /// An ear that takes a wait and ends it by its work, of its own accord, once its gate opens: it tells a pause of the
 /// chain of the wait, says the wait due, then says it done.
 fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
-  ear(move |co: Co<(String, String)>| async move {
+  ear(move |mut co: Co<(String, String)>| async move {
     let mut gate = Some(gate);
     loop {
       match co.next().await {
@@ -502,15 +502,15 @@ fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
             && a.question()
             && let Some(opens) = gate.take()
           {
-            say(&co, Fact::says("started", a.about(), [])).await;
+            say(&mut co, Fact::says("started", a.about(), [])).await;
             let (about, on) = (a.about().to_owned(), a.on().to_owned());
             co.work(stream::once(opens.map(|_| (about, on))));
           }
         }
         Next::Worked((about, on)) => {
-          tell(&co, "pause", vec![Object::string(on)], vec![]).await;
-          say(&co, Fact::says("due", &about, [Object::float(1.0)])).await;
-          say(&co, done(&about, Object::none())).await;
+          tell(&mut co, "pause", vec![Object::string(on)], vec![]);
+          say(&mut co, Fact::says("due", &about, [Object::float(1.0)])).await;
+          say(&mut co, done(&about, Object::none())).await;
         }
       }
     }
@@ -562,17 +562,17 @@ fn what_the_ears_say_of_their_own_accord_in_one_drive_is_one_feed_of_the_sandbox
 
 /// An ear that takes each wait and ends it by a work that is ready at once, which says the wait done.
 fn quick() -> Box<dyn Ear> {
-  ear(move |co: Co<String>| async move {
+  ear(move |mut co: Co<String>| async move {
     loop {
       match co.next().await {
         Next::Heard(a) => {
           if a.kind() == "wait" && a.question() {
-            say(&co, Fact::says("started", a.about(), [])).await;
+            say(&mut co, Fact::says("started", a.about(), [])).await;
             co.work(stream::once(std::future::ready(a.about().to_owned())));
           }
         }
         Next::Worked(about) => {
-          say(&co, done(&about, Object::none())).await;
+          say(&mut co, done(&about, Object::none())).await;
         }
       }
     }
@@ -596,4 +596,29 @@ fn what_the_work_of_an_ear_came_to_lands_after_the_run_that_began_it() {
   let ran =
     facts[asked..done].iter().any(|one| one.kind() == "done" && one.about().starts_with("run"));
   assert!(ran, "the run that said the wait was over before its done came");
+}
+
+/// A waker that counts how often it is woken.
+struct Counted(std::sync::atomic::AtomicUsize);
+
+impl Wake for Counted {
+  fn wake(self: Arc<Self>) {
+    self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+  }
+}
+
+#[test]
+fn a_drive_that_finds_nothing_to_do_wakes_nobody() {
+  let mut lived = Lived::new("idle", &[], true).unwrap();
+  let counted = Arc::new(Counted(std::sync::atomic::AtomicUsize::new(0)));
+  let waker = Waker::from(Arc::clone(&counted));
+  lived.engine.pump(&waker).unwrap();
+  let woken = counted.0.load(std::sync::atomic::Ordering::SeqCst);
+  lived.engine.pump(&waker).unwrap();
+  lived.engine.pump(&waker).unwrap();
+  assert_eq!(
+    counted.0.load(std::sync::atomic::Ordering::SeqCst),
+    woken,
+    "a drive with nothing to do wakes nobody"
+  );
 }

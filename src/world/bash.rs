@@ -60,7 +60,7 @@ fn runs(path: &Path) -> bool {
 /// A command ends with every process it started, which its group holds. A command that a control ended first, which
 /// the engine says done, is ended so and says nothing more.
 pub fn bash() -> Box<dyn Ear> {
-  ear(|co: Co<Said>| async move {
+  ear(|mut co: Co<Said>| async move {
     let mut running: HashMap<String, Running> = HashMap::new();
     // What the operator fed a command that runs nowhere yet, which a later life holds until a wake starts it.
     let mut fed: HashMap<String, Vec<Option<String>>> = HashMap::new();
@@ -78,14 +78,14 @@ pub fn bash() -> Box<dyn Ear> {
             }
             _ => continue,
           };
-          say(&co, saying).await;
+          say(&mut co, saying).await;
           continue;
         }
       };
       let about = a.about().to_owned();
       match a.kind() {
         "bash" if a.question() => {
-          say(&co, Fact::says("started", &about, [])).await;
+          say(&mut co, Fact::says("started", &about, [])).await;
           match begun(&a) {
             Ok(begun) => {
               let (stdin, fed_in) = spsc::unbounded();
@@ -206,8 +206,7 @@ async fn ran(
   stopped: oneshot::Receiver<()>,
   says: UnboundedSender<Said>,
 ) {
-  let Begun { about, mut child, group, timeout } = begun;
-  let mut leash = Leash(Some(group));
+  let Begun { about, mut child, mut group, timeout } = begun;
   let (stdout, stderr, stdin) = (child.stdout.take(), child.stderr.take(), child.stdin.take());
   let ended = async {
     let (out, err) =
@@ -230,12 +229,12 @@ async fn ran(
       got = &mut ended => break got,
       () = &mut expired, if !late => {
         late = true;
-        leash.slay();
+        group.slay();
       }
       () = &mut feeding, if !closed => closed = true,
     }
   };
-  leash.0 = None;
+  group.free();
   let code = status.ok().and_then(|status| status.code()).map(i64::from);
   let exit = Exit {
     code: if late { None } else { code },
@@ -243,24 +242,6 @@ async fn ran(
     stderr: Text::new(format!("{about}/stderr"), err),
   };
   let _ = says.unbounded_send(Said::Exit { about: about.clone(), exit });
-}
-
-/// The group of a command that runs, which ends with every process of it when it is let go before the command is
-/// over: at a stop, or at the end of the ear.
-struct Leash(Option<Group>);
-
-impl Leash {
-  fn slay(&self) {
-    if let Some(group) = &self.0 {
-      group.slay();
-    }
-  }
-}
-
-impl Drop for Leash {
-  fn drop(&mut self) {
-    self.slay();
-  }
 }
 
 /// What is fed to a command, written into its stdin, until nothing closes it or the command reads no more.
@@ -351,63 +332,62 @@ fn grouped(command: &mut Command) {
 
 /// Every process a command started: on Unix the process group it leads, and on Windows, where a shell of Git does
 /// not keep the tree of its processes, a job that holds the command and every process it starts.
-struct Group(#[cfg(unix)] libc::pid_t, #[cfg(windows)] windows_sys::Win32::Foundation::HANDLE);
+///
+/// Every process of it ends when the group goes before the command is over: at a stop, or at the end of the ear. Its
+/// leader stays unreaped until the command is over, since only the read of its exit reaps it, so an end never reaches
+/// a group that another took.
+struct Group {
+  #[cfg(unix)]
+  leader: Option<rustix::process::Pid>,
+  #[cfg(windows)]
+  job: Option<win32job::Job>,
+}
 
 impl Group {
   /// The group of a command that just started. On Windows the job takes the command before its shell has read a
-  /// word, since the shell starts slower than the job takes it.
+  /// word, since the shell starts slower than the job takes it, and it ends every process it holds when it closes.
   fn of(child: &Child) -> std::io::Result<Self> {
     let gone = || std::io::Error::other("the command is over already");
     #[cfg(unix)]
     {
-      let pid = child.id().ok_or_else(gone)?;
-      libc::pid_t::try_from(pid).map(Self).map_err(std::io::Error::other)
+      let pid = child.id().and_then(|pid| i32::try_from(pid).ok());
+      let leader = pid.and_then(rustix::process::Pid::from_raw).ok_or_else(gone)?;
+      Ok(Group { leader: Some(leader) })
     }
     #[cfg(windows)]
     {
-      use windows_sys::Win32::{
-        Foundation::CloseHandle,
-        System::JobObjects::{AssignProcessToJobObject, CreateJobObjectW},
-      };
-      // SAFETY: the job is made with no name and no attributes, and it takes the process that the child holds open.
-      unsafe {
-        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
-        if job.is_null() {
-          return Err(std::io::Error::last_os_error());
-        }
-        let Some(process) = child.raw_handle() else {
-          CloseHandle(job);
-          return Err(gone());
-        };
-        if AssignProcessToJobObject(job, process) == 0 {
-          let no = std::io::Error::last_os_error();
-          CloseHandle(job);
-          return Err(no);
-        }
-        Ok(Self(job))
-      }
+      let mut ends = win32job::ExtendedLimitInfo::new();
+      ends.limit_kill_on_job_close();
+      let job = win32job::Job::create_with_limit_info(&ends).map_err(std::io::Error::other)?;
+      let process = child.raw_handle().ok_or_else(gone)?;
+      job.assign_process(process as isize).map_err(std::io::Error::other)?;
+      Ok(Group { job: Some(job) })
     }
   }
 
   /// Every process of the group, ended.
-  fn slay(&self) {
-    // SAFETY: on Unix kill is given the group the command leads, whose leader stays unreaped while its leash holds
-    // it; on Windows the job is open until the group drops.
-    unsafe {
-      #[cfg(unix)]
-      libc::kill(-self.0, libc::SIGKILL);
-      #[cfg(windows)]
-      windows_sys::Win32::System::JobObjects::TerminateJobObject(self.0, 1);
+  fn slay(&mut self) {
+    #[cfg(unix)]
+    if let Some(leader) = self.leader {
+      let _ = rustix::process::kill_process_group(leader, rustix::process::Signal::KILL);
+    }
+    #[cfg(windows)]
+    self.job.take();
+  }
+
+  /// The group let go once the command is over, and every process of it that outlives the command left to run.
+  fn free(&mut self) {
+    #[cfg(unix)]
+    self.leader.take();
+    #[cfg(windows)]
+    if let Some(job) = self.job.take() {
+      let _ = job.set_extended_limit_info(&win32job::ExtendedLimitInfo::new());
     }
   }
 }
 
-#[cfg(windows)]
 impl Drop for Group {
   fn drop(&mut self) {
-    // SAFETY: the group alone holds the handle of its job.
-    unsafe {
-      windows_sys::Win32::Foundation::CloseHandle(self.0);
-    }
+    self.slay();
   }
 }
