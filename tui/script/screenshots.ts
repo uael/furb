@@ -313,6 +313,10 @@ try {
   app().closeTree();
   await session.submit("show live progress");
   session.enqueue("Check keyboard navigation after this answer.");
+  // The follow-up waits while the model writes its first steps.
+  await until(session.host, () =>
+    [...session.host.streams.values()].some((stream) => stream.text.includes("await bash")),
+  );
   await capture("34-queued-follow-up");
   app().composer.setText("/queue");
   await app().submit();
