@@ -196,6 +196,9 @@ the tools in `.venv/bin`.
   after `bun run test` filters the files.
   As root, the test of a folder that cannot be read fails, since root reads every folder.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
+- `LOOK_DIR=<project> LOOK_OUT=<folder> bun run look <threads>`: one real life in the TUI, on claude-cli:opus/high
+  unless `LOOK_MODEL` names another, drawn to a picture and a text of the screen as it works, and each thread again
+  when it closes, with every word open. The head of `tui/script/look.ts` names the other settings. It spends prompts.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.
 - `bun run screenshots` and `bun run animation`: capture `docs/screenshots/` and `docs/furb.gif` again from the
