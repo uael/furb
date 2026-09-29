@@ -26,12 +26,12 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 use tokio::{
-  io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader},
-  process::{Child, ChildStdin, Command},
+  io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
+  process::{Child, ChildStderr, ChildStdin, ChildStdout, Command},
   sync::mpsc,
 };
 
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 
 use super::{Model, ended, uuid};
 use crate::ear::reactor;
@@ -430,11 +430,9 @@ impl Conversation {
       return Err(failed("claude started with no pipes"));
     };
     self.resumed = true;
-    let hurt = Arc::new(Mutex::new(String::new()));
-    let tailing = Some(tokio::spawn(tailed(stderr, Arc::clone(&hurt))));
-    let (said, lines) = mpsc::unbounded_channel();
-    tokio::spawn(listened(stdout, said));
-    Ok(Process { effort, child, stdin, lines, hurt, tailing, paid: 0.0 })
+    let out = Out { reader: BufReader::new(stdout), read: Vec::new() };
+    let tail = Tail { stderr: Some(stderr), kept: String::new() };
+    Ok(Process { effort, child, stdin, out, tail, paid: 0.0 })
   }
 }
 
@@ -446,74 +444,94 @@ enum Line {
   Over(Option<String>),
 }
 
-/// One process of the command line: the effort it spends, the child, its stdin, what its stdout says, the tail of its
-/// stderr, and the running cost it said last, since it says the cost of all its turns.
+/// One process of the command line: the effort it spends, the child, its stdin, its stdout, the tail of its stderr,
+/// and the running cost it said last, since it says the cost of all its turns.
 struct Process {
   /// The effort of each turn of the process, which it started at.
   effort: Option<String>,
   child: Child,
   stdin: ChildStdin,
-  lines: mpsc::UnboundedReceiver<Line>,
-  hurt: Arc<Mutex<String>>,
-  /// The read of its stderr, which an exit waits for, so the failure says all the process wrote.
-  tailing: Option<tokio::task::JoinHandle<()>>,
+  out: Out,
+  tail: Tail,
   paid: f64,
 }
 
 impl Process {
   /// Whether the process still stands: what an earlier turn left unread goes, and an end among it says no.
   fn stands(&mut self) -> bool {
-    while let Ok(line) = self.lines.try_recv() {
+    while let Some(line) = self.out.line().now_or_never() {
       if let Line::Over(_) = line {
         return false;
       }
     }
     matches!(self.child.try_wait(), Ok(None))
   }
-
-  /// The last of what the process wrote on its stderr, after a colon, or nothing.
-  fn tail(&self) -> String {
-    let hurt = self.hurt.lock().map(|one| one.trim().to_owned()).unwrap_or_default();
-    if hurt.is_empty() { hurt } else { format!(": {hurt}") }
-  }
 }
 
-/// Every line of the stdout of a process, read as it comes, until its end.
-async fn listened(stdout: impl AsyncRead + Unpin, said: mpsc::UnboundedSender<Line>) {
-  let mut reader = BufReader::new(stdout);
-  let mut read = Vec::new();
-  loop {
-    read.clear();
-    let limit = u64::try_from(LINE).unwrap_or(u64::MAX) + 1;
-    let line = match (&mut reader).take(limit).read_until(b'\n', &mut read).await {
-      Ok(0) => Line::Over(None),
-      Ok(_) if read.len() > LINE => {
-        Line::Over(Some(format!("Claude wrote a line over {LINE} bytes.")))
-      }
-      Ok(_) => match serde_json::from_slice::<Value>(read.trim_ascii()) {
-        Ok(event) => Line::Event(event),
-        Err(_) if read.trim_ascii().is_empty() => continue,
-        Err(_) => Line::Odd(String::from_utf8_lossy(read.trim_ascii()).into_owned()),
-      },
-      Err(no) => Line::Over(Some(format!("The stdout of claude failed: {no}"))),
-    };
-    let over = matches!(line, Line::Over(_));
-    if said.send(line).is_err() || over {
-      return;
+/// The stdout of a process, read a line at a time, and the part of a line read so far, which stays when a read is
+/// dropped before its line is whole.
+struct Out {
+  reader: BufReader<ChildStdout>,
+  read: Vec<u8>,
+}
+
+impl Out {
+  /// The next line of the stdout, as it comes.
+  async fn line(&mut self) -> Line {
+    loop {
+      let limit = u64::try_from((LINE + 1).saturating_sub(self.read.len())).unwrap_or(u64::MAX);
+      let got = (&mut self.reader).take(limit).read_until(b'\n', &mut self.read).await;
+      return match got {
+        Ok(0) if self.read.is_empty() => Line::Over(None),
+        Ok(_) if self.read.len() > LINE => {
+          Line::Over(Some(format!("Claude wrote a line over {LINE} bytes.")))
+        }
+        Ok(_) => {
+          let read = std::mem::take(&mut self.read);
+          match serde_json::from_slice::<Value>(read.trim_ascii()) {
+            Ok(event) => Line::Event(event),
+            Err(_) if read.trim_ascii().is_empty() => continue,
+            Err(_) => Line::Odd(String::from_utf8_lossy(read.trim_ascii()).into_owned()),
+          }
+        }
+        Err(no) => Line::Over(Some(format!("The stdout of claude failed: {no}"))),
+      };
     }
   }
 }
 
-/// The last characters of the stderr of a process, kept for the failure that comes next.
-async fn tailed(mut stderr: impl AsyncRead + Unpin, hurt: Arc<Mutex<String>>) {
-  let mut chunk = vec![0u8; 4096];
-  while let Ok(n) = stderr.read(&mut chunk).await
-    && n > 0
-  {
-    let Ok(mut held) = hurt.lock() else { return };
-    held.push_str(&String::from_utf8_lossy(&chunk[..n]));
-    let cut = held.len() - last(&held).len();
-    held.drain(..cut);
+/// The stderr of a process, until its end, and the last characters it wrote, kept for the failure that comes next.
+struct Tail {
+  stderr: Option<ChildStderr>,
+  kept: String,
+}
+
+impl Tail {
+  /// What the stderr writes next, kept, until its end.
+  async fn heard(&mut self) {
+    let Some(stderr) = self.stderr.as_mut() else { return std::future::pending().await };
+    let mut chunk = [0u8; 4096];
+    match stderr.read(&mut chunk).await {
+      Ok(n) if n > 0 => {
+        self.kept.push_str(&String::from_utf8_lossy(&chunk[..n]));
+        let cut = self.kept.len() - last(&self.kept).len();
+        self.kept.drain(..cut);
+      }
+      _ => self.stderr = None,
+    }
+  }
+
+  /// All that the stderr writes until its end.
+  async fn drained(&mut self) {
+    while self.stderr.is_some() {
+      self.heard().await;
+    }
+  }
+
+  /// The last of what the process wrote on its stderr, after a colon, or nothing.
+  fn said(&self) -> String {
+    let kept = self.kept.trim();
+    if kept.is_empty() { String::new() } else { format!(": {kept}") }
   }
 }
 
@@ -585,32 +603,38 @@ impl Flight<'_> {
       process.stdin.flush().await
     };
     if let Err(no) = wrote.await {
-      return Err(failed(format!("claude took no input: {no}{}", process.tail())));
+      // A process that took no input ended, and the failure says all that it wrote on its stderr.
+      let _ = tokio::time::timeout(Duration::from_secs(1), process.tail.drained()).await;
+      return Err(failed(format!("claude took no input: {no}{}", process.tail.said())));
     }
     self.heard = true;
     let mut reply = Reply { deltas, ..Reply::default() };
     let mut odd = String::new();
     let mut due = tokio::time::Instant::now() + stall;
     loop {
-      let Ok(heard) = tokio::time::timeout_at(due, process.lines.recv()).await else {
-        let odd = if odd.is_empty() { odd } else { format!(" The last line it wrote was {odd}") };
-        let seconds = stall.as_secs_f64();
-        return Err(failed(format!("Claude made no progress for {seconds}s.{odd}")));
+      // Its stderr is read while its stdout is awaited, so a process that writes much of it never stops for it.
+      let heard = tokio::select! {
+        line = process.out.line() => line,
+        () = process.tail.heard() => continue,
+        () = tokio::time::sleep_until(due) => {
+          let odd = if odd.is_empty() { odd } else { format!(" The last line it wrote was {odd}") };
+          let seconds = stall.as_secs_f64();
+          return Err(failed(format!("Claude made no progress for {seconds}s.{odd}")));
+        }
       };
       let event = match heard {
-        Some(Line::Event(event)) => event,
-        Some(Line::Odd(text)) => {
+        Line::Event(event) => event,
+        Line::Odd(text) => {
           last(&text).clone_into(&mut odd);
           continue;
         }
-        Some(Line::Over(Some(why))) => return Err(failed(why)),
-        Some(Line::Over(None)) | None => {
+        Line::Over(Some(why)) => return Err(failed(why)),
+        Line::Over(None) => {
           let code = process.child.wait().await.ok().and_then(|status| status.code());
-          if let Some(tailing) = process.tailing.take() {
-            let _ = tokio::time::timeout(Duration::from_secs(1), tailing).await;
-          }
+          // The failure says all that the process wrote, which its stderr gives until its end.
+          let _ = tokio::time::timeout(Duration::from_secs(1), process.tail.drained()).await;
           let code = code.map_or_else(|| "a signal".to_owned(), |code| code.to_string());
-          return Err(failed(format!("Claude exited ({code}){}", process.tail())));
+          return Err(failed(format!("Claude exited ({code}){}", process.tail.said())));
         }
       };
       let kind = event.get("type").and_then(Value::as_str).unwrap_or_default();
