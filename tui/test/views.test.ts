@@ -575,6 +575,28 @@ test("the view of a thread that closed with another names no thread above its an
     ]);
   }));
 
+test("a question for the operator says it waits, and once answered says it is past", () =>
+  composing(async ({ session, frame }) => {
+    const id = await session.engine.thread("str", {
+      markdown: "Which name do you want?",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.threads.has(id));
+    await session.refresh();
+    await session.open(id);
+    const asked = await frame();
+    await session.submit("Call it flip.");
+    await until(session.host, () => !session.host.threads.has(id));
+    await session.refresh();
+    const answered = await frame();
+    expect([
+      asked.includes("Question for you"),
+      answered.includes("Question for you"),
+      answered.includes("Asked you"),
+    ]).toEqual([true, false, true]);
+  }));
+
 test("a diff in an answer tints each line that it adds or removes, as the diffs of the feed do", () =>
   composing(async ({ session, screen, frame }) => {
     const id = await session.engine.thread("str", {

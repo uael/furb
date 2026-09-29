@@ -2069,7 +2069,8 @@ export class App {
         `${message}\n${waiting}\n${this.theme}`,
         [
           [`${glyph.asks} `, waiting ? c.warm : c.faint],
-          ["Question for you", c.bright],
+          // A question that its answer closed is past, and says so in the tone of the chrome.
+          waiting ? ["Question for you", c.bright] : ["Asked you", c.faint],
         ],
         (box) => {
           this.panel(box, waiting ? c.warm : c.rule).add(this.text(message, c.bright));
