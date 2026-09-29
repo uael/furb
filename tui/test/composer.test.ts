@@ -573,7 +573,9 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     await idle(session);
     app.composer.setText("A second message.");
     await app.submit();
-    await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
+    // The thread closes once the word of its answer has run, after the answer of the model comes.
+    const second = session.thread;
+    await until(session, () => session.acts.some((act) => act.id === second && act.done));
     // The feed of the chain holds a card for each thread.
     await session.open("");
     const shown = await frame();
