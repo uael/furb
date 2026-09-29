@@ -187,7 +187,7 @@ test("the views say each quantity one way, read a page of changes once, and set 
     { width: 150, height: 40 },
   ));
 
-test("the lines that two hunks of a diff leave out between them show as one faint mark", () =>
+test("the lines that two hunks of a diff leave out between them show as one faint mark, and every hunk keeps one column of numbers", () =>
   composing(
     async ({ session, frame }) => {
       const lines = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`);
@@ -209,6 +209,8 @@ test("the lines that two hunks of a diff leave out between them show as one fain
       const last = shown.findLastIndex((line) => line.includes("+ last"));
       const marks = shown.slice(first, last).filter((line) => line.trim().startsWith("⋯"));
       expect([first > 0, last > first, marks.length]).toEqual([true, true, 1]);
+      // Both hunks keep one column of numbers, though the numbers of the last have more digits.
+      expect(shown[first]?.indexOf("+ first")).toBe(shown[last]?.indexOf("+ last"));
     },
     { width: 120, height: 60 },
   ));
@@ -540,6 +542,36 @@ test("a step of a model stands in the tone of the steps once it lands, and the a
     },
     { width: 145, height: 45 },
   ));
+
+test("the view of a thread that closed with another names no thread above its answer, and no turn of its model that wrote nothing", () =>
+  composing(async ({ session, screen, frame }) => {
+    // The demo model answers a message that asks to show live progress slowly, so the rung closes both threads first.
+    const ask = (markdown: string) => session.engine.thread("str", { markdown, on: session.engine.root });
+    const [first, second] = [
+      await ask("First, show live progress."),
+      await ask("Second, show live progress."),
+    ];
+    await session.engine.result(
+      await session.engine.rung({
+        word: `close("README.md", "${first}")\nclose("notes.md", "${second}")`,
+        on: session.engine.root,
+      }),
+    );
+    await until(
+      session,
+      () => session.acts.filter((act) => [first, second].includes(act.id) && act.done).length === 2,
+    );
+    await session.open(first);
+    await frame();
+    await Promise.all(highlighting(screen.renderer.root));
+    const shown = await frame();
+    // The rung of the model, which the close ended before it wrote a word, shows nothing.
+    expect([shown.includes("README.md"), shown.includes("answers “"), shown.includes("▸ ✓")]).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  }));
 
 test("a diff in an answer tints each line that it adds or removes, as the diffs of the feed do", () =>
   composing(async ({ session, screen, frame }) => {

@@ -22,8 +22,10 @@ import {
   InputRenderable,
   InputRenderableEvents,
   type KeyEvent,
+  type LineColorConfig,
   type LineNumberOptions,
   LineNumberRenderable,
+  type LineSign,
   type MarkdownOptions,
   MarkdownRenderable,
   type MouseEvent,
@@ -40,6 +42,7 @@ import {
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
+import { parsePatch } from "diff";
 import { clipboardImage } from "./clipboard.ts";
 import { commands, slashes } from "./commands.ts";
 import {
@@ -1681,14 +1684,14 @@ export class App {
           writing.push([act.id, { chain: w.selected, text: "", thinking: "" }]);
       const waiting = new Set(writing.map(([id]) => id));
       // An act that no turn tells yet stands with the word that made it, or where it came in time among the items that
-      // the turns tell, so the feed never moves a card once it shows it. A rung that a cancel ended before it wrote a
-      // word shows nothing, since its message says the cancel.
+      // the turns tell, so the feed never moves a card once it shows it. A rung that a cancel or a close ended before
+      // its model wrote a word shows nothing, since the cancel or the answer says how its thread ended.
       const position = new Map(w.activity.map((act, index) => [act.id, index]));
       const loose: { at: number; item: Item }[] = [];
       for (const act of w.activity) {
         if (told.has(act.id) || waiting.has(act.id) || !this.isPoint(act) || !fromOperator(act, rows))
           continue;
-        if (act.kind === "rung" && cancelled(act) && !w.program[act.id]) continue;
+        if (act.kind === "rung" && act.done && !failed(act) && !w.program[act.id]) continue;
         const maker = words.get(act.by);
         if (maker && act.kind !== "thread") maker.told.push(act);
         else
@@ -2135,14 +2138,15 @@ export class App {
     } else if (item.type === "result") {
       const { act } = item;
       const value = display(act.value);
+      // An answer that closed with others says which thread it answers, but in the view of that thread itself.
+      const named = item.parallel && act.id !== w.thread;
       add(
         item.key,
-        `${value}:${item.parallel}:${this.theme}`,
+        `${value}:${named}:${this.theme}`,
         [],
         (box) => {
           const answer = this.box({ paddingLeft: space.between });
-          // An answer that closed with others says which thread it answers.
-          if (item.parallel)
+          if (named)
             answer.add(
               this.text(`answers “${this.firstLine(String(act.words[1] ?? ""))}”`, c.faint, {
                 truncate: true,
@@ -2566,34 +2570,72 @@ export class App {
     }
   }
   /** A patch as a diff: each added and removed line tinted, in the colors of the language of its file, and in two
-   * sides where the view asks for them. The lines that two hunks leave out between them show as one faint mark, so a
-   * jump of the line numbers never reads as a line that was there. */
+   * sides where the view asks for them. One side is one gutter for the whole patch, in which the lines that two hunks
+   * leave out between them stand as one row with no number and the mark ⋯, so a jump of the line numbers never reads
+   * as a line that was there, and every hunk keeps one column of numbers. */
   private diff(patch: string, path: string, split: boolean): Renderable {
-    const [head = "", ...hunks] = patch.split(/^(?=@@ )/m);
-    if (hunks.length < 2) return this.hunk(patch, path, split);
-    const box = this.box({});
-    for (const [at, hunk] of hunks.entries()) {
-      if (at) box.add(this.text("⋯", c.faint, { marginLeft: 1 }));
-      box.add(this.hunk(head + hunk, path, split));
+    if (split)
+      return new DiffRenderable(this.renderer, {
+        diff: patch,
+        view: "split",
+        filetype: filetype(path),
+        syntaxStyle: this.style,
+        fg: c.bright,
+        showLineNumbers: true,
+        lineNumberFg: c.faint,
+        lineNumberBg: c.ground,
+        contextBg: c.ground,
+        addedBg: c.added,
+        removedBg: c.removed,
+        addedSignColor: c.done,
+        removedSignColor: c.warm,
+        wrapMode: "word",
+      });
+    const lines: string[] = [];
+    const lineColors = new Map<number, LineColorConfig>();
+    const lineSigns = new Map<number, LineSign>();
+    const lineNumbers = new Map<number, number>();
+    const hideLineNumbers = new Set<number>();
+    for (const [at, hunk] of (parsePatch(patch)[0]?.hunks ?? []).entries()) {
+      if (at) {
+        hideLineNumbers.add(lines.length);
+        lineSigns.set(lines.length, { after: " ⋯", afterColor: c.faint });
+        lines.push("");
+      }
+      let before = hunk.oldStart;
+      let after = hunk.newStart;
+      for (const line of hunk.lines) {
+        const row = lines.length;
+        if (line.startsWith("+")) {
+          lineColors.set(row, { gutter: c.ground, content: c.added });
+          lineSigns.set(row, { after: " +", afterColor: c.done });
+          lineNumbers.set(row, after++);
+        } else if (line.startsWith("-")) {
+          lineColors.set(row, { gutter: c.ground, content: c.removed });
+          lineSigns.set(row, { after: " -", afterColor: c.warm });
+          lineNumbers.set(row, before++);
+        } else if (line.startsWith(" ")) {
+          lineNumbers.set(row, after++);
+          before++;
+        } else continue;
+        lines.push(line.slice(1));
+      }
     }
-    return box;
-  }
-  private hunk(patch: string, path: string, split: boolean): DiffRenderable {
-    return new DiffRenderable(this.renderer, {
-      diff: patch,
-      view: split ? "split" : "unified",
-      filetype: filetype(path),
-      syntaxStyle: this.style,
-      fg: c.bright,
-      showLineNumbers: true,
-      lineNumberFg: c.faint,
-      lineNumberBg: c.ground,
-      contextBg: c.ground,
-      addedBg: c.added,
-      removedBg: c.removed,
-      addedSignColor: c.done,
-      removedSignColor: c.warm,
-      wrapMode: "word",
+    return new LineNumberRenderable(this.renderer, {
+      target: new CodeRenderable(this.renderer, {
+        content: safeText(lines.join("\n")),
+        filetype: filetype(path),
+        syntaxStyle: this.style,
+        fg: c.bright,
+        wrapMode: "word",
+        drawUnstyledText: true,
+      }),
+      fg: c.faint,
+      bg: c.ground,
+      lineColors,
+      lineSigns,
+      lineNumbers,
+      hideLineNumbers,
     });
   }
   /** A text that moves while its cause holds: the tick draws its parts again, until a time after which it shows them
