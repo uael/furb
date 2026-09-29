@@ -6,15 +6,14 @@ from conftest import STANDS, Sand, born, life, paragraphs, plain, said, settle, 
 from furb import engine
 from furb.engine import Drift
 
-ROSTER, WHERE, WHO = STANDS
+ROSTER = STANDS[0]
 
 
 async def test_what_a_chain_stands_on() -> None:
   """What a chain stands on: the actors the World offers, the directory the chain starts in, and the actor a prompt goes to when it names none."""
   _, log, root = born("close(1)")
   assert await engine.prompt(int, "count", on=root) == 1
-  assert (WHERE, WHO) == ("/w", "m/low")
-  assert [name for name, *_ in ROSTER] == ["operator", "m", "n"]
+  assert engine.module(root)[f"{root}_roster"] == ROSTER
   assert engine.cwd(on=root) == "/w"
   assert [a[4] for a in said(log, "reply")] == ["m/low"]
   assert engine.module(root)["actor"] == "m/low"

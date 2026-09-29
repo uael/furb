@@ -107,9 +107,12 @@ async def test_at_its_tip_boot_stands_the_life_again() -> None:
 
 async def test_each_standing_binds_the_default_actor_of_the_chain_under_the_name_actor() -> None:
   """Each standing binds the default actor of the chain, under the name actor."""
-  _, log, root = born("close(1)", "close(None)")
+  sand, log, root = born("close(1)", "close(None)")
   assert await engine.prompt(int, "count", on=root) == 1
   assert engine.module(root)["actor"] == "m/low" == said(log, "reply")[0][4]
+  sand.stands = LATER
+  engine.stand(on=root)
+  assert engine.module(root)["actor"] == "o/low"
 
 
 async def test_the_chain_tells_each_standing_it_takes_in_one_paragraph_headed_standing() -> None:
@@ -173,6 +176,12 @@ async def test_every_chain_hears_the_done_of_every_stand() -> None:
     and engine.cwd(on=over) == "/z"
     and paragraphs(engine.turns(on=over))[-1] == takes(root, LATER)
   )
+  two = await chained("two")
+  assert paragraphs(engine.turns(on=two))[-1] == takes(two, LATER)
   later.stands = STANDS
   engine.stand(on=over)
   assert paragraphs(engine.turns(on=over))[-1] == takes(root) and engine.module(root)["actor"] == "m/low"
+  assert paragraphs(engine.turns(on=two))[-1] == takes(two) and engine.module(two)["actor"] == "m/low"
+  before = [paragraphs(engine.turns(on=one)) for one in (over, two)]
+  engine.stand(on=over)
+  assert [paragraphs(engine.turns(on=one)) for one in (over, two)] == before

@@ -3,7 +3,7 @@
 from asyncio import CancelledError
 from collections.abc import Generator
 
-from conftest import born, dones, said, settle, slow, stalled
+from conftest import born, dones, hushed, said, settle, slow, stalled
 from furb import engine
 
 
@@ -54,10 +54,7 @@ async def test_a_paused_prompt_stops_at_its_next_boundary_with_its_loop_where_it
 
 async def test_the_engine_holds_the_response_of_a_reply_that_returns_on_a_paused_chain() -> None:
   """The engine holds the response of a reply that returns on a paused chain."""
-  _, log, root = born("close(7)")
-  act = engine.prompt(int, "count", on=root)
-  engine.pause(root)
-  await settle()
+  _, log, root, act = await hushed("close(7)")
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   assert [a[1] for a in said(log, "done") if a[1].startswith("reply")] == ["reply1"] and engine.peek(act, ...) is ...
   assert [a for a in said(log, "ready") if a[1] == step] == [] and [a for a in said(log, "run") if a[4] == step] == []

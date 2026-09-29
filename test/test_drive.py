@@ -29,7 +29,7 @@ async def test_the_other_way_to_speak_a_generator_is_brought_to_life_under_a_nam
   at = len(log)
   engine.drive(keeping(heard, ("done", "none://one", None)), "keeper")
   engine.bash("echo hi", on=root)
-  assert said(log, "done")[-1][1] == "none://one" or heard
+  assert log[at] == ("done", "none://one", "keeper", None)
   assert heard == log[at:]
 
 

@@ -107,10 +107,26 @@ async def test_one_rung_runs_at_a_time_on_a_chain_and_rungs_interleave_at_their_
   await settle()
   assert [engine.scope(a[1]) for a in said(log, "wants")] == [root, two]
   assert engine.peek(here, ...) is ... and engine.peek(there, ...) is ...
+  quick = engine.rung("k = 1", on=root)
+  await settle()
   for a in said(log, "bash"):
     sand.exits(a[1], 0)
   await settle()
   assert ((await here), (await there)) == (0, 0)
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == here]
+  runs = {a[4]: a[1] for a in said(log, "run")}
+  slow, fast = runs[step], runs[quick]
+  (waits,) = [a[1] for a in said(log, "wants") if a[2] == slow]
+  moves = [(a[0], a[1]) for a in log if a[1] in (slow, fast, waits) and a[0] in ("wants", "started", "done")]
+  assert moves == [
+    ("started", slow),
+    ("wants", waits),
+    ("started", waits),
+    ("started", fast),
+    ("done", fast),
+    ("done", waits),
+    ("done", slow),
+  ]
 
 
 async def test_the_word_of_a_rung_runs_again_in_every_chain_made_from_its_chain() -> None:
@@ -126,11 +142,17 @@ async def test_the_word_of_a_rung_runs_again_in_every_chain_made_from_its_chain(
 
 async def test_two_prompts_on_one_chain_see_the_bindings_of_each_other_as_they_run() -> None:
   """Two prompts on one chain see the bindings of each other as they run."""
-  _, _, root = born("mine = 1\nclose(mine)", "close(mine + 1)", "close(None)")
+  sand, log, root = born(
+    "mine, theirs = 1, 0\nx = bash('slow')\nawait x\nclose(mine + theirs)", "theirs = mine + 10\nclose(theirs)"
+  )
+  sand.auto = False
   first = engine.prompt(int, "bind", on=root)
   second = engine.prompt(int, "read it", on=root)
   await settle()
-  assert ((await first), (await second)) == (1, 2)
+  assert engine.peek(first, ...) is ... and engine.peek(second) == 11
+  sand.exits(said(log, "bash")[0][1], 0)
+  await settle()
+  assert ((await first), (await second)) == (12, 11)
 
 
 async def test_a_rung_whose_word_rebinds_a_broken_name_repairs_the_chain() -> None:

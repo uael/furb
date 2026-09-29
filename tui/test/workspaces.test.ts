@@ -4,7 +4,6 @@ import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { type NativeEar, store } from "@furb/engine";
-import type { CapturedFrame, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
@@ -13,6 +12,7 @@ import { seedDemoFiles } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session, savedView } from "../src/session.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
+import { cellAt } from "./composing.ts";
 
 /** A library in the sidebar of an App on a test terminal: the terminal, the App that shows the session that the
  * library selects now, the first column of the sidebar, the rows of the frame that the App draws anew, and the row of
@@ -266,6 +266,10 @@ test("a model of the catalog that the roster does not hold joins the session, wh
     const first = entry.session;
     expect(first?.roster.map(([name]) => name)).toEqual(["claude-cli:opus", "operator"]);
     await until(library, () => first?.catalog.some(([name]) => name === "claude-cli:sonnet") ?? false);
+    // A name that neither the roster nor the catalog holds is refused with the models of the roster.
+    expect(String(await first?.submit("/model nothing").catch((error: unknown) => error))).toContain(
+      "Choose one of claude-cli:opus.",
+    );
     await first?.submit("/model sonnet");
     await until(library, () => entry.session !== first && entry.session?.actor === "claude-cli:sonnet/high");
     expect(entry.session?.roster.map(([name]) => name)).toEqual([
@@ -424,16 +428,6 @@ test("a session row archives a session through its remove button, which folds it
     await until(library, () => library.current === first);
     expect(first.archived).toBe(false);
   }));
-
-/** The text, the color and the ground of the cell at a column of a row of the screen. */
-function cellAt(frame: CapturedFrame, x: number, y: number): { text: string; fg?: RGBA; bg?: RGBA } {
-  let at = 0;
-  for (const span of frame.lines[y]?.spans ?? []) {
-    if (x < at + span.width) return { text: span.text, fg: span.fg, bg: span.bg };
-    at += span.width;
-  }
-  return { text: "" };
-}
 
 test("a session row lights under the pointer with its buttons, tells its state on its mark alone, and goes dark when the pointer leaves", () =>
   withLibrary(async ({ directory, open, sidebar }) => {

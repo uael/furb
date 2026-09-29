@@ -6,15 +6,13 @@ from furb import engine
 
 async def test_a_filter_is_given_the_acts_of_the_transcript_up_to_the_source() -> None:
   """A filter is given the acts of the transcript up to the source of a chain that has one."""
-  _, log, root = await lived()
+  _, _, root = await lived()
   held: list[tuple] = []
   engine.chain("twin", source=root, filter=seen(held))
   await settle()
   theirs = engine.transcript(root)
   facts = [one[1] for one in theirs if engine.question(one)]
-  assert [one[1] for one in held] == facts[: len(held)]
-  made = {said(log, "prompt")[0][1], said(log, "rung")[0][1], said(log, "bash")[0][1]}
-  assert made <= {one[1] for one in held}
+  assert [one[1] for one in held] == facts
 
 
 async def test_a_filter_says_which_acts_the_turns_of_that_chain_keep_each_with_its_entries() -> None:

@@ -227,51 +227,33 @@ fn a_turn_given_again_with_its_last_message_grown_after_it_failed_sends_what_it_
 
 #[test]
 fn a_message_that_the_command_line_did_not_hear_goes_whole_at_the_next_turn() {
-  let yard = Yard::new("unheard");
-  let model = yard.claude(10_000).completion_model("sonnet");
-  let settings = json!({"session": "chain"});
-  let one = asked(&model, &[user("first")], settings.clone()).unwrap();
-  let answer = Message::Assistant { id: None, content: one.choice };
-  let turn =
-    |last: &str| asked(&model, &[user("first"), answer.clone(), user(last)], settings.clone());
-  turn("second FAIL").unwrap_err();
-  let bin = yard.at.join("claude");
-  fs::remove_file(&bin).unwrap();
-  turn("second FAIL\n\nthird").unwrap_err();
-  fs::write(&bin, FAKE).unwrap();
-  fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
-  turn("second FAIL\n\nthird\n\nfourth").unwrap();
-  let pids = yard.pids();
-  assert_eq!(pids.len(), 2);
-  let first = after(&yard.args(&pids[0]), "--session-id");
-  assert_eq!(after(&yard.args(&pids[1]), "--resume"), first, "the same conversation goes on");
-  let line: Value = serde_json::from_str(yard.heard().last().unwrap()).unwrap();
-  assert_eq!(line["message"]["content"], json!([{"type": "text", "text": "third\n\nfourth"}]));
-}
-
-#[test]
-fn a_turn_given_again_whole_after_its_grown_message_did_not_go_sends_only_what_the_message_gained()
-{
-  let yard = Yard::new("unsent");
-  let model = yard.claude(10_000).completion_model("sonnet");
-  let settings = json!({"session": "chain"});
-  let one = asked(&model, &[user("first")], settings.clone()).unwrap();
-  let answer = Message::Assistant { id: None, content: one.choice };
-  let turn =
-    |last: &str| asked(&model, &[user("first"), answer.clone(), user(last)], settings.clone());
-  turn("second FAIL").unwrap_err();
-  let bin = yard.at.join("claude");
-  fs::remove_file(&bin).unwrap();
-  turn("second FAIL\n\nthird").unwrap_err();
-  fs::write(&bin, FAKE).unwrap();
-  fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
-  turn("second FAIL\n\nthird").unwrap();
-  let pids = yard.pids();
-  assert_eq!(pids.len(), 2);
-  let first = after(&yard.args(&pids[0]), "--session-id");
-  assert_eq!(after(&yard.args(&pids[1]), "--resume"), first, "the same conversation goes on");
-  let line: Value = serde_json::from_str(yard.heard().last().unwrap()).unwrap();
-  assert_eq!(line["message"]["content"], json!([{"type": "text", "text": "third"}]));
+  // The turn after the one that did not go gives the message grown again, or the same message whole.
+  let cases = [
+    ("unheard", "second FAIL\n\nthird\n\nfourth", "third\n\nfourth"),
+    ("unsent", "second FAIL\n\nthird", "third"),
+  ];
+  for (name, last, sent) in cases {
+    let yard = Yard::new(name);
+    let model = yard.claude(10_000).completion_model("sonnet");
+    let settings = json!({"session": "chain"});
+    let one = asked(&model, &[user("first")], settings.clone()).unwrap();
+    let answer = Message::Assistant { id: None, content: one.choice };
+    let turn =
+      |last: &str| asked(&model, &[user("first"), answer.clone(), user(last)], settings.clone());
+    turn("second FAIL").unwrap_err();
+    let bin = yard.at.join("claude");
+    fs::remove_file(&bin).unwrap();
+    turn("second FAIL\n\nthird").unwrap_err();
+    fs::write(&bin, FAKE).unwrap();
+    fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+    turn(last).unwrap();
+    let pids = yard.pids();
+    assert_eq!(pids.len(), 2, "{name}");
+    let first = after(&yard.args(&pids[0]), "--session-id");
+    assert_eq!(after(&yard.args(&pids[1]), "--resume"), first, "the same conversation goes on");
+    let line: Value = serde_json::from_str(yard.heard().last().unwrap()).unwrap();
+    assert_eq!(line["message"]["content"], json!([{"type": "text", "text": sent}]), "{name}");
+  }
 }
 
 #[test]

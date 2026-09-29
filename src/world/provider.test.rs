@@ -333,15 +333,6 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   );
 }
 
-/// A model that writes a thought and a word in parts.
-fn writing() -> MockCompletionModel {
-  MockCompletionModel::from_stream_turns([[
-    MockStreamEvent::ReasoningDelta { id: "r".into(), reasoning: "let me".into() },
-    MockStreamEvent::text("close("),
-    MockStreamEvent::text("3)"),
-  ]])
-}
-
 /// Whom a test tells what a model writes, and what it was told, each as its rung, its chain, its text and its
 /// thought.
 fn heard() -> (Writes, Arc<Mutex<Vec<[String; 4]>>>) {
@@ -351,21 +342,6 @@ fn heard() -> (Writes, Arc<Mutex<Vec<[String; 4]>>>) {
     kept.lock().expect("the parts told").push([rung, chain, text, thinking].map(str::to_owned));
   });
   (writes, heard)
-}
-
-#[test]
-fn what_a_model_writes_reaches_the_host_as_it_writes_it_under_its_rung_and_its_chain() {
-  let (writes, told) = heard();
-  let at = yard("writes");
-  let provider = Provider::new(at.display().to_string(), vec![scripted(&writing())]).writes(writes);
-  let mut engine = lived(provider);
-  let id = asked(&mut engine);
-  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
-  assert_eq!(got.as_ref().as_int(), Some(3));
-  let root = engine.root().to_owned();
-  let parts = [["", "let me"], ["close(", ""], ["3)", ""]]
-    .map(|[text, thinking]| ["rung1", root.as_str(), text, thinking].map(str::to_owned));
-  assert_eq!(told.lock().expect("the parts told").clone(), parts);
 }
 
 #[test]
@@ -539,10 +515,10 @@ fn a_provider_of_the_network_is_asked_with_its_credential_and_streams_its_turn()
   assert_eq!(body["messages"][0]["content"][0]["text"], SYSTEM);
   let expected = "('assistant', 'close(3)', (100, 5, 40, 0, 0.7), [{'type': 'reasoning', ";
   assert!(said(&mut engine)[1].2.starts_with(expected), "{:?}", said(&mut engine)[1]);
-  let parts: Vec<[String; 4]> = told.lock().expect("the parts told").clone();
-  let texts: Vec<(&str, &str)> =
-    parts.iter().map(|[_, _, text, thinking]| (text.as_str(), thinking.as_str())).collect();
-  assert_eq!(texts, [("", "hm"), ("close(", ""), ("3)", "")]);
+  let root = engine.root().to_owned();
+  let parts = [["", "hm"], ["close(", ""], ["3)", ""]]
+    .map(|[text, thinking]| ["rung1", root.as_str(), text, thinking].map(str::to_owned));
+  assert_eq!(told.lock().expect("the parts told").clone(), parts);
 }
 
 #[test]

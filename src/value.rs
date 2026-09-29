@@ -207,16 +207,6 @@ mod tests {
   use super::*;
 
   #[test]
-  fn an_instance_of_the_engine_goes_in_as_its_name_and_its_fields() {
-    let sent = Text::new("a.txt", "one\n").object();
-    let sent = sent.as_ref();
-    assert_eq!(field(&sent, IS).and_then(|one| one.as_str()), Some("Text"));
-    assert_eq!(field(&sent, "content").and_then(|one| one.as_str()), Some("one\n"));
-    let fault = Fault::refused("no").object();
-    assert_eq!(field(&fault.as_ref(), IS).and_then(|one| one.as_str()), Some("Refused"));
-  }
-
-  #[test]
   fn a_builtin_exception_is_read_by_its_type_and_its_message() {
     let held = Object::exception(monty_types::ExcType::ValueError, Some("bad".to_owned()));
     let fault = Fault::of(held.as_ref()).unwrap();

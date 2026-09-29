@@ -202,7 +202,7 @@ async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_r
   assert (refused_yet_ran, accepted_yet_unbound) == ([], [])
 
 
-async def test_an_ear_of_the_crate_serves_a_life_of_this_interpreter_and_what_it_says_from_a_thread_drives_it() -> None:
+async def test_an_ear_of_the_crate_crosses_to_the_boot_of_the_door_and_what_it_says_from_a_thread_drives_it() -> None:
   """An ear of the crate crosses to the boot of the door beside the generators the contract says, and what it says
   from a thread of its own drives the life from the loop: time ends a wait from its thread."""
   root = furb_monty.engine.boot((), time=_monty.time(), world=Dead(stands=STANDS).hears())
@@ -235,8 +235,8 @@ async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_gen
 async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> None:
   """A life opens on its record and on the ears of the crate, in the order every host boots them after its own, and
   enables at its tip what the configs turn on; a life that turns the extensions off enables nothing new."""
-  path = str(tmp_path / "record.jsonl")
-  record, ears = _monty.opened(directory=str(tmp_path), record=path, config=str(tmp_path / "config"))
+  path, config = str(tmp_path / "record.jsonl"), str(tmp_path / "config")
+  record, ears = _monty.opened(directory=str(tmp_path), record=path, config=config)
   assert (record, [name for name, _ in ears]) == (
     [],
     ["provider", "extensions", "memory", "skills", "files", "bash", "time", "store"],
@@ -247,10 +247,15 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
   assert {a[0] for a in engine.transcript(on=root) if a[2] == "memory"} == {"done"}, "the memory ear answered"
   for _, one in ears:
     one.dispose()
-  record, ears = _monty.opened(directory=str(tmp_path), record=path, keeps=False, extensions=False)
-  assert [name for name, _ in ears] == ["provider", "extensions", "memory", "skills", "files", "bash", "time"]
+  fresh = str(tmp_path / "fresh.jsonl")
+  record, ears = _monty.opened(directory=str(tmp_path), record=fresh, config=config, keeps=False, extensions=False)
+  assert (record, [name for name, _ in ears]) == (
+    [],
+    ["provider", "extensions", "memory", "skills", "files", "bash", "time"],
+  )
   root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
-  assert [one["name"] for one in _monty.enabled(engine.transcript(on=root))] == ["memory", "skills"]
+  await settle()
+  assert _monty.enabled(engine.transcript(on=root)) == []
 
 
 async def test_the_door_names_the_work_that_an_earlier_life_left_pending(tmp_path: Path) -> None:

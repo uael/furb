@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, chained, paragraphs, said, settle, slow, stalled
+from conftest import born, chained, paragraphs, posed, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -58,9 +58,7 @@ async def test_a_cancelled_act_completes_with_cancellederror() -> None:
 
 async def test_a_cancelled_prompt_raises_cancellederror_to_whoever_awaits_it() -> None:
   """A cancelled prompt raises CancelledError to whoever awaits it."""
-  _, _, root = born()
-  one = engine.prompt(int, "how many?", to=OPERATOR, on=root)
-  await settle()
+  _, _, _, one = await posed()
   engine.cancel(one)
   with pytest.raises(CancelledError):
     await one

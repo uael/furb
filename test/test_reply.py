@@ -12,6 +12,7 @@ from conftest import (
   chained,
   dones,
   heads,
+  hushed,
   life,
   opened,
   paragraphs,
@@ -205,14 +206,13 @@ async def test_a_chain_has_at_most_one_reply_in_flight() -> None:
 
 async def test_across_chains_there_is_no_limit_on_the_replies_in_flight() -> None:
   """Across chains there is no limit on the replies in flight."""
-  sand, log, root = born()
+  _, log, root = born()
   two = engine.chain("two")
   here = engine.prompt(int, "here", on=root)
   there = engine.prompt(int, "there", on=two)
   await settle()
   assert [a[3] for a in said(log, "reply")] == [root, two]
-  assert engine.peek(here) is None and engine.peek(there) is None
-  assert sand.script.get(root, []) == []
+  assert engine.peek(here, ...) is ... and engine.peek(there, ...) is ...
 
 
 async def test_every_model_asked_on_a_chain_reads_all_the_turns_of_the_chain_as_the_turns_grow() -> None:
@@ -280,10 +280,7 @@ async def test_no_prompt_that_a_pause_is_over_asks_a_model() -> None:
 
 async def test_a_paused_chain_makes_no_new_reply_after_a_held_response() -> None:
   """A paused chain makes no new reply after a held response."""
-  _, log, root = born("a = 1", "close(a + 1)", "close(None)")
-  one = engine.prompt(int, "count", on=root)
-  engine.pause(root)
-  await settle()
+  _, log, _, one = await hushed("a = 1", "close(a + 1)", "close(None)")
   assert len([a for a in said(log, "done") if a[1].startswith("reply")]) == 1 and len(said(log, "reply")) == 1
   await settle()
   assert len(said(log, "reply")) == 1 and engine.peek(one) is None
@@ -311,6 +308,14 @@ async def test_it_asks_for_no_rung_a_pause_stands_over() -> None:
   engine.wake(root)
   await settle()
   assert (await one) == 1 and len(said(log, "reply")) == 1
+  _, log, root = born("close(2)")
+  await engine.rung("r = rung()\npause(r)", on=root)
+  await settle()
+  held = engine.module(root)["r"]
+  assert said(log, "reply") == [] and engine.peek(held, ...) is ...
+  engine.wake(held)
+  await settle()
+  assert said(log, "reply")[0][2] == held and engine.peek(held) == 2
 
 
 async def test_the_chain_asks_no_model_while_a_word_of_the_chain_runs() -> None:

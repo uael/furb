@@ -95,6 +95,17 @@ DOOR = (
 )
 """A word of a rung that opens an act of an extension, which takes it and answers a read of a door of its own."""
 
+NUMS = (
+  "def kept(id):\n"
+  "  while True:\n"
+  "    match (yield):\n"
+  "      case ('read', qid, _, _, path) if path.startswith('nums://'):\n"
+  "        yield 'done', qid, [1, 2]\n"
+  "\n"
+  "act('nums', '', kept)\n"
+)
+"""A word of a rung that opens a door of its own, which answers a read of nums:// with a list."""
+
 
 def plain(record: Sequence[tuple]) -> list:
   """A record as a later life is given it: kept by the store of the crate and read again, so every tuple is a list,
@@ -403,6 +414,25 @@ def slow() -> tuple[Sand, list[tuple], str, Act[Exit]]:
   root and the command."""
   sand, log, root = born(auto=False)
   return sand, log, root, engine.bash("slow", on=root)
+
+
+async def posed(shape: object = int, message: str = "how many?") -> tuple[Sand, list[tuple], str, Act]:
+  """A life on the World of the suite whose root prompts the operator, once the loop gave the World room to take the
+  prompt: the World, what was said, the root and the prompt."""
+  sand, log, root = born()
+  act = engine.prompt(shape, message, to=OPERATOR, on=root)
+  await settle()
+  return sand, log, root, act
+
+
+async def hushed(*script: str) -> tuple[Sand, list[tuple], str, Act[int]]:
+  """A life whose root is paused as the operator prompts it to count, once the loop gave it room: the World, what
+  was said, the root and the prompt."""
+  sand, log, root = born(*script)
+  act = engine.prompt(int, "count", on=root)
+  engine.pause(root)
+  await settle()
+  return sand, log, root, act
 
 
 async def stalled() -> tuple[Sand, list[tuple], str, Act[int], str, str]:

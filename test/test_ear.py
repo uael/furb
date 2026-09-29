@@ -2,6 +2,7 @@
 
 from asyncio import CancelledError
 from collections.abc import Generator
+from dataclasses import dataclass, field
 
 from conftest import WORLD, Py, Sand, Where, World, born, dones, fresh, life, prompted, ran, said, settle, sown, written
 from furb import engine
@@ -21,6 +22,24 @@ class Knows(Sand):
         yield "done", about, "did ping"
       case _:
         yield from super().hear(a)
+
+
+@dataclass
+class Answering(Sand):
+  """A World of the suite that keeps each fact it said by yielding it, while an act was put to it."""
+
+  now: list[tuple] = field(default_factory=list)
+
+  def hear(self, a: tuple) -> World:
+    """The World of the suite, which keeps each saying it yields as the bus said it."""
+    inner = super().hear(a)
+    try:
+      saying = next(inner)
+      while True:
+        self.now.append(fact := (yield saying))
+        saying = inner.send(fact)
+    except StopIteration:
+      return
 
 
 async def test_the_world_hears_every_fact() -> None:
@@ -68,14 +87,17 @@ async def test_the_world_performs_any_fact_that_an_extension_defines_and_that_th
 
 async def test_the_facts_that_the_world_says_of_its_own_are_for_the_acts_that_complete_later() -> None:
   """The facts that the World says of its own are for the acts that complete later."""
-  _, log, root = born("x = bash('echo hi')\nclose((await x).code)")
+  world = Answering(files={"/w/a.txt": "one\ntwo\n"})
+  log, root = life(world)
+  world.script[root] = ["t = read('a.txt')\nx = bash('echo hi')\nclose((await x).code)"]
   assert await engine.prompt(int, "run it", on=root) == 0
   await settle()
   _, command, *_ = said(log, "bash")[0]
   _, asked, *_ = said(log, "reply")[0]
-  own = [a for a in log if a[2] == WORLD and a[0] in ("out", "done") and engine.get(a[1])[0] in ("bash", "reply")]
+  own = [a for a in log if a[2] == WORLD and a[0] in ("out", "done") and a not in world.now]
   assert [(a[0], a[1]) for a in own] == [("done", asked), ("out", command), ("done", command)]
-  assert {a[1] for a in own} == {command, asked}
+  assert {a[1] for a in own} <= {a[1] for a in world.now if a[0] == "started"}
+  assert [(a[0], a[1]) for a in world.now if a[0] == "done"] == [("done", "stand1"), ("done", "read1")]
 
 
 async def test_an_ear_speaks_by_yielding_a_saying_and_the_work_it_began_speaks_later_by_say() -> None:

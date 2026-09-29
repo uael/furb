@@ -1,11 +1,39 @@
 """wake, which ends a pause and gives what waited."""
 
-from conftest import Sand, born, fresh, gated, heads, paragraphs, plain, prompted, ran, relived, said, settle, slow
+from conftest import (
+  Sand,
+  born,
+  fresh,
+  gated,
+  heads,
+  hushed,
+  paragraphs,
+  plain,
+  prompted,
+  ran,
+  relived,
+  said,
+  settle,
+  slow,
+)
 from furb import engine
-from furb.engine import OPERATOR
+from furb.engine import OPERATOR, Act, Exit
 
 TAKEN = ("bash", "wait", "prompt", "reply")
 """The kinds of act that the World takes."""
+
+
+async def withheld(first: int = 0, second: int = 0) -> tuple[str, Act[Exit], Act[Exit]]:
+  """A life whose two commands end, with these codes, while its root is paused, so their exits wait for a wake: the
+  root and the two commands."""
+  sand, _, root = born(auto=False)
+  one, two = engine.bash("one", on=root), engine.bash("two", on=root)
+  await settle()
+  engine.pause(root)
+  sand.exits(one, first)
+  sand.exits(two, second)
+  await settle()
+  return root, one, two
 
 
 async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_heard() -> None:
@@ -41,13 +69,7 @@ async def test_delivery_carries_on_the_rungs_that_await_the_result_on_whatever_c
 
 async def test_a_wake_on_one_act_lifts_a_pause_of_its_chain_for_that_act_alone() -> None:
   """A wake on one act lifts a pause of its chain for that act alone."""
-  sand, _, root = born(auto=False)
-  one, two = engine.bash("one", on=root), engine.bash("two", on=root)
-  await settle()
-  engine.pause(root)
-  sand.exits(one, 0)
-  sand.exits(two, 0)
-  await settle()
+  root, one, _ = await withheld()
   engine.wake(one)
   await settle()
   assert heads(engine.turns(on=root))[-2:] == [f"#{one} woke", f"#{one} exited 0"]
@@ -65,13 +87,7 @@ async def test_a_wake_on_one_act_lifts_a_pause_of_its_chain_for_that_act_alone()
 
 async def test_wake_is_given_the_id_of_an_act_or_the_id_of_a_chain() -> None:
   """wake is given the id of an act or the id of a chain."""
-  sand, _, root = born(auto=False)
-  one, two = engine.bash("one", on=root), engine.bash("two", on=root)
-  await settle()
-  engine.pause(root)
-  sand.exits(one, 0)
-  sand.exits(two, 0)
-  await settle()
+  root, one, two = await withheld()
   for woken, exited in ((one, one), (root, two)):
     engine.wake(woken)
     await settle()
@@ -80,13 +96,7 @@ async def test_wake_is_given_the_id_of_an_act_or_the_id_of_a_chain() -> None:
 
 async def test_a_wake_lifts_the_pause_and_delivers_every_held_result() -> None:
   """A wake lifts the pause and delivers every held result."""
-  sand, _, root = born(auto=False)
-  one, two = engine.bash("one", on=root), engine.bash("two", on=root)
-  await settle()
-  engine.pause(root)
-  sand.exits(one, 1)
-  sand.exits(two, 2)
-  await settle()
+  root, one, two = await withheld(1, 2)
   assert heads(engine.turns(on=root))[-1] == f"#{root} paused"
   engine.wake(root)
   await settle()
@@ -95,10 +105,7 @@ async def test_a_wake_lifts_the_pause_and_delivers_every_held_result() -> None:
 
 async def test_a_wake_gates_and_runs_a_held_response() -> None:
   """A wake gates and runs a held response."""
-  _, log, root = born("close(7)")
-  act = engine.prompt(int, "count", on=root)
-  engine.pause(root)
-  await settle()
+  _, log, root, act = await hushed("close(7)")
   assert gated(log) == [] and ran(log) == []
   engine.wake(root)
   await settle()
@@ -124,10 +131,7 @@ async def test_a_wake_makes_a_prompt_ask_its_model_with_the_transcript_as_it_gre
 
 async def test_a_wake_makes_no_reply_twice_and_loses_none() -> None:
   """A wake makes no reply twice and loses none."""
-  sand, log, root = born("a = 1", "b = a + 1", "close(b + 1)")
-  act = engine.prompt(int, "count", on=root)
-  engine.pause(root)
-  await settle()
+  sand, log, root, act = await hushed("a = 1", "b = a + 1", "close(b + 1)")
   engine.wake(root)
   await settle()
   asks = [a[1] for a in said(log, "reply")]

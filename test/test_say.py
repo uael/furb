@@ -136,6 +136,8 @@ async def test_every_generator_hears_every_fact_it_has_not_heard_in_order_until_
   await settle()
   facts = [a for a in log[at:] if engine.get(a[1]) != a]
   assert [a for a in heard if engine.get(a[1]) != a] == facts and len(facts) > 1
+  made = [a[1] for a in log[at:] if engine.get(a[1]) == a]
+  assert [a[1] for a in heard if engine.get(a[1]) == a] == made == [said(log, "bash")[0][1], said(log, "merged")[0][1]]
 
 
 async def test_while_one_speaks_nobody_hears() -> None:

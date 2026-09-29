@@ -53,29 +53,41 @@ async def test_an_act_is_put_to_every_ear_of_the_engine_the_acts_first() -> None
   _, _, root = born()
   heard: list[tuple] = []
   made: list[str] = []
+  first: list[str] = []
 
   def asking() -> Generator[tuple | None, tuple]:
     while True:
       heard.append(a := (yield))
+      if a[0] == "bash":
+        first.append("asking")
       if a[0] == "tell" and not made:
         made.append(engine.act("read", root, None, "a.txt"))
         yield "tell", root, ["#chain1 asked"]
+
+  def noted(id: str) -> Generator[tuple | None, tuple]:
+    yield "started", id
+    while True:
+      if (a := (yield)) is not None and a[0] == "bash":
+        first.append(id)
 
   engine.drive(asking(), "asking")
   engine.say("tell", root, ["#chain1 hello"])
   kinds = [(a[0], a[1]) for a in heard if a[0] != "keep"]
   assert kinds[:4] == [("tell", root), ("read", made[0]), ("done", made[0]), ("tell", root)]
+  note = engine.act("note", root, noted)
   engine.bash("echo hi", on=root)
-  assert ("bash", "bash1") not in kinds and [a[1] for a in heard if a[0] == "bash"] == ["bash1"]
+  assert [a[1] for a in heard if a[0] == "bash"] == ["bash1"]
+  assert first == [note, "asking"]
 
 
 async def test_its_own_ear_is_born_after_the_ears_of_the_engine_heard_it() -> None:
   """Its own ear is born after the ears of the engine heard it, so the acts that ear makes stand after it."""
   _, _, root = born("close(1)")
+  heard: list[tuple] = []
+  engine.drive(keeping(heard), "keeper")
   asked = engine.prompt(int, "one", on=root)
   assert await asked == 1
-  kinds = [(a[0], a[1]) for a in engine.transcript(root) if engine.get(a[1]) == a]
-  assert kinds.index(("prompt", asked)) < kinds.index(("rung", "rung1"))
+  assert [(a[0], a[1]) for a in heard if engine.get(a[1]) == a][:2] == [("prompt", asked), ("rung", "rung1")]
 
 
 async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes_it() -> None:
@@ -131,8 +143,9 @@ async def test_an_act_said_twice_under_one_name_is_one_act() -> None:
   """An act said twice under one name is one act, and the second saying brings no second ear and gives the name back."""
   sand, log, root = born()
   first = engine.rung("close(bash('echo hi'))", on=root)
-  again = engine.rung("close(bash('echo hi'))", retells=first, on=root)
+  again = engine.rung("given = bash('echo hi')", retells=first, on=root)
   assert (await first) == "bash1" and (await again) is None
+  assert engine.module(root)["given"] == "bash1"
   assert len(said(log, "bash")) == 1
   assert [a[1] for a in sand.calls if a[0] == "bash"] == ["bash1"]
 
@@ -176,12 +189,13 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
 
 async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fact_said_after_its_birth() -> None:
   """The ear of an act is given the name of the act and hears every fact said after its birth, and it speaks by yielding a saying."""
-  _, _, root = born()
+  _, log, root = born()
   heard: list[object] = []
   one = engine.act("note", root, noting(heard, "spoke"), "one")
-  two = engine.bash("echo hi", on=root)
+  engine.bash("echo hi", on=root)
   await settle()
-  assert heard[0] == one and ("bash", two, OPERATOR, root, "echo hi", False, TIMEOUT) in heard[1:]
+  after = log[log.index(engine.get(one)) + 1 :]
+  assert heard[0] == one and sorted(heard[1:], key=repr) == sorted(after, key=repr)
   assert engine.get(one) not in heard
   assert paragraphs(engine.turns(on=root))[2:] == [
     "#note1 spoke by yield",
