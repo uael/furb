@@ -4,7 +4,7 @@ from asyncio import CancelledError
 from collections.abc import Generator
 from dataclasses import dataclass, field
 
-from conftest import WORLD, Py, Sand, Where, World, born, dones, fresh, life, prompted, ran, said, settle, sown, written
+from conftest import WORLD, Py, Sand, Where, World, born, dones, fresh, life, ran, said, settle, sown, threaded, written
 from furb import engine
 from furb.engine import OPERATOR, Exit, Refused, Text
 
@@ -43,7 +43,7 @@ class Answering(Sand):
 
 
 async def test_the_world_hears_every_fact() -> None:
-  """The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model."""
+  """The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a thread to the operator, which it shows; and it takes a reply, which it answers with the turn of the model."""
   sand, log, root = born(files={"/w/a.txt": "one\n"}, auto=False)
   assert engine.cwd(on=root) == "/w"
   assert engine.clock(on=root) == 1001.0
@@ -64,8 +64,8 @@ async def test_the_world_hears_every_fact() -> None:
   assert (await short).code is None
   assert engine.cd("sub", on=root) == "/w/sub"
   sand.script[root] = ["close(1)"]
-  assert await engine.prompt(int, "count", on=root) == 1
-  asking = engine.prompt(Text, "a text?", to=OPERATOR, on=root)
+  assert await engine.thread(int, "count", on=root) == 1
+  asking = engine.thread(Text, "a text?", to=OPERATOR, on=root)
   await settle()
   assert isinstance(engine.peek(asking), Refused)
   where = Where(files={"/x/a.txt": "three\n"})
@@ -81,7 +81,7 @@ async def test_the_world_performs_any_fact_that_an_extension_defines_and_that_th
   sand = Knows()
   _, root = life(sand)
   sand.script[root] = [PING]
-  assert await engine.prompt(str, "an act of my own", on=root) == "did ping"
+  assert await engine.thread(str, "an act of my own", on=root) == "did ping"
   assert [a[1] for a in said(sand.calls, "ping")] == ["ping1"]
 
 
@@ -90,7 +90,7 @@ async def test_the_facts_that_the_world_says_of_its_own_are_for_the_acts_that_co
   world = Answering(files={"/w/a.txt": "one\ntwo\n"})
   log, root = life(world)
   world.script[root] = ["t = read('a.txt')\nx = bash('echo hi')\nclose((await x).code)"]
-  assert await engine.prompt(int, "run it", on=root) == 0
+  assert await engine.thread(int, "run it", on=root) == 0
   await settle()
   _, command, *_ = said(log, "bash")[0]
   _, asked, *_ = said(log, "reply")[0]
@@ -128,12 +128,12 @@ async def test_an_ear_is_any_generator_of_that_shape() -> None:
   kept: list[tuple] = []
   root = engine.boot((), world=sand.hears(), kernel=Py().kernel(), gate=Py().gating(), note=note(kept))
   sand.script[root] = ["close(1)"]
-  assert await engine.prompt(int, "work", on=root) == 1
+  assert await engine.thread(int, "work", on=root) == 1
   assert engine.read("note://one", on=root) == Text("note://one", "kept")
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
   assert [a[0] for a in sand.calls] == ["stand", "reply", "read", "read"]
   runs = [a[1] for a in kept if a[0] == "started" and engine.question(("run", a[1]))]
-  told = fresh(root, prompted("prompt1", "int", "work"), "#rung1 advance on prompt1")
+  told = fresh(root, threaded("thread1", "int", "work"), "#rung1 advance on thread1")
   assert [engine.get(run)[5] for run in runs] == [told, "close(1)"]
   assert [a[4] for a in kept if a[0] == "read"] == ["note://one"]
   assert {"started", "ready", "done"} <= {a[0] for a in kept} and not {"reply", "run"} & {a[0] for a in kept}
@@ -144,9 +144,9 @@ async def test_the_chain_has_the_gate_read_and_the_kernel_begin_every_rung() -> 
   sand, log, root = born()
   await engine.rung("k = 1", on=root)
   sand.script[root] = ["close(k + 1)"]
-  assert await engine.prompt(int, "count", on=root) == 2
+  assert await engine.thread(int, "count", on=root) == 2
   await settle()
-  told = [fresh(root, written("rung1", "k = 1")), f"{prompted('prompt1', 'int', 'count')}\n\n#rung2 advance on prompt1"]
+  told = [fresh(root, written("rung1", "k = 1")), f"{threaded('thread1', 'int', 'count')}\n\n#rung2 advance on thread1"]
   assert ran(log) == [told[0], "k = 1", told[1], "close(k + 1)"]
   assert [a[4] for a in said(log, "run")] == ["rung1_told", "rung1", "rung2_told", "rung2"]
   assert [one[2] for one in said(log, "done") if one[1].startswith("gate")] == ["gate", "gate"]
@@ -156,7 +156,7 @@ async def test_the_chain_has_the_gate_read_and_the_kernel_begin_every_rung() -> 
 async def test_the_kernel_takes_a_run_as_that_run() -> None:
   """The Kernel takes a run as that run, begins its word in the module of the chain when it hears that it took it, makes a wants as the run when the word waits for an act that is not done, carries the word on at the done of that wants, and says the run done with what the word gave."""
   _, log, root = born("x = bash('echo hi')\nout = await x\nclose(out.code)")
-  assert await engine.prompt(int, "run it", on=root) == 0
+  assert await engine.thread(int, "run it", on=root) == 0
   await settle()
   runs = said(log, "run")
   assert [(a[1], a[4]) for a in runs] == [("run1", "rung1_told"), ("run2", "rung1")]
@@ -174,5 +174,5 @@ async def test_the_kernel_takes_a_run_as_that_run() -> None:
 async def test_the_kernel_sets_the_site_to_the_rung_whose_word_it_steps() -> None:
   """The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung."""
   _, log, root = born("x = bash('echo hi')\nclose((await x).code)")
-  assert await engine.prompt(int, "run it", on=root) == 0
+  assert await engine.thread(int, "run it", on=root) == 0
   assert [(one[1], one[2]) for one in said(log, "bash")] == [("bash1", "rung1")] and engine.site.get() == OPERATOR

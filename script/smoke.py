@@ -1,7 +1,7 @@
-"""The smoke of a real life: one model, one record, and the journal answering the same prompt from it the second
+"""The smoke of a real life: one model, one record, and the journal answering the same thread from it the second
 time.
 
-Run it from the root of the repository, as `uv run python script/smoke.py`. It runs `furb prompt` twice on one record,
+Run it from the root of the repository, as `uv run python script/smoke.py`. It runs `furb thread` twice on one record,
 on the default actor of the crate. It spends the dollars of one turn of one model and no more: the first life asks
 the model, and the second life is answered out of the record of the first, so no model is asked again.
 """
@@ -13,8 +13,8 @@ from pathlib import Path
 
 from real import bought, ready, say, spent
 
-MESSAGE = "How many lines does the file a.txt hold?"
-"""MESSAGE is what the model is asked, of a file it must read to answer."""
+MARKDOWN = "How many lines does the file a.txt hold?"
+"""MARKDOWN is what the model is asked, of a file it must read to answer."""
 HELD = "one\ntwo\nthree\n"
 """HELD is what the file holds."""
 STALL = 300.0
@@ -44,7 +44,7 @@ def main() -> int:
   say(f"the directory of the smoke is {yard}")
   furb(yard, "run", f"grant({CEILING})")
   for life in ("first", "second"):
-    got = furb(yard, "prompt", MESSAGE, "--shape", "int")
+    got = furb(yard, "thread", MARKDOWN, "--shape", "int")
     say(f"the {life} life gave {got}, and the record holds {len(bought(record))} answer(s) of a model")
     assert got == str(len(HELD.splitlines())), f"the {life} life answered {got}"
   _, word, usage, _ = bought(record)[0][3]

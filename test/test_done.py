@@ -69,12 +69,12 @@ async def test_a_kind_that_ends_when_it_is_told_to() -> None:
   """A kind that ends when it is told to: it starts its ear, and then a done that names it is what it came to; a cancel over it ends it with a CancelledError, and a close of it with the value that close carries."""
   _, _, root = born()
   assert await engine.wait(0, on=root) is None
-  shut = engine.prompt(int, "how many?", to=OPERATOR, on=root)
+  shut = engine.thread(int, "how many?", to=OPERATOR, on=root)
   await settle()
   engine.close(21, shut)
   await settle()
   assert (await shut) == 21
-  gone = engine.prompt(int, "how many?", to=OPERATOR, on=root)
+  gone = engine.thread(int, "how many?", to=OPERATOR, on=root)
   await settle()
   engine.cancel(gone)
   await settle()

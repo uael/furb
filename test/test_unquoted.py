@@ -63,7 +63,7 @@ async def test_the_engine_unquotes_a_word_before_the_gate_reads_it_and_before_th
   sand, log, root = born()
   word = "<s:hi>\nhi\n</s:hi>\nclose(len(hi))"
   sand.script[root] = [word]
-  asking = engine.prompt(int, "count", on=root)
+  asking = engine.thread(int, "count", on=root)
   assert await asking == 3
   assert ran(log)[-1] == "hi = 'hi\\n'\n\n\nclose(len(hi))"
   assert [a[3] for a in said(log, "ready") if a[1] == "rung1"] == [word]

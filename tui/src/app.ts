@@ -82,8 +82,8 @@ const twice = 800;
 const viewLabels: Record<View, string> = { feed: "Feed", transcript: "Transcript", changes: "Changes" };
 /** A text with its first letter in upper case. */
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-/** Whether an act is a question to the operator: a prompt whose actor is the operator. */
-const asksOperator = (act: ActRow) => act.kind === "prompt" && act.words[2] === "operator";
+/** Whether an act is a question to the operator: a thread whose actor is the operator. */
+const asksOperator = (act: ActRow) => act.kind === "thread" && act.words[2] === "operator";
 /** What an act is doing: the word that says it, the glyph that shows it, and their color. */
 type State = { word: string; mark: string; color: RGBA };
 /** The state of an act that failed, that a cancel ended, that is done, or that a pause holds. */
@@ -753,7 +753,7 @@ export class App {
     const kept = w.histories[w.draftKey] ?? [];
     if (kept.length || w.mode !== "prompt" || w.editing) return kept;
     return w.activity
-      .filter((act) => w.isUserPrompt(act))
+      .filter((act) => w.isUserThread(act))
       .map((act) => String(act.words[1] ?? ""))
       .filter(Boolean);
   }
@@ -795,7 +795,7 @@ export class App {
     this.rail.visible = w.preferences.sidebar && this.renderer.width >= 100;
     this.rail.width = w.preferences.sidebarWidth;
     this.renderTop();
-    const pending = w.operatorPrompt;
+    const pending = w.operatorThread;
     const images = w.images[w.selected] ?? [];
     this.imageBox.visible = images.length > 0;
     if (this.paneChanged(this.imageBox, [images, this.theme])) {
@@ -862,7 +862,7 @@ export class App {
       );
     }
     const [mode, modeColor, placeholder] = w.editing
-      ? ["Edit program", c.warning, "Edit this prompt's Python program"]
+      ? ["Edit program", c.warning, "Edit this thread's Python program"]
       : pending
         ? [
             "Answer",
@@ -987,7 +987,7 @@ export class App {
    * answer. Each part is a button that changes it. */
   private renderMeta(mode: string, modeColor: RGBA): void {
     const w = this.session;
-    const pending = w.operatorPrompt;
+    const pending = w.operatorThread;
     const { model, effort } = w.actorChoice;
     const { provider, id: name } = modelName(model);
     const stash = w.stashes[w.draftKey];
@@ -1484,8 +1484,8 @@ export class App {
         )
         .map((act) => ({
           at: position.get(act.id) ?? Number.POSITIVE_INFINITY,
-          item: (w.isUserPrompt(act) || asksOperator(act)
-            ? { type: "prompt", key: act.id, act }
+          item: (w.isUserThread(act) || asksOperator(act)
+            ? { type: "thread", key: act.id, act }
             : { type: "act", key: act.id, act }) as (typeof listed)[number],
         }));
       if (untold.length) {
@@ -1547,10 +1547,10 @@ export class App {
             (box) => this.word(box, code, rung?.run?.reason),
             { collapsible: true, act: rung, title: moving(rung), shown: code },
           );
-        } else if (item.type === "prompt" && asksOperator(item.act)) {
+        } else if (item.type === "thread" && asksOperator(item.act)) {
           const { act } = item;
           const message = String(act.words[1] ?? "");
-          const waiting = w.host.prompts.has(act.id);
+          const waiting = w.host.threads.has(act.id);
           add(
             item.key,
             `${message}\n${waiting}`,
@@ -1580,16 +1580,16 @@ export class App {
             },
             { group: "question", act, shown: message },
           );
-        } else if (item.type === "prompt") {
+        } else if (item.type === "thread") {
           const { act } = item;
           const message = String(act.words[1] ?? "");
-          const user = w.isUserPrompt(act);
+          const user = w.isUserThread(act);
           // A message that the chain or a rung sent is its heading when it is one short line, and stands under its
           // heading otherwise. The heading says who sent it, and to which model.
           const sent = user ? "" : this.sender(act);
           const line =
             !message.includes("\n") && Bun.stringWidth(message) + Bun.stringWidth(sent) < this.feedWidth - 8;
-          const state = user ? this.promptState(act) : [];
+          const state = user ? this.threadState(act) : [];
           add(
             item.key,
             `${message}\n${line}\n${sent}\n${plain(state)}`,
@@ -2086,8 +2086,8 @@ export class App {
       const output = [exit.stdout?.content, exit.stderr?.content].filter(Boolean).join("\n");
       if (output) return (box) => this.excerpt(box, output, true);
     }
-    // The answer of a prompt is markdown, whose marks of a heading, of emphasis, and of code the preview leaves out.
-    if (act.kind === "prompt" && act.done && act.value !== null)
+    // The answer of a thread is markdown, whose marks of a heading, of emphasis, and of code the preview leaves out.
+    if (act.kind === "thread" && act.done && act.value !== null)
       return (box) =>
         this.excerpt(
           box,
@@ -2121,11 +2121,11 @@ export class App {
               : running();
     if (act.done) return stateOf(failed(act) ? "failed" : cancelled(act) ? "cancelled" : "done");
     if (w.host.pending.has(act.id)) return { word: "pending", mark: glyph.ring, color: c.faint };
-    if (w.host.prompts.has(act.id)) return { word: "needs input", mark: glyph.asks, color: c.warning };
+    if (w.host.threads.has(act.id)) return { word: "needs input", mark: glyph.asks, color: c.warning };
     if (act.paused && act.kind !== "bash") return stateOf("held");
     return running();
   }
-  /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
+  /** The rung that took the place of a rung of a model that failed: a later rung for the same thread, which the model
    * wrote once it read the failure, so the failure no longer stands. */
   private retry(act: ActRow): ActRow | undefined {
     if (act.kind !== "rung" || act.by === "operator" || !failed(act)) return undefined;
@@ -2136,7 +2136,7 @@ export class App {
    * id, and says its first line while it is folded. */
   private actLabel(act: ActRow, closed = false, indent = 0, code?: string): Part[] {
     const { word, mark, color } = this.actState(act);
-    const observation = act.kind === "prompt" && !this.session.isUserPrompt(act);
+    const observation = act.kind === "thread" && !this.session.isUserThread(act);
     // A rung says its first line while it is folded, and a message of a chain names the act that it tells done.
     const subject =
       act.kind === "rung"
@@ -2147,7 +2147,7 @@ export class App {
           ? this.subject(act).replace(/ done$/, "")
           : this.subject(act);
     const name = act.kind === "rung" ? act.id : observation ? (subject.split("\n")[0] ?? "") : act.kind;
-    // An open rung says who wrote it: the model of the prompt that made it, or the operator.
+    // An open rung says who wrote it: the model of the thread that made it, or the operator.
     const author =
       act.kind === "rung" && !closed
         ? `  by ${act.by === "operator" ? "you" : this.model(String(act.words[2] ?? "")).name}`
@@ -2164,10 +2164,10 @@ export class App {
       [tail, color],
     ];
   }
-  /** What an act is about, whole: the message of a prompt, the program of a rung, the time of a wait, the ceilings of
+  /** What an act is about, whole: the markdown of a thread, the program of a rung, the time of a wait, the ceilings of
    * a grant, and the first word of any other act. */
   private subject(act: ActRow): string {
-    if (act.kind === "prompt") return String(act.words[1] ?? "");
+    if (act.kind === "thread") return String(act.words[1] ?? "");
     if (act.kind === "rung") return String(this.session.program[act.id] || act.words[0] || "");
     if (act.kind === "wait") return seconds(Number(act.words[0]));
     if (act.kind === "grant")
@@ -2181,7 +2181,7 @@ export class App {
   }
   /** Where a message of the operator stands, which its panel says at its right: the type of the answer that it asks
    * for, and a mark and a word only when a cancel or a failure ended it, or a pause holds it. */
-  private promptState(act: ActRow): Part[] {
+  private threadState(act: ActRow): Part[] {
     const shape: Part = [String(act.words[0] ?? ""), c.faint];
     const state = act.done
       ? failed(act)
@@ -2202,14 +2202,14 @@ export class App {
     );
     return { name: modelName(model).id, effort };
   }
-  /** Who sent a prompt that is not a message of the operator, and to which model: a chain tells its model that an
+  /** Who sent a thread that is not a message of the operator, and to which model: a chain tells its model that an
    * act it waits on is done, and a rung asks a model a question. */
   private sender(act: ActRow): string {
     const model = this.model(String(act.words[2] ?? "")).name;
     const maker = this.session.actOf(act.by);
     return maker?.kind === "chain" ? `the chain told ${model}` : `${act.by} asked ${model}`;
   }
-  /** The heading of the answer to a prompt: the model that answered it with its effort, and the prompt when others
+  /** The heading of the answer to a thread: the model that answered it with its effort, and the thread when others
    * closed with it. */
   private answerLabel(act: ActRow, parallel: boolean): Part[] {
     const { name, effort } = this.model(String(act.words[2] ?? ""));
@@ -2248,7 +2248,7 @@ export class App {
       return;
     }
     const fields: Record<string, string[]> = {
-      prompt: ["shape", "message", "actor"],
+      thread: ["shape", "markdown", "actor"],
       rung: ["word", "retells", "actor", "returns"],
       wait: ["seconds"],
       grant: ["dollar ceiling", "context ceiling"],
@@ -3238,7 +3238,7 @@ export class App {
   /** What the operator can do with an act that a right click chose. */
   private actActions(act: ActRow): void {
     const w = this.session;
-    const message = w.isUserPrompt(act) && !asksOperator(act);
+    const message = w.isUserThread(act) && !asksOperator(act);
     this.openPalette(`${title(act.kind)} ${act.id}`, [
       {
         label: "Inspect",
@@ -3443,7 +3443,7 @@ export class App {
         .filter((act) => working(act))
         .map((act) => ({
           value: act.id,
-          detail: `${act.kind}  ${clip(String(act.words[act.kind === "prompt" ? 1 : 0] ?? ""), 40)}`,
+          detail: `${act.kind}  ${clip(String(act.words[act.kind === "thread" ? 1 : 0] ?? ""), 40)}`,
         })),
     feed: () =>
       this.session.activity
@@ -3803,7 +3803,7 @@ export class App {
     ]);
   };
   question(): void {
-    const question = this.session.operatorPrompt;
+    const question = this.session.operatorThread;
     if (!question) return;
     if (question.shape === "bool") {
       this.openPalette("Answer yes or no", [
@@ -3818,7 +3818,7 @@ export class App {
           run: () => this.session.host.answer(question.id, "no").then(() => {}),
         },
       ]);
-      this.showQuestionText(question.message);
+      this.showQuestionText(question.markdown);
       return;
     }
     this.openPalette(`Your answer, as ${question.shape}`, []);
@@ -3826,7 +3826,7 @@ export class App {
     const prompt = this.paletteInputRow?.getChildren()[0];
     if (prompt) prompt.visible = true;
     if (this.paletteInputRow) this.paletteInputRow.height = space.bar;
-    this.showQuestionText(question.message);
+    this.showQuestionText(question.markdown);
     if (this.paletteInput) this.paletteInput.placeholder = `Type the answer, as ${question.shape}`;
     const error = this.text("Enter submits. Esc leaves the question open.", c.muted);
     this.paletteList?.add(error);
@@ -4044,12 +4044,12 @@ export class App {
         })),
     );
   }
-  /** The prompts of the chain, whose program an edit changes and replays. */
+  /** The threads of the chain, whose program an edit changes and replays. */
   ladders(): void {
-    const prompts = this.session.activity.filter((act) => this.session.editable(act));
+    const threads = this.session.activity.filter((act) => this.session.editable(act));
     this.openPalette(
-      "Edit a prompt program",
-      prompts.map((act) => {
+      "Edit a thread program",
+      threads.map((act) => {
         const { mark, color } = this.actState(act);
         return {
           label: act.id,
@@ -4059,8 +4059,8 @@ export class App {
         };
       }),
       {
-        selected: Math.max(0, prompts.length - 1),
-        note: "The program is the Python the model wrote for the prompt. An edit replays it.",
+        selected: Math.max(0, threads.length - 1),
+        note: "The program is the Python the model wrote for the thread. An edit replays it.",
       },
     );
   }
@@ -4078,7 +4078,7 @@ export class App {
       return;
     }
     const points = this.session.activity.filter((act) => this.isPoint(act));
-    const last = points.findLast((act) => this.session.isUserPrompt(act)) ?? points.at(-1);
+    const last = points.findLast((act) => this.session.isUserThread(act)) ?? points.at(-1);
     this.openTree(last?.id ?? this.session.selected, "Rewind");
   };
   /** The tree of the session in the feed, with the pointer on the chain shown. */
@@ -4204,7 +4204,7 @@ export class App {
       this.closeTree();
       await w.rewind(act.id);
     };
-    if (w.isUserPrompt(act) && !asksOperator(act))
+    if (w.isUserThread(act) && !asksOperator(act))
       return {
         parts: [
           [`${glyph.prompt} `, c.accent],
@@ -4216,7 +4216,7 @@ export class App {
       };
     const { mark, color } = this.actState(act);
     const subject = this.subject(act);
-    const observation = act.kind === "prompt" && !asksOperator(act) && !w.isUserPrompt(act);
+    const observation = act.kind === "thread" && !asksOperator(act) && !w.isUserThread(act);
     const name = asksOperator(act) ? "question" : act.kind === "rung" ? act.id : act.kind;
     return {
       parts: observation
@@ -5093,7 +5093,7 @@ export class App {
   /** Whether Escape pauses the chain: a model is at work on it, and no pause holds it. */
   private pausing(): boolean {
     const w = this.session;
-    return !w.paused && w.activity.some((act) => act.kind === "prompt" && !act.done && !asksOperator(act));
+    return !w.paused && w.activity.some((act) => act.kind === "thread" && !act.done && !asksOperator(act));
   }
   /** What each action of the table of keys does, with the key that ran it. */
   private readonly actions: Record<Action, (key?: KeyEvent) => unknown> = {
@@ -5144,7 +5144,7 @@ export class App {
   /** When an action of the table acts, where it does not act at all times: a key that does not act goes on to the
    * input, and the footer does not offer it. */
   private readonly when: Partial<Record<Action, () => boolean>> = {
-    answer: () => Boolean(this.session.operatorPrompt),
+    answer: () => Boolean(this.session.operatorThread),
     page: () => this.session.view === "changes",
     pause: () => !this.searchRow.visible && this.pausing(),
   };
@@ -5207,7 +5207,7 @@ export class App {
       .getChildren()
       .filter((node) => {
         const act = w.acts.find((one) => one.id === this.cards.get(node.id)?.act);
-        return act && w.isUserPrompt(act) && !asksOperator(act);
+        return act && w.isUserThread(act) && !asksOperator(act);
       })
       .map((node) => node.y - top);
     const offset = step > 0 ? messages.find((at) => at > 0) : messages.findLast((at) => at < 0);

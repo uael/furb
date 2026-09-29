@@ -254,7 +254,7 @@ impl Provider {
     Provider { directory: directory.into(), models, actor: None, images: None, writes: None }
   }
 
-  /// The actor a prompt goes to when it names none, which is the first model at the level of an actor that names
+  /// The actor a thread goes to when it names none, which is the first model at the level of an actor that names
   /// none when none is given, and the operator when there is no model.
   pub fn actor(mut self, actor: Option<String>) -> Provider {
     self.actor = actor;
@@ -278,7 +278,7 @@ impl Provider {
   /// answers.
   ///
   /// A reply reads the turns of its chain: the system prompt is the engine, a user turn goes as its python and the
-  /// images that the prompts it opens name, and an assistant turn as the blocks its provider gave. It is done with
+  /// images that the threads it opens name, and an assistant turn as the blocks its provider gave. It is done with
   /// the turn of the model, or with a refusal, and a second refusal in a row of the same actor on a chain pauses the
   /// chain first. A done of a reply that the ear did not say ends the call of its model.
   pub fn ear(self) -> Box<dyn Ear> {
@@ -420,7 +420,7 @@ fn requested(
 }
 
 /// The turns of a chain as messages of rig. The engine phrases every turn as python and the provider renders
-/// nothing: a user turn goes as its python and the images that the prompts it opens name, and one that holds
+/// nothing: a user turn goes as its python and the images that the threads it opens name, and one that holds
 /// nothing goes not at all; an assistant turn goes as the blocks its provider gave, or as its python when a
 /// provider of another kind gave them. A model that takes no image refuses a turn that names one.
 fn messages(

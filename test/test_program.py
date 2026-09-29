@@ -1,6 +1,6 @@
 """program, the words of the rungs that run on a chain."""
 
-from conftest import BAD, born, fresh, prompted, said, settle, written
+from conftest import BAD, born, fresh, said, settle, threaded, written
 from furb import engine
 from furb.engine import OPERATOR, Text
 
@@ -11,7 +11,7 @@ async def test_program_gives_the_program_of_a_chain() -> None:
   mine = engine.rung("mine = 1", on=root)
   await mine
   sand.script[root] = ["<s:hi>\nhi\n</s:hi>\na = hi", "b = BAD", "close(len(a))"]
-  one = engine.prompt(int, "count", on=root)
+  one = engine.thread(int, "count", on=root)
   assert await one == 3
   await settle()
   first, refused, last = [a[1] for a in said(log, "rung") if a[2] == one]
@@ -20,7 +20,7 @@ async def test_program_gives_the_program_of_a_chain() -> None:
   assert list(program.items()) == [
     (f"{mine}_told", fresh(root, written(mine, "mine = 1"))),
     (mine, "mine = 1"),
-    (f"{first}_told", f"{prompted(one, 'int', 'count')}\n\n#{first} advance on {one}"),
+    (f"{first}_told", f"{threaded(one, 'int', 'count')}\n\n#{first} advance on {one}"),
     (first, "hi = 'hi\\n'\n\n\na = hi"),
     (f"{refused}_told", f"#{refused} advance on {one}"),
     (f"{last}_told", f"{findings}\n\n#{last} advance on {one}"),
@@ -28,12 +28,12 @@ async def test_program_gives_the_program_of_a_chain() -> None:
   ]
   assert refused not in program
   assert {a[4]: a[5] for a in engine.transcript(root) if a[0] == "run"} == program
-  asked = engine.prompt(int, "edit", to=OPERATOR, on=root)
+  asked = engine.thread(int, "edit", to=OPERATOR, on=root)
   engine.write(Text(asked, "k = 1"), on=root)
   await settle()
   again = engine.program(root)
   (made,) = [a[1] for a in said(log, "rung") if a[2] == asked]
-  held = f"#{one} closed\n{one}_value = 3\n\n{prompted(asked, 'int', 'edit')}"
+  held = f"#{one} closed\n{one}_value = 3\n\n{threaded(asked, 'int', 'edit')}"
   (retold, *_) = [a[1] for a in said(log, "rung") if a[2] == root]
   assert list(again) == [f"{retold}_told", *program, f"{made}_told", made]
   assert list(again.values()) == [held, *program.values(), written(made, "k = 1"), "k = 1"]

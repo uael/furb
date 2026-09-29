@@ -18,12 +18,14 @@ async def test_a_filter_is_given_the_acts_of_the_transcript_up_to_the_source() -
 async def test_a_filter_says_which_acts_the_turns_of_that_chain_keep_each_with_its_entries() -> None:
   """A filter says which acts the turns of that chain keep, each with its entries."""
   _, log, root = await lived()
-  (one, ack), command = [a[1] for a in said(log, "prompt")], said(log, "bash")[0][1]
-  step, answered = [a[1] for a in said(log, "rung") if a[2] in (one, ack)]
+  (one,), command = [a[1] for a in said(log, "thread")], said(log, "bash")[0][1]
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == one]
+  (ack,) = [a[1] for a in said(log, "rung") if a[2] == command]
   narrow = engine.chain("narrow", source=root, filter=engine.take(command, inside=False))
   await settle()
-  assert named(engine.turns(on=root)) == [root, root, one, step, "read1", command, one, ack, command, answered, ack]
-  assert named(engine.turns(on=narrow)) == [root, root, one, step, "read1", one, ack, answered, ack, narrow]
+  assert named(engine.turns(on=root)) == [root, root, one, step, "read1", command, one, command, ack, ack]
+  # The acknowledgment of the command is made as the command, so a filter that drops what the command made drops it.
+  assert named(engine.turns(on=narrow)) == [root, root, one, step, "read1", one, narrow]
   kept = [part for part in paragraphs(engine.turns(on=narrow)) if part.startswith(f"#{step} ")]
   assert kept == [f"#{step} advance on {one}"]
 
@@ -34,7 +36,7 @@ async def test_a_filter_is_any_callable_of_that_shape() -> None:
     "x = bash('echo one')\nn = (await x).code",
     "def bare(facts):\n  return [a for a in facts if not under(a[1], x)]\n\nclose(chain('side', source=__name__, filter=bare))",
   )
-  side = await engine.prompt(str, "fork", on=root)
+  side = await engine.thread(str, "fork", on=root)
   await settle(200)
   command = said(log, "bash")[0][1]
   assert command in named(engine.turns(on=root)) and command not in named(engine.turns(on=side))
@@ -47,7 +49,7 @@ async def test_a_later_life_runs_the_filter_again_and_keeps_the_same_acts() -> N
   sand, log, root = born(
     "x = bash('echo hi')\nn = (await x).code", "close(chain('side', source=__name__, filter=take(x, inside=False)))"
   )
-  side = await engine.prompt(str, "fork", on=root)
+  side = await engine.thread(str, "fork", on=root)
   await settle(200)
   command = said(log, "bash")[0][1]
   was = [(role, py) for role, py, *_ in engine.turns(on=side)]

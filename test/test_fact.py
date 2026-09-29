@@ -21,15 +21,15 @@ async def test_a_fact_is_a_tuple_its_kind_the_act_it_is_about_who_said_it_and_it
 async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_say_is_a_fact() -> None:
   """Everything that the engine, the World, the Kernel and the operator say is a fact, and the kind of a fact is its first slot."""
   _, log, root = born("close(1)")
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   assert all(isinstance(one, tuple) and isinstance(one[0], str) for one in log)
   assert {OPERATOR, WORLD, "gate", root, "journal"} <= {one[2] for one in log}
-  kinds = {"chain", "module", "stand", "prompt", "rung", "reply", "gate", "started", "done", "ready", "run", "keep"}
+  kinds = {"chain", "module", "stand", "thread", "rung", "reply", "gate", "started", "done", "ready", "run", "keep"}
   assert kinds <= {one[0] for one in log}
   assert {name: one[0] for name, one in acts(log).items()} == {
     "chain1": "chain",
     "stand1": "stand",
-    "prompt1": "prompt",
+    "thread1": "thread",
     "rung1": "rung",
     "reply1": "reply",
     "run1": "run",
@@ -41,8 +41,8 @@ async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_
 async def test_a_fact_says_who_said_it() -> None:
   """A fact says who said it: the rung that made it, the operator outside a rung, or the World or the Kernel."""
   _, log, root = born("close(read('a.txt').content)", files={"/w/a.txt": "one\n"})
-  assert await engine.prompt(str, "read it", on=root) == "one\n"
-  assert said(log, "rung")[0][1:3] == ("rung1", "prompt1")
+  assert await engine.thread(str, "read it", on=root) == "one\n"
+  assert said(log, "rung")[0][1:3] == ("rung1", "thread1")
   assert said(log, "read")[0][2] == "rung1"
   assert [one[2] for one in said(log, "done") if one[1].startswith("reply")] == [WORLD]
   assert [one[2] for one in said(log, "done") if one[1].startswith("gate")] == ["gate"]
@@ -86,7 +86,7 @@ async def test_a_verb_takes_a_chain_and_the_act_it_makes_is_on_that_chain() -> N
 async def test_a_model_calls_a_verb_from_a_rung_and_the_operator_calls_the_same_verb_outside_a_rung() -> None:
   """A model calls a verb from a rung, and the operator calls the same verb outside a rung."""
   _, log, root = born("x = bash('from a rung')\nclose(1)")
-  assert await engine.prompt(int, "run it", on=root) == 1
+  assert await engine.thread(int, "run it", on=root) == 1
   engine.bash("from the operator", on=root)
   step = said(log, "rung")[0][1]
   assert [(one[4], one[2]) for one in said(log, "bash")] == [("from a rung", step), ("from the operator", OPERATOR)]
@@ -97,7 +97,7 @@ async def test_an_act_is_on_the_chain_that_the_verb_names() -> None:
   sand, log, root = born()
   two = await chained("two")
   sand.script[root] = [f"x = bash('elsewhere', on={two!r})\nclose(1)"]
-  assert await engine.prompt(int, "run it", on=root) == 1
+  assert await engine.thread(int, "run it", on=root) == 1
   assert [one[3] for one in said(log, "bash")] == [two]
 
 
@@ -134,14 +134,14 @@ async def test_the_world_is_given_the_id_of_the_act_and_the_facts_about_the_act_
   assert (await act).code == 0
 
 
-async def test_a_prompt_that_a_rung_makes_on_another_chain_is_an_act_of_that_chain() -> None:
-  """A prompt that a rung makes on another chain is an act of that chain."""
+async def test_a_thread_that_a_rung_makes_on_another_chain_is_an_act_of_that_chain() -> None:
+  """A thread that a rung makes on another chain is an act of that chain."""
   sand, log, root = born()
   two = await chained("two")
-  sand.script[root] = [f"p = prompt(int, 'hi', on={two!r})\nclose(1)"]
-  assert await engine.prompt(int, "delegate", on=root) == 1
+  sand.script[root] = [f"p = thread(int, 'hi', on={two!r})\nclose(1)"]
+  assert await engine.thread(int, "delegate", on=root) == 1
   await settle()
-  theirs = said(log, "prompt")[-1]
+  theirs = said(log, "thread")[-1]
   assert theirs[3] == two
   held = engine.transcript(two)
   assert isinstance(held, list) and theirs in held

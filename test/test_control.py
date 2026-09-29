@@ -18,7 +18,7 @@ async def test_a_control_said_over_the_act_it_names_with_a_header_of_its_name() 
 async def test_the_call_gives_the_control_as_the_life_made_it_whole() -> None:
   """The call gives the control as the life made it whole, so a close that named no act reads which act it is over."""
   _, log, root = born("b = bash('slow')\nk = control('pause', 'paused', b)\nclose(3)", auto=False)
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   assert await act == 3
   await settle()
   step = said(log, "rung")[0][1]
@@ -29,7 +29,7 @@ async def test_the_call_gives_the_control_as_the_life_made_it_whole() -> None:
 async def test_a_control_is_said_while_it_is_over_an_act_that_is_not_done() -> None:
   """A control is said while the act it names is not done, and a wake also while that act is paused, done or not, so a control that reaches nothing says nothing."""
   sand, log, root = born("x = bash('slow')\nclose(7)", auto=False)
-  act = engine.prompt(int, "go", on=root)
+  act = engine.thread(int, "go", on=root)
   assert await act == 7
   command = said(log, "bash")[0][1]
   engine.close(1, act)

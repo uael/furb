@@ -11,11 +11,11 @@ from conftest import (
   gated,
   gatings,
   paragraphs,
-  prompted,
   ran,
   relived,
   said,
   settle,
+  threaded,
   written,
 )
 from furb import engine
@@ -28,11 +28,11 @@ async def test_whether_the_word_of_a_rung_may_run() -> None:
   laid = engine.rung("k = 1", on=root)
   await laid
   sand.script[root] = ["close(k + 1)"]
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   assert await act == 2
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  told = [fresh(root, written(laid, "k = 1")), f"{prompted(act, 'int', 'count')}\n\n#{step} advance on {act}"]
+  told = [fresh(root, written(laid, "k = 1")), f"{threaded(act, 'int', 'count')}\n\n#{step} advance on {act}"]
   assert gatings(log) == [("k = 1", told[:1]), ("close(k + 1)", [told[0], "k = 1", told[1]])]
   assert findings(log) == [[], []]
 
@@ -52,10 +52,10 @@ async def test_the_word_of_a_rung_runs_only_if_the_gate_accepts_the_word_or_if_t
   told.append(f"{refused}\n\n{written(laid, 'k = 1')}")
   assert ran(log) == [*told, "k = 1"] and engine.module(root)["k"] == 1
   sand.script[root] = ["close(k)"]
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   assert await act == 1
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  told.append(f"{prompted(act, 'int', 'count')}\n\n#{step} advance on {act}")
+  told.append(f"{threaded(act, 'int', 'count')}\n\n#{step} advance on {act}")
   assert [a[5] for a in said(log, "run") if a[4].endswith("_told")] == told
   assert [word for word, _ in gatings(log)] == ["k = BAD", "k = 1", "close(k)"]
   assert ran(log) == [*told[:2], "k = 1", told[2], "close(k)"] and engine.module(root)[act] == act
@@ -97,7 +97,7 @@ async def test_the_gate_checks_the_word_of_a_rung_against_the_rungs_before_it_in
 async def test_a_response_that_is_not_python_is_a_finding_like_any_other() -> None:
   """A response that is not python is a finding like any other."""
   _, log, root = born("this is no python at all", "close(1)")
-  act = engine.prompt(int, "try", on=root)
+  act = engine.thread(int, "try", on=root)
   assert await act == 1
   await settle()
   assert gated(log) == ["this is no python at all", "close(1)"]
@@ -111,7 +111,7 @@ async def test_a_response_that_is_not_python_is_a_finding_like_any_other() -> No
   ]
   (_, last) = [a[1] for a in said(log, "rung") if a[2] == act]
   told = [
-    fresh(root, prompted(act, "int", "try"), f"#{step} advance on {act}"),
+    fresh(root, threaded(act, "int", "try"), f"#{step} advance on {act}"),
     f"#{step} refused\n{step}_findings = {found!r}\n\n#{step} closed\n{step}_value = Refused()\n\n#{last} advance on {act}",
   ]
   assert ran(log) == [told[0], told[1], "close(1)"]
@@ -128,7 +128,7 @@ async def test_the_gate_gives_no_finding_when_the_gate_accepts_the_rung() -> Non
 async def test_the_journal_keeps_what_the_gate_found() -> None:
   """The journal keeps what the gate found, since the gate is of the outside, so a later life reads the same findings and asks the gate nothing again."""
   sand, log, root = born("close(1)")
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   await settle()
   assert gated(log) == ["close(1)"] and findings(log) == [[]]
   assert [fact[1] for fact, *_ in sand.record if fact[0] == "gate"] == ["gate1"]

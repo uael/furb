@@ -118,17 +118,17 @@ impl Life {
     self.quiet.borrow().paused
   }
 
-  /// The name of the prompt the record already holds for this message: of the operator, on the root, of this shape
+  /// The name of the thread the record already holds for this markdown: of the operator, on the root, of this shape
   /// and to this actor; and nothing when it holds none.
   ///
   /// The engine matches nothing the operator says again, so a life stood up on its own record would open a second
-  /// prompt beside the one that record stands on, and ask a model for what it was answered once.
-  pub fn again(&self, shape: &str, message: &str, to: &str) -> Option<String> {
-    let wanted = [OPERATOR, self.root.as_str(), shape, message, to];
+  /// thread beside the one that record stands on, and ask a model for what it was answered once.
+  pub fn again(&self, shape: &str, markdown: &str, to: &str) -> Option<String> {
+    let wanted = [OPERATOR, self.root.as_str(), shape, markdown, to];
     self.held.iter().find_map(|a| {
       let words =
         a.0.as_ref().items()?.iter().map(|one| one.as_str()).collect::<Option<Vec<_>>>()?;
-      (words.len() == 7 && a.kind() == "prompt" && words[2..] == wanted)
+      (words.len() == 7 && a.kind() == "thread" && words[2..] == wanted)
         .then(|| a.about().to_owned())
     })
   }
@@ -161,11 +161,11 @@ impl Life {
   }
 }
 
-/// The shape of a prompt of the operator that names none: a str, so the model works until it closes the prompt with
+/// The shape of a thread of the operator that names none: a str, so the model works until it closes the thread with
 /// its report.
 pub const SHAPE: &str = "str";
 
-/// A shape as a prompt is given it, by its name: None itself, or the name of a type.
+/// A shape as a thread is given it, by its name: None itself, or the name of a type.
 pub fn shape(name: &str) -> Object {
   if name == "None" { Object::none() } else { Object::string(name) }
 }

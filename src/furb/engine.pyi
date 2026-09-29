@@ -30,14 +30,14 @@ An act is on the chain that the verb names.
 An act is on a chain, and its facts are on its scope.
 A chain is on no chain, and its scope is itself.
 The World is given the id of the act, and the facts about the act carry the same id.
-A prompt that a rung makes on another chain is an act of that chain.
+A thread that a rung makes on another chain is an act of that chain.
 """
 type Question = tuple[str, str, str, str, *tuple[object, ...]]
 """A fact that takes a name of its own when it is said and is answered, which is an act: answered now with a done, or later, with a started now and a done after it.
 A question is a fact whose about is its own name and whose first word is the chain it is on.
 Every question takes a name, what is answered now as well as what is answered later.
 A question is named by its kind, so a fact is a question when the act it is about is named under its kind, which is what question says.
-The name of an act is its kind and how many acts of that kind the life has made with it, so the root is chain1, the first command is bash1 and the first prompt is prompt1, and python binds each name as it is.
+The name of an act is its kind and how many acts of that kind the life has made with it, so the root is chain1, the first command is bash1 and the first thread is thread1, and python binds each name as it is.
 A read takes its number as a command does, so the first read is read1, whoever made it.
 The generator that settles an await of an act from outside a run is named after that act and the task that awaits it, which is the name of no question.
 """
@@ -45,7 +45,7 @@ type Saying = tuple[str, str, *tuple[object, ...]]
 """What an ear says: the kind of the fact, the act it is about, and the words, and nothing of who says it, which the bus fills in from whoever is speaking."""
 type Ear = Generator[Saying | None, Fact]
 """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by.
-The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
+The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a thread to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
 The World performs any fact that an extension defines and that the World knows.
 The facts that the World says of its own are for the acts that complete later.
 An ear speaks by yielding a saying, and the work it began speaks later by say, under the site of the ear that began it.
@@ -152,9 +152,9 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   read is given a path and a show.
   read gives a Text.
   A text without a show is told as HEAD, which is the span of its first 2000 lines.
-  A read of the name of a prompt gives the program of that ladder, the words of its rungs in order.
-  Whether a name is one of the prompts a chain has heard on itself, which is what its doors serve and no other path, a path of no name being none of them.
-  A prompt is the door of the program of its ladder, so a read of its name gives the word of every rung of it in order, the words the gate refused among them, which are none at all for a prompt that ran no word.
+  A read of the name of a thread gives the program of that ladder, the words of its rungs in order.
+  Whether a name is one of the threads a chain has heard on itself, which is what its doors serve and no other path, a path of no name being none of them.
+  A thread is the door of the program of its ladder, so a read of its name gives the word of every rung of it in order, the words the gate refused among them, which are none at all for a thread that ran no word.
   A read of a door that a rung of that ladder says leaves the word of that rung out, since a rung is no part of the program it reads.
   One made from inside an act tells itself under its own name, with its path and what it was answered, on the scope of that act; one made from outside an act tells nothing, and neither does one whose show is hidden.
   A read answered with what is no text gives that value, and tells it as python shows it.
@@ -167,8 +167,8 @@ def write(text: Text, on: str = "") -> Text:
   The engine tells of a write of a text only the lines that differ from what the caller asked, and of a write a door answers with a value, that value.
   A write takes no show, since what a write would show the word of the model already said: it tells the lines of what came back that differ from what it asked for, so a write that the disk took as it was asked tells nothing at all.
   A door that answers a write with more than it was asked for tells each line of what came back that differs from the line it was asked for at the same place.
-  A write to the door of a prompt edits the program of its ladder, so the door and the verb are one act.
-  The chain answers a write of the door of one of its prompts with the text it took, and makes its rungs again from it.
+  A write to the door of a thread edits the program of its ladder, so the door and the verb are one act.
+  The chain answers a write of the door of one of its threads with the text it took, and makes its rungs again from it.
   A write of a door that a rung of that ladder says leaves the word of that rung out, and that rung is no rung of the chain after it.
   A new file is a write of a Text made of its path and its content.
   """
@@ -281,17 +281,17 @@ def wake(id: str) -> None:
   wake is given the id of an act or the id of a chain.
   A wake lifts the pause and delivers every held result.
   A wake gates and runs a held response.
-  A wake makes a prompt ask its model with the transcript as it grew.
+  A wake makes a thread ask its model with the transcript as it grew.
   A wake makes no reply twice and loses none.
-  A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each command, wait, prompt to the operator and reply of them, and a model reads the transcript as it grew.
+  A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each command, wait, thread to the operator and reply of them, and a model reads the transcript as it grew.
   """
 
 def cancel(id: str) -> None:
-  """A cancel of that prompt reaches the acts that its rungs made on the chain with a source.
+  """A cancel of that thread reaches the acts that its rungs made on the chain with a source.
   A cancel is over the act it names and everything that act made, and each of them is done with CancelledError.
   cancel is given the id of an act, and says a cancel over it.
   A cancelled act completes with CancelledError.
-  A cancelled prompt raises CancelledError to whoever awaits it.
+  A cancelled thread raises CancelledError to whoever awaits it.
   A cancel touches nothing else on the chain.
   The awaiter of a cancelled command raises CancelledError in its step.
   """
@@ -299,22 +299,22 @@ def cancel(id: str) -> None:
 def close(value: object, id: str = "") -> None:
   """An act ended from outside, by its name, with a value: it is done with it, and it ends what it made, since a close is a cancel that carries what the act it names is done with.
   The close of the operator enters the record as a fact of its own.
-  A close ends the rung of a prompt at its next await.
-  The operator closes a prompt of shape None with None.
+  A close ends the rung of a thread at its next await.
+  The operator closes a thread of shape None with None.
   The close of the operator delivers to the act of the rung whenever the close comes.
-  The operator closes a pending prompt of any actor.
-  A rung closes a pending prompt of any actor.
-  close is given the result of a pending act, and the id of that act when it is not the prompt of the running word.
-  An exception closes a prompt with that exception.
+  The operator closes a pending thread of any actor.
+  A rung closes a pending thread of any actor.
+  close is given the result of a pending act, and the id of that act when it is not the thread of the running word.
+  An exception closes a thread with that exception.
   The close of the operator stands in the transcript with the name of the operator.
-  A prompt completes with the exception that the word of the prompt gave to close.
-  close is given the value first, since a word that answers its own prompt names no act at all.
-  A value closes an act with that value, and a prompt with a value that has its shape.
-  A close that answers a prompt with a value that does not have the shape of the prompt raises Refused in the word that said it, so the prompt asks again.
+  A thread completes with the exception that the word of the thread gave to close.
+  close is given the value first, since a word that answers its own thread names no act at all.
+  A value closes an act with that value, and a thread with a value that has its shape.
+  A close that answers a thread with a value that does not have the shape of the thread raises Refused in the word that said it, so the thread asks again.
   A close on an act that is over reaches nothing.
-  A close said from a word that names no act is over the prompt that made the rung of the word, and over the rung itself for a word its caller wrote, which answers no prompt.
-  A close said from a word that retells reaches nothing and says nothing: it stops the word where it stands, so the rung is done with nothing and answers no prompt.
-  A close of the prompt of the running word stops that word where it stands, as a raise does, and nothing after the call runs.
+  A close said from a word that names no act is over the thread that made the rung of the word, and over the rung itself for a word its caller wrote, which answers no thread.
+  A close said from a word that retells reaches nothing and says nothing: it stops the word where it stands, so the rung is done with nothing and answers no thread.
+  A close of the thread of the running word stops that word where it stands, as a raise does, and nothing after the call runs.
   """
 
 def debug(template: Template) -> None:
@@ -355,16 +355,16 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
   The word of a model is python code and nothing else.
   A step that raised keeps what it bound before the raise.
   A rung may await at its top level.
-  A rung answers the prompt of its chain with close, wherever in its word the close is said.
+  A rung answers the thread of its chain with close, wherever in its word the close is said.
   The Kernel gives nothing for a word that ran to its end, since a word that answers says a close and stops there.
   The Kernel gives what a word raised, and a top-level return is no python, which the gate refuses as it refuses any word that is not python.
   The word of a rung runs to its next await and continues when the close it awaits comes.
-  The word of a rung answers its prompt with close, which carries the value the prompt is done with.
-  The turns of the chain of another prompt tell the rung of a word its caller wrote.
+  The word of a rung answers its thread with close, which carries the value the thread is done with.
+  The turns of the chain of another thread tell the rung of a word its caller wrote.
   rung is given a word and runs it on a chain in the globals of that chain.
   The gate reads the word its caller wrote like any word.
   A rung with a word completes with what that word raises, and with nothing when the word runs to its end.
-  A close ends the rung that runs in a prompt at its next await.
+  A close ends the rung that runs in a thread at its next await.
   A chain with a source and its origin share the one act, the record's.
   A chain with a source awaits what its origin started, through the name of the act.
   It says its word may run as soon as it holds one, whichever way that word came, and what the chain makes of the word is the chain's.
@@ -383,59 +383,54 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
   """
 
 @overload
-def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[None]:
-  """A prompt: it makes the rung of one turn of its model, makes another while the rung it made gives no value, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike.
-  The driver gives the name of the prompt, and the prompt is awaited for the shape.
+def thread(shape: None, markdown: str = "", to: str = "", on: str = "") -> Act[None]:
+  """A thread: it makes the rung of one turn of its model, makes another while the rung it made gives no value, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike.
+  The driver gives the name of the thread, and the thread is awaited for the shape.
   The engine asks the model again after a refusal.
-  The operator prompts a model to make the model work.
-  A model prompts the operator to tell the model something or to get a decision.
-  A model prompts a model to delegate.
-  A prompt to a model is a ladder of rungs in the globals of its chain.
-  Nothing but a prompt asks a model.
-  The value of a prompt on another chain comes back as the value, and nothing is wired between the chains of one life.
-  prompt is given a shape, a message and an actor, on a chain.
-  prompt gives the prompt, which is awaited for the shape.
-  The response of a prompt has the shape.
+  The operator starts a thread to a model to make the model work.
+  A model starts a thread to the operator to get a decision.
+  A model starts a thread to a model to delegate.
+  A thread to a model is a ladder of rungs in the globals of its chain.
+  Nothing but a thread or a rung with no word asks a model.
+  The value of a thread on another chain comes back as the value, and nothing is wired between the chains of one life.
+  thread is given a shape, a markdown and an actor, on a chain.
+  thread gives the thread, which is awaited for the shape.
+  The response of a thread has the shape.
   None is a shape of its own.
-  Without a message, the actor reads the transcript alone.
+  Without a markdown, the actor reads the transcript alone.
   A model answers any shape.
-  A model asked with the shape None reads the message, works, and closes with nothing.
-  A rung need not wait for a prompt of shape None.
-  The actor left unsaid is the default actor of the chain when the prompt is made, which the prompt writes into the actor word of every rung it makes, so every life asks the one actor the record holds.
-  A prompt to a model runs in steps until the prompt completes.
-  The binding of a prompt gives the shape as python shows the expression, as prompt1: Act[int] = Act('prompt1').
+  A model asked with the shape None reads the markdown, works, and closes with nothing.
+  A rung need not wait for a thread of shape None.
+  The actor left unsaid is the default actor of the chain when the thread is made, which the thread writes into the actor word of every rung it makes, so every life asks the one actor the record holds.
+  A thread to a model runs in steps until the thread completes.
+  The binding of a thread gives the shape as python shows the expression, as thread1: Act[int] = Act('thread1').
   A rung whose word closes nothing ends its step, and the engine asks the model again.
-  The completion of a prompt cancels nothing under the prompt but the words it ran.
-  The operator prompts on any chain, by the id of the chain.
-  A rung prompts on any chain, by the id of the chain.
-  A prompt to the operator completes when the operator closes the prompt.
-  The response of a prompt on a chain with a source comes to the act that the caller holds.
+  The completion of a thread cancels nothing under the thread but the words it ran.
+  The operator starts a thread on any chain, by the id of the chain.
+  A rung starts a thread on any chain, by the id of the chain.
+  A thread to the operator completes when the operator closes the thread.
+  The response of a thread on a chain with a source comes to the act that the caller holds.
   It is the ladder of its rungs, and its name is the door of the program of that ladder, which holds the word of every rung of it for as long as the chain lives.
   A word written to its door is a rung of it, which answers it as the word of its model does.
-  A prompt to the operator asks no model: the World takes it and shows it, and it waits to be closed; in a later life, one the record shows open is shown again only at a wake, and one the record shows closed is shown no more.
-  A prompt to a model takes its own act, since the engine is the one that asks the model.
+  A thread to the operator asks no model: the World takes it and shows it, and it waits to be closed; in a later life, one the record shows open is shown again only at a wake, and one the record shows closed is shown no more.
+  A thread to a model takes its own act, since the engine is the one that asks the model.
   Its close tells what closed it from outside, which the one that closed it says, and nothing of what its rung gave, which the rung has told.
-  A paused prompt makes no rung until the wake, and a cancel of it is over its rung too, which ends itself.
-  The World closes with a refusal a prompt it cannot put to the operator; which shapes the operator answers is the World's law.
-  The shape left unsaid is None, which the acknowledgment uses, and any value responds to it.
-  A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one.
-  A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the journal makes it again.
+  A paused thread makes no rung until the wake, and a cancel of it is over its rung too, which ends itself.
+  The World closes with a refusal a thread it cannot put to the operator; which shapes the operator answers is the World's law.
+  Any value responds to the shape None.
+  A thread takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one.
+  A thread carries the name of its shape as a word, and takes the name as well as the shape, so the journal makes it again.
   The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
-  The acknowledgment carries no shape and a message that names the act that is done.
-  The turns of the chain hold the result of the command that the acknowledgment names.
-  A cancelled result is no orphan.
-  The response of an acknowledgment is no orphan.
-  When an act that a rung of the chain made is done while the word of that rung does not run, no word of the chain awaited it, no reply has shown it, no prompt it heard on itself is open and no word of the chain is running, the chain prompts nothing, so that the model sees it.
-  A pause stands over the close that answers a prompt too, so what a word gave waits for the wake.
-  A prompt tells its message and its binding where it is made, as every act tells its open, whether a model or the operator answers it.
+  A pause stands over the close that answers a thread too, so what a word gave waits for the wake.
+  A thread tells its markdown and its binding where it is made, as every act tells its open, whether a model or the operator answers it.
   """
 
 @overload
-def prompt[T](shape: type[T], message: str = "", to: str = "", on: str = "") -> Act[T]: ...
+def thread[T](shape: type[T], markdown: str = "", to: str = "", on: str = "") -> Act[T]: ...
 @overload
-def prompt(shape: str, message: str = "", to: str = "", on: str = "") -> Act: ...
+def thread(shape: str, markdown: str = "", to: str = "", on: str = "") -> Act: ...
 @overload
-def prompt(shape: object, message: str = "", to: str = "", on: str = "") -> Act: ...
+def thread(shape: object, markdown: str = "", to: str = "", on: str = "") -> Act: ...
 def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act[Never]:
   """chain says what a chain does: how it is opened, what it tells, and what it answers for.
   boot gives the root, and chain gives the chain, which never settles.
@@ -446,9 +441,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The engine makes a chain in one way: by running its rungs.
   In a chain with a source the rungs of the origin up to that source run again in the module of the new chain.
   A chain given a source stands on that one: it retells the words of it as they stand, each rung of it retelling a rung of that one, so that it makes the same acts and shares them, and what it holds of the transcript of that one is what its filter kept, though it runs every word all the same, so what it holds bound is more than its turns say.
-  A prompt to an actor its roster does not hold it closes with the refusal.
+  A thread to an actor its roster does not hold it closes with the refusal.
   A chain that the word of a rung opens is a scope of its own: its words are on itself, though the chain fact itself stands on the chain of the rung that opened it; and when that rung is retold, the word makes the same chain, since a rung that retells another shares the acts it makes, so a word that opens a chain opens it once.
-  The engine refuses a prompt to an actor outside the roster.
+  The engine refuses a thread to an actor outside the roster.
   The chain holds the control it says itself, so what it closes tells the model what was done to it.
   The engine binds the exception of a raise in the globals of the chain, under the name raised.
   The engine binds the exception again at each raise.
@@ -466,17 +461,17 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   Every name that the file defines is in the globals of a chain.
   A chain holds whole every act made on the chain, the rungs it makes itself among them, which tell nothing.
   A chain holds every fact on it, and an act on another chain is that chain's.
-  A prompt that a step of another chain made reads nothing of that chain.
+  A thread that a step of another chain made reads nothing of that chain.
   The word of a rung rebinds the default actor like any name, and so does an answer of a stand that changes the standing, and the last binding in record order wins.
   The transcript of the root begins with the open of the root and then the standing.
-  The transcript then holds the prompt of the operator, and the replies of the model, each with its turn.
+  The transcript then holds the thread of the operator, and the replies of the model, each with its turn.
   The engine reads its own names through the globals of the chain.
   The engine uses a rebound name from the next use on.
   No close reaches a chain, since a chain never completes.
   To await a chain never returns.
   A chain has a globals dict and a working directory of its own.
   A chain with a source holds the acts it inherited from that source, as the filter kept them.
-  The steps that an inherited prompt takes after the point enter the transcript of its owner alone.
+  The steps that an inherited thread takes after the point enter the transcript of its owner alone.
   What a chain binds is its own, and a chain with a source is how a chain gets isolation.
   Two chains from one source hold the same values, since both ran the same rungs.
   A chain with a source inherits the default actor with the globals of its origin at that source.
@@ -508,9 +503,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The chain retells the rungs of its origin through the program of the origin, and it makes the rungs it retells itself, so they tell nothing.
   A replay makes the rungs of a chain again from its donor: it keeps each rung of the ladder whose word is the next part of the words it is given, it makes one rung of what is left, and every other rung of the ladder is gone.
   A replay makes the module of the chain again, as it was at its birth but on the standing the chain stands on then, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in.
-  The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.
+  The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its threads.
   A write of a door gives the words of that ladder alone, so every rung of the chain that is no rung of that ladder stands as it did.
-  Before every reply the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
+  Before every reply the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on thread1, which names the one that made the rung.
   The chain holds the text of each paragraph told on it, in order.
   At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.
   Each act that a told paragraph opened and each value that it told is bound for the word of that rung, whoever wrote it.
@@ -522,6 +517,10 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A rung makes at most one told rung, at its first ready, so no two told rungs share a name.
   The chain takes its own act, since the engine is the one that runs it.
   The chain asks the model of a rung for its word by a reply it makes under the site of that rung, whose one word is the actor.
+  When an act that a rung of the chain made is done while the word of that rung does not run, no word of the chain awaited it, no reply has shown it, no thread it heard on itself is open, no word of the chain is running and the default actor of the chain is a model, the chain makes a rung with no word, the acknowledgment, which asks its model for one step, so that the model sees it.
+  The acknowledgment is made as the act that is done, on the chain, so the turns it asks with hold the result of that act, and its last line names that act, as #rung9 advance on bash3.
+  A cancelled result is no orphan.
+  The done of an acknowledgment is no orphan.
   When an act that a rung of the chain made on another chain is done while the word of that rung does not run and no word of the chain awaited it, the chain tells it about that rung under the header done, and binds what it came to under the word value, since its model reads no other transcript.
   """
 
@@ -535,7 +534,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
   An answer that carries the ledger past the ceiling pauses the chain, so the word that answer brought runs and what it gave waits, and no rung of the chain asks until the wake.
   Lifting a ceiling wakes nothing: the pause stands until a wake, ceiling or no ceiling.
   It stands until it is lifted, as the chain it is on does, so what it comes to is what lifted it: nothing for a later grant that closes it, and a CancelledError for a cancel.
-  A grant of nothing, of a ceiling under zero, or of a share past one is no ceiling: it is done with the refusal, which whoever made it takes by awaiting it, and it tells nothing, since it never stood; a prompt to no actor of the roster is closed the same way after it has told its open.
+  A grant of nothing, of a ceiling under zero, or of a share past one is no ceiling: it is done with the refusal, which whoever made it takes by awaiting it, and it tells nothing, since it never stood; a thread to no actor of the roster is closed the same way after it has told its open.
   A later grant that stands closes every grant of the chain before it that stands, and none that is over, so the ledger counts from the new one alone; one that is no ceiling closes nothing, and the ceiling that stands stands on.
   A cancel of it lifts the ceiling, since it is an act like any other.
   A grant is any caller's, on any chain.
@@ -645,7 +644,7 @@ class Act[T = object](str):
     To await an act raises the exception that the act completed with.
     To await a cancelled act raises CancelledError.
     A word that awaits a chain raises Refused where it waited, since a chain never settles and the word could go no further.
-    The awaiter of the prompt raises that exception.
+    The awaiter of the thread raises that exception.
     A run that awaits it hands it to whoever steps the run, since the engine owns the order of every run; the operator, which the engine does not step, waits on its own loop.
     """
 
@@ -663,12 +662,12 @@ class Drift(Exception):
 type Note = str
 """One thing a tell says: a paragraph, or the binding of an act.
 A paragraph is what one fact that tells stands as in a turn: its notes, one after the other, and a blank line between two paragraphs.
-The first line of a paragraph is its header: # and, with no space, the id of the act it is of, then what happened to the act, as #bash1 exited 0 or #prompt1, and no text that the act tells.
+The first line of a paragraph is its header: # and, with no space, the id of the act it is of, then what happened to the act, as #bash1 exited 0 or #thread1, and no text that the act tells.
 Every other line of a paragraph is python: a binding of each value that the act tells, and the binding of the act on its open.
 The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write or a cd stands at the place in the run where it was asked.
 The headers of the file are the open of an act, closed, done, exited, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled.
 A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing.
-A paragraph binds each value that it tells under a name: the id of the act, an underscore, and the word that holds the value, as prompt2_message, bash1_command, read3_text or prompt2_value.
+A paragraph binds each value that it tells under a name: the id of the act, an underscore, and the word that holds the value, as thread2_markdown, bash1_command, read3_text or thread2_value.
 A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr.
 A value that is None or an empty string is not told.
 A quote that a paragraph tells takes one more underscore in its name for as long as its string holds the close mark of that name at the end of a line, so the first close mark after it is its own.
@@ -693,11 +692,11 @@ The python of an assistant turn is the word the model wrote, quotes and all, and
 type Actor = list[str | list[str] | int]
 """An actor the World offers: the name of a model, the efforts it takes, and the window it reads.
 The window that a roster entry leaves unsaid is the window that the file names.
-What a prompt names is one of these names and one effort of that range.
+What a thread names is one of these names and one effort of that range.
 An actor takes an effort of its own, and any actor takes the effort that is not named.
 """
 type Standing = list[list[Actor] | str]
-"""What a chain stands on: the actors the World offers, the directory the chain starts in, and the actor a prompt goes to when it names none.
+"""What a chain stands on: the actors the World offers, the directory the chain starts in, and the actor a thread goes to when it names none.
 The roster, the directory and the actor that a model reads are in the transcript of its chain.
 A standing holds no source: the engine is one file the model imports, and a record made by another engine is a drift.
 """
@@ -728,7 +727,7 @@ A control reaches what it is over, and whatever else the words of the control na
 A control is no act: it takes no name of its own, and the record holds it as a fact about the acts it is over.
 What a control reaches: the act it names, everything that act made, and every act of the chain it names.
 It reaches by the chain as well as by the name, since an act on a chain is not under it unless the chain made it.
-A control carries the header it tells, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it.
+A control carries the header it tells, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a thread it will not serve, says the control the one way there is to say it.
 A pause is over the act it names and everything under it.
 """
 type Wake = tuple[Literal["wake"], str, str, list[Note]]
@@ -757,19 +756,19 @@ type Reply = tuple[Literal["reply"], str, str, str, str]
 The model reads the turns of the chain at each step.
 A reply carries the rung it asks for as its maker, the chain that asks as the chain it is on, and the actor as its one word, and nothing else.
 A reply is on the chain that asks, so the World keys its facts and its cache by chain.
-A reply the World cannot answer is the World's to refuse: it pauses the chain first when it wants a wake, and is done with the refusal, which the rung comes to and the prompt asks again after.
+A reply the World cannot answer is the World's to refuse: it pauses the chain first when it wants a wake, and is done with the refusal, which the rung comes to and the thread asks again after.
 The life refuses a reply that no ear owns, and the chain that asks then pauses itself, since that fault stands until a wake.
 A reply ends as a wait does, so a cancel or a close over it ends it with a CancelledError.
 The World reads the turns of the chain whole when it takes a reply, folded again for that reply, and the journal keeps the answer and no turns.
 The World answers a reply with a done whose value is the turn of the model, which stands as the turn it is, with its usage and the blocks of the provider.
-Many prompts are pending on one chain at once.
+Many threads are pending on one chain at once.
 A chain has at most one reply in flight.
 Across chains there is no limit on the replies in flight.
 Every model asked on a chain reads all the turns of the chain, as the turns grow.
 As many replies as there are chains are in flight together.
 A later life asks no model, and does no act, whose close the record already holds.
-A new prompt reads the whole transcript of the chain, the cancelled work included.
-No prompt that a pause is over asks a model.
+A new thread reads the whole transcript of the chain, the cancelled work included.
+No thread that a pause is over asks a model.
 A paused chain makes no new reply after a held response.
 No model is asked for a rung the journal answered, since a later life asks again for nothing it was answered once.
 It asks for no rung a pause stands over, whether the pause is over that rung or over the chain, so a paused chain asks no model until the wake.
@@ -791,9 +790,9 @@ What a rung binds stays bound for every later rung of the chain.
 The last rung to bind a name wins.
 One rung runs at a time on a chain, and rungs interleave at their awaits, whether they are rungs of one chain or of many.
 The word of a rung runs again in every chain made from its chain and in every later life, and what it does outside its acts it does again.
-Two prompts on one chain see the bindings of each other as they run.
+Two threads on one chain see the bindings of each other as they run.
 A rung whose word rebinds a broken name repairs the chain, since the last rung to bind wins.
-A prompt after such a rung finds what it bound.
+A thread after such a rung finds what it bound.
 The chain runs one word at a time.
 A word that waits for an act gives the chain to the next word, which runs while it waits, and the waiting word runs on at the done of what it awaits.
 A run whose rung is done when the Kernel begins it never begins its word, and is done with CancelledError.
@@ -839,8 +838,8 @@ A gate carries the word alone, and the gate reads the program of the chain befor
 The refused paragraph binds the findings that refused the word of a rung, one line for each, as rungN_findings.
 The chain has the word of a rung gated before it runs, but a word it wrote itself, and a refused word runs never.
 A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a copy of a refused word is refused again and tells its findings not again.
-A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run.
-The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the prompt of it asks again as it does for a word that gave no value.
+A refused word of a rung stands in the ladder of its thread, which its door shows, and it is no part of the program of the chain, which holds the words that run.
+The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the thread of it asks again as it does for a word that gave no value.
 """
 type Cd = tuple[Literal["cd"], str, str, str, str]
 """A cd is the question of the directory a path names, which the World answers and the transcript of the chain holds."""
@@ -850,8 +849,8 @@ type Wait = tuple[Literal["wait"], str, str, str, float]
 """A wait carries the seconds that must pass before the World is done with it."""
 type Rung = tuple[Literal["rung"], str, str, str, str, str, str]
 """A rung carries the word, the rung it retells and the actor."""
-type Prompt = tuple[Literal["prompt"], str, str, str, str, str, str]
-"""A prompt carries the name of the shape, the message and the actor of a prompt."""
+type Thread = tuple[Literal["thread"], str, str, str, str, str, str]
+"""A thread carries the name of the shape, the markdown and the actor of a thread."""
 type Chain = tuple[Literal["chain"], str, str, str, str, str]
 """A chain carries the label and the source of a chain, and every chain is chainN whether boot or chain opened it."""
 type Grant = tuple[Literal["grant"], str, str, str, float | None, float | None]
@@ -862,7 +861,7 @@ type Bash = tuple[Literal["bash"], str, str, str, str, bool, float]
 def under(name: str, of: str) -> bool:
   """Whether one act is another or was made by it, which the life says, since every question says who made it.
   An act is under every ancestor of the act, which the maker of each says in turn, up to the operator or an ear of the outside.
-  An act is under its chain only when the chain made it: the rung of a prompt the operator made is under that prompt, and on the chain, so the maker of an act says who made it and never where it stands.
+  An act is under its chain only when the chain made it: the rung of a thread the operator made is under that thread, and on the chain, so the maker of an act says who made it and never where it stands.
   Nothing is under a name of nothing.
   """
 
@@ -940,7 +939,7 @@ def lives(g: Ear, a: Fact | None) -> bool:
 def pausing(ear: Callable[[str], Ear]) -> Callable[[str], Ear]:
   """An act is paused while the last control in record order that is over it is a pause.
   A pause holds delivery: a result that arrives enters the record and waits.
-  A paused prompt stops at its next boundary, with its loop where it stood.
+  A paused thread stops at its next boundary, with its loop where it stood.
   The engine holds the response of a reply that returns on a paused chain.
   A rung carries on only while its own chain is not paused.
   A control from outside reaches a paused act at once, where what the words of the act say waits for the wake.

@@ -1,6 +1,6 @@
 """Ready, the word a rung holds."""
 
-from conftest import BAD, DOOR, Sand, acts, born, fresh, plain, prompted, relived, said, settle, written
+from conftest import BAD, DOOR, Sand, acts, born, fresh, plain, relived, said, settle, threaded, written
 from furb import engine
 
 
@@ -11,7 +11,7 @@ async def test_a_ready_says_the_word_a_rung_holds() -> None:
   laid = engine.rung(word, on=root)
   await laid
   sand.script[root] = ["<s:there>\nthere\n</s:there>\nclose(k + there)"]
-  act = engine.prompt(str, "greet", on=root)
+  act = engine.thread(str, "greet", on=root)
   assert await act == "hithere\n"
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   asked = "<s:there>\nthere\n</s:there>\nclose(k + there)"
@@ -21,10 +21,10 @@ async def test_a_ready_says_the_word_a_rung_holds() -> None:
 async def test_the_word_of_a_rung_enters_the_program_when_the_gate_accepts_it_or_the_chain_wrote_it() -> None:
   """The word of a rung enters the program of the chain when the gate accepts it or when the chain wrote it, and runs in the globals of the chain."""
   _, log, root = born("a = BAD", "a = 1", "close(a + 1)")
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   assert await act == 2
   refused, first, second = [a[1] for a in said(log, "rung") if a[2] == act]
-  wrote = fresh(root, prompted(act, "int", "count"), f"#{refused} advance on {act}")
+  wrote = fresh(root, threaded(act, "int", "count"), f"#{refused} advance on {act}")
   shut = f"#{refused} refused\n{refused}_findings = {BAD!r}\n\n#{refused} closed\n{refused}_value = Refused()"
   bound = f"{shut}\n\n#{first} advance on {act}"
   assert engine.program(root) == {
@@ -43,7 +43,7 @@ async def test_the_word_of_a_rung_enters_the_program_when_the_gate_accepts_it_or
 async def test_the_word_of_a_rung_that_extends_the_engine_is_part_of_the_program() -> None:
   """The word of a rung that extends the engine is part of the program, so the extension returns in a later life."""
   sand, _, root = born(DOOR, "close(None)")
-  assert await engine.prompt(int, "a door", on=root) == 1
+  assert await engine.thread(int, "a door", on=root) == 1
   await settle()
   program = engine.program(root)
   assert DOOR in program.values()
@@ -56,13 +56,13 @@ async def test_the_old_words_stay_in_the_program_and_in_the_turns_after_a_rung_r
   sand, log, root = born()
   old, new = "def twice(x):\n  return x * 2\nclose(None)", "def twice(x):\n  return x * 3"
   sand.script[root] = [old]
-  act = engine.prompt(None, "bind it", on=root)
+  act = engine.thread(None, "bind it", on=root)
   assert await act is None
   laid = engine.rung(new, on=root)
   await laid
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   program = engine.program(root)
-  wrote = fresh(root, prompted(act, "None", "bind it"), f"#{step} advance on {act}")
+  wrote = fresh(root, threaded(act, "None", "bind it"), f"#{step} advance on {act}")
   shut = engine.unquoted(f"#{act} closed\n\n{written(laid, new)}")
   assert program == {f"{step}_told": wrote, step: old, f"{laid}_told": shut, laid: new}
   assert [turn[1] for turn in engine.turns(on=root) if turn[0] == "assistant"] == [old]

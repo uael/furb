@@ -34,10 +34,10 @@ async def test_a_pause_holds_delivery_a_result_that_arrives_enters_the_record_an
   assert (await act) == 0
 
 
-async def test_a_paused_prompt_stops_at_its_next_boundary_with_its_loop_where_it_stood() -> None:
-  """A paused prompt stops at its next boundary, with its loop where it stood."""
+async def test_a_paused_thread_stops_at_its_next_boundary_with_its_loop_where_it_stood() -> None:
+  """A paused thread stops at its next boundary, with its loop where it stood."""
   _, log, root = born("a = 1", "close(a + 1)")
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   engine.pause(act)
   await settle()
   (first,) = [a[1] for a in said(log, "rung") if a[2] == act]

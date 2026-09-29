@@ -66,7 +66,7 @@ function open(record: unknown[] = []) {
         const over = () => later(() => engine.say("done", id, [null]));
         if (Number(words[1]) === 0) over();
         else waits.push(over);
-      } else if (kind === "prompt") yield ["started", id];
+      } else if (kind === "thread") yield ["started", id];
     }
   }
   const engine = Engine.boot(record, [["world", world()]]);
@@ -195,7 +195,8 @@ test.serial("a record keeps a value with no plain form, so a later life makes th
 
 test.serial("a whole JavaScript number is an int, and a BigInt is one exactly", () => {
   const { engine } = open();
-  const asked = (shape: string) => engine.prompt(shape, { message: "?", to: "operator", on: engine.root }).id;
+  const asked = (shape: string) =>
+    engine.thread(shape, { markdown: "?", to: "operator", on: engine.root }).id;
   for (const [value, back] of [
     [5_000_000_000, 5_000_000_000],
     [-5_000_000_000, -5_000_000_000],
@@ -269,12 +270,12 @@ test.serial(
   "the text of a paragraph drops the two marks of each quote, and a binding reads back the string it binds",
   () => {
     const [told] = paragraphs(
-      "#prompt1\n<s:prompt1_message>\ncount\n# them\n</s:prompt1_message>\nprompt1: Act[int] = Act('prompt1')",
+      "#thread1\n<s:thread1_message>\ncount\n# them\n</s:thread1_message>\nthread1: Act[int] = Act('thread1')",
     );
-    expect(told?.name).toBe("prompt1");
-    expect(plain(told?.lines ?? [])).toBe("count\n# them\nprompt1: Act[int] = Act('prompt1')");
+    expect(told?.name).toBe("thread1");
+    expect(plain(told?.lines ?? [])).toBe("count\n# them\nthread1: Act[int] = Act('thread1')");
     expect(plain(["x = 1", "<s:a>", "b</s:a>", "c</s:a>"])).toBe("x = 1\nb\nc</s:a>");
-    expect(bound(told?.lines ?? [], "prompt1_message")).toBe("count\n# them\n");
+    expect(bound(told?.lines ?? [], "thread1_message")).toBe("count\n# them\n");
     expect(bound(["<s:a__>", "b</s:a_>", "c</s:a__>"], "a")).toBe("b</s:a_>\nc");
     expect(bound(["x = 1", "a = 'it\\'s\\n\\x07\\u00e9\\\\'", 'b = "it\'s"'], "a")).toBe("it's\n\x07é\\");
     expect(bound(['b = "it\'s"'], "b")).toBe("it's");

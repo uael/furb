@@ -368,7 +368,7 @@ export class Session extends EventEmitter {
     if (chain ? this.error : Object.values(this.errors).some(Boolean)) return "error";
     if (this.queueHeld && this.queued.length) return "blocked";
     if (this.host.pending.size) return "paused";
-    if (!chain && this.host.prompts.size) return "blocked";
+    if (!chain && this.host.threads.size) return "blocked";
     const state = this.actStatus(chain);
     return this.paused && (state === "idle" || state === "error") ? "paused" : state;
   }
@@ -378,7 +378,7 @@ export class Session extends EventEmitter {
     const acts = this.acts.filter(
       (act) => act.kind !== "chain" && act.kind !== "grant" && (!chain || act.on === chain),
     );
-    if (acts.some((act) => this.host.prompts.has(act.id))) return "blocked";
+    if (acts.some((act) => this.host.threads.has(act.id))) return "blocked";
     if (acts.some((act) => this.host.pending.has(act.id))) return "paused";
     if (acts.some(working)) return "working";
     if (acts.some((act) => act.paused && !act.done)) return "paused";
@@ -440,12 +440,12 @@ export class Session extends EventEmitter {
     return this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2]?.[0];
   }
   /** The share of the window that the last answer of the chain filled, as the ledger of a grant says it: the whole
-   * prompt of that answer over the window of the model that the last prompt went to, or the window of the engine for
+   * prompt of that answer over the window of the model that the last thread went to, or the window of the engine for
    * a model that the roster does not name. Nothing before the first answer. */
   get filled(): number | undefined {
     const usage = this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2];
     if (!usage) return undefined;
-    const asked = this.activity.findLast((act) => act.kind === "prompt" && act.words[2] !== "operator");
+    const asked = this.activity.findLast((act) => act.kind === "thread" && act.words[2] !== "operator");
     const names = this.roster.map(([name]) => name);
     const { model } = actorParts(String(asked?.words[2] || this.actor), names);
     const window = Number(this.roster.find(([name]) => name === model)?.[2]) || WINDOW;
@@ -460,19 +460,19 @@ export class Session extends EventEmitter {
       this.roster.map(([name]) => name),
     );
   }
-  get operatorPrompt() {
-    return [...this.host.prompts.values()].find(
-      (prompt) => this.acts.find((act) => act.id === prompt.id)?.on === this.selected,
+  get operatorThread() {
+    return [...this.host.threads.values()].find(
+      (thread) => this.acts.find((act) => act.id === thread.id)?.on === this.selected,
     );
   }
-  isUserPrompt(act: ActRow): boolean {
-    return act.kind === "prompt" && act.by === "operator";
+  isUserThread(act: ActRow): boolean {
+    return act.kind === "thread" && act.by === "operator";
   }
-  /** Whether a prompt has a program that an edit changes and replays: one of its rungs holds a word the gate let run
+  /** Whether a thread has a program that an edit changes and replays: one of its rungs holds a word the gate let run
    * on this chain. */
   editable(act: ActRow): boolean {
     return (
-      act.kind === "prompt" &&
+      act.kind === "thread" &&
       this.activity.some((rung) => rung.by === act.id && Object.hasOwn(this.program, rung.id))
     );
   }
@@ -569,7 +569,7 @@ export class Session extends EventEmitter {
               !passed.has(entry.id) &&
               !this.acts.find((act) => act.id === entry.chain)?.paused &&
               !this.acts.some(
-                (act) => act.on === entry.chain && !act.done && ["prompt", "rung"].includes(act.kind),
+                (act) => act.on === entry.chain && !act.done && ["thread", "rung"].includes(act.kind),
               ),
           );
     try {
@@ -645,7 +645,7 @@ export class Session extends EventEmitter {
     const at = this.activity.findIndex((act) => act.id === id);
     const act = this.activity[at];
     if (!act || ["chain", "grant"].includes(act.kind)) throw new Error(`There is no act ${id} to rewind to.`);
-    const message = this.isUserPrompt(act);
+    const message = this.isUserThread(act);
     // Every act after the point leaves the branch, a grant or a chain among them, so that the branch reads no ceiling
     // and no branch that came later.
     const omitted = this.activity.slice(message ? at : at + 1).map((later) => later.id);
@@ -669,18 +669,18 @@ export class Session extends EventEmitter {
     this.emit("compose", message.trimEnd());
   }
   async undo(): Promise<void> {
-    if (this.paused || this.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)))
+    if (this.paused || this.activity.some((act) => !act.done && ["thread", "rung"].includes(act.kind)))
       throw new Error("Let the current prompt finish, or cancel and wake it before undo.");
-    const prompt = this.activity.findLast((act) => this.isUserPrompt(act));
-    if (!prompt) throw new Error("There is no user message to undo.");
+    const thread = this.activity.findLast((act) => this.isUserThread(act));
+    if (!thread) throw new Error("There is no user message to undo.");
     const source = this.selected;
-    this.redo.push({ from: source, to: await this.rewind(prompt.id) });
+    this.redo.push({ from: source, to: await this.rewind(thread.id) });
     this.notice = "Message removed from this branch. Module and files keep their current state.";
     this.save();
   }
 
   /** Set the actor of the selected chain by a rung of the operator. Until that rung has run, the session shows the
-   * choice and sends prompts to it. */
+   * choice and sends threads to it. */
   private async choose(actor: string): Promise<void> {
     const chain = this.selected;
     const choice: { actor: string; rung?: string } = { actor };
@@ -713,14 +713,14 @@ export class Session extends EventEmitter {
       this.editing = undefined;
     } else if (text.startsWith("!")) await this.command(`/bash ${text.slice(1).trimStart()}`);
     else {
-      const pending = this.operatorPrompt;
+      const pending = this.operatorThread;
       if (pending) await this.host.answer(pending.id, input);
       else {
         await this.attachFiles(input);
         this.redo = [];
         const pending = this.host.pending.size > 0;
-        const id = await this.engine.prompt(this.shape, {
-          message: this.withImages(input),
+        const id = await this.engine.thread(this.shape, {
+          markdown: this.withImages(input),
           on: this.selected,
           to: this.actor,
         });
@@ -881,9 +881,9 @@ export class Session extends EventEmitter {
         if (command === "read") this.view = "feed";
         break;
       case "edit": {
-        // The latest prompt with a program.
+        // The latest thread with a program.
         const id = argument || this.activity.findLast((act) => this.editable(act))?.id;
-        if (!id) throw new Error("There is no prompt program to edit.");
+        if (!id) throw new Error("There is no thread program to edit.");
         const got = await this.engine.read(id, { on: this.selected });
         this.editing = id;
         this.emit("compose", this.drafts[this.draftKey] ?? got.content);

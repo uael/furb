@@ -74,12 +74,12 @@ export class Snapshots {
       view.turns = undefined;
     if (kind === "run" || kind === "module") view.program = undefined;
     if (kind === "cd") view.directory = undefined;
-    // A write of the door of a prompt edits the program of its ladder and replays it.
+    // A write of the door of a thread edits the program of its ladder and replays it.
     const written = kind === "write" ? fact[4] : answered === "write" ? fact[3] : undefined;
     if (
       written &&
       typeof written === "object" &&
-      isQuestion("prompt", String((written as { path?: unknown }).path))
+      isQuestion("thread", String((written as { path?: unknown }).path))
     ) {
       view.turns = undefined;
       view.program = undefined;

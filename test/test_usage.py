@@ -11,7 +11,7 @@ async def test_what_one_answer_of_a_model_cost() -> None:
   """What one answer of a model cost: the words it read and wrote, of which the words it read again and the words it kept to read again, and its dollars."""
   _, _, root = born("close(1)", cost=USAGE)
   engine.grant(usd=10.0, on=root)
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   got = engine.turns(on=root)
   assert got[1][2] == USAGE
   assert [one for one in paragraphs(got) if one.startswith("#grant1 ledger")] == [
@@ -22,7 +22,7 @@ async def test_what_one_answer_of_a_model_cost() -> None:
 async def test_a_usage_holds_the_token_counts_and_the_dollars_of_one_model_response() -> None:
   """A usage holds the token counts and the dollars of one model response."""
   _, _, root = born("close(1)", cost=USAGE)
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   assert [usage for _, _, usage, _ in engine.turns(on=root)] == [None, USAGE, None]
 
 
@@ -32,14 +32,14 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
   sand.script[root] = ["a = 1", "close(2)"]
-  assert await engine.prompt(int, "count", on=root) == 2
+  assert await engine.thread(int, "count", on=root) == 2
   assert [line for line in paragraphs(engine.turns(on=root)) if line.startswith("#grant1 ledger")] == [
     "#grant1 ledger\ngrant1_spent = 1.5\ngrant1_filled = 0.2",
     "#grant1 ledger\ngrant1_spent = 3.0\ngrant1_filled = 0.2",
   ]
   engine.cancel(ceiling)
   _, _, root = born("close(2)", cost=USAGE)
-  asked = engine.prompt(int, "count", on=root)
+  asked = engine.thread(int, "count", on=root)
   engine.rung("actor = 'n/low'", on=root)
   later = engine.grant(usd=10.0, on=root)
   assert await asked == 2
@@ -47,7 +47,7 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   assert [one.split(f"{later}_filled = ")[1] for one in ledgers] == ["0.2"]
   engine.cancel(later)
   first, _, root = born(cost=USAGE)
-  engine.prompt(int, "count", on=root)
+  engine.thread(int, "count", on=root)
   await settle()
   wider: list = [[STANDS[0][0], ["m", ["low"], 800000]], "/w", "m/low"]
   heard, _ = await relived(Sand(stands=wider, cost=USAGE), list(first.record))

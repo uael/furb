@@ -3,7 +3,7 @@ import { isFault } from "./ears.js";
 import { bound, display, type Fact, isQuestion } from "./types.js";
 
 /** The kinds of act that are work which ends later, and the table counts each one that is done. */
-export const WORK = ["prompt", "rung", "bash", "wait"];
+export const WORK = ["thread", "rung", "bash", "wait"];
 
 export interface RunState {
   status: "running" | "failed" | "done";
@@ -181,7 +181,7 @@ export class Activity {
         value.is === "CancelledError" &&
         (act.words[1] ||
           (act.done && !isFault(act.value)) ||
-          (parent?.kind === "prompt" && parent.done && !isFault(parent.value)))
+          (parent?.kind === "thread" && parent.done && !isFault(parent.value)))
       )
         act.run = { status: "done", reason: "" };
       else act.run = { status: "failed", reason: `${value.is}: ${value.args.map(display).join(", ")}` };

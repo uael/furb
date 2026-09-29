@@ -29,7 +29,7 @@ const state = () => {
     actor: owner.actor,
     record: owner.record,
     facts: owner.facts.length - sentFacts,
-    prompts: [...owner.console.prompts.values()].map(({ id, shape, message }) => ({ id, shape, message })),
+    threads: [...owner.console.threads.values()].map(({ id, shape, markdown }) => ({ id, shape, markdown })),
     streams: [...owner.streams],
     pending: [...owner.pending],
     changes: owner.changes.length,
@@ -60,7 +60,7 @@ const replies: [cue: string, thinking: string, answer: string][] = [
     "The layout reads well. The logo leads, the starters sit under it, and the keys close the column.",
   ],
   [
-    " done",
+    " advance on bash",
     "The command is done, so the answer says what it found.",
     "The checks finished and all three passed, so the project is ready for the search shortcut.",
   ],
@@ -156,7 +156,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
       entry.id,
       queueHash(entry.chain, entry.shape, entry.text, entry.actor),
     ]);
-    const act = engine.prompt(entry.shape, { message: entry.text, on: entry.chain, to: entry.actor });
+    const act = engine.thread(entry.shape, { markdown: entry.text, on: entry.chain, to: entry.actor });
     engine.say("queue", entry.chain, ["sent", entry.id, act.id]);
     return act.id;
   }

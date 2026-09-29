@@ -167,10 +167,10 @@ def close(value: object, id: str = "") -> None:
     case ("rung", _, by, _, _, retells, *_):
       if retells:
         raise CancelledError()
-      if not id and question(("prompt", by)):
+      if not id and question(("thread", by)):
         id = by
   match get(id := id or who):
-    case ("prompt", _, _, on, shape, *_) if not isinstance(value, BaseException):
+    case ("thread", _, _, on, shape, *_) if not isinstance(value, BaseException):
       try:
         fits = isinstance(value, (s := eval(shape, module(on))) or object)
       except TypeError:
@@ -229,14 +229,14 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
   return act("rung", on, ending(pausing(ear)), word, retells, actor)
 
 
-def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str = "") -> Act[T]:
+def thread[T](shape: type[T] | object, markdown: str = "", to: str = "", on: str = "") -> Act[T]:
   named = shape if isinstance(shape, str) else re.sub(r"<class '|'>|[\w.:/]*\.", "", repr(shape))
   actor = to or module(on).get("actor")
 
   def ear(id):
     if actor != OPERATOR:
       yield "started", id
-    yield told(id, "", bound(id, named), message=message)
+    yield told(id, "", bound(id, named), markdown=markdown)
     while True:
       while actor == OPERATOR or paused(id):
         yield
@@ -244,7 +244,7 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
       while (yield)[:2] != ("done", asking):
         pass
 
-  return act("prompt", on, pausing(ending(ear)), named, message, to)
+  return act("thread", on, pausing(ending(ear)), named, markdown, to)
 
 
 def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act[Never]:
@@ -304,9 +304,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       if scope(a[1]) != id:
         continue
       match a:
-        case ("read", about, by, _, path) if question(("prompt", path)) and scope(path) == id:
+        case ("read", about, by, _, path) if question(("thread", path)) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in rungs.items() if x != by and under(x, path)))
-        case ("write", about, by, _, Text(path, content) as text) if question(("prompt", path)) and scope(path) == id:
+        case ("write", about, by, _, Text(path, content) as text) if question(("thread", path)) and scope(path) == id:
           yield from replay(path, content, by)
           yield "done", about, text
         case ("rung", rid, maker, _, "", _, to):
@@ -341,14 +341,19 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       if asking not in waiting and (asking := next((x for x in waiting if not paused(x)), "")):
         maker, to = waiting[asking]
         if offered(last[0], to) is None:
-          close(Refused(f"{to} no actor"), maker if question(("prompt", maker)) else asking)
+          close(Refused(f"{to} no actor"), maker if question(("thread", maker)) else asking)
         else:
           yield told(asking, f"advance on {maker}")
           with site.set(asking):
             act("reply", id, ending(idle), to)
           unseen = ""
-      if unseen and all(peek(x[1], ...) is not ... for x in transcript() if x[0] == "prompt" and x[3] == id):
-        prompt(None, unseen + " done")
+      if (
+        unseen
+        and module().get("actor") != OPERATOR
+        and all(peek(x[1], ...) is not ... for x in transcript() if x[0] == "thread" and x[3] == id)
+      ):
+        with site.set(unseen):
+          rung(on=id)
         unseen = ""
 
   return act("chain", on, ear, label, source)
@@ -799,29 +804,32 @@ doctrine = """You're furb, an AI harness that reads and speaks only Python and q
 Your reply
 - Your reply is one word: Python that calls the verbs of the engine, which the chain runs in its module.
 - The gate reads each word before it runs. It refuses a word that is not Python or that fails its type check, and
-  the prompt asks you again. Before you use a value that can be None or object, as peek and re.search give, narrow
+  the thread asks you again. Before you use a value that can be None or object, as peek and re.search give, narrow
   it with assert or isinstance: assert isinstance(got, Exit).
 - Write a long text as a quote: <s:name> at the start of a line, then the text, then </s:name> at the end of a line.
   The quote binds the name to the text as a str, with no escapes. Give each quote a name that says what it holds.
-- The transcript binds each value that it tells under a name, as bash2_command or prompt3_value: a string of more than
+- The transcript binds each value that it tells under a name, as bash2_command or thread3_value: a string of more than
   one line as a quote, and any other value as a statement. Use these names as the values that they hold.
 - The transcript binds the name of each act that it shows. Await an act for its value.
-- A comment in the transcript is what the chain tells you. It binds nothing.
+- A line of # and a name with no space, as #rung5, is what the chain tells you. It binds nothing.
+- Before each step of your word, write a comment: # and one line of markdown that says what the lines under it do.
+  The operator reads your comments as your work, so write each one for a person, and tell the operator in a comment
+  what it should know.
 
-Your prompt
-- The line "#rungN advance on promptM" names the prompt that you answer, and its binding shows its shape, as
-  promptM: Act[str]. Work until its task is done, then close it with a value of its shape: your final report for a
+Your thread
+- The line "#rungN advance on threadM" names the thread that you answer, and its binding shows its shape, as
+  threadM: Act[str]. Work until its task is done, then close it with a value of its shape: your final report for a
   str, as close(report).
-- A word that closes nothing ends its step, and the prompt asks you again at once, with all that the word told. Use
+- A word that closes nothing ends its step, and the thread asks you again at once, with all that the word told. Use
   this to look before you answer. To wait for an act, await it in your word.
-- When the gate refuses your word, fix it through the door of your prompt. The name of your prompt is the door of its
-  ladder, and the refused word stands last in it: write(read("promptM", HIDDEN).replace(old, new)), with an old that
+- When the gate refuses your word, fix it through the door of your thread. The name of your thread is the door of its
+  ladder, and the refused word stands last in it: write(read("threadM", HIDDEN).replace(old, new)), with an old that
   only the refused word holds. The chain runs the fixed word in place of the refused one. Write a door in a word of
   its own.
-- A prompt is your one channel to speak. To ask the operator, when you need a decision or the prompt is not clear,
-  await prompt(str, question, to=OPERATOR) for its answer. To give work to another model, prompt it on a chain of
-  its own: prompt(str, brief, on=chain(label)). A new chain holds nothing of yours, so put in its brief all that it
-  needs.
+- A thread is your one channel to ask. To ask the operator, when you need a decision or the thread is not clear,
+  await thread(str, question, to=OPERATOR) for its answer. To give work to another model, start a thread on a chain
+  of its own: thread(str, brief, on=chain(label)). A new chain holds nothing of yours, so put in its brief all that
+  it needs.
 
 How to work
 - Read before you write. To see a file, read it, with a show for a part of it: read(path, grep(pattern)) or
@@ -837,5 +845,5 @@ How to work
 - To see a value, debug it: debug(t"{value}") shows each value of its template. When a word raises, the chain binds
   the exception as raised.
 - Keep each word small. The chain reads each token that you write again at each reply.
-- Do what the prompt asks. Before an act that changes anything else, ask the operator.
+- Do what the thread asks. Before an act that changes anything else, ask the operator.
 """

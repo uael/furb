@@ -26,7 +26,7 @@ export interface SessionOptions {
   readOnly?: boolean;
   cwd?: string;
   record?: string;
-  /** The model a prompt goes to when it names none, as the catalog of the crate names it; the first of the roster
+  /** The model a thread goes to when it names none, as the catalog of the crate names it; the first of the roster
    * when unsaid, and the default of the crate when the roster is unsaid too. */
   model?: string;
   /** The effort of that model, which moves to the nearest one the model takes; the effort of the crate when unsaid. */
@@ -112,7 +112,7 @@ export class Session extends EventEmitter {
     this.changes = new FileChanges(this.record, options.readOnly);
   }
 
-  /** The actor a prompt goes to when it names none, which the standing of every chain says, and the operator before
+  /** The actor a thread goes to when it names none, which the standing of every chain says, and the operator before
    * the life stands. */
   get actor(): string {
     const standing = this.engine?.standing() as [unknown, string, string] | [];
@@ -230,7 +230,7 @@ export class Session extends EventEmitter {
   }
 
   /** Start the pending work: a wake of each chain that holds some, which the engine answers by starting each
-   * command, wait and prompt to the operator of it again, and by asking for each pending rung. */
+   * command, wait and thread to the operator of it again, and by asking for each pending rung. */
   async resume(): Promise<void> {
     if (this.options.readOnly) throw new Error("Record inspection cannot resume work.");
     const engine = this.engine;
@@ -241,7 +241,7 @@ export class Session extends EventEmitter {
   }
 
   /** Save what the next life needs, then end the life whatever the save came to: its commands, its waits, its
-   * requests and its prompts end with it, and the store lets its record go. */
+   * requests and its threads end with it, and the store lets its record go. */
   async dispose(): Promise<void> {
     if (this.stopped) return;
     this.stopped = true;
@@ -255,7 +255,7 @@ export class Session extends EventEmitter {
     }
   }
 
-  /** The work of a chain cancelled: each prompt, rung, command and wait on it that is not done, with everything each
+  /** The work of a chain cancelled: each thread, rung, command and wait on it that is not done, with everything each
    * made. A cancel of the chain itself would end every act on it, and an act that an extension started, such as the
    * watcher of the memory, is no work of the chain and runs on. */
   interrupt(chain: string): void {

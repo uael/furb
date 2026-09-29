@@ -25,7 +25,7 @@ async def test_the_turns_of_what_a_chain_has_heard() -> None:
   sand, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   sand.script[root] = ["close(k + 1)"]
-  assert await engine.prompt(int, "count", on=root) == 2
+  assert await engine.thread(int, "count", on=root) == 2
   await settle()
   held = engine.transcript(root)
   carried = notes(held)
@@ -40,7 +40,7 @@ async def test_the_turns_of_what_a_chain_has_heard() -> None:
     "module",
     "started",
     "done",
-    "prompt",
+    "thread",
     "reply",
   }
 
@@ -50,14 +50,14 @@ async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operato
   sand, log, root = born(files={"/w/n.txt": "one\ntwo\n"})
   word = "read('n.txt', span(2, 2))\nclose(1)"
   sand.script[root] = [word]
-  assert await engine.prompt(int, "read it", on=root) == 1
+  assert await engine.thread(int, "read it", on=root) == 1
   got = engine.turns(on=root)
   assert [role for role, *_ in got] == ["user", "assistant", "user"]
-  assert heads(got[:1])[-1] == f"#{said(log, 'rung')[0][1]} advance on prompt1"
+  assert heads(got[:1])[-1] == f"#{said(log, 'rung')[0][1]} advance on thread1"
   assert (
     got[1] == engine.peek(said(log, "reply")[0][1]) == ("assistant", word, (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
   )
-  assert got[2][1] == "#read1\nread1_path = 'n.txt'\nread1_text = 'two'\n\n#prompt1 closed\nprompt1_value = 1"
+  assert got[2][1] == "#read1\nread1_path = 'n.txt'\nread1_text = 'two'\n\n#thread1 closed\nthread1_value = 1"
 
 
 async def test_turns_reads_the_transcript_of_the_chain_and_asks_nothing() -> None:
@@ -80,10 +80,10 @@ async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_las
   assert heads(got) == ["#chain1", "#chain1 standing", "#rung1"]
   assert got[0][1] == "\n\n".join(paragraphs(got))
   sand.script[root] = ["close(1)"]
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   engine.say("tell", root, [f"#{root} one"])
   engine.say("tell", root, [f"#{root} two"])
-  told = ["#prompt1 closed\nprompt1_value = 1", f"#{root} one", f"#{root} two"]
+  told = ["#thread1 closed\nthread1_value = 1", f"#{root} one", f"#{root} two"]
   assert engine.turns(on=root)[-1] == ("user", "\n\n".join(told), None, None)
 
 
@@ -93,7 +93,7 @@ async def test_the_turns_of_a_chain_only_grow() -> None:
   assert await engine.rung("k = 1", on=root) is None
   was = engine.turns(on=root)
   sand.script[root] = ["close(k + 1)"]
-  assert await engine.prompt(int, "count", on=root) == 2
+  assert await engine.thread(int, "count", on=root) == 2
   await settle()
   now = engine.turns(on=root)
   assert paragraphs(now)[: len(paragraphs(was))] == paragraphs(was)
@@ -105,7 +105,7 @@ async def test_a_turn_once_phrased_is_phrased_the_same_on_every_later_reply() ->
   sand, _, root = born()
   engine.grant(usd=10.0, on=root)
   sand.script[root] = ["a = 1", "b = 2", "close(3)"]
-  assert await engine.prompt(int, "count", on=root) == 3
+  assert await engine.thread(int, "count", on=root) == 3
   await settle()
   asks = list(sand.turns.values())
   assert [len(one) for one in asks] == [1, 3, 5]
@@ -116,7 +116,7 @@ async def test_a_turn_once_phrased_is_phrased_the_same_on_every_later_reply() ->
 async def test_the_turns_are_folded_whole_at_each_reply() -> None:
   """The turns are folded whole at each reply, and a user turn holds every paragraph told before its reply and since the reply before it, so a paragraph told while a reply is in flight goes to the turn after the answer."""
   sand, log, root = born("x = bash('slow')", "y = 2", "close(3)")
-  assert await engine.prompt(int, "count", on=root) == 3
+  assert await engine.thread(int, "count", on=root) == 3
   await settle()
   asks = list(sand.turns.values())
   assert [[role for role, *_ in one] for one in asks] == [
@@ -125,15 +125,15 @@ async def test_the_turns_are_folded_whole_at_each_reply() -> None:
     ["user", "assistant", "user", "assistant", "user"],
   ]
   assert [one[: len(asks[1])] for one in asks[1:]] == [asks[1]] * 2
-  assert heads(asks[1][-1:]) == ["#bash1", "#rung2 advance on prompt1"]
-  assert heads(asks[2][-1:]) == ["#bash1 exited 0", "#rung3 advance on prompt1"]
+  assert heads(asks[1][-1:]) == ["#bash1", "#rung2 advance on thread1"]
+  assert heads(asks[2][-1:]) == ["#bash1 exited 0", "#rung3 advance on thread1"]
   assert said(log, "bash")[0][1] == "bash1"
 
 
 async def test_a_reply_appends_the_response_as_an_assistant_turn() -> None:
   """A reply appends the response as an assistant turn."""
   _, log, root = born("close(1)")
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   got = engine.turns(on=root)
   assert got[-2] == engine.peek(said(log, "reply")[0][1])
   assert got[-2][0] == "assistant" and got[-1][0] == "user"
@@ -142,16 +142,16 @@ async def test_a_reply_appends_the_response_as_an_assistant_turn() -> None:
 async def test_the_next_reply_tells_everything_that_the_step_told() -> None:
   """The next reply tells everything that the step told."""
   sand, _, root = born("raise ValueError('boom')", "close(1)")
-  assert await engine.prompt(int, "try", on=root) == 1
+  assert await engine.thread(int, "try", on=root) == 1
   await settle()
   second = sand.turns["reply2"]
-  assert paragraphs(second[-1:]) == ["#rung1 raised\nrung1_raised = ValueError('boom')", "#rung2 advance on prompt1"]
+  assert paragraphs(second[-1:]) == ["#rung1 raised\nrung1_raised = ValueError('boom')", "#rung2 advance on thread1"]
 
 
 async def test_the_turns_hold_every_answer_of_the_model_as_the_turn_it_is() -> None:
   """The turns hold every answer of the model as the turn it is."""
   _, log, root = born("a = 1", "close(2)")
-  assert await engine.prompt(int, "count", on=root) == 2
+  assert await engine.thread(int, "count", on=root) == 2
   await settle()
   got = engine.turns(on=root)
   assert [turn for turn in got if turn[0] == "assistant"] == [engine.peek(a[1]) for a in said(log, "reply")]
@@ -160,7 +160,7 @@ async def test_the_turns_hold_every_answer_of_the_model_as_the_turn_it_is() -> N
 async def test_the_turns_of_a_chain_show_every_act_the_model_made() -> None:
   """The turns of a chain show every act the model made, with its result, and turns is how they are read."""
   _, log, root = born("x = bash('echo hi')\nclose((await x).code)")
-  assert await engine.prompt(int, "run it", on=root) == 0
+  assert await engine.thread(int, "run it", on=root) == 0
   await settle()
   _, command, *_ = said(log, "bash")[0]
   got = engine.turns(on=root)
@@ -175,7 +175,7 @@ async def test_the_turns_end_with_a_user_turn() -> None:
   sand, _, root = born()
   assert engine.turns(on=root)[-1][0] == "user"
   sand.script[root] = ["await wait(9)\nclose(1)"]
-  act = engine.prompt(int, "wait", on=root)
+  act = engine.thread(int, "wait", on=root)
   await settle()
   got = engine.turns(on=root)
   assert got[-1] == ("user", "", None, None)

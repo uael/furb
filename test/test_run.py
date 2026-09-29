@@ -11,12 +11,12 @@ from conftest import (
   fresh,
   kept,
   plain,
-  prompted,
   ran,
   relived,
   said,
   settle,
   sown,
+  threaded,
   watched,
   written,
 )
@@ -27,7 +27,7 @@ async def test_a_run_is_the_act_of_running_the_word_of_a_rung() -> None:
   """A run is the act of running the word of a rung or the text of a told rung, which the chain makes on itself and the Kernel takes: it says started as the run, runs the word as the rung, and says the run done with what the word gave."""
   log, root, laid, act, step = await counted()
   first = fresh(root, written(laid, "k = 1"))
-  second = f"{prompted(act, 'int', 'count')}\n\n#{step} advance on {act}"
+  second = f"{threaded(act, 'int', 'count')}\n\n#{step} advance on {act}"
   assert [a[2:] for a in said(log, "run")] == [
     (root, root, f"{laid}_told", first, ""),
     (root, root, laid, "k = 1", ""),
@@ -47,7 +47,7 @@ async def test_the_word_a_run_carries_is_python_which_unquoted_made_of_the_word_
   laid = engine.rung("<s:hi>\nhi\n</s:hi>\nk = hi", on=root)
   await laid
   sand.script[root] = ["<s:there>it's</s:there>\nclose(k + there)"]
-  act = engine.prompt(str, "greet", on=root)
+  act = engine.thread(str, "greet", on=root)
   assert await act == "hi\nit's"
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   words = {a[1]: a[3] for a in said(log, "ready")}
@@ -76,14 +76,14 @@ async def test_every_rung_of_a_chain_runs_in_the_globals_of_the_chain() -> None:
   sand, _, root = born()
   await engine.rung("mine = 1", on=root)
   sand.script[root] = ["theirs = mine + 1\nclose(theirs)", "close(None)"]
-  assert await engine.prompt(int, "count", on=root) == 2
+  assert await engine.thread(int, "count", on=root) == 2
   assert (engine.module(root)["mine"], engine.module(root)["theirs"]) == (1, 2)
 
 
 async def test_what_a_rung_binds_stays_bound_for_every_later_rung_of_the_chain() -> None:
   """What a rung binds stays bound for every later rung of the chain."""
   _, _, root = born("a = 1", "b = a + 1", "close(b + 1)", "close(None)")
-  assert await engine.prompt(int, "count", on=root) == 3
+  assert await engine.thread(int, "count", on=root) == 3
   assert (engine.module(root)["a"], engine.module(root)["b"]) == (1, 2)
 
 
@@ -93,7 +93,7 @@ async def test_the_last_rung_to_bind_a_name_wins() -> None:
   await engine.rung("def twice(x):\n  return x * 2", on=root)
   await engine.rung("def twice(x):\n  return x * 3", on=root)
   sand.script[root] = ["close(twice(21))", "close(None)"]
-  assert await engine.prompt(int, "use it", on=root) == 63
+  assert await engine.thread(int, "use it", on=root) == 63
 
 
 async def test_one_rung_runs_at_a_time_on_a_chain_and_rungs_interleave_at_their_awaits() -> None:
@@ -102,8 +102,8 @@ async def test_one_rung_runs_at_a_time_on_a_chain_and_rungs_interleave_at_their_
   two = engine.chain("two")
   sand.script[root] = ["x = bash('slow here')\nclose((await x).code)"]
   sand.script[two] = ["y = bash('slow there')\nclose((await y).code)"]
-  here = engine.prompt(int, "go", on=root)
-  there = engine.prompt(int, "go", on=two)
+  here = engine.thread(int, "go", on=root)
+  there = engine.thread(int, "go", on=two)
   await settle()
   assert [engine.scope(a[1]) for a in said(log, "wants")] == [root, two]
   assert engine.peek(here, ...) is ... and engine.peek(there, ...) is ...
@@ -132,7 +132,7 @@ async def test_one_rung_runs_at_a_time_on_a_chain_and_rungs_interleave_at_their_
 async def test_the_word_of_a_rung_runs_again_in_every_chain_made_from_its_chain() -> None:
   """The word of a rung runs again in every chain made from its chain and in every later life, and what it does outside its acts it does again."""
   sand, _, root = born("marks = []\nmarks.append(1)\nclose(len(marks))", "close(None)")
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   await settle()
   twin = await chained("twin", root, 300)
   assert engine.module(twin)["marks"] == [1] and engine.module(twin)["marks"] is not engine.module(root)["marks"]
@@ -140,14 +140,14 @@ async def test_the_word_of_a_rung_runs_again_in_every_chain_made_from_its_chain(
   assert engine.module(over)["marks"] == [1]
 
 
-async def test_two_prompts_on_one_chain_see_the_bindings_of_each_other_as_they_run() -> None:
-  """Two prompts on one chain see the bindings of each other as they run."""
+async def test_two_threads_on_one_chain_see_the_bindings_of_each_other_as_they_run() -> None:
+  """Two threads on one chain see the bindings of each other as they run."""
   sand, log, root = born(
     "mine, theirs = 1, 0\nx = bash('slow')\nawait x\nclose(mine + theirs)", "theirs = mine + 10\nclose(theirs)"
   )
   sand.auto = False
-  first = engine.prompt(int, "bind", on=root)
-  second = engine.prompt(int, "read it", on=root)
+  first = engine.thread(int, "bind", on=root)
+  second = engine.thread(int, "read it", on=root)
   await settle()
   assert engine.peek(first, ...) is ... and engine.peek(second) == 11
   sand.exits(said(log, "bash")[0][1], 0)
@@ -158,18 +158,18 @@ async def test_two_prompts_on_one_chain_see_the_bindings_of_each_other_as_they_r
 async def test_a_rung_whose_word_rebinds_a_broken_name_repairs_the_chain() -> None:
   """A rung whose word rebinds a broken name repairs the chain, since the last rung to bind wins."""
   sand, _, root = born("def twice(x):\n  raise ValueError('broken')", "close(None)")
-  assert await engine.prompt(None, "bind it", on=root) is None
+  assert await engine.thread(None, "bind it", on=root) is None
   await engine.rung("def twice(x):\n  return x * 2", on=root)
   sand.script[root] = ["close(twice(21))", "close(None)"]
-  assert await engine.prompt(int, "use it", on=root) == 42
+  assert await engine.thread(int, "use it", on=root) == 42
 
 
-async def test_a_prompt_after_such_a_rung_finds_what_it_bound() -> None:
-  """A prompt after such a rung finds what it bound."""
+async def test_a_thread_after_such_a_rung_finds_what_it_bound() -> None:
+  """A thread after such a rung finds what it bound."""
   sand, _, root = born()
   await engine.rung("def twice(x):\n  return x * 2", on=root)
   sand.script[root] = ["close(twice(21))", "close(None)"]
-  assert await engine.prompt(int, "use it", on=root) == 42
+  assert await engine.thread(int, "use it", on=root) == 42
 
 
 async def test_the_chain_runs_one_word_at_a_time() -> None:

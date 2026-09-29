@@ -42,7 +42,7 @@ API of its own:
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout
   it was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, as Pi does, which
-  `docs/rpc.md` says. `prompt`, `turns`, `run` and `extensions` each open one life on the record they are given.
+  `docs/rpc.md` says. `thread`, `turns`, `run` and `extensions` each open one life on the record they are given.
   Every life runs on the ears of the crate, on the model of its default actor and the models that `--roster` names,
   and on a console of the operator. The package `furb` depends on the wheel of `furb-cli`, so `pip install furb`
   gives the command `furb`.

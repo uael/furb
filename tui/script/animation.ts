@@ -50,7 +50,7 @@ async function working(delay = 8): Promise<void> {
   for (let moment = 0; moment < 120; moment++) {
     await new Promise((done) => setTimeout(done, delay * 10));
     await still(delay);
-    if (!session.activity.some((act) => !act.done && ["prompt", "rung", "bash"].includes(act.kind))) break;
+    if (!session.activity.some((act) => !act.done && ["thread", "rung", "bash"].includes(act.kind))) break;
   }
   await idle(session);
   await session.refresh();

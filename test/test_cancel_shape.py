@@ -21,7 +21,7 @@ async def test_a_cancel_ends_everything_it_is_over() -> None:
 async def test_a_cancel_reaches_to_any_depth_and_on_whatever_chain() -> None:
   """A cancel reaches to any depth, and on whatever chain."""
   _, log, root = born("two = chain('two')\nx = bash('slow', on=two)\nclose((await x).code)", auto=False)
-  one = engine.prompt(int, "go", on=root)
+  one = engine.thread(int, "go", on=root)
   await settle()
   step, command = said(log, "rung")[0][1], said(log, "bash")[0][1]
   assert engine.get(command)[3] == said(log, "chain")[-1][1] != root

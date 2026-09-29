@@ -52,8 +52,8 @@ const EAR: &str = "ear:";
 /// The name of the function of the host that the gate calls with a sheet, which answers each finding by its line.
 const GATE: &str = "gate";
 
-/// The kinds of act that are work an operator waits for: a prompt, a rung, a command and a wait.
-const WORK: [&str; 4] = ["prompt", "rung", "bash", "wait"];
+/// The kinds of act that are work an operator waits for: a thread, a rung, a command and a wait.
+const WORK: [&str; 4] = ["thread", "rung", "bash", "wait"];
 
 /// Whether this life took up an act that the record shows started and not done: the outside says it started, which
 /// it does once a wake that this life says puts the act to it, or the act is done.
@@ -1047,7 +1047,7 @@ impl Engine {
   /// act by its name and its kind. The record shows each act that the outside started and did not end, and the
   /// journal holds it from the outside until a wake that this life says puts it to the outside again. Such an act is
   /// pending while it is not done and no pause holds it, and so is each act above it that made it, directly or not,
-  /// when that act is a prompt, a rung, a command or a wait that is not done and that no pause holds.
+  /// when that act is a thread, a rung, a command or a wait that is not done and that no pause holds.
   pub fn pending(&mut self) -> Result<Vec<(String, String)>, Fault> {
     let mut holding = Vec::new();
     for id in std::mem::take(&mut self.holding) {

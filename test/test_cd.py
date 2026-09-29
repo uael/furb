@@ -46,7 +46,7 @@ async def test_it_is_a_question_and_no_fact() -> None:
     "before = read('a.txt').content\ncd('/x')\nclose([before, cwd(), read('a.txt').content])",
     files={"/w/a.txt": "one\n", "/x/a.txt": "two\n"},
   )
-  assert await engine.prompt(list, "move and read", on=root) == ["one\n", "/x", "two\n"]
+  assert await engine.thread(list, "move and read", on=root) == ["one\n", "/x", "two\n"]
   await settle()
   assert engine.cwd(on=root) == "/x"
 
@@ -54,8 +54,8 @@ async def test_it_is_a_question_and_no_fact() -> None:
 async def test_cd_tells_the_directory_it_came_to() -> None:
   """cd tells the directory it came to."""
   _, _, root = born("cd('x')\nclose(1)")
-  assert await engine.prompt(int, "move", on=root) == 1
+  assert await engine.thread(int, "move", on=root) == 1
   await settle()
-  assert engine.turns(on=root)[-1][1] == "#cd1\ncd1_path = '/w/x'\n\n#prompt1 closed\nprompt1_value = 1"
+  assert engine.turns(on=root)[-1][1] == "#cd1\ncd1_path = '/w/x'\n\n#thread1 closed\nthread1_value = 1"
   was = paragraphs(engine.turns(on=root))
   assert engine.cd("/y", on=root) == "/y" and paragraphs(engine.turns(on=root)) == was

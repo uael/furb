@@ -51,18 +51,18 @@ async def test_a_cancel_over_it_ends_it_and_a_pause_over_it_holds_it_until_the_w
 
 
 async def test_the_life_word_of_the_extension_is_remember(tmp_path: Path) -> None:
-  """The life word of the extension is remember(), so a chain tells its memory when the life enables the extension, and a chain born later tells it at its birth, before its first prompt asks a model."""
+  """The life word of the extension is remember(), so a chain tells its memory when the life enables the extension, and a chain born later tells it at its birth, before its first thread asks a model."""
   top = noted(tmp_path / "work", "one\n")
   _, root = extended("memory", tmp_path, _monty.memory, lives=True)
   two = engine.chain("two")
-  engine.prompt(None, "go", on=two)
+  engine.thread(None, "go", on=two)
   await settle()
   assert (recalled(root, tmp_path), recalled(two, tmp_path)) == (
     [memorized("memory1", top, "one\n")],
     [memorized("memory2", top, "one\n")],
   )
   said = heads(engine.turns(on=two))
-  assert said.index("#memory2") < said.index("#prompt1")
+  assert said.index("#memory2") < said.index("#thread1")
 
 
 async def test_a_memory_file_enters_a_chain_once_and_again_only_when_it_changed(tmp_path: Path) -> None:

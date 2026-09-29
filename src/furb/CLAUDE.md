@@ -13,7 +13,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   outside is one that neither the operator nor an act made.
 - model: a language model that answers with python code.
 - provider: the service that runs a model.
-- actor: the operator, or a model at an effort, named model/effort; it answers prompts and makes acts.
+- actor: the operator, or a model at an effort, named model/effort; it answers threads and makes acts.
 - effort: one of the levels of reasoning the World offers, ordered from least to most.
 - roster: the actors the World offers, each as its name, its efforts and its window.
 - window: the context size of a model in tokens, as its roster entry says.
@@ -25,10 +25,10 @@ meanings. The entry of such a name here gives only its form in the engine.
   the tip of a later life.
 - tip: the point of a later life where the journal has said the record again whole, at which boot stands the life
   again, and after which the life goes on past it.
-- default actor: the actor a prompt goes to when the prompt leaves the actor unsaid, bound as `actor` in the chain.
+- default actor: the actor a thread goes to when the thread leaves the actor unsaid, bound as `actor` in the chain.
 - World: the ears of the outside that serve the machine, one or many, which reach the disk, the machine, the actors,
   the operator and the record; they answer what is theirs to answer, take what takes time, a command, a wait, a
-  prompt to the operator and a reply, and say each done when it ends, and they keep what the journal says to keep.
+  thread to the operator and a reply, and say each done when it ends, and they keep what the journal says to keep.
 - Kernel: the ear of the outside that runs rungs: it takes a run, makes a wants as the run while the word waits for
   an act that is not done, and says the run done with what the word gave.
 - gate: the ear of the outside that answers a gate, apart from the Kernel, so a word may ask it while the Kernel
@@ -76,18 +76,19 @@ meanings. The entry of such a name here gives only its form in the engine.
 - paragraph: what one fact that tells stands as in a turn: its notes, with a blank line between two paragraphs.
 - header: the first line of a paragraph: # and, with no space, the id of the act it is of, then what happened to
   the act, and no text that the act tells.
-- advance: the header the chain tells last before a reply, which names the rung it asks for and the prompt that
+- advance: the header the chain tells last before a reply, which names the rung it asks for and the thread that
   rung advances.
 - binding: a statement that binds the name of an act to the act, or a value that the act tells to the id of the act
   and the word of the value, as bash1_command, which a turn shows and a rung the chain writes runs.
 - tell: a fact that carries notes about the act it is of, which the turns are folded from and the journal keeps
   none of.
 - turn: one item of what a model reads of a transcript, folded from the tells: a role, python, a usage and blocks.
-- prompt: the act that sends a message to an actor and wants a response of a shape.
-- message: the text a prompt carries.
-- shape: the python type of a response, which a prompt carries by its name.
-- response: what a prompt completes with.
-- acknowledgment: the prompt of nothing a chain makes when an act a rung made is done and no reply has shown it.
+- thread: the act that sends a markdown to an actor and wants a response of a shape.
+- markdown: the text a thread carries, which the operator reads rendered.
+- shape: the python type of a response, which a thread carries by its name.
+- response: what a thread completes with.
+- acknowledgment: the rung with no word that a chain makes as an act that is done, when no reply has shown that act,
+  so that its model sees it in one step.
 - rung: the run of one word on a chain, and the verb that makes it: with a word its caller wrote, or with no word,
   for a turn of a model.
 - reply: the act a chain makes, under the site of a rung, to ask the model of that rung for its word, which the
@@ -97,7 +98,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - wants: the act a run makes when its word waits for an act that is not done, which the rung takes and answers
   with what that act came to.
 - step: one turn of a model and the run of its word, which is one rung.
-- ladder: the rungs of one prompt, in order, which the name of that prompt is the door of.
+- ladder: the rungs of one thread, in order, which the name of that thread is the door of.
 - program: the words of rungs, in order, each under the name of its rung; the program of a ladder is the words of
   its rungs, the words the gate refused among them, which its door shows, and the program of a chain is the words
   of its runs since its last module, as python, which the gate reads a word after.
@@ -109,13 +110,15 @@ meanings. The entry of such a name here gives only its form in the engine.
   by its module.
 - command: what bash runs on the machine.
 - merged: the state of a command whose stderr flows into its stdout, in the order the command wrote them.
-- door: the name of an act, with a part after it or without; the name of a prompt is the door of its ladder, the
+- door: the name of an act, with a part after it or without; the name of a thread is the door of its ladder, the
   word of a rung adds a door by making an act whose ear answers reads of a scheme, and the World serves the rest.
 - text: what read gives, and what write is given and gives back as it landed; a Text, with a path and a content.
 - show: a callable given the lines of a text, which gives the numbers of the lines the engine tells; span, grep and
   differs make the shows of the file.
 - quote: a string between two marks, <s:name> and </s:name>, which binds its name when it runs; a word writes one,
   and the transcript tells each string of more than one line as one.
+- comment: `#`, a space and one line of markdown in a word, which says what the lines under it do; the TUI shows the
+  comments of a word as its steps, and a header of the chain is `#` and a name with no space.
 - doctrine: the last statement of engine.py, which the system prompt shows as a quote after the engine; it says how
   a model works in furb, and holds no law.
 - template: a python template string, each interpolation of which carries an expression and its value.
@@ -131,7 +134,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - plain: the form of a value on the wire, which the World may keep an entry as: nothing, a boolean, a number, a
   string, a list of plain, or a table from a string to plain.
 - drift: an act that, made again, does not agree with the record.
-- pending: what the record shows started and not done when boot returns: a command, a wait, a prompt to the operator
+- pending: what the record shows started and not done when boot returns: a command, a wait, a thread to the operator
   or a reply that the outside took, which the life holds with no fact until a wake that the life says.
 - extension: python that extends the engine from a rung: its word, which defines its names, and, for one that a host
   gives a life, its life word, which starts its work; an official one has an ear of the World that answers the
@@ -154,7 +157,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - The defaults of every verb are public names in the file.
 - A model knows from the source alone what the engine does with what the model writes.
 - What the engine does to the word of a rung it does to itself.
-- The prompt is the one prose channel of the engine: every exchange of prose between the operator, the models and a chain is a prompt.
+- The thread is the one channel that asks in prose: every question between the operator, the models and a chain is a
+  thread, and a model tells the operator what it does in the comments of its words.
 - A model extends the engine from a step: an extension writes verbs and ears, shows and filters as callables, and
   rebinds names, and it tells notes of its own, from a door or from a rebound verb.
 - The engine has no registry, no plugin surface, no permission and no REPL: the record shows who made each act.
@@ -178,14 +182,14 @@ meanings. The entry of such a name here gives only its form in the engine.
   record is made again by running its words.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
-  asks a model for, with the message of the prompt each advances, of the prompts and the words it refuses, and of
+  asks a model for, with the markdown of the thread each advances, of the threads and the words it refuses, and of
   the done of an act that one of its rungs made on another chain.
 - A drift is a hard error.
 - The engine owns the order of every run, and nothing of a model runs on the loop of the outside.
 - A chain with a source reads the transcript of its origin as it stands, where the record is what a later life should
   make it from.
 - An extension enters a life as rungs that the World plays, and never enters the module of the engine or the system
-  prompt, so a chain that takes one grows at its end.
+  thread, so a chain that takes one grows at its end.
 - A life runs every extension that its record enables, whatever the configs say then, since a record is made again by
   running its words; the World enables at the tip each extension that the host gives it and the record does not hold.
 - An ear that makes acts makes each one while it hears the fact that causes it, from what it heard alone and never

@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import BAD, Dead, Sand, World, born, fresh, life, of, paragraphs, prompted, said, settle, written
+from conftest import BAD, Dead, Sand, World, born, fresh, life, of, paragraphs, said, settle, threaded, written
 from furb import engine
 from furb.engine import OPERATOR, Refused, Text
 
@@ -53,7 +53,7 @@ async def test_a_write_whoever_serves_the_path_of_the_text_takes_its_content() -
   sand, _, root = born(files={})
   assert engine.write(Text("b.txt", "one\n"), on=root) == Text("/w/b.txt", "one\n")
   assert sand.files == {"/w/b.txt": "one\n"}
-  act = engine.prompt(int, "count", to=OPERATOR, on=root)
+  act = engine.thread(int, "count", to=OPERATOR, on=root)
   assert engine.write(Text(act, "k = 1"), on=root) == Text(act, "k = 1")
   await settle()
   assert sand.files == {"/w/b.txt": "one\n"}
@@ -91,7 +91,7 @@ async def test_the_engine_tells_of_a_write_of_a_text_only_the_lines_that_differ(
   assert sand.files == {"b.txt": "one\ntwo\nEND\n"}
   assert of(engine.turns(on=root), "write") == ["#write1\nwrite1_path = 'b.txt'\nwrite1_text = 'END'"]
   _, _, two = born(KEPT)
-  assert await engine.prompt(int, "a door of my own", on=two) == 7
+  assert await engine.thread(int, "a door of my own", on=two) == 7
   assert of(engine.turns(on=two), "write") == ["#write1\nwrite1_path = 'nums://a'\nwrite1_value = 7"]
 
 
@@ -117,10 +117,10 @@ async def test_a_door_that_answers_a_write_with_more_than_it_was_asked_for() -> 
   ]
 
 
-async def test_a_write_to_the_door_of_a_prompt_edits_the_program_of_its_ladder() -> None:
-  """A write to the door of a prompt edits the program of its ladder, so the door and the verb are one act."""
+async def test_a_write_to_the_door_of_a_thread_edits_the_program_of_its_ladder() -> None:
+  """A write to the door of a thread edits the program of its ladder, so the door and the verb are one act."""
   _, log, root = born()
-  act = engine.prompt(int, "count", to=OPERATOR, on=root)
+  act = engine.thread(int, "count", to=OPERATOR, on=root)
   got = engine.write(Text(act, "k = 21"), on=root)
   await settle()
   assert got == Text(act, "k = 21")
@@ -130,7 +130,7 @@ async def test_a_write_to_the_door_of_a_prompt_edits_the_program_of_its_ladder()
   engine.write(Text(act, "k = 21\nk = 22"), on=root)
   await settle()
   first = said(log, "rung")[0][1]
-  bound = fresh(root, prompted(act, "int", "count"), written(first, "k = 21"))
+  bound = fresh(root, threaded(act, "int", "count"), written(first, "k = 21"))
   assert [(a[2], a[4], a[5]) for a in said(log, "rung")] == [
     (act, "k = 21", ""),
     (root, bound, f"{first}_told"),
@@ -140,21 +140,21 @@ async def test_a_write_to_the_door_of_a_prompt_edits_the_program_of_its_ladder()
   assert engine.read(act, on=root) == Text(act, "k = 21\nk = 22") and engine.module(root)["k"] == 22
 
 
-async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_the_text_it_took() -> None:
-  """The chain answers a write of the door of one of its prompts with the text it took, and makes its rungs again from it."""
+async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_threads_with_the_text_it_took() -> None:
+  """The chain answers a write of the door of one of its threads with the text it took, and makes its rungs again from it."""
   sand, log, root = born()
-  act = engine.prompt(int, "count", to=OPERATOR, on=root)
+  act = engine.thread(int, "count", to=OPERATOR, on=root)
   got = engine.write(Text(act, "k = 21"), on=root)
   await settle()
   assert engine.module(root)["k"] == 21
   assert [a[4] for a in said(log, "rung")] == ["k = 21"]
-  assert got == Text(act, "k = 21") and [a[0] for a in sand.calls] == ["stand", "prompt"]
+  assert got == Text(act, "k = 21") and [a[0] for a in sand.calls] == ["stand", "thread"]
   again = engine.write(Text(act, "k = 22"), on=root)
   await settle()
   assert again == Text(act, "k = 22") and engine.read(act, on=root) == Text(act, "k = 22")
-  bound = fresh(root, prompted(act, "int", "count"), written(said(log, "rung")[0][1], "k = 21"))
+  bound = fresh(root, threaded(act, "int", "count"), written(said(log, "rung")[0][1], "k = 21"))
   assert [a[4] for a in said(log, "rung")] == ["k = 21", bound, "k = 22"] and engine.module(root)["k"] == 22
-  assert [a[0] for a in sand.calls] == ["stand", "prompt"]
+  assert [a[0] for a in sand.calls] == ["stand", "thread"]
 
 
 async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_of_that_rung_out() -> None:
@@ -165,12 +165,12 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
     "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))",
     "close((k, ok, read(get(acting())[2]).content))",
   )
-  act = engine.prompt(object, "fix it", on=root)
+  act = engine.thread(object, "fix it", on=root)
   assert await act == (1, 2, "k = 1\nok = 2")
   await settle()
   binding, first, advance, refusal, writer = (a[4] for a in said(log, "run")[:5])
   one, bad, _, made, last = [a[1] for a in said(log, "rung") if a[2] == act]
-  bound = fresh(root, prompted(act, "object", "fix it"), f"#{one} advance on {act}")
+  bound = fresh(root, threaded(act, "object", "fix it"), f"#{one} advance on {act}")
   refused = f"#{bad} refused\n{bad}_findings = {BAD!r}\n\n#{bad} closed\n{bad}_value = Refused()"
   read = engine.unquoted(f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\nok = BAD</s:read1_text>")
   assert [(a[5], a[6]) for a in said(log, "run")] == [

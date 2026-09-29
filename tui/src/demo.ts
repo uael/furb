@@ -84,11 +84,11 @@ export async function seedDemo(session: Session): Promise<void> {
   const { engine } = session;
   const on = engine.root;
   await engine.grant({ usd: 2, on });
-  const prompt = await engine.prompt("str", {
-    message: "Explore this project, run its checks, and suggest a useful next step.",
+  const thread = await engine.thread("str", {
+    markdown: "Explore this project, run its checks, and suggest a useful next step.",
     on,
   });
-  await engine.result(prompt);
+  await engine.result(thread);
   const fork = await engine.chain({ label: "Search shortcut", source: on });
   await engine.result(await engine.rung({ word: 'shortcut = "Ctrl+K"\nquery = "small ideas"', on: fork }));
   await engine.chain({ label: "Review notes" });

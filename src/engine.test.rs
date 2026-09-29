@@ -262,13 +262,13 @@ fn a_command_that_does_not_start_is_closed_with_why_and_the_chain_is_told() {
 }
 
 #[test]
-fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it() {
+fn the_world_ends_a_command_at_a_cancel_of_its_thread_and_never_at_a_close_of_it() {
   let words = ["await bash('sleep 5')", "c = bash('sleep 0.2; echo late')\nclose(1)"];
   let mut lived = Lived::new("controls", &words, true).unwrap();
   let root = lived.root();
   let cancelled = lived
     .engine
-    .prompt(Object::string("int"), verbs::Prompt { on: on(&root), ..Default::default() })
+    .thread(Object::string("int"), verbs::Thread { on: on(&root), ..Default::default() })
     .unwrap()
     .id()
     .to_owned();
@@ -281,7 +281,7 @@ fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it
   let got = block_on(
     lived
       .engine
-      .prompt(Object::string("int"), verbs::Prompt { on: on(&root), ..Default::default() })
+      .thread(Object::string("int"), verbs::Thread { on: on(&root), ..Default::default() })
       .unwrap(),
   )
   .unwrap();
@@ -437,15 +437,15 @@ fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
     let mut first = Lived::new("again", &["close(len(read('a.txt').lines))"], true).unwrap();
     let root = first.root();
     fs::write(first.at.join("a.txt"), "one\ntwo\n").unwrap();
-    let with = verbs::Prompt {
-      message: Some("count the lines".to_owned()),
+    let with = verbs::Thread {
+      markdown: Some("count the lines".to_owned()),
       on: on(&root),
       ..Default::default()
     };
-    let act = first.engine.prompt(Object::string("int"), with).unwrap();
+    let act = first.engine.thread(Object::string("int"), with).unwrap();
     let id = act.id().to_owned();
     assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(2));
-    // The provider asks for the turns while it hears, and they hold the message of the prompt.
+    // The provider asks for the turns while it hears, and they hold the markdown of the thread.
     assert_eq!(first.read.borrow().len(), 1);
     assert!(first.read.borrow()[0].contains("count the lines"));
     (root, id)
@@ -455,7 +455,7 @@ fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
   assert_eq!(second.root(), root);
   assert_eq!(
     second.engine.get(&id).unwrap().map(|one| one.kind().to_owned()).as_deref(),
-    Some("prompt")
+    Some("thread")
   );
   assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
   assert_eq!(second.settled(&id).unwrap().as_ref().as_int(), Some(2));

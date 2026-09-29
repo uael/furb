@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import acts, born, chained, heads, paragraphs, prompted, said, settle, written
+from conftest import acts, born, chained, heads, paragraphs, said, settle, threaded, written
 from furb import engine
 from furb.engine import Refused
 
@@ -10,7 +10,7 @@ from furb.engine import Refused
 async def test_what_a_word_tells_of_itself_as_it_runs() -> None:
   """What a word tells of itself as it runs: each interpolation of a template, with its expression and its value."""
   _, log, root = born("n = 42\ndebug(t'{n} and {n + 1}')\nclose(n)")
-  assert await engine.prompt(int, "tell me", on=root) == 42
+  assert await engine.thread(int, "tell me", on=root) == 42
   await settle()
   step = said(log, "reply")[0][2]
   assert [one for one in paragraphs(engine.turns(on=root)) if " debugged " in one] == [
@@ -21,7 +21,7 @@ async def test_what_a_word_tells_of_itself_as_it_runs() -> None:
 async def test_the_engine_tells_what_a_step_debugged() -> None:
   """The engine tells what a step debugged."""
   _, log, root = born("debug(t'{7}')\nclose(1)")
-  assert await engine.prompt(int, "tell me", on=root) == 1
+  assert await engine.thread(int, "tell me", on=root) == 1
   await settle()
   step = said(log, "reply")[0][2]
   assert [line for line in heads(engine.turns(on=root)) if " debugged " in line] == [f"#{step} debugged 7"]
@@ -39,7 +39,7 @@ async def test_a_debugged_header_names_the_expression_of_each_interpolation_of_a
 async def test_a_raised_header_and_a_debugged_header_stand_at_the_place_in_the_run_where_they_happened() -> None:
   """A raised header and a debugged header stand at the place in the run where they happened."""
   _, log, root = born("debug(t'{1}')\nraise ValueError('boom')", "close(1)")
-  act = engine.prompt(int, "try", on=root)
+  act = engine.thread(int, "try", on=root)
   assert await act == 1
   await settle()
   one, two = [a[2] for a in said(log, "reply")]
@@ -50,7 +50,7 @@ async def test_a_raised_header_and_a_debugged_header_stand_at_the_place_in_the_r
 async def test_the_transcript_holds_between_the_entries_what_the_run_of_each_word_raised_and_debugged() -> None:
   """The transcript holds between the entries what the run of each word raised and debugged."""
   _, log, root = born("debug(t'{1}')\nclose(1)")
-  assert await engine.prompt(int, "tell me", on=root) == 1
+  assert await engine.thread(int, "tell me", on=root) == 1
   await settle()
   step = said(log, "reply")[0][2]
   held = engine.transcript(root)
@@ -90,10 +90,10 @@ async def test_a_rung_binds_one_list_of_what_it_debugged() -> None:
   ]
   assert engine.module(root)[f"{step}_debug"] == ["1", "2", "9"]
   sand.script[root] = ["close(1)"]
-  again = engine.prompt(int, "again", on=root)
+  again = engine.thread(int, "again", on=root)
   assert await again == 1
   (asking,) = [a[1] for a in said(log, "rung") if a[2] == again]
-  opens = [prompted(again, "int", "again"), f"#{asking} advance on {again}"]
+  opens = [threaded(again, "int", "again"), f"#{asking} advance on {again}"]
   assert said(log, "run")[-2][5] == "\n\n".join([*told, *opens])
   assert engine.module(root)[f"{step}_debug"] == ["1", "2", "9"]
 
@@ -111,10 +111,10 @@ async def test_rungn_debug_holds_the_repr_of_each_value_as_a_str() -> None:
   ]
   assert engine.module(root)[f"{step}_debug"] == ["<p>", "1", "<p>"]
   sand.script[root] = ["close(1)"]
-  again = engine.prompt(int, "again", on=root)
+  again = engine.thread(int, "again", on=root)
   assert await again == 1
   (asking,) = [a[1] for a in said(log, "rung") if a[2] == again]
-  opens = [prompted(again, "int", "again"), f"#{asking} advance on {again}"]
+  opens = [threaded(again, "int", "again"), f"#{asking} advance on {again}"]
   assert said(log, "run")[-2][5] == "\n\n".join([*told, *opens])
   assert engine.module(root)[f"{step}_debug"] == ["<p>", "1", "<p>"]
 

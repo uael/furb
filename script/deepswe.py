@@ -101,7 +101,7 @@ LOOK = 10
 STUCK = 25
 """STUCK is how many answers a life may buy without doing one thing before the rig reads it as wedged.
 
-A model that answers with a value and no call leaves its prompt open, so the chain asks again, and the answer it
+A model that answers with a value and no call leaves its thread open, so the chain asks again, and the answer it
 already gave stands in the turns and is answered the same way. One run bought 412 of those and six dollars, and
 the ceiling of the grant was the only thing that ended it, since a grant bounds the money and not the work.
 """
@@ -643,9 +643,9 @@ def numbered(record: Path, began: float) -> dict[str, float]:
   return {
     "facts": len(entries),
     "answers": len(answers),
-    # The journal keeps a rung that the operator wrote, and of a rung that a prompt made, only its reply.
+    # The journal keeps a rung that the operator wrote, and of a rung that a thread made, only its reply.
     "rungs": kinds.count("rung") + kinds.count("reply"),
-    "prompts": kinds.count("prompt"),
+    "threads": kinds.count("thread"),
     "commands": kinds.count("bash"),
     "reads": kinds.count("read"),
     "writes": kinds.count("write"),
@@ -712,7 +712,7 @@ def watched(record: Path, root: str, began: float, mark: dict[str, float]) -> st
 async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) -> tuple[object, str, Path]:
   """One life on the checkout, asked the task and nothing else, and what it answered.
 
-  The message of the prompt is the instruction of the task as the task wrote it. The model is told nothing else:
+  The markdown of the thread is the instruction of the task as the task wrote it. The model is told nothing else:
   what it is and what it may say is the engine, which is its system prompt.
   """
   record = run_dir / "record.jsonl"
@@ -722,12 +722,12 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
   say(f"[deepswe] life on {app}, root {root}, {len(held)} facts kept")
   if args.ceiling:
     engine.grant(usd=args.ceiling, on=root)
-  stopped, got, looks, message = "", None, 0, told + ASKED
+  stopped, got, looks, markdown = "", None, 0, told + ASKED
   mark: dict[str, float] = {"did": 0, "answers": 0}
   began = time.monotonic()
   try:
     while True:
-      act = engine.prompt(float, message, args.to, on=root)
+      act = engine.thread(float, markdown, args.to, on=root)
       while engine.peek(act, ...) is ...:
         if args.timeout and time.monotonic() - began > args.timeout:
           stopped = f"the cap of {args.timeout:.0f} seconds ran out"
@@ -742,7 +742,7 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
       if not isinstance(got, (int, float)) or float(got) >= CONFIDENT:
         break
       say(f"[deepswe] the model is {got} sure, under the {CONFIDENT} the rig wants; it is asked to go on")
-      message = AGAIN.format(got)
+      markdown = AGAIN.format(got)
   except Exception as no:
     stopped = f"the task was refused: {no!r}"
   finally:

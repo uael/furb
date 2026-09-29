@@ -49,7 +49,7 @@ of each provider whose credential, such as `ANTHROPIC_API_KEY`, stands in the en
 ```sh
 furb                                 # The TUI, when furb finds one.
 furb --mode rpc                      # A JSON-RPC on stdin and stdout, with no TUI.
-furb prompt "How many lines does a.txt hold?" --shape int
+furb thread "How many lines does a.txt hold?" --shape int
 furb run "close(1 + 1)"              # A Python word, run on the root chain.
 furb turns --record session.jsonl    # The turns of a life made again from its record, which it only reads.
 furb extensions                      # The extensions that a life runs here.

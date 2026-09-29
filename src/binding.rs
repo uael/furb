@@ -162,7 +162,7 @@ impl ModelInfo {
   }
 }
 
-/// An image a host attached: the name of its file, the uri a message names it by, its media type, and its size in
+/// An image a host attached: the name of its file, the uri a markdown names it by, its media type, and its size in
 /// bytes.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
@@ -347,7 +347,7 @@ pub fn shapes() -> Vec<&'static str> {
   world::SHAPES.to_vec()
 }
 
-/// A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
+/// A line of the operator as a value of the shape a thread wants, by the rules every console of the crate reads a
 /// line by, as the record keeps it; or the refusal of a line that is no value of the shape, and of a shape the
 /// operator answers not.
 #[cfg_attr(feature = "python", pyfunction)]
@@ -380,7 +380,8 @@ pub fn levels() -> Vec<&'static str> {
   world::catalog::LEVELS.to_vec()
 }
 
-/// An image copied into a directory of images under the digest of its bytes, as a message attaches it.
+/// An image copied into a directory of images under the digest of its bytes, as the markdown of a thread
+/// attaches it.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn attach_image(directory: String, path: String) -> Result<ImageAttachment, Fault> {
@@ -406,18 +407,18 @@ pub fn image_path(directory: String, uri: String) -> Result<ImagePath, Fault> {
   Ok(ImagePath { path: path.display().to_string(), digest })
 }
 
-/// How a message names an image: `![name](uri)`.
+/// How a markdown names an image: `![name](uri)`.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn image_reference(name: String, uri: String) -> String {
   images::reference(&name, &uri)
 }
 
-/// Each image a message names, as its text in the message, its name, and its uri.
+/// Each image a markdown names, as its text in the markdown, its name, and its uri.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn image_references(message: String) -> Vec<images::Named> {
-  images::references(&message)
+pub fn image_references(markdown: String) -> Vec<images::Named> {
+  images::references(&markdown)
 }
 
 /// The type of an image by its first bytes: its media type and its extension, for a PNG, a JPEG, a GIF or a WebP.

@@ -9,17 +9,17 @@ from conftest import (
   hushed,
   paragraphs,
   plain,
-  prompted,
   ran,
   relived,
   said,
   settle,
   slow,
+  threaded,
 )
 from furb import engine
 from furb.engine import OPERATOR, Act, Exit
 
-TAKEN = ("bash", "wait", "prompt", "reply")
+TAKEN = ("bash", "wait", "thread", "reply")
 """The kinds of act that the World takes."""
 
 
@@ -53,10 +53,10 @@ async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_hea
 async def test_delivery_carries_on_the_rungs_that_await_the_result_on_whatever_chain() -> None:
   """Delivery carries on the rungs that await the result, on whatever chain."""
   sand, _, root = born("x = bash('slow')\nclose(x)", auto=False)
-  which = await engine.prompt(str, "start one", on=root)
+  which = await engine.thread(str, "start one", on=root)
   two = engine.chain("two")
   sand.script[two] = [f"out = await Act({which!r})\nassert isinstance(out, Exit)\nclose(out.code)"]
-  act = engine.prompt(int, "await it", on=two)
+  act = engine.thread(int, "await it", on=two)
   await settle()
   engine.pause(two)
   sand.exits(which, 0)
@@ -75,7 +75,7 @@ async def test_a_wake_on_one_act_lifts_a_pause_of_its_chain_for_that_act_alone()
   assert heads(engine.turns(on=root))[-2:] == [f"#{one} woke", f"#{one} exited 0"]
   asked, log, root = born()
   engine.pause(root)
-  counting, other = engine.prompt(int, "count", on=root), engine.prompt(int, "wait", on=root)
+  counting, other = engine.thread(int, "count", on=root), engine.thread(int, "wait", on=root)
   await settle()
   assert said(log, "rung") == [] and said(log, "reply") == [] and asked.turns == {}
   engine.wake(counting)
@@ -110,14 +110,14 @@ async def test_a_wake_gates_and_runs_a_held_response() -> None:
   engine.wake(root)
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  bound = fresh(root, prompted(act, "int", "count"), f"#{step} advance on {act}", f"#{root} paused", f"#{root} woke")
+  bound = fresh(root, threaded(act, "int", "count"), f"#{step} advance on {act}", f"#{root} paused", f"#{root} woke")
   assert gated(log) == ["close(7)"] and ran(log) == [bound, "close(7)"] and (await act) == 7
 
 
-async def test_a_wake_makes_a_prompt_ask_its_model_with_the_transcript_as_it_grew() -> None:
-  """A wake makes a prompt ask its model with the transcript as it grew."""
+async def test_a_wake_makes_a_thread_ask_its_model_with_the_transcript_as_it_grew() -> None:
+  """A wake makes a thread ask its model with the transcript as it grew."""
   sand, log, root = born("a = 1", "close(a + 1)")
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   engine.pause(act)
   await settle()
   engine.say("tell", root, [f"#{root} noted"])
@@ -140,12 +140,12 @@ async def test_a_wake_makes_no_reply_twice_and_loses_none() -> None:
 
 
 async def test_a_wake_that_this_life_says_puts_every_pending_act_it_is_over_on_to_the_outside() -> None:
-  """A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each command, wait, prompt to the operator and reply of them, and a model reads the transcript as it grew."""
+  """A wake that this life says, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each command, wait, thread to the operator and reply of them, and a model reads the transcript as it grew."""
   sand, log, root = born(auto=False)
   command = engine.bash("sleep 9", on=root)
   waited = engine.wait(100.0, on=root)
-  shown = engine.prompt(str, "why?", to=OPERATOR, on=root)
-  engine.prompt(int, "count", on=root)
+  shown = engine.thread(str, "why?", to=OPERATOR, on=root)
+  engine.thread(int, "count", on=root)
   await settle()
   engine.pause(root)
   engine.wake(root)

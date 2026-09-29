@@ -82,7 +82,7 @@ disk. The suite runs on both engines.
 ## A third party extension
 
 A third party extension has a word and a life word, and no ear of its own. Its word reaches the machine through the
-acts that the World takes already: a read, a write, a command, a wait, the clock, a chance, and a prompt to the
+acts that the World takes already: a read, a write, a command, a wait, the clock, a chance, and a thread to the
 operator. It can also make acts with ears of its own, written in python, as `remember` does, and a door that
 answers the reads of a scheme of its own. An extension that needs an ear in rust is a change of the crate.
 

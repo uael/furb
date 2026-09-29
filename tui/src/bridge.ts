@@ -33,7 +33,7 @@ export type Engine = {
     : Native[K];
 };
 /** A question that waits for the operator. */
-type Prompt = { id: string; shape: string; message: string };
+type Thread = { id: string; shape: string; markdown: string };
 /** What the session in the worker holds that the host keeps as it comes. */
 interface Plain {
   completed: number;
@@ -50,7 +50,7 @@ interface Plain {
  * state, which the host needs to know of and not to hold. */
 export interface HostState extends Plain {
   facts: number;
-  prompts: Prompt[];
+  threads: Thread[];
   streams: [string, Stream][];
   pending: [string, string][];
 }
@@ -64,15 +64,15 @@ export class HostView extends EventEmitter implements Plain {
   actor = "";
   record?: string;
   changes = 0;
-  prompts = new Map<string, Prompt>();
+  threads = new Map<string, Thread>();
   streams = new Map<string, Stream>();
   pending = new Map<string, string>();
   constructor(private request: (target: string, method: string, args: unknown[]) => Promise<unknown>) {
     super();
   }
-  update({ facts, prompts, streams, pending, ...plain }: HostState): void {
+  update({ facts, threads, streams, pending, ...plain }: HostState): void {
     Object.assign(this, plain);
-    this.prompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
+    this.threads = new Map(threads.map((thread) => [thread.id, thread]));
     this.streams = new Map(streams);
     this.pending = new Map(pending);
     if (facts) this.emit("facts");

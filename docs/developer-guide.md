@@ -13,7 +13,7 @@ each part. When the two differ, `CLAUDE.md` is right, and this guide must change
 | [uv](https://docs.astral.sh/uv/) | The Python environment, the hooks, and every Python command. |
 | Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the packages `furb-monty` and `furb-cli`. rustup reads the version from the file. |
 | [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings and the TUI. On Windows, bun 1.3 crashes the TUI. |
-| The `claude` command line, signed in, or the credential of a provider | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`. The demo and the suite need no model. |
+| The `claude` command line, signed in, or the credential of a provider | Only for a real life, such as `bun run tui`, `furb thread` or `script/smoke.py`. The demo and the suite need no model. |
 
 Then set up a clone as the [README](../README.md#try-it) says, and install the hooks, which run at each commit:
 
@@ -23,11 +23,11 @@ uv run pre-commit install
 
 ## How a word runs
 
-1. A prompt asks a model for a response of a shape, such as `str`.
+1. A thread asks a model for a response of a shape, such as `str`.
 2. The model answers with Python. That answer is a word, and a rung runs it.
 3. The gate reads the word first: a type checker reads it, and a sandbox runs each of its imports. A word that it
    refuses does not run, and the model reads the reason in its next turn.
-4. The Kernel runs the word in the module of its chain. Each call such as `read`, `bash`, `prompt`, or `wait`
+4. The Kernel runs the word in the module of its chain. Each call such as `read`, `bash`, `thread`, or `wait`
    makes an act, which goes to the ears in turn until one owns it: the ear of the act, or an ear of the World,
    which reaches the disk, the machine, the models, the operator, or the record. The owner answers the act: now, or
    later.
@@ -117,7 +117,7 @@ no network.
 | `src/world/provider/clients.rs` | The client of rig that asks each provider, with its credential and its address. |
 | `src/world/provider/pi.rs` | The protocol of pi-ai itself, which the gateway Radius speaks. |
 | `src/world/provider/claude.rs` | The claude command line, as a model of rig. |
-| `src/world/provider/images.rs` | The images that a message names, each kept under the digest of its bytes. |
+| `src/world/provider/images.rs` | The images that the markdown of a thread names, each kept under the digest of its bytes. |
 
 ## Changing an extension
 
@@ -132,9 +132,9 @@ the word, so a change of either needs `uv sync --reinstall-package furb-monty --
 
 | File | What it holds |
 | --- | --- |
-| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `run` and `extensions`. |
-| `cli/src/life.rs` | One life on the opening of the crate: the prompt of the record it takes up, and how the operator awaits an act. |
-| `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back by the rules of the crate. |
+| `cli/src/main.rs` | The words of the command line, on clap, and the commands `thread`, `turns`, `run` and `extensions`. |
+| `cli/src/life.rs` | One life on the opening of the crate: the thread of the record it takes up, and how the operator awaits an act. |
+| `cli/src/console.rs` | The console of the terminal, which shows each thread to the operator and reads the line back by the rules of the crate. |
 | `cli/src/rpc.rs` | The JSON-RPC of `--mode rpc`, which `docs/rpc.md` says. Change the two together. |
 | `cli/src/tui.rs` | How furb finds the TUI and hands the terminal to it. |
 | `cli/tests/furb.rs` | The tests, which run `furb` as a process, on a claude command line that answers from a script. |

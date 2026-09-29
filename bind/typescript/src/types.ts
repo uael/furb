@@ -16,10 +16,10 @@ export type Turn = ReturnType<Engine["turns"]>[number];
 export type Fact = ReturnType<Engine["say"]>;
 /** One entry of the record: one fact, an act among them. */
 export type Entry = [Fact];
-export interface OperatorPrompt {
+export interface OperatorThread {
   id: string;
   shape: string;
-  message: string;
+  markdown: string;
   resolve(value: unknown): void;
   reject(error: Error): void;
 }

@@ -7,7 +7,7 @@ from furb import engine
 async def test_transcript_gives_the_facts_on_a_chain() -> None:
   """transcript gives the facts on a chain, each of which the life adds when it is said, so a chain reads at once what it said itself."""
   sand, log, root = born("close(1)")
-  one = engine.prompt(int, "count", on=root)
+  one = engine.thread(int, "count", on=root)
   assert await one == 1
   await settle()
   (asked,) = said(log, "reply")

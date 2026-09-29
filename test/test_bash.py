@@ -239,7 +239,7 @@ async def test_a_read_of_the_stdout_door_gives_the_lines_of_the_command_while_th
 async def test_a_wake_on_a_chain_with_a_source_starts_no_inherited_command_again() -> None:
   """A wake on a chain with a source starts no inherited command again, since only the owner starts an act."""
   sand, log, root = born("x = bash('slow')\nclose(1)", auto=False)
-  assert await engine.prompt(int, "start one", on=root) == 1
+  assert await engine.thread(int, "start one", on=root) == 1
   command = said(log, "bash")[0][1]
   twin = await chained("twin", root)
   engine.pause(twin)

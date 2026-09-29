@@ -13,7 +13,7 @@ async def test_a_chain_carries_the_label_and_the_source_of_a_chain() -> None:
   assert (root, two) == ("chain1", "chain2")
   assert said(log, "chain") == [("chain", root, OPERATOR, "", "root", ""), ("chain", two, OPERATOR, "", "two", root)]
   sand.script[root] = ["close(chain('deep'))"]
-  one = engine.prompt(str, "fork", on=root)
+  one = engine.thread(str, "fork", on=root)
   deep = await one
   (step,) = [a[1] for a in said(log, "rung") if a[2] == one]
   assert deep == "chain3"

@@ -116,8 +116,8 @@ test("workspaces keep sessions alive, report background completion and input, an
     expect(first.status).toBe("idle");
     expect(first.unread).toBe(false);
 
-    const question = await second.session.engine.prompt("str", {
-      message: "Name the release",
+    const question = await second.session.engine.thread("str", {
+      markdown: "Name the release",
       to: "operator",
       on: second.session.engine.root,
     });

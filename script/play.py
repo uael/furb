@@ -1,11 +1,11 @@
 """The play: a life with its whole runtime, and a model asked to use every part of it.
 
 Run it from the root of the repository, as `sleep 3000 | uv run python -u script/play.py`. The stdin of the play
-must stay open and say nothing: the World shows a prompt of the operator on the terminal and reads a line back,
-and this play answers that prompt from the side of the operator instead, after a settle.
+must stay open and say nothing: the World shows a thread of the operator on the terminal and reads a line back,
+and this play answers that thread from the side of the operator instead, after a settle.
 
 One life does the work and a second life is opened on the record it kept, which answers every rung of the first
-without asking a model, and then takes one prompt more.
+without asking a model, and then takes one thread more.
 """
 
 import asyncio
@@ -23,11 +23,11 @@ from furb.world import kept
 CEILING = 4.0
 """CEILING is the dollars the play may spend, on each chain it sees and over all of them together."""
 QUIET = 240.0
-"""QUIET is the seconds the record may stand still before the play reads the chain as wedged and ends the prompt."""
+"""QUIET is the seconds the record may stand still before the play reads the chain as wedged and ends the thread."""
 TRIES = 40
-"""TRIES is the answers the play buys before it reads the model as unable to answer and ends the prompt."""
+"""TRIES is the answers the play buys before it reads the model as unable to answer and ends the thread."""
 STALL = 1800.0
-"""STALL is the seconds the play waits for one prompt, since a chain that went quiet would wait for ever."""
+"""STALL is the seconds the play waits for one thread, since a chain that went quiet would wait for ever."""
 SETTLE = 2.0
 """SETTLE is the seconds the operator gives the life before it looks at the life or acts on it again, since each
 look is a read."""
@@ -36,22 +36,23 @@ SAID = "windlass"
 ITEMS = 7
 """ITEMS is how many things the model is asked to find, which is the length of the list it closes with."""
 
-MESSAGE = f"""You have the engine and a directory of your own. Use them, in this order.
+MARKDOWN = f"""You have the engine and a directory of your own. Use them, in this order.
 
 1. Read the engine at {Path(engine.__file__)} and say in one line what a chain is.
 2. Write a small python module into your directory, run it with bash, and read its stdout.
 3. Open a chain with your own chain as its source and take() as its filter, so the model you ask on it reads
-   none of your work, and end that word without closing anything. In the next word, prompt that chain with no actor
-   named, with shape int for a small sum, and await the value. Say in that message that the answer is a close of the number.
-4. Prompt the operator, which is the actor named "operator", with shape str for a word, await it, and hold the
-   word it gives back.
+   none of your work, and end that word without closing anything. In the next word, start a thread on that chain
+   with no actor named, with shape int for a small sum, and await the value. Say in that markdown that the answer
+   is a close of the number.
+4. Start a thread to the operator, which is the actor named "operator", with shape str for a word, await it, and
+   hold the word it gives back.
 5. Debug one value with a template string, and peek at one act you made.
 6. Make a subdirectory, cd into it by its full path, and show that cwd changed.
 7. Close with a list of exactly {ITEMS} items, in this order: your one line about a chain (str), the stdout of your
    module (str), the int the chain you opened gave (int), the word of the operator (str), the id of the act you
    peeked at (str), the working directory you are now in (str), and the id of the chain you opened (str).
 """
-"""MESSAGE is what the model is told: what it has, what to do with it, and what to give back."""
+"""MARKDOWN is what the model is told: what it has, what to do with it, and what to give back."""
 
 
 def heads(root: str, name: str) -> list[str]:
@@ -67,8 +68,8 @@ def heads(root: str, name: str) -> list[str]:
 async def watching(root: str, record: Path, name: str) -> None:
   """The operator while the model works.
 
-  It answers the one prompt the model puts to it, and it ends the prompt when the spend of the whole life crosses
-  the ceiling, since a grant is of one chain alone and a prompt of the model opens chains of its own. It puts no
+  It answers the one thread the model puts to it, and it ends the thread when the spend of the whole life crosses
+  the ceiling, since a grant is of one chain alone and a thread of the model opens chains of its own. It puts no
   grant on those chains: a grant of the operator on a chain that a rung opened cannot be made again, since a later
   life says the acts of the operator at once and that chain does not stand yet.
   """
@@ -77,14 +78,14 @@ async def watching(root: str, record: Path, name: str) -> None:
     await asyncio.sleep(SETTLE)
     for one in engine.transcript(root):
       match one:
-        case ("prompt", pid, _, _, _, _, "operator") if engine.peek(pid, ...) is ...:
+        case ("thread", pid, _, _, _, _, "operator") if engine.peek(pid, ...) is ...:
           engine.close(SAID, pid)
     if spent(record) > CEILING:
-      say(f"the play spent {spent(record):.4f} dollars, over its ceiling of {CEILING}, and ends the prompt")
+      say(f"the play spent {spent(record):.4f} dollars, over its ceiling of {CEILING}, and ends the thread")
       engine.cancel(name)
       return
     if len(bought(record)) > TRIES:
-      say(f"the play bought {len(bought(record))} answers, over the {TRIES} it allows, and ends the prompt")
+      say(f"the play bought {len(bought(record))} answers, over the {TRIES} it allows, and ends the thread")
       engine.cancel(name)
       return
     grown = record.stat().st_size if record.is_file() else 0
@@ -101,7 +102,7 @@ async def first(yard: Path, record: Path) -> list[object]:
   world, root, held = lived(record, yard, None, keeps=True)
   assert held == [], "the first life is opened on no record"
   engine.grant(usd=CEILING, on=root)
-  waits = engine.prompt(list, MESSAGE, on=root)
+  waits = engine.thread(list, MARKDOWN, on=root)
   watched = asyncio.ensure_future(watching(root, record, waits))
   try:
     got = await asyncio.wait_for(waits, STALL)
@@ -114,14 +115,14 @@ async def first(yard: Path, record: Path) -> list[object]:
   forks = [one for one in said if one[0] == "chain" and one[5] == root]
   assert forks, "the model opened no chain with a source of its own"
   assert got[6] in {one[1] for one in forks}, (got[6], [one[1] for one in forks])
-  # The chain it names must have served it: a word of a model ran on it, and a prompt of the model stands there.
+  # The chain it names must have served it: a word of a model ran on it, and a thread of the model stands there.
   assert isinstance(got[6], str), got[6]
   theirs = engine.transcript(got[6])
-  assert [one for one in theirs if one[0] == "prompt"], f"no prompt of the model stands on {got[6]}"
+  assert [one for one in theirs if one[0] == "thread"], f"no thread of the model stands on {got[6]}"
   assert [one for one in engine.turns(on=got[6]) if one[0] == "assistant"], f"no model answered on {got[6]}"
 
-  asked = [one for one in said if one[0] == "prompt" and one[6] == OPERATOR]
-  assert len(asked) == 1, f"the model put {len(asked)} prompts to the operator"
+  asked = [one for one in said if one[0] == "thread" and one[6] == OPERATOR]
+  assert len(asked) == 1, f"the model put {len(asked)} threads to the operator"
   assert engine.peek(asked[0][1]) == SAID, engine.peek(asked[0][1])
   assert got[3] == SAID, got[3]
 
@@ -150,7 +151,7 @@ async def first(yard: Path, record: Path) -> list[object]:
 
 
 async def second(yard: Path, record: Path, got: list[object]) -> float:
-  """The life on the record of the first: it asks no model for what the record holds, and takes one prompt more."""
+  """The life on the record of the first: it asks no model for what the record holds, and takes one thread more."""
   world, root, held = lived(record, yard, None, keeps=True)
   await asyncio.sleep(SETTLE)
   replies = [one for one in world.calls if one[0] == "reply"]
@@ -163,9 +164,9 @@ async def second(yard: Path, record: Path, got: list[object]) -> float:
     say("the record holds a pause of the root, said by the World, so the operator wakes the chain")
     engine.wake(root)
     await asyncio.sleep(SETTLE)
-  message = "How many items did you give back? Close with the number and nothing else."
+  markdown = "How many items did you give back? Close with the number and nothing else."
   try:
-    more = await asyncio.wait_for(engine.prompt(int, message, on=root), STALL)
+    more = await asyncio.wait_for(engine.thread(int, markdown, on=root), STALL)
     assert more == len(got), (more, len(got))
     say(f"the resumed life answered {more!r} for the length of that list")
     return ledger(root, record)

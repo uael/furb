@@ -9,12 +9,12 @@ from furb import engine
 from furb.engine import OPERATOR
 
 
-async def test_a_cancel_of_that_prompt_reaches_the_acts_that_its_rungs_made_on_the_chain_with_a_source() -> None:
-  """A cancel of that prompt reaches the acts that its rungs made on the chain with a source."""
+async def test_a_cancel_of_that_thread_reaches_the_acts_that_its_rungs_made_on_the_chain_with_a_source() -> None:
+  """A cancel of that thread reaches the acts that its rungs made on the chain with a source."""
   sand, log, root = born(auto=False)
   twin = await chained("twin", root)
   sand.script[root] = [f"y = bash('there', on={twin!r})\nclose((await y).code)"]
-  one = engine.prompt(int, "run it there", on=root)
+  one = engine.thread(int, "run it there", on=root)
   await settle()
   command = said(log, "bash")[0]
   assert command[3] == twin
@@ -56,8 +56,8 @@ async def test_a_cancelled_act_completes_with_cancellederror() -> None:
   assert isinstance(engine.peek(one), CancelledError)
 
 
-async def test_a_cancelled_prompt_raises_cancellederror_to_whoever_awaits_it() -> None:
-  """A cancelled prompt raises CancelledError to whoever awaits it."""
+async def test_a_cancelled_thread_raises_cancellederror_to_whoever_awaits_it() -> None:
+  """A cancelled thread raises CancelledError to whoever awaits it."""
   _, _, _, one = await posed()
   engine.cancel(one)
   with pytest.raises(CancelledError):
@@ -67,8 +67,8 @@ async def test_a_cancelled_prompt_raises_cancellederror_to_whoever_awaits_it() -
 async def test_a_cancel_touches_nothing_else_on_the_chain() -> None:
   """A cancel touches nothing else on the chain."""
   _, _, root = born()
-  one = engine.prompt(int, "one", to=OPERATOR, on=root)
-  two = engine.prompt(int, "two", to=OPERATOR, on=root)
+  one = engine.thread(int, "one", to=OPERATOR, on=root)
+  two = engine.thread(int, "two", to=OPERATOR, on=root)
   await settle()
   engine.cancel(one)
   await settle()

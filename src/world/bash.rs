@@ -67,7 +67,7 @@ pub fn bash() -> Box<dyn Ear> {
               }
               running.insert(about, one);
             }
-            // The machine would not start it, so the ear closes it with why, as a prompt that the operator cannot
+            // The machine would not start it, so the ear closes it with why, as a thread that the operator cannot
             // answer is closed, and the chain is told why.
             Err(fault) => {
               call("close", vec![fault.object()], vec![("id", Object::string(&about))])?;

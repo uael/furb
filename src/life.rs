@@ -59,7 +59,7 @@ pub struct Opening {
   /// when unsaid.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub config: Option<String>,
-  /// The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
+  /// The actor a thread goes to when it names none, as the catalog names a model, and an effort after a slash, at its
   /// level as [`world::Model::at`] moves it; the first model of the roster when unsaid.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub actor: Option<String>,

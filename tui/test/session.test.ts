@@ -24,7 +24,7 @@ test("an @word that names no file is text of the message, and a word that names 
       (act) => act.kind === "rung" && act.by === "operator" && String(act.words[0]).startsWith("read("),
     );
     expect(reads.map((act) => [act.words[0], act.run?.status])).toEqual([['read("README.md")', "done"]]);
-    expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
+    expect(session.acts.filter((act) => session.isUserThread(act)).map((act) => act.words[1])).toEqual([
       message,
     ]);
   }));
@@ -78,7 +78,7 @@ test("a session that cannot save its view still ends its life, its commands and 
   }
 });
 
-test("a snapshot asked before a model choice lands after it, and the choice holds for the next prompt", async () => {
+test("a snapshot asked before a model choice lands after it, and the choice holds for the next thread", async () => {
   const session = await demoSession();
   const snapshot = session.host.snapshot.bind(session.host);
   const { promise: gate, resolve: release } = Promise.withResolvers<void>();
@@ -99,8 +99,8 @@ test("a snapshot asked before a model choice lands after it, and the choice hold
     await reading;
     expect(session.actor).toBe("claude-cli:opus/high");
     await session.submit("Which model reads this?");
-    const prompt = session.acts.findLast((act) => session.isUserPrompt(act));
-    expect(prompt?.words).toEqual(["str", "Which model reads this?", "claude-cli:opus/high"]);
+    const thread = session.acts.findLast((act) => session.isUserThread(act));
+    expect(thread?.words).toEqual(["str", "Which model reads this?", "claude-cli:opus/high"]);
     await idle(session);
     await session.refresh();
     expect((await session.engine.inspect("actor", session.engine.root)).value).toBe("claude-cli:opus/high");
@@ -131,7 +131,7 @@ test("a follow-up that the operator removes while an earlier one is sent is not 
     await idle(session);
     await session.refresh();
     expect(session.queued).toEqual([]);
-    expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
+    expect(session.acts.filter((act) => session.isUserThread(act)).map((act) => act.words[1])).toEqual([
       "First follow-up on main",
     ]);
     expect(session.acts.filter((act) => act.on === other && act.kind === "rung")).toEqual([]);
@@ -170,7 +170,7 @@ test("a follow-up that the operator removes while its files are read is not sent
     expect(session.acts.some((act) => act.kind === "rung" && act.words[0] === 'read("README.md")')).toBe(
       true,
     );
-    expect(session.acts.filter((act) => session.isUserPrompt(act))).toEqual([]);
+    expect(session.acts.filter((act) => session.isUserThread(act))).toEqual([]);
   } finally {
     Object.assign(session, { engine });
     await session.dispose();

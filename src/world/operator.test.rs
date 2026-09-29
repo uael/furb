@@ -1,4 +1,4 @@
-//! The operator: a line it writes back, read as a value of the shape a prompt wants.
+//! The operator: a line it writes back, read as a value of the shape a thread wants.
 
 use super::answered;
 
@@ -8,7 +8,7 @@ fn read(shape: &str, line: &str) -> String {
 }
 
 #[test]
-fn a_line_is_read_as_the_shape_a_prompt_wants() {
+fn a_line_is_read_as_the_shape_a_thread_wants() {
   assert_eq!(read("None", "anything"), "None");
   assert_eq!(read("str", " as typed "), "' as typed '");
   assert_eq!(read("int", " 12 "), "12");

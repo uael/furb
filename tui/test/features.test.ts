@@ -108,7 +108,7 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     session.enqueue("Explain @README.md after this answer.");
     expect(session.queued).toHaveLength(1);
     expect(
-      session.acts.some((act) => act.kind === "prompt" && String(act.words[1]).startsWith("Explain")),
+      session.acts.some((act) => act.kind === "thread" && String(act.words[1]).startsWith("Explain")),
     ).toBe(false);
     await until(
       session,
@@ -116,12 +116,12 @@ test("queued follow-ups wait for current work, attach files, and message undo an
         session.queued.length === 0 &&
         session.acts.some(
           (act) =>
-            session.isUserPrompt(act) && act.words[1] === "Explain @README.md after this answer." && act.done,
+            session.isUserThread(act) && act.words[1] === "Explain @README.md after this answer." && act.done,
         ),
     );
     await idle(session);
     await session.refresh();
-    expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
+    expect(session.acts.filter((act) => session.isUserThread(act)).map((act) => act.words[1])).toEqual([
       "show live progress",
       "Explain @README.md after this answer.",
     ]);
@@ -141,7 +141,7 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     session.save();
     const saved = JSON.parse(await readFile(`${session.host.record}.ui.json`, "utf8"));
     expect(saved.queued[0].text).toBe("Keep this follow-up through exit.");
-    expect(session.acts.some((act) => act.kind === "prompt" && act.words[1] === saved.queued[0].text)).toBe(
+    expect(session.acts.some((act) => act.kind === "thread" && act.words[1] === saved.queued[0].text)).toBe(
       false,
     );
     const record = session.host.record;
@@ -156,19 +156,19 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     await until(session, () =>
       session.acts.some(
         (act) =>
-          session.isUserPrompt(act) && act.words[1] === "Keep this follow-up through exit." && act.done,
+          session.isUserThread(act) && act.words[1] === "Keep this follow-up through exit." && act.done,
       ),
     );
     await idle(session);
     await session.refresh();
-    const sent = session.acts.filter((act) => session.isUserPrompt(act)).length;
+    const sent = session.acts.filter((act) => session.isUserThread(act)).length;
     await session.dispose();
     const stale = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
     stale.queued = saved.queued;
     await writeFile(`${record}.ui.json`, JSON.stringify(stale));
     session = await demoSession({ record });
     expect(session.queued).toHaveLength(0);
-    expect(session.acts.filter((act) => session.isUserPrompt(act))).toHaveLength(sent);
+    expect(session.acts.filter((act) => session.isUserThread(act))).toHaveLength(sent);
   } finally {
     await session.dispose();
   }
@@ -354,7 +354,7 @@ test("/extensions lists what a life runs, and a cancel of the work of a chain le
   }
 });
 
-test("a queued dispatch recovers both sides of the prompt-write boundary without sending twice", async () => {
+test("a queued dispatch recovers both sides of the thread-write boundary without sending twice", async () => {
   let session = await demoSession();
   try {
     const record = session.host.record;
@@ -376,7 +376,7 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     const begin = lines.findIndex(
       (line) => JSON.parse(line)[0][0] === "queue" && JSON.parse(line)[0][3] === "begin",
     );
-    expect(JSON.parse(lines[begin + 1] ?? "null")[0][0]).toBe("prompt");
+    expect(JSON.parse(lines[begin + 1] ?? "null")[0][0]).toBe("thread");
     const state = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
     state.queued = [entry];
     await writeFile(`${record}.ui.json`, JSON.stringify(state));
@@ -387,15 +387,15 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     session = await demoSession({ record });
     expect(session.queued).toHaveLength(0);
     expect(session.dispatched).toContain(entry.id);
-    expect(session.acts.filter((act) => act.kind === "prompt")).toHaveLength(1);
+    expect(session.acts.filter((act) => act.kind === "thread")).toHaveLength(1);
     expect(session.acts.some((act) => act.id === sent)).toBe(true);
     await session.dispose();
     await writeFile(record, `${lines.slice(0, begin + 1).join("\n")}\n`);
     await writeFile(`${record}.ui.json`, JSON.stringify(state));
     session = await demoSession({ record });
     expect(session.queued).toHaveLength(1);
-    const manual = await session.engine.prompt(entry.shape, {
-      message: entry.text,
+    const manual = await session.engine.thread(entry.shape, {
+      markdown: entry.text,
       on: entry.chain,
       to: entry.actor,
     });
@@ -405,7 +405,7 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     expect(dispatched).not.toBe(manual);
     expect(await session.host.sendQueued(entry)).toBe(dispatched);
     await session.refresh();
-    expect(session.acts.filter((act) => act.kind === "prompt")).toHaveLength(2);
+    expect(session.acts.filter((act) => act.kind === "thread")).toHaveLength(2);
   } finally {
     await session.dispose();
   }
