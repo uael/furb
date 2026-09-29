@@ -296,6 +296,34 @@ test("the feed left at its end opens at its end, and one left above its end open
     true,
   ));
 
+test("the feed at its end stays at its end when the input grows, and a turn of the wheel stays where it went", () =>
+  composing(
+    async (context) => {
+      const { session, app, screen } = context;
+      const end = () => Math.max(0, app.scroll.scrollHeight - app.scroll.viewport.height);
+      await show(context, "transcript");
+      for (let i = 0; i < 12; i++) await session.command(`/run grown${i} = ${i}`);
+      await until(session, () => Object.values(session.program).includes("grown11 = 11"));
+      await show(context, "feed");
+      const tall = app.scroll.viewport.height;
+      app.composer.setText("one\ntwo\nthree\nfour\nfive");
+      app.render();
+      await screen.flush();
+      await screen.flush();
+      expect(app.scroll.viewport.height).toBeLessThan(tall);
+      expect(app.scroll.scrollTop).toBe(end());
+      // A render that changes nothing on the screen draws no frame, and the wheel still moves the feed.
+      app.render();
+      await screen.flush();
+      await screen.mockMouse.scroll(10, 5, "up");
+      await screen.flush();
+      await screen.flush();
+      expect(app.scroll.scrollTop).toBeLessThan(end());
+    },
+    { width: 120, height: 30, useMouse: true },
+    true,
+  ));
+
 test("the keys of the footer and the palette answer the mouse, and a drag over a heading selects and copies its text", () =>
   composing(
     async ({ session, app, screen, frame, click }) => {
