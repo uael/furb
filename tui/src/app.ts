@@ -2100,7 +2100,8 @@ export class App {
           waiting ? ["Question for you", c.bright] : ["Asked you", c.faint],
         ],
         (box) => {
-          this.panel(box, waiting ? c.warm : c.rule).add(this.text(message, c.bright));
+          // A question is markdown, as an answer is.
+          this.panel(box, waiting ? c.warm : c.rule).add(this.markdown(message, c.bright));
           if (waiting)
             box.add(
               this.inset(

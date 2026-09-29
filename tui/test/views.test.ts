@@ -617,6 +617,23 @@ test("a question for the operator says it waits, and once answered says it is pa
     ]).toEqual([true, false, true]);
   }));
 
+test("a question for the operator stands as markdown, as an answer does", () =>
+  composing(async ({ session, screen, frame }) => {
+    const id = await session.engine.thread("str", {
+      markdown: "How should it sort?\n\n1. **By name**, nothing else.",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.threads.has(id));
+    await session.refresh();
+    await session.open(id);
+    await frame();
+    // The text of markdown shows once tree-sitter has read it.
+    await Promise.all(highlighting(screen.renderer.root));
+    const shown = await frame();
+    expect([shown.includes("By name, nothing else."), shown.includes("**By name**")]).toEqual([true, false]);
+  }));
+
 test("a user turn of the transcript stands in the colors of Python, and the name that starts a header in the color of a reference", () =>
   composing(async ({ session, screen, frame }) => {
     session.show("transcript");
