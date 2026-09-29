@@ -91,10 +91,11 @@ test("a command that printed more than a row holds sends the tail and its length
       expect(stdout.length).toBeLessThanOrEqual(2000);
       expect(printed.endsWith(stdout)).toBe(true);
       await frame();
-      const card = app.scroll.getChildren().find((node) => node.id === command.id);
-      const heading = card?.getChildren()[0];
-      if (!card || !heading) throw new Error("No card for the command.");
-      await screen.mockMouse.click(heading.x + 1, heading.y);
+      // Folded, the block of the command shows the last line that it printed, and no line before it.
+      const folded = await frame();
+      expect([folded.includes("3000"), folded.includes("2999")]).toEqual([true, false]);
+      // A click on the line of the command opens its block.
+      await screen.mockMouse.click(...find(screen, "$ seq 1 3000"));
       await screen.flush();
       const opened = app.scroll.getChildren().find((node) => node.id === command.id);
       if (!opened) throw new Error("No open card for the command.");
@@ -119,10 +120,8 @@ test("the open card of a command says its limit of time while it runs, and only 
       });
       await until(session, () => session.acts.some((act) => act.id === id));
       await frame();
-      const card = app.scroll.getChildren().find((node) => node.id === id);
-      const heading = card?.getChildren()[0];
-      if (!card || !heading) throw new Error("No card for the command.");
-      await screen.mockMouse.click(heading.x + 1, heading.y);
+      // A click on the line of the command opens its block.
+      await screen.mockMouse.click(...find(screen, "read -r line; printf ended"));
       const shown = () => {
         const node = app.scroll.getChildren().find((one) => one.id === id);
         if (!node) throw new Error("No card for the command.");
@@ -215,6 +214,25 @@ test("the lines that two hunks of a diff leave out between them show as one fain
       expect(shown[first]?.indexOf("+ first")).toBe(shown[last]?.indexOf("+ last"));
     },
     { width: 120, height: 60 },
+  ));
+
+test("a diff shows the source as it stands, so markdown keeps its marks", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      await session.engine.result(
+        await session.engine.rung({
+          word: 'write(read("README.md", HIDDEN).append("\\n## Keyboard\\n\\nPress **Ctrl+K** to find a note.\\n"))',
+          on: session.engine.root,
+        }),
+      );
+      await until(session.host, () => session.host.changes === 1);
+      await session.refresh();
+      await frame();
+      await Promise.all(highlighting(screen.renderer.root));
+      const shown = await frame();
+      expect([shown.includes("+ ## Keyboard"), shown.includes("**Ctrl+K**")]).toEqual([true, true]);
+    },
+    { width: 120, height: 50 },
   ));
 
 test("a relative path that the operator types is read from the directory of the selected chain", () =>

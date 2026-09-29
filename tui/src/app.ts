@@ -196,8 +196,8 @@ interface BlockOptions {
   title?: () => Part[];
   /** The columns the card stands in from the edge of the feed. */
   indent?: number;
-  /** Whether the card is a word, which draws no heading and shows its body folded and open. */
-  word?: boolean;
+  /** Whether the card draws no heading, as a word or a command does, whose body shows it folded and open. */
+  headless?: boolean;
 }
 /** A word of the conversation. */
 type Word = Extract<Item, { type: "word" }>;
@@ -1348,9 +1348,9 @@ export class App {
     index: number,
     options: BlockOptions = {},
   ): void {
-    const rung = options.act?.kind === "rung" && !options.word ? options.act : undefined;
-    const state = options.word ? (options.act?.id ?? id) : (rung?.id ?? id);
-    const closed = options.word
+    const rung = options.act?.kind === "rung" && !options.headless ? options.act : undefined;
+    const state = options.headless ? (options.act?.id ?? id) : (rung?.id ?? id);
+    const closed = options.headless
       ? (this.session.folds[state] ?? this.session.preferences.foldRungs)
       : this.folded(state, rung, Boolean(options.compact));
     key =
@@ -1358,12 +1358,12 @@ export class App {
         ? "closed"
         : `${key}:${closed}:${options.preview && closed ? this.feedWidth : ""}`;
     const marker: Part[] =
-      !options.word && (rung || options.compact || options.collapsible)
+      !options.headless && (rung || options.compact || options.collapsible)
         ? [[`${closed ? glyph.closed : glyph.open} `, c.faint]]
         : [];
     const heading = [...marker, ...label];
     const visible =
-      !options.word && Boolean(plain(label)) && (options.compact || options.heading !== false || closed);
+      !options.headless && Boolean(plain(label)) && (options.compact || options.heading !== false || closed);
     const margin = options.separate ? space.section : space.stack;
     const { title } = options;
     const prior = this.cards.get(id);
@@ -1400,7 +1400,7 @@ export class App {
       run: toggle,
     });
     box.add(labelNode);
-    if (options.word || !closed) body(box, closed, toggle);
+    if (options.headless || !closed) body(box, closed, toggle);
     else if (!rung) options.preview?.(box);
     this.scroll.add(box, index);
     const card = {
@@ -1409,7 +1409,7 @@ export class App {
       heading: labelNode,
       label: "",
       compact: options.compact ?? false,
-      collapsible: Boolean(rung || options.collapsible || options.word),
+      collapsible: Boolean(rung || options.collapsible || options.headless),
       state,
       closed,
       act: options.act?.id,
@@ -1546,6 +1546,7 @@ export class App {
           syntaxStyle: this.style,
           wrapMode: "word",
           drawUnstyledText: true,
+          conceal: false,
         }),
       );
       return block;
@@ -2055,7 +2056,7 @@ export class App {
         [[said[0] ?? this.firstLine(code), c.prose]],
         (box, closed, toggle) => this.wordBody(box, item, { closed, toggle, retried, changes, findings }),
         {
-          word: true,
+          headless: true,
           act: rung,
           shown: [code, ...notesOf(item).map((note) => note.body)].join("\n"),
         },
@@ -2157,6 +2158,15 @@ export class App {
           box.add(answer);
         },
         { act, separate: true, shown: value },
+      );
+    } else if (item.type === "act" && item.act.kind === "bash") {
+      const { act } = item;
+      add(
+        item.key,
+        JSON.stringify(act),
+        [],
+        (box, closed, toggle) => this.commandBlock(box, act, !closed, toggle),
+        { act, headless: true, indent: space.between - space.inset, shown: this.describe(act) },
       );
     } else if (item.type === "act") {
       const { act, notes } = item;
@@ -2322,9 +2332,13 @@ export class App {
   }
   /** The words that a model writes now: the last line of its thought, and each step that it has written whole. */
   private streamBody(box: BoxRenderable, id: string, stream: { text: string; thinking: string }): void {
-    const inner = this.box({ paddingLeft: space.between });
+    // The words of a model stand where they stand once they land: each mark in the column of the marks, and each text
+    // in the column of the text of the steps.
+    const inner = this.box({ paddingLeft: space.between - space.inset });
+    const lead = Bun.stringWidth(`${glyph.closed} `);
     const thought = stream.thinking.trim().split("\n").at(-1) ?? "";
-    if (thought) inner.add(this.text(thought, c.faint, { attributes: italic, truncate: true }));
+    if (thought)
+      inner.add(this.text(thought, c.faint, { attributes: italic, truncate: true, marginLeft: lead }));
     const whole = stream.text.slice(0, stream.text.lastIndexOf("\n") + 1);
     const said = steps(whole);
     for (const [at, line] of said.entries())
@@ -2342,7 +2356,12 @@ export class App {
       );
     // A model that has said nothing yet is waited for, and the card says so.
     if (!thought && !whole.trim())
-      inner.add(this.text("Waiting for the first words of the model", c.faint, { attributes: italic }));
+      inner.add(
+        this.text("Waiting for the first words of the model", c.faint, {
+          attributes: italic,
+          marginLeft: lead,
+        }),
+      );
     box.add(inner);
   }
   /** A word as the steps that its comments say, or its first line where it says none. Open, it shows its Python and
@@ -2387,21 +2406,17 @@ export class App {
           { truncate: true, ...shape },
         ),
       );
+    const lines = inner.getChildren().length;
     if (!how.closed) {
-      const detail = this.box({ marginTop: space.section, marginBottom: space.section, gap: space.stack });
-      // The code of the word stands apart from what came of it by one line.
-      if (code)
-        detail.add(
-          this.numbered(code, {
-            fg: c.faint,
-            minWidth: 3,
-            marginBottom: item.told.length ? space.section : 0,
-          }),
-        );
-      // Each act stands in the order the word made it, with what it told, and each note of a query among them.
+      const detail = this.box({ marginTop: space.section, gap: space.stack });
+      if (code) detail.add(this.numbered(code, { fg: c.faint, minWidth: 3 }));
+      // Each act stands in the order the word made it, with what it told, and each note of a query among them. The code
+      // of the word and each block of a command stand apart by one line from the lines that follow them.
       const acts = new Set(actsOf(item).map((act) => act.id));
       const notes = notesOf(item);
-      for (const one of item.told)
+      let apart = Boolean(code);
+      for (const one of item.told) {
+        const at = detail.getChildren().length;
         if ("id" in one)
           this.made(
             detail,
@@ -2410,15 +2425,22 @@ export class App {
             how.retried,
           );
         else if (!acts.has(one.act?.id ?? "")) this.noteLine(detail, one);
+        const first = detail.getChildren()[at];
+        if (first && apart && !("id" in one && one.kind === "bash")) first.marginTop = space.section;
+        if (first) apart = "id" in one && one.kind === "bash";
+      }
       inner.add(detail);
     } else
       for (const act of actsOf(item))
-        if (act.kind === "bash") this.commandBlock(inner, act);
+        if (act.kind === "bash") this.commandBlock(inner, act, false);
         else if (working(act)) this.made(inner, act, [], false);
     this.diffs(inner, how.changes);
     // A word that a later word replaced says so in one line, and what refused it, or what it raised, no longer counts.
     // Each line stands under the text of the steps, after the fold.
-    const under = this.box({ marginLeft: Bun.stringWidth(fold) });
+    const under = this.box({
+      marginLeft: Bun.stringWidth(fold),
+      marginTop: inner.getChildren().length > lines ? space.section : 0,
+    });
     if (rung?.run?.status === "failed" && !cancelled(rung) && how.retried)
       under.add(
         this.text(
@@ -2439,31 +2461,48 @@ export class App {
     if (under.getChildren().length) inner.add(under);
     box.add(inner);
   }
-  /** A command that a word ran, as a block of its own under the steps of the word: its line, then the last line that
-   * it printed, and its exit code when it failed. A spinner stands for its mark while it runs. */
-  private commandBlock(box: BoxRenderable, act: ActRow): void {
+  /** A command as one block wherever it stands, under the steps of a word or as a command of the operator: its line,
+   * with a spinner and its time while it runs, or its end when it failed or a cancel ended it. Folded, the block shows
+   * the last line that the command printed; open, all that it printed and how it ended. A click on its line folds or
+   * opens it, where the block folds apart from a word. The block stands where the marks of the steps stand, and its
+   * background reaches the edge of the feed, as the card of a thread does. It stands apart by one line from what
+   * stands before it. */
+  private commandBlock(box: BoxRenderable, act: ActRow, whole: boolean, toggle?: () => void): void {
     const exit = (act.value && typeof act.value === "object" ? act.value : {}) as Exit;
-    const block = this.box({ backgroundColor: c.surface2, paddingX: space.inset, marginTop: space.section });
-    const head = (): Part[] => [
-      working(act) ? [this.session.preferences.motion ? spin() : glyph.running, c.model] : ["$", c.faint],
-      [" "],
-      [this.firstLine(String(act.words[0] ?? "")), c.bright],
-    ];
-    const line = this.line(head(), c.bright, { truncate: true });
+    const block = this.box({
+      backgroundColor: c.surface2,
+      paddingX: space.inset,
+      marginLeft: -space.inset,
+      marginTop: box.getChildren().some((child) => child.visible) ? space.section : 0,
+    });
+    const head = (): Part[] => {
+      const live = working(act);
+      const ended = cancelled(act)
+        ? "cancelled"
+        : act.done && exit.code !== 0
+          ? `exit ${exit.code ?? "timeout"}`
+          : "";
+      return [
+        live ? [this.session.preferences.motion ? spin() : glyph.running, c.model] : ["$", c.faint],
+        [" "],
+        [this.firstLine(String(act.words[0] ?? "")), c.bright],
+        [live ? `  ${this.actState(act).word}` : "", c.faint],
+        [!whole && ended ? `  ${ended}` : "", cancelled(act) ? c.faint : c.warm],
+      ];
+    };
+    const line = this.line(head(), c.bright, { truncate: true, run: toggle });
     if (working(act) && this.session.preferences.motion) this.move(line, head);
     block.add(line);
-    const printed = [exit.stdout?.content, exit.stderr?.content].filter(Boolean).join("\n");
-    const last = printed
-      .split("\n")
-      .map((one) => one.trim())
-      .findLast(Boolean);
-    const outcome: Part[] = [
-      ...(last ? [[last, c.faint] as Part] : []),
-      ...(act.done && exit.code !== 0
-        ? [[`${last ? "   " : ""}exit ${exit.code ?? "timeout"}`, c.warm] as Part]
-        : []),
-    ];
-    if (outcome.length) block.add(this.line(outcome, c.faint, { truncate: true }));
+    if (whole) this.commandDetails(block, act);
+    else {
+      const last = [exit.stdout?.content, exit.stderr?.content]
+        .filter(Boolean)
+        .join("\n")
+        .split("\n")
+        .map((one) => one.trim())
+        .findLast(Boolean);
+      if (last) block.add(this.line(last, c.faint, { truncate: true, run: toggle }));
+    }
     box.add(block);
   }
   /** A step of a word: one line of markdown in a tone, after its lead in the tone of the chrome. A step that shows first
@@ -2485,6 +2524,11 @@ export class App {
   /** An act that a word made, on one line with no name: its state and what it is, then what it printed while it runs,
    * or what it told. */
   private made(box: BoxRenderable, act: ActRow, notes: Note[], quiet: boolean): void {
+    // A command is the block of a command, open, with all that it printed.
+    if (act.kind === "bash") {
+      this.commandBlock(box, act, true);
+      return;
+    }
     const parts = (): Part[] => {
       const { word, mark, color } = this.actState(act);
       return [
@@ -2496,13 +2540,6 @@ export class App {
     const node = this.line(parts(), c.prose, { truncate: true });
     if (working(act) && this.session.preferences.motion) this.move(node, parts);
     box.add(node);
-    // A command that is over shows what it printed and how it ended, as its card did.
-    if (act.kind === "bash" && act.done) {
-      const details = this.box({ paddingLeft: space.between, gap: space.stack });
-      this.commandDetails(details, act);
-      box.add(details);
-      return;
-    }
     this.actPreview(act)?.(box);
     for (const note of notes) if (note.body) this.excerpt(box, note.body, false, quiet ? c.faint : c.prose);
   }
@@ -2580,6 +2617,7 @@ export class App {
         diff: patch,
         view: "split",
         filetype: filetype(path),
+        conceal: false,
         syntaxStyle: this.style,
         fg: c.bright,
         showLineNumbers: true,
@@ -2623,6 +2661,7 @@ export class App {
       }
     }
     return new LineNumberRenderable(this.renderer, {
+      // A diff shows the source as it stands, so markdown keeps its marks.
       target: new CodeRenderable(this.renderer, {
         content: safeText(lines.join("\n")),
         filetype: filetype(path),
@@ -2630,6 +2669,7 @@ export class App {
         fg: c.bright,
         wrapMode: "word",
         drawUnstyledText: true,
+        conceal: false,
       }),
       fg: c.faint,
       bg: c.ground,
@@ -2863,12 +2903,6 @@ export class App {
       const fault = act.value as { is: string; args: unknown[] };
       return (box) => this.excerpt(box, `${fault.is}: ${fault.args.map(display).join(", ")}`, false, c.warm);
     }
-    // A command shows the tail of its output while it runs, and folds to its heading once it is over.
-    if (act.kind === "bash" && !act.done && act.value && typeof act.value === "object") {
-      const exit = act.value as Exit;
-      const output = [exit.stdout?.content, exit.stderr?.content].filter(Boolean).join("\n");
-      if (output) return (box) => this.excerpt(box, output, true);
-    }
     // The answer of a thread is markdown, whose marks of a heading, of emphasis, and of code the preview leaves out.
     if (act.kind === "thread" && act.done && act.value !== null)
       return (box) =>
@@ -2971,8 +3005,8 @@ export class App {
       inner.add(this.branched(shortenHomes(reason.replace(/\s*\(<string>, line \d+\)$/, "")), c.warm));
     box.add(inner);
   }
-  /** What an act that no word made holds, open: the Python of a rung, what a command printed, or the words and the
-   * value of any other act, then the start of what each note told of it. */
+  /** What an act that no word made holds, open: the Python of a rung, or the words and the value of any other act, then
+   * the start of what each note told of it. A command is a block of its own. */
   private actDetails(box: BoxRenderable, act: ActRow, notes: Note[] = []): void {
     if (act.kind === "rung") {
       this.python(box, String(this.session.program[act.id] || act.words[0] || ""), act.run?.reason);
@@ -2980,10 +3014,6 @@ export class App {
     }
     const details = this.box({ paddingLeft: space.between, gap: space.stack });
     box.add(details);
-    if (act.kind === "bash") {
-      this.commandDetails(details, act);
-      return;
-    }
     for (const note of notes) if (note.body) this.excerpt(details, note.body);
     const fields: Record<string, string[]> = {
       thread: ["shape", "markdown", "actor"],
@@ -3028,7 +3058,6 @@ export class App {
       details.add(node);
       shown.push(node);
     }
-    const meta = this.box({ flexDirection: "row", marginTop: shown.length ? space.section : 0 });
     const [, input, timeout] = act.words;
     const notes: Part[] = [
       ...(act.done
@@ -3046,8 +3075,9 @@ export class App {
         c.faint,
       ],
     ];
-    meta.add(this.text(notes, c.faint));
-    details.add(meta);
+    // A command that runs with no limit of its own and no open input has nothing to note until it ends.
+    if (notes.some(([text]) => text))
+      details.add(this.text(notes, c.faint, { marginTop: shown.length ? space.section : 0 }));
     // The row holds the tail of what the command printed, and the card reads the whole of it once it opens.
     if (act.output !== undefined)
       void this.session.host.act(act.id).then((whole) => {
