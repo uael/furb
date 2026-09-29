@@ -55,15 +55,18 @@ test("the real native life drives the feed, the transcript, and responsive views
       await screen.mockMouse.click(x, y);
       await frame();
       expect(screen.captureCharFrame()).toContain("exit 0");
-      expect(screen.captureCharFrame()).toContain("✓ local storage");
+      expect(screen.captureCharFrame()).toContain("✓ search puts the newest note first");
+      // The open word is taller than the screen, so the screen grows to show all of it.
+      screen.resize(145, 110);
+      await frame();
       // A read says its file and what it gave, before the command that the word ran after it, and the feed names no act.
       expect(screen.captureCharFrame()).toMatch(/read {2}README\.md/);
       expect(screen.captureCharFrame().search(/read {2}README\.md/)).toBeLessThan(
-        screen.captureCharFrame().indexOf("$ printf"),
+        screen.captureCharFrame().indexOf("$ grep"),
       );
       // The code of the word stands apart from what came of it by one line.
       const rows = screen.captureCharFrame().split("\n");
-      const code = rows.findIndex((line) => line.includes('focused test.")'));
+      const code = rows.findIndex((line) => line.includes("close(report)"));
       expect([rows[code + 1]?.trim(), rows[code + 2]]).toEqual([
         "",
         expect.stringMatching(/read {2}README\.md/),

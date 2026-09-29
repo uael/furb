@@ -37,13 +37,93 @@ const state = () => {
   sentFacts = owner.facts.length;
   self.postMessage({ state: snapshot });
 };
+/** The first word of the demo: it reads the project, finds what a change would touch, runs its checks, and reports
+ * with a next step. */
+const explore =
+  String.raw`# Read the README and the search module, to learn what the project holds
+notes = read("README.md")
+search = read("src/search.ts")
+# Find each caller of search, to see what a shortcut would touch
+callers = await bash("grep -rn 'search(' src test")
+# Run the checks of the project
+check = await bash("bun run check")
+# All three checks pass: report what the project holds and a next step
+<s:report>
+## A clear starting point
+Fieldnotes keeps ideas close, in three small parts:
+
+- **capture** saves a note with the time it was taken
+- **search** finds the notes that hold every word of a query, newest first
+- **storage** keeps the notes in memory, in the order they came
+
+All three checks pass. A useful next step is a **search shortcut**, so that a note is one key away:
+
+` +
+  "```ts" +
+  String.raw`
+export const shortcut = { key: "k", ctrl: true, run: search };
+` +
+  "```" +
+  String.raw`
+
+It runs ` +
+  "`search`" +
+  String.raw` as it stands, and one focused test covers it.
+</s:report>
+close(report)`;
+
+/** The word of the demo that adds the search shortcut: it changes the search module, its test and the README, and runs
+ * the checks again. */
+const shortcut =
+  String.raw`# Read the search module and its test, to add the shortcut beside search
+search = read("src/search.ts", HIDDEN)
+tests = read("test/search.test.ts", HIDDEN)
+# Add the shortcut to src/search.ts: Ctrl+K runs the search
+<s:key>
+
+/** The key that opens the search, and what it runs. */
+export const shortcut = { key: "k", ctrl: true, run: search };
+</s:key>
+write(search.append(key))
+# Cover the shortcut with a test of what it runs
+<s:covered>
+
+test("the shortcut runs the search", () => {
+  expect(shortcut.run).toBe(search);
+});
+</s:covered>
+write(tests.replace("import { search } from", "import { search, shortcut } from").append(covered))
+# Document the shortcut in the README, under a heading of its own
+write(read("README.md", HIDDEN).append("\n## Keyboard\n\nPress **Ctrl+K** to find a note.\n"))
+# Run the checks again, with the new test among them
+check = await bash("bun run check")
+# The shortcut works, its test passes, and the README says so: report it
+<s:report>
+The search shortcut is in place:
+
+- ` +
+  "`src/search.ts`" +
+  String.raw` exports **shortcut**, and Ctrl+K runs ` +
+  "`search`" +
+  String.raw`
+- ` +
+  "`test/search.test.ts`" +
+  String.raw` checks what the shortcut runs
+- ` +
+  "`README.md`" +
+  String.raw` has a **Keyboard** section
+
+All four checks pass.
+</s:report>
+close(report)`;
+
 /** What the demo thinks, and the word it writes, on a later turn, by what the turn says. Each word says its steps in
  * comments, as a model does. */
 const replies: [cue: string, thinking: string, word: string][] = [
   [
-    "Document the search shortcut",
-    "The README has no section for keys yet, so the word adds one.",
-    '# Add the shortcut to the README, under a heading of its own\nwrite(read("README.md", HIDDEN).append("\\n## Keyboard\\nPress Ctrl+K to find a note.\\n"))\n# The README documents the shortcut: report it\nclose("The README now documents **Ctrl+K**, which opens the search.")',
+    "Add the search shortcut",
+    "The search module takes the shortcut, its test covers it, and the README says so.",
+    shortcut,
   ],
   [
     "refused",
@@ -52,8 +132,13 @@ const replies: [cue: string, thinking: string, word: string][] = [
   ],
   [
     "show live progress",
-    "The index is ready, so the answer says what it holds.",
-    '# The index is built: report what it holds\nclose("The index is built, and three notes are ready to search. Each word streamed into the feed as it ran.")',
+    "The index is new, so I read what it reads and build it once.",
+    '# Read the notes that the index reads, to count them\nnotes = read("src/storage.ts", HIDDEN)\n# Build the index, to see that it takes every note\nbuilt = await bash("bun run index")',
+  ],
+  [
+    "Indexed 5 notes",
+    "Every note is in the index, so the checks come next.",
+    '# Run the checks, to see that search still finds every note\nchecked = await bash("bun run check")\n# The index is built and the checks pass: report what it holds\nclose("The index is built, and five notes are ready to search. Each word streamed into the feed as it ran.")',
   ],
   [
     "keyboard navigation",
@@ -97,10 +182,12 @@ function scriptedSession(options: SessionOptions): Session {
       const pause = (milliseconds: number) =>
         new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
       const last = JSON.stringify(messages.at(-1));
-      // Only the turn that asks for live progress is slow, and not every later turn of its chain: it thinks, then
+      // Only the two turns of live progress are slow, and not every later turn of their chain: each thinks, then
       // writes its word a few words at a time, as a model streams it. FURB_DEMO_STREAM=1 makes every turn so, for a
       // recording of the demo.
-      const slow = process.env.FURB_DEMO_STREAM === "1" || last.includes("show live progress");
+      const slow =
+        process.env.FURB_DEMO_STREAM === "1" ||
+        ["show live progress", "Indexed 5 notes"].some((cue) => last.includes(cue));
       await pause(slow ? 300 : 180);
       const first = !messages.some((message) => (message as { role?: string }).role === "assistant");
       const [thinking, word] = first
@@ -116,7 +203,7 @@ function scriptedSession(options: SessionOptions): Session {
         : inPlace && last.includes("refused")
           ? `# Fix the refused word in place, with no fence around it\nwrite(read("${inPlace}", HIDDEN).replace("\`\`\`python\\n", "").replace("\\n\`\`\`", ""))`
           : first
-            ? '# Read the README to learn what the project is for\nnotes = read("README.md")\n# Run the checks of the project\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\n# All three checks pass: report what the project holds and a next step\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
+            ? explore
             : word;
       if (slow) {
         write({ thinking });

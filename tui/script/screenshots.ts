@@ -96,7 +96,7 @@ try {
   await capture("03-transcript");
   session.show("feed");
   const written = session.host.changes;
-  await session.submit("Document the search shortcut in the README.");
+  await session.submit("Add the search shortcut, cover it with a test, and document it.");
   await session.engine.result(session.thread);
   await until(session.host, () => session.host.changes > written);
   await rest();
@@ -153,23 +153,19 @@ try {
   test.resize(152, 46);
   app().toggleMode();
   app().composer.setText("");
-  const command = await session.engine.bash(
-    "printf 'Building the search index...\\n'; sleep 1; printf '3 notes indexed.\\n'",
-    { on: session.selected },
-  );
-  // The command shows once it has printed its first line.
+  const command = await session.engine.bash("bun run index", { on: session.selected });
+  // The command shows once it has indexed two notes, and its block opens to all that it printed so far.
   await until(session, () =>
-    Boolean((session.acts.find((act) => act.id === command)?.value as Exit | undefined)?.stdout?.content),
+    Boolean(
+      (session.acts.find((act) => act.id === command)?.value as Exit | undefined)?.stdout?.content.includes(
+        "2/5",
+      ),
+    ),
   );
   await session.refresh();
   app().render();
   await test.flush();
-  const commandRow = app()
-    .scroll.getChildren()
-    .find((node) => node.id === command)
-    ?.getChildren()[0];
-  if (!commandRow) throw new Error("The command row is not visible.");
-  await test.mockMouse.click(commandRow.x + 1, commandRow.y);
+  await click(test, "bun run index");
   await rest();
   app().scroll.scrollTo(app().scroll.scrollHeight);
   await capture("18-live-command");
@@ -178,9 +174,9 @@ try {
     markdown: "show live progress",
     on: session.selected,
   });
-  // The model has written part of its word, and writes the rest.
+  // The model built the index in its first word, and has written part of its second, which runs the checks.
   await until(session.host, () =>
-    [...session.host.streams.values()].some((stream) => stream.text.length > 70),
+    [...session.host.streams.values()].some((stream) => stream.text.includes("checked = await")),
   );
   await session.open(progress);
   await capture("19-model-progress");
