@@ -6,7 +6,8 @@
 //! by, a coroutine that [`ear::ear`] makes, and [`world`] holds the ears the crate writes: files, commands, time,
 //! the store of the record, and the provider of models. [`extension`] says what an extension is and plays the ones a
 //! life runs as rungs, and [`life::Opening`] opens a life on the record and on the ears of the crate, to which a host
-//! adds its own. The Kernel and the gate are the crate's. [`wire`] carries a value as JSON, as the record keeps it.
+//! adds its own. The Kernel and the gate are the crate's. [`wire`] carries a value as JSON, as the record keeps it,
+//! and [`binding`] gives the host API to python and to TypeScript.
 
 pub mod ear;
 pub mod engine;
@@ -19,6 +20,7 @@ pub mod value;
 pub mod wire;
 pub mod world;
 
+#[cfg(any(feature = "python", feature = "typescript"))]
 pub mod binding;
 
 pub use crate::{
@@ -32,11 +34,13 @@ pub use crate::{
 ///
 /// The crate carries the same file the python package ships, so the engine a host runs and the engine a model
 /// reads are one thing.
+#[cfg_attr(feature = "typescript", napi_derive::napi)]
 pub const ENGINE: &str = include_str!("furb/engine.py");
 
 /// The system prompt of every model: the engine minified in layout alone, and nothing else.
 ///
 /// The build makes it from [`ENGINE`], and stops unless it is the same program.
+#[cfg_attr(feature = "typescript", napi_derive::napi)]
 pub const SYSTEM: &str = include_str!(concat!(env!("OUT_DIR"), "/system.py"));
 
 /// The sheet the gate reads a word on, which the Kernel of the sandbox writes the same way the python package does.

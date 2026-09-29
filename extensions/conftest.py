@@ -16,9 +16,9 @@ def extended(
   extension of that name, with its life word when it lives: it hears the ear of the extension, whose config directory
   of the user is the folder config of the directory, and the files of the machine after the World of the suite. It
   gives the World and the root."""
-  one, word, life_word = next(x for x in _monty.official() if x[0] == name)
+  one = next(x for x in _monty.official() if x["name"] == name)
   (at / "work").mkdir(exist_ok=True)
-  given = _monty.extensions([(one, word, life_word if lives else "")])
+  given = _monty.extensions([one if lives else {**one, "life": ""}])
   sand = sown(stands=[STANDS[0], str(at / "work"), STANDS[2]])
   return sand, life(sand, record, extensions=given, **{name: ear(str(at / "config"))}, files=_monty.files())[1]
 

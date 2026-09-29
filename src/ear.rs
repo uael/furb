@@ -147,13 +147,10 @@ pub async fn hear(co: &Co) -> Fact {
 
 /// One saying, said, and the fact the bus made of it, which is `a = yield saying` of python.
 pub async fn say(co: &Co, saying: Fact) -> Fact {
-  let mut said = co.yield_(Step::Say(saying)).await;
-  loop {
-    if let Heard::Fact(fact) = said {
-      return fact;
-    }
-    said = co.yield_(Step::Wait).await;
+  if let Heard::Fact(fact) = co.yield_(Step::Say(saying)).await {
+    return fact;
   }
+  hear(co).await
 }
 
 /// What answers a verb that an ear calls while it hears: the life that hears the ear.
@@ -181,6 +178,11 @@ pub(crate) fn heard<R>(answers: &mut Answers<'_>, step: impl FnOnce() -> R) -> R
   };
   let _before = Before(ANSWERS.replace(Some(answering)));
   step()
+}
+
+/// Whether a life of this thread hears an ear now, which answers each verb that the ear calls.
+pub fn hearing() -> bool {
+  ANSWERS.get().is_some()
 }
 
 /// One verb of the engine, called by its name with its words by the ear that a life of this thread hears now, and

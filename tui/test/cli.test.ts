@@ -117,7 +117,7 @@ for (const ending of endings)
       expect(Object.values(view.drafts)).toContain("draftmarker");
       const running = await pid();
       await eventually(() => !alive(running), "the command to end");
-      store(join(sessions, record ?? "")).ear.dispose();
+      store(join(sessions, record ?? ""))[1].dispose();
     } finally {
       tui.kill();
       await remove(directory);

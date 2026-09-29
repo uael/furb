@@ -323,7 +323,7 @@ test("deleting the current session moves to the next session that opens, and to 
       library = open();
       const group = await library.add(directory);
       const current = await library.create(group, "Delete me");
-      lease = store(held.path).ear;
+      lease = store(held.path)[1];
       const sibling = group.sessions.find((entry) => entry.path === held.path);
       expect(group.sessions.map((entry) => entry.name)).toEqual(["Delete me", "Held elsewhere"]);
       await library.delete(current);

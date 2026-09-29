@@ -24,7 +24,7 @@ crate-type = ["rlib", "cdylib"]
 [features]
 # The python binding: the same crate, reached from python. It links no interpreter of its own, which is what an
 # extension module is, so the module feature is on only where maturin builds the wheel.
-python = ["dep:pyo3"]
+python = ["dep:pyo3", "dep:windows-sys"]
 extension-module = ["python", "pyo3/extension-module"]
 typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build", "dep:windows-sys"]
 
@@ -62,7 +62,7 @@ base64 = "0.22"
 # The runtime that each call of a model runs on, and the processes of the claude command line.
 tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "time", "sync"] }
 futures = "0.3"
-pyo3 = { version = "0.29.2", features = ["generate-import-lib"], optional = true }
+pyo3 = { version = "0.29.2", features = ["generate-import-lib", "multiple-pymethods"], optional = true }
 napi = { version = "3", default-features = false, features = ["napi6", "serde-json", "dyn-symbols"], optional = true }
 napi-derive = { version = "3", optional = true }
 # The identity of a file on every system: the device and inode on Unix, and the volume serial number and file index
@@ -78,7 +78,7 @@ ruff_text_size = "0.0.9"
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-# The console of Windows, whose end the typescript binding hears.
+# The console of Windows, whose end a host hears through a door.
 windows-sys = { version = "0.61", features = ["Win32_System_Console"], optional = true }
 
 [dev-dependencies]

@@ -22,8 +22,8 @@ API of its own:
   `src/extension/` holds the ear of the World of each. `docs/extensions.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one: the record, and the ears of the crate after the ears of the
   host, the provider among them, on the default actor and the roster that the host names from the catalog, or on a
-  model of its own, and the extensions. A host adds only its own ears, such as the console of its operator. The
-  python door gives it as `_monty.opened`, and the TypeScript door as `Engine.open`.
+  model of its own, and the extensions. A host adds only its own ears, such as the console of its operator. Every
+  host gives it as one `Opening`, and each door gives it as `opened` and as `Engine.open`.
 - `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of
   its own, and it carries each value between the sandbox and a host. An ear of a host is an object of the host in the
   sandbox, which the engine steps as a generator.
@@ -31,8 +31,12 @@ API of its own:
   names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
   engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox
   of its own, which alone says which module runs. The gate of the python package reads through it too.
-- `src/binding/py.rs`, behind the `python` feature, is the door to python: an `Engine` that says each name of the
-  contract by its name, and the ears of the crate. `bind/python` is the package `furb-monty`. Its module
+- `src/binding.rs` holds the host API that both doors give, each function once: the ears of the crate, the store, the
+  opening of a life, the catalog, the extensions, the images and the gate. A door holds only how a value of its
+  language crosses, its `Engine` and its `Act`, and the loop that drives them. The `Engine` of each door has the same
+  methods, one for each verb of the contract, which the build makes from the contract.
+- `src/binding/py.rs`, behind the `python` feature, is the door to python. `bind/python` is the package
+  `furb-monty`. Its module
   `furb_monty.engine` gives every name of the contract over one life in the sandbox, and `FURB_ENGINE=monty` makes
   `from furb import engine` give it.
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no

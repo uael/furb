@@ -122,7 +122,10 @@ enum Command {
 impl Place {
   /// A life in the directory of this place, on its record, which it keeps what it says to when `keeps` says so.
   fn opening(&self, keeps: bool) -> Opening {
-    Opening::new(life::directory(self.cwd.as_deref())).record(self.record.clone(), keeps)
+    let cwd = self.cwd.clone().unwrap_or_else(|| PathBuf::from("."));
+    let directory = std::path::absolute(&cwd).unwrap_or(cwd).display().to_string();
+    let record = self.record.as_ref().map(|one| one.display().to_string());
+    Opening { directory, record, keeps: Some(keeps), ..Opening::default() }
   }
 }
 
@@ -130,7 +133,7 @@ impl Stand {
   /// A life that stands on the actor and the roster of this stand.
   fn on(&self, opening: Opening) -> Opening {
     let roster = (!self.roster.is_empty()).then(|| self.roster.clone());
-    opening.actor(self.model.clone()).roster(roster)
+    Opening { actor: self.model.clone(), roster, ..opening }
   }
 }
 
@@ -139,12 +142,12 @@ fn main() -> ExitCode {
   let done = match furb.command {
     Some(Command::Prompt { message, to, shape, place, mut stand }) => {
       // The actor of the prompt is one the life offers.
-      stand.roster.extend(life::model(&to));
+      stand.roster.extend(life::actor(&to).1);
       prompt(stand.on(place.opening(true)), &shape, message, to)
     }
     Some(Command::Turns { record, cwd, stand }) => {
-      let opening = Opening::new(life::directory(cwd.as_deref())).record(Some(record), false);
-      turns(stand.on(opening.inspecting(true)))
+      let place = Place { record: Some(record), cwd };
+      turns(stand.on(Opening { inspecting: Some(true), ..place.opening(false) }))
     }
     Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word),
     Some(Command::Extensions { place }) => extensions(place.opening(false)),
@@ -176,7 +179,7 @@ fn main() -> ExitCode {
 /// the command wakes it, and a wake of a prompt that is done says nothing.
 fn prompt(opening: Opening, shape: &str, message: String, to: String) -> Result<(), String> {
   let mut life = Life::lived(opening)?;
-  let to = life::actor(&to);
+  let to = life::actor(&to).0;
   let id = match life.again(shape, &message, &to) {
     Some(id) => {
       life.engine.wake(&id).map_err(|no| no.to_string())?;

@@ -7,10 +7,12 @@ import type { FileChange, ImageAttachment, LiveAct, Turn } from "@furb/engine";
 import {
   actorParts,
   decodeRecord,
+  enabled,
   furbDirectory,
   imagePath,
   imageReference,
   imageReferences,
+  ROOT,
   saveFile,
   shapes,
   WINDOW,
@@ -490,7 +492,10 @@ export class Session extends EventEmitter {
     this.notice = `${image.name} attached.`;
   }
   private withImages(text: string): string {
-    return [text, ...(this.images[this.selected] ?? []).map(imageReference)].join("\n");
+    return [
+      text,
+      ...(this.images[this.selected] ?? []).map(({ name, uri }) => imageReference(name, uri)),
+    ].join("\n");
   }
   labelOf(id: string): string {
     return id === this.engine.root
@@ -754,8 +759,9 @@ export class Session extends EventEmitter {
         this.notice = "Work cancelled.";
         break;
       case "extensions": {
-        const enabled = await this.engine.extensions();
-        const each = enabled.map(({ name, life }) => (life ? `${name} with ${life}` : name));
+        const each = enabled(await this.engine.transcript({ on: ROOT })).map(({ name, life }) =>
+          life ? `${name} with ${life}` : name,
+        );
         this.notice = each.length
           ? `This life runs ${each.join(", ")}. Run a word of one with /run.`
           : "This life runs no extension.";

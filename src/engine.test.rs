@@ -23,6 +23,7 @@ use std::{
 use crate::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
   ear::{call, ear, hear, say},
+  engine::callable,
   verbs, world,
 };
 
@@ -358,7 +359,7 @@ fn a_function_of_the_host_is_called_back_by_the_sandbox_with_what_the_word_gave_
   let mut lived = Lived::new("callables", &[], true).unwrap();
   let seen = Rc::new(RefCell::new(0usize));
   let held = Rc::clone(&seen);
-  let show = lived.engine.callable(move |args| {
+  let show = callable(move |args| {
     *held.borrow_mut() =
       args.first().and_then(|one| one.as_ref().items()).map_or(0, |lines| lines.len());
     Ok(Object::list([Object::int(2)]))
@@ -366,7 +367,7 @@ fn a_function_of_the_host_is_called_back_by_the_sandbox_with_what_the_word_gave_
   let got = lived.engine.word("show(['one', 'two', 'three'])", vec![("show", show)]).unwrap();
   assert_eq!(*seen.borrow(), 3, "the function was given the lines");
   assert_eq!(got.py_repr(), "[2]", "the word got what the function gave");
-  let bad = lived.engine.callable(|_| Err(Fault::refused("not lines")));
+  let bad = callable(|_| Err(Fault::refused("not lines")));
   let no = lived.engine.word("show(1)", vec![("show", bad)]);
   assert_eq!(
     no.unwrap_err().name,

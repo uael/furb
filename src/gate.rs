@@ -113,15 +113,11 @@ fn unrun(sheet: &str) -> Vec<(usize, String)> {
     .into_iter()
     .filter(|at| !(at.start() == 0.into() && sheet[*at] == opening))
     .filter_map(|at| {
-      let raised = ran(&sheet[at]).err()?;
+      let raised =
+        Sand::new().run(&sheet[at], NamedValues::new(), &mut Nobody("an import")).err()?;
       Some((sheet[..at.start().to_usize()].matches('\n').count() + 1, format!("{IMPORT} {raised}")))
     })
     .collect()
-}
-
-/// One import, run in a sandbox of its own, which calls no host.
-fn ran(import: &str) -> Result<(), Fault> {
-  Sand::new().run(import, NamedValues::new(), &mut Nobody("an import")).map(drop)
 }
 
 /// The imports of a body and of every body beneath it, each by where it stands.

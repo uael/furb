@@ -25,7 +25,6 @@ use std::{
   future::Future,
   marker::PhantomData,
   pin::Pin,
-  rc::Rc,
   sync::atomic::{AtomicI64, Ordering},
   task::{Context, Poll, Waker},
 };
@@ -104,81 +103,36 @@ type Words<'a> = (Vec<Object>, Vec<(&'a str, Object)>);
 /// What a host does when an act is done, given what it came to.
 type Watcher = Box<dyn FnMut(&Object)>;
 
-/// The ears and the functions of the host, by the names the sandbox calls them by.
-///
-/// A door adds to them while an ear speaks or a function runs, since a function of the host may give a generator,
-/// so they are shared, and each is taken out while it runs.
-#[derive(Clone, Default)]
-pub(crate) struct Hosted {
-  ears: Rc<RefCell<Ears>>,
-  calls: Rc<RefCell<Vec<Option<Callable>>>>,
-}
-
-/// The ears of the host by name, and how many a door added, which names the next.
+/// The ears and the functions of a host, by the names the sandbox calls them by.
 #[derive(Default)]
-struct Ears {
-  named: HashMap<String, Box<dyn Ear>>,
-  added: usize,
+struct Hosted {
+  ears: HashMap<String, Box<dyn Ear>>,
+  calls: HashMap<String, Callable>,
 }
 
-impl Hosted {
-  /// An ear of the host, heard under this name.
-  fn named(&self, name: String, ear: Box<dyn Ear>) -> Result<(), Fault> {
-    match self.ears.borrow_mut().named.insert(name.clone(), ear) {
-      Some(_) => Err(Fault::refused(format!("{name} hears"))),
-      None => Ok(()),
-    }
-  }
+thread_local! {
+  /// What a host of this thread handed over and no life took yet. A life takes each the first time a value that names
+  /// it comes into its sandbox, and holds it from then on, so each is the life's that was given it.
+  static HANDED: RefCell<Hosted> = RefCell::default();
+}
 
-  /// An ear of the host, heard from now on under a name of its own, as the value a verb is given: the object that
-  /// stands in for it in the sandbox, which stands at a yield when the host started the ear before it crossed.
-  pub(crate) fn ear(&self, ear: Box<dyn Ear>, started: bool) -> Object {
-    let name = {
-      let mut held = self.ears.borrow_mut();
-      held.added += 1;
-      let name = format!("{EAR}{}", held.added);
-      held.named.insert(name.clone(), ear);
-      name
-    };
-    marked("ear", [("name", Object::string(name)), ("started", Object::bool(started))])
-  }
+/// How many ears and functions the hosts of this process handed over, which names the next.
+static HANDS: AtomicI64 = AtomicI64::new(1);
 
-  /// Every ear and every function of the host goes, with what each holds, as a command it runs or a record it keeps.
-  #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
-  pub(crate) fn clear(&self) {
-    let ears = std::mem::take(&mut self.ears.borrow_mut().named);
-    let calls = std::mem::take(&mut *self.calls.borrow_mut());
-    drop((ears, calls));
-  }
+/// An ear of the host, handed over as the value a verb is given: the object that stands in for it in the sandbox,
+/// which stands at a yield when the host started the ear before it crossed.
+pub fn handed(ear: Box<dyn Ear>, started: bool) -> Object {
+  let name = format!("{EAR}{}", HANDS.fetch_add(1, Ordering::Relaxed));
+  HANDED.with_borrow_mut(|held| held.ears.insert(name.clone(), ear));
+  marked("ear", [("name", Object::string(name)), ("started", Object::bool(started))])
+}
 
-  /// A function of the host, as a value a verb may be given.
-  pub(crate) fn callable(&self, call: Callable) -> Object {
-    let mut calls = self.calls.borrow_mut();
-    calls.push(Some(call));
-    Object::function(format!("{CALL}{}", calls.len() - 1), None)
-  }
-
-  /// What the ear of this name does with what it heard.
-  fn resume(&self, name: &str, heard: Heard) -> Result<Step, Fault> {
-    let taken = self.ears.borrow_mut().named.remove(name);
-    let Some(mut ear) = taken else {
-      return Err(Fault::refused(format!("no ear of the host is named {name}")));
-    };
-    let step = ear.resume(heard);
-    self.ears.borrow_mut().named.insert(name.to_owned(), ear);
-    Ok(step)
-  }
-
-  /// What the function of this name gave, called with these words.
-  fn call(&self, name: &str, args: Vec<Object>) -> Result<Object, Fault> {
-    let missing = || Fault::refused(format!("{name} is no function of the host"));
-    let n = name.strip_prefix(CALL).and_then(|n| n.parse::<usize>().ok()).ok_or_else(missing)?;
-    let taken = self.calls.borrow_mut().get_mut(n).and_then(Option::take);
-    let mut call = taken.ok_or_else(missing)?;
-    let got = call(args);
-    self.calls.borrow_mut()[n] = Some(call);
-    got
-  }
+/// A function of the host, handed over as a value a verb may be given: a show, a filter. The sandbox calls it back,
+/// and what it gives is what the call gave.
+pub fn callable(call: impl FnMut(Vec<Object>) -> Result<Object, Fault> + 'static) -> Object {
+  let name = format!("{CALL}{}", HANDS.fetch_add(1, Ordering::Relaxed));
+  HANDED.with_borrow_mut(|held| held.calls.insert(name.clone(), Box::new(call)));
+  Object::function(name, None)
 }
 
 /// The acts that the entries of a record show started and not done, by name, in the order of the record: work that
@@ -386,8 +340,7 @@ impl Outside {
     args: Vec<Object>,
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
-    let made =
-      self.made.get(&n).cloned().ok_or_else(|| Fault::new("KeyError", vec![Object::int(n)]))?;
+    let made = self.held(n)?;
     let (args, kwargs) = self.inwards(sand, args, kwargs)?;
     let got = sand.call(self, &made, args, kwargs)?;
     self.outward(sand, &got)
@@ -457,6 +410,11 @@ impl Outside {
     }
   }
 
+  /// A callable the engine made or a class a word defined, by the number the host holds it by.
+  fn held(&self, n: i64) -> Result<Object, Fault> {
+    self.made.get(&n).cloned().ok_or_else(|| Fault::new("KeyError", vec![Object::int(n)]))
+  }
+
   /// A callable the engine made or a class a word defined, forgotten by the host, so the sandbox holds it no more.
   fn forget(&mut self, sand: &mut Sand, n: i64) {
     if let Some(made) = self.made.remove(&n)
@@ -483,8 +441,11 @@ impl Outside {
   /// it gives comes in as any value comes in, so a function that gives an ear gives the object that stands in for it.
   fn called(&mut self, sand: &mut Sand, name: &str, args: &[Object]) -> Result<Object, Fault> {
     let args = args.iter().map(|one| self.outward(sand, one)).collect::<Result<Vec<_>, _>>()?;
-    let got = self.hearing(sand, |hosted| hosted.call(name, args))?;
-    self.inward(sand, &got)
+    let missing = || Fault::refused(format!("{name} is no function of the host"));
+    let mut call = self.hosted.calls.remove(name).ok_or_else(missing)?;
+    let got = self.hearing(sand, || call(args));
+    self.hosted.calls.insert(name.to_owned(), call);
+    self.inward(sand, &got?)
   }
 
   /// One step of an ear of the host, which the sandbox holds as an object that stands in for a generator.
@@ -520,10 +481,11 @@ impl Outside {
         Err(fault) => return Answer::Abort(fault),
       },
     };
-    let step = match self.hearing(sand, |hosted| hosted.resume(&name, heard)) {
-      Ok(step) => step,
-      Err(fault) => return Answer::Abort(fault),
+    let Some(mut ear) = self.hosted.ears.remove(&name) else {
+      return Answer::Abort(Fault::refused(format!("no ear of the host is named {name}")));
     };
+    let step = self.hearing(sand, || ear.resume(heard));
+    self.hosted.ears.insert(name.clone(), ear);
     let at = match step {
       Step::Say(_) | Step::Wait => At::Waiting,
       Step::Over | Step::Raised(_) => At::Over,
@@ -539,10 +501,21 @@ impl Outside {
 
   /// What the host does in `step`, with this life answering at once each verb that the host calls while it runs,
   /// since the sandbox takes a call before the call of the sandbox that the host answers.
-  fn hearing<R>(&mut self, sand: &mut Sand, step: impl FnOnce(&Hosted) -> R) -> R {
-    let hosted = self.hosted.clone();
+  fn hearing<R>(&mut self, sand: &mut Sand, step: impl FnOnce() -> R) -> R {
     let mut answers = |call: Call| self.asked(sand, call);
-    heard(&mut answers, || step(&hosted))
+    heard(&mut answers, step)
+  }
+
+  /// What the host handed over under this name, which this life holds from now on.
+  fn take(&mut self, name: &str) {
+    HANDED.with_borrow_mut(|held| {
+      if let Some(ear) = held.ears.remove(name) {
+        self.hosted.ears.insert(name.to_owned(), ear);
+      }
+      if let Some(call) = held.calls.remove(name) {
+        self.hosted.calls.insert(name.to_owned(), call);
+      }
+    });
   }
 
   /// What the host calls while the life waits on it, answered at once: who speaks, a callable the engine made, or a
@@ -571,10 +544,7 @@ impl Outside {
   /// What the host raised, raised in the sandbox as the exception it is: a builtin one by its name, and one of the
   /// engine made from what it was made with.
   fn raising(&mut self, sand: &mut Sand, fault: Fault) -> Answer {
-    if fault.name.parse::<ExcType>().is_ok() {
-      return Answer::Fault(fault);
-    }
-    if !self.names.contains_key(&fault.name) {
+    if fault.name.parse::<ExcType>().is_ok() || !self.names.contains_key(&fault.name) {
       return Answer::Fault(fault);
     }
     let made = fault.args.iter().map(|one| self.inward(sand, one)).collect::<Result<Vec<_>, _>>();
@@ -720,6 +690,10 @@ impl Outside {
       }
       MontyNode::List(held) => Object::list(self.coming(sand, graph, held)?),
       MontyNode::Tuple(held) => Object::tuple(self.coming(sand, graph, held)?),
+      MontyNode::Function { name, .. } => {
+        self.take(name);
+        graph.value(id).to_owned()
+      }
       _ => graph.value(id).to_owned(),
     })
   }
@@ -754,17 +728,11 @@ impl Outside {
         Ok(Some(held))
       }
       // A callable the engine made, or a class a word defined, back from the host by the number it went out under.
-      "made" if let Some(n) = number("id") => self
-        .made
-        .get(&n)
-        .cloned()
-        .map(Some)
-        .ok_or_else(|| Fault::new("KeyError", vec![Object::int(n)])),
+      "made" if let Some(n) = number("id") => self.held(n).map(Some),
       // An instance of a class a word defined, back from the host by the number of its class and its fields, made
       // here from them as the interpreter makes one, with no `__init__` run.
       "instance" if let (Some(n), Some(fields)) = (number("class"), at("fields")) => {
-        let class =
-          self.made.get(&n).cloned().ok_or_else(|| Fault::new("KeyError", vec![Object::int(n)]))?;
+        let class = self.held(n)?;
         let MontyNode::Dict(fields) = graph.node(fields) else { return Ok(None) };
         let mut held = Vec::new();
         for (key, one) in fields {
@@ -776,6 +744,7 @@ impl Outside {
         if let (Some(name), Some(started)) =
           (text("name"), at("started").and_then(|one| graph.value(one).as_bool())) =>
       {
+        self.take(&name);
         let on = self.fresh();
         self.standing.insert(on, (name, if started { At::Waiting } else { At::Unborn }));
         Ok(Some(object("Ear", on)))
@@ -956,19 +925,13 @@ impl Engine {
     record: impl IntoIterator<Item = Object>,
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
   ) -> Result<Engine, Fault> {
-    Engine::open(Hosted::default(), record, ears)
-  }
-
-  /// An engine opened on the ears and the functions of a host that a door already added to.
-  pub(crate) fn open<N: Into<String>>(
-    hosted: Hosted,
-    record: impl IntoIterator<Item = Object>,
-    ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
-  ) -> Result<Engine, Fault> {
+    let mut hosted = Hosted::default();
     let mut names = Vec::new();
     for (name, ear) in ears {
       let name = name.into();
-      hosted.named(name.clone(), ear)?;
+      if hosted.ears.insert(name.clone(), ear).is_some() {
+        return Err(Fault::refused(format!("{name} hears")));
+      }
       names.push(name);
     }
     let mut sand = Sand::new();
@@ -1036,23 +999,8 @@ impl Engine {
     self.raised.as_ref()
   }
 
-  /// A function of the host, as a value a verb may be given: a show, a filter. The sandbox calls it back, and what
-  /// it gives is what the call gave.
-  pub fn callable(
-    &mut self,
-    call: impl FnMut(Vec<Object>) -> Result<Object, Fault> + 'static,
-  ) -> Object {
-    self.outside.hosted.callable(Box::new(call))
-  }
-
-  /// The ears and the functions of the host, which a door adds to as it carries a value of its language in.
-  #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
-  pub(crate) fn hosted(&self) -> Hosted {
-    self.outside.hosted.clone()
-  }
-
   /// One verb of the engine by its name, said with these words, and what it gave.
-  pub(crate) fn verb(
+  pub fn verb(
     &mut self,
     name: &str,
     args: Vec<Object>,
@@ -1063,7 +1011,7 @@ impl Engine {
 
   /// One word run in the names of the engine with these values bound, and what it gave, as it goes out, which is how
   /// a door reads what no verb reads.
-  pub(crate) fn word(&mut self, word: &str, inputs: Vec<(&str, Object)>) -> Result<Object, Fault> {
+  pub fn word(&mut self, word: &str, inputs: Vec<(&str, Object)>) -> Result<Object, Fault> {
     let names = Object::dict(inputs.into_iter().map(|(name, one)| (Object::string(name), one)));
     self.run(|sand, outside| {
       let (word_of, names) = (outside.opened.word.clone(), outside.inward(sand, &names)?);
@@ -1073,8 +1021,7 @@ impl Engine {
   }
 
   /// One callable the engine made, called back by the number it went out under, with these words, and what it gave.
-  #[cfg_attr(not(feature = "python"), allow(dead_code))]
-  pub(crate) fn made(
+  pub fn made(
     &mut self,
     n: i64,
     args: Vec<Object>,
@@ -1084,15 +1031,13 @@ impl Engine {
   }
 
   /// A callable the engine made, forgotten: the host holds its number no more, so the sandbox holds it no more.
-  #[cfg_attr(not(feature = "python"), allow(dead_code))]
-  pub(crate) fn forget(&mut self, n: i64) -> Result<(), Fault> {
+  pub fn forget(&mut self, n: i64) -> Result<(), Fault> {
     self.outside.forget(&mut self.sand, n);
     Ok(())
   }
 
   /// Who speaks in the life, and who speaks from now on when a value is given: `site`, read and set where it stands.
-  #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
-  pub(crate) fn site(&mut self, value: Option<&str>) -> Result<String, Fault> {
+  pub fn site(&mut self, value: Option<&str>) -> Result<String, Fault> {
     let value = value.map(Object::string);
     let got = self.run(|sand, outside| outside.site(sand, value.as_ref()))?;
     Ok(got.as_ref().as_str().unwrap_or_default().to_owned())
@@ -1143,14 +1088,33 @@ impl Engine {
     self.run(|sand, outside| outside.outcome(sand, id))
   }
 
+  /// One name that the module of a chain binds, the root when no chain is given, read without calling it: the name
+  /// of its type, its representation, and its value, which goes out as every value does.
+  pub fn inspect(
+    &mut self,
+    name: &str,
+    chain: Option<&str>,
+  ) -> Result<(String, String, Object), Fault> {
+    let chain = Object::string(chain.unwrap_or(&self.root));
+    let bound = vec![("__chain", chain), ("__name", Object::string(name))];
+    let got =
+      self.word("(lambda x: (type(x).__name__, repr(x), x))(module(__chain)[__name])", bound)?;
+    let got = got.as_ref();
+    let text =
+      |at| entry(&got, at).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+    let value = entry(&got, 2).map_or_else(Object::none, |one| one.to_owned());
+    Ok((text(0), text(1), value))
+  }
+
+  /// Every name that the module of a chain binds, the root when no chain is given, in the order it bound them.
+  pub fn names(&mut self, chain: Option<&str>) -> Result<Vec<String>, Fault> {
+    let chain = Object::string(chain.unwrap_or(&self.root));
+    Plain::plain(self.word("[str(x) for x in module(__chain)]", vec![("__chain", chain)])?)
+  }
+
   /// What to do when an act is done, given what it came to: told at once for an act that is done already, and once
   /// when it is, after the entry in which it was. This is how a door that drives the engine itself awaits.
-  #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
-  pub(crate) fn watch(
-    &mut self,
-    id: &str,
-    then: impl FnMut(&Object) + 'static,
-  ) -> Result<(), Fault> {
+  pub fn watch(&mut self, id: &str, then: impl FnMut(&Object) + 'static) -> Result<(), Fault> {
     self.watchers.entry(id.to_owned()).or_default().push(Box::new(then));
     self.told()
   }

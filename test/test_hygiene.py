@@ -219,7 +219,8 @@ def test_no_name_is_bound_again_beneath_itself() -> None:
 
 def test_the_word_of_an_extension_is_its_file_less_its_imports_of_furb() -> None:
   """The word that a chain runs is the program of the file of the extension, which ruff and ty read."""
-  for name, word, _ in _monty.official():
+  for one in _monty.official():
+    name, word = one["name"], one["word"]
     body = ast.parse((EXTENSIONS / name / f"{name}.py").read_text(encoding="utf-8")).body
     kept = [one for one in body if not (isinstance(one, ast.ImportFrom) and (one.module or "").startswith("furb"))]
     assert ast.dump(ast.parse(word)) == ast.dump(ast.Module(body=kept, type_ignores=[]))
@@ -228,6 +229,7 @@ def test_the_word_of_an_extension_is_its_file_less_its_imports_of_furb() -> None
 def test_the_word_of_an_extension_binds_no_name_of_the_engine_nor_again_beneath_itself() -> None:
   """A word runs in the module of a chain, after the engine, so it keeps the meaning of every name there."""
   held = set(binds(ast.parse(PY.read_text(encoding="utf-8"))))
-  for name, word, _ in _monty.official():
+  for one in _monty.official():
+    name, word = one["name"], one["word"]
     assert binds(ast.parse(word)) & held == set(), name
     assert shadows(f"{PY.read_text(encoding='utf-8')}\n{word}") == [], name

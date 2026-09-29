@@ -235,7 +235,7 @@ impl Server {
         let shape = life::shape(shape.as_deref().unwrap_or(life::SHAPE));
         let with = verbs::Prompt {
           message: command.text("message")?,
-          to: command.text("to")?.map(|to| life::actor(&to)),
+          to: command.text("to")?.map(|to| life::actor(&to).0),
           on: Some(on),
         };
         let id = self.life.engine.prompt(shape, with).map_err(failed)?.id().to_owned();

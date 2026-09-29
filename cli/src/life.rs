@@ -4,7 +4,6 @@
 use std::{
   cell::RefCell,
   future::Future,
-  path::{Path, PathBuf},
   pin::Pin,
   rc::Rc,
   sync::Arc,
@@ -171,24 +170,16 @@ pub fn shape(name: &str) -> Object {
   if name == "None" { Object::none() } else { Object::string(name) }
 }
 
-/// An actor as the roster names it: the model the catalog finds by the name, with the effort moved to the nearest
-/// one that model takes, and the name as it is when the catalog knows no model by it, the operator among them.
-pub fn actor(to: &str) -> String {
-  let named = Catalog::load().roster(Some(&[]), Some(to)).ok().and_then(|(_, actor)| actor);
-  named.unwrap_or_else(|| to.to_owned())
-}
-
-/// The model of an actor, as the catalog names it, and nothing for an actor that the catalog knows no model by, the
+/// An actor as the roster names it, and its model: the model the catalog finds by the name, with the effort moved to
+/// the nearest one that model takes; or the name as it is, and no model, when the catalog knows no model by it, the
 /// operator among them.
-pub fn model(to: &str) -> Option<String> {
-  let named = Catalog::load().roster(Some(&[]), Some(to)).ok();
-  named.and_then(|(models, _)| models.first().map(|model| model.name().to_owned()))
-}
-
-/// The directory a life stands on: the one given, or the current one, as an absolute path.
-pub fn directory(cwd: Option<&Path>) -> PathBuf {
-  let cwd = cwd.unwrap_or(Path::new("."));
-  std::path::absolute(cwd).unwrap_or_else(|_| cwd.to_path_buf())
+pub fn actor(to: &str) -> (String, Option<String>) {
+  match Catalog::load().roster(Some(&[]), Some(to)) {
+    Ok((models, actor)) => {
+      (actor.unwrap_or_else(|| to.to_owned()), models.first().map(|one| one.name().to_owned()))
+    }
+    Err(_) => (to.to_owned(), None),
+  }
 }
 
 /// A waker that unparks the thread that awaits, so a voice that speaks from another thread wakes it.

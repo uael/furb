@@ -38,6 +38,8 @@ pub struct Attached {
 }
 
 /// An image a message names: its text in the message, its name, and its uri.
+#[cfg_attr(feature = "typescript", napi_derive::napi(object, object_from_js = false))]
+#[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct Named {
   pub text: String,
   pub name: String,
@@ -173,10 +175,7 @@ impl Images {
     for paragraph in paragraphs(python) {
       let name = paragraph.strip_prefix('#').and_then(|rest| rest.split([' ', '\n']).next());
       let name = name.unwrap_or_default();
-      let prompt = name
-        .strip_prefix("prompt")
-        .is_some_and(|n| !n.is_empty() && n.bytes().all(|one| one.is_ascii_digit()));
-      let opens = prompt
+      let opens = crate::fact::named(name, "prompt")
         && paragraph.lines().last().is_some_and(|last| last.starts_with(&format!("{name}: Act[")));
       if !opens {
         continue;

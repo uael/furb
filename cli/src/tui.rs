@@ -42,8 +42,8 @@ pub fn launch(
     words.extend(["--cwd".into(), cwd.into()]);
   }
   if let Some(to) = &stand.model {
-    let actor = life::actor(to);
-    let model = life::model(to).unwrap_or_else(|| actor.clone());
+    let (actor, model) = life::actor(to);
+    let model = model.unwrap_or_else(|| actor.clone());
     words.extend(["--model".into(), model.as_str().into()]);
     if let Some(effort) = actor.strip_prefix(&format!("{model}/")) {
       words.extend(["--effort".into(), effort.into()]);

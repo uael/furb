@@ -1,4 +1,4 @@
-"""The extension: one engine in the sandbox, the ears of the crate, and the gate of the crate, reached from python.
+"""The extension: the host API of the crate, the same as the package of TypeScript gives, reached from python.
 
 Every value that crosses is what monty carries, made python: none, a truth, a number, a text, a list, a tuple, a
 map, an instance of a class of the engine as the instance it is, an exception as the one object it is for the
@@ -7,8 +7,97 @@ it back. A generator of this interpreter crosses as an ear, an ear of the crate 
 the sandbox calls back.
 """
 
-from collections.abc import Callable, Generator, Iterable
-from typing import final
+from collections.abc import Awaitable, Callable, Generator, Iterable
+from typing import NotRequired, TypedDict, Unpack, final
+
+class Extension(TypedDict):
+  """An extension: its name, its word, and its life word, which is empty when it has none."""
+
+  name: str
+  word: str
+  life: str
+
+class ModelInfo(TypedDict):
+  """A model of the catalog: its name, its efforts, its window in tokens, whether it takes an image, and its price
+  in dollars for a million tokens read, written, read from the cache and written to it."""
+
+  name: str
+  efforts: list[str]
+  window: int
+  images: bool
+  price: list[float] | None
+
+class ImageAttachment(TypedDict):
+  """An image a host attached: the name of its file, the uri a message names it by, its media type, and its size in
+  bytes."""
+
+  name: str
+  uri: str
+  mime_type: str
+  size: int
+
+class ImageContent(TypedDict):
+  """The bytes of an image as base64, and its media type."""
+
+  data: str
+  mime_type: str
+
+class ImagePath(TypedDict):
+  """The file that holds an image, and the digest its bytes have."""
+
+  path: str
+  digest: str
+
+class ImageType(TypedDict):
+  """The type of an image: its media type and its extension."""
+
+  mime_type: str
+  extension: str
+
+class Named(TypedDict):
+  """An image a message names: its text in the message, its name, and its uri."""
+
+  text: str
+  name: str
+  uri: str
+
+class Outcome(TypedDict):
+  """What an act came to, and whether it is done: nothing while it lives."""
+
+  done: bool
+  value: object
+
+class Inspection(TypedDict):
+  """One name of a chain, read without calling it: the name, the name of its type, its representation in the sandbox,
+  and its value."""
+
+  name: str
+  kind: str
+  representation: str
+  value: object
+
+class Opening(TypedDict):
+  """What a life is opened on, which every host gives the same. Each part that is unsaid takes its default: no
+  record, a life that keeps and does work and enables the extensions that the configs turn on, the config directory
+  of this process, and the first model the catalog offers."""
+
+  directory: str
+  record: NotRequired[str | None]
+  keeps: NotRequired[bool | None]
+  inspecting: NotRequired[bool | None]
+  extensions: NotRequired[bool | None]
+  config: NotRequired[str | None]
+  actor: NotRequired[str | None]
+  roster: NotRequired[list[str] | None]
+  claude: NotRequired[str | None]
+  stall: NotRequired[float | None]
+  images: NotRequired[str | None]
+  answer: NotRequired[Callable[[dict, Callable[..., None]], object] | None]
+  stream: NotRequired[Callable[[str, str, str, str], None] | None]
+
+type Ears = Iterable[tuple[str, object]]
+"""The ears of a host, each a generator or an ear of the crate under the name the engine hears it by, in the order
+the engine offers them a question."""
 
 @final
 class NativeEar(Generator[tuple | None, tuple]):
@@ -21,19 +110,29 @@ class NativeEar(Generator[tuple | None, tuple]):
 
   def send(self, value: tuple | None, /) -> tuple | None: ...
   def throw(self, *args: object) -> tuple | None: ...
-  def pump(self) -> None:
-    """What the work of the ear said since, said into the engine of this interpreter under the name of the ear."""
+
+@final
+class Act:
+  """An act: its name, which a control takes, and what it comes to, which python awaits."""
+
+  @property
+  def id(self) -> str: ...
+  def __await__(self) -> Generator[object, None, object]: ...
 
 @final
 class Engine:
-  """One engine, held on the thread of python, which says each name of the contract by its name. A verb that makes an
-  act gives its name."""
+  """One engine, held on the thread of python and driven in the loop it was booted in. Each verb of the contract is
+  a method of the same name, which takes the words it needs by position and the others by name, and gives an Act
+  when the verb makes one."""
 
   @staticmethod
-  def boot(record: Iterable[object], ears: Iterable[tuple[str, object]]) -> Engine:
-    """An engine, opened from the record, on these ears, each a generator of python or an ear of the crate under the
-    name the engine hears it by, in the order the engine offers them a question. It is booted in the running loop,
-    which drives it when an ear of the crate speaks from a thread of its own."""
+  def boot(record: Iterable[object], ears: Ears) -> Engine:
+    """An engine, opened from the record, on these ears. It is booted in the running loop."""
+
+  @staticmethod
+  def open(ears: Ears, **opening: Unpack[Opening]) -> Engine:
+    """A life opened as every host of the crate opens one: on its record, on these ears of the host, and then on the
+    ears of the crate and of the extensions. A life whose record drifted is refused."""
 
   @property
   def root(self) -> str:
@@ -43,104 +142,46 @@ class Engine:
   def raised(self) -> BaseException | None:
     """What boot raised, as the exception it is, and nothing when it raised nothing."""
 
+  @property
+  def record(self) -> list[list[list[object]]]:
+    """The record the life opened on, which the journal said again whole before boot returned."""
+
+  @property
+  def disposed(self) -> bool:
+    """Whether the engine is gone."""
+
   def site(self, value: str | None = None) -> str:
     """Who speaks in the life, and who speaks from now on when a name is given."""
 
-  def verb(self, name: str, args: Iterable[object], kwargs: dict[str, object]) -> object:
+  def verb(self, name: str, args: Iterable[object] | None = None, kwargs: dict[str, object] | None = None) -> object:
     """One name of the engine, said by its name with these words, and what it gave."""
 
-  def made(self, n: int, args: Iterable[object], kwargs: dict[str, object]) -> object:
-    """One callable the engine made, called back by the handle it crossed under, with these words."""
+  def made(self, n: int, args: Iterable[object] | None = None, kwargs: dict[str, object] | None = None) -> object:
+    """One callable the engine made, called back by the number it went out under, with these words."""
 
   def forget(self, n: int) -> None:
-    """A callable the engine made, forgotten: python holds its handle no more."""
+    """A callable the engine made, forgotten: the host holds its number no more."""
 
   def pending(self) -> list[tuple[str, str]]:
     """The work that an earlier life left, which waits for a wake that this life says, each act by its name and its
     kind, as the engine of the crate finds it."""
 
-  def watch(self, act: str, then: Callable[[object], object]) -> None:
-    """What to call when an act is done, with what it came to: at once for one done already, and once otherwise."""
+  def result[T](self, act: str) -> Awaitable[T]:
+    """What an act comes to, which python awaits: its value, or the exception it completed with, raised."""
 
-  def pump(self) -> None:
-    """The engine driven as far as it goes: what the voices of its ears said is said into it."""
+  def outcome(self, act: str) -> Outcome:
+    """What an act came to, and whether it is done."""
+
+  def inspect(self, name: str, chain: str | None = None) -> Inspection:
+    """One name of a chain, the root when none is given, read without calling it."""
+
+  def names(self, chain: str | None = None) -> list[str]:
+    """Every name the module of a chain binds, the root when none is given, in the order it bound them."""
 
   def dispose(self) -> None:
     """The engine is gone, and its ears with it."""
 
-def hearing() -> bool:
-  """Whether python answers a call of the engine now, so that a verb said here is said by what answers."""
-
-def call(verb: str, args: list[object], kwargs: dict[str, object]) -> object:
-  """One verb of the engine, called by its name with its words by the generator or the function of python that the
-  engine waits on now, and what it gave. Who speaks is the verb `spoken`, and a callable the engine made is the verb
-  `made`, with its number and its words."""
-
-def official() -> list[tuple[str, str, str]]:
-  """The official extensions, in the order a life runs them, each as its name, its word and its life word."""
-
-def enabled(root: list[tuple]) -> list[tuple[str, str, str]]:
-  """The extensions that a life runs, in the order it enabled them, as the facts of its root say them, each as its
-  name, its word and its life word."""
-
-def extensions(given: list[tuple[str, str, str]]) -> NativeEar:
-  """The ear of the extensions, given each extension that the life runs as its name, its word and its life word: it
-  enables each at the tip of the life, unless the record enables it, and plays each as a rung on each chain."""
-
-def memory(config: str) -> NativeEar:
-  """The ear of the memory extension, which finds the memory of a path in its folders and in the config directory."""
-
-def skills(config: str) -> NativeEar:
-  """The ear of the skills extension, which finds skills in the folders of a chain and in the config directory."""
-
-def opened(
-  directory: str,
-  record: str | None = None,
-  *,
-  keeps: bool = True,
-  inspecting: bool = False,
-  extensions: bool = True,
-  config: str | None = None,
-  actor: str | None = None,
-  roster: list[str] | None = None,
-  answer: Callable[[dict, Callable[..., None]], tuple] | None = None,
-  claude: str | None = None,
-  stall: float | None = None,
-  images: str | None = None,
-  stream: Callable[[str, str, str, str], None] | None = None,
-) -> tuple[list[list[list[object]]], list[tuple[str, NativeEar]]]:
-  """The record a life opens on, and the ears of the crate that it hears after the ears of the host, as every host of
-  the crate opens a life: the provider, the extensions, which enable at the tip those that the configs of the user
-  and of the directory turn on unless `extensions` is false, each official extension, the files, the commands, time,
-  and the store of the record when the life keeps. A life that inspects keeps nothing, enables nothing new, asks no
-  model, and its files, commands and time do no work.
-
-  The provider offers the model of `actor` and the models of `roster`, each named `provider:id` or by an id that one
-  model alone holds, or the first model the catalog offers when neither is said. `answer`, when given, answers each
-  request in place of the models: it is called on a thread of its own with the request, as JSON reads it, and a
-  function `write(text="", thinking="")`, and gives the turn. `claude` is the path of the claude command line, whose
-  turn is refused when it makes no progress for `stall` seconds. `images` is the directory of the images that a turn
-  names. `stream` is told what a model writes as it writes it, on a thread of the models: the rung it writes for, the
-  chain of that rung, and what it added to its text and to its thought."""
-
-def answered(shape: str, line: str) -> object:
-  """A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
-  line by. It raises Refused for a line that is no value of the shape, and for a shape the operator answers not."""
-
-type Info = tuple[str, list[str], int, bool, list[float] | None]
-"""A model of the catalog: its name, its efforts, its window, whether it takes an image, and its price in dollars for a
-million tokens read, written, read from the cache and written to it."""
-
-def models(claude: str | None = None) -> list[Info]:
-  """The models the catalog of this machine offers, with the claude command line at a path when it is given, each
-  named as the catalog names it."""
-
-def model(name: str) -> Info | None:
-  """The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, whether it offers
-  that model or not; nothing when it knows none."""
-
-def levels() -> list[str]:
-  """The levels of effort, from least to most, which an actor names after its model."""
+  def __getattr__(self, name: str) -> Callable[..., object]: ...
 
 def files() -> NativeEar:
   """The ear of the files, which reads and writes a path."""
@@ -158,11 +199,96 @@ def store(path: str) -> tuple[list[list[list[object]]], NativeEar]:
 def kept(path: str) -> list[list[list[object]]]:
   """What the store kept at a path, read with no lease and changed in nothing."""
 
-def gate(sheet: str) -> list[tuple[int, str]]:
-  """The gate of the crate, for the Kernel of this interpreter to read a sheet with: what the checker found on the
-  sheet, each error by its line, and no warning. It raises when the checker could not read the sheet."""
+def decode_record(line: str) -> object:
+  """One line of a record, read with every number exact, as the record keeps it."""
 
-SHAPES: list[str]
-"""Every shape the operator answers, by its name."""
+def opened(**opening: Unpack[Opening]) -> tuple[list[list[list[object]]], list[tuple[str, NativeEar]]]:
+  """The record a life opens on, and the ears of the crate that it hears after the ears of the host, as every host of
+  the crate opens a life: the provider, the extensions, each official extension, the files, the commands, time, and
+  the store of the record when the life keeps."""
+
+def gate(sheet: str) -> list[tuple[int, str]]:
+  """The gate of the crate: what the type checker of monty found on a sheet, each error by its line, and no warning.
+  It raises when the checker could not read the sheet."""
+
+def official() -> list[Extension]:
+  """The official extensions, in the order a life runs them."""
+
+def enabled(root: Iterable[Iterable[object]]) -> list[Extension]:
+  """The extensions that a life runs, in the order it enabled them, as the facts of its root say them."""
+
+def extensions(given: list[Extension]) -> NativeEar:
+  """The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
+  unless the record enables it, and plays each as a rung on each chain."""
+
+def memory(config: str) -> NativeEar:
+  """The ear of the memory extension, which finds the memory of a path in its folders and in the config directory."""
+
+def skills(config: str) -> NativeEar:
+  """The ear of the skills extension, which finds skills in the folders of a chain and in the config directory."""
+
+def config_directory() -> str:
+  """The config directory of the user for this process."""
+
+def shell() -> str:
+  """The POSIX shell that runs a command of this machine, which a host runs its own commands in too."""
+
+def shapes() -> list[str]:
+  """Every shape the operator answers, by its name."""
+
+def answered(shape: str, line: str) -> object:
+  """A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
+  line by. It raises Refused for a line that is no value of the shape, and for a shape the operator answers not."""
+
+def models(claude: str | None = None) -> list[ModelInfo]:
+  """The models the catalog of this machine offers, with the claude command line at a path when it is given."""
+
+def model(name: str) -> ModelInfo | None:
+  """The model the catalog knows by a name, whether it offers that model or not; nothing when it knows none."""
+
+def levels() -> list[str]:
+  """The levels of effort, from least to most, which an actor names after its model."""
+
+def attach_image(directory: str, path: str) -> ImageAttachment:
+  """An image copied into a directory of images under the digest of its bytes, as a message attaches it."""
+
+def image_content(directory: str, uri: str) -> ImageContent:
+  """The bytes of the image of a uri, as base64, and its media type, once the bytes have the digest the uri names."""
+
+def image_path(directory: str, uri: str) -> ImagePath:
+  """The file that holds the image of a uri, and the digest its bytes have."""
+
+def image_reference(name: str, uri: str) -> str:
+  """How a message names an image: `![name](uri)`."""
+
+def image_references(message: str) -> list[Named]:
+  """Each image a message names, as its text in the message, its name, and its uri."""
+
+def image_type(data: bytes) -> ImageType:
+  """The type of an image by its first bytes: its media type and its extension."""
+
+def hearing() -> bool:
+  """Whether a life of this thread hears an ear or a function of the host now, so that a verb said now is said by
+  what it hears."""
+
+def call(verb: str, args: list[object] | None = None, kwargs: dict[str, object] | None = None) -> object:
+  """One verb of the engine, called by its name with its words by the ear or the function of the host that a life
+  hears now, and what it gave. Who speaks is the verb `spoken`, and a callable the engine made is the verb `made`,
+  with its number and its words."""
+
+def on_console_end(callback: Callable[[str], None]) -> None:
+  """Call back when the console of Windows ends this process, with the name of the event: `break`, `close`,
+  `logoff` or `shutdown`. A system that is not Windows gives this callback no event."""
+
+ENGINE: str
+"""The engine: the one file the sandbox runs."""
 SYSTEM: str
 """The system prompt of every model: the engine, minified in layout alone, and nothing else."""
+WINDOW: int
+"""The window, in tokens, of a model whose roster entry does not say one."""
+OPERATOR: str
+"""The name of the operator in the roster and as an actor."""
+TIMEOUT: float
+"""The timeout, in seconds, of a command that does not say one."""
+ROOT: str
+"""The name of the root, which every life opens first."""

@@ -4,9 +4,11 @@ furb for python, with the engine in monty. `furb_monty.engine` gives every name 
 the engine in the sandbox of monty, with the Kernel that the crate loads there, so it needs no Kernel of its own.
 `furb_monty.gate` is the gate of the crate, which the package `furb` reads a word with too.
 
-`furb_monty._monty` is the door itself. Its `Engine` says each name of the contract by its name, with the words
-python gives, as the engine of this interpreter takes them. `_monty.opened(directory, record)` opens a life as every
-host of the crate opens one: it gives the record and the ears of the crate, which the host boots after its own ears.
+`furb_monty._monty` is the door itself, and it gives the same host API as the package of TypeScript, each name in
+the case of python. Its `Engine` has one method for each verb of the contract, which takes the words the verb needs
+by position and the others by name, and gives an `Act` when the verb makes one. `_monty.opened(directory=...,
+record=...)` opens a life as every host of the crate opens one: it gives the record and the ears of the crate, which
+the host boots after its own ears, and `Engine.open(ears, directory=...)` boots them at once.
 Those ears are the provider of the models, the extensions, which enable at the tip what the configs of the user and
 of the directory turn on unless `extensions=False`, the ear of each official extension, the files, the commands,
 time, and the store when the life keeps. Each is a `NativeEar`, which `furb_monty.engine.boot` takes beside the
@@ -16,7 +18,7 @@ own:
 ```python
 from furb_monty import _monty, engine
 
-record, ears = _monty.opened(".", "life.jsonl", actor="claude-cli:opus")
+record, ears = _monty.opened(directory=".", record="life.jsonl", actor="claude-cli:opus")
 # `world` is an ear of the host that answers the rest, a prompt to the operator among it.
 root = engine.boot(record, world=world, **dict(ears))
 ```
@@ -29,7 +31,7 @@ model writes as it writes it, and `images` is the directory of the images that a
 machine offers, `model(name)` one model by its name, and `levels()` the levels of effort. `files()`, `bash()`, `time()`,
 `store(path)`, `official()`, `extensions(given)`, `memory(config)` and `skills(config)` give the ears one by one, as the
 suite of each extension boots them. `answered(shape, line)` reads a line of the operator as a value of one of the
-`SHAPES`, by the rules that every console of the crate reads a line by. `_monty.SYSTEM` is the system prompt of every
+`shapes()`, by the rules that every console of the crate reads a line by. `_monty.SYSTEM` is the system prompt of every
 model: the engine, minified in layout alone.
 
 `furb_monty.engine.pending()` names the work that an earlier life left, which waits for a wake that this life says,

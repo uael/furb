@@ -482,7 +482,7 @@ export class Workspaces extends EventEmitter {
     await this.release(entry);
     // The lock file moves with the record while this store holds it, and a process that locked it meanwhile opens
     // the path again.
-    const lease = store(entry.path).ear;
+    const lease = store(entry.path)[1];
     const moved: [string, string][] = [];
     try {
       const directory = furbDirectory(group.directory, "trash", randomUUID());
