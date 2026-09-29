@@ -540,10 +540,47 @@ test("a session opens a record in a directory that does not stand yet, and keeps
     const { engine } = session;
     engine.write({ path: "note.txt", content: "one\n" }, { on: engine.root });
     await until(session, () => session.changes.length === 1);
-    expect(session.changes.read()).toEqual([{ path: join(cwd, "note.txt"), before: "", after: "one\n" }]);
+    expect(session.changes.read()).toEqual([
+      { path: join(cwd, "note.txt"), before: "", after: "one\n", write: "write1", by: "operator" },
+    ]);
     expect((await stat(`${record}.changes.jsonl`)).isFile()).toBe(true);
   } finally {
     await session.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
+test("each change keeps the act that asked its write, and the changes of a word are found by its rung, after a reopen", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-made-"));
+  const record = join(cwd, "life.jsonl");
+  const first = boot({ cwd, record });
+  let rung = "";
+  try {
+    const { engine } = first;
+    engine.write({ path: "operator.txt", content: "mine\n" }, { on: engine.root });
+    rung = engine.rung({
+      word: 'write(Text("a.txt", "a\\n"))\nwrite(Text("b.txt", "b\\n"))',
+      on: engine.root,
+    }).id;
+    await engine.result(rung);
+    await until(first, () => first.changes.length === 3);
+    expect(first.changes.of([rung]).map((change) => [change.path, change.after, change.by])).toEqual([
+      [join(cwd, "a.txt"), "a\n", rung],
+      [join(cwd, "b.txt"), "b\n", rung],
+    ]);
+  } finally {
+    await first.dispose();
+  }
+  const second = new Session({ record });
+  try {
+    second.open();
+    expect(second.changes.of([rung]).map((change) => change.path)).toEqual([
+      join(cwd, "a.txt"),
+      join(cwd, "b.txt"),
+    ]);
+    expect(second.changes.of(["operator"]).map((change) => change.path)).toEqual([join(cwd, "operator.txt")]);
+  } finally {
+    await second.dispose();
     await rm(cwd, { recursive: true });
   }
 });

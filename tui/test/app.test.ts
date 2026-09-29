@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
+import { find } from "../script/stage.ts";
 import { App, sessionDetail } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
@@ -19,7 +20,7 @@ test("the real native life drives the feed, the transcript, and responsive views
   composing(
     async ({ session, app, screen, frame }) => {
       expect(screen.captureCharFrame()).toContain("Explore a codebase");
-      expect(session.theme).toBe("github");
+      expect(session.theme).toBe("furb");
       expect(app.scroll.x).toBe(2);
       expect(app.scroll.height).toBeGreaterThanOrEqual(36);
       expect(app.scroll.height).toBeLessThanOrEqual(38);
@@ -30,6 +31,9 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(screen.captureCharFrame()).not.toContain("No budget set");
       expect(screen.captureCharFrame()).not.toContain("Session saved");
       await seedDemo(session);
+      const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
+      if (!thread) throw new Error("No thread of the operator.");
+      await session.open(thread.id);
       await frame();
       // The answer of a thread stands under the name of the model that gave it, once its markdown is drawn.
       expect(screen.captureCharFrame()).toContain("● sonnet");
@@ -45,24 +49,33 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(conversation.indexOf("Explore this project")).toBeLessThan(
         conversation.indexOf("A clear starting point"),
       );
-      // A command that is over folds to its heading, and its output shows once it opens.
-      expect(conversation).not.toContain("└ ✓ capture");
-      const command = app.scroll.getChildren().find((node) => /^bash\d+$/.test(node.id));
-      const heading = command?.getChildren()[0];
-      if (!heading) throw new Error("No command heading.");
-      await screen.mockMouse.click(heading.x, heading.y);
-      await screen.flush();
+      // A word that is over folds to its steps, and what its command printed shows once it opens.
+      expect(conversation).not.toContain("exit 0");
+      const [x, y] = find(screen, "Run the checks of the project");
+      await screen.mockMouse.click(x, y);
+      await frame();
       expect(screen.captureCharFrame()).toContain("exit 0");
-      expect(screen.captureCharFrame()).toContain("✓ local storage");
-      const expanded = app.scroll
-        .getChildren()
-        .find((node) => node.id === command?.id)
-        ?.getChildren()[0];
-      expect(expanded?.visible).toBe(true);
-      if (expanded) await screen.mockMouse.click(expanded.x, expanded.y);
-      await screen.flush();
+      expect(screen.captureCharFrame()).toContain("✓ search puts the newest note first");
+      // The open word is taller than the screen, so the screen grows to show all of it.
+      screen.resize(145, 110);
+      await frame();
+      // A read says its file and what it gave, before the command that the word ran after it, and the feed names no act.
+      expect(screen.captureCharFrame()).toMatch(/read {2}README\.md/);
+      expect(screen.captureCharFrame().search(/read {2}README\.md/)).toBeLessThan(
+        screen.captureCharFrame().indexOf("$ grep"),
+      );
+      // The code of the word stands apart from what came of it by one line.
+      const rows = screen.captureCharFrame().split("\n");
+      const code = rows.findIndex((line) => line.includes("close(report)"));
+      expect([rows[code + 1]?.trim(), rows[code + 2]]).toEqual([
+        "",
+        expect.stringMatching(/read {2}README\.md/),
+      ]);
+      expect(screen.captureCharFrame()).toContain("A small place to keep ideas.");
+      expect(screen.captureCharFrame()).not.toMatch(/\b(read|bash|rung|thread)\d+/);
+      await screen.mockMouse.click(...find(screen, "Run the checks of the project"));
+      await frame();
       expect(screen.captureCharFrame()).not.toContain("exit 0");
-      expect(app.scroll.getChildren().some((child) => /^bash\d+$/.test(child.id))).toBe(true);
       expect(screen.captureCharFrame()).not.toContain("failed");
       session.show("transcript");
       expect(await frame()).toContain('notes = read("README.md")');
@@ -111,7 +124,7 @@ test("model and effort change independently, a model is named by its id alone, a
     expect(first.actorChoice).toEqual({ model: "claude-cli:org/high", effort: "off" });
     await writeFile(first.preferences.path, "{");
     recovered = await demoSession({ preferences: new Preferences(first.preferences.path) });
-    expect(recovered.theme).toBe("github");
+    expect(recovered.theme).toBe("furb");
     expect(recovered.preferences.notice).toContain("Could not read preferences");
     expect(await readFile(first.preferences.path, "utf8")).toBe("{");
   } finally {
@@ -233,53 +246,56 @@ test("operator answers and program edits act through the binding", () =>
     { width: 120, height: 40, exitOnCtrlC: false },
   ));
 
-test("resume preserves chains, programs, theme, and input drafts while unfinished work stays paused", async () => {
-  const first = await demoSession({ seed: true });
-  let library = await demoLibrary(first);
-  const screen = await createTestRenderer({ width: 120, height: 40 });
-  const app = new App(screen.renderer, first, { quit() {}, workspaces: library });
-  const fork = first.chains.find((chain) => chain.id !== first.engine.root);
-  if (!fork) throw new Error("No fork in the fixture.");
-  await first.select(fork.id);
-  first.mode = "python";
-  first.theme = "paper";
-  first.view = "transcript";
-  app.render();
-  app.composer.setText('draft = "keep this"');
-  const pending = await first.engine.wait({ seconds: 10, on: fork.id });
-  const ids = first.chains.map((chain) => chain.id);
-  const program = { ...first.program };
-  const record = first.host.record;
-  app.dispose();
-  screen.renderer.destroy();
-  await library.dispose();
-  if (!record) throw new Error("No saved record.");
-  library = new Workspaces(first.preferences, { demo: true });
-  await library.refresh();
-  // The replay of a saved record comes after the list, and the picker shows its state once it lands.
-  await until(library, () => library.groups[0]?.sessions[0]?.status === "paused");
-  const saved = library.groups[0]?.sessions ?? [];
-  expect(saved).toHaveLength(1);
-  const detail = sessionDetail(saved[0] as SessionEntry, false);
-  expect(detail).toContain("KiB");
-  expect(detail).toContain("Paused");
-  await library.dispose();
-  const second = await demoSession({ record });
-  await composing(
-    async ({ app }) => {
-      expect(second.chains.map((chain) => chain.id)).toEqual(ids);
-      expect(second.program).toEqual(program);
-      expect(second.selected).toBe(fork.id);
-      expect(second.theme).toBe("paper");
-      expect(second.mode).toBe("python");
-      expect(app.composer.plainText).toBe('draft = "keep this"');
-      expect(second.host.pending.has(pending)).toBe(true);
-      expect((await second.engine.outcome(pending)).done).toBe(false);
-    },
-    { width: 120, height: 40 },
-    second,
-  );
-});
+test.serial(
+  "resume preserves chains, programs, theme, and input drafts while unfinished work stays paused",
+  async () => {
+    const first = await demoSession({ seed: true });
+    let library = await demoLibrary(first);
+    const screen = await createTestRenderer({ width: 120, height: 40 });
+    const app = new App(screen.renderer, first, { quit() {}, workspaces: library });
+    const fork = first.chains.find((chain) => chain.id !== first.engine.root);
+    if (!fork) throw new Error("No fork in the fixture.");
+    await first.select(fork.id);
+    first.mode = "python";
+    first.theme = "paper";
+    first.view = "transcript";
+    app.render();
+    app.composer.setText('draft = "keep this"');
+    const pending = await first.engine.wait({ seconds: 10, on: fork.id });
+    const ids = first.chains.map((chain) => chain.id);
+    const program = { ...first.program };
+    const record = first.host.record;
+    app.dispose();
+    screen.renderer.destroy();
+    await library.dispose();
+    if (!record) throw new Error("No saved record.");
+    library = new Workspaces(first.preferences, { demo: true });
+    await library.refresh();
+    // The replay of a saved record comes after the list, and the picker shows its state once it lands.
+    await until(library, () => library.groups[0]?.sessions[0]?.status === "paused");
+    const saved = library.groups[0]?.sessions ?? [];
+    expect(saved).toHaveLength(1);
+    const detail = sessionDetail(saved[0] as SessionEntry, false);
+    expect(detail).toContain("KiB");
+    expect(detail).toContain("Paused");
+    await library.dispose();
+    const second = await demoSession({ record });
+    await composing(
+      async ({ app }) => {
+        expect(second.chains.map((chain) => chain.id)).toEqual(ids);
+        expect(second.program).toEqual(program);
+        expect(second.selected).toBe(fork.id);
+        expect(second.theme).toBe("paper");
+        expect(second.mode).toBe("python");
+        expect(app.composer.plainText).toBe('draft = "keep this"');
+        expect(second.host.pending.has(pending)).toBe(true);
+        expect((await second.engine.outcome(pending)).done).toBe(false);
+      },
+      { width: 120, height: 40 },
+      second,
+    );
+  },
+);
 
 test("rewind is a recorded rung and keeps the selected transcript after reopening", async () => {
   let rewound = "";

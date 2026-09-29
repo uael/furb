@@ -5,6 +5,9 @@ import {
   imageContent,
   imagePath,
   imageReferences,
+  OPERATOR,
+  quotes,
+  type Stream,
   safeText,
   shapes,
   TIMEOUT,
@@ -20,25 +23,41 @@ import {
   InputRenderable,
   InputRenderableEvents,
   type KeyEvent,
+  type LineColorConfig,
   type LineNumberOptions,
   LineNumberRenderable,
+  type LineSign,
+  type MarkdownOptions,
   MarkdownRenderable,
   type MouseEvent,
+  type OptimizedBuffer,
   type Renderable,
   RGBA,
   type ScrollBoxOptions,
   ScrollBoxRenderable,
-  StyledText,
+  type SimpleHighlight,
   TextareaRenderable,
-  type TextChunk,
   type TextOptions,
   TextRenderable,
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
+import { parsePatch } from "diff";
 import { clipboardImage } from "./clipboard.ts";
 import { commands, slashes } from "./commands.ts";
-import { conversation } from "./conversation.ts";
+import {
+  actsOf,
+  asksOperator,
+  conversation,
+  fromOperator,
+  type Item,
+  type Note,
+  notesOf,
+  operatorNote,
+  refusal,
+  steps,
+  stepsOf,
+} from "./conversation.ts";
 import { externalEditor, openFile } from "./editor.ts";
 import { shortenHome, shortenHomes } from "./files.ts";
 import { ago, clip, count, dollars, elapsed, graphemes, kibibytes, modelName, share } from "./format.ts";
@@ -52,6 +71,7 @@ import {
   type Scroll,
   type Session,
   type SessionStatus,
+  type ShownChange,
   statusLabels,
   type View,
   views,
@@ -61,9 +81,10 @@ import { publishShare } from "./share.ts";
 import {
   theme as c,
   defaultTheme,
-  frame,
   glyph,
+  motion,
   palettes,
+  selectedMix,
   setTheme,
   spacing as space,
   spin,
@@ -71,7 +92,7 @@ import {
   type ThemeName,
   themeLabels,
 } from "./theme.ts";
-import { bold, italic, lineCounts, logo, mix, type Part, plain, styled, underline } from "./ui.ts";
+import { bold, inline, italic, lineCounts, logo, mix, type Part, plain, styled, underline } from "./ui.ts";
 import type { SessionEntry, Workspace, Workspaces } from "./workspaces.ts";
 
 const exitNotice = "Press ⌃D again to exit.";
@@ -82,35 +103,36 @@ const twice = 800;
 const viewLabels: Record<View, string> = { feed: "Feed", transcript: "Transcript", changes: "Changes" };
 /** A text with its first letter in upper case. */
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-/** Whether an act is a question to the operator: a thread whose actor is the operator. */
-const asksOperator = (act: ActRow) => act.kind === "thread" && act.words[2] === "operator";
+/** Why a word failed, as the operator reads it: each home as ~, and without the name <string> that the parser gives
+ * the word and the line that it says a second time. */
+const readable = (reason: string) => shortenHomes(reason).replace(/\s*\(<string>, line \d+\)$/gm, "");
 /** What an act is doing: the word that says it, the glyph that shows it, and their color. */
 type State = { word: string; mark: string; color: RGBA };
 /** The state of an act that failed, that a cancel ended, that is done, or that a pause holds. */
 const stateOf = (state: "failed" | "cancelled" | "done" | "held"): State =>
   ({
-    failed: { word: "failed", mark: glyph.failed, color: c.danger },
+    failed: { word: "failed", mark: glyph.failed, color: c.warm },
     cancelled: { word: "cancelled", mark: glyph.cancelled, color: c.faint },
-    done: { word: "", mark: glyph.done, color: c.success },
-    held: { word: "waits for a wake", mark: glyph.held, color: c.warning },
+    done: { word: "", mark: glyph.done, color: c.done },
+    held: { word: "waits for a wake", mark: glyph.held, color: c.warm },
   })[state];
 /** The mark of a state in its color, one shape for each: at work, waiting on the operator, paused, failed, finished
  * and not yet seen, and at rest. */
 const statusMark = (status: SessionStatus): Part =>
   (
     ({
-      working: [`${glyph.running} `, c.accent],
-      opening: [`${glyph.running} `, c.accent],
-      blocked: [`${glyph.asks} `, c.warning],
-      paused: [`${glyph.held} `, c.warning],
-      error: [`${glyph.failed} `, c.danger],
-      done: [`${glyph.dot} `, c.success],
+      working: [`${glyph.running} `, c.operator],
+      opening: [`${glyph.running} `, c.operator],
+      blocked: [`${glyph.asks} `, c.warm],
+      paused: [`${glyph.held} `, c.warm],
+      error: [`${glyph.failed} `, c.warm],
+      done: [`${glyph.dot} `, c.done],
       idle: [`${glyph.ring} `, c.faint],
       saved: [`${glyph.ring} `, c.faint],
     }) satisfies Record<SessionStatus, Part>
   )[status];
 /** The rows that a key moves the pointer of a list by, in the rewind tree and in a dialog. */
-const steps: Record<string, number> = { up: -1, down: 1, pageup: -8, pagedown: 8, home: -1e9, end: 1e9 };
+const moves: Record<string, number> = { up: -1, down: 1, pageup: -8, pagedown: 8, home: -1e9, end: 1e9 };
 /** What the footer says of a key: its chord and what it does, each read when the footer is drawn. */
 type Hint = readonly [chord: string | (() => string), action: string | (() => string)];
 /** A command of a layer of keys: the presses that run it, what it does with the key, when it acts, and what the footer
@@ -156,10 +178,10 @@ const noBorder = {
 const inputColors = (ground: RGBA) => ({
   backgroundColor: ground,
   focusedBackgroundColor: ground,
-  textColor: c.text,
-  focusedTextColor: c.text,
+  textColor: c.bright,
+  focusedTextColor: c.bright,
   placeholderColor: c.faint,
-  cursorColor: c.accent,
+  cursorColor: c.warm,
 });
 /** The suggestions of an empty feed: what each says, and the prompt it puts in the composer. */
 const starters = [
@@ -177,8 +199,46 @@ interface BlockOptions {
   act?: ActRow;
   /** The label again, which the tick reads while the label moves with time. */
   title?: () => Part[];
-  /** The columns the card stands in from the edge of the feed, to show that the act above made it. */
+  /** The columns the card stands in from the edge of the feed. */
   indent?: number;
+  /** Whether the card draws no heading, as a word or a command does, whose body shows it folded and open. */
+  headless?: boolean;
+}
+/** A word of the conversation. */
+type Word = Extract<Item, { type: "word" }>;
+/** A card added to the view: its name, what makes it again when it changes, its heading, and its body, which is given
+ * whether the card is folded, and what folds or opens it. */
+type Add = (
+  id: string,
+  key: string,
+  label: Part[],
+  body: (box: BoxRenderable, closed: boolean, toggle: () => void) => void,
+  options?: BlockOptions & { shown?: string },
+) => void;
+/** A text of numbers and units, each number bright and each unit faint. */
+const quantity = (text: string): Part[] =>
+  text
+    .split(/(\d[\d.,]*)/)
+    .filter(Boolean)
+    .map((part): Part => [part, /^\d/.test(part) ? c.bright : c.faint]);
+/** The languages whose colors the TUI knows, by the extensions of their files. */
+const extensions: Record<string, string> = {
+  py: "python",
+  ts: "typescript",
+  tsx: "typescript",
+  mts: "typescript",
+  cts: "typescript",
+  js: "javascript",
+  jsx: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  md: "markdown",
+  zig: "zig",
+};
+const languages = new Set(Object.values(extensions));
+/** The language of a file, by its extension, for the languages whose colors the TUI knows. */
+function filetype(path: string): string | undefined {
+  return extensions[path.slice(path.lastIndexOf(".") + 1).toLowerCase()];
 }
 interface Choice {
   label: string;
@@ -278,6 +338,46 @@ const efforts: Record<string, string> = {
   xhigh: "Deep thought for the hardest work",
   max: "All the thought the model allows",
 };
+/** Parts cut to a width at their end, with the mark of a cut. */
+function clipParts(parts: readonly Part[], width: number): Part[] {
+  const cut: Part[] = [];
+  let left = width;
+  for (const [text, fg, attributes, bg] of parts) {
+    if (left <= 0) break;
+    const size = Bun.stringWidth(text);
+    if (size < left || (size === left && cut.length === parts.length - 1))
+      cut.push([text, fg, attributes, bg]);
+    else cut.push([clip(text, left), fg, attributes, bg]);
+    left -= size;
+  }
+  return cut;
+}
+/** A text of one line that shows its parts cut at the end to its width, since OpenTUI cuts a line in its middle and a
+ * line of furb keeps its start. It holds the whole text, which OpenTUI measures, and cuts only what it draws. */
+class CutText extends TextRenderable {
+  protected override renderSelf(buffer: OptimizedBuffer): void {
+    const parts = this.content.chunks.map(
+      (chunk): Part => [chunk.text, chunk.fg, chunk.attributes, chunk.bg],
+    );
+    if (Bun.stringWidth(plain(parts)) <= this.width) {
+      super.renderSelf(buffer);
+      return;
+    }
+    let x = this.screenX;
+    for (const [text, fg, attributes, bg] of clipParts(parts, this.width)) {
+      buffer.drawText(
+        text,
+        x,
+        this.screenY,
+        fg ?? this._defaultFg,
+        bg,
+        (attributes ?? 0) | this._defaultAttributes,
+      );
+      x += Bun.stringWidth(text);
+    }
+  }
+}
+
 export class App {
   readonly root: BoxRenderable;
   readonly composer: TextareaRenderable;
@@ -356,8 +456,6 @@ export class App {
       heading: TextRenderable;
       /** The text of the heading, set again only when it changes. */
       label: string;
-      title?: () => Part[];
-      marker: Part[];
       key: string;
       compact: boolean;
       collapsible: boolean;
@@ -367,6 +465,8 @@ export class App {
       act?: string;
     }
   >();
+  /** Whether the pass of the view that draws now is the first of the view, whose steps land at once. */
+  private opening = false;
   /** Where the view scrolls to, or the card it brings into view, once the scroll box has laid out its cards. */
   private scrollTarget?: Scroll | { card: string };
   private overlay?: BoxRenderable;
@@ -392,17 +492,29 @@ export class App {
   private diagnosticsKey = "";
   /** What the footer shows, set again only when it changes. */
   private statusKey = "";
-  /** Whether the footer shows a spinner, which the tick turns. */
+  /** Whether the footer shows a spinner or the bar of a reply, which the tick moves. */
   private statusMoves = false;
   /** The whole text of the footer, which a notice cut to its room shows in a tip. */
   private statusWhole = "";
-  private readonly tick: ReturnType<typeof setInterval>;
+  /** The texts that move while their cause holds: what each shows now, and the time after which it shows that for
+   * good and moves no more. The tick draws each one again, and stops when none moves. */
+  private readonly movers = new Map<
+    TextRenderable,
+    { parts: () => Part[]; until?: number; shown?: string }
+  >();
+  private tick?: ReturnType<typeof setInterval>;
+  /** When each step of the feed first showed, so that a new step lands bright and settles, by its place in its word. */
+  private readonly landed = new Map<string, number>();
+  /** When each thread closed while the App watched, which its check shows for a moment, and the threads open at the
+   * last draw. */
+  private readonly closedAt = new Map<string, number>();
+  private readonly openThreads = new Set<string>();
   private readonly navigation: {
     chain: string;
     view: View;
     search: string;
     place: Scroll;
-    mode: "prompt" | "python";
+    mode: "markdown" | "python";
   }[] = [];
 
   constructor(
@@ -418,7 +530,7 @@ export class App {
       width: "100%",
       height: "100%",
       flexDirection: "row",
-      backgroundColor: c.background,
+      backgroundColor: c.ground,
       // Every press reaches the root, which keeps what it pressed for the release that makes it a click.
       onMouseDown: (event) => {
         this.pressed = event.target;
@@ -449,24 +561,24 @@ export class App {
         visible: false,
         marginTop: space.section,
         paddingX: space.inset,
-        backgroundColor: c.panel,
+        backgroundColor: c.surface2,
         ...options,
       });
     this.searchRow = bar();
     this.searchRow.add(
       this.text(
         [
-          ["Filter  ", c.text, bold],
-          [`${glyph.prompt} `, c.accent],
+          ["Filter  ", c.bright, bold],
+          [`${glyph.prompt} `, c.operator],
         ],
-        c.text,
+        c.bright,
       ),
     );
     this.search = new InputRenderable(renderer, {
       id: "search",
       flexGrow: 1,
       placeholder: "Filter this view",
-      ...inputColors(c.panel),
+      ...inputColors(c.surface2),
     });
     this.search.on(InputRenderableEvents.INPUT, (value: string) => {
       session.search = value;
@@ -502,18 +614,20 @@ export class App {
     center.add(this.queueBox);
     this.imageBox = this.row({ id: "attached-images", gap: space.between, visible: false });
     center.add(this.imageBox);
-    this.suggestionBox = this.box({ id: "suggestions", visible: false, backgroundColor: c.raised });
+    this.suggestionBox = this.box({ id: "suggestions", visible: false, backgroundColor: c.surface2 });
     center.add(this.suggestionBox);
     this.modeBox = this.row();
     // The composer is a panel, whose three rows the mode colors.
-    this.composeBox = this.panel(center, c.accent, { id: "composer-box" });
+    this.composeBox = this.panel(center, c.operator, { id: "composer-box" });
     this.composeEdges = center.getChildren().slice(-3) as BoxRenderable[];
     this.composer = new TextareaRenderable(renderer, {
       id: "composer",
       flexGrow: 1,
       minHeight: 1,
       placeholder: "What would you like to build?",
-      ...inputColors(c.panel),
+      ...inputColors(c.surface2),
+      // The caret is a block that the terminal blinks, and holds still while it moves.
+      cursorStyle: { style: "block", blinking: session.preferences.motion },
       keyBindings: [
         { name: "return", action: "submit" },
         { name: "return", shift: true, action: "newline" },
@@ -543,7 +657,7 @@ export class App {
     this.composeBox.add(metaLine);
     const footer = this.row({ gap: space.between });
     this.status = this.whole(
-      this.line("", c.muted, { truncate: true, flexGrow: 1, flexShrink: 1 }),
+      this.line("", c.prose, { truncate: true, flexGrow: 1, flexShrink: 1 }),
       () => this.statusWhole,
     );
     footer.add(this.status);
@@ -553,7 +667,7 @@ export class App {
     this.rail = this.box({
       id: "sidebar",
       width: session.preferences.sidebarWidth,
-      backgroundColor: c.panel,
+      backgroundColor: c.surface1,
       overflow: "hidden",
     });
     this.railSession = this.box({ paddingX: space.between, gap: space.stack });
@@ -566,7 +680,7 @@ export class App {
       flexShrink: 1,
       minHeight: 0,
       scrollX: false,
-      backgroundColor: c.panel,
+      backgroundColor: c.surface1,
       contentOptions: { paddingBottom: space.section },
     });
     this.railSpaces.verticalScrollBar.visible = false;
@@ -577,7 +691,7 @@ export class App {
       paddingX: space.between,
       paddingBottom: space.inset,
       border: ["top"],
-      borderColor: c.border,
+      borderColor: c.rule,
       customBorderChars: { ...noBorder, horizontal: glyph.rule },
       visible: false,
     });
@@ -592,12 +706,6 @@ export class App {
     this.layersOff = this.layers();
     renderer.on("resize", this.render);
     renderer.on("selection", this.copySelection);
-    // A label that moves with time is read again, and no other part of the view is drawn again.
-    this.tick = setInterval(() => {
-      for (const card of this.cards.values())
-        if (card.title) this.label(card, [...card.marker, ...card.title()]);
-      if (this.statusMoves) this.renderStatus();
-    }, frame);
     this.render();
     this.composer.focus();
     void loadParsers()
@@ -644,7 +752,7 @@ export class App {
     };
   }
   /** A node whose background takes a color while the pointer is on it, and gives it back when the pointer leaves. */
-  private hoverable<T extends BoxRenderable | TextRenderable>(node: T, color = c.raised): T {
+  private hoverable<T extends BoxRenderable | TextRenderable>(node: T, color = c.surface2): T {
     // A box has a background, and a text the color behind its cells.
     const property = node instanceof BoxRenderable ? "backgroundColor" : "bg";
     const rest: unknown = Reflect.get(node, property);
@@ -665,20 +773,22 @@ export class App {
     this.session.notice = `Copied ${length} ${length === 1 ? "character" : "characters"}.`;
   };
   /** A text, which runs an action at a click when it has one. */
-  private text(content: string | Part[], fg = c.text, { run, ...options }: TextShape = {}): TextRenderable {
-    const node = new TextRenderable(this.renderer, {
+  private text(content: string | Part[], fg = c.bright, { run, ...options }: TextShape = {}): TextRenderable {
+    const shape = {
       content: typeof content === "string" ? safeText(content) : styled(content),
       fg,
       // A text truncates only on a line it does not wrap, so a text that truncates keeps one line with an ellipsis.
-      wrapMode: options.truncate ? "none" : "word",
+      wrapMode: options.truncate ? ("none" as const) : ("word" as const),
       flexShrink: 0,
       onMouseUp: run && this.click(run),
       ...options,
-    });
-    return options.truncate && !options.onMouseOver ? this.whole(node) : node;
+    };
+    if (!options.truncate) return new TextRenderable(this.renderer, shape);
+    const node = new CutText(this.renderer, shape);
+    return options.onMouseOver ? node : this.whole(node);
   }
   /** A text one bar high. */
-  private line(content: string | Part[], fg = c.text, options: TextShape = {}): TextRenderable {
+  private line(content: string | Part[], fg = c.bright, options: TextShape = {}): TextRenderable {
     return this.text(content, fg, { height: space.bar, ...options });
   }
   /** A text cut to its room shows the whole of it in a tip while the pointer is over it: the text that the terminal
@@ -690,7 +800,7 @@ export class App {
       if (event.isDragging) return;
       const text = full ? full() : node.plainText;
       const cut = full ? text !== node.plainText : Bun.stringWidth(text) > node.width;
-      if (cut && text) this.tip([[text, c.text]], event.x, event.y);
+      if (cut && text) this.tip([[text, c.bright]], event.x, event.y);
     };
     node.onMouseOut = () => {
       this.unhover();
@@ -751,7 +861,7 @@ export class App {
   private history(): string[] {
     const w = this.session;
     const kept = w.histories[w.draftKey] ?? [];
-    if (kept.length || w.mode !== "prompt" || w.editing) return kept;
+    if (kept.length || w.mode !== "markdown" || w.editing) return kept;
     return w.activity
       .filter((act) => w.isUserThread(act))
       .map((act) => String(act.words[1] ?? ""))
@@ -794,8 +904,10 @@ export class App {
     if (this.draftKey !== w.draftKey) this.showDraft(w.draftKey);
     this.rail.visible = w.preferences.sidebar && this.renderer.width >= 100;
     this.rail.width = w.preferences.sidebarWidth;
+    if (this.composer.cursorStyle.blinking !== w.preferences.motion)
+      this.composer.cursorStyle = { style: "block", blinking: w.preferences.motion };
+    this.watchThreads();
     this.renderTop();
-    const pending = w.operatorThread;
     const images = w.images[w.selected] ?? [];
     this.imageBox.visible = images.length > 0;
     if (this.paneChanged(this.imageBox, [images, this.theme])) {
@@ -803,17 +915,17 @@ export class App {
       this.imageBox.add(
         this.line(
           [
-            [`${glyph.chip} `, c.accent],
-            [`${images.length} ${images.length === 1 ? "image" : "images"} attached  `, c.text],
+            [`${glyph.chip} `, c.operator],
+            [`${images.length} ${images.length === 1 ? "image" : "images"} attached  `, c.bright],
             [
               images
                 .map((image) => image.name)
                 .join("  ")
                 .replace(/\s+/g, " "),
-              c.muted,
+              c.prose,
             ],
           ],
-          c.muted,
+          c.prose,
           {
             truncate: true,
             flexShrink: 1,
@@ -838,14 +950,14 @@ export class App {
       this.queueBox.add(
         this.line(
           [
-            [`${w.queueHeld ? glyph.held : glyph.ring} `, w.queueHeld ? c.warning : c.faint],
+            [`${w.queueHeld ? glyph.held : glyph.ring} `, w.queueHeld ? c.warm : c.faint],
             [
               `${w.queueHeld ? "Queue held" : "Queued"} ${w.queued.length}  `,
-              w.queueHeld ? c.warning : c.text,
+              w.queueHeld ? c.warm : c.bright,
             ],
-            [first, c.muted],
+            [first, c.prose],
           ],
-          c.muted,
+          c.prose,
           { truncate: true, flexGrow: 1, flexShrink: 1 },
         ),
       );
@@ -853,7 +965,7 @@ export class App {
         this.line(
           queued.length
             ? [
-                ["↑", c.muted],
+                ["↑", c.prose],
                 [" takes the last back", c.faint],
               ]
             : [],
@@ -861,26 +973,16 @@ export class App {
         ),
       );
     }
-    const [mode, modeColor, placeholder] = w.editing
-      ? ["Edit program", c.warning, "Edit this thread's Python program"]
-      : pending
-        ? [
-            "Answer",
-            c.warning,
-            pending.shape === "bool" ? "Answer yes or no" : `Your answer, as ${pending.shape}`,
-          ]
-        : w.mode === "python"
-          ? ["Python", c.secondary, "Write Python. The gate reads it before it runs."]
-          : ["Prompt", c.accent, "Ask anything, or type / for commands"];
-    for (const edge of this.composeEdges) if (edge.borderColor !== modeColor) edge.borderColor = modeColor;
-    this.composer.cursorColor = modeColor;
-    this.composer.placeholder = placeholder;
+    const enter = this.enter;
+    for (const edge of this.composeEdges)
+      if (edge.borderColor !== enter.color) edge.borderColor = enter.color;
+    this.composer.placeholder = enter.placeholder;
     // The box holds the lines of the text, up to six, a row of space, and the line under the text.
     this.composeBox.height =
       Math.min(6, Math.max(space.bar, this.composer.lineCount, this.composer.lineInfo.lineSources.length)) +
       space.section +
       space.bar;
-    this.renderMeta(mode, modeColor);
+    this.renderMeta(enter);
     this.renderStatus();
     this.renderContent();
     this.renderRail();
@@ -893,9 +995,10 @@ export class App {
   };
 
   /** A switch between a few choices, which the views and the mode of the input share. A track in a color of its own
-   * holds a segment for each choice, two columns of space at each side of its label. The chosen segment is filled
-   * with the color of its choice from edge to edge, the segment under the pointer lights in place, and a click chooses
-   * a segment. The chord that moves the switch stands after the track. */
+   * holds a segment for each choice, two columns of space at each side of its label. The chosen segment is tinted
+   * with the color of its choice from edge to edge, as a selected row is, and its label stands in that color. The
+   * segment under the pointer lights in place, and a click chooses a segment. The chord that moves the switch stands
+   * after the track. */
   private switcher(
     box: BoxRenderable,
     choices: { label: string; badge?: string; color: RGBA; run?: () => void }[],
@@ -905,15 +1008,15 @@ export class App {
   ): void {
     for (const [index, choice] of choices.entries()) {
       const active = index === chosen;
-      const fill = active ? choice.color : track;
+      const fill = active ? mix(track, choice.color, selectedMix) : track;
       const parts = (lit: boolean): Part[] => [
-        [`  ${choice.label}`, active ? c.background : lit ? c.text : c.muted, active ? bold : 0, fill],
-        [choice.badge ? ` ${choice.badge}` : "", active ? c.background : lit ? c.text : c.faint, 0, fill],
-        ["  ", c.text, 0, fill],
+        [`  ${choice.label}`, active ? choice.color : lit ? c.bright : c.prose, active ? bold : 0, fill],
+        [choice.badge ? ` ${choice.badge}` : "", active ? choice.color : lit ? c.bright : c.faint, 0, fill],
+        ["  ", c.bright, 0, fill],
       ];
       // The pointer recolors the segment that it is over, and builds no node, so that a press and its release land on
       // the same segment.
-      const segment: TextRenderable = this.line(parts(false), c.text, {
+      const segment: TextRenderable = this.line(parts(false), c.bright, {
         run: choice.run,
         ...(choice.run && !active
           ? {
@@ -930,22 +1033,29 @@ export class App {
     }
     if (chord) box.add(this.line(`  ${chord}`, c.faint));
   }
-  /** The top line: the session and the chain at its left, each a button, and the toggle of the views at its right. */
+  /** The top line: the session, the chain, and the thread at its left, each a button, and the toggle of the views at
+   * its right. */
   private renderTop(): void {
     const w = this.session;
+    const thread = w.acts.find((act) => act.id === w.thread && act.on === w.selected);
+    const crumb = thread ? this.firstLine(String(thread.words[1] ?? "")) : "";
     const changes = w.host.changes;
     const shown = this.tree ? "feed" : w.view;
     const directory = shortenHome(w.workingDirectory);
-    // The top line spends its room in this order: the session and the chain, the switch of the views, the key of the
-    // switch, then the directory. A part that finds no room is left out, and a session name that is still too long is
-    // cut at its end.
+    // The top line spends its room in this order: the session and the chain, the switch of the views, the thread, the
+    // key of the switch, then the directory. A part that finds no room is left out, the thread is cut at its end to
+    // the room that is left, and a session name that is still too long is cut at its end.
     const chord = `${this.kitty ? "⌃" : "⌥"}1-3`;
     const toggle = views.reduce(
       (sum, view) =>
         sum + viewLabels[view].length + 4 + (view === "changes" && changes ? String(changes).length + 1 : 0),
       0,
     );
-    const head = Bun.stringWidth(w.sessionName) + 3 + Bun.stringWidth(w.label);
+    const head =
+      Bun.stringWidth(w.sessionName) +
+      3 +
+      Bun.stringWidth(w.label) +
+      (crumb ? 3 + Math.min(24, Bun.stringWidth(crumb)) : 0);
     const room = this.feedWidth - space.between;
     const hint = head + toggle + chord.length + 2 <= room;
     const folder = head + 3 + Bun.stringWidth(directory) + toggle + (hint ? chord.length + 2 : 0) <= room;
@@ -957,22 +1067,29 @@ export class App {
         views.map((view) => ({
           label: viewLabels[view],
           badge: view === "changes" && changes ? String(changes) : "",
-          color: c.accent,
+          color: c.operator,
           run: () => this.showView(view),
         })),
         views.indexOf(shown),
         // F1 lists the chord where the top line has no room for it.
         hint ? chord : "",
-        c.panel,
+        c.surface2,
       );
     }
-    if (this.paneChanged(this.headline, [name, w.label, folder && directory, this.theme])) {
+    if (this.paneChanged(this.headline, [name, w.label, crumb, folder && directory, this.theme])) {
       this.clear(this.headline);
-      this.headline.add(
-        this.line([[name, c.text, bold]], c.text, { run: () => void this.workspacePicker() }),
-      );
+      this.headline.add(this.line([[name, c.bright]], c.bright, { run: () => void this.workspacePicker() }));
       this.headline.add(this.line(` ${glyph.crumb} `, c.faint));
-      this.headline.add(this.line(w.label, c.muted, { run: () => this.chains() }));
+      // The chain opens its feed from a thread, and the chains from its feed.
+      this.headline.add(
+        this.line(w.label, crumb ? c.prose : c.bright, {
+          run: () => (crumb ? void w.open("").catch(w.fail) : this.chains()),
+        }),
+      );
+      if (crumb) {
+        this.headline.add(this.line(` ${glyph.crumb} `, c.faint));
+        this.headline.add(this.line(crumb, c.bright, { truncate: true, flexShrink: 1 }));
+      }
       if (folder)
         this.headline.add(
           this.line(`   ${directory}`, c.faint, {
@@ -983,112 +1100,140 @@ export class App {
         );
     }
   }
-  /** Where the input goes, under it: its mode, its chain, and for a prompt the model, the effort, and the type of its
-   * answer. Each part is a button that changes it. */
-  private renderMeta(mode: string, modeColor: RGBA): void {
+  /** What Enter does in the composer, by the mode of the input and what the operator selected: the words of Enter,
+   * the type of the answer that it asks for, the actor that reads it, the color of the bar of the composer, and the
+   * text of an empty input. */
+  private get enter(): { word: string; shape?: string; actor?: string; color: RGBA; placeholder: string } {
     const w = this.session;
-    const pending = w.operatorThread;
-    const { model, effort } = w.actorChoice;
+    if (w.editing)
+      return { word: "Replay the program", color: c.model, placeholder: "Edit this thread's Python program" };
+    if (w.mode === "python")
+      return {
+        word: "Run Python",
+        color: c.model,
+        placeholder: "Write Python. The gate reads it before it runs.",
+      };
+    const intent = w.intent;
+    if (intent.does === "answer") {
+      const { shape } = intent.question;
+      return {
+        word: "Answer",
+        shape,
+        color: c.warm,
+        placeholder: shape === "bool" ? "Answer yes or no" : `Your answer, as ${shape}`,
+      };
+    }
+    if (intent.does === "notify")
+      return {
+        word: "Notify this thread",
+        actor: String(intent.thread.words[2] || w.actor),
+        color: c.operator,
+        placeholder: "A note for the model, which it reads at its next reply",
+      };
+    return {
+      word: "New thread",
+      shape: w.shape,
+      actor: w.actor,
+      color: c.operator,
+      placeholder: "Start a thread, or type / for commands",
+    };
+  }
+  /** The line under the input, which reads as a sentence: the switch of its mode, what Enter does, the type of the
+   * answer, then the model that reads it, its provider, and its effort. A part that the operator can change is a
+   * button that changes it. */
+  private renderMeta(enter: App["enter"]): void {
+    const w = this.session;
+    const { model, effort } = actorParts(
+      enter.actor ?? "",
+      w.roster.map(([name]) => name),
+    );
     const { provider, id: name } = modelName(model);
     const stash = w.stashes[w.draftKey];
-    const prompt = w.mode === "prompt" && !w.editing && !pending;
+    // A new thread chooses its type and its model, and a note goes to the model that works the thread.
+    const chooses = enter.word === "New thread";
+    const effortShown = Boolean(enter.actor) && effort !== "off";
     // The line spans the input but its bar and its padding.
     const room = this.feedWidth - 3;
     if (
       !this.paneChanged(this.meta, [
-        mode,
-        w.label,
+        enter.word,
+        enter.shape,
         name,
         provider,
         effort,
-        w.shape,
-        pending?.shape,
         stash,
-        prompt,
+        w.editing,
         room,
         this.theme,
       ])
     )
       return;
     this.clear(this.meta);
-    // A narrow input leaves out, in this order, the provider, the type of the answer, the effort, and the chord of the
+    // A narrow input leaves out, in this order, the provider, the effort, the type of the answer, and the chord of the
     // switch, and the stash shows less of what waits in it.
-    const edited = Boolean(w.editing || pending);
-    const shown = { chord: !edited, provider: prompt && Boolean(provider), shape: prompt, effort: prompt };
-    const gaps = 3;
+    const shown = {
+      provider: Boolean(enter.actor && provider),
+      effort: effortShown,
+      shape: Boolean(enter.shape),
+      chord: !w.editing,
+    };
     const width = () =>
-      (edited ? Bun.stringWidth(mode) + 4 : "Prompt".length + "Python".length + 8) +
-      gaps +
+      (w.editing ? "python".length + 4 : "markdown".length + "python".length + 8) +
       (shown.chord ? 4 : 0) +
-      Bun.stringWidth(`on ${w.label}`) +
-      (pending ? gaps + Bun.stringWidth(`returns ${pending.shape}`) : 0) +
-      (prompt ? gaps + Bun.stringWidth(name) : 0) +
+      3 +
+      Bun.stringWidth(enter.word) +
+      (shown.shape ? Bun.stringWidth(` · ${enter.shape}`) : 0) +
+      (enter.actor ? Bun.stringWidth(` with ${name}`) : 0) +
       (shown.provider ? provider.length + 1 : 0) +
-      (shown.effort ? gaps + Bun.stringWidth(`${effort} effort`) : 0) +
-      (shown.shape ? gaps + Bun.stringWidth(`returns ${w.shape}`) : 0) +
+      (shown.effort ? Bun.stringWidth(` at ${effort} effort`) : 0) +
       // The stash takes a gap, its word, its quotes and their space, and its key, and its preview takes the rest.
-      (stash ? gaps + "stashed “”  ⌃S".length : 0);
-    for (const part of ["provider", "shape", "effort", "chord"] as const)
+      (stash ? 3 + "stashed “”  ⌃S".length : 0);
+    for (const part of ["provider", "effort", "shape", "chord"] as const)
       if (width() > room) shown[part] = false;
-    const gap = () => this.meta.add(this.text("   ", c.faint));
-    const button = (parts: Part[], run?: () => void) => this.meta.add(this.line(parts, c.muted, { run }));
-    // The mode of the input is a switch between a prompt and Python, and an answer or a program that the input edits
-    // is a switch of one segment, which only its key leaves.
+    const button = (parts: Part[], run?: () => void) => this.meta.add(this.line(parts, c.prose, { run }));
+    // The mode of the input is a switch between markdown and Python, and a program under edit is Python alone, which
+    // only its key leaves.
     this.clear(this.modeBox);
-    if (edited) this.switcher(this.modeBox, [{ label: mode, color: modeColor }], 0, "", c.raised);
+    if (w.editing) this.switcher(this.modeBox, [{ label: "python", color: c.model }], 0, "", c.surface2);
     else
       this.switcher(
         this.modeBox,
         [
-          { label: "Prompt", color: c.accent, run: () => w.mode === "prompt" || this.toggleMode() },
-          { label: "Python", color: c.secondary, run: () => w.mode === "python" || this.toggleMode() },
+          { label: "markdown", color: c.operator, run: () => w.mode === "markdown" || this.toggleMode() },
+          { label: "python", color: c.model, run: () => w.mode === "python" || this.toggleMode() },
         ],
         w.mode === "python" ? 1 : 0,
         shown.chord ? "⌃R" : "",
-        c.raised,
+        c.surface2,
       );
-    button(
-      [
-        ["on ", c.faint],
-        [w.label, c.muted],
-      ],
-      () => this.chains(),
-    );
-    if (pending) {
-      gap();
-      button([
-        ["returns ", c.faint],
-        [pending.shape, c.muted],
-      ]);
-    } else if (prompt) {
-      gap();
+    this.meta.add(this.text("   ", c.faint));
+    button([[enter.word, c.operator, bold]]);
+    if (shown.shape && enter.shape)
       button(
         [
-          [name, c.text],
+          [" · ", c.faint],
+          [enter.shape, c.prose],
+        ],
+        chooses ? this.shapes : undefined,
+      );
+    if (enter.actor) {
+      button(
+        [
+          [" with ", c.faint],
+          [name, c.prose],
           [shown.provider ? ` ${provider}` : "", c.faint],
         ],
-        () => this.models(),
+        chooses ? () => this.models() : undefined,
       );
-      if (shown.effort) {
-        gap();
+      if (shown.effort)
         button(
           [
-            [effort, c.muted],
+            [" at ", c.faint],
+            [effort, c.warm],
             [" effort", c.faint],
           ],
-          () => this.effortPicker(),
+          chooses ? () => this.effortPicker() : undefined,
         );
-      }
-      if (shown.shape) {
-        gap();
-        button(
-          [
-            ["returns ", c.faint],
-            [w.shape, c.muted],
-          ],
-          this.shapes,
-        );
-      }
     }
     if (stash) {
       this.meta.add(this.box({ flexGrow: 1 }));
@@ -1100,7 +1245,7 @@ export class App {
       button(
         [
           ["stashed ", c.faint],
-          [preview >= 6 ? `“${clip(first, preview)}${more}”  ` : "", c.muted],
+          [preview >= 6 ? `“${clip(first, preview)}${more}”  ` : "", c.prose],
           ["⌃S", c.faint],
         ],
         () => this.stash(),
@@ -1115,8 +1260,11 @@ export class App {
     // A refresh follows each fact, so the footer says Loading only while the chain has nothing to show yet.
     const loading = w.loading && !w.turns.length;
     const status = loading ? "opening" : w.status(w.selected);
-    const moving = status === "working" || status === "opening";
+    // The footer moves while work goes on: a spinner, or a bar while a reply streams.
+    const moving = (status === "working" || status === "opening") && w.preferences.motion;
+    const streaming = moving && w.host.streams.size > 0;
     this.statusMoves = moving;
+    this.animate();
     const [mark, color] = statusMark(status);
     const label = loading
       ? "Loading"
@@ -1152,7 +1300,7 @@ export class App {
     ];
     const buttons = keys.map(([chord, action], index): Part[] => [
       [index ? "   " : "", c.faint],
-      [chord, c.muted],
+      [chord, c.prose],
       [` ${action}`, c.faint],
     ]);
     const hints = buttons.flat();
@@ -1160,18 +1308,18 @@ export class App {
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
     // beside the keys.
     const state: Part[] = [
-      [moving ? `${spin()} ` : mark, color],
-      [label, moving ? c.text : c.muted],
+      ...(streaming ? [...this.walker(), [" "] as Part] : [[moving ? `${spin()} ` : mark, color] as Part]),
+      [label, moving ? c.bright : c.prose],
     ];
     const room =
       this.feedWidth - Bun.stringWidth(plain(hints)) - Bun.stringWidth(plain(state)) - space.between * 2;
     this.statusWhole = notice ? `${plain(state)}   ${notice}` : plain(state);
     if (notice && room >= 8)
       state.push(
-        ["   ", c.text],
-        [clip(notice, room - 3), [exitNotice, rewindNotice].includes(notice) ? c.warning : c.text],
+        ["   ", c.bright],
+        [clip(notice, room - 3), [exitNotice, rewindNotice].includes(notice) ? c.warm : c.bright],
       );
-    const key = JSON.stringify([plain(state), plain(hints), color, this.theme]);
+    const key = JSON.stringify([state.map(([text, fg]) => [text, fg?.toInts()]), plain(hints), this.theme]);
     if (key === this.statusKey) return;
     this.statusKey = key;
     this.status.content = styled(state);
@@ -1180,6 +1328,17 @@ export class App {
       this.hints.add(this.line(buttons[index] ?? [], c.faint, { run }));
   }
 
+  /** The bar of a reply that streams: a bright head that walks its cells, with a tail of three steps that fade. */
+  private walker(now = Date.now()): Part[] {
+    const head = Math.floor(now / motion.walk) % motion.bar;
+    return Array.from({ length: motion.bar }, (_, at): Part => {
+      const behind = (head - at + motion.bar) % motion.bar;
+      return [
+        glyph.meter,
+        behind === 0 ? c.bright : behind <= 3 ? mix(c.bright, c.rule, behind / 4) : c.rule,
+      ];
+    });
+  }
   /** The heading of a card set to a line, only when the line changed. */
   private label(card: { heading: TextRenderable; label: string }, parts: Part[]): void {
     const key = JSON.stringify(parts.map(([text, fg, attributes]) => [text, fg?.toInts(), attributes]));
@@ -1191,49 +1350,63 @@ export class App {
     id: string,
     key: string,
     label: Part[],
-    body: (box: BoxRenderable) => void,
+    body: (box: BoxRenderable, closed: boolean, toggle: () => void) => void,
     index: number,
     options: BlockOptions = {},
   ): void {
-    const rung = options.act?.kind === "rung" ? options.act : undefined;
-    const state = rung?.id ?? id;
-    const closed = this.folded(state, rung, Boolean(options.compact));
+    const rung = options.act?.kind === "rung" && !options.headless ? options.act : undefined;
+    const state = options.headless ? (options.act?.id ?? id) : (rung?.id ?? id);
+    const closed = options.headless
+      ? (this.session.folds[state] ?? this.session.preferences.foldRungs)
+      : this.folded(state, rung, Boolean(options.compact));
     key =
       options.compact && closed && !options.preview
         ? "closed"
         : `${key}:${closed}:${options.preview && closed ? this.feedWidth : ""}`;
     const marker: Part[] =
-      rung || options.compact || options.collapsible
+      !options.headless && (rung || options.compact || options.collapsible)
         ? [[`${closed ? glyph.closed : glyph.open} `, c.faint]]
         : [];
     const heading = [...marker, ...label];
-    const visible = Boolean(plain(label)) && (options.compact || options.heading !== false || closed);
+    const visible =
+      !options.headless && Boolean(plain(label)) && (options.compact || options.heading !== false || closed);
     const margin = options.separate ? space.section : space.stack;
+    const { title } = options;
     const prior = this.cards.get(id);
     if (prior?.key === key) {
-      this.label(prior, heading);
-      Object.assign(prior, { marker, title: options.title, closed });
+      if (title) this.move(prior.heading, () => [...marker, ...title()]);
+      else {
+        this.still(prior.heading);
+        this.label(prior, heading);
+      }
+      prior.closed = closed;
       if (prior.heading.visible !== visible) prior.heading.visible = visible;
       if (prior.node.marginTop !== margin) prior.node.marginTop = margin;
       if (this.scroll.getChildren()[index] !== prior.node) this.scroll.add(prior.node, index);
       return;
     }
     prior?.node.destroyRecursively();
-    const box = this.box({ id, gap: space.stack, marginTop: margin, paddingLeft: options.indent ?? 0 });
-    const labelNode = this.line(heading, c.muted, {
+    const box = this.box({
+      id,
+      gap: space.stack,
+      marginTop: margin,
+      paddingLeft: options.indent ?? 0,
+    });
+    const toggle = () => {
+      this.session.folds[state] = !closed;
+      this.renderContent();
+    };
+    const labelNode = this.line(heading, c.prose, {
       truncate: true,
       visible,
       onMouseDown: (event) => {
         if (event.button === 2 && options.act)
           this.actActions(this.session.acts.find((act) => act.id === options.act?.id) ?? options.act);
       },
-      run: () => {
-        this.session.folds[state] = !closed;
-        this.renderContent();
-      },
+      run: toggle,
     });
     box.add(labelNode);
-    if (!closed) body(box);
+    if (options.headless || !closed) body(box, closed, toggle);
     else if (!rung) options.preview?.(box);
     this.scroll.add(box, index);
     const card = {
@@ -1241,15 +1414,14 @@ export class App {
       node: box,
       heading: labelNode,
       label: "",
-      marker,
-      title: options.title,
       compact: options.compact ?? false,
-      collapsible: Boolean(rung || options.collapsible),
+      collapsible: Boolean(rung || options.collapsible || options.headless),
       state,
       closed,
       act: options.act?.id,
     };
-    this.label(card, heading);
+    if (title) this.move(labelNode, () => [...marker, ...title()]);
+    else this.label(card, heading);
     this.cards.set(id, card);
   }
   /** A panel in a box: a bar of a color at its left, and half a row of the panel above and below what it holds. */
@@ -1266,7 +1438,7 @@ export class App {
           height: space.bar,
           flexGrow: 1,
           border: [side === "top" ? "bottom" : "top"],
-          borderColor: c.panel,
+          borderColor: c.surface2,
           customBorderChars: { ...noBorder, horizontal: side === "top" ? glyph.halfTop : glyph.halfBottom },
         }),
       );
@@ -1278,7 +1450,7 @@ export class App {
       border: ["left"],
       borderColor: color,
       customBorderChars: { ...noBorder, vertical: glyph.bar },
-      backgroundColor: c.panel,
+      backgroundColor: c.surface2,
       ...options,
     });
     box.add(edge("top"));
@@ -1286,13 +1458,39 @@ export class App {
     box.add(edge("bottom"));
     return inner;
   }
-  private code(content: string): CodeRenderable {
+  /** Python in the colors of its syntax. A quote is text and no Python: it stands in the tone of prose, between its
+   * marks in the tone of the chrome. In a user turn, a header is a comment to Python, and the start of an entry to the
+   * reader: the name of its act or the kind of its query stands in the color of a reference, and the rest of its line
+   * as text. An image attachment there is a reference too. */
+  private code(content: string, user = false): CodeRenderable {
     const code = new CodeRenderable(this.renderer, {
       content: safeText(content),
       filetype: "python",
       syntaxStyle: this.style,
       wrapMode: "word",
       drawUnstyledText: true,
+      onHighlight: (highlights, { content: text }) => {
+        const spans = quotes(text);
+        const outside = ([start, end]: SimpleHighlight) =>
+          !spans.some(([, from, to]) => start < to && end > from);
+        const marks = spans.flatMap(([name, from, to]): SimpleHighlight[] => [
+          [from, from + `<s:${name}>`.length, "punctuation"],
+          [from + `<s:${name}>`.length, to - `</s:${name}>`.length, "quote"],
+          [to - `</s:${name}>`.length, to, "punctuation"],
+        ]);
+        const told: SimpleHighlight[] = user
+          ? [
+              ...[...text.matchAll(/^(#(?! |$)\S+)(.*)$/gm)].flatMap((header): SimpleHighlight[] => [
+                [header.index, header.index + (header[1]?.length ?? 0), "reference"],
+                [header.index + (header[1]?.length ?? 0), header.index + header[0].length, "header"],
+              ]),
+              ...[...text.matchAll(/furb-image:\/\/[\w.]+/g)].map(
+                (image): SimpleHighlight => [image.index, image.index + image[0].length, "attachment"],
+              ),
+            ]
+          : [];
+        return [...[...highlights, ...told].filter(outside), ...marks];
+      },
     });
     return this.pointable(code, content);
   }
@@ -1342,10 +1540,54 @@ export class App {
     return node;
   }
   private markdown(content: string, fg = c.prose): MarkdownRenderable {
+    // A block of code stands on the surface of a block, in the colors of its language. OpenTUI spaces the other blocks
+    // only while the renderer says it draws code alone, and it gives no margin to a node of its own, so the block keeps
+    // the blank line under it but at the end of the text.
+    const text = safeText(content);
+    const code: NonNullable<MarkdownOptions["renderNode"]> = (token) => {
+      if (token.type !== "code") return undefined;
+      const end = text.trimEnd().endsWith(token.raw.trimEnd());
+      const block = this.box({
+        backgroundColor: c.surface2,
+        paddingX: space.inset,
+        marginBottom: end ? 0 : 1,
+      });
+      const language = token.lang?.trim().toLowerCase() ?? "";
+      // A diff tints each line that it adds or removes, as the diffs of the feed do.
+      if (["diff", "patch"].includes(language)) {
+        for (const line of safeText(token.text).split("\n")) {
+          const [tone, tint] = /^(\+\+\+|---)( |$)/.test(line)
+            ? [c.faint, undefined]
+            : line.startsWith("+")
+              ? [c.done, c.added]
+              : line.startsWith("-")
+                ? [c.warm, c.removed]
+                : line.startsWith("@@")
+                  ? [c.faint, undefined]
+                  : [c.bright, undefined];
+          const row = this.box(tint ? { backgroundColor: tint } : {});
+          row.add(this.text(line || " ", tone));
+          block.add(row);
+        }
+        return block;
+      }
+      block.add(
+        new CodeRenderable(this.renderer, {
+          content: safeText(token.text),
+          filetype: filetype(`.${language}`) ?? (languages.has(language) ? language : undefined),
+          syntaxStyle: this.style,
+          wrapMode: "word",
+          drawUnstyledText: true,
+          conceal: false,
+        }),
+      );
+      return block;
+    };
     return new MarkdownRenderable(this.renderer, {
-      content: safeText(content),
+      content: text,
       syntaxStyle: this.style,
       fg,
+      renderNode: Object.assign(code, { codeBlockOnly: true }),
     });
   }
 
@@ -1361,9 +1603,15 @@ export class App {
   }
   renderContent(): void {
     const w = this.session;
-    const view = this.tree ? "tree" : `${w.selected}:${w.view}`;
+    // The feed of each thread is a view of its own, which keeps its place.
+    const view = this.tree
+      ? "tree"
+      : `${w.selected}${w.view === "feed" && w.thread ? `/${w.thread}` : ""}:${w.view}`;
     this.treeBar.visible = Boolean(this.tree);
-    if (this.lastView !== view) {
+    this.opening = this.lastView !== view;
+    if (this.opening) {
+      // The steps that a view shows as it opens land at once.
+      this.landed.clear();
       if (this.lastView && this.lastView !== "tree") w.scrolls[this.lastView] = this.place;
       this.clear(this.scroll);
       this.cards.clear();
@@ -1389,13 +1637,7 @@ export class App {
       items = 0,
       group = "";
     // A card that shows an item of the view says the text that the filter reads, and counts as an item once it shows.
-    const add = (
-      id: string,
-      key: string,
-      label: Part[],
-      body: (box: BoxRenderable) => void,
-      options: BlockOptions & { shown?: string } = {},
-    ) => {
+    const add: Add = (id, key, label, body, options = {}) => {
       if (options.shown !== undefined) {
         if (!matches(options.shown)) return;
         items++;
@@ -1414,16 +1656,11 @@ export class App {
       });
       order++;
     };
-    // The label of an act that works moves with time, so the tick reads it again.
-    const moving = (act?: ActRow, indent = 0) =>
-      act && working(act) ? () => this.actLabel(act, false, indent) : undefined;
-    // An act that a rung made stands under that rung.
-    const under = (act?: ActRow) => (act && act.by !== "operator" ? space.between : 0);
     if (w.preferences.notice)
       add("preferences-notice", w.preferences.notice, [], (box) => {
-        const panel = this.panel(box, c.warning);
+        const panel = this.panel(box, c.warm);
         panel.add(
-          this.text(w.preferences.notice, c.text, {
+          this.text(w.preferences.notice, c.bright, {
             run: () => {
               w.preferences.notice = "";
               this.renderContent();
@@ -1435,12 +1672,12 @@ export class App {
       add("view-error", `${w.view}:${w.error}`, [], (box) =>
         this.banner(
           box,
-          c.danger,
+          c.warm,
           [
-            [`${glyph.failed} `, c.danger],
-            [`Error in the ${viewLabels[w.view].toLowerCase()} view`, c.text, bold],
+            [`${glyph.failed} `, c.warm],
+            [`Error in the ${viewLabels[w.view].toLowerCase()} view`, c.bright, bold],
           ],
-          this.text(w.error, c.muted),
+          this.text(w.error, c.prose),
           [
             "Refresh view",
             "reads the view again",
@@ -1452,296 +1689,185 @@ export class App {
         ),
       );
     if (w.view === "feed") {
-      const listed = conversation(w.turns, w.acts);
-      // An act that no turn tells yet, such as a command that the operator started, stands at the end of the feed
-      // until a turn tells it.
-      const told = new Set(
-        listed.flatMap((item) => (item.type === "python" ? [item.rung?.id] : [item.act?.id])).filter(Boolean),
+      const threads = w.threads;
+      const rows = new Map(w.acts.map((act) => [act.id, act]));
+      const listed = conversation(w.turns, w.acts, w.asked);
+      const words = new Map(
+        listed.flatMap((item) => (item.type === "word" && item.rung ? [[item.rung.id, item] as const] : [])),
       );
-      // A rung whose model has not begun to write has no stream yet, and its card waits as the card of a stream does.
+      // An act that a turn tells, or that a word a turn tells made.
+      const told = new Set(
+        listed.flatMap((item) =>
+          item.type === "word"
+            ? [item.rung?.id ?? "", ...actsOf(item).map((act) => act.id)]
+            : [item.act?.id ?? ""],
+        ),
+      );
+      // A rung whose model has not begun to write has no stream yet, and waits as the words of a stream do.
       const writing = [...w.host.streams].filter(([, stream]) => stream.chain === w.selected);
       for (const act of w.activity)
         if (
           act.kind === "rung" &&
           working(act) &&
+          fromOperator(act, rows) &&
           !told.has(act.id) &&
           !w.program[act.id] &&
           !w.host.streams.has(act.id)
         )
           writing.push([act.id, { chain: w.selected, text: "", thinking: "" }]);
       const waiting = new Set(writing.map(([id]) => id));
-      // An act that no turn tells yet stands where it came in time, among the items that the turns tell, so the
-      // feed never moves a card once it shows it.
+      // An act that no turn tells yet stands with the word that made it, or where it came in time among the items that
+      // the turns tell, so the feed never moves a card once it shows it. A rung that a cancel or a close ended before
+      // its model wrote a word shows nothing, since the cancel or the answer says how its thread ended.
       const position = new Map(w.activity.map((act, index) => [act.id, index]));
-      const untold = w.activity
-        // A rung that a cancel ended before it wrote a word shows nothing, since its message says the cancel.
-        .filter(
-          (act) =>
-            !told.has(act.id) &&
-            !waiting.has(act.id) &&
-            this.isPoint(act) &&
-            !(act.kind === "rung" && cancelled(act) && !w.program[act.id]),
-        )
-        .map((act) => ({
-          at: position.get(act.id) ?? Number.POSITIVE_INFINITY,
-          item: (w.isUserThread(act) || asksOperator(act)
-            ? { type: "thread", key: act.id, act }
-            : { type: "act", key: act.id, act }) as (typeof listed)[number],
-        }));
-      if (untold.length) {
-        const merged: typeof listed = [];
+      const loose: { at: number; item: Item }[] = [];
+      for (const act of w.activity) {
+        if (told.has(act.id) || waiting.has(act.id) || !this.isPoint(act) || !fromOperator(act, rows))
+          continue;
+        if (act.kind === "rung" && act.done && !failed(act) && !w.program[act.id]) continue;
+        const maker = words.get(act.by);
+        if (maker && act.kind !== "thread") maker.told.push(act);
+        else
+          loose.push({
+            at: position.get(act.id) ?? Number.POSITIVE_INFINITY,
+            item:
+              act.kind === "thread"
+                ? { type: "thread", key: act.id, act }
+                : { type: "act", key: act.id, act, notes: [] },
+          });
+      }
+      if (loose.length) {
+        const merged: Item[] = [];
         let next = 0;
         for (const item of listed) {
-          const id = item.type === "python" ? item.rung?.id : item.act?.id;
+          const id = item.type === "word" ? item.rung?.id : item.act?.id;
           const at = id === undefined ? undefined : position.get(id);
-          while (at !== undefined && next < untold.length && (untold[next]?.at ?? 0) < at)
-            merged.push(untold[next++]?.item as (typeof listed)[number]);
+          while (at !== undefined && next < loose.length && (loose[next]?.at ?? 0) < at)
+            merged.push(loose[next++]?.item as Item);
           merged.push(item);
         }
-        while (next < untold.length) merged.push(untold[next++]?.item as (typeof listed)[number]);
+        while (next < loose.length) merged.push(loose[next++]?.item as Item);
         listed.splice(0, listed.length, ...merged);
       }
-      for (const item of listed) {
-        if (item.type === "python") {
-          const { code, rung } = item;
-          // A word of the operator that only made a chain, as a branch or a new chain does, reads as the chain that it
-          // made, and a click on it opens that chain.
-          const made =
-            rung?.by === "operator" && /^\s*chain\(/.test(code)
-              ? w.chains.find((chain) => chain.by === rung.id)
-              : undefined;
-          if (made && rung) {
-            const name = w.labelOf(made.id);
-            // The branch itself reads the same word as the point where it starts.
-            const here = made.id === w.selected;
-            add(
-              rung.id,
-              `made:${made.id}:${name}:${here}:${this.theme}`,
-              [],
-              (box) =>
-                box.add(
-                  here
-                    ? this.text([
-                        ["↳ ", c.secondary],
-                        ["This branch starts here", c.muted],
-                      ])
-                    : this.link(
-                        [
-                          ["↳ ", c.secondary],
-                          [made.words[1] ? "Branched to " : "Started the chain ", c.muted],
-                          [name, c.text, bold],
-                        ],
-                        () => void w.select(made.id).catch(w.fail),
-                      ),
-                ),
-              { shown: code },
-            );
-            continue;
-          }
-          const closed = this.folded(rung?.id ?? item.key, rung);
-          // The card of the word of a rung is named by the rung, so that a jump to the rung finds it.
-          add(
-            rung?.id ?? item.key,
-            `${code}\n${rung?.run?.reason ?? ""}`,
-            rung ? this.actLabel(rung, closed, 0, code) : [["Python", c.muted, bold]],
-            (box) => this.word(box, code, rung?.run?.reason),
-            { collapsible: true, act: rung, title: moving(rung), shown: code },
-          );
-        } else if (item.type === "thread" && asksOperator(item.act)) {
-          const { act } = item;
-          const message = String(act.words[1] ?? "");
-          const waiting = w.host.threads.has(act.id);
-          add(
-            item.key,
-            `${message}\n${waiting}`,
-            [
-              [`${glyph.asks} `, waiting ? c.warning : c.faint],
-              ["Question", c.text, bold],
-              [`  ${act.by === "operator" ? "for you" : `from ${act.by}`}`, c.faint],
-            ],
-            (box) => {
-              this.panel(box, waiting ? c.warning : c.border).add(this.text(message));
-              if (waiting)
-                box.add(
-                  this.inset(
-                    space.between,
-                    this.text(
-                      [
-                        ["Answer in the input below", c.muted],
-                        [act.words[0] === "bool" ? " with yes or no" : `, as ${act.words[0]}`, c.muted],
-                        [", or press ", c.faint],
-                        ["⌃A", c.muted],
-                      ],
-                      c.muted,
-                      { run: () => this.question() },
-                    ),
-                  ),
-                );
-            },
-            { group: "question", act, shown: message },
-          );
-        } else if (item.type === "thread") {
-          const { act } = item;
-          const message = String(act.words[1] ?? "");
-          const user = w.isUserThread(act);
-          // A message that the chain or a rung sent is its heading when it is one short line, and stands under its
-          // heading otherwise. The heading says who sent it, and to which model.
-          const sent = user ? "" : this.sender(act);
-          const line =
-            !message.includes("\n") && Bun.stringWidth(message) + Bun.stringWidth(sent) < this.feedWidth - 8;
-          const state = user ? this.threadState(act) : [];
-          add(
-            item.key,
-            `${message}\n${line}\n${sent}\n${plain(state)}`,
-            user
-              ? [["You", c.muted]]
-              : [
-                  [`${glyph.ring} `, c.faint],
-                  [line ? message : sent, c.muted, line ? bold : 0],
-                  [line ? `  ${sent}` : "", c.faint],
-                ],
-            (box) => {
-              // A message shows as the operator typed it, with each image it attached named by a mark that opens it.
-              // Its first line says at its right the type of the answer that it asks for, and where it stands.
-              if (user) {
-                const row = this.box({ flexDirection: "row" });
-                const text = this.message(message);
-                text.flexGrow = 1;
-                text.flexShrink = 1;
-                row.add(text);
-                row.add(this.text(state, c.faint, { marginLeft: space.between }));
-                this.panel(box, c.accent).add(row);
-              } else if (!line) {
-                const note = this.box({ paddingLeft: space.between });
-                note.add(this.markdown(message, c.muted));
-                box.add(note);
-              }
-            },
-            { group: user ? "user" : "sent", act, heading: user ? false : undefined, shown: message },
-          );
-        } else if (item.type === "result" && asksOperator(item.act)) {
-          const { act } = item;
-          const value = typeof act.value === "boolean" ? (act.value ? "yes" : "no") : display(act.value);
-          const line = !value.includes("\n") && Bun.stringWidth(value) < this.feedWidth - 20;
-          add(
-            item.key,
-            `${value}\n${line}`,
-            [
-              [`${glyph.done} `, c.success],
-              ["You answered", c.text, bold],
-              [line ? `  ${value}` : "", c.muted],
-            ],
-            (box) => {
-              if (!line) box.add(this.inset(space.between, this.markdown(value)));
-            },
-            { group: "question", act, heading: true, shown: value },
-          );
-        } else if (item.type === "result") {
-          const { act } = item;
-          const value = display(act.value);
-          add(
-            item.key,
-            value,
-            this.answerLabel(act, item.parallel),
-            (box) => {
-              const answer = this.box({ paddingLeft: space.between });
-              answer.add(this.markdown(value));
-              box.add(answer);
-            },
-            { group: item.parallel ? `assistant:${act.id}` : "assistant", act, shown: value },
-          );
-        } else if (item.type === "act") {
-          const { act } = item;
-          const indent = under(act);
-          add(
-            item.key,
-            JSON.stringify(act),
-            this.actLabel(act, false, indent),
-            (box) => this.actDetails(box, act),
-            {
-              compact: true,
-              group: "tools",
-              preview: this.actPreview(act),
-              act,
-              title: moving(act, indent),
-              indent,
-              shown: JSON.stringify(act),
-            },
-          );
-        } else {
-          const { label, detail, body, act } = item;
-          const text = [act?.id, label, detail, body].filter(Boolean).join("\n");
-          const danger = ["raised", "refused"].includes(label);
-          const indent = act ? under(act) : space.between;
-          add(
-            item.key,
-            text,
-            [
-              [`${danger ? glyph.failed : glyph.done} `, danger ? c.danger : c.success],
-              [label, danger ? c.danger : c.text, bold],
-              [
-                `  ${this.preview(detail || (act ? act.id : ""), Bun.stringWidth(label) + indent + 8)}`,
-                c.muted,
-              ],
-            ],
-            (box) => {
-              const details = this.box({ paddingLeft: space.between * 2 });
-              if (act) details.add(this.reference(act.id, act.id));
-              // A read and a write name the path they were of, which the reference opens.
-              if (!act && detail && ["read", "write"].includes(label))
-                details.add(this.reference(detail, detail));
-              else if (detail) details.add(this.text(detail, c.muted));
-              if (body) details.add(this.text(body, danger ? c.danger : c.text));
-              box.add(details);
-            },
-            {
-              compact: true,
-              group: "tools",
-              act,
-              indent,
-              shown: text,
-              ...(label === "refused"
-                ? { preview: (box: BoxRenderable) => this.excerpt(box, body, false, c.danger) }
-                : {}),
-            },
-          );
-        }
-      }
-      for (const [id, stream] of writing) {
-        const act = w.acts.find((act) => act.id === id);
-        items++;
-        const label = (): Part[] =>
-          act
-            ? this.actLabel(act)
-            : [
-                [`${spin()} `, c.accent],
-                ["writing", c.text, bold],
-                [`  ${this.progress(id)}`, c.accent],
-              ];
-        add(
-          `stream-${id}`,
-          stream.text + stream.thinking,
-          label(),
-          (box) => {
-            const inner = this.box({ paddingLeft: space.between * 2 });
-            if (stream.thinking) inner.add(this.text(stream.thinking, c.faint, { attributes: italic }));
-            // The words that stream have no color yet, since half a string reads as code, and a cursor ends them.
-            if (stream.text)
-              inner.add(
-                this.text([
-                  [stream.text, c.text],
-                  [glyph.mark, c.accent],
-                ]),
-              );
-            // A model that has said nothing yet is waited for, and the card says so.
-            if (!stream.thinking && !stream.text)
-              inner.add(
-                this.text("Waiting for the first words of the model", c.faint, { attributes: italic }),
-              );
-            box.add(inner);
-          },
-          { act, collapsible: true, title: label },
+      // The feed shows the items of the selected thread, or the items of no thread and a card for each thread. A run
+      // of words of one speaker stands under one line that names the speaker.
+      const zoom = rows.get(w.thread)?.on === w.selected ? w.thread : "";
+      const place = (id: string) =>
+        Math.max(
+          0,
+          threads.on(w.selected).findIndex((act) => act.id === id),
         );
+      const here = zoom ? place(zoom) : 0;
+      type Run = { speaker: string; rungs: string[] };
+      type Entry =
+        | { is: "item"; item: Item }
+        | { is: "stream"; id: string; stream: Stream }
+        | { is: "speaker"; key: string; run: Run }
+        | { is: "card"; thread: ActRow };
+      const plan: Entry[] = [];
+      const carded = new Set<string>();
+      let run = undefined as Run | undefined;
+      const speak = (speaker: string, key: string, rung?: string) => {
+        if (run?.speaker !== speaker) {
+          run = { speaker, rungs: [] };
+          plan.push({ is: "speaker", key: `speaker-${key}`, run });
+        }
+        if (rung) run.rungs.push(rung);
+      };
+      const card = (thread: ActRow) => {
+        if (carded.has(thread.id)) return;
+        carded.add(thread.id);
+        plan.push({ is: "card", thread });
+        run = undefined;
+      };
+      // Who speaks in an act that no word made: the speaker of the word that made it, or the operator.
+      const who = (act: ActRow) => {
+        const maker = act.kind === "rung" ? act : rows.get(act.by);
+        return maker?.kind === "rung" ? threads.speaker(maker) : OPERATOR;
+      };
+      for (const item of listed) {
+        const holder = threads.of(item.type === "word" ? item.rung : item.act);
+        if ((holder ?? "") !== zoom) {
+          const thread = holder === undefined ? undefined : rows.get(holder);
+          if (!zoom && thread) card(thread);
+          continue;
+        }
+        if (item.type === "word" && !this.aside(item))
+          speak(item.rung ? threads.speaker(item.rung) : w.actor, item.key, item.rung?.id);
+        else if (item.type === "act") speak(who(item.act), item.key, item.act.id);
+        else if (item.type === "result" && !asksOperator(item.act)) speak(this.answerer(item.act), item.key);
+        else run = undefined;
+        plan.push({ is: "item", item });
+      }
+      // A thread that no turn tells yet has its card after the others.
+      if (!zoom) for (const thread of threads.on(w.selected)) card(thread);
+      // A model that has written nothing yet is waited for once under its name, however many of its rungs wait.
+      const silent = (stream: Stream) => !stream.text.trim() && !stream.thinking.trim();
+      for (const [id, stream] of writing) {
+        const act = rows.get(id);
+        if ((threads.of(act) ?? "") !== zoom) continue;
+        const speaker = act ? threads.speaker(act) : w.actor;
+        const prior = plan.at(-1);
+        const waits =
+          prior?.is === "stream" && run?.speaker === speaker && silent(prior.stream) && silent(stream);
+        speak(speaker, `stream-${id}`, id);
+        if (!waits) plan.push({ is: "stream", id, stream });
+      }
+      // The last step of each thread, which its card says: the last comment of the last word under it, or of the words
+      // that its model writes now.
+      const lasts = new Map<string, string>();
+      const said = (holder: string | undefined, code: string) => {
+        const lines = steps(code);
+        if (holder !== undefined && (lines.length || code.trim()))
+          lasts.set(holder, lines.at(-1) ?? this.firstLine(code));
+      };
+      for (const item of listed) if (item.type === "word") said(threads.of(item.rung), item.code);
+      for (const [id, stream] of writing)
+        said(threads.of(rows.get(id)), stream.text.slice(0, stream.text.lastIndexOf("\n") + 1));
+      for (const entry of plan) {
+        if (entry.is === "speaker") {
+          const { run } = entry;
+          const live = () =>
+            run.rungs.some((id) => {
+              const act = rows.get(id);
+              return w.host.streams.has(id) || (act !== undefined && working(act));
+            });
+          const label = () => this.speaker(run.speaker, live(), run.rungs[0], here);
+          const moves = live() && w.preferences.motion;
+          add(entry.key, `${run.speaker}:${live()}:${this.theme}`, label(), () => {}, {
+            heading: true,
+            separate: true,
+            title: moves ? label : undefined,
+          });
+        } else if (entry.is === "card") {
+          const { thread } = entry;
+          const last = lasts.get(thread.id) ?? "";
+          const state = this.threadState(thread, place(thread.id));
+          add(
+            `card-${thread.id}`,
+            JSON.stringify([
+              thread.words,
+              thread.done,
+              thread.paused,
+              plain(state.label),
+              last,
+              this.feedWidth,
+            ]),
+            [],
+            (box) => this.threadCard(box, thread, state, last),
+            { separate: true, act: thread, shown: `${thread.words[1]}\n${last}` },
+          );
+        } else if (entry.is === "stream") {
+          const { id, stream } = entry;
+          items++;
+          add(
+            `stream-${id}`,
+            `${stream.text}${stream.thinking}:${this.feedWidth}`,
+            [],
+            (box) => this.streamBody(box, id, stream),
+            { act: rows.get(id) },
+          );
+        } else this.item(add, entry.item);
       }
       // A paused chain says so at the end of its feed, with the reason that the last failure gave, and a button that
       // wakes it, since nothing new runs on it until then.
@@ -1751,16 +1877,16 @@ export class App {
         add("paused", `paused:${failure ?? ""}:${this.theme}`, [], (box) =>
           this.banner(
             box,
-            c.warning,
+            c.warm,
             [
-              [`${glyph.held} `, c.warning],
-              ["This chain is paused", c.text, bold],
-              ["  New work waits for a wake.", c.muted],
+              [`${glyph.held} `, c.warm],
+              ["This chain is paused", c.bright],
+              ["  New work waits for a wake.", c.prose],
             ],
             failure
               ? this.whole(
-                  this.text(clip(shortenHomes(failure).split("\n")[0] ?? "", this.feedWidth - 8), c.danger),
-                  () => shortenHomes(failure),
+                  this.text(clip(readable(failure).split("\n")[0] ?? "", this.feedWidth - 8), c.warm),
+                  () => readable(failure),
                 )
               : undefined,
             ["Wake", "runs what waits, once the cause is fixed", () => this.action("/wake")],
@@ -1782,14 +1908,14 @@ export class App {
           [
             [
               turn[0] === "assistant" ? `${glyph.dot} ` : `${glyph.ring} `,
-              turn[0] === "assistant" ? c.secondary : c.faint,
+              turn[0] === "assistant" ? c.model : c.faint,
             ],
-            [turn[0], c.text, bold],
+            [turn[0], c.bright, bold],
             [`  turn ${index + 1}`, c.faint],
           ],
           (box) => {
             const inner = this.box({ paddingLeft: space.between });
-            inner.add(turn[0] === "assistant" ? this.code(text) : this.transcriptText(text));
+            inner.add(this.code(text, turn[0] === "user"));
             box.add(inner);
           },
           { group: turn[0], shown: text },
@@ -1802,7 +1928,7 @@ export class App {
           row.add(
             this.text(
               `Writes ${w.changePage * 20 + 1} to ${Math.min((w.changePage + 1) * 20, w.host.changes)} of ${w.host.changes}`,
-              c.muted,
+              c.prose,
             ),
           );
           row.add(this.link("Previous page", () => this.changePage(-1)));
@@ -1818,10 +1944,10 @@ export class App {
         // The heading of a change is a bar of the panel: the path, what the write did to the file, and the lines it
         // added and removed at its right.
         const [what, color] = !change.before
-          ? ["created", c.success]
+          ? ["created", c.done]
           : !change.after
-            ? ["deleted", c.danger]
-            : ["modified", c.warning];
+            ? ["deleted", c.warm]
+            : ["modified", c.warm];
         const counts = `+${added} -${removed} `;
         const fill = Math.max(
           1,
@@ -1831,32 +1957,15 @@ export class App {
           `change-${position}`,
           position,
           [
-            [` ${glyph.dot} `, color, 0, c.panel],
-            [path, c.text, bold, c.panel],
-            [`  ${what}`, c.muted, 0, c.panel],
-            [" ".repeat(fill), c.text, 0, c.panel],
-            [`+${added}`, added ? c.success : c.faint, 0, c.panel],
-            [` -${removed} `, removed ? c.danger : c.faint, 0, c.panel],
+            [` ${glyph.dot} `, color, 0, c.surface2],
+            [path, c.bright, bold, c.surface2],
+            [`  ${what}`, c.prose, 0, c.surface2],
+            [" ".repeat(fill), c.bright, 0, c.surface2],
+            [`+${added}`, added ? c.done : c.faint, 0, c.surface2],
+            [` -${removed} `, removed ? c.warm : c.faint, 0, c.surface2],
           ],
-          (box) =>
-            box.add(
-              new DiffRenderable(this.renderer, {
-                diff: change.patch,
-                // Two sides need room for two lines of code side by side, and one side reads better below that.
-                view: this.feedWidth >= 160 ? "split" : "unified",
-                syntaxStyle: this.style,
-                fg: c.text,
-                showLineNumbers: true,
-                lineNumberFg: c.faint,
-                lineNumberBg: c.background,
-                contextBg: c.background,
-                addedBg: c.added,
-                removedBg: c.removed,
-                addedSignColor: c.success,
-                removedSignColor: c.danger,
-                wrapMode: "word",
-              }),
-            ),
+          // Two sides need room for two lines of code side by side, and one side reads better below that.
+          (box) => box.add(this.diff(change.patch, path, this.feedWidth >= 160)),
           { shown: change.path },
         );
       }
@@ -1865,8 +1974,8 @@ export class App {
     const { height } = this.scroll.viewport;
     if (!items && w.loading && !w.error) {
       const loading = (): Part[] => [
-        [`${spin()} `, c.accent],
-        [`Loading the ${viewLabels[w.view].toLowerCase()}`, c.muted],
+        [`${spin()} `, c.operator],
+        [`Loading the ${viewLabels[w.view].toLowerCase()}`, c.prose],
       ];
       add(
         "view-loading",
@@ -1894,9 +2003,9 @@ export class App {
           height,
           this.text([
             [`${glyph.ring} `, c.faint],
-            [title, c.text, bold],
+            [title, c.bright, bold],
           ]),
-          this.text(hint, c.muted),
+          this.text(hint, c.prose),
         ),
       );
     }
@@ -1906,6 +2015,776 @@ export class App {
     }
   }
 
+  /** An item of the feed as its card: a word, the open of a thread, its close, an act that no word made, or a note. */
+  private item(add: Add, item: Item): void {
+    const w = this.session;
+    if (item.type === "word") {
+      const { code, rung } = item;
+      // A word of the operator that only made a chain, as a branch or a new chain does, reads as the chain that it
+      // made, and a click on it opens that chain.
+      const made = this.madeChain(item);
+      if (made && rung) {
+        const name = w.labelOf(made.id);
+        // The branch itself reads the same word as the point where it starts.
+        const here = made.id === w.selected;
+        add(
+          rung.id,
+          `made:${made.id}:${name}:${here}:${this.theme}`,
+          [],
+          (box) =>
+            box.add(
+              here
+                ? this.text([
+                    ["↳ ", c.faint],
+                    ["This branch starts here", c.prose],
+                  ])
+                : this.link(
+                    [
+                      ["↳ ", c.faint],
+                      [made.words[1] ? "Branched to " : "Started the chain ", c.prose],
+                      [name, c.bright],
+                    ],
+                    () => void w.select(made.id).catch(w.fail),
+                  ),
+            ),
+          { shown: code, separate: true },
+        );
+        return;
+      }
+      // A note of the operator stands as a message of the operator does, in a smaller block.
+      if (rung && this.aside(item)) {
+        add(
+          rung.id,
+          `${code}:${this.theme}`,
+          [],
+          (box) => {
+            const block = this.box({
+              border: ["left"],
+              borderColor: c.operator,
+              customBorderChars: { ...noBorder, vertical: glyph.bar },
+              backgroundColor: c.surface2,
+              paddingLeft: space.between - space.inset,
+              paddingRight: space.inset,
+            });
+            for (const line of steps(code)) block.add(this.text(this.inline(line, c.bright)));
+            box.add(block);
+          },
+          { act: rung, shown: code, separate: true },
+        );
+        return;
+      }
+      const retried = Boolean(rung && this.retry(rung));
+      const changes = rung ? (w.made[rung.id] ?? []) : [];
+      const findings = rung && failed(rung) ? refusal(w.turns, rung.id) : [];
+      const said = steps(code);
+      add(
+        rung?.id ?? item.key,
+        JSON.stringify([
+          code,
+          rung?.run,
+          item.told.map((one) =>
+            "id" in one ? [one.id, one.done, one.paused, working(one) ? one.value : null] : one.key,
+          ),
+          changes.map((change) => change.patch),
+          findings,
+          retried,
+          this.feedWidth,
+          this.theme,
+        ]),
+        [[said[0] ?? this.firstLine(code), c.prose]],
+        (box, closed, toggle) => this.wordBody(box, item, { closed, toggle, retried, changes, findings }),
+        {
+          headless: true,
+          act: rung,
+          shown: [code, ...notesOf(item).map((note) => note.body)].join("\n"),
+        },
+      );
+    } else if (item.type === "thread" && asksOperator(item.act)) {
+      const { act } = item;
+      const message = String(act.words[1] ?? "");
+      const waiting = w.host.threads.has(act.id);
+      add(
+        item.key,
+        `${message}\n${waiting}\n${this.theme}`,
+        [
+          [`${glyph.asks} `, waiting ? c.warm : c.faint],
+          // A question that its answer closed is past, and says so in the tone of the chrome.
+          waiting ? ["Question for you", c.bright] : ["Asked you", c.faint],
+        ],
+        (box) => {
+          // A question is markdown, as an answer is.
+          this.panel(box, waiting ? c.warm : c.rule).add(this.markdown(message, c.bright));
+          if (waiting)
+            box.add(
+              this.inset(
+                space.between,
+                this.text(
+                  [
+                    ["Answer in the input below", c.prose],
+                    [act.words[0] === "bool" ? " with yes or no" : `, as ${act.words[0]}`, c.prose],
+                    [", or press ", c.faint],
+                    ["⌃A", c.prose],
+                  ],
+                  c.prose,
+                  { run: () => this.question() },
+                ),
+              ),
+            );
+        },
+        { act, heading: true, separate: true, shown: message },
+      );
+    } else if (item.type === "thread") {
+      const { act } = item;
+      const message = String(act.words[1] ?? "");
+      const user = w.isUserThread(act);
+      // A message of the operator shows as the operator typed it, with each image it attached named by a mark that
+      // opens it, and says at its right the type of the answer that it asks for, and where it stands. A thread that a
+      // model started shows its markdown, and the model it goes to.
+      const state = user
+        ? this.messageState(act)
+        : [[`to ${this.model(String(act.words[2] ?? "")).name}`, c.faint]];
+      add(
+        item.key,
+        `${message}\n${plain(state as Part[])}\n${this.theme}`,
+        [],
+        (box) => {
+          const row = this.box({ flexDirection: "row" });
+          const text = user ? this.message(message) : this.markdown(message, c.bright);
+          text.flexGrow = 1;
+          text.flexShrink = 1;
+          row.add(text);
+          row.add(this.text(state as Part[], c.faint, { marginLeft: space.between }));
+          this.panel(box, user ? c.operator : c.model).add(row);
+        },
+        { act, separate: true, shown: message },
+      );
+    } else if (item.type === "result" && asksOperator(item.act)) {
+      const { act } = item;
+      const value = typeof act.value === "boolean" ? (act.value ? "yes" : "no") : display(act.value);
+      const line = !value.includes("\n") && Bun.stringWidth(value) < this.feedWidth - 20;
+      add(
+        item.key,
+        `${value}\n${line}`,
+        [
+          [`${glyph.done} `, c.done],
+          ["You", c.bright, bold],
+          [" answered", c.faint],
+          [line ? `  ${value}` : "", c.bright],
+        ],
+        (box) => {
+          if (!line) box.add(this.inset(space.between, this.markdown(value, c.bright)));
+        },
+        { act, heading: true, separate: false, shown: value },
+      );
+    } else if (item.type === "result") {
+      const { act } = item;
+      const value = display(act.value);
+      // An answer that closed with others says which thread it answers, but in the view of that thread itself.
+      const named = item.parallel && act.id !== w.thread;
+      add(
+        item.key,
+        `${value}:${named}:${this.theme}`,
+        [],
+        (box) => {
+          const answer = this.box({ paddingLeft: space.between });
+          if (named)
+            answer.add(
+              this.text(`answers “${this.firstLine(String(act.words[1] ?? ""))}”`, c.faint, {
+                truncate: true,
+              }),
+            );
+          answer.add(this.markdown(value, c.bright));
+          box.add(answer);
+        },
+        { act, separate: true, shown: value },
+      );
+    } else if (item.type === "act" && item.act.kind === "bash") {
+      const { act } = item;
+      add(
+        item.key,
+        JSON.stringify(act),
+        [],
+        (box, closed, toggle) => this.commandBlock(box, act, !closed, toggle),
+        { act, headless: true, indent: space.between - space.inset, shown: this.describe(act) },
+      );
+    } else if (item.type === "act") {
+      const { act, notes } = item;
+      const heading = () => this.actHeading(act);
+      add(
+        item.key,
+        JSON.stringify([act, notes.map((note) => note.key)]),
+        heading(),
+        (box) => this.actDetails(box, act, notes),
+        {
+          compact: true,
+          preview: this.actPreview(act),
+          act,
+          title: working(act) && w.preferences.motion ? heading : undefined,
+          indent: space.inset,
+          shown: [this.describe(act), ...notes.map((note) => note.body)].join("\n"),
+        },
+      );
+    } else {
+      const { label, detail, body, act } = item;
+      const text = [label, detail, body].filter(Boolean).join("\n");
+      const danger = ["raised", "refused"].includes(label);
+      add(
+        item.key,
+        text,
+        [
+          [`${danger ? glyph.failed : glyph.small} `, danger ? c.warm : c.faint],
+          [label, danger ? c.warm : c.prose],
+          [`  ${this.preview(detail, Bun.stringWidth(label) + 8)}`, c.faint],
+        ],
+        (box) => {
+          const details = this.box({ paddingLeft: space.between * 2 });
+          // A read and a write name the path they were of, which the reference opens.
+          if (!act && detail && ["read", "write"].includes(label))
+            details.add(this.reference(detail, detail));
+          else if (detail) details.add(this.text(detail, c.prose));
+          if (body) details.add(this.text(body, danger ? c.warm : c.bright));
+          box.add(details);
+        },
+        {
+          compact: true,
+          act,
+          indent: space.inset,
+          shown: text,
+          ...(label === "refused"
+            ? { preview: (box: BoxRenderable) => this.excerpt(box, body, false, c.warm) }
+            : {}),
+        },
+      );
+    }
+  }
+  /** The chain that a word of the operator made, when the word made one. */
+  private madeChain(item: Word): ActRow | undefined {
+    const rung = item.rung;
+    return rung?.by === OPERATOR && /^\s*chain\(/.test(item.code)
+      ? this.session.chains.find((chain) => chain.by === rung.id)
+      : undefined;
+  }
+  /** Whether a word stands apart from the runs of words: a note of the operator, or a word of the operator that made a
+   * chain. */
+  private aside(item: Word): boolean {
+    return Boolean((item.rung && operatorNote(item.rung)) || this.madeChain(item));
+  }
+  /** The first line of a text that holds anything. */
+  private firstLine(text: string): string {
+    return text.split("\n").find((line) => line.trim()) ?? "";
+  }
+  /** A line of markdown in a tone, with the colors of code, of what stands out, and of a link. */
+  private inline(line: string, tone: RGBA): Part[] {
+    return inline(line, tone, { strong: c.bright, code: c.model, link: c.operator });
+  }
+  /** Who speaks, above a run of words: a dot, or a spinner while the run works, the name in bold, the effort, and the
+   * time since the run began while it works. */
+  private speaker(actor: string, live: boolean, first: string | undefined, place: number): Part[] {
+    const moving = live && this.session.preferences.motion;
+    const operator = actor === OPERATOR;
+    const mark: Part = [
+      `${moving ? spin(Date.now(), place) : live ? glyph.running : glyph.dot} `,
+      operator ? c.operator : c.model,
+    ];
+    if (operator) return [mark, ["You", c.bright, bold]];
+    const { name, effort } = this.model(actor);
+    return [
+      mark,
+      [name, c.bright, bold],
+      ...(effort && effort !== "off" ? ([["  "], [effort, c.warm]] as Part[]) : []),
+      ...(live && first ? ([["  "], ...quantity(this.progress(first))] as Part[]) : []),
+    ];
+  }
+  /** Who answered a thread: the speaker of the last rung the thread made, or the actor that it went to. */
+  private answerer(thread: ActRow): string {
+    const w = this.session;
+    const rung = w.acts.findLast((act) => act.kind === "rung" && act.by === thread.id);
+    return rung ? w.threads.speaker(rung) : String(thread.words[2] || w.actor);
+  }
+  /** Where a thread stands, as its mark and the words of its state: a spinner while a model works it, a diamond while a
+   * question in it waits for the operator, a ring while a pause holds it, a check for a moment after it closes and a
+   * dot after that, and a cross when it failed. The mark moves until the time it gives, or while the thread works. */
+  private threadState(
+    thread: ActRow,
+    place: number,
+  ): { mark: () => Part; label: Part[]; moves: boolean; until?: number } {
+    const w = this.session;
+    const moving = w.preferences.motion;
+    const threads = w.threads;
+    const asks = [...w.host.threads.keys()].some((id) => {
+      const act = w.acts.find((one) => one.id === id);
+      return act !== undefined && threads.of(act) === thread.id;
+    });
+    if (asks) return { mark: () => [glyph.asks, c.warm], label: [["asks you", c.warm]], moves: false };
+    if (thread.done) {
+      if (failed(thread))
+        return { mark: () => [glyph.failed, c.warm], label: [["failed", c.warm]], moves: false };
+      if (cancelled(thread))
+        return { mark: () => [glyph.cancelled, c.faint], label: [["cancelled", c.faint]], moves: false };
+      const at = this.closedAt.get(thread.id);
+      const until = moving && at !== undefined ? at + motion.check : undefined;
+      return {
+        mark: () =>
+          until !== undefined && Date.now() < until ? [glyph.done, c.done] : [glyph.small, c.faint],
+        label: [[asksOperator(thread) ? "answered" : "closed", c.faint]],
+        moves: until !== undefined && Date.now() < until,
+        until,
+      };
+    }
+    if (thread.paused || w.host.pending.has(thread.id))
+      return { mark: () => [glyph.held, c.warm], label: [["paused", c.warm]], moves: false };
+    return {
+      mark: () => [moving ? spin(Date.now(), place) : glyph.running, c.model],
+      label: [["working", c.faint]],
+      moves: moving,
+    };
+  }
+  /** A thread as a card of the feed of its chain: its mark, the first line of its markdown, and its state, then its
+   * last step. A click opens the thread. */
+  private threadCard(
+    box: BoxRenderable,
+    thread: ActRow,
+    state: ReturnType<App["threadState"]>,
+    last: string,
+  ): void {
+    const w = this.session;
+    const open = () => void w.open(thread.id).catch(w.fail);
+    const block = this.hoverable(
+      this.box({
+        backgroundColor: c.surface2,
+        paddingLeft: space.between - space.inset,
+        paddingRight: space.inset,
+        onMouseUp: this.click(open),
+      }),
+      c.selected,
+    );
+    const top = this.row();
+    const title = this.firstLine(String(thread.words[1] ?? ""));
+    const head = (): Part[] => [state.mark(), [" "], [title, c.bright]];
+    const heading = this.line(head(), c.bright, { truncate: true, flexGrow: 1, flexShrink: 1 });
+    if (state.moves) this.move(heading, head, state.until);
+    top.add(heading);
+    top.add(this.line(state.label, c.faint, { marginLeft: space.between }));
+    block.add(top);
+    if (last) block.add(this.line([["  "], ...this.inline(last, c.prose)], c.prose, { truncate: true }));
+    box.add(block);
+  }
+  /** The words that a model writes now: the last line of its thought, and each step that it has written whole. */
+  private streamBody(box: BoxRenderable, id: string, stream: { text: string; thinking: string }): void {
+    // The words of a model stand where they stand once they land: each mark in the column of the marks, and each text
+    // in the column of the text of the steps.
+    const inner = this.box({ paddingLeft: space.between - space.inset });
+    const lead = Bun.stringWidth(`${glyph.closed} `);
+    const thought = stream.thinking.trim().split("\n").at(-1) ?? "";
+    if (thought)
+      inner.add(this.text(thought, c.faint, { attributes: italic, truncate: true, marginLeft: lead }));
+    const whole = stream.text.slice(0, stream.text.lastIndexOf("\n") + 1);
+    const said = steps(whole);
+    for (const [at, line] of said.entries())
+      inner.add(this.step(`${id}:${at}`, line, c.prose, {}, at ? "  " : `${glyph.closed} `));
+    if (!said.length && whole.trim())
+      inner.add(
+        this.text(
+          [
+            [`${glyph.closed} `, c.faint],
+            [this.firstLine(whole), c.faint],
+          ],
+          c.faint,
+          { truncate: true },
+        ),
+      );
+    // A model that has said nothing yet is waited for, and the card says so.
+    if (!thought && !whole.trim())
+      inner.add(
+        this.text("Waiting for the first words of the model", c.faint, {
+          attributes: italic,
+          marginLeft: lead,
+        }),
+      );
+    box.add(inner);
+  }
+  /** A word as the steps that its comments say, or its first line where it says none. Open, it shows its Python and
+   * what each act it made came to. Under it stand the diff of each file that its writes changed, and what it raised,
+   * or the findings of the gate that refused it. A word that a later word replaced stands in the color of the chrome. */
+  private wordBody(
+    box: BoxRenderable,
+    item: Word,
+    how: {
+      closed: boolean;
+      toggle: () => void;
+      retried: boolean;
+      changes: ShownChange[];
+      findings: string[];
+    },
+  ): void {
+    const w = this.session;
+    const { code, rung } = item;
+    const tone = how.retried ? c.faint : c.prose;
+    const inner = this.box({ paddingLeft: space.between - space.inset });
+    const shape: TextShape = {
+      run: how.toggle,
+      onMouseDown: (event) => {
+        if (event.button === 2 && rung) this.actActions(w.acts.find((act) => act.id === rung.id) ?? rung);
+      },
+    };
+    const said = steps(code);
+    // The fold of the word marks its first line, so that its steps read as work that Enter opens, apart from what
+    // someone said.
+    const fold = `${how.closed ? glyph.closed : glyph.open} `;
+    // Folded, each command stands under the step that ran it, and a step after a command stands apart from it by one
+    // line, as each panel does.
+    const commands = how.closed ? actsOf(item).filter((act) => act.kind === "bash") : [];
+    const placed = stepsOf(
+      code,
+      commands.map((act) => String(act.words[0] ?? "")),
+    );
+    const lines = new Set<Renderable>();
+    const blocksUnder = (at: number) => {
+      for (const [index, act] of commands.entries())
+        if ((placed[index] ?? 0) === at) this.commandBlock(inner, act, false);
+    };
+    for (const [at, line] of said.entries()) {
+      const row = this.step(`${rung?.id ?? item.key}:${at}`, line, tone, shape, at ? "  " : fold);
+      if (!lines.has(inner.getChildren().at(-1) as Renderable) && at) row.marginTop = space.section;
+      inner.add(row);
+      lines.add(row);
+      blocksUnder(at);
+    }
+    if (!said.length) {
+      const first = this.text(
+        [
+          [fold, c.faint],
+          [this.firstLine(code), c.faint],
+        ],
+        c.faint,
+        { truncate: true, ...shape },
+      );
+      inner.add(first);
+      lines.add(first);
+      blocksUnder(0);
+    }
+    if (!how.closed) {
+      const detail = this.box({ marginTop: space.section, gap: space.stack });
+      if (code) detail.add(this.numbered(code, { fg: c.faint, minWidth: 3 }));
+      // Each act stands in the order the word made it, with what it told, and each note of a query among them. The code
+      // of the word and each block of a command stand apart by one line from the lines that follow them.
+      const acts = new Set(actsOf(item).map((act) => act.id));
+      const notes = notesOf(item);
+      let apart = Boolean(code);
+      for (const one of item.told) {
+        const at = detail.getChildren().length;
+        if ("id" in one)
+          this.made(
+            detail,
+            one,
+            notes.filter((note) => note.act?.id === one.id),
+            how.retried,
+          );
+        else if (!acts.has(one.act?.id ?? "")) this.noteLine(detail, one);
+        const first = detail.getChildren()[at];
+        if (first && apart && !("id" in one && one.kind === "bash")) first.marginTop = space.section;
+        if (first) apart = "id" in one && one.kind === "bash";
+      }
+      inner.add(detail);
+    } else
+      for (const act of actsOf(item))
+        if (act.kind !== "bash" && working(act)) this.made(inner, act, [], false);
+    this.diffs(inner, how.changes);
+    // A word that a later word replaced says so in one line, and what refused it, or what it raised, no longer counts.
+    // Each line stands under the text of the steps, after the fold.
+    const under = this.box({
+      marginLeft: Bun.stringWidth(fold),
+      marginTop: lines.has(inner.getChildren().at(-1) as Renderable) ? 0 : space.section,
+    });
+    if (rung?.run?.status === "failed" && !cancelled(rung) && how.retried)
+      under.add(
+        this.text(
+          `${how.findings.length ? "The gate refused this word" : "This word raised"}, and the next took its place.`,
+          c.faint,
+        ),
+      );
+    else if (rung?.run?.status === "failed" && !cancelled(rung)) {
+      if (how.findings.length) {
+        under.add(this.text("The gate refused this word", c.warm));
+        for (const finding of how.findings.filter(Boolean))
+          under.add(this.branched(readable(finding), c.warm));
+      } else under.add(this.text(readable(rung.run.reason ?? ""), c.warm));
+    }
+    if (under.getChildren().length) inner.add(under);
+    box.add(inner);
+  }
+  /** A command as one block wherever it stands, under the steps of a word or as a command of the operator: its line,
+   * with a spinner and its time while it runs, or its end when it failed or a cancel ended it. Folded, the block shows
+   * the last line that the command printed; open, all that it printed and how it ended. A click on its line folds or
+   * opens it, where the block folds apart from a word. The block stands where the marks of the steps stand, and its
+   * background reaches the edge of the feed, as the card of a thread does. It stands apart by one line from what
+   * stands before it. */
+  private commandBlock(box: BoxRenderable, act: ActRow, whole: boolean, toggle?: () => void): void {
+    const exit = (act.value && typeof act.value === "object" ? act.value : {}) as Exit;
+    const block = this.box({
+      backgroundColor: c.surface2,
+      paddingX: space.inset,
+      marginLeft: -space.inset,
+      marginTop: box.getChildren().some((child) => child.visible) ? space.section : 0,
+    });
+    const head = (): Part[] => {
+      const live = working(act);
+      const ended = cancelled(act)
+        ? "cancelled"
+        : act.done && exit.code !== 0
+          ? `exit ${exit.code ?? "timeout"}`
+          : "";
+      return [
+        live ? [this.session.preferences.motion ? spin() : glyph.running, c.model] : ["$", c.faint],
+        [" "],
+        [this.firstLine(String(act.words[0] ?? "")), c.bright],
+        [live ? `  ${this.actState(act).word}` : "", c.faint],
+        [!whole && ended ? `  ${ended}` : "", cancelled(act) ? c.faint : c.warm],
+      ];
+    };
+    const line = this.line(head(), c.bright, { truncate: true, run: toggle });
+    if (working(act) && this.session.preferences.motion) this.move(line, head);
+    block.add(line);
+    if (whole) this.commandDetails(block, act);
+    else {
+      const last = [exit.stdout?.content, exit.stderr?.content]
+        .filter(Boolean)
+        .join("\n")
+        .split("\n")
+        .map((one) => one.trim())
+        .findLast(Boolean);
+      if (last) block.add(this.line(last, c.faint, { truncate: true, run: toggle }));
+    }
+    box.add(block);
+  }
+  /** A step of a word: one line of markdown in a tone, after its lead in the tone of the chrome. A step that wraps goes
+   * on under its own text, and not under its lead. A step that shows first after its view opened lands bright, and
+   * settles to its tone in three steps. */
+  private step(key: string, line: string, tone: RGBA, options: TextShape, lead: string): BoxRenderable {
+    const born = this.landed.get(key) ?? (this.opening || !this.session.preferences.motion ? 0 : Date.now());
+    this.landed.set(key, born);
+    const parts = () => {
+      const settled = Math.min(3, Math.floor(((Date.now() - born) * 3) / motion.settle));
+      return this.inline(line, settled >= 3 ? tone : mix(c.bright, tone, settled / 3));
+    };
+    const row = this.box({ flexDirection: "row" });
+    row.add(this.text(lead, c.faint, options));
+    const node = this.text(parts(), tone, { ...options, flexShrink: 1 });
+    row.add(node);
+    if (Date.now() - born < motion.settle) this.move(node, parts, born + motion.settle);
+    return row;
+  }
+  /** An act that a word made, on one line with no name: its state and what it is, then what it printed while it runs,
+   * or what it told. */
+  private made(box: BoxRenderable, act: ActRow, notes: Note[], quiet: boolean): void {
+    // A command is the block of a command, open, with all that it printed.
+    if (act.kind === "bash") {
+      this.commandBlock(box, act, true);
+      return;
+    }
+    const parts = (): Part[] => {
+      const { word, mark, color } = this.actState(act);
+      return [
+        [`${mark} `, quiet ? c.faint : color],
+        [this.describe(act), quiet ? c.faint : c.prose],
+        [word ? `  ${word}` : "", c.faint],
+      ];
+    };
+    const node = this.line(parts(), c.prose, { truncate: true });
+    if (working(act) && this.session.preferences.motion) this.move(node, parts);
+    box.add(node);
+    this.actPreview(act)?.(box);
+    for (const note of notes) if (note.body) this.excerpt(box, note.body, false, quiet ? c.faint : c.prose);
+  }
+  /** What a query of a word told: its kind and what it was about, then the start of what it told. */
+  private noteLine(box: BoxRenderable, note: Note): void {
+    const danger = ["raised", "refused"].includes(note.label);
+    box.add(
+      this.line(
+        [
+          [`${danger ? glyph.failed : glyph.small} `, danger ? c.warm : c.faint],
+          [note.label, c.faint],
+          [note.detail ? `  ${note.detail}` : "", c.prose],
+        ],
+        c.faint,
+        { truncate: true },
+      ),
+    );
+    if (note.body) this.excerpt(box, note.body, false, danger ? c.warm : c.prose);
+  }
+  /** What an act is, in words and with no name: the line of a command, the time of a wait, whom a thread asks, the
+   * first step of a rung, the name of a chain, the ceilings of a grant, and the kind and the first word of any other. */
+  private describe(act: ActRow): string {
+    const w = this.session;
+    if (act.kind === "bash") return `$ ${this.firstLine(String(act.words[0] ?? ""))}`;
+    if (act.kind === "thread") {
+      const to = asksOperator(act) ? "you" : this.model(String(act.words[2] ?? "")).name;
+      const where = act.on === w.selected ? "" : ` on ${w.labelOf(act.on)}`;
+      return `asked ${to}${where}: ${this.firstLine(String(act.words[1] ?? ""))}`;
+    }
+    if (act.kind === "rung") {
+      const word = String(w.program[act.id] || act.words[0] || "");
+      return steps(word)[0] ?? this.firstLine(word);
+    }
+    if (act.kind === "chain") return `started the chain ${w.labelOf(act.id)}`;
+    if (["wait", "grant"].includes(act.kind)) return `${act.kind} ${this.subject(act)}`;
+    return `${act.kind} ${this.firstLine(String(act.words[0] ?? ""))}`.trim();
+  }
+  /** The heading of an act that no word made: its state, what it is, and the word of its state. */
+  private actHeading(act: ActRow): Part[] {
+    const { word, mark, color } = this.actState(act);
+    return [
+      [`${mark} `, color],
+      [this.preview(this.describe(act), Bun.stringWidth(word) + 8), c.bright],
+      [word ? `  ${word}` : "", color],
+    ];
+  }
+  /** The diff of each file that a word changed, each under its path and the lines it added and removed. */
+  private diffs(box: BoxRenderable, changes: ShownChange[]): void {
+    const root = this.session.host.directory;
+    for (const change of changes) {
+      const { added, removed } = lineCounts(change.patch);
+      const path = change.path.startsWith(`${root}/`) ? change.path.slice(root.length + 1) : change.path;
+      box.add(
+        this.line(
+          [
+            [shortenHome(path), c.prose],
+            ["  "],
+            [`+${added}`, added ? c.done : c.faint],
+            [` -${removed}`, removed ? c.warm : c.faint],
+          ],
+          c.prose,
+          { truncate: true, marginTop: space.section },
+        ),
+      );
+      box.add(this.diff(change.patch, path, false));
+    }
+  }
+  /** A patch as a diff: each added and removed line tinted, in the colors of the language of its file, and in two
+   * sides where the view asks for them. One side is one gutter for the whole patch, in which the lines that two hunks
+   * leave out between them stand as one row with no number and the mark ⋯, so a jump of the line numbers never reads
+   * as a line that was there, and every hunk keeps one column of numbers. */
+  private diff(patch: string, path: string, split: boolean): Renderable {
+    if (split)
+      return new DiffRenderable(this.renderer, {
+        diff: patch,
+        view: "split",
+        filetype: filetype(path),
+        conceal: false,
+        syntaxStyle: this.style,
+        fg: c.bright,
+        showLineNumbers: true,
+        lineNumberFg: c.faint,
+        lineNumberBg: c.ground,
+        contextBg: c.ground,
+        addedBg: c.added,
+        removedBg: c.removed,
+        addedSignColor: c.done,
+        removedSignColor: c.warm,
+        wrapMode: "word",
+      });
+    const lines: string[] = [];
+    const lineColors = new Map<number, LineColorConfig>();
+    const lineSigns = new Map<number, LineSign>();
+    const lineNumbers = new Map<number, number>();
+    const hideLineNumbers = new Set<number>();
+    for (const [at, hunk] of (parsePatch(patch)[0]?.hunks ?? []).entries()) {
+      if (at) {
+        hideLineNumbers.add(lines.length);
+        lineSigns.set(lines.length, { after: " ⋯", afterColor: c.faint });
+        lines.push("");
+      }
+      let before = hunk.oldStart;
+      let after = hunk.newStart;
+      for (const line of hunk.lines) {
+        const row = lines.length;
+        if (line.startsWith("+")) {
+          lineColors.set(row, { gutter: c.ground, content: c.added });
+          lineSigns.set(row, { after: " +", afterColor: c.done });
+          lineNumbers.set(row, after++);
+        } else if (line.startsWith("-")) {
+          lineColors.set(row, { gutter: c.ground, content: c.removed });
+          lineSigns.set(row, { after: " -", afterColor: c.warm });
+          lineNumbers.set(row, before++);
+        } else if (line.startsWith(" ")) {
+          lineNumbers.set(row, after++);
+          before++;
+        } else continue;
+        lines.push(line.slice(1));
+      }
+    }
+    return new LineNumberRenderable(this.renderer, {
+      // A diff shows the source as it stands, so markdown keeps its marks.
+      target: new CodeRenderable(this.renderer, {
+        content: safeText(lines.join("\n")),
+        filetype: filetype(path),
+        syntaxStyle: this.style,
+        fg: c.bright,
+        wrapMode: "word",
+        drawUnstyledText: true,
+        conceal: false,
+      }),
+      fg: c.faint,
+      bg: c.ground,
+      lineColors,
+      lineSigns,
+      lineNumbers,
+      hideLineNumbers,
+    });
+  }
+  /** A text that moves while its cause holds: the tick draws its parts again, until a time after which it shows them
+   * for good. It shows its parts at once. */
+  private move(node: TextRenderable, parts: () => Part[], until?: number): void {
+    const mover: { parts: () => Part[]; until?: number; shown?: string } = { parts, until };
+    this.movers.set(node, mover);
+    this.draw(node, mover);
+    this.animate();
+  }
+  /** A text that moved, still. */
+  private still(node: TextRenderable): void {
+    this.movers.delete(node);
+  }
+  /** A text of the movers drawn with its parts of now, when they changed. */
+  private draw(node: TextRenderable, mover: { parts: () => Part[]; shown?: string }): void {
+    const parts = mover.parts();
+    const shown = JSON.stringify(parts.map(([text, fg, attributes]) => [text, fg?.toInts(), attributes]));
+    if (shown === mover.shown) return;
+    mover.shown = shown;
+    node.content = styled(parts);
+  }
+  /** The tick runs while anything moves, and stops when nothing does. */
+  private animate(): void {
+    const moves = this.movers.size > 0 || this.statusMoves;
+    if (moves && !this.tick) this.tick = setInterval(this.advance, 20);
+    else if (!moves && this.tick) {
+      clearInterval(this.tick);
+      this.tick = undefined;
+    }
+  }
+  /** One tick: each mover drawn as it stands now, and the footer while it moves. */
+  private advance = (): void => {
+    if (this.closed) return;
+    const now = Date.now();
+    for (const [node, mover] of this.movers) {
+      if (node.isDestroyed) {
+        this.movers.delete(node);
+        continue;
+      }
+      this.draw(node, mover);
+      if (mover.until !== undefined && now >= mover.until) this.movers.delete(node);
+    }
+    if (this.statusMoves) this.renderStatus();
+    this.animate();
+  };
+  /** The time each thread closed while the App watched it, which its check shows for a moment. */
+  private watchThreads(): void {
+    const now = Date.now();
+    for (const act of this.session.acts) {
+      if (act.kind !== "thread") continue;
+      if (!act.done) this.openThreads.add(act.id);
+      else if (this.openThreads.delete(act.id)) this.closedAt.set(act.id, now);
+    }
+  }
   /** A panel of the feed that says a state of the view: its heading, what the state holds, and a link that acts on it
    * with what the link does. */
   private banner(
@@ -1919,13 +2798,13 @@ export class App {
     panel.add(this.text(heading));
     if (detail) panel.add(this.inset(space.between, detail));
     const row = this.box({ flexDirection: "row", marginTop: space.section, paddingLeft: space.between });
-    row.add(this.link([[label, c.accent, bold]], run));
+    row.add(this.link([[label, c.operator, bold]], run));
     row.add(this.text(`  ${does}`, c.faint));
     panel.add(row);
   }
   /** A text that lights under the pointer, and runs an action at a click. */
   private link(content: string | Part[], run: () => void): TextRenderable {
-    return this.hoverable(this.text(content, c.accent, { run }));
+    return this.hoverable(this.text(content, c.operator, { run }));
   }
   /** A message of the operator: its text, and the name of each image it refers to in the color of an attachment. A
    * click on the message opens the actions of its first image. */
@@ -1935,12 +2814,12 @@ export class App {
     let rest = text;
     for (const image of images) {
       const at = rest.indexOf(image.text);
-      parts.push([rest.slice(0, at), c.text], [`${glyph.dot} ${image.name || "image"}`, c.secondary]);
+      parts.push([rest.slice(0, at), c.bright], [`${glyph.dot} ${image.name || "image"}`, c.model]);
       rest = rest.slice(at + image.text.length);
     }
-    parts.push([rest, c.text]);
+    parts.push([rest, c.bright]);
     const first = images[0];
-    return this.text(parts, c.text, { run: first && (() => this.imageActions(first.uri)) });
+    return this.text(parts, c.bright, { run: first && (() => this.imageActions(first.uri)) });
   }
   /** What a view says in the middle of the feed when it has nothing else to show. */
   private centered(box: BoxRenderable, height: number, ...nodes: Renderable[]): void {
@@ -1963,15 +2842,13 @@ export class App {
     for (const line of logo)
       column.add(
         this.text(
-          [...line].map(
-            (cell, at): Part => [cell, mix(c.accent, c.secondary, at / Math.max(1, columns - 1))],
-          ),
-          c.accent,
+          [...line].map((cell, at): Part => [cell, mix(c.operator, c.model, at / Math.max(1, columns - 1))]),
+          c.operator,
           { width: columns },
         ),
       );
     column.add(
-      this.text("The model answers in Python. Read and steer each word it runs.", c.muted, {
+      this.text("The model answers in Python. Read and steer each word it runs.", c.prose, {
         marginTop: space.section,
       }),
     );
@@ -2002,22 +2879,22 @@ export class App {
       // The pointer lifts a card onto a panel, and its bar takes the accent.
       const card = this.box({
         paddingX: space.between,
-        backgroundColor: c.background,
+        backgroundColor: c.ground,
         border: ["left"],
-        borderColor: c.border,
+        borderColor: c.rule,
         customBorderChars: { ...noBorder, vertical: glyph.bar },
         onMouseUp: this.click(() => this.insert(prompt)),
         onMouseOver() {
-          this.backgroundColor = c.panel;
-          this.borderColor = c.accent;
+          this.backgroundColor = c.surface2;
+          this.borderColor = c.operator;
         },
         onMouseOut() {
-          this.backgroundColor = c.background;
-          this.borderColor = c.border;
+          this.backgroundColor = c.ground;
+          this.borderColor = c.rule;
         },
       });
-      card.add(this.text([[label, c.text, bold]], c.text, { truncate: true }));
-      card.add(this.text(prompt, c.muted, { truncate: true }));
+      card.add(this.text([[label, c.bright, bold]], c.bright, { truncate: true }));
+      card.add(this.text(prompt, c.prose, { truncate: true }));
       starts.add(card);
     }
     column.add(starts);
@@ -2032,7 +2909,7 @@ export class App {
       keys.add(
         this.text(
           [
-            [chord, c.muted],
+            [chord, c.prose],
             [` ${action}`, c.faint],
           ],
           c.faint,
@@ -2047,7 +2924,7 @@ export class App {
     return clip(text.replace(/\s+/g, " "), Math.max(8, this.feedWidth - reserve));
   }
   /** The first or the last lines of a text under a heading, joined to it by a branch. */
-  private excerpt(box: BoxRenderable, content: string, tail = false, color = c.muted): void {
+  private excerpt(box: BoxRenderable, content: string, tail = false, color = c.prose): void {
     const lines = shortenHomes(content)
       .trimEnd()
       .split("\n")
@@ -2073,18 +2950,11 @@ export class App {
   private actPreview(act: ActRow): BlockOptions["preview"] {
     if (act.run)
       return act.run.reason && !cancelled(act)
-        ? (box) => this.excerpt(box, act.run?.reason ?? "", false, c.danger)
+        ? (box) => this.excerpt(box, readable(act.run?.reason ?? ""), false, c.warm)
         : undefined;
     if (failed(act)) {
       const fault = act.value as { is: string; args: unknown[] };
-      return (box) =>
-        this.excerpt(box, `${fault.is}: ${fault.args.map(display).join(", ")}`, false, c.danger);
-    }
-    // A command shows the tail of its output while it runs, and folds to its heading once it is over.
-    if (act.kind === "bash" && !act.done && act.value && typeof act.value === "object") {
-      const exit = act.value as Exit;
-      const output = [exit.stdout?.content, exit.stderr?.content].filter(Boolean).join("\n");
-      if (output) return (box) => this.excerpt(box, output, true);
+      return (box) => this.excerpt(box, `${fault.is}: ${fault.args.map(display).join(", ")}`, false, c.warm);
     }
     // The answer of a thread is markdown, whose marks of a heading, of emphasis, and of code the preview leaves out.
     if (act.kind === "thread" && act.done && act.value !== null)
@@ -2101,18 +2971,18 @@ export class App {
    * nothing, since its glyph says it. */
   private actState(act: ActRow): State {
     const w = this.session;
-    const running = () => ({ word: `running ${this.progress(act.id)}`, mark: spin(), color: c.accent });
+    const running = () => ({ word: `running ${this.progress(act.id)}`, mark: spin(), color: c.operator });
     if (act.kind === "grant" && act.done) return { word: "ended", mark: glyph.ring, color: c.faint };
     // Only work moves: an act of another kind that lives, as a grant or the watcher of an extension, lives until
     // something ends it, as a chain does, and shows a dot.
-    if (!act.done && !WORK.includes(act.kind)) return { word: "", mark: glyph.dot, color: c.accent };
+    if (!act.done && !WORK.includes(act.kind)) return { word: "", mark: glyph.dot, color: c.operator };
     // A rung that a pause holds waits for the wake, and says so, where it would otherwise seem to run.
     if (act.kind === "rung")
       return cancelled(act)
         ? stateOf("cancelled")
         : act.run?.status === "failed"
           ? this.retry(act)
-            ? { word: `retried as ${this.retry(act)?.id}`, mark: glyph.failed, color: c.faint }
+            ? { word: "retried", mark: glyph.failed, color: c.faint }
             : stateOf("failed")
           : act.run?.status === "done"
             ? stateOf("done")
@@ -2121,7 +2991,7 @@ export class App {
               : running();
     if (act.done) return stateOf(failed(act) ? "failed" : cancelled(act) ? "cancelled" : "done");
     if (w.host.pending.has(act.id)) return { word: "pending", mark: glyph.ring, color: c.faint };
-    if (w.host.threads.has(act.id)) return { word: "needs input", mark: glyph.asks, color: c.warning };
+    if (w.host.threads.has(act.id)) return { word: "needs input", mark: glyph.asks, color: c.warm };
     if (act.paused && act.kind !== "bash") return stateOf("held");
     return running();
   }
@@ -2131,38 +3001,6 @@ export class App {
     if (act.kind !== "rung" || act.by === "operator" || !failed(act)) return undefined;
     const acts = this.session.acts;
     return acts.slice(acts.indexOf(act) + 1).find((other) => other.kind === "rung" && other.by === act.by);
-  }
-  /** The heading of an act: its state, its kind, what it is about, and the word of its state. A rung is named by its
-   * id, and says its first line while it is folded. */
-  private actLabel(act: ActRow, closed = false, indent = 0, code?: string): Part[] {
-    const { word, mark, color } = this.actState(act);
-    const observation = act.kind === "thread" && !this.session.isUserThread(act);
-    // A rung says its first line while it is folded, and a message of a chain names the act that it tells done.
-    const subject =
-      act.kind === "rung"
-        ? closed
-          ? ((code || this.subject(act)).split("\n")[0] ?? "")
-          : ""
-        : observation
-          ? this.subject(act).replace(/ done$/, "")
-          : this.subject(act);
-    const name = act.kind === "rung" ? act.id : observation ? (subject.split("\n")[0] ?? "") : act.kind;
-    // An open rung says who wrote it: the model of the thread that made it, or the operator.
-    const author =
-      act.kind === "rung" && !closed
-        ? `  by ${act.by === "operator" ? "you" : this.model(String(act.words[2] ?? "")).name}`
-        : observation
-          ? `  ${this.sender(act)}`
-          : "";
-    const tail = word ? `  ${word}` : "";
-    const reserve = indent + 2 + 2 + Bun.stringWidth(name) + 2 + Bun.stringWidth(tail) + 1;
-    return [
-      [`${mark} `, color],
-      [name, act.kind === "rung" || !failed(act) ? c.text : c.danger, bold],
-      [subject && !observation ? `  ${this.preview(subject, reserve)}` : "", c.muted],
-      [author, c.faint],
-      [tail, color],
-    ];
   }
   /** What an act is about, whole: the markdown of a thread, the program of a rung, the time of a wait, the ceilings of
    * a grant, and the first word of any other act. */
@@ -2181,7 +3019,7 @@ export class App {
   }
   /** Where a message of the operator stands, which its panel says at its right: the type of the answer that it asks
    * for, and a mark and a word only when a cancel or a failure ended it, or a pause holds it. */
-  private threadState(act: ActRow): Part[] {
+  private messageState(act: ActRow): Part[] {
     const shape: Part = [String(act.words[0] ?? ""), c.faint];
     const state = act.done
       ? failed(act)
@@ -2207,65 +3045,47 @@ export class App {
   private sender(act: ActRow): string {
     const model = this.model(String(act.words[2] ?? "")).name;
     const maker = this.session.actOf(act.by);
-    return maker?.kind === "chain" ? `the chain told ${model}` : `${act.by} asked ${model}`;
-  }
-  /** The heading of the answer to a thread: the model that answered it with its effort, and the thread when others
-   * closed with it. */
-  private answerLabel(act: ActRow, parallel: boolean): Part[] {
-    const { name, effort } = this.model(String(act.words[2] ?? ""));
-    return [
-      [`${glyph.dot} `, c.secondary],
-      [name, c.text, bold],
-      [effort && effort !== "off" ? `  ${effort}` : "", c.faint],
-      [
-        parallel
-          ? `  answers “${this.preview(String(act.words[1]).split("\n")[0] ?? "", Bun.stringWidth(name) + 34)}”`
-          : "",
-        c.muted,
-      ],
-    ];
+    if (maker?.kind === "chain") return `the chain told ${model}`;
+    const asker = maker?.kind === "rung" ? this.session.threads.speaker(maker) : OPERATOR;
+    return `${asker === OPERATOR ? "you" : this.model(asker).name} asked ${model}`;
   }
   /** A word of Python in a card: its numbered lines, and the reason it failed. */
-  private word(box: BoxRenderable, word: string, reason?: string): void {
+  private python(box: BoxRenderable, word: string, reason?: string): void {
     // The code starts under the name of its rung, past the fold and the glyph of the heading.
     const inner = this.box({ gap: space.stack, paddingLeft: space.inset });
     // A rung whose word has not come yet shows no code.
     if (word) inner.add(this.numbered(word));
-    // The parser names the word as <string> and says its line twice, which the reason leaves out.
-    if (reason)
-      inner.add(this.branched(shortenHomes(reason.replace(/\s*\(<string>, line \d+\)$/, "")), c.danger));
+    if (reason) inner.add(this.branched(readable(reason), c.warm));
     box.add(inner);
   }
-  private actDetails(box: BoxRenderable, act: ActRow): void {
+  /** What an act that no word made holds, open: the Python of a rung, or the words and the value of any other act, then
+   * the start of what each note told of it. A command is a block of its own. */
+  private actDetails(box: BoxRenderable, act: ActRow, notes: Note[] = []): void {
     if (act.kind === "rung") {
-      this.word(box, String(this.session.program[act.id] || act.words[0] || ""), act.run?.reason);
+      this.python(box, String(this.session.program[act.id] || act.words[0] || ""), act.run?.reason);
       return;
     }
-    const details = this.box({ paddingLeft: space.between * 2, gap: space.stack });
+    const details = this.box({ paddingLeft: space.between, gap: space.stack });
     box.add(details);
-    if (act.kind === "bash") {
-      this.commandDetails(details, act);
-      return;
-    }
+    for (const note of notes) if (note.body) this.excerpt(details, note.body);
     const fields: Record<string, string[]> = {
       thread: ["shape", "markdown", "actor"],
       rung: ["word", "retells", "actor", "returns"],
       wait: ["seconds"],
       grant: ["dollar ceiling", "context ceiling"],
     };
-    details.add(this.reference(act.id, act.id));
     for (const [index, value] of act.words.entries()) {
       if (value === null || value === "") continue;
       details.add(
         this.text([
           [`${fields[act.kind]?.[index] ?? `argument ${index + 1}`}: `, c.faint],
-          [display(value), c.muted],
+          [display(value), c.prose],
         ]),
       );
     }
     if (act.done && act.value !== null)
       details.add(
-        this.text(display(act.value), failed(act) ? c.danger : c.text, { marginTop: space.section }),
+        this.text(display(act.value), failed(act) ? c.warm : c.bright, { marginTop: space.section }),
       );
   }
   /** What a command printed, and under it its name and how it ended. The command says its line in its heading. What it
@@ -2275,14 +3095,14 @@ export class App {
     const both = Boolean(exit.stdout?.content && exit.stderr?.content);
     const shown: TextRenderable[] = [];
     for (const [name, color] of [
-      ["stdout", c.text],
-      ["stderr", c.danger],
+      ["stdout", c.bright],
+      ["stderr", c.warm],
     ] as const) {
       const content = exit[name]?.content;
       if (!content) continue;
       if (both)
         details.add(
-          this.text(name, name === "stdout" ? c.faint : c.danger, {
+          this.text(name, name === "stdout" ? c.faint : c.warm, {
             marginTop: shown.length ? space.section : 0,
           }),
         );
@@ -2291,21 +3111,26 @@ export class App {
       details.add(node);
       shown.push(node);
     }
-    const meta = this.box({ flexDirection: "row", marginTop: shown.length ? space.section : 0 });
-    meta.add(this.reference(act.id, act.id));
     const [, input, timeout] = act.words;
     const notes: Part[] = [
       ...(act.done
         ? ([
-            ["   exit ", c.faint],
-            [String(exit.code ?? "timeout"), exit.code === 0 ? c.success : c.danger],
+            ["exit ", c.faint],
+            [String(exit.code ?? "timeout"), exit.code === 0 ? c.done : c.warm],
           ] as Part[])
         : []),
-      [input === true ? "   input open" : "", c.faint],
-      [typeof timeout === "number" && timeout !== TIMEOUT ? `   times out after ${timeout}s` : "", c.faint],
+      [input === true ? `${act.done ? "   " : ""}input open` : "", c.faint],
+      // A limit of time holds while the command runs; once it ends, its exit says whether the limit ended it.
+      [
+        !act.done && typeof timeout === "number" && timeout !== TIMEOUT
+          ? `${input === true ? "   " : ""}times out after ${timeout}s`
+          : "",
+        c.faint,
+      ],
     ];
-    meta.add(this.text(notes, c.faint));
-    details.add(meta);
+    // A command that runs with no limit of its own and no open input has nothing to note until it ends.
+    if (notes.some(([text]) => text))
+      details.add(this.text(notes, c.faint, { marginTop: shown.length ? space.section : 0 }));
     // The row holds the tail of what the command printed, and the card reads the whole of it once it opens.
     if (act.output !== undefined)
       void this.session.host.act(act.id).then((whole) => {
@@ -2352,7 +3177,7 @@ export class App {
   }
 
   private reference(label: string, value: string): TextRenderable {
-    const node = this.text(label, c.link, { attributes: underline });
+    const node = this.text(label, c.operator, { attributes: underline });
     node.onMouseDown = () => {
       void this.follow(value).catch(this.report);
     };
@@ -2404,38 +3229,12 @@ export class App {
         y,
         8,
         () => void this.follow(value).catch(this.report),
-        this.text(value, c.link, { attributes: bold }),
-        this.text(detail.slice(0, 400), c.muted, { maxHeight: 4 }),
+        this.text(value, c.operator, { attributes: bold }),
+        this.text(detail.slice(0, 400), c.prose, { maxHeight: 4 }),
       );
     } catch {
       /* A path can have disappeared since the turn was written. */
     }
-  }
-
-  /** The python of a user turn: a header is `#` and the name of an act or the kind of a query, a comment is `#` and
-   * a space, and a header that names an act and an image attachment are references. */
-  private transcriptText(source: string): TextRenderable {
-    const text = safeText(source);
-    const chunks: TextChunk[] = [];
-    let at = 0;
-    for (const match of text.matchAll(/^#(?! |$)\S+|^#(?: .*)?$|furb-image:\/\/[\w.]+/gm)) {
-      if (match.index > at) chunks.push({ __isChunk: true, text: text.slice(at, match.index), fg: c.text });
-      chunks.push({
-        __isChunk: true,
-        text: match[0],
-        fg: match[0].startsWith("furb-image://")
-          ? c.syntaxString
-          : /^#(?! |$)/.test(match[0])
-            ? c.syntaxKeyword
-            : c.syntaxComment,
-      });
-      at = match.index + match[0].length;
-    }
-    chunks.push({ __isChunk: true, text: text.slice(at), fg: c.text });
-    return this.pointable(
-      new TextRenderable(this.renderer, { content: new StyledText(chunks), wrapMode: "word", flexShrink: 0 }),
-      text,
-    );
   }
 
   private renderRail(): void {
@@ -2449,16 +3248,26 @@ export class App {
     const window = w.filled;
     const grant = w.activity.find((act) => act.kind === "grant" && !act.done);
     const width = w.preferences.sidebarWidth;
+    const threads = w.threads;
     if (
       !this.paneChanged(this.railSession, [
         this.theme,
         w.selected,
+        w.thread,
         w.spend,
         window,
         width,
-        w.chains.map((chain) => [chain.id, w.labelOf(chain.id), this.session.chainStatus(chain.id)]),
+        w.chains.map((chain) => [
+          chain.id,
+          w.labelOf(chain.id),
+          this.session.chainStatus(chain.id),
+          threads
+            .on(chain.id)
+            .map((thread) => [thread.id, thread.words[1], plain(this.threadState(thread, 0).label)]),
+        ]),
         grant?.words,
         this.unfolded.has("finished"),
+        w.preferences.motion,
       ])
     )
       return;
@@ -2468,7 +3277,7 @@ export class App {
     // The chains fill the head of the sidebar, and the usage its foot.
     let target: BoxRenderable = this.railSession;
     const add = (parts: Part[], options: TextShape = {}) => {
-      const node = this.line(parts, c.muted, { truncate: true, ...options });
+      const node = this.line(parts, c.prose, { truncate: true, ...options });
       target.add(node);
       return node;
     };
@@ -2477,10 +3286,14 @@ export class App {
       const room = Math.max(1, inner - Bun.stringWidth(name[0] + note + value[0]));
       return add([name, [note, c.faint], [" ".repeat(room)], value], options);
     };
-    const row = (name: string, value: string, color = c.text) => spread([name, c.muted], "", [value, color]);
+    // A row of the usage: its name, and its value, each number bright and each unit faint.
+    const row = (name: string, value: string) => {
+      const room = Math.max(1, inner - Bun.stringWidth(name + value));
+      return add([[name, c.prose], [" ".repeat(room)], ...quantity(value)]);
+    };
     // The heading of a section, which stands first in its part of the sidebar.
     const section = (name: string, value = "", note = "", run?: () => void) =>
-      spread([name, c.text, bold], note, [value, c.faint], { run });
+      spread([name, c.bright], note, [value, c.faint], { run });
     section("Chains", "⌃B", "", () => this.chains());
     // The root chain, the chain that is shown, and a chain that has something to say stand in the list, and the other
     // finished chains fold under a row of their own, which a click opens. The list takes six rows at most, and the rest
@@ -2492,26 +3305,50 @@ export class App {
     const resting = w.chains.filter((chain) => !active.includes(chain));
     // A row of a chain spans the sidebar past its padding.
     const edge = { marginX: -space.between, paddingX: space.inset };
+    // A chain names itself, and its feed shows when its name is chosen. Under it stand its threads: the open ones, then
+    // the last closed ones, dim, and a row that opens the feed of the chain where more closed.
     const chainLine = (chain: ActRow) => {
       const selected = chain.id === w.selected;
       const status = states.get(chain.id) ?? "idle";
       this.railSession.add(
         this.railRow(
           [
-            [selected ? glyph.mark : " ", c.accent],
+            [selected ? glyph.mark : " ", c.operator],
             [" "],
             statusMark(status),
-            [
-              w.labelOf(chain.id),
-              selected ? c.text : status === "idle" ? c.faint : c.muted,
-              selected ? bold : 0,
-            ],
+            [w.labelOf(chain.id), selected ? c.bright : status === "idle" ? c.faint : c.prose],
           ],
           () => void w.select(chain.id).catch(w.fail),
           edge,
-          selected,
+          selected && !w.thread,
         ),
       );
+      const all = threads.on(chain.id);
+      const closed = all.filter((thread) => thread.done);
+      const kept = closed.slice(-3);
+      for (const thread of [...all.filter((one) => !one.done), ...kept]) {
+        const zoomed = thread.id === w.thread;
+        const state = this.threadState(thread, all.indexOf(thread));
+        const title = this.firstLine(String(thread.words[1] ?? ""));
+        const parts = (): Part[] => [
+          [zoomed ? glyph.mark : " ", c.operator],
+          ["   "],
+          state.mark(),
+          [" "],
+          [title, zoomed ? c.bright : thread.done ? c.faint : c.prose, zoomed ? bold : 0],
+        ];
+        const line = this.railRow(parts(), () => void w.open(thread.id).catch(w.fail), edge, zoomed);
+        if (state.moves) this.move(line.getChildren()[0] as TextRenderable, parts, state.until);
+        this.railSession.add(line);
+      }
+      if (closed.length > kept.length)
+        this.railSession.add(
+          this.railRow(
+            [["      "], [`${closed.length - kept.length} more closed`, c.faint]],
+            () => void w.select(chain.id).catch(w.fail),
+            edge,
+          ),
+        );
     };
     const shown = active.length > 7 ? 6 : active.length;
     for (const chain of active.slice(0, shown)) chainLine(chain);
@@ -2519,7 +3356,7 @@ export class App {
       add(
         [
           ["   ", c.faint],
-          [`${active.length - shown} more`, c.accent],
+          [`${active.length - shown} more`, c.operator],
         ],
         { run: () => this.chains() },
       );
@@ -2548,14 +3385,14 @@ export class App {
       const part = known ? (window ?? 0) : 0;
       const used = Math.min(inner, Math.max(part > 0 ? 1 : 0, Math.round(part * inner)));
       const mark = ceiling === undefined ? -1 : Math.min(inner - 1, Math.round(ceiling * inner));
-      const tone = part >= 0.9 ? c.danger : part >= 0.7 ? c.warning : c.accent;
+      const tone = part >= 0.7 ? c.warm : c.operator;
       const cells: Part[] = [];
       for (let at = 0; at < inner; at++)
-        cells.push(at === mark ? ["╋", c.warning] : [glyph.meter, at < used ? tone : c.border]);
+        cells.push(at === mark ? ["╋", c.warm] : [glyph.meter, at < used ? tone : c.rule]);
       const tip: Part[] = [
-        [known ? `${Number((part * 100).toFixed(1))}%` : "No answer yet", c.text, bold],
-        [known ? " of the context window" : "", c.muted],
-        [ceiling === undefined ? "" : `, pauses at ${Number((ceiling * 100).toFixed(1))}%`, c.warning],
+        [known ? `${Number((part * 100).toFixed(1))}%` : "No answer yet", c.bright],
+        [known ? " of the context window" : "", c.prose],
+        [ceiling === undefined ? "" : `, pauses at ${Number((ceiling * 100).toFixed(1))}%`, c.warm],
       ];
       this.tipped(add(cells), tip);
       // The last prompt is the whole prompt of the last answer, its system prompt and the reads of the cache included,
@@ -2564,28 +3401,32 @@ export class App {
       const prompt = w.context;
       if (prompt !== undefined)
         this.tipped(row("Last prompt", count(prompt)), [
-          ["The whole prompt of the last answer, its system prompt and the cache included.", c.text],
+          ["The whole prompt of the last answer, its system prompt and the cache included.", c.bright],
         ]);
       if (tokens > 0) {
         this.tipped(row("Fresh input", count(spend.input)), [
-          ["The input of the answers of the chain that the cache did not hold.", c.text],
+          ["The input of the answers of the chain that the cache did not hold.", c.bright],
         ]);
         row("Output", count(spend.output));
         if (spend.cacheRead) row("Cache read", count(spend.cacheRead));
         if (spend.cacheWrite) row("Cache write", count(spend.cacheWrite));
       }
       row("Spent", dollars(spend.dollars));
-      if (grant && grant.words[0] !== null) row("Ceiling", dollars(Number(grant.words[0])), c.muted);
+      if (grant && grant.words[0] !== null) row("Ceiling", dollars(Number(grant.words[0])));
     }
   }
   /** A row of the sidebar, whose click runs, which spans the sidebar so that the pointer and the selection show from
    * edge to edge. It lights while the pointer is on it, and stays lit while it is selected. */
   private railRow(parts: Part[], run: () => void, options: BoxOptions, selected = false): BoxRenderable {
     const row = this.hoverable(
-      this.row({ backgroundColor: selected ? c.selected : c.panel, onMouseUp: this.click(run), ...options }),
-      selected ? c.selected : c.raised,
+      this.row({
+        backgroundColor: selected ? c.selected : c.surface1,
+        onMouseUp: this.click(run),
+        ...options,
+      }),
+      selected ? c.selected : c.surface2,
     );
-    row.add(this.text(parts, c.muted, { truncate: true, flexGrow: 1, flexShrink: 1 }));
+    row.add(this.text(parts, c.prose, { truncate: true, flexGrow: 1, flexShrink: 1 }));
     return row;
   }
   /** A row of the sidebar that folds a list under it, with its label and the count of the list, which a click folds
@@ -2643,15 +3484,15 @@ export class App {
     this.clear(this.railSpaces);
     this.unhover();
     const inner = width - space.between * 2;
-    this.railHeading.add(this.text("Workspaces", c.text, { attributes: bold, flexGrow: 1 }));
+    this.railHeading.add(this.text("Workspaces", c.bright, { attributes: bold, flexGrow: 1 }));
     this.railHeading.add(this.text("⌃W", c.faint, { run: () => void this.workspacePicker() }));
     const padding = { paddingLeft: space.inset, paddingRight: space.between };
     const line = (parts: Part[], run: () => void, options: BoxOptions = {}) =>
       this.railSpaces.add(this.railRow(parts, run, { ...padding, ...options }));
-    if (library.notice) this.railSpaces.add(this.inset(space.between, this.text(library.notice, c.warning)));
+    if (library.notice) this.railSpaces.add(this.inset(space.between, this.text(library.notice, c.warm)));
     if (!library.groups.length)
       this.railSpaces.add(
-        this.inset(space.between, this.text("No workspaces yet. Add a project folder below.", c.muted)),
+        this.inset(space.between, this.text("No workspaces yet. Add a project folder below.", c.prose)),
       );
     // A session and a workspace take one shape of row. While the pointer is on the row, it lights, and at its end a
     // button renames it and a button removes it, which asks first. The buttons are drawn in the color of the row until
@@ -2666,8 +3507,8 @@ export class App {
       selected = false,
     ) => {
       const noun = "sessions" in item ? "workspace" : "session";
-      const lit = selected ? c.selected : c.raised;
-      const ground = selected ? c.selected : this.menuItem === item ? lit : c.panel;
+      const lit = selected ? c.selected : c.surface2;
+      const ground = selected ? c.selected : this.menuItem === item ? lit : c.surface1;
       // A click in the input of a new name only moves its cursor.
       const renaming = this.renaming?.item === item ? this.renaming : undefined;
       const row = this.row({
@@ -2682,15 +3523,15 @@ export class App {
         },
         ...options,
       });
-      row.add(this.line(parts.lead, c.muted));
-      const state = parts.state && this.line([parts.state], c.muted);
+      row.add(this.line(parts.lead, c.prose));
+      const state = parts.state && this.line([parts.state], c.prose);
       if (state && !parts.after) row.add(state);
       if (renaming) {
         const input = new InputRenderable(this.renderer, {
           flexGrow: 1,
           flexShrink: 1,
           value: renaming.value,
-          ...inputColors(c.background),
+          ...inputColors(c.ground),
         });
         input.on(InputRenderableEvents.INPUT, (value: string) => {
           renaming.value = value;
@@ -2716,7 +3557,7 @@ export class App {
         input.focus();
         return row;
       }
-      const name = this.line([parts.name], c.muted, {
+      const name = this.line([parts.name], c.prose, {
         truncate: true,
         flexShrink: 1,
         flexGrow: parts.after ? 0 : 1,
@@ -2741,22 +3582,22 @@ export class App {
       row.add(remove);
       row.onMouseOver = (event) => {
         row.backgroundColor = lit;
-        rename.fg = event.target === rename ? c.accent : c.muted;
-        remove.fg = event.target === remove ? c.danger : c.muted;
+        rename.fg = event.target === rename ? c.operator : c.prose;
+        remove.fg = event.target === remove ? c.warm : c.prose;
         // A name that its room cuts shows whole in a tip of its own.
         if (event.target === name) return;
         this.unhover();
         if (event.isDragging) return;
         const told: Part[] | undefined =
           event.target === rename
-            ? [[`Rename this ${noun}`, c.text]]
+            ? [[`Rename this ${noun}`, c.bright]]
             : event.target === remove
               ? [
                   [
                     "sessions" in item
                       ? "Remove this workspace from the list"
                       : "Archive or remove this session",
-                    c.text,
+                    c.bright,
                   ],
                 ]
               : event.target === state
@@ -2782,16 +3623,16 @@ export class App {
         group,
         {
           lead: [[" "], [`${group.collapsed ? glyph.closed : glyph.open} `, c.faint]],
-          name: [group.name, current ? c.text : c.muted, bold],
+          name: [group.name, current ? c.bright : c.prose, bold],
           state: quiet ? undefined : statusMark(status),
           after: true,
         },
         () => [
           statusMark(status),
-          [statusLabels[status], c.text, bold],
+          [statusLabels[status], c.bright, bold],
           [
             `  ${count} of ${group.sessions.length} ${group.sessions.length === 1 ? "session" : "sessions"}`,
-            c.muted,
+            c.prose,
           ],
         ],
         () => library.toggle(group),
@@ -2815,14 +3656,14 @@ export class App {
         itemRow(
           entry,
           {
-            lead: [[selected ? glyph.mark : " ", c.accent], ["  "]],
+            lead: [[selected ? glyph.mark : " ", c.operator], ["  "]],
             state: statusMark(entry.status),
-            name: [entry.name, selected ? c.text : entry.archived ? c.faint : c.muted, selected ? bold : 0],
+            name: [entry.name, selected ? c.bright : entry.archived ? c.faint : c.prose, selected ? bold : 0],
           },
           () => [
             statusMark(entry.status),
-            [statusLabels[entry.status], c.text, bold],
-            [entry.error ? `  ${entry.error}` : "", c.danger],
+            [statusLabels[entry.status], c.bright, bold],
+            [entry.error ? `  ${entry.error}` : "", c.warm],
           ],
           () => {
             void library.select(entry).catch(this.report);
@@ -2868,7 +3709,7 @@ export class App {
    * it. */
   private popup(options: BoxOptions, ...nodes: Renderable[]): void {
     this.unhover();
-    this.hover = this.box({ position: "absolute", backgroundColor: c.raised, zIndex: 30, ...options });
+    this.hover = this.box({ position: "absolute", backgroundColor: c.surface2, zIndex: 30, ...options });
     for (const node of nodes) this.hover.add(node);
     this.root.add(this.hover);
   }
@@ -2899,7 +3740,7 @@ export class App {
             },
         {
           label: "Move to trash",
-          color: c.danger,
+          color: c.warm,
           detail: "Stop this session and move its saved record to the trash",
           run: () => library.delete(entry).then(() => {}),
         },
@@ -2974,7 +3815,7 @@ export class App {
             item.archived
               ? { label: "Restore", detail: "", run: () => library.restore(item) }
               : { label: "Archive", detail: "", run: () => library.archive(item) },
-            { label: "Move to trash", detail: "", color: c.danger, run: () => this.removeItem(item) },
+            { label: "Move to trash", detail: "", color: c.warm, run: () => this.removeItem(item) },
           ];
     this.openPalette(item.name, choices, { at: { x, y } });
     this.menuItem = item;
@@ -2992,7 +3833,7 @@ export class App {
             {
               label: "Add a workspace",
               detail: "Open a project folder",
-              mark: ["+ ", c.accent],
+              mark: ["+ ", c.operator],
               run: () => this.insert("/workspace "),
             },
             // Each workspace is a part of the list with its folder in its title, and its sessions under it.
@@ -3355,7 +4196,7 @@ export class App {
     if (value && Object.hasOwn(this.values, value[1] ?? ""))
       return { kind: "value", text: value[2] ?? "", command: value[1] ?? "" };
     const at = before.match(/(?:^|\s)@([^\s"']*)$/);
-    if (at && this.session.mode === "prompt" && !this.session.editing)
+    if (at && this.session.mode === "markdown" && !this.session.editing)
       return { kind: "@", text: at[1] ?? "" };
     return undefined;
   }
@@ -3570,7 +4411,7 @@ export class App {
     this.clear(this.suggestionBox);
     this.suggestionBox.visible = Boolean(state || shown.length);
     if (state)
-      this.suggestionBox.add(this.inset(space.between, this.line(state, files?.error ? c.danger : c.muted)));
+      this.suggestionBox.add(this.inset(space.between, this.line(state, files?.error ? c.warm : c.prose)));
     const rows = 8;
     const first = Math.max(0, Math.min(this.suggestionIndex - rows + 1, shown.length - rows));
     const visible = shown.slice(first, first + rows);
@@ -3584,7 +4425,7 @@ export class App {
       const selected = index === this.suggestionIndex;
       const row = this.row({
         paddingX: space.inset,
-        backgroundColor: selected ? c.selected : c.raised,
+        backgroundColor: selected ? c.selected : c.surface2,
         onMouseUp: this.click(() => {
           this.suggestionIndex = index;
           this.complete(one);
@@ -3595,15 +4436,15 @@ export class App {
           this.renderSuggestions();
         },
       });
-      row.add(this.text(selected ? `${glyph.pointer} ` : "  ", c.accent));
+      row.add(this.text(selected ? `${glyph.pointer} ` : "  ", c.operator));
       row.add(
-        this.text(one.label, selected ? c.accent : c.text, {
+        this.text(one.label, selected ? c.operator : c.bright, {
           width: one.detail ? column : undefined,
           truncate: true,
           attributes: selected ? bold : 0,
         }),
       );
-      if (one.detail) row.add(this.text(one.detail, c.muted, { truncate: true, flexShrink: 1 }));
+      if (one.detail) row.add(this.text(one.detail, c.prose, { truncate: true, flexShrink: 1 }));
       this.suggestionBox.add(row);
     }
     if (shown.length > rows)
@@ -3614,7 +4455,7 @@ export class App {
   }
   /** The mark of a choice that is the current one, and the room of that mark for the others. */
   private current(yes: boolean): Part {
-    return yes ? [`${glyph.done} `, c.accent] : ["  "];
+    return yes ? [`${glyph.done} `, c.operator] : ["  "];
   }
   /** The values of a command in a picker, with the current one marked and selected, which runs the command on the
    * value that is chosen. */
@@ -3669,7 +4510,7 @@ export class App {
           label: themeLabels[name][0],
           detail: themeLabels[name][1],
           mark: this.current(name === this.theme),
-          swatch: [palette.accent, palette.secondary, palette.success, palette.warning, palette.danger],
+          swatch: [palette.operator, palette.model, palette.warm, palette.done, palette.bright],
           run: () => {
             this.session.theme = name;
             this.render();
@@ -3683,7 +4524,7 @@ export class App {
   shapes = (): void =>
     this.pick("shape", "Response shape", "The engine validates the result against this Python type.");
   toggleMode(): void {
-    this.session.mode = this.session.mode === "python" ? "prompt" : "python";
+    this.session.mode = this.session.mode === "python" ? "markdown" : "python";
     this.render();
     void this.highlightEditor();
   }
@@ -3703,15 +4544,21 @@ export class App {
         "titleColor",
         "textColor",
         "placeholderColor",
+        "cursorColor",
       ]) {
         const color: unknown = Reflect.get(node, property);
         if (replacements.has(color as RGBA)) Reflect.set(node, property, replacements.get(color as RGBA));
       }
+      // An input hides the colors that it shows focused, and every input of the view shows the colors it shows
+      // unfocused.
+      if (node instanceof TextareaRenderable)
+        Object.assign(node, {
+          focusedBackgroundColor: node.backgroundColor,
+          focusedTextColor: node.textColor,
+        });
       for (const child of node.getChildren()) recolor(child);
     };
     recolor(this.root);
-    // An input keeps the colors that it shows focused, which the walk above cannot read.
-    for (const input of [this.composer, this.search]) Object.assign(input, inputColors(c.panel));
     this.clear(this.scroll);
     this.cards.clear();
     const previous = this.style;
@@ -3828,7 +4675,7 @@ export class App {
     if (this.paletteInputRow) this.paletteInputRow.height = space.bar;
     this.showQuestionText(question.markdown);
     if (this.paletteInput) this.paletteInput.placeholder = `Type the answer, as ${question.shape}`;
-    const error = this.text("Enter submits. Esc leaves the question open.", c.muted);
+    const error = this.text("Enter submits. Esc leaves the question open.", c.prose);
     this.paletteList?.add(error);
     const input = this.paletteInput;
     if (!input) return;
@@ -3839,7 +4686,7 @@ export class App {
         .answer(question.id, input.value)
         .then(() => this.closeOverlay())
         .catch((failure) => {
-          error.fg = c.danger;
+          error.fg = c.warm;
           error.content = String(failure);
         });
     });
@@ -3872,14 +4719,14 @@ export class App {
         9,
         () => this.inspect(name),
         this.text([
-          [name, c.text, bold],
-          [`: ${inspected.kind}`, c.secondary],
+          [name, c.bright, bold],
+          [`: ${inspected.kind}`, c.model],
         ]),
-        this.text(inspected.representation.slice(0, 280), c.muted, { maxHeight: 4 }),
+        this.text(inspected.representation.slice(0, 280), c.prose, { maxHeight: 4 }),
         this.text([
-          ["Click", c.muted],
+          ["Click", c.prose],
           [" opens it   ", c.faint],
-          ["⌃G", c.muted],
+          ["⌃G", c.prose],
           [" inspects a name", c.faint],
         ]),
       );
@@ -3901,17 +4748,16 @@ export class App {
     const choices: Choice[] = [];
     if (back) choices.push({ label: "← Back", detail: "Return to the parent value", run: back });
     if (name && /^[\p{L}_][\p{L}\p{N}_]*$/u.test(name)) {
+      // The last word that binds the name defines it, and the row shows the line that binds it.
+      const binds = (line: string) => new RegExp(`^(?:def |class )?${name}\\b(?:\\s*[:=(])`).test(line);
       const definition = [...Object.entries(this.session.program)]
         .reverse()
-        .find(([, source]) =>
-          source
-            .split("\n")
-            .some((line) => new RegExp(`^(?:def |class )?${name}\\b(?:\\s*[:=(])`).test(line)),
-        );
+        .map(([id, source]) => [id, source.split("\n").find(binds)] as const)
+        .find(([, line]) => line !== undefined);
       if (definition)
         choices.push({
           label: "Go to definition",
-          detail: definition[0],
+          detail: definition[1]?.trim() ?? "",
           run: () => {
             this.go("feed", definition[0]);
           },
@@ -3940,7 +4786,7 @@ export class App {
             this.paletteList?.add(
               this.document(
                 this.numbered(lines.slice(at, next < 0 ? undefined : at + next + 1).join("\n"), {
-                  fg: c.muted,
+                  fg: c.prose,
                   lineNumberOffset: at,
                 }),
                 { height: Math.min(24, this.renderer.height - 16) },
@@ -4191,8 +5037,8 @@ export class App {
       const current = act.id === w.selected;
       const status = this.session.chainStatus(act.id);
       return {
-        parts: [statusMark(status), [w.labelOf(act.id), current ? c.text : c.muted, bold]],
-        tag: current ? "current" : act.id,
+        parts: [statusMark(status), [w.labelOf(act.id), current ? c.bright : c.prose, bold]],
+        tag: current ? "current" : "",
         hint: "open it",
         run: async () => {
           this.closeTree();
@@ -4207,34 +5053,42 @@ export class App {
     if (w.isUserThread(act) && !asksOperator(act))
       return {
         parts: [
-          [`${glyph.prompt} `, c.accent],
-          [String(act.words[1] ?? "").split("\n")[0] ?? "", c.text],
+          [`${glyph.prompt} `, c.operator],
+          [String(act.words[1] ?? "").split("\n")[0] ?? "", c.bright],
         ],
-        tag: act.id,
+        tag: "",
         hint: "edit it on a new branch",
         run: branch,
       };
     const { mark, color } = this.actState(act);
     const subject = this.subject(act);
     const observation = act.kind === "thread" && !asksOperator(act) && !w.isUserThread(act);
-    const name = asksOperator(act) ? "question" : act.kind === "rung" ? act.id : act.kind;
+    // A rung shows its first step, or the first line of its program where it says none, a command its line after $,
+    // and any other act its kind and its words on one line, as the feed does.
+    const named: Part[] =
+      act.kind === "rung"
+        ? []
+        : act.kind === "bash"
+          ? [["$ ", c.faint]]
+          : [[asksOperator(act) ? "question" : act.kind, c.bright], ["  "]];
     return {
       parts: observation
         ? [
             [`${mark} `, color],
-            [subject.split("\n")[0] ?? "", c.muted],
+            [subject.split("\n")[0] ?? "", c.prose],
             [`  ${this.sender(act)}`, c.faint],
           ]
         : [
             [`${mark} `, color],
-            [name, c.text],
-            // A rung shows the first line of its program, and any other act its words on one line, as the feed does.
+            ...named,
             [
-              `  ${act.kind === "rung" ? (subject.split("\n")[0] ?? "") : subject.replace(/\s+/g, " ").trim()}`,
-              c.muted,
+              act.kind === "rung"
+                ? (steps(subject)[0] ?? subject.split("\n")[0] ?? "")
+                : subject.replace(/\s+/g, " ").trim(),
+              act.kind === "rung" ? c.bright : c.prose,
             ],
           ],
-      tag: act.kind === "rung" ? "" : act.id,
+      tag: "",
       hint: "branch after it",
       run: branch,
     };
@@ -4258,10 +5112,10 @@ export class App {
       this.treeBar.add(
         this.line(
           [
-            [tree.title, c.text, bold],
-            [`${" ".repeat(space.between)}${clip(note, Math.max(0, room))}`, c.muted],
+            [tree.title, c.bright, bold],
+            [`${" ".repeat(space.between)}${clip(note, Math.max(0, room))}`, c.prose],
           ],
-          c.muted,
+          c.prose,
           { flexGrow: 1, flexShrink: 1 },
         ),
       );
@@ -4284,7 +5138,7 @@ export class App {
         // Each tree of chains stands apart from the one above it.
         marginTop: index && !row.lines ? space.section : 0,
         paddingX: space.inset,
-        backgroundColor: active ? c.selected : c.background,
+        backgroundColor: active ? c.selected : c.ground,
         onMouseUp: this.click((event) => {
           // A click on the fold of a row folds it, a click on another row points at it, and a click on the row
           // that the pointer is on chooses it.
@@ -4294,7 +5148,7 @@ export class App {
           else this.pointTree(row.id);
         }),
       });
-      if (!active) this.hoverable(line, c.panel);
+      if (!active) this.hoverable(line, c.surface2);
       const fold = row.parent ? `${row.folded ? glyph.closed : glyph.open} ` : "  ";
       const tag = row.tag ? `  ${row.tag}` : "";
       const room = Math.max(8, width - space.inset * 2 - Bun.stringWidth(row.lines + fold + tag));
@@ -4304,30 +5158,16 @@ export class App {
           [
             [row.lines, c.faint],
             [fold, c.faint],
-            ...(Bun.stringWidth(label) > room ? this.clipParts(row.parts, room) : row.parts),
+            ...(Bun.stringWidth(label) > room ? clipParts(row.parts, room) : row.parts),
           ],
-          c.text,
+          c.bright,
           { flexGrow: 1, flexShrink: 1, truncate: true },
         ),
       );
-      if (tag) line.add(this.line(tag, active ? c.muted : c.faint));
+      if (tag) line.add(this.line(tag, active ? c.prose : c.faint));
       this.scroll.add(line);
     }
     this.scrollAfterLayout({ card: `tree-${tree.selected}` });
-  }
-  /** Parts cut to a width at their end, with the mark of a cut. */
-  private clipParts(parts: readonly Part[], width: number): Part[] {
-    const cut: Part[] = [];
-    let left = width;
-    for (const [text, fg, attributes, bg] of parts) {
-      if (left <= 0) break;
-      const size = Bun.stringWidth(text);
-      if (size < left || (size === left && cut.length === parts.length - 1))
-        cut.push([text, fg, attributes, bg]);
-      else cut.push([clip(text, left), fg, attributes, bg]);
-      left -= size;
-    }
-    return cut;
   }
   private pointTree(id: string): void {
     if (!this.tree) return;
@@ -4539,19 +5379,19 @@ export class App {
       paddingX: space.inset,
       paddingY: space.inset,
       gap: space.stack,
-      backgroundColor: c.raised,
+      backgroundColor: c.surface2,
       zIndex: 20,
     });
     this.root.add(this.overlay);
     // The title and the filter start where the labels of the list start, and the prompt of the filter stands over the
     // pointer of the list.
     const heading = this.row({ paddingLeft: space.between, paddingRight: space.inset });
-    heading.add(this.text(label, c.text, { attributes: bold, truncate: true, flexGrow: 1, flexShrink: 1 }));
+    heading.add(this.text(label, c.bright, { attributes: bold, truncate: true, flexGrow: 1, flexShrink: 1 }));
     heading.add(this.text("Esc", c.faint, { run: () => this.closeOverlay() }));
     this.overlay.add(heading);
     this.paletteNote = note ? space.bar : 0;
     if (note)
-      this.overlay.add(this.inset(space.between, this.line(clip(note, this.paletteWidth - 8), c.muted)));
+      this.overlay.add(this.inset(space.between, this.line(clip(note, this.paletteWidth - 8), c.prose)));
     // A short list shows its filter only once the operator types in it, and until then the filter takes no row.
     const quiet = choices.length <= 5;
     this.paletteInputRow = this.row({
@@ -4559,13 +5399,13 @@ export class App {
       paddingRight: space.inset,
       marginBottom: space.section,
     });
-    const prompt = this.text(`${glyph.prompt} `, c.accent, { visible: !quiet });
+    const prompt = this.text(`${glyph.prompt} `, c.operator, { visible: !quiet });
     this.paletteInputRow.add(prompt);
     this.paletteInput = new InputRenderable(this.renderer, {
       id: "palette-search",
       flexGrow: 1,
       placeholder: quiet ? "" : "Type to filter",
-      ...inputColors(c.raised),
+      ...inputColors(c.surface2),
     });
     this.paletteInputRow.add(this.paletteInput);
     this.overlay.add(this.paletteInputRow);
@@ -4685,13 +5525,13 @@ export class App {
         this.paletteList.add(
           this.inset(
             space.between,
-            this.line([[choice.heading ?? "", c.muted, bold]], c.muted, {
+            this.line([[choice.heading ?? "", c.prose, bold]], c.prose, {
               marginTop: offset ? space.section : 0,
             }),
           ),
         );
       const block = this.box({
-        backgroundColor: selected ? c.selected : c.raised,
+        backgroundColor: selected ? c.selected : c.surface2,
         marginTop: offset && this.rich ? gap : 0,
         onMouseUp: this.click(() => {
           this.selection = index;
@@ -4705,29 +5545,33 @@ export class App {
       });
       if (this.rich) {
         // The bar of the selected choice runs down all its rows.
-        const bar: Part = [`${selected ? glyph.mark : " "} `, c.accent];
+        const bar: Part = [`${selected ? glyph.mark : " "} `, c.operator];
         const width = inner - 2;
         const keys = choice.keys ?? "";
         const top = this.row();
         top.add(
-          this.text([bar, [clip(choice.label, width - Bun.stringWidth(keys) - 2), c.text, bold]], c.text, {
-            flexGrow: 1,
-            flexShrink: 1,
-            truncate: true,
-          }),
+          this.text(
+            [bar, [clip(choice.label, width - Bun.stringWidth(keys) - 2), c.bright, bold]],
+            c.bright,
+            {
+              flexGrow: 1,
+              flexShrink: 1,
+              truncate: true,
+            },
+          ),
         );
-        if (keys) top.add(this.text(keys, selected ? c.muted : c.faint, { paddingRight: space.inset }));
+        if (keys) top.add(this.text(keys, selected ? c.prose : c.faint, { paddingRight: space.inset }));
         block.add(top);
         if (choice.command)
-          block.add(this.line([bar, [clip(choice.command, width), selected ? c.accent : c.secondary]]));
-        block.add(this.line([bar, [clip(choice.detail.replace(/\s*\n\s*/g, " "), width), c.muted]], c.muted));
+          block.add(this.line([bar, [clip(choice.command, width), selected ? c.operator : c.model]]));
+        block.add(this.line([bar, [clip(choice.detail.replace(/\s*\n\s*/g, " "), width), c.prose]], c.prose));
         this.paletteList.add(block);
         continue;
       }
       block.flexDirection = "row";
       block.height = space.bar;
-      const fg = choice.color ?? c.text;
-      block.add(this.text(`${selected ? glyph.pointer : " "} `, c.accent, { attributes: bold }));
+      const fg = choice.color ?? c.bright;
+      block.add(this.text(`${selected ? glyph.pointer : " "} `, c.operator, { attributes: bold }));
       const mark: Part | undefined = choice.mark ?? (choice.status ? statusMark(choice.status) : undefined);
       // A label or a detail that the row cut shows whole in a tip while the pointer is over it.
       const markText = mark ? mark[0] : "";
@@ -4762,7 +5606,7 @@ export class App {
         block.add(
           this.text(
             choice.swatch.map((hex): Part => [`${glyph.chip} `, RGBA.fromHex(hex)]),
-            c.text,
+            c.bright,
             { width: choice.swatch.length * 2 + space.between },
           ),
         );
@@ -4780,7 +5624,7 @@ export class App {
                     (choice.swatch ? choice.swatch.length * 2 + space.between : 0),
                 ),
               ),
-              selected ? c.text : c.muted,
+              selected ? c.bright : c.prose,
               { truncate: true, flexShrink: 1 },
             ),
             () => choice.detail.replace(/\s*\n\s*/g, " "),
@@ -4789,7 +5633,7 @@ export class App {
       this.paletteList.add(block);
     }
     if (!this.filtered.length && this.paletteInput?.value)
-      this.paletteList.add(this.inset(space.between, this.text("Nothing matches this filter.", c.muted)));
+      this.paletteList.add(this.inset(space.between, this.text("Nothing matches this filter.", c.prose)));
     else if (shown.length < this.filtered.length)
       this.paletteList.add(
         this.inset(
@@ -4826,17 +5670,17 @@ export class App {
   /** The keys that this terminal sends, what each mark means, and the commands. */
   help(): void {
     const legend: [string, RGBA, string][] = [
-      [`${spin(0)} Working`, c.accent, "A model or a command runs"],
-      [`${glyph.running} Running`, c.accent, "A chain or a session has work in progress"],
-      [`${glyph.asks} Input needed`, c.warning, "A question waits for your answer"],
-      [`${glyph.held} Paused`, c.warning, "Work waits until you wake it"],
-      [`${glyph.done} Done`, c.success, "The act ended and gave its value"],
+      [`${spin(0)} Working`, c.operator, "A model or a command runs"],
+      [`${glyph.running} Running`, c.operator, "A chain or a session has work in progress"],
+      [`${glyph.asks} Input needed`, c.warm, "A question waits for your answer"],
+      [`${glyph.held} Paused`, c.warm, "Work waits until you wake it"],
+      [`${glyph.done} Done`, c.done, "The act ended and gave its value"],
       [
         `${glyph.dot} Finished, unread`,
-        c.success,
+        c.done,
         "A chain you started, or a session, ended while you were away",
       ],
-      [`${glyph.failed} Failed`, c.danger, "The act raised, or the gate refused its Python"],
+      [`${glyph.failed} Failed`, c.warm, "The act raised, or the gate refused its Python"],
       [`${glyph.ring} Ready`, c.faint, "Nothing runs, or the work is saved or pending"],
     ];
     this.openPalette(
@@ -4919,7 +5763,7 @@ export class App {
       },
     ]);
     layer(() => bare() && Boolean(this.tree), "tree", [
-      ...Object.entries(steps).map(
+      ...Object.entries(moves).map(
         ([on, step]): KeyCommand => ({
           on,
           run: () => this.moveTree(step),
@@ -4974,7 +5818,7 @@ export class App {
       ...["up", "down", "pageup", "pagedown"].map(
         (on): KeyCommand => ({
           on,
-          run: () => this.stepChoice(steps[on] ?? 0),
+          run: () => this.stepChoice(moves[on] ?? 0),
           when: () => Boolean(this.overlay),
         }),
       ),

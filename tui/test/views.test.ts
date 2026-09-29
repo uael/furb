@@ -1,14 +1,16 @@
 import { afterAll, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type Renderable, TextRenderable } from "@opentui/core";
+import { type Renderable, RGBA, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { find } from "../script/stage.ts";
+import { find, highlighting } from "../script/stage.ts";
 import { App } from "../src/app.ts";
-import { demoLibrary, demoSession, removeDemoDirectories } from "../src/demo.ts";
+import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
 import type { View } from "../src/session.ts";
-import { type Composing, composing, withDemo } from "./composing.ts";
+import { hexes, motion, palettes } from "../src/theme.ts";
+import { bold } from "../src/ui.ts";
+import { type Composing, cellAt, composing, withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
 
 afterAll(removeDemoDirectories);
@@ -18,6 +20,15 @@ const texts = (node: Renderable): string[] =>
   node
     .getChildren()
     .flatMap((child) => [...(child instanceof TextRenderable ? [child.plainText] : []), ...texts(child)]);
+
+/** The first text under a node that the view shows. */
+const visible = (node: Renderable): TextRenderable | undefined => {
+  for (const child of node.getChildren()) {
+    const found = child instanceof TextRenderable && child.visible ? child : visible(child);
+    if (found) return found;
+  }
+  return undefined;
+};
 
 /** A view shown, read, and laid out, so that it stands where it opens. */
 async function show({ session, app, screen }: Pick<Composing, "session" | "app" | "screen">, view: View) {
@@ -80,17 +91,50 @@ test("a command that printed more than a row holds sends the tail and its length
       expect(stdout.length).toBeLessThanOrEqual(2000);
       expect(printed.endsWith(stdout)).toBe(true);
       await frame();
-      const card = app.scroll.getChildren().find((node) => node.id === command.id);
-      const heading = card?.getChildren()[0];
-      if (!card || !heading) throw new Error("No card for the command.");
-      await screen.mockMouse.click(heading.x + 1, heading.y);
+      // Folded, the block of the command shows the last line that it printed, and no line before it.
+      const folded = await frame();
+      expect([folded.includes("3000"), folded.includes("2999")]).toEqual([true, false]);
+      // A click on the line of the command opens its block.
+      await screen.mockMouse.click(...find(screen, "$ seq 1 3000"));
       await screen.flush();
       const opened = app.scroll.getChildren().find((node) => node.id === command.id);
       if (!opened) throw new Error("No open card for the command.");
-      // The line end that closes the output ends its last row, and the card draws no empty row for it.
-      const shown = printed.replace(/\n$/, "");
-      await screen.waitFor(() => texts(opened).includes(shown), { maxPasses: 200 });
-      expect(texts(opened)).toContain(shown);
+      // The open card asks the host for the whole output, and the host answers in order, so the card has it once the
+      // same request of the test is answered. The line end that closes the output ends its last row, and the card draws
+      // no empty row for it.
+      await session.host.act(command.id);
+      await screen.flush();
+      expect(texts(opened)).toContain(printed.replace(/\n$/, ""));
+    },
+    { width: 120, height: 40, useMouse: true },
+  ));
+
+test("the open card of a command says its limit of time while it runs, and only its exit once it ends", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      // The command waits for a line that the test feeds, so it runs for as long as the test reads it.
+      const id = await session.engine.bash("read -r line; printf ended", {
+        fed: true,
+        on: session.engine.root,
+        timeout: 30,
+      });
+      await until(session, () => session.acts.some((act) => act.id === id));
+      await frame();
+      // A click on the line of the command opens its block.
+      await screen.mockMouse.click(...find(screen, "read -r line; printf ended"));
+      const shown = () => {
+        const node = app.scroll.getChildren().find((one) => one.id === id);
+        if (!node) throw new Error("No card for the command.");
+        return texts(node).join("\n");
+      };
+      await frame();
+      expect(shown()).toContain("times out after 30s");
+      await session.submit(`/feed ${id} go`);
+      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      await frame();
+      expect(shown()).toContain("\nended");
+      expect(shown()).toContain("exit 0");
+      expect(shown()).not.toContain("times out");
     },
     { width: 120, height: 40, useMouse: true },
   ));
@@ -144,6 +188,53 @@ test("the views say each quantity one way, read a page of changes once, and set 
     { width: 150, height: 40 },
   ));
 
+test("the lines that two hunks of a diff leave out between them show as one faint mark, and every hunk keeps one column of numbers", () =>
+  composing(
+    async ({ session, frame }) => {
+      const lines = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`);
+      const write = async (text: string[]) => {
+        await session.engine.result(
+          await session.engine.rung({
+            word: `write(Text("lines.txt", ${JSON.stringify(`${text.join("\n")}\n`)}))`,
+            on: session.engine.root,
+          }),
+        );
+      };
+      await write(lines);
+      await until(session.host, () => session.host.changes === 1);
+      await write(["first", ...lines.slice(1, -1), "last"]);
+      await until(session.host, () => session.host.changes === 2);
+      await session.refresh();
+      const shown = (await frame()).split("\n");
+      const first = shown.findLastIndex((line) => line.includes("+ first"));
+      const last = shown.findLastIndex((line) => line.includes("+ last"));
+      const marks = shown.slice(first, last).filter((line) => line.trim().startsWith("⋯"));
+      expect([first > 0, last > first, marks.length]).toEqual([true, true, 1]);
+      // Both hunks keep one column of numbers, though the numbers of the last have more digits.
+      expect(shown[first]?.indexOf("+ first")).toBe(shown[last]?.indexOf("+ last"));
+    },
+    { width: 120, height: 60 },
+  ));
+
+test("a diff shows the source as it stands, so markdown keeps its marks", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      await session.engine.result(
+        await session.engine.rung({
+          word: 'write(read("README.md", HIDDEN).append("\\n## Keyboard\\n\\nPress **Ctrl+K** to find a note.\\n"))',
+          on: session.engine.root,
+        }),
+      );
+      await until(session.host, () => session.host.changes === 1);
+      await session.refresh();
+      await frame();
+      await Promise.all(highlighting(screen.renderer.root));
+      const shown = await frame();
+      expect([shown.includes("+ ## Keyboard"), shown.includes("**Ctrl+K**")]).toEqual([true, true]);
+    },
+    { width: 120, height: 50 },
+  ));
+
 test("a relative path that the operator types is read from the directory of the selected chain", () =>
   withDemo(async (session) => {
     const directory = join(session.host.directory, "sub");
@@ -175,9 +266,10 @@ test("the standing of a chain is no card of the conversation, though its turns b
         `${root}_cwd`,
         `${root}_actor`,
       ]);
-      const headings = app.scroll.getChildren().map((card) => (texts(card)[0] ?? "").replace(/^[▸▾] /, ""));
-      expect(headings).toContain("You");
-      expect(headings.filter((heading) => /^(standing|roster|cwd|actor)\b/.test(heading))).toEqual([]);
+      const shown = texts(app.scroll).map((text) => text.replace(/^\S+ /, ""));
+      const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
+      expect(shown.some((text) => text.includes(String(thread?.words[1])))).toBe(true);
+      expect(shown.filter((text) => /^(standing|roster|cwd|actor)\b/.test(text))).toEqual([]);
     },
     { width: 120, height: 30 },
     true,
@@ -341,35 +433,37 @@ test("the keys of the footer and the palette answer the mouse, and a drag over a
       await screen.mockMouse.click(x, y);
       expect(session.view).toBe("transcript");
       session.show("feed");
+      // The words of a model stand in the feed of their thread.
+      const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
+      if (!thread) throw new Error("No thread of the operator.");
+      await session.open(thread.id);
       // The screen draws the feed, with the palette gone, before the pointer acts on it again.
       await frame();
-      // A drag over the heading of a card selects its text and leaves the card as it was.
-      const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
-      const heading = card?.getChildren()[0];
-      if (!card || !(heading instanceof TextRenderable)) throw new Error("No rung in the feed.");
-      const open = card.getChildren().length;
-      await screen.mockMouse.drag(heading.x, heading.y, heading.x + 6, heading.y);
+      // A drag over the first step of a word selects its text and leaves the word as it was.
+      const word = () => app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
+      // A step is its lead and its text, side by side.
+      const step = () => {
+        const card = word();
+        const lead = card && visible(card);
+        return lead?.parent ? { x: lead.x, y: lead.y, text: texts(lead.parent).join("") } : undefined;
+      };
+      const first = step();
+      if (!first) throw new Error("No word in the feed.");
+      const { text } = first;
+      await screen.mockMouse.drag(first.x + 2, first.y, first.x + 8, first.y);
       await frame();
-      expect(
-        app.scroll
-          .getChildren()
-          .find((node) => node.id === card.id)
-          ?.getChildren().length,
-      ).toBe(open);
+      expect(step()?.text).toBe(text);
       const selected = screen.renderer.getSelection()?.getSelectedText() ?? "";
       expect(selected.length).toBeGreaterThan(0);
-      expect(heading.plainText).toContain(selected);
+      expect(text).toContain(selected);
       expect(session.notice).toStartWith("Copied");
-      // A rung that is over starts folded to its heading, and a click on the heading opens it.
-      expect(open).toBe(1);
-      await screen.mockMouse.click(heading.x + 2, heading.y);
+      // A word that is over starts folded to its steps, and a click on a step opens it.
+      expect(text).toStartWith("▸ ");
+      // A click right after a drag is a second click, which selects a word, so the selection goes first.
+      screen.renderer.clearSelection();
+      await screen.mockMouse.click(first.x + 2, first.y);
       await frame();
-      expect(
-        app.scroll
-          .getChildren()
-          .find((node) => node.id === card.id)
-          ?.getChildren().length,
-      ).toBeGreaterThan(1);
+      expect(step()?.text).toStartWith("▾ ");
     },
     { width: 140, height: 40, useMouse: true },
     true,
@@ -389,3 +483,350 @@ test("the root chain stands in the list of chains when it rests, and the other r
     },
     { width: 140, height: 30 },
   ));
+
+test("a title longer than its room keeps its start, and ends with an ellipsis", () =>
+  composing(
+    async ({ session, frame }) => {
+      const left = 120 - session.preferences.sidebarWidth;
+      const rows = (await frame()).split("\n").map((line) => line.slice(left));
+      const row = rows.find((line) => line.includes("Explore this project")) ?? "";
+      expect(row.trimEnd()).toMatch(/Explore this project, .*…$/);
+      expect(row).not.toContain("...");
+    },
+    { width: 120, height: 30 },
+    true,
+  ));
+
+test("a heading and a strong span of an answer are bold, as their writer meant them to stand out", () =>
+  composing(async ({ session, screen, frame }) => {
+    const id = await session.engine.thread("str", {
+      markdown: "Say it plainly.",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.threads.has(id));
+    await session.refresh();
+    await session.submit("## The outcome\n\nEvery check is **green** now.");
+    await until(session, () => session.acts.some((act) => act.id === id && act.done));
+    await session.open(id);
+    await frame();
+    // The text of markdown shows once tree-sitter has read it.
+    await Promise.all(highlighting(screen.renderer.root));
+    await frame();
+    const isBold = (text: string) => {
+      const [x, y] = find(screen, text);
+      return (cellAt(screen.captureSpans(), x, y).attributes & bold) === bold;
+    };
+    expect([isBold("The outcome"), isBold("green"), isBold("Every check")]).toEqual([true, true, false]);
+  }));
+
+test("a block of code in an answer keeps a blank line before and after it, and so do the blocks after it", () =>
+  composing(async ({ session, screen, frame }) => {
+    const id = await session.engine.thread("str", {
+      markdown: "Show the command.",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.threads.has(id));
+    await session.refresh();
+    await session.submit(
+      "Run this:\n\n```sh\nls -la src\n```\n\n- first item\n- second item\n\nThat is all.",
+    );
+    await until(session, () => session.acts.some((act) => act.id === id && act.done));
+    await session.open(id);
+    await frame();
+    // The text of markdown shows once tree-sitter has read it.
+    await Promise.all(highlighting(screen.renderer.root));
+    await frame();
+    const rows = ["Run this:", "ls -la src", "first item", "second item", "That is all."].map(
+      (text) => find(screen, text)[1],
+    );
+    expect(rows.slice(1).map((row, index) => row - (rows[index] ?? 0))).toEqual([2, 2, 1, 2]);
+  }));
+
+test("a step of a model stands in the tone of the steps once it lands, and the answer in the tone of what someone said", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      await seedDemo(session);
+      const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
+      if (!thread) throw new Error("No thread of the operator.");
+      await session.open(thread.id);
+      await frame();
+      await new Promise((done) => setTimeout(done, motion.settle * 2));
+      await Promise.all(highlighting(screen.renderer.root));
+      await frame();
+      const colors = hexes(session.theme);
+      const fg = (text: string) => cellAt(screen.captureSpans(), ...find(screen, text)).fg;
+      expect([
+        fg("Run the checks of the project")?.equals(RGBA.fromHex(colors.prose)),
+        fg("Fieldnotes keeps ideas close")?.equals(RGBA.fromHex(colors.bright)),
+      ]).toEqual([true, true]);
+    },
+    { width: 145, height: 45 },
+  ));
+
+test("the view of a thread that closed with another names no thread above its answer, and no turn of its model that wrote nothing", () =>
+  composing(async ({ session, screen, frame }) => {
+    // The demo model answers a message that asks to show live progress slowly, so the rung closes both threads first.
+    const ask = (markdown: string) => session.engine.thread("str", { markdown, on: session.engine.root });
+    const [first, second] = [
+      await ask("First, show live progress."),
+      await ask("Second, show live progress."),
+    ];
+    await session.engine.result(
+      await session.engine.rung({
+        word: `close("README.md", "${first}")\nclose("notes.md", "${second}")`,
+        on: session.engine.root,
+      }),
+    );
+    await until(
+      session,
+      () => session.acts.filter((act) => [first, second].includes(act.id) && act.done).length === 2,
+    );
+    await session.open(first);
+    await frame();
+    await Promise.all(highlighting(screen.renderer.root));
+    const shown = await frame();
+    // The rung of the model, which the close ended before it wrote a word, shows nothing.
+    expect([shown.includes("README.md"), shown.includes("answers “"), shown.includes("▸ ✓")]).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  }));
+
+test("a question for the operator says it waits, and once answered says it is past", () =>
+  composing(async ({ session, frame }) => {
+    const id = await session.engine.thread("str", {
+      markdown: "Which name do you want?",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.threads.has(id));
+    await session.refresh();
+    await session.open(id);
+    const asked = await frame();
+    await session.submit("Call it flip.");
+    await until(session.host, () => !session.host.threads.has(id));
+    await session.refresh();
+    const answered = await frame();
+    expect([
+      asked.includes("Question for you"),
+      answered.includes("Question for you"),
+      answered.includes("Asked you"),
+    ]).toEqual([true, false, true]);
+  }));
+
+test("a question for the operator stands as markdown, as an answer does", () =>
+  composing(async ({ session, screen, frame }) => {
+    const id = await session.engine.thread("str", {
+      markdown: "How should it sort?\n\n1. **By name**, nothing else.",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.threads.has(id));
+    await session.refresh();
+    await session.open(id);
+    await frame();
+    // The text of markdown shows once tree-sitter has read it.
+    await Promise.all(highlighting(screen.renderer.root));
+    const shown = await frame();
+    expect([shown.includes("By name, nothing else."), shown.includes("**By name**")]).toEqual([true, false]);
+  }));
+
+test("a user turn of the transcript stands in the colors of Python, and the name that starts a header in the color of a reference", () =>
+  composing(async ({ session, screen, frame }) => {
+    session.show("transcript");
+    await frame();
+    await Promise.all(highlighting(screen.renderer.root));
+    await frame();
+    const fg = (text: string) => {
+      const [x, y] = find(screen, text);
+      return cellAt(screen.captureSpans(), x, y).fg;
+    };
+    const [model, done, bright] = [palettes.furb.model, palettes.furb.done, palettes.furb.bright].map(
+      RGBA.fromHex,
+    );
+    expect([
+      fg("#chain1")?.equals(model),
+      fg("'root'")?.equals(done),
+      fg("chain1_label")?.equals(bright),
+    ]).toEqual([true, true, true]);
+  }));
+
+test("the reason that a word failed leaves out the name that the parser gives the word and the line that it says again", () =>
+  composing(async ({ session, frame }) => {
+    await session.submit("/run this is invalid python !!!");
+    await session.refresh();
+    const shown = await frame();
+    expect(shown).toContain("line 1: Simple statements must be separated by newlines or semicolons");
+    expect(shown).not.toContain("<string>");
+  }));
+
+test.serial("an input that has the focus takes the colors of a theme chosen after it opened", () =>
+  composing(
+    async ({ app, frame, screen, session }) => {
+      session.theme = "midnight";
+      await frame();
+      // The dialog opens before the next frame draws the new theme.
+      session.theme = "github";
+      app.palette();
+      await frame();
+      const [x, y] = find(screen, "Type to filter");
+      expect(cellAt(screen.captureSpans(), x, y).bg?.equals(RGBA.fromHex(palettes.github.surface2))).toBe(
+        true,
+      );
+    },
+    { width: 120, height: 30 },
+  ),
+);
+
+test("the inspector shows the definition of a name as the line that binds it", () =>
+  composing(async ({ app, session, frame }) => {
+    await session.command("/run # Count the notes\nnotes_count = 5");
+    await until(session, () =>
+      Object.values(session.program).some((word) => word.includes("notes_count = 5")),
+    );
+    await app.inspect("notes_count");
+    const row = (await frame()).split("\n").find((line) => line.includes("Go to definition")) ?? "";
+    expect(row).toContain("notes_count = 5");
+    expect(row).not.toMatch(/rung\d/);
+  }));
+
+test("a model that has written nothing yet is waited for once under its name, however many of its rungs wait", () =>
+  composing(async ({ session, frame }) => {
+    // Each command that the word leaves running wakes a rung of the model once it ends.
+    await session.submit('/run bash("printf a")\nbash("printf b")');
+    await until(
+      session,
+      () => session.acts.filter((act) => act.kind === "rung" && act.by.startsWith("bash")).length === 2,
+    );
+    await session.refresh();
+    const shown = await frame();
+    expect(shown.split("Waiting for the first words of the model").length - 1).toBe(1);
+  }));
+
+test("the rewind tree names each act as the feed does, and no act by its name in the record", () =>
+  composing(
+    async ({ session, app, frame }) => {
+      await seedDemo(session);
+      await idle(session);
+      app.rewind();
+      const shown = await frame();
+      expect(shown).toContain("Read the README and the search module, to learn what the project holds");
+      expect(shown).toContain("$ bun run check");
+      expect(shown).not.toMatch(/\b(?:rung|thread|bash|chain|wait)\d+\b/);
+    },
+    { width: 140, height: 44 },
+  ));
+
+test("a folded word shows each command under the step that ran it", () =>
+  composing(
+    async ({ session, frame }) => {
+      await seedDemo(session);
+      const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
+      if (!thread) throw new Error("No thread of the operator.");
+      await session.open(thread.id);
+      const shown = await frame();
+      const rows = [
+        "Find each caller of search",
+        "$ grep -rn",
+        "Run the checks of the project",
+        "$ bun run check",
+        "All three checks pass",
+      ].map((text) => shown.indexOf(text));
+      expect(rows.every((row) => row >= 0)).toBe(true);
+      expect(rows).toEqual([...rows].sort((one, other) => one - other));
+    },
+    { width: 145, height: 45 },
+  ));
+
+test("the text of a quote in a word stands in the tone of prose, and no word of it in the colors of Python", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      await seedDemo(session);
+      const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
+      if (!thread) throw new Error("No thread of the operator.");
+      await session.open(thread.id);
+      await frame();
+      await screen.mockMouse.click(...find(screen, "Read the README and the search module"));
+      await frame();
+      await Promise.all(highlighting(screen.renderer.root));
+      await frame();
+      const [x, y] = find(screen, "saves a note with the time");
+      const prose = RGBA.fromHex(palettes[session.theme].prose);
+      // "with" is a keyword of Python, and here a word of the quote.
+      expect(cellAt(screen.captureSpans(), x + "saves a note ".length, y).fg?.equals(prose)).toBe(true);
+    },
+    { width: 145, height: 70, useMouse: true },
+  ));
+
+test("a heading of markdown inside a quote of a word is text of the quote, and no step of the word", () =>
+  composing(async ({ session, frame }) => {
+    await session.engine.result(
+      await session.engine.rung({
+        word: "# Write the brief of the second model\n<s:brief>\n# Usage\nAdd a section.\n</s:brief>\nsent = brief",
+        on: session.engine.root,
+      }),
+    );
+    await session.refresh();
+    const shown = await frame();
+    expect([shown.includes("Write the brief of the second model"), shown.includes("Usage")]).toEqual([
+      true,
+      false,
+    ]);
+  }));
+
+test("a diff in an answer tints each line that it adds or removes, as the diffs of the feed do", () =>
+  composing(async ({ session, screen, frame }) => {
+    const id = await session.engine.thread("str", {
+      markdown: "Show the diff.",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.threads.has(id));
+    await session.refresh();
+    await session.submit("```diff\n--- a/words.py\n+++ b/words.py\n-    return old\n+    return new\n```");
+    await until(session, () => session.acts.some((act) => act.id === id && act.done));
+    await session.open(id);
+    await frame();
+    const colors = hexes(session.theme);
+    const cell = (text: string) => cellAt(screen.captureSpans(), ...find(screen, text));
+    const [added, removed, header] = [cell("return new"), cell("return old"), cell("+++ b/words.py")];
+    expect([
+      added.fg?.equals(RGBA.fromHex(colors.done)),
+      added.bg?.equals(RGBA.fromHex(colors.added)),
+      removed.fg?.equals(RGBA.fromHex(colors.warm)),
+      removed.bg?.equals(RGBA.fromHex(colors.removed)),
+      header.fg?.equals(RGBA.fromHex(colors.faint)),
+    ]).toEqual([true, true, true, true, true]);
+  }));
+
+test("a block of code in an answer stands on the surface of a block, in the colors of its language", () =>
+  composing(async ({ session, screen, frame }) => {
+    const id = await session.engine.thread("str", {
+      markdown: "Show the code.",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.threads.has(id));
+    await session.refresh();
+    await session.submit("```python\nanswer = 42\n```");
+    await until(session, () => session.acts.some((act) => act.id === id && act.done));
+    await session.open(id);
+    await frame();
+    // The colors of the code come once tree-sitter has read it.
+    await Promise.all(highlighting(screen.renderer.root));
+    const shown = await frame();
+    expect(shown).not.toContain("```");
+    const [x, y] = find(screen, "answer = 42");
+    const surface = RGBA.fromHex(palettes[session.theme].surface2);
+    expect(cellAt(screen.captureSpans(), x, y).bg?.equals(surface)).toBe(true);
+    // A name keeps the color of text, and a number takes the warm color, as in the Python of a word.
+    expect(cellAt(screen.captureSpans(), x, y).fg?.equals(RGBA.fromHex(palettes[session.theme].bright))).toBe(
+      true,
+    );
+    expect(
+      cellAt(screen.captureSpans(), x + 9, y).fg?.equals(RGBA.fromHex(palettes[session.theme].warm)),
+    ).toBe(true);
+  }));

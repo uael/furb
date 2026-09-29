@@ -4,7 +4,8 @@ import { setRendererCapabilities } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
 import { count } from "../src/format.ts";
-import { palettes } from "../src/theme.ts";
+import { palettes, selectedMix } from "../src/theme.ts";
+import { mix } from "../src/ui.ts";
 import { cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 
@@ -389,14 +390,17 @@ test("⌃Tab rolls to the next chain and ⇧⌃Tab to the one before it, round f
     true,
   ));
 
-test("the switch of the views fills the view shown with the accent, names its chord, and a click on a view shows it", () =>
+test("the switch of the views tints the view shown and writes its label in the accent, names its chord, and a click on a view shows it", () =>
   composing(async ({ session, screen, frame, click }) => {
     const top = (await frame()).split("\n")[0] ?? "";
     expect(top).toContain("Feed");
     expect(top).toContain("⌥1-3");
-    const accent = RGBA.fromHex(palettes.github.accent);
-    const filled = (label: string) =>
-      Boolean(cellAt(screen.captureSpans(), top.indexOf(label), 0).bg?.equals(accent));
+    const accent = RGBA.fromHex(palettes.furb.operator);
+    const tint = mix(RGBA.fromHex(palettes.furb.surface2), accent, selectedMix);
+    const filled = (label: string) => {
+      const cell = cellAt(screen.captureSpans(), top.indexOf(label), 0);
+      return Boolean(cell.fg?.equals(accent) && cell.bg?.equals(tint));
+    };
     expect([filled("Feed"), filled("Changes")]).toEqual([true, false]);
     await click("Changes");
     await until(session, () => session.view === "changes");
@@ -406,17 +410,17 @@ test("the switch of the views fills the view shown with the accent, names its ch
     await until(session, () => session.view === "feed");
   }));
 
-test("the switch of the input shows Prompt and Python, ⌃R names it, and a click on a mode chooses it", () =>
+test("the switch of the input shows markdown and python, ⌃R names it, and a click on a mode chooses it", () =>
   composing(async ({ session, screen, frame }) => {
     const lines = (await frame()).split("\n");
-    const row = lines.findIndex((line) => line.includes("Python") && line.includes("Prompt"));
+    const row = lines.findIndex((line) => line.includes(" python ") && line.includes(" markdown "));
     expect(row).toBeGreaterThanOrEqual(0);
     expect(lines[row]).toContain("⌃R");
-    await screen.mockMouse.click((lines[row] ?? "").indexOf("Python") + 1, row);
+    await screen.mockMouse.click((lines[row] ?? "").indexOf(" python ") + 2, row);
     await until(session, () => session.mode === "python");
     await frame();
-    await screen.mockMouse.click((lines[row] ?? "").indexOf("Prompt") + 1, row);
-    await until(session, () => session.mode === "prompt");
+    await screen.mockMouse.click((lines[row] ?? "").indexOf(" markdown ") + 2, row);
+    await until(session, () => session.mode === "markdown");
   }));
 
 test("the meter of the context says its share and where the chain pauses when the pointer is over it", () =>
@@ -573,21 +577,40 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     await idle(session);
     app.composer.setText("A second message.");
     await app.submit();
-    await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
-    await session.refresh();
+    // The thread closes once the word of its answer has run, after the answer of the model comes.
+    const second = session.thread;
+    await until(session, () => session.acts.some((act) => act.id === second && act.done));
+    // The feed of the chain holds a card for each thread.
+    await session.open("");
     const shown = await frame();
     expect(shown).not.toContain("failed");
     expect(shown).not.toContain("CancelledError");
-    // The first message says its cancel at its right, above the second message, and the rung that the cancel ended
-    // before it wrote a word shows nothing.
-    const lines = shown.split("\n");
-    const first = lines.findIndex((line) => line.includes("show live progress"));
-    expect(lines[first]).toContain("⊘ cancelled");
+    // The first thread says its cancel, above the second thread, and the rung that the cancel ended before it wrote a
+    // word shows nothing.
+    const lines = shown.split("\n").map((line) => line.slice(0, 120 - session.preferences.sidebarWidth));
+    const first = lines.findIndex((line) => line.includes("⊘ show live progress"));
+    expect(lines[first]).toMatch(/⊘ show live progress +cancelled/);
     expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
-    expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);
-    // A message that its answer closed says no state, only the type of its answer.
-    expect(lines.find((line) => line.includes("A second message."))).not.toContain("✓");
+    expect(lines.find((line) => line.includes("A second message."))).toMatch(/A second message\. +closed/);
   }));
+
+test("a word that a model fixed in the text of its thread speaks as that model, under the heading of its words", () =>
+  composing(
+    async ({ session, frame }) => {
+      await session.submit("Give me an answer in a fence, fixed in place.");
+      const thread = session.thread;
+      await until(session, () => session.acts.some((act) => act.id === thread && act.done));
+      await idle(session);
+      await session.refresh();
+      await session.open(thread);
+      const lines = (await frame()).split("\n");
+      const heads = lines.flatMap((line) => /^\s*\S (sonnet|You)\b/.exec(line)?.[1] ?? []);
+      expect(heads).toEqual(["sonnet"]);
+      expect(lines.some((line) => line.includes("Answer in a fence, as the message asks"))).toBe(true);
+    },
+    { width: 140, height: 44 },
+    true,
+  ));
 
 test("a word that the gate refused and that a later word of the same thread replaced folds, and reads as retried", () =>
   composing(
@@ -599,9 +622,16 @@ test("a word that the gate refused and that a later word of the same thread repl
       await idle(session);
       await session.refresh();
       const shown = await frame();
-      expect(shown).toMatch(/▸ ✗ rung\d+ .*retried as rung\d+/);
+      expect(shown).toContain("The gate refused this word, and the next took its place.");
       expect(shown).not.toContain("failed");
       expect(shown).not.toContain("Got unexpected token");
+      // The line stands under the text of the steps of the word, after its fold.
+      const column = (text: string) =>
+        shown
+          .split("\n")
+          .find((line) => line.includes(text))
+          ?.indexOf(text);
+      expect(column("The gate refused this word")).toBe(column("Answer in a fence, as the message asks"));
     },
     { width: 140, height: 44 },
     true,

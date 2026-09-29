@@ -39,7 +39,7 @@ and SIGQUIT quit the same way. On Windows, a console that closes and Ctrl+Break 
 the preferences file sets the width of the sidebar, from 26 to 48 columns. On a terminal narrower than 100 columns the
 sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
 
-Python words have offline Tree-sitter colors. GitHub Dark is the default. Sessions share the theme, and the TUI saves
+Python words have offline Tree-sitter colors. Furb is the default palette. Sessions share the theme, and the TUI saves
 it in `$XDG_CONFIG_HOME/furb/ui.json` (or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows).
 `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated
 preferences; the CLI shares the user's choice across sessions, including demos.
@@ -95,7 +95,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/new` | Start a fresh life |
 | `/model [model]` | Choose the model that answers on this chain |
 | `/effort [level]` | Set the reasoning effort of the selected model |
-| `/shape [type]` | Choose the result type of the next prompt |
+| `/shape [type]` | Choose the result type of the next thread |
 | `/theme [name]` | Change the palette of every surface |
 | `/chain <label>` | A conversation with its own state |
 | `/fork <label>` | Copy this chain's current transcript and program |
@@ -128,6 +128,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/sidebar` | Show or hide the chains, the usage, and the workspaces |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/autocollapse` | Toggle collapse of completed rungs |
+| `/motion` | Turn the spinners, the bar of a reply, and the blink of the caret on or off |
 | `/extensions` | List the extensions that this life runs |
 | `/exit` | Save every session and quit |
 
@@ -171,6 +172,7 @@ through `gh`. Upload happens only when chosen. Anyone with its link can read the
 the structured JSON export. `/context` sets the context ceiling.
 
 A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
-and each chain shows the rungs of their words in its feed, as it shows any rung. The TUI has no part of its own for an extension: `/extensions` lists what the life runs, and `/run`
+and the feed shows none of their work, since it shows what you started and what came of it. The TUI has no part of
+its own for an extension: `/extensions` lists what the life runs, and `/run`
 runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel of the work of a chain ends its threads,
 rungs, commands and waits, and not what an extension started on it, such as the watcher of the memory.

@@ -9,17 +9,99 @@ import { Workspaces } from "./workspaces.ts";
 
 /** The files of the demo project: a small notes app with the three parts that its answers name. */
 const demoFiles: Record<string, string> = {
-  "README.md":
-    "# Fieldnotes\n\nA small place to keep ideas.\n\n- Capture a thought\n- Find it when it matters\n- Keep everything local\n",
-  "package.json": '{\n  "name": "fieldnotes",\n  "type": "module",\n  "scripts": { "test": "bun test" }\n}\n',
-  "src/capture.ts":
-    'import { save } from "./storage.ts";\n\nexport function capture(text: string): void {\n  save({ text, at: Date.now() });\n}\n',
-  "src/search.ts":
-    'import { load } from "./storage.ts";\n\nexport function search(query: string) {\n  return load().filter((note) => note.text.includes(query));\n}\n',
-  "src/storage.ts":
-    "export interface Note {\n  text: string;\n  at: number;\n}\n\nconst notes: Note[] = [];\n\nexport const save = (note: Note) => notes.push(note);\nexport const load = () => notes;\n",
-  "test/search.test.ts":
-    'import { expect, test } from "bun:test";\nimport { capture } from "../src/capture.ts";\nimport { search } from "../src/search.ts";\n\ntest("search finds a captured note", () => {\n  capture("small ideas");\n  expect(search("ideas")).toHaveLength(1);\n});\n',
+  "README.md": `# Fieldnotes
+
+A small place to keep ideas.
+
+- Capture a thought
+- Find it when it matters
+- Keep everything local
+
+## Develop
+
+Run the checks with \`bun test\`.
+`,
+  "package.json": `{
+  "name": "fieldnotes",
+  "type": "module",
+  "scripts": { "test": "bun test", "check": "bun scripts/check.ts", "index": "bun scripts/index.ts" }
+}
+`,
+  "scripts/check.ts": `import { readdirSync, readFileSync } from "node:fs";
+
+// The checks of the project: each test that the files of test/ name, file by file, then how many there are.
+const files = readdirSync("test").filter((name) => name.endsWith(".test.ts")).sort();
+let count = 0;
+for (const file of files) {
+  console.log(\`test/\${file}:\`);
+  for (const [, name] of readFileSync(\`test/\${file}\`, "utf8").matchAll(/test\\("([^"]+)"/g)) {
+    console.log(\`✓ \${name}\`);
+    count++;
+  }
+  console.log("");
+}
+console.log(\` \${count} pass\\n 0 fail\\nRan \${count} tests across \${files.length} files.\`);
+`,
+  "scripts/index.ts": `// Build the search index of the notes, one note at a time, as a long task does.
+const notes = ["small ideas", "a search shortcut", "keep everything local", "a thought on names", "the release"];
+console.log(\`Indexing \${notes.length} notes\`);
+for (const [at, note] of notes.entries()) {
+  await Bun.sleep(400);
+  console.log(\`  \${at + 1}/\${notes.length}  \${note}\`);
+}
+console.log(\`Indexed \${notes.length} notes.\`);
+`,
+  "src/capture.ts": `import { save } from "./storage.ts";
+
+/** Save a thought as a note, with the time it was taken. */
+export function capture(text: string): void {
+  save({ text: text.trim(), at: Date.now() });
+}
+`,
+  "src/search.ts": `import { load, type Note } from "./storage.ts";
+
+/** The notes that hold every word of a query, newest first. */
+export function search(query: string): Note[] {
+  const words = query.toLowerCase().split(/\\s+/).filter(Boolean);
+  return load()
+    .filter((note) => words.every((word) => note.text.toLowerCase().includes(word)))
+    .sort((a, b) => b.at - a.at);
+}
+`,
+  "src/storage.ts": `export interface Note {
+  text: string;
+  at: number;
+}
+
+const notes: Note[] = [];
+
+export const save = (note: Note) => notes.push(note);
+export const load = () => [...notes];
+`,
+  "test/capture.test.ts": `import { expect, test } from "bun:test";
+import { capture } from "../src/capture.ts";
+import { load } from "../src/storage.ts";
+
+test("capture keeps the text and its time", () => {
+  capture("  a thought  ");
+  expect(load().at(-1)?.text).toBe("a thought");
+});
+`,
+  "test/search.test.ts": `import { expect, test } from "bun:test";
+import { capture } from "../src/capture.ts";
+import { search } from "../src/search.ts";
+
+test("search finds a captured note", () => {
+  capture("small ideas");
+  expect(search("ideas")).toHaveLength(1);
+});
+
+test("search puts the newest note first", () => {
+  capture("old idea");
+  capture("new idea");
+  expect(search("idea")[0]?.text).toBe("new idea");
+});
+`,
 };
 
 export async function seedDemoFiles(directory: string): Promise<void> {

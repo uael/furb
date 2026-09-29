@@ -73,7 +73,7 @@ const renderer = await createCliRenderer({
   exitOnCtrlC: false,
   // The TUI ends on a signal by its own quit, since the view saves its draft before the renderer goes.
   exitSignals: [],
-  backgroundColor: palettes[initial.theme].background,
+  backgroundColor: palettes[initial.theme].ground,
   targetFps: 30,
   useMouse: true,
 });

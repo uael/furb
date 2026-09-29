@@ -13,6 +13,8 @@ export interface Snapshot {
   roster: [string, string[], number][];
   /** The acts that changed after the count the session asked with. */
   acts: ActRow[];
+  /** The steps asked after the count the session asked with, each with the act that asked it. */
+  asked: [string, string][];
   /** The count of changes of the act table that the acts are read at. */
   count: number;
   selected: string;
@@ -98,6 +100,8 @@ export class HostView extends EventEmitter implements Plain {
   source = () => this.ask<string>("library", "source");
   snapshot = (chain: string, since = 0) => this.ask<Snapshot>("library", "snapshot", chain, since);
   readChanges = (start: number, count: number) => this.ask<FileChange[]>("library", "changes", start, count);
+  /** The changes that the writes of some acts made, as the rungs of words, in the order they were made. */
+  changesOf = (acts: string[]) => this.ask<FileChange[]>("library", "changesOf", acts);
   /** An act whole, with all that a command printed, and nothing when the life holds no such act. */
   act = (id: string) => this.ask<LiveAct | undefined>("library", "act", id);
   /** The text the World reads at a path, from where a chain stands, which makes no act and keeps nothing. */

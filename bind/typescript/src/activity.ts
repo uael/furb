@@ -50,6 +50,8 @@ export class Activity {
    * takes only the rows that changed since it last read. */
   private changes = 0;
   private readonly changed = new Map<string, number>();
+  /** The act that asked each step, which the step is answered for. */
+  readonly asked = new Map<string, string>();
   /** The last pause or wake of each act it names, oldest first. A pause and a wake are over acts by the act they
    * name alone, so an earlier control of the same name decides nothing more. */
   private readonly controls = new Map<string, Fact>();
@@ -69,13 +71,15 @@ export class Activity {
     return this.scopes.get(id) ?? "";
   }
 
-  /** The rows that changed after a count of changes, and the count now. */
-  since(count: number): { count: number; acts: LiveAct[] } {
-    const acts = [...this.acts.values()].filter((act) => (this.changed.get(act.id) ?? 0) > count);
-    return { count: this.changes, acts };
+  /** The rows that changed after a count of changes, the steps asked after it with the act that asked each, and the
+   * count now. */
+  since(count: number): { count: number; acts: LiveAct[]; asked: [string, string][] } {
+    const after = (id: string) => (this.changed.get(id) ?? 0) > count;
+    const acts = [...this.acts.values()].filter((act) => after(act.id));
+    return { count: this.changes, acts, asked: [...this.asked].filter(([id]) => after(id)) };
   }
-  private mark(act: LiveAct): void {
-    this.changed.set(act.id, ++this.changes);
+  private mark(id: string): void {
+    this.changed.set(id, ++this.changes);
   }
 
   hear(fact: Fact): void {
@@ -83,6 +87,10 @@ export class Activity {
     const question = isQuestion(kind, id);
     if (question) this.scopes.set(id, kind === "chain" ? id : String(fact[3]));
     if (question && kind === "run") this.runs.set(id, String(fact[4]));
+    if (question && STEPS.has(kind)) {
+      this.asked.set(id, by);
+      this.mark(id);
+    }
     if (question && !STEPS.has(kind)) {
       const act: LiveAct = {
         id,
@@ -103,7 +111,7 @@ export class Activity {
           stderr: { is: "Text", path: `${id}/stderr`, content: "" },
         };
       this.acts.set(id, act);
-      this.mark(act);
+      this.mark(act.id);
       if (!this.children.has(by)) this.children.set(by, new Set());
       this.children.get(by)?.add(id);
       return;
@@ -116,7 +124,7 @@ export class Activity {
       for (const row of [...this.acts.values()])
         if (!row.done && row.paused !== paused && covers(fact, row.id)) {
           row.paused = paused;
-          this.mark(row);
+          this.mark(row.id);
         }
     } else if (kind === "done") {
       if (isQuestion("merged", id) && this.acts.get(by)?.kind === "bash")
@@ -133,7 +141,7 @@ export class Activity {
         if (!act.done && WORK.includes(act.kind)) this.completed++;
         act.done = true;
         act.value = fact[3];
-        this.mark(act);
+        this.mark(act.id);
         this.updateRun(act);
         for (const child of this.children.get(id) ?? []) {
           const row = this.acts.get(child);
@@ -151,7 +159,7 @@ export class Activity {
       const value = act.value as { stdout: { content: string }; stderr: { content: string } };
       const stream = fact[4] === "stderr" && this.merged.get(id) === false ? value.stderr : value.stdout;
       stream.content += String(fact[3]);
-      this.mark(act);
+      this.mark(act.id);
     }
   }
   /** Whether the last control over a new act is a pause. Only a control no older than the oldest pause can make
@@ -167,7 +175,7 @@ export class Activity {
   }
   private updateRun(act: LiveAct): void {
     if (act.kind !== "rung") return;
-    this.mark(act);
+    this.mark(act.id);
     const refused = this.refused.get(act.id);
     if (refused !== undefined) {
       act.run = { status: "failed", reason: refused };

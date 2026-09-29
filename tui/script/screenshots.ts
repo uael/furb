@@ -7,7 +7,7 @@ import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles } from "../
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
 import type { Exit, Session } from "../src/session.ts";
-import { palettes } from "../src/theme.ts";
+import { hexes, motion } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
 import { rasterize } from "./raster.ts";
@@ -74,7 +74,10 @@ async function capture(name: string): Promise<void> {
   await Promise.all(highlighting(test.renderer.root));
   await test.flush();
   if (only && !only.test(name)) return;
-  await writeFile(`${output}/${name}.png`, rasterize(test.captureSpans(), palettes[session.theme], "furb"));
+  // A step that the view shows first lands bright and settles to its tone, which is the tone an operator reads.
+  await new Promise((done) => setTimeout(done, motion.settle));
+  await test.flush();
+  await writeFile(`${output}/${name}.png`, rasterize(test.captureSpans(), hexes(session.theme), "furb"));
   // The text of each shot goes to a folder that FURB_GALLERY_TEXT names, to read the gallery without its pictures.
   const texts = process.env.FURB_GALLERY_TEXT;
   if (texts) await writeFile(join(texts, `${name}.txt`), test.captureCharFrame());
@@ -86,18 +89,18 @@ try {
   await seedDemo(session);
   await session.command("/name Explore project");
   await idle(session);
-  await session.refresh();
+  // The feed shows the thread that the operator started: the steps of the model, then its answer.
+  await session.open(session.acts.find((act) => session.isUserThread(act))?.id ?? "");
   await capture("02-feed");
   session.show("transcript");
   await capture("03-transcript");
+  session.show("feed");
   const written = session.host.changes;
-  await session.engine.result(
-    await session.engine.rung({
-      word: 'write(read("README.md").append("\\n## Keyboard\\nPress Ctrl+K to find a note.\\n"))',
-      on: session.selected,
-    }),
-  );
+  await session.submit("Add the search shortcut, cover it with a test, and document it.");
+  await session.engine.result(session.thread);
   await until(session.host, () => session.host.changes > written);
+  await rest();
+  await capture("22-thread");
   session.show("changes");
   await capture("04-changes");
   session.show("feed");
@@ -110,17 +113,28 @@ try {
   app().effortPicker();
   await capture("07-effort");
   app().closeOverlay();
+  // A question of a model waits in its thread as markdown, and as a card among the threads of its chain.
+  await session.open("");
   const question = await session.engine.thread("bool", {
-    markdown: "Apply the search shortcut to the main chain?",
+    markdown: [
+      "Apply the search shortcut to the main chain? It changes three files:",
+      "",
+      "- `src/search.ts`, which exports **shortcut**",
+      "- `test/search.test.ts`, which checks what it runs",
+      "- `README.md`, which gains a **Keyboard** section",
+    ].join("\n"),
     on: session.selected,
     to: "operator",
   });
   await until(session.host, () => session.host.threads.has(question));
   await session.refresh();
+  await session.open(question);
+  await rest();
   await capture("08-operator-question");
   app().question();
   await capture("09-operator-dialog");
   app().closeOverlay();
+  await session.open("");
   await session.host.answer(session.operatorThread?.id ?? "", "yes");
   await until(session.host, () => !session.host.threads.size);
   app().toggleMode();
@@ -148,23 +162,19 @@ try {
   test.resize(152, 46);
   app().toggleMode();
   app().composer.setText("");
-  const command = await session.engine.bash(
-    "printf 'Building the search index...\\n'; sleep 1; printf '3 notes indexed.\\n'",
-    { on: session.selected },
-  );
-  // The command shows once it has printed its first line.
+  const command = await session.engine.bash("bun run index", { on: session.selected });
+  // The command shows once it has indexed two notes, and its block opens to all that it printed so far.
   await until(session, () =>
-    Boolean((session.acts.find((act) => act.id === command)?.value as Exit | undefined)?.stdout?.content),
+    Boolean(
+      (session.acts.find((act) => act.id === command)?.value as Exit | undefined)?.stdout?.content.includes(
+        "2/5",
+      ),
+    ),
   );
   await session.refresh();
   app().render();
   await test.flush();
-  const commandRow = app()
-    .scroll.getChildren()
-    .find((node) => node.id === command)
-    ?.getChildren()[0];
-  if (!commandRow) throw new Error("The command row is not visible.");
-  await test.mockMouse.click(commandRow.x + 1, commandRow.y);
+  await click(test, "bun run index");
   await rest();
   app().scroll.scrollTo(app().scroll.scrollHeight);
   await capture("18-live-command");
@@ -173,11 +183,11 @@ try {
     markdown: "show live progress",
     on: session.selected,
   });
-  // The model has written part of its word, and writes the rest.
+  // The model built the index in its first word, and has written part of its second, which runs the checks.
   await until(session.host, () =>
-    [...session.host.streams.values()].some((stream) => stream.text.length > 70),
+    [...session.host.streams.values()].some((stream) => stream.text.includes("checked = await")),
   );
-  await session.refresh();
+  await session.open(progress);
   await capture("19-model-progress");
   await session.engine.result(progress);
   await session.submit("/run this is invalid python !!!").catch(session.fail);
@@ -290,15 +300,13 @@ try {
       research.status === "paused",
   );
   await capture("28-workspace-tree");
+  // A click on a step of a word opens its Python and what each act that it made came to.
+  await session.open(session.acts.find((act) => session.isUserThread(act))?.id ?? "");
   app().render();
   await test.flush();
-  const word = app()
-    .scroll.getChildren()
-    .find((node) => /^rung\d+$/.test(node.id) && app().scroll.viewport.y <= node.y);
-  const heading = word?.getChildren()[0];
-  if (heading) await test.mockMouse.click(heading.x + 1, heading.y);
+  await click(test, "Run the checks of the project");
   await rest();
-  await capture("29-collapsed-rung");
+  await capture("29-open-word");
   library.toggle(second);
   await capture("30-collapsed-workspace");
   library.toggle();
@@ -314,6 +322,10 @@ try {
   app().closeTree();
   await session.submit("show live progress");
   session.enqueue("Check keyboard navigation after this answer.");
+  // The follow-up waits while the model writes its first steps.
+  await until(session.host, () =>
+    [...session.host.streams.values()].some((stream) => stream.text.includes("await bash")),
+  );
   await capture("34-queued-follow-up");
   app().composer.setText("/queue");
   await app().submit();

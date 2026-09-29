@@ -11,7 +11,7 @@ test("a save of the preferences that fails names its file, and the preferences s
     // A directory where the save writes its file makes the save fail on every system.
     await mkdir(join(directory, "ui.json.tmp"));
     expect(() => preferences.save("paper")).toThrow("ui.json.tmp");
-    expect(preferences.theme).toBe("github");
+    expect(preferences.theme).toBe("furb");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

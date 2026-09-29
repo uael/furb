@@ -17,17 +17,21 @@ import { call } from "../index.cjs";
 import type { Ear } from "./ears.js";
 import { type Fact, isQuestion } from "./types.js";
 
+/** A change of a file: its path, its text before and after, the name of the write that made it, and the act that asked
+ * that write, which is the rung of the word that wrote it. A change that an older life kept names neither. */
 export interface FileChange {
   path: string;
   before: string;
   after: string;
+  write?: string;
+  by?: string;
 }
 
-/** Append file snapshots once. Keep only their positions in memory and read a page on demand. As an ear that comes
- * before the files, it reads the text a write replaces before the files take the write, and keeps the change once the
- * write is done. */
+/** Append file snapshots once. Keep only their positions and the act that asked each in memory, and read a page, or
+ * the changes of some acts, on demand. As an ear that comes before the files, it reads the text a write replaces
+ * before the files take the write, and keeps the change once the write is done. */
 export class FileChanges {
-  private readonly positions: { start: number; size: number }[] = [];
+  private readonly positions: { start: number; size: number; by?: string }[] = [];
   private readonly temporary?: string;
   private readonly fd?: number;
   private end = 0;
@@ -46,8 +50,8 @@ export class FileChanges {
           break;
         }
         // A complete line that is no change fails here, before the session opens on it.
-        JSON.parse(data.subarray(this.end, newline).toString("utf8"));
-        this.positions.push({ start: this.end, size: newline - this.end });
+        const change = JSON.parse(data.subarray(this.end, newline).toString("utf8")) as FileChange;
+        this.positions.push({ start: this.end, size: newline - this.end, by: change.by });
         this.end = newline + 1;
       }
     }
@@ -59,11 +63,11 @@ export class FileChanges {
   /** The ear of the changes, for a life that stands on this directory: it says nothing, so each write goes on to the
    * ear that takes it. */
   *ear(directory: string, changed?: () => void): Ear {
-    const before = new Map<string, { path: string; before: string }>();
+    const before = new Map<string, { path: string; before: string; write: string; by: string }>();
     for (;;) {
       const fact = (yield null) as Fact | undefined;
       if (!fact) continue;
-      const [kind, id, , ...words] = fact;
+      const [kind, id, by, ...words] = fact;
       if (kind === "write" && isQuestion(kind, id)) {
         const text = words[1] as { path?: unknown } | undefined;
         if (typeof text?.path !== "string" || text.path.includes("://")) continue;
@@ -73,7 +77,7 @@ export class FileChanges {
         try {
           old = readFileSync(path, "utf8");
         } catch {}
-        before.set(id, { path, before: old });
+        before.set(id, { path, before: old, write: id, by });
       } else if (kind === "done" && before.has(id)) {
         const held = before.get(id);
         before.delete(id);
@@ -90,17 +94,25 @@ export class FileChanges {
     const data = Buffer.from(`${JSON.stringify(change)}\n`);
     writeSync(this.fd, data);
     fsyncSync(this.fd);
-    this.positions.push({ start: this.end, size: data.length - 1 });
+    this.positions.push({ start: this.end, size: data.length - 1, by: change.by });
     this.end += data.length;
   }
   read(start = 0, count = 20): FileChange[] {
+    return this.positions.slice(start, start + count).flatMap((position) => this.at(position));
+  }
+  /** The changes that the writes of some acts made, in the order they were made. */
+  of(acts: readonly string[]): FileChange[] {
+    const asked = new Set(acts);
+    return this.positions
+      .filter(({ by }) => by !== undefined && asked.has(by))
+      .flatMap((position) => this.at(position));
+  }
+  private at({ start, size }: { start: number; size: number }): FileChange[] {
     const fd = this.fd;
     if (fd === undefined) return [];
-    return this.positions.slice(start, start + count).map(({ start, size }) => {
-      const data = Buffer.alloc(size);
-      readSync(fd, data, 0, size, start);
-      return JSON.parse(data.toString("utf8")) as FileChange;
-    });
+    const data = Buffer.alloc(size);
+    readSync(fd, data, 0, size, start);
+    return [JSON.parse(data.toString("utf8")) as FileChange];
   }
   dispose(): void {
     if (this.fd !== undefined) closeSync(this.fd);

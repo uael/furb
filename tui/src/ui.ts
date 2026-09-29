@@ -16,6 +16,28 @@ export function styled(parts: readonly Part[]): StyledText {
   );
 }
 
+/** A line of markdown as parts in a tone: code in the color of code, strong text in the color of what stands out,
+ * emphasis in italic, and a link as its label, underlined. No part is bold. */
+export function inline(line: string, tone: RGBA, colors: { strong: RGBA; code: RGBA; link: RGBA }): Part[] {
+  const parts: Part[] = [];
+  let at = 0;
+  for (const match of line.matchAll(
+    /(`+)(.+?)\1|\*\*(\S(?:.*?\S)?)\*\*|__(\S(?:.*?\S)?)__|\*(\S(?:.*?\S)?)\*|\b_(\S(?:.*?\S)?)_\b|\[([^\]]+)\]\([^)]*\)/g,
+  )) {
+    if (match.index > at) parts.push([line.slice(at, match.index), tone]);
+    const [, , code, strong, underscores, emphasis, underscore, link] = match;
+    if (code !== undefined) parts.push([code, colors.code]);
+    else if (strong !== undefined || underscores !== undefined)
+      parts.push([strong ?? underscores ?? "", colors.strong]);
+    else if (emphasis !== undefined || underscore !== undefined)
+      parts.push([emphasis ?? underscore ?? "", tone, italic]);
+    else parts.push([link ?? "", colors.link, underline]);
+    at = match.index + match[0].length;
+  }
+  if (at < line.length) parts.push([line.slice(at), tone]);
+  return parts;
+}
+
 /** The text of the parts, with no style. */
 export function plain(parts: readonly Part[]): string {
   return parts.map(([text]) => text).join("");

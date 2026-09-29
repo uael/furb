@@ -37,41 +37,132 @@ const state = () => {
   sentFacts = owner.facts.length;
   self.postMessage({ state: snapshot });
 };
-/** What the demo thinks and answers on a later turn, by what the turn says. */
-const replies: [cue: string, thinking: string, answer: string][] = [
+/** The first word of the demo: it reads the project, finds what a change would touch, runs its checks, and reports
+ * with a next step. */
+const explore =
+  String.raw`# Read the README and the search module, to learn what the project holds
+notes = read("README.md")
+search = read("src/search.ts")
+# Find each caller of search, to see what a shortcut would touch
+callers = await bash("grep -rn 'search(' src test")
+# Run the checks of the project
+check = await bash("bun run check")
+# All three checks pass: report what the project holds and a next step
+<s:report>
+## A clear starting point
+Fieldnotes keeps ideas close, in three small parts:
+
+- **capture** saves a note with the time it was taken
+- **search** finds the notes that hold every word of a query, newest first
+- **storage** keeps the notes in memory, in the order they came
+
+All three checks pass. A useful next step is a **search shortcut**, so that a note is one key away:
+
+` +
+  "```ts" +
+  String.raw`
+export const shortcut = { key: "k", ctrl: true, run: search };
+` +
+  "```" +
+  String.raw`
+
+It runs ` +
+  "`search`" +
+  String.raw` as it stands, and one focused test covers it.
+</s:report>
+close(report)`;
+
+/** The word of the demo that adds the search shortcut: it changes the search module, its test and the README, and runs
+ * the checks again. */
+const shortcut =
+  String.raw`# Read the search module and its test, to add the shortcut beside search
+search = read("src/search.ts", HIDDEN)
+tests = read("test/search.test.ts", HIDDEN)
+# Add the shortcut to src/search.ts: Ctrl+K runs the search
+<s:key>
+
+/** The key that opens the search, and what it runs. */
+export const shortcut = { key: "k", ctrl: true, run: search };
+</s:key>
+write(search.append(key))
+# Cover the shortcut with a test of what it runs
+<s:covered>
+
+test("the shortcut runs the search", () => {
+  expect(shortcut.run).toBe(search);
+});
+</s:covered>
+write(tests.replace("import { search } from", "import { search, shortcut } from").append(covered))
+# Document the shortcut in the README, under a heading of its own
+write(read("README.md", HIDDEN).append("\n## Keyboard\n\nPress **Ctrl+K** to find a note.\n"))
+# Run the checks again, with the new test among them
+check = await bash("bun run check")
+# The shortcut works, its test passes, and the README says so: report it
+<s:report>
+The search shortcut is in place:
+
+- ` +
+  "`src/search.ts`" +
+  String.raw` exports **shortcut**, and Ctrl+K runs ` +
+  "`search`" +
+  String.raw`
+- ` +
+  "`test/search.test.ts`" +
+  String.raw` checks what the shortcut runs
+- ` +
+  "`README.md`" +
+  String.raw` has a **Keyboard** section
+
+All four checks pass.
+</s:report>
+close(report)`;
+
+/** What the demo thinks, and the word it writes, on a later turn, by what the turn says. Each word says its steps in
+ * comments, as a model does. */
+const replies: [cue: string, thinking: string, word: string][] = [
+  [
+    "Add the search shortcut",
+    "The search module takes the shortcut, its test covers it, and the README says so.",
+    shortcut,
+  ],
   [
     "refused",
     "The gate refused the fence, so the word is Python alone.",
-    "Here it is again as plain Python, with no fence around it.",
+    '# Answer again in plain Python, since the gate refused the fence\nclose("Here it is again as plain Python, with no fence around it.")',
   ],
   [
     "show live progress",
-    "The index is ready, so the answer says what it holds.",
-    "The index is built, and three notes are ready to search. Each word streamed into the feed as it ran.",
+    "The index is new, so I read what it reads and build it once.",
+    '# Read the notes that the index reads, to count them\nnotes = read("src/storage.ts", HIDDEN)\n# Build the index, to see that it takes every note\nbuilt = await bash("bun run index")',
+  ],
+  [
+    "Indexed 5 notes",
+    "Every note is in the index, so the checks come next.",
+    '# Run the checks, to see that search still finds every note\nchecked = await bash("bun run check")\n# The index is built and the checks pass: report what it holds\nclose("The index is built, and five notes are ready to search. Each word streamed into the feed as it ran.")',
   ],
   [
     "keyboard navigation",
     "The keys work, so the answer lists them.",
-    "Keyboard navigation works: Ctrl+K opens the search, and the arrows move between notes.",
+    '# List the keys that move through the notes\nclose("Keyboard navigation works: Ctrl+K opens the search, and the arrows move between notes.")',
   ],
   [
     "layout",
     "The image shows the welcome, so the answer reads its layout.",
-    "The layout reads well. The logo leads, the starters sit under it, and the keys close the column.",
+    '# Read the layout of the welcome from the image\nclose("The layout reads well. The logo leads, the starters sit under it, and the keys close the column.")',
   ],
   [
     " advance on bash",
     "The command is done, so the answer says what it found.",
-    "The checks finished and all three passed, so the project is ready for the search shortcut.",
+    '# The checks passed: report what they found\nclose("The checks finished and all three passed, so the project is ready for the search shortcut.")',
   ],
 ];
-function reply(turn: string): [thinking: string, answer: string] {
+function reply(turn: string): [thinking: string, word: string] {
   const found = replies.find(([cue]) => turn.includes(cue));
   return found
     ? [found[1], found[2]]
     : [
         "The change is small, so the answer says where it is.",
-        "Done. The change is small, its checks pass, and the result is in the feed.",
+        '# The change is small and its checks pass: report it\nclose("Done. The change is small, its checks pass, and the result is in the feed.")',
       ];
 }
 
@@ -91,23 +182,29 @@ function scriptedSession(options: SessionOptions): Session {
       const pause = (milliseconds: number) =>
         new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
       const last = JSON.stringify(messages.at(-1));
-      // Only the turn that asks for live progress is slow, and not every later turn of its chain: it thinks, then
+      // Only the two turns of live progress are slow, and not every later turn of their chain: each thinks, then
       // writes its word a few words at a time, as a model streams it. FURB_DEMO_STREAM=1 makes every turn so, for a
       // recording of the demo.
-      const slow = process.env.FURB_DEMO_STREAM === "1" || last.includes("show live progress");
+      const slow =
+        process.env.FURB_DEMO_STREAM === "1" ||
+        ["show live progress", "Indexed 5 notes"].some((cue) => last.includes(cue));
       await pause(slow ? 300 : 180);
       const first = !messages.some((message) => (message as { role?: string }).role === "assistant");
-      const [thinking, answer] = first
+      const [thinking, word] = first
         ? ["I read the README and run the checks before I answer.", ""]
         : reply(last);
       // A message that asks for an answer in a fence gets one, as a model sometimes writes it, which the gate refuses,
-      // and the model answers again once it reads the refusal.
+      // and the model answers again once it reads the refusal. A thread that asks for the fix in place gets it as a
+      // model sometimes writes it: the text of the thread again, with the fence taken away.
       const fenced = !first && last.includes("an answer in a fence");
+      const inPlace = /#(thread\d+)\\n\1_markdown = '[^']*fixed in place/.exec(JSON.stringify(messages))?.[1];
       const code = fenced
-        ? '```python\nclose("Here is the answer, in a fence.")\n```'
-        : first
-          ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
-          : `close(${JSON.stringify(answer)})`;
+        ? '```python\n# Answer in a fence, as the message asks\nclose("Here is the answer, in a fence.")\n```'
+        : inPlace && last.includes("refused")
+          ? `# Fix the refused word in place, with no fence around it\nwrite(read("${inPlace}", HIDDEN).replace("\`\`\`python\\n", "").replace("\\n\`\`\`", ""))`
+          : first
+            ? explore
+            : word;
       if (slow) {
         write({ thinking });
         await pause(200);
@@ -180,6 +277,8 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   if (data.target === "library" && data.method === "source") return ENGINE;
   if (data.target === "library" && data.method === "changes")
     return session?.changes.read(Number(data.args[0]), Number(data.args[1]));
+  if (data.target === "library" && data.method === "changesOf")
+    return session?.changes.of((data.args[0] as unknown[]).map(String));
   if (data.target === "library" && data.method === "act")
     return session?.activity.acts.get(String(data.args[0]));
   if (data.target === "library" && data.method === "look") {

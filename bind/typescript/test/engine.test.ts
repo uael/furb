@@ -266,6 +266,16 @@ test.serial(
   },
 );
 
+test("a paragraph ends at a blank line before the name of an act, and never inside a quote", () => {
+  const told = paragraphs(
+    "#read1\n<s:read1_text>\n# Fieldnotes\n\n## Develop\n\n#tag</s:read1_text>\n\n#bash1\nbash1_command = 'ls'",
+  );
+  expect(told.map((one) => [one.name, plain(one.lines)])).toEqual([
+    ["read1", "# Fieldnotes\n\n## Develop\n\n#tag"],
+    ["bash1", "bash1_command = 'ls'"],
+  ]);
+});
+
 test.serial(
   "the text of a paragraph drops the two marks of each quote, and a binding reads back the string it binds",
   () => {
