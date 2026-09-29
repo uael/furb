@@ -98,10 +98,12 @@ test("a command that printed more than a row holds sends the tail and its length
       await screen.flush();
       const opened = app.scroll.getChildren().find((node) => node.id === command.id);
       if (!opened) throw new Error("No open card for the command.");
-      // The line end that closes the output ends its last row, and the card draws no empty row for it.
-      const shown = printed.replace(/\n$/, "");
-      await screen.waitFor(() => texts(opened).includes(shown), { maxPasses: 200 });
-      expect(texts(opened)).toContain(shown);
+      // The open card asks the host for the whole output, and the host answers in order, so the card has it once the
+      // same request of the test is answered. The line end that closes the output ends its last row, and the card draws
+      // no empty row for it.
+      await session.host.act(command.id);
+      await screen.flush();
+      expect(texts(opened)).toContain(printed.replace(/\n$/, ""));
     },
     { width: 120, height: 40, useMouse: true },
   ));
@@ -131,7 +133,7 @@ test("the open card of a command says its limit of time while it runs, and only 
       await session.submit(`/feed ${id} go`);
       await until(session, () => session.acts.some((act) => act.id === id && act.done));
       await frame();
-      await screen.waitFor(() => shown().includes("\nended"), { maxPasses: 200 });
+      expect(shown()).toContain("\nended");
       expect(shown()).toContain("exit 0");
       expect(shown()).not.toContain("times out");
     },
@@ -610,6 +612,9 @@ test("a block of code in an answer stands on the surface of a block, in the colo
     await session.submit("```python\nanswer = 42\n```");
     await until(session, () => session.acts.some((act) => act.id === id && act.done));
     await session.open(id);
+    await frame();
+    // The colors of the code come once tree-sitter has read it.
+    await Promise.all(highlighting(screen.renderer.root));
     const shown = await frame();
     expect(shown).not.toContain("```");
     const [x, y] = find(screen, "answer = 42");
