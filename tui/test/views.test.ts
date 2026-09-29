@@ -551,7 +551,10 @@ test("a step of a model stands in the tone of the steps once it lands, and the a
       const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
       if (!thread) throw new Error("No thread of the operator.");
       await session.open(thread.id);
-      await frame();
+      // The step lands once the feed draws it, however long the thread takes to open, and settles after that.
+      for (let tries = 0; !(await frame()).includes("Run the checks of the project"); tries++)
+        if (tries > 200) throw new Error("The step never landed.");
+        else await Bun.sleep(20);
       await new Promise((done) => setTimeout(done, motion.settle * 2));
       await Promise.all(highlighting(screen.renderer.root));
       await frame();
