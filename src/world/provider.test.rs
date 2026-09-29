@@ -227,6 +227,37 @@ fn a_second_refusal_in_a_row_of_an_actor_on_a_chain_pauses_the_chain_before_its_
 }
 
 #[test]
+fn a_function_of_the_host_that_refuses_later_twice_in_a_row_pauses_the_chain_and_is_asked_no_more()
+{
+  let calls = Arc::new(Mutex::new(0));
+  let counted = Arc::clone(&calls);
+  let host: Hosted = Arc::new(move |_, _| {
+    *counted.lock().expect("the calls") += 1;
+    // It refuses once the life is driven again, so the ear says so of its own accord.
+    async move {
+      tokio::time::sleep(Duration::from_millis(1)).await;
+      Err("unavailable".to_owned())
+    }
+    .boxed()
+  });
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let mut engine = lived(Provider::new(yard("refused").display().to_string(), vec![model]));
+  let root = engine.root().to_owned();
+  asked(&mut engine);
+  assert!(until(&mut engine, |engine| said(engine).len() == 5), "{:?}", said(&mut engine));
+  let kinds: Vec<_> = said(&mut engine).into_iter().map(|(kind, about, _)| (kind, about)).collect();
+  let expected = [
+    ("started", "reply1"),
+    ("done", "reply1"),
+    ("started", "reply2"),
+    ("pause", root.as_str()),
+    ("done", "reply2"),
+  ];
+  assert_eq!(kinds, expected.map(|(kind, about)| (kind.to_owned(), about.to_owned())));
+  assert_eq!(*calls.lock().expect("the calls"), 2, "the paused chain asks the function no more");
+}
+
+#[test]
 fn a_turn_between_two_refusals_of_an_actor_on_a_chain_ends_their_row() {
   let failed = || vec![MockStreamEvent::Error(MockError::provider("boom"))];
   let turn = |word: &str| vec![MockStreamEvent::text(word)];

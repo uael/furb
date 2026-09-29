@@ -300,7 +300,7 @@ impl Provider {
         let a = tokio::select! {
           biased;
           a = hear(&co) => a,
-          Some(Some((id, got))) = calls.next() => {
+          Some(Some((id, got))) = co.working(calls.next()), if !calls.is_empty() => {
             let Some(reply) = replies.get(&id) else { continue };
             let got = got.map_err(|no| Fault::refused(format!("{} answered nothing: {no}", reply.actor)));
             if got.is_err() && reply.again {

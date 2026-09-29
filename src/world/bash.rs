@@ -72,7 +72,7 @@ pub fn bash() -> Box<dyn Ear> {
       let a = tokio::select! {
         biased;
         a = hear(&co) => a,
-        Some(one) = said.next() => {
+        Some(one) = co.working(said.next()), if !running.is_empty() => {
           let saying = match one {
             Said::Out { about, text, stream } if running.contains_key(&about) => {
               Fact::says("out", &about, [Object::string(text), Object::string(stream)])
@@ -85,7 +85,7 @@ pub fn bash() -> Box<dyn Ear> {
           say(&co, saying).await;
           continue;
         }
-        Some(()) = commands.next() => continue,
+        Some(()) = co.working(commands.next()), if !commands.is_empty() => continue,
       };
       let about = a.about().to_owned();
       match a.kind() {

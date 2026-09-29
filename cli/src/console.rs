@@ -75,7 +75,7 @@ pub fn terminal() -> Box<dyn Ear> {
             shown = shown.filter(|one| one.about != a.about());
           }
         }
-        line = lines.next_line(), if shown.is_some() => {
+        line = co.working(lines.next_line()), if shown.is_some() => {
           let Some(Asked { about, shape, .. }) = shown.take() else { continue };
           let value = match line {
             Ok(Some(line)) => answered(&shape, line.trim_end_matches('\r')),

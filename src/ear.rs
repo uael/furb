@@ -20,7 +20,7 @@ use std::{
   cell::{Cell, RefCell},
   collections::VecDeque,
   future::{Future, poll_fn},
-  pin::Pin,
+  pin::{Pin, pin},
   ptr::NonNull,
   rc::Rc,
   sync::OnceLock,
@@ -101,34 +101,87 @@ pub enum Spoken {
   Verb(Call),
 }
 
-/// What a coroutine of rust and its body share: the facts it heard and has not taken, and what it yields.
+/// What a coroutine of rust and its body share: the facts it heard and has not taken, what it yields, whether it
+/// hears a fact now, and whether it held its work back while it heard.
 #[derive(Default)]
 struct Mailbox {
   heard: VecDeque<Fact>,
   spoken: Option<Spoken>,
+  hearing: bool,
+  held: bool,
 }
 
 /// What the body of an ear of rust hears and says through.
 #[derive(Clone, Default)]
 pub struct Co(Rc<RefCell<Mailbox>>);
 
+impl Co {
+  /// The work of the ear, which goes on only while the ear hears nothing. An ear says what its work came to only
+  /// when the life is driven, and never in answer to a fact it hears, so what the work says lands in the log after
+  /// what the life was doing. The work is polled each time the ear is polled while it hears nothing, and whoever
+  /// drives the life is woken once the ear heard, so a work it held back goes on.
+  pub async fn working<F: Future>(&self, work: F) -> F::Output {
+    let mut work = pin!(work);
+    poll_fn(|cx| {
+      let mut mailbox = self.0.borrow_mut();
+      if mailbox.hearing {
+        mailbox.held = true;
+        return Poll::Pending;
+      }
+      drop(mailbox);
+      work.as_mut().poll(cx)
+    })
+    .await
+  }
+}
+
 type Body = Pin<Box<dyn Future<Output = Result<(), Fault>>>>;
 
-/// An ear of rust: its body, polled when it hears and when the life is driven, and how it ended, which the next
-/// resume gives.
+/// An ear of rust: its body, polled when it hears and when the life is driven, how it ended, which the next resume
+/// gives, and whether it said something of its own accord, whose fact it has yet to hear.
 struct Coroutine {
   co: Co,
   body: Option<Body>,
   ended: Option<Step>,
+  echoed: bool,
 }
 
 impl Ear for Coroutine {
   fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
     if let Heard::Fact(fact) = heard {
-      self.co.0.borrow_mut().heard.push_back(fact);
+      let mut mailbox = self.co.0.borrow_mut();
+      // The bus hands back the fact of a saying the ear said of its own accord as the next fact the ear hears, which
+      // is what that saying gives; and the ear hears that fact in the log too, as it hears every fact it says.
+      if std::mem::take(&mut self.echoed) {
+        mailbox.heard.push_back(fact.clone());
+      }
+      mailbox.heard.push_back(fact);
     }
+    self.co.0.borrow_mut().hearing = true;
+    let step = self.heard(cx);
+    let held = {
+      let mut mailbox = self.co.0.borrow_mut();
+      mailbox.hearing = false;
+      std::mem::take(&mut mailbox.held)
+    };
+    if held {
+      cx.waker().wake_by_ref();
+    }
+    step
+  }
+
+  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
+    let spoken = self.stepped(cx);
+    self.echoed = matches!(spoken, Poll::Ready(Spoken::Saying(_)));
+    spoken
+  }
+}
+
+impl Coroutine {
+  /// What the ear does with what it heard: what it says, each verb it tells said at once, until it waits.
+  fn heard(&mut self, cx: &mut Context<'_>) -> Step {
     loop {
-      match self.poll(cx) {
+      match self.stepped(cx) {
         Poll::Ready(Spoken::Saying(saying)) => return Step::Say(saying),
         // A verb told while the ear hears is said at once, by the life that hears it.
         Poll::Ready(Spoken::Verb(Call { verb, args, kwargs })) => {
@@ -148,7 +201,8 @@ impl Ear for Coroutine {
     }
   }
 
-  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
+  /// What the body yields when it is polled once, and how it ended when it ended.
+  fn stepped(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
     let Some(body) = self.body.as_mut() else { return Poll::Pending };
     if let Poll::Ready(done) = body.as_mut().poll(cx) {
       self.body = None;
@@ -166,7 +220,7 @@ where
   F: Future<Output = Result<(), Fault>> + 'static,
 {
   let co = Co::default();
-  Box::new(Coroutine { body: Some(Box::pin(body(co.clone()))), co, ended: None })
+  Box::new(Coroutine { body: Some(Box::pin(body(co.clone()))), co, ended: None, echoed: false })
 }
 
 /// The next fact the ear hears, which is `a = yield` of python. It takes no fact until it gives one, so a select

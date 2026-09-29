@@ -31,7 +31,7 @@ pub fn time() -> Box<dyn Ear> {
       let a = tokio::select! {
         biased;
         a = hear(&co) => a,
-        Some(Some(id)) = waits.next() => {
+        Some(Some(id)) = co.working(waits.next()), if !waits.is_empty() => {
           stops.remove(&id);
           say(&co, Fact::says("done", &id, [Object::none()])).await;
           continue;

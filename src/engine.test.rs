@@ -507,7 +507,7 @@ fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
             works.push(opens.map(|_| (about, on)).boxed_local());
           }
         }
-        Some((about, on)) = works.next() => {
+        Some((about, on)) = co.working(works.next()), if !works.is_empty() => {
           tell(&co, "pause", vec![Object::string(on)], vec![]).await;
           say(&co, Fact::says("due", &about, [Object::float(1.0)])).await;
           say(&co, done(&about, Object::none())).await;
@@ -558,4 +558,44 @@ fn what_the_ears_say_of_their_own_accord_in_one_drive_is_one_feed_of_the_sandbox
   engine.pump(Waker::noop()).unwrap();
   assert_eq!(engine.sand.fed() - before, 1, "one drive of three things said is one feed");
   assert_eq!(*told.borrow(), ["None"], "whoever watches the wait is told in that feed");
+}
+
+/// An ear that takes each wait and ends it by a work that is ready at once, which says the wait done.
+fn quick() -> Box<dyn Ear> {
+  ear(move |co| async move {
+    let mut works: FuturesUnordered<LocalBoxFuture<'static, String>> = FuturesUnordered::new();
+    loop {
+      tokio::select! {
+        biased;
+        a = hear(&co) => {
+          if a.kind() == "wait" && a.question() {
+            say(&co, Fact::says("started", a.about(), [])).await;
+            works.push(std::future::ready(a.about().to_owned()).boxed_local());
+          }
+        }
+        Some(about) = co.working(works.next()), if !works.is_empty() => {
+          say(&co, done(&about, Object::none())).await;
+        }
+      }
+    }
+  })
+}
+
+#[test]
+fn what_the_work_of_an_ear_came_to_lands_after_the_run_that_began_it() {
+  let at = std::env::temp_dir().join("furb-engine-landed");
+  let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("quick", quick())];
+  let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
+  let root = engine.root().to_owned();
+  let word = Some("w = wait(9)".to_owned());
+  engine.rung(verbs::Rung { word, on: on(&root), ..Default::default() }).unwrap();
+  block_on(Act::<Object>::of(&mut engine, "wait1")).unwrap();
+  let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let at = |kind: &str, about: &str| {
+    facts.iter().position(|one| one.kind() == kind && one.about() == about).expect("the fact")
+  };
+  let (asked, done) = (at("wait", "wait1"), at("done", "wait1"));
+  let ran =
+    facts[asked..done].iter().any(|one| one.kind() == "done" && one.about().starts_with("run"));
+  assert!(ran, "the run that said the wait was over before its done came");
 }
