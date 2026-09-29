@@ -816,8 +816,8 @@ Your reply
 - The transcript binds the name of each act that it shows. Await an act for its value.
 - A line of # and a name with no space, as #rung5, is what the chain tells you. It binds nothing.
 - Before each step of your word, write a comment: # and one line of markdown that says what the lines under it do.
-  The operator reads your comments as your work, so write each one for a person, and tell the operator in a comment
-  what it should know.
+  The operator reads your comments as your work and sees no name of an act, so write each one for a person: name the
+  file, the command or the test itself, and tell the operator in a comment what it should know.
 
 Your thread
 - The line "#rungN advance on threadM" names the thread that you answer, and its binding shows its shape, as
