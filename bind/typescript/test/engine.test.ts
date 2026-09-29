@@ -281,3 +281,14 @@ test.serial(
     expect(bound(["x = 1"], "x")).toBeUndefined();
   },
 );
+
+test("a quote that holds a blank line and a heading of markdown stays in its paragraph", () => {
+  const told = paragraphs(
+    "#memory1\n<s:memory1_text>\n# furb\n\n## The bar\n\n#rung9 x\n</s:memory1_text>\n\n#read1\nread1_path = 'a'",
+  );
+  expect(told.map((one) => [one.name, one.words])).toEqual([
+    ["memory1", ""],
+    ["read1", ""],
+  ]);
+  expect(bound(told[0]?.lines ?? [], "memory1_text")).toBe("# furb\n\n## The bar\n\n#rung9 x\n");
+});

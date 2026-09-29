@@ -514,8 +514,26 @@ def acts(log: Sequence[tuple]) -> dict[str, tuple]:
 
 def paragraphs(got: Sequence[tuple]) -> list[str]:
   """Every paragraph the user turns of a fold hold, in order: what one fact that tells stands as. A blank line that a
-  header follows is where one paragraph ends, since a word its caller wrote may hold a blank line of its own."""
-  return [one for role, py, _, _ in got if role == "user" and py for one in re.split(r"\n\n(?=#\S)", py)]
+  header follows is where one paragraph ends, since a word its caller wrote may hold a blank line of its own. A quote
+  holds no header: its text may hold a blank line and a line that starts with #, as a heading of markdown does. The
+  close mark of a quote is the first line after its open mark that ends with it, as the engine reads one."""
+  found: list[str] = []
+  for role, py, _, _ in got:
+    if role != "user" or not py:
+      continue
+    lines: list[str] = []
+    closing = ""
+    for line in py.split("\n"):
+      if not closing and lines and lines[-1] == "" and re.match(r"#\S", line):
+        found.append("\n".join(lines[:-1]))
+        lines = []
+      lines.append(line)
+      if closing:
+        closing = "" if line.endswith(closing) else closing
+      elif opened := re.fullmatch(r"<s:(\w+)>", line):
+        closing = f"</s:{opened[1]}>"
+    found.append("\n".join(lines))
+  return found
 
 
 def heads(got: Sequence[tuple]) -> list[str]:
