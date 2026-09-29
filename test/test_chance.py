@@ -28,7 +28,7 @@ async def test_a_number_the_world_draws_at_least_zero_and_under_one() -> None:
 async def test_chance_is_a_question_the_world_answers_and_the_journal_keeps_what_it_answered() -> None:
   """chance is a question the World answers, and the journal keeps what it answered, as it keeps every answer of the World."""
   sand, _, root = born("close(chance())")
-  assert await engine.prompt(float, "draw", on=root) == 1 / 7
+  assert await engine.thread(float, "draw", on=root) == 1 / 7
   await settle()
   drawn = [e[0] for e in sand.record if e[0][0] == "chance"]
   assert [a[3] for a in drawn] == [root] and (("done", drawn[0][1], "world", 1 / 7),) in sand.record

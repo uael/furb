@@ -13,7 +13,7 @@ async def test_who_is_speaking_is_the_site_which_every_fact_is_said_from() -> No
   sand, log, root = born()
   assert engine.site.get() == OPERATOR
   sand.script[root] = ["here = site.get()\nread('a.txt')\nclose(here)"]
-  step = await engine.prompt(str, "who speaks", on=root)
+  step = await engine.thread(str, "who speaks", on=root)
   assert step == said(log, "rung")[0][1]
   assert said(log, "read")[0][2] == step
   assert [a[2] for a in said(log, "done") if a[1] == "reply1"] == [WORLD]

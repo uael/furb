@@ -26,7 +26,7 @@ async def test_the_world_stands_a_life_on_the_provider_of_the_crate_and_its_mode
   live = world(yard, watched(seen, ["close(3)"]))
   live.actor = "opus/xhigh"
   root = life(live)
-  assert await engine.prompt(int, "count", on=root) == 3
+  assert await engine.thread(int, "count", on=root) == 3
   roster, directory, actor = engine.standing()
   assert [name for name, _, _ in roster] == ["claude-cli:opus", OPERATOR]
   assert (directory, actor) == (str(yard), "claude-cli:opus/xhigh")
@@ -34,7 +34,7 @@ async def test_the_world_stands_a_life_on_the_provider_of_the_crate_and_its_mode
   (request,) = seen
   assert (request["actor"], request["chain"], request["settings"]["effort"]) == ("claude-cli:opus/xhigh", root, "xhigh")
   assert [message["role"] for message in request["messages"]] == ["user"]
-  opened = "\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act[int] = Act('prompt1')\n\n"
+  opened = "\n\n#thread1\nthread1_markdown = 'count'\nthread1: Act[int] = Act('thread1')\n\n"
   assert opened in request["messages"][0]["content"][0]["text"]
 
 
@@ -45,7 +45,7 @@ async def test_the_world_hands_the_provider_a_stream_that_hears_what_a_model_wri
   live = world(yard, faltering(["close(3)"]))
   live.stream = lambda *said: heard.append(said)
   root = life(live)
-  assert await engine.prompt(int, "count", on=root) == 3
+  assert await engine.thread(int, "count", on=root) == 3
   assert heard == [("rung1", root, "a part", "")]
 
 
@@ -64,7 +64,7 @@ async def test_a_fault_that_stands_pauses_the_chain_and_the_world_tells_the_oper
   tells the operator on stderr why the chain went quiet."""
   live = world(yard, broken())
   root = life(live)
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   told: list[str] = []
 
   def said() -> bool:
@@ -101,7 +101,7 @@ async def test_the_answers_a_record_holds_are_the_turns_its_replies_came_to(yard
   record = yard / "record.jsonl"
   live = world(yard, faltering([None, "close(3)"]))
   root = life(live, record)
-  assert await engine.prompt(int, "count", on=root) == 3
+  assert await engine.thread(int, "count", on=root) == 3
   await settle()
   live.end()
   said = kept(record)
@@ -110,13 +110,13 @@ async def test_the_answers_a_record_holds_are_the_turns_its_replies_came_to(yard
   assert [(one[1], one[3][1]) for one in answered(said)] == [(replies[1], "close(3)")]
 
 
-async def test_two_prompts_of_the_operator_are_shown_and_answered_one_at_a_time(yard: Path) -> None:
-  """There is one terminal and one operator, so prompts of the operator are shown and answered one at a time, in
+async def test_two_threads_of_the_operator_are_shown_and_answered_one_at_a_time(yard: Path) -> None:
+  """There is one terminal and one operator, so threads of the operator are shown and answered one at a time, in
   the order they asked, and never two at once on one stream."""
   with speaking("first\nsecond\n"):
     root = life(world(yard))
-    one = engine.prompt(str, "the first", OPERATOR, on=root)
-    two = engine.prompt(str, "the second", OPERATOR, on=root)
+    one = engine.thread(str, "the first", OPERATOR, on=root)
+    two = engine.thread(str, "the second", OPERATOR, on=root)
     assert await until(lambda: engine.peek(one, ...) is not ... and engine.peek(two, ...) is not ...)
     assert (await one, await two) == ("first", "second")
 
@@ -124,29 +124,29 @@ async def test_two_prompts_of_the_operator_are_shown_and_answered_one_at_a_time(
 async def test_the_world_refuses_a_shape_the_operator_does_not_answer(yard: Path) -> None:
   """Which shapes the operator answers is the law of the World, and one it cannot put to the operator it closes."""
   root = life(world(yard))
-  got = engine.prompt(set, "a set please", OPERATOR, on=root)
+  got = engine.thread(set, "a set please", OPERATOR, on=root)
   await settle()
   assert engine.peek(got, ...) is not ...
   with pytest.raises(Refused, match="the operator answers no set"):
     await got
 
 
-async def test_the_operator_that_cannot_be_read_closes_the_prompt_with_a_refusal(yard: Path) -> None:
-  """A terminal the World cannot read is no operator, and the prompt is closed with what went wrong rather than
+async def test_the_operator_that_cannot_be_read_closes_the_thread_with_a_refusal(yard: Path) -> None:
+  """A terminal the World cannot read is no operator, and the thread is closed with what went wrong rather than
   left standing for an answer that can never come."""
   root = life(world(yard))
-  got = engine.prompt(str, "say a word", OPERATOR, on=root)
+  got = engine.thread(str, "say a word", OPERATOR, on=root)
   await settle()
   assert engine.peek(got, ...) is not ...
   with pytest.raises(Refused, match="the operator cannot be read"):
     await got
 
 
-async def test_a_line_that_is_no_value_of_the_shape_closes_the_prompt_with_a_refusal(yard: Path) -> None:
+async def test_a_line_that_is_no_value_of_the_shape_closes_the_thread_with_a_refusal(yard: Path) -> None:
   """Which shapes the operator answers is the law of the World, and a line that is none of the shape is refused."""
   with speaking("not a number\n"):
     root = life(world(yard))
-    got = engine.prompt(int, "a number please", OPERATOR, on=root)
+    got = engine.thread(int, "a number please", OPERATOR, on=root)
     assert await until(lambda: engine.peek(got, ...) is not ...)
     with pytest.raises(Refused, match="is no int"):
       await got

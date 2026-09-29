@@ -29,14 +29,14 @@ async def test_a_close_is_over_the_act_it_names_and_the_words_running_under_it()
   assert engine.peek(shut) == 21
   assert isinstance(engine.peek(step), CancelledError) and engine.peek(command, ...) is ...
   sand.script[root] = ["y = bash('slower')\nclose((await y).code)"]
-  gone = engine.prompt(int, "go again", on=root)
+  gone = engine.thread(int, "go again", on=root)
   await settle()
   theirs = said(log, "bash")[1][1]
   engine.cancel(gone)
   await settle()
   assert isinstance(engine.peek(gone), CancelledError)
   assert isinstance(engine.peek(theirs), CancelledError)
-  asking = engine.prompt(int, "no answer comes", on=root)
+  asking = engine.thread(int, "no answer comes", on=root)
   await settle()
   reply = said(log, "reply")[-1][1]
   assert engine.get(engine.get(reply)[2])[2] == asking and engine.peek(reply, ...) is ...

@@ -28,7 +28,7 @@ class ModelInfo(TypedDict):
   price: list[float] | None
 
 class ImageAttachment(TypedDict):
-  """An image a host attached: the name of its file, the uri a message names it by, its media type, and its size in
+  """An image a host attached: the name of its file, the uri a markdown names it by, its media type, and its size in
   bytes."""
 
   name: str
@@ -55,7 +55,7 @@ class ImageType(TypedDict):
   extension: str
 
 class Named(TypedDict):
-  """An image a message names: its text in the message, its name, and its uri."""
+  """An image a markdown names: its text in the markdown, its name, and its uri."""
 
   text: str
   name: str
@@ -237,7 +237,7 @@ def shapes() -> list[str]:
   """Every shape the operator answers, by its name."""
 
 def answered(shape: str, line: str) -> object:
-  """A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
+  """A line of the operator as a value of the shape a thread wants, by the rules every console of the crate reads a
   line by. It raises Refused for a line that is no value of the shape, and for a shape the operator answers not."""
 
 def models(claude: str | None = None) -> list[ModelInfo]:
@@ -250,7 +250,8 @@ def levels() -> list[str]:
   """The levels of effort, from least to most, which an actor names after its model."""
 
 def attach_image(directory: str, path: str) -> ImageAttachment:
-  """An image copied into a directory of images under the digest of its bytes, as a message attaches it."""
+  """An image copied into a directory of images under the digest of its bytes, as the markdown of a thread attaches
+  it."""
 
 def image_content(directory: str, uri: str) -> ImageContent:
   """The bytes of the image of a uri, as base64, and its media type, once the bytes have the digest the uri names."""
@@ -259,10 +260,10 @@ def image_path(directory: str, uri: str) -> ImagePath:
   """The file that holds the image of a uri, and the digest its bytes have."""
 
 def image_reference(name: str, uri: str) -> str:
-  """How a message names an image: `![name](uri)`."""
+  """How a markdown names an image: `![name](uri)`."""
 
-def image_references(message: str) -> list[Named]:
-  """Each image a message names, as its text in the message, its name, and its uri."""
+def image_references(markdown: str) -> list[Named]:
+  """Each image a markdown names, as its text in the markdown, its name, and its uri."""
 
 def image_type(data: bytes) -> ImageType:
   """The type of an image by its first bytes: its media type and its extension."""

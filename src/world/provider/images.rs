@@ -1,6 +1,7 @@
-//! The images of a turn. A host attaches an image to a message as a file of a directory of images, named by the
-//! digest of its bytes, and the message names it as a Markdown image, `![name](furb-image://<digest>.<extension>)`.
-//! The provider hands a model each image that the message of a prompt of a user turn names, as an image of rig, and
+//! The images of a turn. A host attaches an image to the markdown of a thread as a file of a directory of images,
+//! named by the digest of its bytes, and the markdown names it as a Markdown image,
+//! `![name](furb-image://<digest>.<extension>)`. The provider hands a model each image that the markdown of a thread
+//! of a user turn names, as an image of rig, and
 //! reads it once while its file stays the same.
 
 use std::{
@@ -37,7 +38,7 @@ pub struct Attached {
   pub size: u64,
 }
 
-/// An image a message names: its text in the message, its name, and its uri.
+/// An image a markdown names: its text in the markdown, its name, and its uri.
 #[cfg_attr(feature = "typescript", napi_derive::napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct Named {
@@ -108,7 +109,7 @@ pub fn read(directory: &Path, uri: &str) -> Result<(&'static str, Vec<u8>), Stri
   Ok((kind(&bytes)?.0, bytes))
 }
 
-/// How a message names an image: `![name](uri)`, with each bracket and line break of the name as `_`.
+/// How a markdown names an image: `![name](uri)`, with each bracket and line break of the name as `_`.
 pub fn reference(name: &str, uri: &str) -> String {
   let name: String = name
     .chars()
@@ -117,14 +118,14 @@ pub fn reference(name: &str, uri: &str) -> String {
   format!("![{name}]({uri})")
 }
 
-/// Each image a message names, in order.
-pub fn references(message: &str) -> Vec<Named> {
+/// Each image a markdown names, in order.
+pub fn references(markdown: &str) -> Vec<Named> {
   let mut found = Vec::new();
   let mut from = 0;
-  while let Some(at) = message[from..].find("![") {
+  while let Some(at) = markdown[from..].find("![") {
     let open = from + at;
     from = open + 2;
-    let rest = &message[from..];
+    let rest = &markdown[from..];
     let Some(close) = rest.find(']') else { break };
     let Some((uri, _)) = rest[close + 1..].strip_prefix('(').and_then(|tail| tail.split_once(')'))
     else {
@@ -135,7 +136,7 @@ pub fn references(message: &str) -> Vec<Named> {
     }
     let end = from + close + 1 + uri.len() + 2;
     let (name, uri) = (rest[..close].to_owned(), uri.to_owned());
-    found.push(Named { text: message[open..end].to_owned(), name, uri });
+    found.push(Named { text: markdown[open..end].to_owned(), name, uri });
     from = end;
   }
   found
@@ -166,8 +167,8 @@ impl Images {
     Images { directory, held: HashMap::new() }
   }
 
-  /// The images that the prompts a user turn opens name, each once, as images of rig; and none when the life has
-  /// no directory of images. A prompt tells its message in its open, and an image that anything else names is no
+  /// The images that the threads a user turn opens name, each once, as images of rig; and none when the life has
+  /// no directory of images. A thread tells its markdown in its open, and an image that anything else names is no
   /// image of the turn.
   pub(super) fn named(&mut self, python: &str) -> Result<Vec<UserContent>, String> {
     let Some(directory) = self.directory.clone() else { return Ok(Vec::new()) };
@@ -175,7 +176,7 @@ impl Images {
     for paragraph in paragraphs(python) {
       let name = paragraph.strip_prefix('#').and_then(|rest| rest.split([' ', '\n']).next());
       let name = name.unwrap_or_default();
-      let opens = crate::fact::named(name, "prompt")
+      let opens = crate::fact::named(name, "thread")
         && paragraph.lines().last().is_some_and(|last| last.starts_with(&format!("{name}: Act[")));
       if !opens {
         continue;

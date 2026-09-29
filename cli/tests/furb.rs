@@ -186,24 +186,24 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
 }
 
 #[test]
-fn a_prompt_of_the_operator_is_answered_at_the_terminal() {
+fn a_thread_of_the_operator_is_answered_at_the_terminal() {
   let yard = Yard::new("terminal");
   let output =
-    ran(yard.furb(&["prompt", "say a word", "--to", "operator", "--shape", "str"]), "a word\n");
+    ran(yard.furb(&["thread", "say a word", "--to", "operator", "--shape", "str"]), "a word\n");
   assert_eq!(String::from_utf8_lossy(&output.stdout), "'a word'\n");
   let asked = String::from_utf8_lossy(&output.stderr);
-  assert_eq!(asked, "prompt1 wants a str: say a word\n> ");
-  let nothing = ["prompt", "say nothing", "--to", "operator", "--shape", "None"];
+  assert_eq!(asked, "thread1 wants a str: say a word\n> ");
+  let nothing = ["thread", "say nothing", "--to", "operator", "--shape", "None"];
   assert_eq!(printed(yard.furb(&nothing), "\n"), "None\n");
   let said =
-    refused(yard.furb(&["prompt", "count", "--to", "operator", "--shape", "int"]), "many\n");
+    refused(yard.furb(&["thread", "count", "--to", "operator", "--shape", "int"]), "many\n");
   assert!(said.ends_with("furb: Refused: \"many\" is no int\n"), "{said}");
-  let said = refused(yard.furb(&["prompt", "count", "--to", "operator", "--shape", "int"]), "");
+  let said = refused(yard.furb(&["thread", "count", "--to", "operator", "--shape", "int"]), "");
   assert!(
     said.ends_with("furb: Refused: the operator cannot be read: the input is over\n"),
     "{said}"
   );
-  let said = refused(yard.furb(&["prompt", "a set", "--to", "operator", "--shape", "set"]), "");
+  let said = refused(yard.furb(&["thread", "a set", "--to", "operator", "--shape", "set"]), "");
   assert_eq!(
     said, "furb: Refused: the operator answers no set\n",
     "a shape outside SHAPES is not shown"
@@ -211,36 +211,36 @@ fn a_prompt_of_the_operator_is_answered_at_the_terminal() {
 }
 
 #[test]
-fn a_prompt_of_the_operator_that_names_no_shape_wants_a_str() {
+fn a_thread_of_the_operator_that_names_no_shape_wants_a_str() {
   let yard = Yard::new("no-shape");
   yard.words(&["close(None)", "close('done')"]);
-  assert_eq!(printed(yard.furb(&["prompt", "work"]), ""), "'done'\n");
+  assert_eq!(printed(yard.furb(&["thread", "work"]), ""), "'done'\n");
 }
 
 #[test]
-fn a_model_answers_a_prompt_of_any_shape() {
+fn a_model_answers_a_thread_of_any_shape() {
   let yard = Yard::new("any-shape");
   yard.words(&["close(['a', 'b'])"]);
   assert_eq!(
-    printed(yard.furb(&["prompt", "two words", "--shape", "list[str]"]), ""),
+    printed(yard.furb(&["thread", "two words", "--shape", "list[str]"]), ""),
     "['a', 'b']\n"
   );
 }
 
 #[test]
-fn the_life_of_a_prompt_offers_the_model_of_the_actor_it_names() {
+fn the_life_of_a_thread_offers_the_model_of_the_actor_it_names() {
   let yard = Yard::new("to");
   yard.words(&["close('hi')"]);
   assert_eq!(
-    printed(yard.furb(&["prompt", "hi", "--to", "sonnet/high", "--shape", "str"]), ""),
+    printed(yard.furb(&["thread", "hi", "--to", "sonnet/high", "--shape", "str"]), ""),
     "'hi'\n"
   );
 }
 
 #[test]
-fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
+fn a_thread_the_record_already_holds_is_taken_up_and_never_asked_again() {
   let yard = Yard::new("again");
-  let asked = ["prompt", "say a number", "--to", "operator", "--shape", "int"];
+  let asked = ["thread", "say a number", "--to", "operator", "--shape", "int"];
   assert_eq!(printed(yard.kept(&asked), "7\n"), "7\n");
   assert_eq!(
     printed(yard.kept(&asked), ""),
@@ -248,7 +248,7 @@ fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
     "the record answers, and the operator is asked nothing"
   );
   yard.words(&[COUNT]);
-  let counted = ["prompt", "count the lines", "--shape", "int"];
+  let counted = ["thread", "count the lines", "--shape", "int"];
   assert_eq!(printed(yard.kept(&counted), ""), "3\n");
   assert_eq!(printed(yard.kept(&counted), ""), "3\n");
   assert_eq!(yard.answered(), 1, "a later life asks no model for what its record holds");
@@ -256,25 +256,25 @@ fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
   turns.arg(yard.record());
   let said = printed(turns, "");
   assert!(said.starts_with("[user] #chain1\nchain1_label = 'root'\n"), "{said}");
-  let paragraphs = "\n\n#prompt1\nprompt1_message = 'say a number'\nprompt1: Act[int] = Act('prompt1')\n\n#prompt1 closed\nprompt1_value = 7";
+  let paragraphs = "\n\n#thread1\nthread1_markdown = 'say a number'\nthread1: Act[int] = Act('thread1')\n\n#thread1 closed\nthread1_value = 7";
   assert!(said.contains(paragraphs), "the turns of a root as a model read them: {said}");
   assert!(said.contains(&format!("\n[assistant] {COUNT}\n")), "{said}");
 }
 
 #[test]
-fn a_prompt_the_world_paused_ends_its_command_with_why_and_goes_on_when_it_is_taken_up() {
+fn a_thread_the_world_paused_ends_its_command_with_why_and_goes_on_when_it_is_taken_up() {
   let yard = Yard::new("paused");
-  let counted = ["prompt", "count the lines", "--shape", "int"];
+  let counted = ["thread", "count the lines", "--shape", "int"];
   let mut missing = yard.kept(&counted);
   missing.env("FURB_CLAUDE_BIN", yard.at.join("missing"));
   let said = refused(missing, "");
   assert!(
-    said.contains("furb: prompt1 is paused: claude-cli:opus/high answered nothing: "),
+    said.contains("furb: thread1 is paused: claude-cli:opus/high answered nothing: "),
     "{said}"
   );
   assert!(said.contains("A wake from the TUI or from `furb --mode rpc` makes it go on."), "{said}");
   yard.words(&[COUNT]);
-  assert_eq!(printed(yard.kept(&counted), ""), "3\n", "the command wakes the prompt it takes up");
+  assert_eq!(printed(yard.kept(&counted), ""), "3\n", "the command wakes the thread it takes up");
   assert_eq!(yard.answered(), 1);
 }
 
@@ -383,23 +383,23 @@ impl Drop for Client {
 }
 
 #[test]
-fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
-  let yard = Yard::new("rpc-prompt");
+fn a_thread_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
+  let yard = Yard::new("rpc-thread");
   yard.words(&[COUNT]);
   let mut client = Client::new(&yard);
-  let asked = json!({"type": "prompt", "message": "count the lines", "shape": "int"});
+  let asked = json!({"type": "thread", "markdown": "count the lines", "shape": "int"});
   let response = client.asked("1", asked);
   assert_eq!(
     response,
-    json!({"id": "1", "type": "response", "command": "prompt", "success": true, "data": {"act": "prompt1"}})
+    json!({"id": "1", "type": "response", "command": "thread", "success": true, "data": {"act": "thread1"}})
   );
-  assert_eq!(client.done("prompt1"), json!({"type": "done", "act": "prompt1", "value": 3}));
-  let fact = client.until(|one| one["type"] == "fact" && one["fact"][0] == "prompt");
+  assert_eq!(client.done("thread1"), json!({"type": "done", "act": "thread1", "value": 3}));
+  let fact = client.until(|one| one["type"] == "fact" && one["fact"][0] == "thread");
   assert_eq!(
     fact["fact"],
-    json!(["prompt", "prompt1", "operator", "chain1", "int", "count the lines", ""])
+    json!(["thread", "thread1", "operator", "chain1", "int", "count the lines", ""])
   );
-  let peeked = client.data("2", json!({"type": "peek", "act": "prompt1"}));
+  let peeked = client.data("2", json!({"type": "peek", "act": "thread1"}));
   assert_eq!(peeked, json!({"done": true, "value": 3}));
   let turns = client.data("3", json!({"type": "turns"}));
   let turns = turns["turns"].as_array().expect("the turns");
@@ -411,73 +411,73 @@ fn a_prompt_of_the_client_is_answered_by_a_model_and_its_done_is_sent() {
 }
 
 #[test]
-fn a_prompt_of_the_client_with_no_shape_wants_a_str() {
+fn a_thread_of_the_client_with_no_shape_wants_a_str() {
   let yard = Yard::new("rpc-no-shape");
   yard.words(&["close('done')"]);
   let mut client = Client::new(&yard);
-  client.data("1", json!({"type": "prompt", "message": "work", "shape": ""}));
-  let fact = client.until(|one| one["type"] == "fact" && one["fact"][0] == "prompt");
-  assert_eq!(fact["fact"], json!(["prompt", "prompt1", "operator", "chain1", "str", "work", ""]));
-  assert_eq!(client.done("prompt1"), json!({"type": "done", "act": "prompt1", "value": "done"}));
-  let more = client.data("2", json!({"type": "prompt", "message": "more"}))["act"].clone();
+  client.data("1", json!({"type": "thread", "markdown": "work", "shape": ""}));
+  let fact = client.until(|one| one["type"] == "fact" && one["fact"][0] == "thread");
+  assert_eq!(fact["fact"], json!(["thread", "thread1", "operator", "chain1", "str", "work", ""]));
+  assert_eq!(client.done("thread1"), json!({"type": "done", "act": "thread1", "value": "done"}));
+  let more = client.data("2", json!({"type": "thread", "markdown": "more"}))["act"].clone();
   let fact = client.until(|one| one["type"] == "fact" && one["fact"][1] == more);
-  assert_eq!(fact["fact"][4], "str", "a prompt that says no shape wants a str");
+  assert_eq!(fact["fact"][4], "str", "a thread that says no shape wants a str");
 }
 
 #[test]
-fn a_prompt_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
+fn a_thread_to_the_operator_is_sent_and_the_close_of_the_client_answers_it() {
   let yard = Yard::new("rpc-operator");
-  yard.words(&["close(await prompt(int, 'how many?', 'operator'))"]);
+  yard.words(&["close(await thread(int, 'how many?', 'operator'))"]);
   let mut client = Client::new(&yard);
-  client.data("1", json!({"type": "prompt", "message": "ask me", "shape": "int"}));
-  let asked = client.until(|one| one["type"] == "prompt");
-  let prompt = json!({"type": "prompt", "act": "prompt2", "on": "chain1", "shape": "int", "message": "how many?"});
-  assert_eq!(asked, prompt);
+  client.data("1", json!({"type": "thread", "markdown": "ask me", "shape": "int"}));
+  let asked = client.until(|one| one["type"] == "thread");
+  let thread = json!({"type": "thread", "act": "thread2", "on": "chain1", "shape": "int", "markdown": "how many?"});
+  assert_eq!(asked, thread);
   let state = client.data("2", json!({"type": "state"}));
   assert_eq!(
-    state["prompts"],
-    json!([{"act": "prompt2", "on": "chain1", "shape": "int", "message": "how many?"}])
+    state["threads"],
+    json!([{"act": "thread2", "on": "chain1", "shape": "int", "markdown": "how many?"}])
   );
   assert_eq!(
     (&state["root"], &state["paused"], &state["acts"]),
-    (&json!("chain1"), &json!(false), &json!(["prompt1"]))
+    (&json!("chain1"), &json!(false), &json!(["thread1"]))
   );
   assert_eq!(state["standing"][2], "claude-cli:opus/high");
-  let wrong = client.asked("3", json!({"type": "close", "act": "prompt2", "value": "seven"}));
+  let wrong = client.asked("3", json!({"type": "close", "act": "thread2", "value": "seven"}));
   assert_eq!(wrong["success"], false, "a close of the wrong shape is refused: {wrong}");
-  client.data("4", json!({"type": "close", "act": "prompt2", "value": 7}));
-  assert_eq!(client.done("prompt1")["value"], 7);
-  assert_eq!(client.data("5", json!({"type": "state"}))["prompts"], json!([]));
-  let float = json!({"type": "prompt", "message": "a float", "shape": "float", "to": "operator"});
+  client.data("4", json!({"type": "close", "act": "thread2", "value": 7}));
+  assert_eq!(client.done("thread1")["value"], 7);
+  assert_eq!(client.data("5", json!({"type": "state"}))["threads"], json!([]));
+  let float = json!({"type": "thread", "markdown": "a float", "shape": "float", "to": "operator"});
   let float = client.data("6", float)["act"].as_str().expect("the act").to_owned();
-  client.until(|one| one["type"] == "prompt" && one["act"] == float);
+  client.until(|one| one["type"] == "thread" && one["act"] == float);
   client.data("7", json!({"type": "close", "act": float, "value": 2}));
   let done = client.done(&float);
   assert!(
     done["value"].is_f64() && done["value"] == 2.0,
-    "a whole number closes a prompt of a float: {done}"
+    "a whole number closes a thread of a float: {done}"
   );
-  let never = json!({"type": "prompt", "message": "never", "shape": "str", "to": "operator"});
+  let never = json!({"type": "thread", "markdown": "never", "shape": "str", "to": "operator"});
   let never = client.data("8", never)["act"].as_str().expect("the act").to_owned();
   client.data("9", json!({"type": "cancel", "act": never}));
   let raised =
     json!({"type": "done", "act": never, "raised": {"is": "CancelledError", "args": []}});
   assert_eq!(client.done(&never), raised);
-  let no = json!({"type": "prompt", "message": "no", "shape": "str", "to": "operator"});
+  let no = json!({"type": "thread", "markdown": "no", "shape": "str", "to": "operator"});
   let no = client.data("10", no)["act"].as_str().expect("the act").to_owned();
   let refusal = json!({"is": "Refused", "args": ["no"]});
   client.data("11", json!({"type": "close", "act": no, "value": refusal}));
   assert_eq!(
     client.done(&no)["raised"],
     refusal,
-    "an exception closes a prompt with that exception"
+    "an exception closes a thread with that exception"
   );
-  let set = json!({"type": "prompt", "message": "a set", "shape": "set", "to": "operator"});
+  let set = json!({"type": "thread", "markdown": "a set", "shape": "set", "to": "operator"});
   let set = client.data("12", set)["act"].as_str().expect("the act").to_owned();
   let raised = json!({"is": "Refused", "args": ["the operator answers no set"]});
   assert_eq!(client.done(&set)["raised"], raised, "a shape outside SHAPES is refused at once");
-  let sent = client.held.iter().any(|one| one["type"] == "prompt" && one["act"] == set);
-  assert!(!sent, "a prompt the operator answers not is sent not");
+  let sent = client.held.iter().any(|one| one["type"] == "thread" && one["act"] == set);
+  assert!(!sent, "a thread the operator answers not is sent not");
 }
 
 #[test]
@@ -501,9 +501,9 @@ fn a_life_offers_the_model_of_its_default_actor_and_the_models_it_names_and_no_m
   let (roster, actor) = names(&mut client);
   assert_eq!(roster, ["claude-cli:sonnet", "claude-cli:haiku", "operator"]);
   assert_eq!(actor, "claude-cli:sonnet/high");
-  let refused = client.data("2", json!({"type": "prompt", "to": "opus"}));
-  let prompt = refused["act"].as_str().expect("the act").to_owned();
-  assert_eq!(client.done(&prompt)["raised"]["is"], "Refused", "the roster holds no opus");
+  let refused = client.data("2", json!({"type": "thread", "to": "opus"}));
+  let thread = refused["act"].as_str().expect("the act").to_owned();
+  assert_eq!(client.done(&thread)["raised"]["is"], "Refused", "the roster holds no opus");
 }
 
 #[test]
@@ -523,14 +523,14 @@ fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake(
     (&state["paused"], &state["extensions"]),
     (&json!(true), &json!(["memory", "skills"]))
   );
-  client.data("4", json!({"type": "prompt", "message": "one", "shape": "int"}));
+  client.data("4", json!({"type": "thread", "markdown": "one", "shape": "int"}));
   assert!(
     client.quiet(|one| one["type"] == "done", Duration::from_secs(1)),
     "a paused chain asks no model"
   );
   assert_eq!(yard.answered(), 0);
   client.data("5", json!({"type": "wake", "act": "chain1"}));
-  assert_eq!(client.done("prompt1")["value"], 1);
+  assert_eq!(client.done("thread1")["value"], 1);
   assert_eq!(client.data("6", json!({"type": "state"}))["paused"], false);
 }
 
@@ -556,12 +556,12 @@ fn the_life_ends_with_stdin_and_a_later_life_resumes_its_record() {
   let yard = Yard::new("rpc-later");
   yard.words(&[COUNT]);
   let mut client = Client::new(&yard);
-  client.data("1", json!({"type": "prompt", "message": "count the lines", "shape": "int"}));
-  client.done("prompt1");
+  client.data("1", json!({"type": "thread", "markdown": "count the lines", "shape": "int"}));
+  client.done("thread1");
   assert!(client.ended(), "furb ends well when its stdin ends");
   let mut later = Client::new(&yard);
   assert_eq!(
-    later.data("1", json!({"type": "peek", "act": "prompt1"})),
+    later.data("1", json!({"type": "peek", "act": "thread1"})),
     json!({"done": true, "value": 3})
   );
   let record = later.data("2", json!({"type": "state"}))["record"].clone();

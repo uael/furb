@@ -12,7 +12,7 @@ function queueEvent(fact: Fact): { step: string; key: string; value: unknown } |
   return undefined;
 }
 
-/** Begin and prompt are synchronous calls in one worker message. A following sent fact confirms the ID. */
+/** Begin and thread are synchronous calls in one worker message. A following sent fact confirms the ID. */
 export function queueDispatches(entries: readonly Entry[]): Map<string, string> {
   const sent = new Map<string, string>();
   for (const [index, entry] of entries.entries()) {
@@ -22,7 +22,7 @@ export function queueDispatches(entries: readonly Entry[]): Map<string, string> 
     if (event?.step === "begin") {
       const next = entries[index + 1]?.[0];
       if (
-        next?.[0] === "prompt" &&
+        next?.[0] === "thread" &&
         next[2] === "operator" &&
         event.value === queueHash(String(next[3]), String(next[4]), String(next[5]), String(next[6]))
       )

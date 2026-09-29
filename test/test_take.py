@@ -6,14 +6,14 @@ from furb.engine import take
 
 
 async def twice() -> tuple[str, str, str, str, str]:
-  """A life of two prompts, each with a rung of its own: the chain, both prompts and both rungs."""
+  """A life of two threads, each with a rung of its own: the chain, both threads and both rungs."""
   _, log, root = born("a = 1\nclose(1)", "b = 2\nclose(2)")
-  first = engine.prompt(int, "first", on=root)
+  first = engine.thread(int, "first", on=root)
   assert await first == 1
-  second = engine.prompt(int, "second", on=root)
+  second = engine.thread(int, "second", on=root)
   assert await second == 2
   await settle()
-  (one,), (two,) = [[a[1] for a in said(log, "rung") if a[2] == prompt] for prompt in (first, second)]
+  (one,), (two,) = [[a[1] for a in said(log, "rung") if a[2] == thread] for thread in (first, second)]
   return root, first, second, one, two
 
 
@@ -39,17 +39,19 @@ async def test_take_is_given_ids_and_keeps_the_acts_with_those_ids() -> None:
 async def test_take_keeps_everything_that_the_acts_with_those_ids_caused() -> None:
   """take keeps everything that the acts with those ids caused."""
   _, log, root = born("x = bash('echo hi')\nclose(1)", "close(None)")
-  first = engine.prompt(int, "first", on=root)
+  first = engine.thread(int, "first", on=root)
   assert await first == 1
   await settle()
   _, step, *_ = said(log, "rung")[0]
   _, command, *_ = said(log, "bash")[0]
   held = engine.transcript(root)
   made: list[tuple] = [a for a in held if engine.question(a)]
-  assert [a[1] for a in take(first)(made)] == [first, step, "reply1", command]
+  (ack,) = [a[1] for a in said(log, "rung") if a[2] == command]
+  # The acknowledgment of the command is made as the command, which the first thread caused, so take keeps it too.
+  assert [a[1] for a in take(first)(made)] == [first, step, "reply1", command, ack, "reply2"]
   kept = engine.chain("kept", source=root, filter=take(first))
   await settle(300)
-  assert named(engine.turns(on=kept)) == [root, root, first, step, command, first, command, kept]
+  assert named(engine.turns(on=kept)) == [root, root, first, step, command, first, command, ack, ack, kept]
 
 
 async def test_take_that_is_not_inside_keeps_every_other_act() -> None:

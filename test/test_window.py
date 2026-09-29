@@ -16,7 +16,7 @@ async def test_window_is_the_window_in_tokens_of_a_model_whose_roster_entry_does
   ceiling = engine.grant(share=0.9, on=root)
   await settle()
   sand.script[root] = ["close(1)"]
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#grant1 ledger")] == [
     "#grant1 ledger\ngrant1_spent = 0.0\ngrant1_filled = 0.5"
   ]

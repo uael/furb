@@ -19,13 +19,13 @@ async def test_the_open_of_an_act_tells_the_id_and_what_the_act_says_of_itself()
 async def test_a_closed_paragraph_binds_what_the_act_came_to_under_the_word_value() -> None:
   """A closed paragraph binds what the act came to under the word value."""
   _, _, root = born()
-  act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
+  act = engine.thread(int, "how many?", to=OPERATOR, on=root)
   engine.close(21, act)
   assert await act == 21
-  other = engine.prompt(str, "which?", to=OPERATOR, on=root)
+  other = engine.thread(str, "which?", to=OPERATOR, on=root)
   engine.close("k", other)
   assert await other == "k"
-  lines = engine.prompt(str, "which lines?", to=OPERATOR, on=root)
+  lines = engine.thread(str, "which lines?", to=OPERATOR, on=root)
   engine.close("one\ntwo", lines)
   assert await lines == "one\ntwo"
   step = engine.rung("k = 1\nclose(5)", on=root)

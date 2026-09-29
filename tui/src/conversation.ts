@@ -5,14 +5,14 @@ import { type ActRow, failed } from "./session.ts";
  *
  * - `python`: a word, which an assistant turn holds, or which the open of a rung its caller wrote binds as rungN_word,
  *   with the rung it is the word of.
- * - `prompt`: the open of a prompt, which tells its message.
- * - `result`: the close of a prompt, and whether other prompts closed in the same turn.
+ * - `thread`: the open of a thread, which tells its markdown.
+ * - `result`: the close of a thread, and whether other threads closed in the same turn.
  * - `act`: the open or the end of any other act, which the conversation shows once.
  * - `note`: any other paragraph: what an act told of itself after its open, or a query of a run, by its header.
  */
 export type Item =
   | { type: "python"; key: string; code: string; rung?: ActRow }
-  | { type: "prompt"; key: string; act: ActRow }
+  | { type: "thread"; key: string; act: ActRow }
   | { type: "result"; key: string; act: ActRow; parallel: boolean }
   | { type: "act"; key: string; act: ActRow }
   | { type: "note"; key: string; label: string; detail: string; body: string; act?: ActRow };
@@ -34,7 +34,7 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
     }
     const told = paragraphs(python);
     const closes = told.filter(
-      (paragraph) => rows.get(paragraph.name)?.kind === "prompt" && paragraph.words.startsWith("closed"),
+      (paragraph) => rows.get(paragraph.name)?.kind === "thread" && paragraph.words.startsWith("closed"),
     ).length;
     for (const [part, paragraph] of told.entries()) {
       const key = `turn-${index}-${part}`;
@@ -57,8 +57,8 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
           if (failed(act) && !seen.has(act.id)) items.push({ type: "act", key: act.id, act });
           seen.add(act.id);
         } else if (!(["raised", "refused"].includes(word) && failed(act) && seen.has(act.id))) shown();
-      } else if (act?.kind === "prompt") {
-        if (opens(paragraph)) items.push({ type: "prompt", key, act });
+      } else if (act?.kind === "thread") {
+        if (opens(paragraph)) items.push({ type: "thread", key, act });
         else if (word === "closed") items.push({ type: "result", key, act, parallel: closes > 1 });
         else shown();
       } else if (act && ["chain", "grant"].includes(act.kind)) {

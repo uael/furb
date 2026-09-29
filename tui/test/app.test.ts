@@ -31,7 +31,7 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(screen.captureCharFrame()).not.toContain("Session saved");
       await seedDemo(session);
       await frame();
-      // The answer of a prompt stands under the name of the model that gave it, once its markdown is drawn.
+      // The answer of a thread stands under the name of the model that gave it, once its markdown is drawn.
       expect(screen.captureCharFrame()).toContain("● sonnet");
       for (
         let pass = 0;
@@ -210,12 +210,12 @@ test("every view shows an empty result, loading, and an error in its feed", () =
 test("operator answers and program edits act through the binding", () =>
   composing(
     async ({ session, app, screen, frame }) => {
-      const id = await session.engine.prompt("bool", {
-        message: "Continue with the change?",
+      const id = await session.engine.thread("bool", {
+        markdown: "Continue with the change?",
         to: "operator",
         on: session.engine.root,
       });
-      await until(session.host, () => session.host.prompts.has(id));
+      await until(session.host, () => session.host.threads.has(id));
       await session.refresh();
       expect(await frame()).toContain("Continue with the change?");
       await session.submit("yes");
@@ -303,7 +303,7 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
       await idle(session);
       const original = await transcriptOf(session.engine, source);
       record = session.host.record;
-      const message = session.activity.findLast((act) => session.isUserPrompt(act));
+      const message = session.activity.findLast((act) => session.isUserThread(act));
       app.rewind();
       await screen.flush();
       // The tree opens in the feed with the pointer on the last message, which Enter gives back on a new branch.
@@ -406,11 +406,11 @@ test("a delayed snapshot cannot restore the chain selected before a switch", () 
     expect(session.label).toBe("next");
   }));
 
-test("editing a prompt program is a durable operator rung", async () => {
+test("editing a thread program is a durable operator rung", async () => {
   const first = await demoSession({ seed: true });
-  const prompt = first.activity.find((act) => act.kind === "prompt" && act.by === "operator");
-  if (!prompt) throw new Error("No prompt in the fixture.");
-  await first.command(`/edit ${prompt.id}`);
+  const thread = first.activity.find((act) => act.kind === "thread" && act.by === "operator");
+  if (!thread) throw new Error("No thread in the fixture.");
+  await first.command(`/edit ${thread.id}`);
   await first.submit('saved_edit = 42\nclose("edited")');
   expect((await first.engine.inspect("saved_edit")).value).toBe(42);
   const record = first.host.record;
@@ -467,7 +467,7 @@ test("slash commands and project files are suggested above the input as they are
       screen.mockInput.pressEnter();
       expect(app.composer.plainText).toBe("Read @README.md ");
       expect(
-        session.acts.some((act) => act.kind === "prompt" && String(act.words[1]).startsWith("Read")),
+        session.acts.some((act) => act.kind === "thread" && String(act.words[1]).startsWith("Read")),
       ).toBe(false);
     },
     // In the kitty protocol an Escape is a key of its own, which the parser need not wait on to tell from Alt.

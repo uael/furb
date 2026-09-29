@@ -86,7 +86,7 @@ test("Alt+Enter queues a message, and leaves Python input and a program under ed
       screen.mockInput.pressEnter({ meta: true });
       expect(app.composer.plainText).toBe("");
       await until(session, () =>
-        session.acts.some((act) => act.kind === "prompt" && act.words[1] === "a follow-up"),
+        session.acts.some((act) => act.kind === "thread" && act.words[1] === "a follow-up"),
       );
     },
     { width: 120, height: 44, kittyKeyboard: true },
@@ -98,7 +98,7 @@ test("a command that the text names whole comes first among its suggestions", ()
     async ({ session, app, screen, frame }) => {
       await screen.mockInput.typeText("/edit");
       const rows = (await frame()).split("\n").filter((line) => /\/edit/.test(line) && !line.includes("│"));
-      expect(rows[0]).toContain("/edit [prompt id]");
+      expect(rows[0]).toContain("/edit [thread id]");
       expect(rows[1]).toContain("/editor");
       screen.mockInput.pressTab();
       expect(app.composer.plainText).toBe("/edit ");
@@ -113,7 +113,7 @@ test("a command that the text names whole comes first among its suggestions", ()
     true,
   ));
 
-test("the shape picker marks the shape of the next prompt and runs /shape, and /edit and its picker offer each prompt with a program", () =>
+test("the shape picker marks the shape of the next thread and runs /shape, and /edit and its picker offer each thread with a program", () =>
   composing(
     async ({ session, app, screen, frame }) => {
       app.shapes();
@@ -124,27 +124,28 @@ test("the shape picker marks the shape of the next prompt and runs /shape, and /
       screen.mockInput.pressEnter();
       await until(session, () => session.shape === "int");
       await idle(session);
-      // The prompt of the operator, a prompt that a rung made, and the prompt of the chain that tells it done each hold
-      // a program once the model answers it.
-      await session.command('/run prompt("str", message="Summarize the notes.")');
-      await until(session, () => session.activity.some((act) => act.id === "prompt3"));
+      // The thread of the operator and a thread that a rung made each hold a program once the model answers it, and the
+      // acknowledgment that the chain makes as the second thread, once it is done, is a rung under it.
+      await session.command('/run thread("str", markdown="Summarize the notes.")');
+      await until(session, () =>
+        session.activity.some((act) => act.kind === "rung" && act.by === "thread2" && act.done),
+      );
       await idle(session);
       app.ladders();
       shown = await frame();
-      expect(shown).toContain("Edit a prompt program");
-      expect(shown).toContain("✓ prompt1  Explore this project");
-      expect(shown).toContain("✓ prompt2  Summarize the notes.");
-      expect(shown).toContain("❯ ✓ prompt3  prompt2 done");
+      expect(shown).toContain("Edit a thread program");
+      expect(shown).toContain("✓ thread1  Explore this project");
+      expect(shown).toContain("❯ ✓ thread2  Summarize the notes.");
       app.closeOverlay();
       await screen.mockInput.typeText("/edit ");
       shown = await frame();
-      expect(shown).toContain("❯ prompt1  Explore this project");
-      expect(shown).toContain("prompt2  Summarize the notes.");
-      expect(shown).toContain("prompt3  prompt2 done");
+      expect(shown).toContain("❯ thread1  Explore this project");
+      expect(shown).toContain("thread2  Summarize the notes.");
+      expect(shown).not.toContain("thread3");
       app.composer.setText("/edit");
       await app.submit();
       await until(session, () => session.editing !== undefined);
-      expect(session.editing).toBe("prompt3");
+      expect(session.editing).toBe("thread2");
     },
     undefined,
     true,
@@ -153,9 +154,9 @@ test("the shape picker marks the shape of the next prompt and runs /shape, and /
 test("a sent text leaves its draft at once, and a program under edit opens from its door the next time", () =>
   composing(
     async ({ session, app, screen, frame }) => {
-      // /edit opens the latest prompt with a program, so the demo settles first: its last prompt may still run.
+      // /edit opens the latest thread with a program, so the demo settles first: its last thread may still run.
       await idle(session);
-      const prompt = session.draftKey;
+      const thread = session.draftKey;
       await screen.mockInput.typeText("/edit");
       await frame();
       screen.mockInput.pressEnter();
@@ -165,7 +166,7 @@ test("a sent text leaves its draft at once, and a program under edit opens from 
       await app.submit();
       expect(session.editing).toBeUndefined();
       await frame();
-      expect(session.drafts[prompt]).toBeUndefined();
+      expect(session.drafts[thread]).toBeUndefined();
       expect(session.drafts[edited]).toBeUndefined();
       expect(session.histories[edited]).toEqual(['close("edited once")']);
       app.composer.setText("/edit");
@@ -189,7 +190,7 @@ test("a sent text leaves its draft at once, and a program under edit opens from 
       await sending;
       session.submit = submit;
       expect(app.composer.plainText).toBe("the next one");
-      expect(session.histories[prompt]).toEqual(["/edit", "a question"]);
+      expect(session.histories[thread]).toEqual(["/edit", "a question"]);
       // A text that is not sent goes back to its draft.
       app.composer.setText("");
       app.composer.setText("/model nothing");
@@ -326,7 +327,7 @@ test("Escape twice opens the rewind tree in the feed, which keys move, fold, and
       expect(tree).toContain("Rewind");
       const rows = () => app.scroll.getChildren().map((node) => node.id);
       expect(rows().every((id) => id.startsWith("tree-"))).toBe(true);
-      const last = session.activity.findLast((act) => session.isUserPrompt(act));
+      const last = session.activity.findLast((act) => session.isUserThread(act));
       // The pointer starts on the last message, and Enter would give it back on a new branch.
       expect(tree).toContain("edit it on a new branch");
       const before = rows().length;
@@ -501,12 +502,12 @@ test("the footer offers the keys of the top layer that acts, and a click on one 
       const footer = async () => ((await frame()).trimEnd().split("\n").at(-1) ?? "").trim();
       await idle(session);
       expect(await footer()).toEndWith("⌃P commands   F1 help");
-      const id = await session.engine.prompt("bool", {
-        message: "Continue with the change?",
+      const id = await session.engine.thread("bool", {
+        markdown: "Continue with the change?",
         to: "operator",
         on: session.engine.root,
       });
-      await until(session.host, () => session.host.prompts.has(id));
+      await until(session.host, () => session.host.threads.has(id));
       await session.refresh();
       expect(await footer()).toEndWith("⌃P commands   ⌃A answer   F1 help");
       await click("⌃A answer");
@@ -588,7 +589,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     expect(lines.find((line) => line.includes("A second message."))).not.toContain("✓");
   }));
 
-test("a word that the gate refused and that a later word of the same prompt replaced folds, and reads as retried", () =>
+test("a word that the gate refused and that a later word of the same thread replaced folds, and reads as retried", () =>
   composing(
     async ({ session, frame }) => {
       await session.submit("Give me an answer in a fence.");

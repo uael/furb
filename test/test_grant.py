@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import COST, Sand, born, chained, fresh, heads, paragraphs, prompted, ran, said, settle
+from conftest import COST, Sand, born, chained, fresh, heads, paragraphs, ran, said, settle, threaded
 from furb import engine
 from furb.engine import OPERATOR, Act, Refused
 
@@ -10,22 +10,22 @@ GRANT = "#grant1\ngrant1_usd = 1.0\ngrant1: Act[None] = Act('grant1')"
 """The paragraph a grant of one dollar tells of its open."""
 
 
-def crossed(log: list[tuple], root: str, act: str, message: str) -> str:
+def crossed(log: list[tuple], root: str, act: str, markdown: str) -> str:
   """The text that a fresh root runs as the told rung of the answer that crossed a grant of one dollar: the
-  paragraphs of its open, of its standing, of the open of the grant and of the prompt, of the line that says what the
+  paragraphs of its open, of its standing, of the open of the grant and of the thread, of the line that says what the
   answer is for, of the ledger of that answer, and of the pause that the grant said, joined by blank lines."""
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   ledger = "#grant1 ledger\ngrant1_spent = 1.5\ngrant1_filled = 0.2"
-  return fresh(root, GRANT, prompted(act, "int", message), f"#{step} advance on {act}", ledger, f"#{root} paused")
+  return fresh(root, GRANT, threaded(act, "int", markdown), f"#{step} advance on {act}", ledger, f"#{root} paused")
 
 
-async def capped(*script: str, message: str = "count") -> tuple[Sand, list[tuple], str, Act[None], Act[int]]:
-  """A life whose root holds a grant of one dollar and prompts its model, which answers with the words of the script
+async def capped(*script: str, markdown: str = "count") -> tuple[Sand, list[tuple], str, Act[None], Act[int]]:
+  """A life whose root holds a grant of one dollar and threads its model, which answers with the words of the script
   at the cost COST, once the loop gave the first answer room to cross the grant: the World, what was said, the root,
-  the grant and the prompt."""
+  the grant and the thread."""
   sand, log, root = born(*script, cost=COST)
   ceiling = engine.grant(usd=1.0, on=root)
-  act = engine.prompt(int, message, on=root)
+  act = engine.thread(int, markdown, on=root)
   await settle()
   return sand, log, root, ceiling, act
 
@@ -35,7 +35,7 @@ async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_bot
   sand, log, root = born(cost=COST)
   engine.grant(usd=10.0, on=root)
   sand.script[root] = ["a = 1", "b = 2", "close(a + b)"]
-  assert await engine.prompt(int, "count", on=root) == 3
+  assert await engine.thread(int, "count", on=root) == 3
   await settle()
   assert len(said(log, "reply")) == 3
   final = engine.turns(on=root)
@@ -60,7 +60,7 @@ async def test_grant_on_a_chain_puts_a_ceiling_on_it_dollars_a_share_of_the_wind
   assert [(one[3], one[4], one[5]) for one in made] == [(root, 1.0, None), (two, None, 0.1), (three, 1.0, 0.1)]
   for who in (root, two, three):
     sand.script[who] = ["close(1)"]
-    engine.prompt(int, "spend", on=who)
+    engine.thread(int, "spend", on=who)
   await settle()
   assert sorted((one[1], one[2]) for one in said(log, "pause")) == [(one[3], one[1]) for one in made]
 
@@ -100,7 +100,7 @@ async def test_the_model_continues_after_a_later_grant_and_a_wake() -> None:
 
 async def test_an_answer_that_carries_the_ledger_past_the_ceiling_pauses_the_chain() -> None:
   """An answer that carries the ledger past the ceiling pauses the chain, so the word that answer brought runs and what it gave waits, and no rung of the chain asks until the wake."""
-  _, log, root, _, act = await capped("close(5)", message="spend")
+  _, log, root, _, act = await capped("close(5)", markdown="spend")
   assert ran(log) == [crossed(log, root, act, "spend"), "close(5)"] and engine.peek(act, ...) is ...
   assert len(said(log, "reply")) == 1
   engine.wake(root)
@@ -110,7 +110,7 @@ async def test_an_answer_that_carries_the_ledger_past_the_ceiling_pauses_the_cha
 
 async def test_lifting_a_ceiling_wakes_nothing() -> None:
   """Lifting a ceiling wakes nothing: the pause stands until a wake, ceiling or no ceiling."""
-  _, _, root, ceiling, act = await capped("close(5)", message="spend")
+  _, _, root, ceiling, act = await capped("close(5)", markdown="spend")
   assert engine.peek(act, ...) is ...
   engine.cancel(ceiling)
   await settle()
@@ -135,7 +135,7 @@ async def test_it_stands_until_it_is_lifted_as_the_chain_it_is_on_does() -> None
 
 
 async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one_is_no_ceiling() -> None:
-  """A grant of nothing, of a ceiling under zero, or of a share past one is no ceiling: it is done with the refusal, which whoever made it takes by awaiting it, and it tells nothing, since it never stood; a prompt to no actor of the roster is closed the same way after it has told its open."""
+  """A grant of nothing, of a ceiling under zero, or of a share past one is no ceiling: it is done with the refusal, which whoever made it takes by awaiting it, and it tells nothing, since it never stood; a thread to no actor of the roster is closed the same way after it has told its open."""
   _, log, root = born()
   none = engine.grant(on=root)
   below = engine.grant(usd=-1.0, on=root)
@@ -145,11 +145,11 @@ async def test_a_grant_of_nothing_of_a_ceiling_under_zero_or_of_a_share_past_one
   assert [type(one) for one in got] == [Refused, Refused, Refused]
   assert [str(one) for one in got] == ["None/None no ceiling", "-1.0/None no ceiling", "None/1.5 no ceiling"]
   assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing"]
-  ghost = engine.prompt(int, "hi", to="ghost", on=root)
+  ghost = engine.thread(int, "hi", to="ghost", on=root)
   await settle()
   assert isinstance(engine.peek(ghost), Refused) and said(log, "reply") == []
   assert paragraphs(engine.turns(on=root))[2:] == [
-    prompted(ghost, "int", "hi"),
+    threaded(ghost, "int", "hi"),
     f"#{ghost} closed\n{ghost}_value = Refused('ghost no actor')",
   ]
 
@@ -159,7 +159,7 @@ async def test_a_later_grant_that_stands_closes_every_grant_of_the_chain_before_
   sand, log, root = born(cost=COST)
   ceiling = engine.grant(usd=2.0, on=root)
   sand.script[root] = ["a = 1", "b = 2", "close(a + b)"]
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   await settle()
   assert engine.peek(act, ...) is ...
   top = engine.grant(usd=4.0, on=root)
@@ -197,7 +197,7 @@ async def test_a_cancel_of_it_lifts_the_ceiling_since_it_is_an_act_like_any_othe
   await settle()
   assert isinstance(engine.peek(ceiling), CancelledError)
   sand.script[root] = ["a = 1", "close(2)"]
-  assert await engine.prompt(int, "count", on=root) == 2
+  assert await engine.thread(int, "count", on=root) == 2
   await settle()
   assert said(log, "pause") == []
 
@@ -209,7 +209,7 @@ async def test_a_grant_is_any_callers_on_any_chain() -> None:
   mine = engine.grant(usd=1.0, on=two)
   await settle()
   sand.script[root] = [f"theirs = grant(usd=2.0, on={two!r})\nclose(1)"]
-  assert await engine.prompt(int, "grant", on=root) == 1
+  assert await engine.thread(int, "grant", on=root) == 1
   await settle()
   step = said(log, "reply")[0][2]
   assert [(one[3], one[2]) for one in said(log, "grant")] == [(two, OPERATOR), (two, step)]

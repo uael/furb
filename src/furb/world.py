@@ -2,7 +2,7 @@
 
 The ears of the crate serve the World: the provider of models, whose models the catalog of the crate knows, the files,
 the commands, time and the store of the record, which `furb_monty` opens a life on as every host of the crate does.
-This World answers what they do not: a prompt to the operator, which the terminal answers, as a task of the loop the
+This World answers what they do not: a thread to the operator, which the terminal answers, as a task of the loop the
 operator booted the life on, begun while the World speaks, so what it comes to reaches the life through close under
 the name of the World. It tells the operator on stderr why the provider paused a chain.
 """
@@ -49,7 +49,7 @@ class Live:
   """The World of one life on this machine: its operator, and the ears of the crate, the provider of its models among
   them.
 
-  `directory` is where the chains of the life start. `actor` is the actor a prompt goes to when it names none, and
+  `directory` is where the chains of the life start. `actor` is the actor a thread goes to when it names none, and
   `roster` names the models the life offers beside its model, or the first model the catalog of the crate offers
   stands alone when neither is said. `answer` answers each request in place of the models, when it is given, and
   `stream` is told what a model writes as it writes it, on a thread of the models. `images` is the directory of the
@@ -108,18 +108,18 @@ class Live:
       await asyncio.get_running_loop().connect_read_pipe(lambda: made, sys.stdin)
     return (await self.reader.readline()).decode(errors="replace").rstrip("\r\n")
 
-  async def show(self, about: str, shape: str, message: str) -> None:
-    """A prompt of the operator: the message on the terminal, and one line back as the shape the prompt wants, by the
+  async def show(self, about: str, shape: str, markdown: str) -> None:
+    """A thread of the operator: the markdown on the terminal, and one line back as the shape the thread wants, by the
     rules of the crate; and no line for a shape the operator answers not, which that no line refuses.
 
-    There is one terminal and one operator, so prompts of the operator are shown and answered one at a time, in
+    There is one terminal and one operator, so threads of the operator are shown and answered one at a time, in
     the order they asked, and never two at once on one stream.
     """
     try:
       line = ""
       if shape in _monty.shapes():
         async with self.reading:
-          sys.stdout.write(f"{about} wants a {shape}: {message}\n> ")
+          sys.stdout.write(f"{about} wants a {shape}: {markdown}\n> ")
           sys.stdout.flush()
           line = await self.line()
       value = _monty.answered(shape, line)
@@ -130,7 +130,7 @@ class Live:
     engine.close(value, about)
 
   def hears(self) -> World:
-    """The World as one generator for one life, which comes before the provider: it takes a prompt to the operator,
+    """The World as one generator for one life, which comes before the provider: it takes a thread to the operator,
     whose done it says when the operator answered, and tells the operator why the provider paused a chain."""
     jobs: set[asyncio.Task[None]] = set()
     loop = asyncio.get_running_loop()
@@ -146,12 +146,12 @@ class Live:
     while True:
       a = yield
       # Every question the World or the provider answered, and none that the World only heard.
-      if a[0] in ("prompt", "reply", "stand"):
+      if a[0] in ("thread", "reply", "stand"):
         self.calls.append(a)
       match a:
-        case ("prompt", about, _, _, shape, message, _):
+        case ("thread", about, _, _, shape, markdown, _):
           yield "started", about
-          start(self.show(about, shape, message))
+          start(self.show(about, shape, markdown))
         case ("pause", on, "provider", *_):
           paused.add(on)
         case ("done", about, "provider", Refused() as why) if engine.scope(about) in paused:

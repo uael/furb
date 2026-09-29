@@ -10,7 +10,7 @@ async def test_hidden_is_the_span_of_no_line_which_an_act_takes_to_tell_nothing_
   _, log, root = born(
     "q = bash('quiet', show=HIDDEN)\nawait q\nread('a.txt', HIDDEN)\nclose(1)", files={"/w/a.txt": "one\n"}
   )
-  assert await engine.prompt(int, "quietly", on=root) == 1
+  assert await engine.thread(int, "quietly", on=root) == 1
   await settle()
   command = said(log, "bash")[0][1]
   told = [a[3] for a in said(log, "tell") if a[1] == command or a[3][0].startswith("#read")]

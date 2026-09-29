@@ -19,9 +19,9 @@ knows the models, each named `provider:id`, and offers those of the claude comma
 `claude-cli:sonnet`, `claude-cli:haiku` and `claude-cli:fable`, when furb finds the program, and those of each provider
 whose credential, such as `ANTHROPIC_API_KEY`, stands in the environment. The roster of the life holds the model of the
 default actor, the models that `--roster` names, and the operator, which is the client. `--model provider:model/effort`
-names the default actor, and a prompt that names no actor goes to it. When it is not given, the default actor is the
+names the default actor, and a thread that names no actor goes to it. When it is not given, the default actor is the
 first model the catalog offers, `claude-cli:opus/high` when furb finds the claude command line. An actor that names no
-effort takes `high`, and an effort moves to the nearest one that its model takes. The life refuses a prompt to a model
+effort takes `high`, and an effort moves to the nearest one that its model takes. The life refuses a thread to a model
 that its roster does not hold. An actor may name its model by the id alone, when one model alone holds it, and furb
 names it as the roster does. `FURB_CLAUDE_BIN` names the claude command line, and the `claude` on PATH is used when it
 is not set.
@@ -55,7 +55,7 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
 
 | `type` | Fields | `data` of the response |
 | --- | --- | --- |
-| `prompt` | `message`, `shape`, `to`, `on` | `{"act": "prompt1"}` |
+| `thread` | `markdown`, `shape`, `to`, `on` | `{"act": "thread1"}` |
 | `rung` | `word`, `on` | `{"act": "rung1"}` |
 | `close` | `act`, `value` | none |
 | `cancel` | `act` | none |
@@ -64,27 +64,27 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
 | `turns` | `on` | `{"turns": [...]}` |
 | `transcript` | `on` | `{"facts": [...]}` |
 | `peek` | `act` | `{"done": false}`, or `{"done": true, "value": ...}`, or `{"done": true, "raised": ...}` |
-| `state` | none | `{"root", "record", "standing", "extensions", "paused", "prompts", "acts", "pending"}` |
+| `state` | none | `{"root", "record", "standing", "extensions", "paused", "threads", "acts", "pending"}` |
 
-- `prompt` prompts an actor on a chain. `message` is what the actor reads, and the actor reads the transcript alone when
-  there is no message. `shape` is the name of the type of the response, such as `int`, `str` or `list[str]`. A prompt
-  with no shape wants a `str`, so the model works until it closes the prompt with its report, and a prompt with the
-  shape `None` wants nothing. `to` is the actor, as `opus/high` or `operator`, and a prompt with no actor goes to the
-  default actor of its chain.
+- `thread` starts a thread to an actor on a chain. `markdown` is what the actor reads, and the actor reads the
+  transcript alone when there is no markdown. `shape` is the name of the type of the response, such as `int`, `str` or
+  `list[str]`. A thread with no shape wants a `str`, so the model works until it closes the thread with its report,
+  and a thread with the shape `None` wants nothing. `to` is the actor, as `opus/high` or `operator`, and a thread with
+  no actor goes to the default actor of its chain.
 - `rung` runs `word`, which is python, as a rung on a chain, in the globals of that chain. The act is done with what
   the word gave to `close`, and with nothing when the word runs to its end.
 - `close` ends an act with `value`, which is none when the command does not give it. It is how the client answers a
-  prompt to the operator. An exception, such as `{"is": "Refused", "args": ["no"]}`, ends the act with that
-  exception. The operator answers a prompt of the shape `float` with any number, so a whole number closes it as a
-  float. A value of another shape is refused, and the prompt stays open.
+  thread to the operator. An exception, such as `{"is": "Refused", "args": ["no"]}`, ends the act with that
+  exception. The operator answers a thread of the shape `float` with any number, so a whole number closes it as a
+  float. A value of another shape is refused, and the thread stays open.
 - `cancel` ends an act and everything that it made, each with `CancelledError`.
 - `pause` holds an act, or every act on a chain, until a `wake` of the same act or chain.
 - `turns` gives the turns of a chain, as the model reads them: each is its role, its python, its usage and its blocks.
 - `transcript` gives the facts on a chain, in the order of the log.
 - `peek` gives what an act came to, when it is done.
 - `state` gives the root, the path of the record, the standing, which is the roster, the directory and the default
-  actor, the names of the extensions that the life runs, whether a pause stands over the root, each prompt to the
-  operator that waits for a close, each act that a `prompt` or a `rung` of the client made that is not done, and the
+  actor, the names of the extensions that the life runs, whether a pause stands over the root, each thread to the
+  operator that waits for a close, each act that a `thread` or a `rung` of the client made that is not done, and the
   work that an earlier life left pending, which the part on a resumed life says.
 
 ## Responses
@@ -93,7 +93,7 @@ Each command gets one response. `success` says whether the command did what it s
 done: the `done` event says that.
 
 ```json
-{"id": "1", "type": "response", "command": "prompt", "success": true, "data": {"act": "prompt1"}}
+{"id": "1", "type": "response", "command": "thread", "success": true, "data": {"act": "thread1"}}
 {"id": "2", "type": "response", "command": "close", "success": false, "error": "The command needs act."}
 ```
 
@@ -112,24 +112,24 @@ The life says its events as they happen, after the response of the command that 
   entry that the journal gives the record.
 
   ```json
-  {"type": "fact", "fact": ["prompt", "prompt1", "operator", "chain1", "int", "count the lines", ""]}
+  {"type": "fact", "fact": ["thread", "thread1", "operator", "chain1", "int", "count the lines", ""]}
   ```
 
-- `prompt`: each prompt to the operator, which the client answers with `close`. It comes from a `prompt` of the
+- `thread`: each thread to the operator, which the client answers with `close`. It comes from a `thread` of the
   client to `operator`, or from a word of a model that asks the operator. The operator answers the shapes `str`,
-  `None`, `bool`, `int`, `float`, `list` and `dict`, as at the terminal. A prompt to the operator of another shape
+  `None`, `bool`, `int`, `float`, `list` and `dict`, as at the terminal. A thread to the operator of another shape
   is not sent: furb closes it at once with a refusal, such as `the operator answers no set`.
 
   ```json
-  {"type": "prompt", "act": "prompt2", "on": "chain1", "shape": "int", "message": "how many?"}
+  {"type": "thread", "act": "thread2", "on": "chain1", "shape": "int", "markdown": "how many?"}
   ```
 
-- `done`: the end of each act that a `prompt` or a `rung` of the client made, once, with its value or the exception
+- `done`: the end of each act that a `thread` or a `rung` of the client made, once, with its value or the exception
   it raised.
 
   ```json
-  {"type": "done", "act": "prompt1", "value": 3}
-  {"type": "done", "act": "prompt4", "raised": {"is": "CancelledError", "args": []}}
+  {"type": "done", "act": "thread1", "value": 3}
+  {"type": "done", "act": "thread4", "raised": {"is": "CancelledError", "args": []}}
   ```
 
 ## A resumed life
@@ -139,7 +139,7 @@ event for what it says again. `transcript` and `turns` read that part. furb wake
 record holds a pause of the root, or work that an earlier life started and did not end, that work waits for a `wake`
 of the client. `state` says whether a pause stands over the root, and `pending` names the work of an earlier life that
 waits, each act as its name and its kind, such as `["bash1", "bash"]`: among each act that the World started and did
-not end, and the acts that made it, each prompt, rung, command and wait that is not done and that no pause holds. An
+not end, and the acts that made it, each thread, rung, command and wait that is not done and that no pause holds. An
 act is pending no more once a `wake` puts it to the World again.
 
 ## A session
@@ -148,19 +148,19 @@ The lines that start with `>` are the lines of the client, and the others are th
 are not shown.
 
 ```text
-> {"id": "1", "type": "prompt", "message": "ask me", "shape": "int"}
-{"id": "1", "type": "response", "command": "prompt", "success": true, "data": {"act": "prompt1"}}
-{"type": "fact", "fact": ["prompt", "prompt1", "operator", "chain1", "int", "ask me", ""]}
-{"type": "prompt", "act": "prompt2", "on": "chain1", "shape": "int", "message": "how many?"}
-> {"id": "2", "type": "close", "act": "prompt2", "value": 7}
+> {"id": "1", "type": "thread", "markdown": "ask me", "shape": "int"}
+{"id": "1", "type": "response", "command": "thread", "success": true, "data": {"act": "thread1"}}
+{"type": "fact", "fact": ["thread", "thread1", "operator", "chain1", "int", "ask me", ""]}
+{"type": "thread", "act": "thread2", "on": "chain1", "shape": "int", "markdown": "how many?"}
+> {"id": "2", "type": "close", "act": "thread2", "value": 7}
 {"id": "2", "type": "response", "command": "close", "success": true}
-{"type": "done", "act": "prompt1", "value": 7}
+{"type": "done", "act": "thread1", "value": 7}
 ```
 
 ## How it differs from Pi
 
-- A `prompt` of Pi starts a run of the agent, and `agent_settled` says that the run ended. A `prompt` of furb makes an
+- A `prompt` of Pi starts a run of the agent, and `agent_settled` says that the run ended. A `thread` of furb makes an
   act, and its `done` event says what it came to.
 - The `abort` of Pi is `cancel`. A question of Pi to the user is an `extension_ui_request`, and its answer is an
-  `extension_ui_response`. In furb, the question is a `prompt` event, and the answer is `close`.
+  `extension_ui_response`. In furb, the question is a `thread` event, and the answer is `close`.
 - Pi streams messages and the parts of each message. furb streams facts, which are what the transcript holds.

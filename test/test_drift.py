@@ -10,7 +10,7 @@ from furb.engine import Drift
 async def test_what_a_life_fails_with_when_an_act_of_it_is_not_the_one_the_record_holds() -> None:
   """What a life fails with when an act of it is not the one the record holds, which the journal raises, so that it comes out of the entry the operator went in by and the life goes on with nothing."""
   sand, _, root = born("import random\nx = bash(f'echo {random.random()}')\nclose((await x).code)")
-  assert await engine.prompt(int, "roll", on=root) == 0
+  assert await engine.thread(int, "roll", on=root) == 0
   await settle()
   later = Sand()
   with pytest.raises(Drift, match=r"^bash1 drifts$"):
@@ -44,7 +44,7 @@ async def test_an_act_whose_words_are_not_the_ones_the_record_holds_is_a_drift()
 async def test_a_drift_breaks_the_journal_which_keeps_nothing_more() -> None:
   """A drift breaks the journal, which keeps nothing more, and the life runs on with nothing kept."""
   sand, _, root = born("import random\nx = bash(f'echo {random.random()}')\nclose(None)", auto=False)
-  await engine.prompt(None, "roll", on=root)
+  await engine.thread(None, "roll", on=root)
   kept = engine.bash("echo kept", on=root)
   await settle()
   assert kept == "bash2" and ("started", "bash2", WORLD) in [e[0] for e in sand.record]
@@ -60,7 +60,7 @@ async def test_a_drift_breaks_the_journal_which_keeps_nothing_more() -> None:
   assert fresh == "bash2" and [a[4] for a in later.calls if a[0] == "bash"] == ["echo new"]
   assert (await fresh).code == 0 and later.record == []
   sand, _, root = born("import random\nx = bash(f'echo {random.random()}')", "close(None)")
-  await engine.prompt(None, "roll", on=root)
+  await engine.thread(None, "roll", on=root)
   await settle()
   left = Sand()
   with pytest.raises(Drift, match=r"^bash1 drifts$"):

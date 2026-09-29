@@ -14,6 +14,6 @@ async def test_the_window_an_actor_reads() -> None:
   assert engine.offered(STANDS[0], "n/high") is None
   assert engine.offered(STANDS[0], "ghost") is None
   _, _, root = born()
-  ghost = engine.prompt(int, "hi", to="ghost", on=root)
+  ghost = engine.thread(int, "hi", to="ghost", on=root)
   await settle()
   assert isinstance(engine.peek(ghost), Refused)

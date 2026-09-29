@@ -8,7 +8,7 @@ from furb.engine import OPERATOR, Text
 async def test_a_module_carries_the_globals_of_a_chain() -> None:
   """A module carries the globals of a chain, which the chain says at its birth and at each replay, so its transcript says which module each of its rungs ran in."""
   _, _, root = born()
-  act = engine.prompt(int, "edit", to=OPERATOR, on=root)
+  act = engine.thread(int, "edit", to=OPERATOR, on=root)
   engine.write(Text(act, "k = 1"), on=root)
   await settle()
   engine.write(Text(act, "k = 2"), on=root)

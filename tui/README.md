@@ -75,10 +75,10 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ↑, ↓, Tab, Enter after / or @ | Choose a slash command, its value, or a project file as it is typed |
 | ⌃F / PageUp / PageDown | Filter the current view / scroll |
 | ⌃R / ⌃Space | Python input / complete a name |
-| ⌃L / ⌃A | Edit a prompt program / answer an operator question |
+| ⌃L / ⌃A | Edit a thread program / answer an operator question |
 | ⌃G / ⌃click a name | Inspect a value and follow its definition |
 | Drag / ⌃Y | Select text and copy it / copy the selected text again |
-| Click / right-click an act | Fold or expand it / inspect its value or prompt program |
+| Click / right-click an act | Fold or expand it / inspect its value or thread program |
 | ⌃⌥← | Return from a definition jump |
 | ⌥[ / ⌥] or ⌥P / ⌥N | Previous / next message of the feed |
 | ⌃PageUp / ⌃PageDown | Previous / next page of file changes |
@@ -111,7 +111,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/bash <command>` | Stream a shell command |
 | `/read <path>` | Show a file to this chain |
 | `/cd <path>` | Change this chain's working directory |
-| `/edit [prompt id]` | Change a prompt's program and replay it |
+| `/edit [thread id]` | Change a thread's program and replay it |
 | `/inspect <name>` | Read a value from this chain's module |
 | `/details` | Expand or collapse an act in the current view |
 | `/grant <dollars>` | Pause at a dollar ceiling |
@@ -136,8 +136,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 The command table comes from the same source as completion, the palette, and help. Run `bun run docs` after
 changing that source. Enter sends a message straight to the engine. The engine gives the next
 ask to the rung that has waited longest. ⌥Enter or `/queue text` holds a follow-up until the chain's
-current prompt and rungs complete. `/queue` edits or removes waiting messages. Saved queues require a resume
-choice; a dispatch recorded before a crash is not sent twice. Editing a prompt's program writes its door and uses the engine's
+current thread and rungs complete. `/queue` edits or removes waiting messages. Saved queues require a resume
+choice; a dispatch recorded before a crash is not sent twice. Editing a thread's program writes its door and uses the engine's
 replay. A slash command typed while a program is under edit runs as a command, since no Python program starts with a
 slash. Python input uses the same gate as a model's word and marks a refused line in the word and editor.
 The editor matches brackets and indents a new Python line.
@@ -148,12 +148,12 @@ that runs commands; configure the editor to wait until the file is saved and clo
 `/image path` attaches a PNG, JPEG, GIF, or WebP file. ⌃V or bare `/image` pastes an image through macOS
 AppKit, Windows PowerShell, Wayland `wl-paste`, or X11 `xclip`. Attachments have a limit of 20 MiB each and are
 copied beside the record. The provider of the session sends them to a model that takes images, with their
-references kept in the prompt.
+references kept in the markdown of the thread.
 Click the attachment row to open or remove an image from the draft.
 `/model` and `/effort` open separate pickers. The model picker lists the models of the session, then every
 model that the catalog of the crate offers. `/model name` takes `provider:model` or the model's id alone, by the
 rule of the catalog. A model of the catalog that the session does not offer joins the session: the session saves
-it, opens again on its record, starts again the work that was running, and sends the next prompt of the chain to
+it, opens again on its record, starts again the work that was running, and sends the next thread of the chain to
 that model. Each model offers the efforts that the catalog gives it, saved in the chain's roster. A model change
 keeps the current effort if the new model offers it.
 
@@ -172,5 +172,5 @@ the structured JSON export. `/context` sets the context ceiling.
 
 A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
 and each chain shows the rungs of their words in its feed, as it shows any rung. The TUI has no part of its own for an extension: `/extensions` lists what the life runs, and `/run`
-runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel of the work of a chain ends its prompts,
+runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel of the work of a chain ends its threads,
 rungs, commands and waits, and not what an extension started on it, such as the watcher of the memory.

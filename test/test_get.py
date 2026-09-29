@@ -8,7 +8,7 @@ from furb.engine import OPERATOR, Exit
 async def test_the_act_again_from_its_name() -> None:
   """The act again, from its name: whoever holds the name of an act is given the act the life holds under it, whole as it stands."""
   _, log, root = born("x = bash('echo hi')\nclose(x)")
-  which = await engine.prompt(str, "start one", on=root)
+  which = await engine.thread(str, "start one", on=root)
   await settle()
   step = said(log, "rung")[0][1]
   assert engine.get(which) == said(log, "bash")[0]

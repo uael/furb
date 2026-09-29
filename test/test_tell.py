@@ -12,7 +12,7 @@ async def test_what_a_question_answered_now_that_shows_a_text_or_changes_a_state
     "read('a.txt')\ncd('/x')\nx = bash('echo hi')\nseen = [peek(x), turns(), clock(), chance(), gate('k = 1'), cwd()]\n"
   )
   sand.script[root] = [word + "debug(t'{seen[2]}')\nclose(1)"]
-  assert await engine.prompt(int, "ask things", on=root) == 1
+  assert await engine.thread(int, "ask things", on=root) == 1
   await settle()
   _, step, *_ = said(log, "rung")[0]
   kinds = ["reply", "read", "cd", "bash", "clock", "chance", "gate"]
@@ -39,18 +39,18 @@ async def test_a_question_is_put_to_the_ears_of_the_engine_before_those_of_the_o
   sand, _, root = born()
   assert engine.cwd(on=root) == "/w"
   assert engine.turns(on=root) != []
-  act = engine.prompt(int, "count", to=OPERATOR, on=root)
+  act = engine.thread(int, "count", to=OPERATOR, on=root)
   assert engine.read(act, on=root) == Text(act, "")
-  assert [a[0] for a in sand.calls] == ["stand", "prompt"]
+  assert [a[0] for a in sand.calls] == ["stand", "thread"]
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
-  assert [a[0] for a in sand.calls] == ["stand", "prompt", "read"]
+  assert [a[0] for a in sand.calls] == ["stand", "thread", "read"]
 
 
 async def test_the_question_that_tell_names_is_the_last_one_of_its_kind_on_its_chain_that_the_run_made() -> None:
   """The question that tell names is the last one of its kind on its chain that the run made."""
   _, log, root = born("read('a.txt', HIDDEN)\nread('a.txt', span(1, 1))\nclose(1)")
   engine.read("a.txt", on=root)
-  assert await engine.prompt(int, "read twice", on=root) == 1
+  assert await engine.thread(int, "read twice", on=root) == 1
   step = said(log, "reply")[0][2]
   assert [(a[1], a[2]) for a in said(log, "read")] == [("read1", OPERATOR), ("read2", step), ("read3", step)]
   assert [a[3] for a in said(log, "tell") if a[1] == step and a[2] == step] == [
@@ -61,7 +61,7 @@ async def test_the_question_that_tell_names_is_the_last_one_of_its_kind_on_its_c
 async def test_a_text_is_told_by_the_lines_that_its_show_picks_under_the_word_text() -> None:
   """A text is told by the lines that its show picks, under the word text, and any other answer under the word value."""
   _, _, root = born(NUMS + "read('nums://a')\nread('a.txt', span(2, 2))\nclose(1)")
-  assert await engine.prompt(int, "a door of my own", on=root) == 1
+  assert await engine.thread(int, "a door of my own", on=root) == 1
   await settle()
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#read")] == [
     "#read1\nread1_path = 'nums://a'\nread1_value = [1, 2]",

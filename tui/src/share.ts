@@ -34,7 +34,7 @@ export function shareHtml(session: Session): string {
   for (const item of conversation(session.turns, session.acts)) {
     if (item.type === "python")
       sections.push(`<section><h2>Python</h2><pre><code>${escaped(item.code)}</code></pre></section>`);
-    else if (item.type === "prompt") {
+    else if (item.type === "thread") {
       const message = String(item.act.words[1] ?? "");
       const references = imageReferences(message);
       const images = references
@@ -45,7 +45,7 @@ export function shareHtml(session: Session): string {
         .join("");
       const text = references.reduce((rest, reference) => rest.replace(reference.text, ""), message);
       sections.push(
-        `<section class="prompt"><h2>${session.isUserPrompt(item.act) ? "You" : "Observation"}</h2>${prose(text)}${images}</section>`,
+        `<section class="prompt"><h2>${session.isUserThread(item.act) ? "You" : "Observation"}</h2>${prose(text)}${images}</section>`,
       );
     } else if (item.type === "result")
       sections.push(`<section><h2>Result</h2>${prose(display(item.act.value))}</section>`);
@@ -67,10 +67,10 @@ export function shareMarkdown(session: Session): string {
   };
   for (const item of conversation(session.turns, session.acts)) {
     if (item.type === "python") lines.push("## Python", ...fenced(item.code, "python"), "");
-    else if (item.type === "prompt") {
+    else if (item.type === "thread") {
       const message = String(item.act.words[1] ?? "");
       lines.push(
-        `## ${session.isUserPrompt(item.act) ? "You" : "Observation"}`,
+        `## ${session.isUserThread(item.act) ? "You" : "Observation"}`,
         "",
         imageReferences(message).reduce(
           (text, reference) =>

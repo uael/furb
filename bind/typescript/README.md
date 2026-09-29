@@ -23,13 +23,13 @@ const session = boot({
   record: ".furb/work.jsonl",
   // A roster of no model offers the operator alone, and this callback answers what is put to it.
   roster: [],
-  operator: async ({ message }) => `You asked: ${message}`,
+  operator: async ({ markdown }) => `You asked: ${markdown}`,
 });
 try {
   const { engine } = session;
   const on = engine.root;
   console.log(engine.cwd({ on })); // A synchronous view.
-  const work = engine.prompt("str", { message: "What is this project?", on });
+  const work = engine.thread("str", { markdown: "What is this project?", on });
   console.log(work.id);
   const answer = await work;
   console.log(answer); // You asked: What is this project?
@@ -54,7 +54,7 @@ of it stands in the environment, such as `ANTHROPIC_API_KEY`, and the models of 
 the program. The host names what the provider offers beside the model of the default actor in `roster`, as
 `provider:id`, and the default actor in `model` and `effort`: the first of the roster when unsaid. When the roster is
 unsaid too, the session stands on the default of the crate, the first model that the catalog offers. A roster that names
-no model, with no model, offers the operator alone, and a prompt that names no actor goes to the operator. The standing
+no model, with no model, offers the operator alone, and a thread that names no actor goes to the operator. The standing
 of every chain tells the roster, so a session offers the models it names and not the whole catalog. An actor that names
 no effort takes `high`, and an effort moves to the nearest one the model takes, among `levels()`. A name without its
 provider names the one model of that id. A reopened session offers what its host names now. It keeps the model and the
@@ -80,7 +80,7 @@ const session = new Session({ model: first, effort: "high", roster: others.slice
 Pass `answer` to replace only model requests, or `operator` to supply operator answers. `answer` gets the actor,
 the chain, the messages and the settings of the effort as the provider would send them, and a `write` that tells
 what it writes as it writes it, and gives a turn. The host still names the models that `answer` stands in for. With
-no `operator`, questions stand in `session.console.prompts`; call `session.console.answer(id, text)` to read an
+no `operator`, questions stand in `session.console.threads`; call `session.console.answer(id, text)` to read an
 answer by the rules that every console of the crate reads a line by, which `answered(shape, line)` gives, for each
 of the `shapes()` that the operator answers. `session` emits `change` and `facts`, and `fault` tells what the life refused when the console
 said what an act came to. `session.streams` holds what a model writes for each rung, until the done of its reply.
@@ -127,7 +127,7 @@ drifts.
 
 `session.pending` names the work that an earlier life left, which waits for a wake that this life says, by the kind of
 each act, as `engine.pending()` finds it: among each act that the outside started and did not end, and the acts that
-made it, each prompt, rung, command and wait that is not done and that no pause holds. `session.resume()` wakes each
+made it, each thread, rung, command and wait that is not done and that no pause holds. `session.resume()` wakes each
 chain that holds some, and an act that a wake puts to the outside again is pending no more. The streams that a
 model wrote in part live in the record's `.session.json` companion. File snapshots append to `.changes.jsonl`;
 `session.changes.read` loads a page of them. Keep both companions with the JSONL record. The session saves
@@ -138,14 +138,14 @@ own files with it.
 `inspectRecord(path)` reads pending work through the same native replay without taking a record lock,
 writing files, enabling an extension, or starting a model or command. `session.activity` holds the state of every act
 a person follows, and `session.isPaused(id)` reads it. `session.interrupt(chain)` cancels the work of a chain, each
-prompt, rung, command and wait on it that is not done, and not what an extension started on it.
+thread, rung, command and wait on it that is not done, and not what an extension started on it.
 
 `session.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type,
 size, and `furb-image://` reference. A session with no record copies it into `.furb/images` of its directory. The
 `.furb` that it makes holds a `.gitignore` that keeps it out of version control but its `config.json`, as
 `furbDirectory` makes it.
-Put that reference in the prompt as a Markdown image,
-`![design](furb-image://...)`, which `imageReference(name, uri)` writes and `imageReferences(message)` reads. The
-provider hands the python of the turn as it is, and adds each image that the message of a prompt of that turn
+Put that reference in the markdown of a thread as a Markdown image,
+`![design](furb-image://...)`, which `imageReference(name, uri)` writes and `imageReferences(markdown)` reads. The
+provider hands the python of the turn as it is, and adds each image that the markdown of a thread of that turn
 references, to a model that takes images. The stored bytes are checked against their digest before use. PNG, JPEG, GIF,
 and WebP are supported, with a 20 MiB limit per image. Keep `.images` with the record when moving a session.

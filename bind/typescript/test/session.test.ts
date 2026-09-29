@@ -16,7 +16,7 @@ import {
 import { alive, printPid, remove } from "./processes.ts";
 import { until } from "./until.ts";
 
-// A session with no model puts every prompt to the operator, so a test that asks a model names one of the catalog of
+// A session with no model puts every thread to the operator, so a test that asks a model names one of the catalog of
 // the crate, and its `answer` replaces the request, so no model is asked.
 const modeled = { model: "claude-cli:sonnet" };
 /** A turn of a model whose word is the one given. */
@@ -43,7 +43,7 @@ test("record inspection derives pending work without taking its lock, writing fi
     const on = engine.root;
     await engine.rung({ word: 'write(Text("value.txt", "once"))', on });
     const waiting = engine.wait({ seconds: 60, on }).id;
-    const prompt = engine.prompt("str", { message: "Question", to: "operator", on }).id;
+    const thread = engine.thread("str", { markdown: "Question", to: "operator", on }).id;
     const before = await readFile(record, "utf8");
     const metadata = await readFile(`${record}.session.json`, "utf8");
     // The lock file holds no text, and Windows refuses a read of a file that another handle has locked, so the test
@@ -55,13 +55,13 @@ test("record inspection derives pending work without taking its lock, writing fi
     const lock = await locked();
     // The session holds the lease while the inspection runs, so an inspection that took it would be refused.
     const first = await inspectRecord(record);
-    expect(first.pending.map(([id]) => id)).toEqual([waiting, prompt]);
+    expect(first.pending.map(([id]) => id)).toEqual([waiting, thread]);
     expect(await readFile(record, "utf8")).toBe(before);
     expect(await readFile(`${record}.session.json`, "utf8")).toBe(metadata);
     expect(await locked()).toEqual(lock);
     expect(await readFile(join(cwd, "value.txt"), "utf8")).toBe("once");
     engine.cancel(waiting);
-    engine.close("answered", { id: prompt });
+    engine.close("answered", { id: thread });
     expect((await inspectRecord(record)).pending).toEqual([]);
   } finally {
     await session.dispose();
@@ -186,7 +186,7 @@ test("what a model writes streams into the session under its rung until its repl
   });
   try {
     const engine = session.open();
-    const prompt = engine.prompt("int", { message: "count", on: engine.root });
+    const thread = engine.thread("int", { markdown: "count", on: engine.root });
     // The rungs of the two official extensions come first.
     await until(session, () => session.streams.get("rung3")?.text === "close(3)");
     expect(session.streams.get("rung3")).toEqual({
@@ -203,7 +203,7 @@ test("what a model writes streams into the session under its rung until its repl
       },
     ]);
     release();
-    expect(await prompt).toBe(3);
+    expect(await thread).toBe(3);
     expect(session.streams.size).toBe(0);
     expect(session.activity.cost).toBe(0);
   } finally {
@@ -218,7 +218,7 @@ test("unfinished model work and waits reopen pending until the host resumes them
   let calls = 0;
   const first = new Session({ cwd, record, ...modeled, answer: () => new Promise(() => {}) });
   const engine = first.open();
-  const prompt = engine.prompt("str", { message: "pending", on: engine.root }).id;
+  const thread = engine.thread("str", { markdown: "pending", on: engine.root }).id;
   const wait = engine.wait({ seconds: 0.1, on: engine.root }).id;
   await first.dispose();
   const second = new Session({
@@ -234,10 +234,10 @@ test("unfinished model work and waits reopen pending until the host resumes them
     // stands.
     await tick();
     expect(calls).toBe(0);
-    expect(second.pending.has(prompt)).toBe(true);
-    expect(resumed.outcome(prompt).done).toBe(false);
+    expect(second.pending.has(thread)).toBe(true);
+    expect(resumed.outcome(thread).done).toBe(false);
     await second.resume();
-    expect(await resumed.result<string>(prompt)).toBe("resumed");
+    expect(await resumed.result<string>(thread)).toBe("resumed");
     expect(await resumed.result(wait)).toBeNull();
     expect(calls).toBe(1);
   } finally {
@@ -256,10 +256,10 @@ test("a function of the host that throws answers nothing, and two in a row pause
     },
   });
   try {
-    const prompt = broken.engine.prompt("str", { message: "try", on: broken.engine.root });
+    const thread = broken.engine.thread("str", { markdown: "try", on: broken.engine.root });
     await until(broken, () => broken.facts.some((fact) => fact[0] === "pause"));
     expect(calls).toBe(2);
-    expect(broken.engine.outcome(prompt.id).done).toBe(false);
+    expect(broken.engine.outcome(thread.id).done).toBe(false);
     expect(broken.facts.filter((fact) => fact[0] === "pause")).toHaveLength(1);
     const reasons = [...broken.activity.acts.values()]
       .filter((act) => act.kind === "rung")
@@ -297,15 +297,15 @@ test("file changes append once and reopen in pages without growing the session m
   }
 });
 
-test("a whole number from the operator answers a float prompt as a float, typed or from its callback", async () => {
+test("a whole number from the operator answers a float thread as a float, typed or from its callback", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-float-"));
   const typed = boot({ cwd });
   const called = boot({ cwd, operator: async () => 2 });
   try {
     const asked = (session: typeof typed) =>
-      session.engine.prompt("float", { message: "A number?", to: "operator", on: session.engine.root });
+      session.engine.thread("float", { markdown: "A number?", to: "operator", on: session.engine.root });
     const one = asked(typed);
-    await until(typed, () => typed.console.prompts.has(one.id));
+    await until(typed, () => typed.console.threads.has(one.id));
     typed.console.answer(one.id, "1.0");
     const two = asked(called);
     expect([await one, await two]).toEqual([1, 2]);
@@ -328,16 +328,16 @@ test("an operator question survives a resume and validates its answer", async ()
   const record = join(cwd, "life.jsonl");
   const first = new Session({ cwd, record });
   const opened = first.open();
-  const question = opened.prompt("bool", { message: "Continue?", to: "operator", on: opened.root }).id;
-  await until(first, () => first.console.prompts.has(question));
+  const question = opened.thread("bool", { markdown: "Continue?", to: "operator", on: opened.root }).id;
+  await until(first, () => first.console.threads.has(question));
   await first.dispose();
   const second = new Session({ record });
   try {
     const engine = second.open();
-    expect(second.console.prompts.size).toBe(0);
+    expect(second.console.threads.size).toBe(0);
     await second.resume();
-    await until(second, () => second.console.prompts.has(question));
-    expect(second.console.prompts.get(question)?.message).toBe("Continue?");
+    await until(second, () => second.console.threads.has(question));
+    expect(second.console.threads.get(question)?.markdown).toBe("Continue?");
     expect(() => second.console.answer(question, "maybe")).toThrow("neither yes nor no");
     second.console.answer(question, "yes");
     expect(await engine.result<boolean>(question)).toBe(true);
@@ -353,7 +353,7 @@ test("resume wakes no work that a pause of the operator holds, so that pause sta
   const first = new Session({ cwd, record, ...modeled, answer: () => new Promise(() => {}) });
   const engine = first.open();
   engine.pause(engine.root);
-  engine.prompt("str", { message: "later", on: engine.root });
+  engine.thread("str", { markdown: "later", on: engine.root });
   await first.dispose();
   const second = new Session({ record, answer: async () => said('close("x")') });
   try {
@@ -373,13 +373,13 @@ test("pending work that a cancel ends is pending no more", async () => {
   const record = join(cwd, "life.jsonl");
   const first = new Session({ cwd, record });
   const opened = first.open();
-  const prompt = opened.prompt("str", { message: "first", to: "operator", on: opened.root }).id;
+  const thread = opened.thread("str", { markdown: "first", to: "operator", on: opened.root }).id;
   await first.dispose();
   const second = new Session({ record });
   try {
     const again = second.open();
-    expect(second.pending.has(prompt)).toBe(true);
-    again.cancel(prompt);
+    expect(second.pending.has(thread)).toBe(true);
+    again.cancel(thread);
     await tick();
     expect(second.pending.size).toBe(0);
   } finally {
@@ -455,8 +455,8 @@ test("an operator answer of a list keeps its numbers exact, and a map in it that
   const engine = session.open();
   try {
     const on = engine.root;
-    const question = engine.prompt("list", { message: "Numbers?", to: "operator", on });
-    await until(session, () => session.console.prompts.has(question.id));
+    const question = engine.thread("list", { markdown: "Numbers?", to: "operator", on });
+    await until(session, () => session.console.threads.has(question.id));
     expect(() => session.console.answer(question.id, "{}")).toThrow('"{}" is no list');
     session.console.answer(question.id, '[2.0, 9007199254740993, {"is": "str", "args": [1.0]}]');
     const kept = {
@@ -479,27 +479,30 @@ test("an operator answer of a list keeps its numbers exact, and a map in it that
   }
 });
 
-test("a session with no model puts to the operator every prompt that names no actor, the acknowledgment among them", async () => {
+test("a session with no model puts to the operator every thread that names no actor, and acknowledges nothing, since no model reads", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-operator-alone-"));
-  const { promise: acknowledgment, resolve: acknowledged } = Promise.withResolvers<string>();
+  const asked: string[] = [];
   // The first example of the README, whose callback answers for the operator.
   const session = boot({
     cwd,
     record: join(cwd, "work.jsonl"),
     roster: [],
-    operator: async ({ shape, message }) => {
-      if (shape === "None") acknowledged(message);
-      return shape === "str" ? `You asked: ${message}` : null;
+    operator: async ({ shape, markdown }) => {
+      asked.push(shape);
+      return shape === "str" ? `You asked: ${markdown}` : null;
     },
   });
   try {
     const { engine } = session;
     const on = engine.root;
-    expect(await engine.prompt("str", { message: "What is this project?", on })).toBe(
+    expect(await engine.thread("str", { markdown: "What is this project?", on })).toBe(
       "You asked: What is this project?",
     );
-    engine.rung({ word: 'b = bash("true")', on });
-    expect(await acknowledgment).toBe("bash1 done");
+    await engine.rung({ word: 'b = bash("true")', on });
+    await engine.result("bash1");
+    // The chain would acknowledge the command in the dispatch of its done, which is over once the result is given.
+    expect(engine.transcript({ on }).filter((fact) => fact[0] === "rung" && fact[2] === "bash1")).toEqual([]);
+    expect(asked).toEqual(["str"]);
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });

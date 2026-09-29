@@ -50,17 +50,18 @@ async def test_a_question_is_named_by_its_kind() -> None:
 
 
 async def test_the_name_of_an_act() -> None:
-  """The name of an act is its kind and how many acts of that kind the life has made with it, so the root is chain1, the first command is bash1 and the first prompt is prompt1, and python binds each name as it is."""
+  """The name of an act is its kind and how many acts of that kind the life has made with it, so the root is chain1, the first command is bash1 and the first thread is thread1, and python binds each name as it is."""
   _, log, root = born("x = bash('echo hi')\ny = bash('echo ho')\nclose(1)", "close(bash1 + bash2 == 'bash1bash2')")
-  asking = engine.prompt(int, "run it", on=root)
+  asking = engine.thread(int, "run it", on=root)
   assert await asking == 1
   await settle()
-  assert (root, asking) == ("chain1", "prompt1")
+  assert (root, asking) == ("chain1", "thread1")
   assert said(log, "rung")[0][1] == "rung1"
   assert [a[1] for a in said(log, "bash")] == ["bash1", "bash2"]
-  assert await Act("prompt2") is True
+  first, second = [a[1] for a in said(log, "rung") if a[2] in ("bash1", "bash2")]
+  assert await Act(first) is True and engine.peek(second, ...) is ...
   await settle()
-  assert [a[1] for a in said(log, "prompt")] == ["prompt1", "prompt2", "prompt3"]
+  assert [a[1] for a in said(log, "thread")] == ["thread1"]
   assert all(name.isidentifier() for name in acts(log))
   twin = await chained("twin", root, 300)
   assert twin == "chain2"
@@ -72,22 +73,22 @@ async def test_a_read_takes_its_number_as_a_command_does() -> None:
   sand, log, root = born()
   engine.read("a.txt", on=root)
   sand.script[root] = ["x = bash('echo hi')\nt = read('a.txt')\nclose(len(t.lines))"]
-  asking = engine.prompt(int, "read it", on=root)
+  asking = engine.thread(int, "read it", on=root)
   assert await asking == 2
   await settle()
   assert [(a[1], a[2]) for a in said(log, "read")] == [("read1", OPERATOR), ("read2", "rung1")]
   later = Sand()
   again, _ = life(later, list(sand.record))
   await settle(300)
-  assert [a[1] for a in said(again, "read")] == ["read1", "read2"] and engine.peek("prompt1") == 2
+  assert [a[1] for a in said(again, "read")] == ["read1", "read2"] and engine.peek("thread1") == 2
   assert [a for a in later.calls if a[0] in ("read", "reply")] == []
 
 
 async def test_the_generator_that_settles_an_await_is_named_after_that_act() -> None:
   """The generator that settles an await of an act from outside a run is named after that act and the task that awaits it, which is the name of no question."""
   _, log, root = born("x = bash('echo hi')\nclose(1)")
-  asking = engine.prompt(int, "run it", on=root)
+  asking = engine.thread(int, "run it", on=root)
   assert await asking == 1
   assert [a for a in log if "waits" in a[1]] == []
   assert [name for name in acts(log) if "waits" in name] == []
-  assert not engine.question(("prompt", f"{asking} waits 1", OPERATOR))
+  assert not engine.question(("thread", f"{asking} waits 1", OPERATOR))

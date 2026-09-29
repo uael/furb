@@ -167,7 +167,7 @@ export const keys = [
   },
   {
     chord: "⌃L / ⌃A",
-    action: "Edit a prompt program / answer an operator question",
+    action: "Edit a thread program / answer an operator question",
     bindings: [
       { on: ["ctrl+l"], run: "ladders", chord: "⌃L", command: "edit" },
       { on: ["ctrl+a"], run: "answer", chord: "⌃A", hint: "answer" },
@@ -183,7 +183,7 @@ export const keys = [
     action: "Select text and copy it / copy the selected text again",
     bindings: [{ on: ["ctrl+y"], run: "copy" }],
   },
-  { chord: "Click / right-click an act", action: "Fold or expand it / inspect its value or prompt program" },
+  { chord: "Click / right-click an act", action: "Fold or expand it / inspect its value or thread program" },
   {
     chord: "⌃⌥←",
     action: "Return from a definition jump",

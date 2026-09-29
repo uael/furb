@@ -20,16 +20,16 @@ async def test_to_await_an_act_gives_the_value_of_the_act_when_the_act_completes
 async def test_an_act_is_awaited_from_any_chain() -> None:
   """An act is awaited from any chain."""
   sand, _, root = born("x = bash('echo hi')\nclose(x)")
-  which = await engine.prompt(str, "start one", on=root)
+  which = await engine.thread(str, "start one", on=root)
   two = engine.chain("two")
   sand.script[two] = [f"out = await Act({which!r})\nassert isinstance(out, Exit)\nclose(out.code)"]
-  assert await engine.prompt(int, "await it", on=two) == 0
+  assert await engine.thread(int, "await it", on=two) == 0
 
 
 async def test_a_rung_that_awaits_an_act_reads_the_result_of_the_act() -> None:
   """A rung that awaits an act reads the result of the act."""
   _, _, root = born("x = bash('echo hi')\nout = await x\nclose([out.code, out.stdout.content])")
-  assert await engine.prompt(list, "run it", on=root) == [0, "ran echo hi\n"]
+  assert await engine.thread(list, "run it", on=root) == [0, "ran echo hi\n"]
 
 
 async def test_a_rung_awaits_an_act_and_nothing_else() -> None:
@@ -60,29 +60,29 @@ async def test_to_await_a_cancelled_act_raises_cancellederror() -> None:
 async def test_a_word_that_awaits_a_chain_raises_refused_where_it_waited() -> None:
   """A word that awaits a chain raises Refused where it waited, since a chain never settles and the word could go no further."""
   _, log, root = born("sub = chain('sub')\nawait sub\nclose(1)", "close(2)")
-  assert await engine.prompt(int, "fork", on=root) == 2
+  assert await engine.thread(int, "fork", on=root) == 2
   await settle()
   assert heads(engine.turns(on=root)) == [
     "#chain1",
     "#chain1 standing",
-    "#prompt1",
-    "#rung1 advance on prompt1",
+    "#thread1",
+    "#rung1 advance on thread1",
     "#rung1 raised",
-    "#rung2 advance on prompt1",
-    "#prompt1 closed",
+    "#rung2 advance on thread1",
+    "#thread1 closed",
   ]
   assert "#rung1 raised\nrung1_raised = Refused('chain2 never settles')" in paragraphs(engine.turns(on=root))
   assert [(a[1], a[4]) for a in said(log, "chain")] == [("chain1", "root"), ("chain2", "sub")]
 
 
-async def test_the_awaiter_of_the_prompt_raises_that_exception() -> None:
-  """The awaiter of the prompt raises that exception."""
+async def test_the_awaiter_of_the_thread_raises_that_exception() -> None:
+  """The awaiter of the thread raises that exception."""
   _, log, root = born(
-    "p = prompt(int, 'ask them', to=OPERATOR)\ntry:\n  await p\nexcept ValueError as no:\n  close(str(no))"
+    "p = thread(int, 'ask them', to=OPERATOR)\ntry:\n  await p\nexcept ValueError as no:\n  close(str(no))"
   )
-  one = engine.prompt(str, "delegate", on=root)
+  one = engine.thread(str, "delegate", on=root)
   await settle()
-  theirs = said(log, "prompt")[-1][1]
+  theirs = said(log, "thread")[-1][1]
   engine.close(ValueError("boom"), theirs)
   await settle()
   assert (await one) == "boom"
@@ -91,7 +91,7 @@ async def test_the_awaiter_of_the_prompt_raises_that_exception() -> None:
 async def test_a_run_that_awaits_it_hands_it_to_whoever_steps_the_run() -> None:
   """A run that awaits it hands it to whoever steps the run, since the engine owns the order of every run; the operator, which the engine does not step, waits on its own loop."""
   sand, log, root = born("x = bash('echo hi')\nclose((await x).code)")
-  assert await engine.prompt(int, "run it", on=root) == 0
+  assert await engine.thread(int, "run it", on=root) == 0
   command = said(log, "bash")[0]
   assert [(a[4], engine.get(a[2])[4]) for a in said(log, "wants")] == [(command[1], command[2])]
   mine = engine.bash("echo again", on=root)

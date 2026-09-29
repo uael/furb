@@ -11,12 +11,12 @@ from conftest import (
   lived,
   pair,
   plain,
-  prompted,
   ran,
   relived,
   said,
   settle,
   slow,
+  threaded,
   world_says,
 )
 from furb import engine
@@ -41,7 +41,7 @@ async def test_the_way_to_say_a_fact_from_what_is_no_ear() -> None:
 async def test_every_verb_of_the_file_speaks_through_the_two_entries_of_the_bus() -> None:
   """Every verb of the file, and every verb of an extension, speaks through the two entries of the bus: say for a fact and act for a question."""
   _, log, root = born(DOOR, "close(None)")
-  assert await engine.prompt(int, "a door", on=root) == 1
+  assert await engine.thread(int, "a door", on=root) == 1
   await settle()
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")
   act = engine.bash("echo hi", on=root)
@@ -56,10 +56,10 @@ async def test_every_verb_of_the_file_speaks_through_the_two_entries_of_the_bus(
 async def test_a_fact_reaches_the_world_the_kernel_and_the_journal_only_through_the_bus() -> None:
   """A fact reaches the World, the Kernel and the journal only through the bus."""
   sand, log, root = born("close(read('a.txt').content)")
-  assert await engine.prompt(str, "read it", on=root) == "one\ntwo\n"
+  assert await engine.thread(str, "read it", on=root) == "one\ntwo\n"
   assert [a[0] for a in sand.calls] == ["stand", "reply", "read"]
   assert findings(log) == [[]]
-  told = fresh(root, prompted("prompt1", "str", "read it"), "#rung1 advance on prompt1")
+  told = fresh(root, threaded("thread1", "str", "read it"), "#rung1 advance on thread1")
   assert ran(log) == [told, "close(read('a.txt').content)"]
   assert [entry[0][4] for entry in sand.record if entry[0][0] == "read"] == ["a.txt"]
 
@@ -69,17 +69,17 @@ async def test_a_rebound_verb_reaches_the_world_only_through_the_bus() -> None:
   sand, _, root = born(files={"/w/mine.txt": "mine\n"})
   assert await engine.rung(MINE, on=root) is None
   sand.script[root] = ["close(read('any.txt').content)"]
-  assert await engine.prompt(str, "read it", on=root) == "mine\n"
+  assert await engine.thread(str, "read it", on=root) == "mine\n"
   assert [a[4] for a in said(sand.calls, "read")] == ["mine.txt"]
 
 
 async def test_who_says_it_is_whoever_is_speaking() -> None:
   """Who says it is whoever is speaking, which the site holds, and nothing names another."""
   _, log, root = born("x = bash('slow')\nclose(1)", files={"/w/a.txt": "one\n"}, auto=False)
-  assert await engine.prompt(int, "start one", on=root) == 1
+  assert await engine.thread(int, "start one", on=root) == 1
   await settle()
   step, command = said(log, "rung")[0], said(log, "bash")[0]
-  assert (command[2], step[1], step[2]) == ("rung1", "rung1", "prompt1")
+  assert (command[2], step[1], step[2]) == ("rung1", "rung1", "thread1")
   world_says("out", command[1], "hi\n", "stdout")
   assert said(log, "out")[-1][2] == WORLD
   engine.read("a.txt", on=root)

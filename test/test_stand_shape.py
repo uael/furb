@@ -59,7 +59,7 @@ async def test_a_model_asked_on_any_chain_of_a_later_life_finds_the_new_roster()
   later = Sand(stands=LATER)
   again, over = await relived(later, plain(sand.record))
   later.script[over] = ["close(1)"]
-  assert await engine.prompt(int, "count", to="o/low", on=over) == 1
+  assert await engine.thread(int, "count", to="o/low", on=over) == 1
   asked = later.turns[said(again, "reply")[-1][1]]
   assert [one for one in paragraphs(asked) if one.startswith(f"#{over} standing")] == [takes(over), takes(over, LATER)]
 
@@ -76,7 +76,7 @@ async def test_the_world_answers_it_with_a_done_at_once() -> None:
 async def test_the_journal_keeps_each_stand_and_its_answer() -> None:
   """The journal keeps each stand and its answer, so a later life says them again at their places and replays every chain on what it stood on there."""
   sand, log, root = born("close(1)")
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   await settle()
   assert [a[3] for a in said(sand.calls, "stand")] == [root]
   first = said(log, "stand")[0]
@@ -108,7 +108,7 @@ async def test_at_its_tip_boot_stands_the_life_again() -> None:
 async def test_each_standing_binds_the_default_actor_of_the_chain_under_the_name_actor() -> None:
   """Each standing binds the default actor of the chain, under the name actor."""
   sand, log, root = born("close(1)", "close(None)")
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   assert engine.module(root)["actor"] == "m/low" == said(log, "reply")[0][4]
   sand.stands = LATER
   engine.stand(on=root)
@@ -127,7 +127,7 @@ async def test_the_chain_tells_each_standing_it_takes_in_one_paragraph_headed_st
     "chain1_actor = 'm/low'"
   )
   sand.script[root] = ["close(chain1_cwd)"]
-  assert await engine.prompt(str, "where", on=root) == "/w"
+  assert await engine.thread(str, "where", on=root) == "/w"
   assert [engine.module(root)[f"chain1_{word}"] for word in ("roster", "cwd", "actor")] == STANDS
   await relived(Sand(stands=LATER), plain(sand.record))
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{root} standing")][-1] == (

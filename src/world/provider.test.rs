@@ -94,12 +94,12 @@ fn on(root: &str) -> Option<String> {
   Some(root.to_owned())
 }
 
-/// A prompt on the root that wants an int.
+/// A thread on the root that wants an int.
 fn asked(engine: &mut Engine) -> String {
   let root = engine.root().to_owned();
   let with =
-    verbs::Prompt { message: Some("count".to_owned()), on: on(&root), ..Default::default() };
-  engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned()
+    verbs::Thread { markdown: Some("count".to_owned()), on: on(&root), ..Default::default() };
+  engine.thread(Object::string("int"), with).expect("a thread is made").id().to_owned()
 }
 
 /// The facts of the root that the provider said about replies and chains: each kind, what it is about, and the
@@ -157,7 +157,7 @@ fn a_reply_comes_to_the_turn_of_the_model_with_its_usage_its_dollars_and_its_blo
   let model = streaming(&[("close(3)", usage)]);
   let (mut engine, _) = life("turn", vec![scripted(&model).price(1e4, 2e4, 1e3, 5e3)]);
   let id = asked(&mut engine);
-  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the thread is answered");
   assert_eq!(got.as_ref().as_int(), Some(3));
   // The price counts each token once: ten read fresh, five written, twenty read from the cache and three written to
   // it.
@@ -170,7 +170,7 @@ fn a_reply_comes_to_the_turn_of_the_model_with_its_usage_its_dollars_and_its_blo
   let [Message::User { content }] = &request.chat_history[..] else {
     panic!("one user turn: {:?}", request.chat_history)
   };
-  assert!(format!("{content:?}").contains("count"), "the turn holds the message of the prompt");
+  assert!(format!("{content:?}").contains("count"), "the turn holds the markdown of the thread");
 }
 
 #[test]
@@ -191,7 +191,7 @@ fn an_assistant_turn_goes_again_as_the_blocks_its_provider_gave() {
   let model = MockCompletionModel::from_stream_turns(turns);
   let (mut engine, _) = life("again", vec![scripted(&model)]);
   let id = asked(&mut engine);
-  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the thread is answered");
   assert_eq!(got.as_ref().as_int(), Some(1));
   let requests = model.requests();
   assert_eq!(requests.len(), 2);
@@ -240,7 +240,7 @@ fn a_turn_between_two_refusals_of_an_actor_on_a_chain_ends_their_row() {
   let id = asked(&mut engine);
   let answered = until(&mut engine, |engine| engine.outcome(&id).is_ok_and(|got| got.is_some()));
   assert!(answered, "a row of two refusals paused the chain: {:?}", said(&mut engine));
-  let got = engine.outcome(&id).expect("the prompt is an act").expect("the prompt is answered");
+  let got = engine.outcome(&id).expect("the thread is an act").expect("the thread is answered");
   assert_eq!(got.as_ref().as_int(), Some(3));
 }
 
@@ -281,7 +281,7 @@ fn a_cancel_over_a_reply_ends_the_call_of_its_model_and_the_ear_says_nothing_mor
   let (mut engine, _) = life("cancel", vec![Model::new("m", 1000, model.clone())]);
   let id = asked(&mut engine);
   assert!(until(&mut engine, |_| model.asked.load(Ordering::SeqCst)), "the model is asked");
-  engine.cancel(&id).expect("the prompt is cancelled");
+  engine.cancel(&id).expect("the thread is cancelled");
   let no = block_on(Act::<Object>::of(&mut engine, "reply1")).expect_err("the reply ends");
   assert_eq!(no.name, "CancelledError");
   assert!(
@@ -300,13 +300,14 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   let claude = yard.claude(10_000);
   let (mut engine, _) = life("claude", claude.models());
   let root = engine.root().to_owned();
-  let mut answer = |message: &str| {
-    let with = verbs::Prompt { message: Some(message.into()), on: on(&root), ..Default::default() };
-    let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
+  let mut answer = |markdown: &str| {
+    let with =
+      verbs::Thread { markdown: Some(markdown.into()), on: on(&root), ..Default::default() };
+    let act = engine.thread(Object::string("str"), with).expect("a thread is made");
     block_on(act).map(|got| got.py_repr())
   };
-  assert_eq!(answer("first task").expect("the first prompt"), "'reply 1'");
-  assert_eq!(answer("second task").expect("the second prompt"), "'reply 2'");
+  assert_eq!(answer("first task").expect("the first thread"), "'reply 1'");
+  assert_eq!(answer("second task").expect("the second thread"), "'reply 2'");
   let pids = yard.pids();
   assert_eq!(pids.len(), 1, "one process holds the conversation of the chain");
   let args = yard.args(&pids[0]);
@@ -319,8 +320,8 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   // The ids of chains repeat in every life, and a life on the same command line keeps a conversation of its own.
   let (mut other, _) = life("claude-other", claude.models());
   let with =
-    verbs::Prompt { message: Some("first task".into()), on: on(&root), ..Default::default() };
-  block_on(other.prompt(Object::string("str"), with).expect("a prompt is made"))
+    verbs::Thread { markdown: Some("first task".into()), on: on(&root), ..Default::default() };
+  block_on(other.thread(Object::string("str"), with).expect("a thread is made"))
     .expect("an answer");
   let session = |pid: &str| super::claude::test::after(&yard.args(pid), "--session-id");
   let both = yard.pids();
@@ -349,19 +350,19 @@ fn a_turn_hands_its_images_to_a_model_that_takes_them_and_a_model_that_takes_non
   let at = yard("images");
   fs::write(at.join("a.png"), b"\x89PNG\r\n\x1a\nimage").expect("the image is written");
   let kept = images::attach(&at.join("images"), &at.join("a.png")).expect("the image is attached");
-  let message = format!("look at {}", images::reference("a.png", &kept.uri));
-  let prompted = |engine: &mut Engine| {
+  let markdown = format!("look at {}", images::reference("a.png", &kept.uri));
+  let threaded = |engine: &mut Engine| {
     let root = engine.root().to_owned();
     let with =
-      verbs::Prompt { message: Some(message.clone()), on: on(&root), ..Default::default() };
-    engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned()
+      verbs::Thread { markdown: Some(markdown.clone()), on: on(&root), ..Default::default() };
+    engine.thread(Object::string("int"), with).expect("a thread is made").id().to_owned()
   };
   let model = streaming(&[("close(1)", Usage::new())]);
   let provider = Provider::new(at.display().to_string(), vec![scripted(&model).images()])
     .images(at.join("images"));
   let mut engine = lived(provider);
-  let id = prompted(&mut engine);
-  block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  let id = threaded(&mut engine);
+  block_on(Act::<Object>::of(&mut engine, &id)).expect("the thread is answered");
   let [Message::User { content }] = &model.requests()[0].chat_history[..] else {
     panic!("one user turn")
   };
@@ -373,7 +374,7 @@ fn a_turn_hands_its_images_to_a_model_that_takes_them_and_a_model_that_takes_non
   let provider =
     Provider::new(at.display().to_string(), vec![scripted(&blind)]).images(at.join("images"));
   let mut engine = lived(provider);
-  prompted(&mut engine);
+  threaded(&mut engine);
   assert!(until(&mut engine, |engine| said(engine).len() >= 2), "{:?}", said(&mut engine));
   let refused =
     "Refused(args=('m/high answered nothing: ProviderError: m does not accept images.'))";
@@ -397,7 +398,7 @@ fn a_function_of_the_host_answers_a_request_with_a_turn_in_place_of_the_model() 
   let model = scripted(&MockCompletionModel::default()).hosted(host);
   let mut engine = lived(Provider::new(at.display().to_string(), vec![model]).writes(writes));
   let id = asked(&mut engine);
-  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the thread is answered");
   assert_eq!(got.as_ref().as_int(), Some(7));
   let root = engine.root().to_owned();
   let request = requests.lock().expect("the requests")[0].clone();
@@ -407,7 +408,7 @@ fn a_function_of_the_host_answers_a_request_with_a_turn_in_place_of_the_model() 
   assert!(
     request["messages"][0]["content"][0]["text"]
       .as_str()
-      .is_some_and(|text| text.contains("#prompt1\nprompt1_message = 'count'\n"))
+      .is_some_and(|text| text.contains("#thread1\nthread1_markdown = 'count'\n"))
   );
   let expected = "('assistant', 'close(7)', (10, 2, 0, 0, 1.0), None)";
   assert_eq!(said(&mut engine)[1], ("done".into(), "reply1".into(), expected.into()));
@@ -460,8 +461,8 @@ fn chatted() -> String {
   events.concat()
 }
 
-/// A life whose root prompts the one model of a provider of the network, which the catalog makes of this listing
-/// with this environment; and what the prompt came to.
+/// A life whose root starts a thread to the one model of a provider of the network, which the catalog makes of this
+/// listing with this environment; and what the thread came to.
 fn networked(name: &str, listed: &Value, env: &[(&str, &str)]) -> (Engine, Object) {
   let catalog = Catalog::of(&super::catalog::parsed(&listed.to_string(), None), None, |name| {
     env.iter().find(|(held, _)| *held == name).map(|(_, value)| (*value).to_owned())
@@ -501,7 +502,7 @@ fn a_provider_of_the_network_is_asked_with_its_credential_and_streams_its_turn()
   let mut engine =
     lived(Provider::new(at.display().to_string(), models).actor(actor).writes(writes));
   let id = asked(&mut engine);
-  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the thread is answered");
   assert_eq!(got.as_ref().as_int(), Some(3));
   let request = asked_of.join().expect("the provider read the request");
   assert!(request.starts_with("POST /v1/chat/completions "), "{request}");
@@ -543,7 +544,7 @@ fn the_host_is_told_nothing_more_of_what_a_model_writes_once_its_reply_is_over()
   let id = asked(&mut engine);
   let parts = |told: &Arc<Mutex<Vec<[String; 4]>>>| told.lock().expect("the parts told").len();
   assert!(until(&mut engine, |_| parts(&told) == 1), "the model wrote a part");
-  engine.cancel(&id).expect("the prompt is cancelled");
+  engine.cancel(&id).expect("the thread is cancelled");
   let over = |engine: &mut Engine| {
     let root = engine.root().to_owned();
     let facts = engine.transcript(verbs::Transcript { on: on(&root) }).expect("the transcript");

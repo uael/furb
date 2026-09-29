@@ -7,7 +7,7 @@ from furb import engine
 async def test_a_close_from_outside_still_ends_what_a_pause_is_over() -> None:
   """A close from outside still ends what a pause is over."""
   _, _, root = born()
-  act = engine.prompt(int, "how many?", on=root)
+  act = engine.thread(int, "how many?", on=root)
   await settle()
   engine.pause(act)
   engine.close(21, act)

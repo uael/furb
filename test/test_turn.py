@@ -10,7 +10,7 @@ USAGE = (8000, 30, 0, 0, 1.5)
 async def spoke(*words: str) -> tuple[Sand, list[tuple], str]:
   """A life whose model answers with each word in turn at the usage of these tests, the last of them a close."""
   sand, log, root = born(*words, cost=USAGE)
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   await settle()
   return sand, log, root
 
@@ -44,7 +44,7 @@ async def test_a_turn_is_a_role_python_a_usage_and_blocks() -> None:
   assert [len(turn) for turn in got] == [4, 4, 4]
   role, py, usage, blocks = got[0]
   assert (role, usage, blocks) == ("user", None, None)
-  assert heads(got[:1]) == ["#chain1", "#chain1 standing", "#prompt1", "#rung1 advance on prompt1"]
+  assert heads(got[:1]) == ["#chain1", "#chain1 standing", "#thread1", "#rung1 advance on thread1"]
   assert py == "\n\n".join(paragraphs(got[:1]))
 
 
@@ -76,5 +76,5 @@ async def test_the_python_of_a_turn() -> None:
   _, _, root = await spoke("<s:hi>\nhi\n</s:hi>\na = hi", "close(len(a) - 2)")
   got = engine.turns(on=root)
   assert got[1][1] == "<s:hi>\nhi\n</s:hi>\na = hi"
-  assert got[2][1] == "#rung2 advance on prompt1"
-  assert got[4][1] == "#prompt1 closed\nprompt1_value = 1"
+  assert got[2][1] == "#rung2 advance on thread1"
+  assert got[4][1] == "#thread1 closed\nthread1_value = 1"

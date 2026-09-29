@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, chained, paragraphs, posed, prompted, said, settle, slow, stalled
+from conftest import born, chained, paragraphs, posed, said, settle, slow, stalled, threaded
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -28,16 +28,16 @@ async def test_the_close_of_the_operator_enters_the_record_as_a_fact_of_its_own(
   assert [(one[1], one[2], one[3]) for one in kept] == [(act, OPERATOR, 21)]
 
 
-async def test_a_close_ends_the_rung_of_a_prompt_at_its_next_await() -> None:
-  """A close ends the rung of a prompt at its next await."""
+async def test_a_close_ends_the_rung_of_a_thread_at_its_next_await() -> None:
+  """A close ends the rung of a thread at its next await."""
   _, _, _, act, step, _ = await stalled()
   engine.close(21, act)
   await settle()
   assert (await act) == 21 and isinstance(engine.peek(step), CancelledError)
 
 
-async def test_the_operator_closes_a_prompt_of_shape_none_with_none() -> None:
-  """The operator closes a prompt of shape None with None."""
+async def test_the_operator_closes_a_thread_of_shape_none_with_none() -> None:
+  """The operator closes a thread of shape None with None."""
   _, _, _, act = await posed(None, "look at this")
   engine.close(None, act)
   await settle()
@@ -46,20 +46,20 @@ async def test_the_operator_closes_a_prompt_of_shape_none_with_none() -> None:
 
 async def test_the_close_of_the_operator_delivers_to_the_act_of_the_rung_whenever_the_close_comes() -> None:
   """The close of the operator delivers to the act of the rung whenever the close comes."""
-  _, log, root = born("p = prompt(int, 'how many?', to='operator')\nclose(await p)")
-  act = engine.prompt(int, "ask them", on=root)
+  _, log, root = born("p = thread(int, 'how many?', to='operator')\nclose(await p)")
+  act = engine.thread(int, "ask them", on=root)
   await settle()
-  theirs = said(log, "prompt")[-1][1]
+  theirs = said(log, "thread")[-1][1]
   assert engine.peek(act, ...) is ...
   engine.close(21, theirs)
   await settle()
   assert (await act) == 21
 
 
-async def test_the_operator_closes_a_pending_prompt_of_any_actor() -> None:
-  """The operator closes a pending prompt of any actor."""
+async def test_the_operator_closes_a_pending_thread_of_any_actor() -> None:
+  """The operator closes a pending thread of any actor."""
   _, log, root = born()
-  act = engine.prompt(int, "count", to="m/low", on=root)
+  act = engine.thread(int, "count", to="m/low", on=root)
   await settle()
   assert engine.peek(act, ...) is ... and said(log, "reply")
   engine.close(21, act)
@@ -67,20 +67,20 @@ async def test_the_operator_closes_a_pending_prompt_of_any_actor() -> None:
   assert (await act) == 21
 
 
-async def test_a_rung_closes_a_pending_prompt_of_any_actor() -> None:
-  """A rung closes a pending prompt of any actor."""
+async def test_a_rung_closes_a_pending_thread_of_any_actor() -> None:
+  """A rung closes a pending thread of any actor."""
   sand, _, root = born()
   two = engine.chain("two")
-  waiting = engine.prompt(int, "count", to="n/low", on=two)
+  waiting = engine.thread(int, "count", to="n/low", on=two)
   await settle()
   sand.script[root] = [f"close(21, {waiting!r})\nclose(1)"]
-  act = engine.prompt(int, "close it", on=root)
+  act = engine.thread(int, "close it", on=root)
   await settle()
   assert ((await waiting), (await act)) == (21, 1)
 
 
 async def test_close_is_given_the_result_of_a_pending_act_and_the_id_of_that_act() -> None:
-  """close is given the result of a pending act, and the id of that act when it is not the prompt of the running word."""
+  """close is given the result of a pending act, and the id of that act when it is not the thread of the running word."""
   _, _, _, act = slow()
   await settle()
   engine.close("done with it", act)
@@ -88,8 +88,8 @@ async def test_close_is_given_the_result_of_a_pending_act_and_the_id_of_that_act
   assert (await act) == "done with it"
 
 
-async def test_an_exception_closes_a_prompt_with_that_exception() -> None:
-  """An exception closes a prompt with that exception."""
+async def test_an_exception_closes_a_thread_with_that_exception() -> None:
+  """An exception closes a thread with that exception."""
   _, _, _, act = await posed()
   engine.close(ValueError("boom"), act)
   await settle()
@@ -105,22 +105,22 @@ async def test_the_close_of_the_operator_stands_in_the_transcript_with_the_name_
   held = engine.transcript(root)
   assert [one[2] for one in held if one[0] == "close"] == [OPERATOR]
   assert paragraphs(engine.turns(on=root))[2:] == [
-    prompted(act, "int", "how many?"),
+    threaded(act, "int", "how many?"),
     f"#{act} closed\n{act}_value = 21",
   ]
 
 
-async def test_a_prompt_completes_with_the_exception_that_the_word_of_the_prompt_gave_to_close() -> None:
-  """A prompt completes with the exception that the word of the prompt gave to close."""
+async def test_a_thread_completes_with_the_exception_that_the_word_of_the_prompt_gave_to_close() -> None:
+  """A thread completes with the exception that the word of the thread gave to close."""
   sand, _, root, waiting = await posed(int, "count")
   sand.script[root] = [f"close(ValueError('boom'), {waiting!r})\nclose(1)"]
-  act = engine.prompt(int, "close it", on=root)
+  act = engine.thread(int, "close it", on=root)
   await settle()
   assert (await act) == 1 and isinstance(engine.peek(waiting), ValueError)
 
 
 async def test_close_is_given_the_value_first() -> None:
-  """close is given the value first, since a word that answers its own prompt names no act at all."""
+  """close is given the value first, since a word that answers its own thread names no act at all."""
   _, log, _, act = slow()
   engine.close(21, act)
   word = said(log, "close")[0]
@@ -128,13 +128,13 @@ async def test_close_is_given_the_value_first() -> None:
   assert word[4] == [f"#{act} closed\n{act}_value = 21"]
 
 
-async def test_a_value_closes_an_act_with_that_value_and_a_prompt_with_a_value_that_has_its_shape() -> None:
-  """A value closes an act with that value, and a prompt with a value that has its shape."""
+async def test_a_value_closes_an_act_with_that_value_and_a_thread_with_a_value_that_has_its_shape() -> None:
+  """A value closes an act with that value, and a thread with a value that has its shape."""
   _, _, root = born()
   waiting = engine.wait(30.0, on=root)
   engine.close("twenty one", waiting)
   assert (await waiting) == "twenty one"
-  act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
+  act = engine.thread(int, "how many?", to=OPERATOR, on=root)
   await settle()
   with pytest.raises(Refused, match="'twenty one' not int"):
     engine.close("twenty one", act)
@@ -142,10 +142,10 @@ async def test_a_value_closes_an_act_with_that_value_and_a_prompt_with_a_value_t
   assert (await act) == 21
 
 
-async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the_shape_of_the_prompt_raises() -> None:
-  """A close that answers a prompt with a value that does not have the shape of the prompt raises Refused in the word that said it, so the prompt asks again."""
+async def test_a_close_that_answers_a_thread_with_a_value_that_does_not_have_the_shape_of_the_prompt_raises() -> None:
+  """A close that answers a thread with a value that does not have the shape of the thread raises Refused in the word that said it, so the thread asks again."""
   _, log, root = born("close('nope')", "close(1)")
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   await settle()
   assert len(said(log, "reply")) == 2
   step = said(log, "reply")[0][2]
@@ -159,7 +159,7 @@ async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
   act = engine.bash("echo hi", on=root)
   sand.exits(act, 0)
   sand.script[root] = ["y = bash('slow')\nclose(7)"]
-  answered = engine.prompt(int, "go", on=root)
+  answered = engine.thread(int, "go", on=root)
   assert await answered == 7
   await settle()
   running = said(log, "bash")[1][1]
@@ -173,10 +173,10 @@ async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
   assert engine.turns(on=root) == was
 
 
-async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_that_made_the_rung_of_the_word() -> None:
-  """A close said from a word that names no act is over the prompt that made the rung of the word, and over the rung itself for a word its caller wrote, which answers no prompt."""
+async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_thread_that_made_the_rung_of_the_word() -> None:
+  """A close said from a word that names no act is over the thread that made the rung of the word, and over the rung itself for a word its caller wrote, which answers no thread."""
   sand, log, root = born("close(21)")
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   assert await act == 21
   await settle()
   assert [one[1] for one in said(log, "close")] == [act]
@@ -184,15 +184,15 @@ async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_tha
   assert await mine == 9
   assert [one[1] for one in said(log, "close")] == [act, mine]
   sand.script[root] = ["close(5, 'rung3')", "close(6)"]
-  named = engine.prompt(int, "count", on=root)
+  named = engine.thread(int, "count", on=root)
   assert await named == 6
   assert [one[1] for one in said(log, "close")][2:] == ["rung3", named] and engine.peek("rung3") == 5
 
 
 async def test_a_close_said_from_a_word_that_retells_reaches_nothing_and_says_nothing() -> None:
-  """A close said from a word that retells reaches nothing and says nothing: it stops the word where it stands, so the rung is done with nothing and answers no prompt."""
+  """A close said from a word that retells reaches nothing and says nothing: it stops the word where it stands, so the rung is done with nothing and answers no thread."""
   _, log, root = born("x = bash('slow')\nk = 1\nclose(7, x)\nclose(21)\nj = 2", auto=False)
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   assert await act == 21
   await settle()
   command = said(log, "bash")[0][1]
@@ -203,10 +203,10 @@ async def test_a_close_said_from_a_word_that_retells_reaches_nothing_and_says_no
   assert [(one[1], one[3]) for one in said(log, "close")] == [(command, 7), (act, 21)]
 
 
-async def test_a_close_of_the_prompt_of_the_running_word_stops_that_word_where_it_stands() -> None:
-  """A close of the prompt of the running word stops that word where it stands, as a raise does, and nothing after the call runs."""
+async def test_a_close_of_the_thread_of_the_running_word_stops_that_word_where_it_stands() -> None:
+  """A close of the thread of the running word stops that word where it stands, as a raise does, and nothing after the call runs."""
   _, _, root = born("close(21)\nk = 1")
-  assert await engine.prompt(int, "count", on=root) == 21
+  assert await engine.thread(int, "count", on=root) == 21
   await settle()
   assert "k" not in engine.module(root)
   await engine.rung("try:\n  close(5)\nexcept Exception:\n  after = 1", on=root)

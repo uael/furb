@@ -45,13 +45,13 @@ fn an_attached_image_is_kept_once_under_the_digest_of_its_bytes() {
 }
 
 #[test]
-fn a_message_names_an_image_as_markdown_and_names_nothing_else_so() {
+fn a_markdown_names_an_image_as_a_markdown_image_and_names_nothing_else_so() {
   let uri = format!("furb-image://{}.png", "a".repeat(64));
   let named = reference("my [draft]\n", &uri);
   assert_eq!(named, format!("![my _draft__]({uri})"));
-  let message =
+  let markdown =
     format!("see {named} and ![x](https://elsewhere/a.png) and ![y](furb-image://short.png)");
-  let found = references(&message);
+  let found = references(&markdown);
   assert_eq!(found.len(), 1);
   assert_eq!(
     (found[0].name.as_str(), found[0].uri.as_str(), found[0].text.as_str()),
@@ -71,13 +71,13 @@ fn an_image_is_read_only_while_its_bytes_have_the_digest_it_is_named_by() {
 }
 
 #[test]
-fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_once() {
+fn a_turn_hands_a_model_each_image_that_the_markdown_of_a_thread_it_opens_names_once() {
   let at = yard("turn");
   fs::write(at.join("a.png"), PNG).expect("the image is written");
   let kept = attach(&at, &at.join("a.png")).expect("the image is attached");
   let named = reference("a.png", &kept.uri);
   let python = format!(
-    "#prompt1 look at {named} and {named}\nprompt1: Act[str] = Act('prompt1')\n\n#read a.txt\n# {named}\n\n#prompt2 no open"
+    "#thread1 look at {named} and {named}\nthread1: Act[str] = Act('thread1')\n\n#read a.txt\n# {named}\n\n#thread2 no open"
   );
   let mut images = Images::new(Some(at.clone()));
   let seen = images.named(&python).expect("the images of the turn");

@@ -20,7 +20,7 @@ export const commands = {
   bash: ["Run command", "<command>", "Stream a shell command"],
   read: ["Read file", "<path>", "Show a file to this chain"],
   cd: ["Change directory", "<path>", "Change this chain's working directory"],
-  edit: ["Edit program", "[prompt id]", "Change a prompt's program and replay it"],
+  edit: ["Edit program", "[thread id]", "Change a thread's program and replay it"],
   inspect: ["Inspect a name", "<name>", "Read a value from this chain's module"],
   details: ["Details", "", "Expand or collapse an act in the current view"],
   grant: ["Set budget", "<dollars>", "Pause at a dollar ceiling"],

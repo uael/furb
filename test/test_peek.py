@@ -49,7 +49,7 @@ async def test_peek_never_raises() -> None:
   engine.cancel(gone)
   await settle()
   assert isinstance(engine.peek(gone), CancelledError)
-  ghost = engine.prompt(int, "hi", to="ghost", on=root)
+  ghost = engine.thread(int, "hi", to="ghost", on=root)
   await settle()
   assert isinstance(engine.peek(ghost), Refused)
 

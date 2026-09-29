@@ -49,7 +49,7 @@ const notices = /^(34|36|37|42|43|44|45|50)-/;
 async function settle(): Promise<void> {
   await session.refresh();
   for (let attempt = 0; attempt < 10; attempt++) {
-    const pending = session.activity.filter((act) => !act.done && ["prompt", "rung"].includes(act.kind));
+    const pending = session.activity.filter((act) => !act.done && ["thread", "rung"].includes(act.kind));
     if (!pending.length && !session.queued.length) break;
     // A queue that waits on no act sends its next message in a moment.
     if (!pending.length) await new Promise((done) => setTimeout(done, 100));
@@ -110,19 +110,19 @@ try {
   app().effortPicker();
   await capture("07-effort");
   app().closeOverlay();
-  const question = await session.engine.prompt("bool", {
-    message: "Apply the search shortcut to the main chain?",
+  const question = await session.engine.thread("bool", {
+    markdown: "Apply the search shortcut to the main chain?",
     on: session.selected,
     to: "operator",
   });
-  await until(session.host, () => session.host.prompts.has(question));
+  await until(session.host, () => session.host.threads.has(question));
   await session.refresh();
   await capture("08-operator-question");
   app().question();
   await capture("09-operator-dialog");
   app().closeOverlay();
-  await session.host.answer(session.operatorPrompt?.id ?? "", "yes");
-  await until(session.host, () => !session.host.prompts.size);
+  await session.host.answer(session.operatorThread?.id ?? "", "yes");
+  await until(session.host, () => !session.host.threads.size);
   app().toggleMode();
   app().composer.setText('notes = read("README.md")\nprint(notes.content)');
   await capture("10-python-input");
@@ -169,8 +169,8 @@ try {
   app().scroll.scrollTo(app().scroll.scrollHeight);
   await capture("18-live-command");
   await session.engine.result(command);
-  const progress = await session.engine.prompt("str", {
-    message: "show live progress",
+  const progress = await session.engine.thread("str", {
+    markdown: "show live progress",
     on: session.selected,
   });
   // The model has written part of its word, and writes the rest.
@@ -265,8 +265,8 @@ try {
   await checks.session.engine.bash("printf 'Checking the project...\\n'; sleep 60", {
     on: checks.session.engine.root,
   });
-  await review.session.engine.prompt("bool", {
-    message: "Apply the new navigation?",
+  await review.session.engine.thread("bool", {
+    markdown: "Apply the new navigation?",
     to: "operator",
     on: review.session.engine.root,
   });
@@ -326,11 +326,11 @@ try {
   await capture("36-image-attachment");
   await app().submit();
   await session.refresh();
-  const imagePrompt = session.acts.findLast(
-    (act) => act.kind === "prompt" && String(act.words[1]).startsWith("Review the layout"),
+  const imageThread = session.acts.findLast(
+    (act) => act.kind === "thread" && String(act.words[1]).startsWith("Review the layout"),
   );
-  if (!imagePrompt) throw new Error("The image prompt was not submitted.");
-  await session.engine.result(imagePrompt.id);
+  if (!imageThread) throw new Error("The image thread was not submitted.");
+  await session.engine.result(imageThread.id);
   await session.refresh();
   await session.submit("/share");
   await capture("37-share-conversation");

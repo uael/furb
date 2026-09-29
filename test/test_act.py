@@ -85,9 +85,9 @@ async def test_its_own_ear_is_born_after_the_ears_of_the_engine_heard_it() -> No
   _, _, root = born("close(1)")
   heard: list[tuple] = []
   engine.drive(keeping(heard), "keeper")
-  asked = engine.prompt(int, "one", on=root)
+  asked = engine.thread(int, "one", on=root)
   assert await asked == 1
-  assert [(a[0], a[1]) for a in heard if engine.get(a[1]) == a][:2] == [("prompt", asked), ("rung", "rung1")]
+  assert [(a[0], a[1]) for a in heard if engine.get(a[1]) == a][:2] == [("thread", asked), ("rung", "rung1")]
 
 
 async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes_it() -> None:
@@ -183,7 +183,7 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
   named = engine.act("note", two, noting(heard), "one")
   assert engine.get(named)[3] == two
   sand.script[root] = ["close(bash('echo hi'))"]
-  unsaid = await engine.prompt(str, "start one", on=root)
+  unsaid = await engine.thread(str, "start one", on=root)
   assert engine.get(unsaid)[3] == root
 
 
@@ -213,7 +213,7 @@ async def test_an_act_carries_the_words_of_its_kind() -> None:
   assert engine.get(two) == ("chain", two, OPERATOR, "", "two", root)
   sand.files["/w/a.txt"] = "one\n"
   sand.script[root] = ["write(read('a.txt').replace('one', 'uno'))\nclose(1)"]
-  assert await engine.prompt(int, "edit", on=root) == 1
+  assert await engine.thread(int, "edit", on=root) == 1
   (edit,) = said(sand.calls, "write")
   assert edit[4] == Text("/w/a.txt", "uno\n") and edit[4].before is None
   await relived(Sand(files={"/w/a.txt": "one\n"}), plain(sand.record))

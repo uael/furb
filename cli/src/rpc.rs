@@ -2,7 +2,7 @@
 //!
 //! The client writes one command on each line of stdin, a JSON object whose `type` names it. furb writes one record on
 //! each line of stdout: the response to each command, which repeats its `id`, and the events of the life, which are
-//! each fact it says, each prompt it puts to the operator, and the done of each act that a command made. `docs/rpc.md`
+//! each fact it says, each thread it puts to the operator, and the done of each act that a command made. `docs/rpc.md`
 //! says each command and each event. The life ends when stdin ends.
 
 use std::{
@@ -54,20 +54,20 @@ pub fn serve(opening: Opening, record: Option<&Path>) -> Result<(), String> {
   server.served(&heard).map_err(|no| no.to_string())
 }
 
-/// The client as the server holds it: the records not yet written to it, and each prompt of the operator that waits
+/// The client as the server holds it: the records not yet written to it, and each thread to the operator that waits
 /// for its close, in the order they asked.
 #[derive(Default)]
 struct Client {
   records: Vec<Value>,
-  prompts: Vec<Asked>,
+  threads: Vec<Asked>,
 }
 
-/// A prompt put to the operator as the client reads it.
+/// A thread put to the operator as the client reads it.
 fn fields(asked: &Asked) -> Value {
-  json!({"act": asked.about, "on": asked.on, "shape": asked.shape, "message": asked.message})
+  json!({"act": asked.about, "on": asked.on, "shape": asked.shape, "markdown": asked.markdown})
 }
 
-/// The console of the client, as an ear of the World: it takes each prompt put to the operator and sends it to the
+/// The console of the client, as an ear of the World: it takes each thread put to the operator and sends it to the
 /// client, whose close answers it.
 fn console(client: Rc<RefCell<Client>>) -> Box<dyn Ear> {
   ear(move |co, _| async move {
@@ -75,12 +75,12 @@ fn console(client: Rc<RefCell<Client>>) -> Box<dyn Ear> {
       let a = hear(&co).await;
       if let Some(asked) = Asked::taken(&co, &a).await? {
         let mut event = fields(&asked);
-        event["type"] = json!("prompt");
+        event["type"] = json!("thread");
         let mut client = client.borrow_mut();
         client.records.push(event);
-        client.prompts.push(asked);
+        client.threads.push(asked);
       } else if a.kind() == "done" {
-        client.borrow_mut().prompts.retain(|one| one.about != a.about());
+        client.borrow_mut().threads.retain(|one| one.about != a.about());
       }
     }
   })
@@ -230,15 +230,15 @@ impl Server {
     let failed = |no: Fault| no.to_string();
     let on = command.text("on")?.unwrap_or_else(|| self.life.root.clone());
     match kind {
-      "prompt" => {
+      "thread" => {
         let shape = command.text("shape")?.filter(|name| !name.is_empty());
         let shape = life::shape(shape.as_deref().unwrap_or(life::SHAPE));
-        let with = verbs::Prompt {
-          message: command.text("message")?,
+        let with = verbs::Thread {
+          markdown: command.text("markdown")?,
           to: command.text("to")?.map(|to| life::actor(&to).0),
           on: Some(on),
         };
-        let id = self.life.engine.prompt(shape, with).map_err(failed)?.id().to_owned();
+        let id = self.life.engine.thread(shape, with).map_err(failed)?.id().to_owned();
         Ok(self.made(id))
       }
       "rung" => {
@@ -288,7 +288,7 @@ impl Server {
       }
       "state" => {
         let standing = self.life.engine.standing().map_err(failed)?;
-        let prompts: Vec<Value> = self.client.borrow().prompts.iter().map(fields).collect();
+        let threads: Vec<Value> = self.client.borrow().threads.iter().map(fields).collect();
         let extensions: Vec<String> =
           self.life.extensions()?.into_iter().map(|one| one.name).collect();
         Ok(json!({
@@ -297,7 +297,7 @@ impl Server {
           "standing": wire::outward(standing.as_ref()),
           "extensions": extensions,
           "paused": self.life.paused(),
-          "prompts": prompts,
+          "threads": threads,
           "acts": self.awaited,
           "pending": self.life.engine.pending().map_err(failed)?,
         }))
@@ -315,12 +315,12 @@ impl Server {
   }
 
   /// The value a close carries, with every number exact. The operator answers a float with any number, so a whole
-  /// number that closes a prompt of a float is that float.
+  /// number that closes a thread of a float is that float.
   fn closing(&self, act: &str, command: &Command) -> Result<Object, String> {
     let raw = command.0.get("value").map_or("null", |one| one.get());
     let value = wire::parsed(raw).map_err(|no| no.to_string())?;
     let float =
-      self.client.borrow().prompts.iter().any(|one| one.about == act && one.shape == "float");
+      self.client.borrow().threads.iter().any(|one| one.about == act && one.shape == "float");
     Ok(match value.as_ref().as_int() {
       Some(n) if float => Object::float(n as f64),
       _ => value,

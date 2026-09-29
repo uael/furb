@@ -77,9 +77,9 @@ async def test_it_reaches_by_the_chain_as_well_as_by_the_name() -> None:
 
 
 async def test_a_control_carries_the_header_it_tells() -> None:
-  """A control carries the header it tells, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it."""
+  """A control carries the header it tells, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a thread it will not serve, says the control the one way there is to say it."""
   sand, log, root = born(cost=COST)
-  ghost = engine.prompt(int, "hi", to="ghost", on=root)
+  ghost = engine.thread(int, "hi", to="ghost", on=root)
   await settle()
   closed = f"#{ghost} closed\n{ghost}_value = Refused('ghost no actor')"
   shut = said(log, "close")[0]
@@ -87,7 +87,7 @@ async def test_a_control_carries_the_header_it_tells() -> None:
   assert isinstance(shut[3], Refused) and str(shut[3]) == "ghost no actor"
   ceiling = engine.grant(usd=1.0, on=root)
   sand.script[root] = ["a = 1", "close(2)"]
-  engine.prompt(int, "count", on=root)
+  engine.thread(int, "count", on=root)
   await settle()
   assert said(log, "pause") == [("pause", root, ceiling, [f"#{root} paused"])]
   assert [line for line in paragraphs(engine.turns(on=root)) if line in (closed, f"#{root} paused")] == [

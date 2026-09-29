@@ -108,7 +108,7 @@ export declare class Engine {
   pause(id: string): void
   /** A wake: it ends the pause over the same act, and what waited is heard. */
   wake(id: string): void
-  /** A cancel of that prompt reaches the acts that its rungs made on the chain with a source. */
+  /** A cancel of that thread reaches the acts that its rungs made on the chain with a source. */
   cancel(id: string): void
   /** An act ended from outside, by its name, with a value: it is done with it, and it ends what it made, since a close is a cancel that carries what the act it names is done with. */
   close(value: unknown, options?: { id?: string } | null): void
@@ -118,8 +118,8 @@ export declare class Engine {
   wait(options?: { seconds?: number; on?: string } | null): Act & PromiseLike<null>
   /** The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is. */
   rung(options?: { word?: string; retells?: string; actor?: string; on?: string } | null): Act & PromiseLike<unknown>
-  /** A prompt: it makes the rung of one turn of its model, makes another while the rung it made gives no value, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike. */
-  prompt(shape: unknown, options?: { message?: string; to?: string; on?: string } | null): Act & PromiseLike<unknown>
+  /** A thread: it makes the rung of one turn of its model, makes another while the rung it made gives no value, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike. */
+  thread(shape: unknown, options?: { markdown?: string; to?: string; on?: string } | null): Act & PromiseLike<unknown>
   /** chain says what a chain does: how it is opened, what it tells, and what it answers for. */
   chain(options?: { label?: string; source?: string; filter?: unknown; on?: string } | null): Act & PromiseLike<unknown>
   /** A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells that ledger at each answer of a model, so no turn a reply has sent grows a line after it. */
@@ -143,13 +143,16 @@ export declare class NativeEar {
 }
 
 /**
- * A line of the operator as a value of the shape a prompt wants, by the rules every console of the crate reads a
+ * A line of the operator as a value of the shape a thread wants, by the rules every console of the crate reads a
  * line by, as the record keeps it; or the refusal of a line that is no value of the shape, and of a shape the
  * operator answers not.
  */
 export declare function answered(shape: string, line: string): unknown
 
-/** An image copied into a directory of images under the digest of its bytes, as a message attaches it. */
+/**
+ * An image copied into a directory of images under the digest of its bytes, as the markdown of a thread
+ * attaches it.
+ */
 export declare function attachImage(directory: string, path: string): ImageAttachment
 
 /** The ear of commands, which runs each in a shell of this machine. */
@@ -211,7 +214,7 @@ export declare function gate(sheet: string): Array<[number, string]>
 export declare function hearing(): boolean
 
 /**
- * An image a host attached: the name of its file, the uri a message names it by, its media type, and its size in
+ * An image a host attached: the name of its file, the uri a markdown names it by, its media type, and its size in
  * bytes.
  */
 export interface ImageAttachment {
@@ -239,11 +242,11 @@ export interface ImagePath {
   digest: string
 }
 
-/** How a message names an image: `![name](uri)`. */
+/** How a markdown names an image: `![name](uri)`. */
 export declare function imageReference(name: string, uri: string): string
 
-/** Each image a message names, as its text in the message, its name, and its uri. */
-export declare function imageReferences(message: string): Array<Named>
+/** Each image a markdown names, as its text in the markdown, its name, and its uri. */
+export declare function imageReferences(markdown: string): Array<Named>
 
 /** The type of an image by its first bytes: its media type and its extension, for a PNG, a JPEG, a GIF or a WebP. */
 export declare function imageType(data: Uint8Array): ImageType
@@ -298,7 +301,7 @@ export interface ModelInfo {
  */
 export declare function models(claude?: string | undefined | null): Array<ModelInfo>
 
-/** An image a message names: its text in the message, its name, and its uri. */
+/** An image a markdown names: its text in the markdown, its name, and its uri. */
 export interface Named {
   text: string
   name: string
@@ -360,7 +363,7 @@ export interface Opening {
    */
   config?: string
   /**
-   * The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
+   * The actor a thread goes to when it names none, as the catalog names a model, and an effort after a slash, at its
    * level as [`world::Model::at`] moves it; the first model of the roster when unsaid.
    */
   actor?: string

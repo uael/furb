@@ -1,7 +1,7 @@
 //! furb, the command line: the TUI, a JSON-RPC on stdin and stdout, and one command of the operator on one life.
 //!
 //! With no command, furb hands the terminal to the TUI, or, with `--mode rpc`, serves a client on its stdin and its
-//! stdout. `prompt`, `turns`, `run` and `extensions` each open one life and print what it came to. Every life runs on
+//! stdout. `thread`, `turns`, `run` and `extensions` each open one life and print what it came to. Every life runs on
 //! the engine of the crate, on the ears of the World that the crate writes, the extensions among them, and on the
 //! provider of the model of its default actor and of the models that `--roster` names, from the catalog of the crate.
 
@@ -58,11 +58,11 @@ struct Place {
   cwd: Option<PathBuf>,
 }
 
-/// What a life stands on: the actor a prompt goes to when it names none, and the models it offers beside the model
+/// What a life stands on: the actor a thread goes to when it names none, and the models it offers beside the model
 /// of that actor. The standing of every chain tells the roster, so a life offers the models it names and no more.
 #[derive(Args, Default)]
 struct Stand {
-  /// The actor a prompt goes to when it names none, as provider:model/effort; the first model the catalog offers when
+  /// The actor a thread goes to when it names none, as provider:model/effort; the first model the catalog offers when
   /// unsaid.
   #[arg(long)]
   model: Option<String>,
@@ -74,10 +74,10 @@ struct Stand {
 /// One command of the operator, on one life.
 #[derive(Subcommand)]
 enum Command {
-  /// Prompt an actor on the root chain and print what the prompt gave.
-  Prompt {
-    /// The message, which the actor reads.
-    message: String,
+  /// Start a thread to an actor on the root chain and print what the thread gave.
+  Thread {
+    /// The markdown, which the actor reads.
+    markdown: String,
     /// The actor, as provider:model/effort, or as an id that one model alone holds; the default actor of the chain
     /// when unsaid.
     #[arg(long, default_value = "", hide_default_value = true)]
@@ -140,10 +140,10 @@ impl Stand {
 fn main() -> ExitCode {
   let furb = Furb::parse();
   let done = match furb.command {
-    Some(Command::Prompt { message, to, shape, place, mut stand }) => {
-      // The actor of the prompt is one the life offers.
+    Some(Command::Thread { markdown, to, shape, place, mut stand }) => {
+      // The actor of the thread is one the life offers.
       stand.roster.extend(life::actor(&to).1);
-      prompt(stand.on(place.opening(true)), &shape, message, to)
+      thread(stand.on(place.opening(true)), &shape, markdown, to)
     }
     Some(Command::Turns { record, cwd, stand }) => {
       let place = Place { record: Some(record), cwd };
@@ -171,24 +171,24 @@ fn main() -> ExitCode {
   }
 }
 
-/// A prompt of the operator on the root of a life, awaited for the shape it asks for, and what it came to, as python
+/// A thread of the operator on the root of a life, awaited for the shape it asks for, and what it came to, as python
 /// shows it.
 ///
-/// A prompt the record already holds is taken up and never asked twice, so a command said again on a kept record
-/// reads the answer of the life before it and asks no model for it. A prompt it holds that is not done goes on, since
-/// the command wakes it, and a wake of a prompt that is done says nothing.
-fn prompt(opening: Opening, shape: &str, message: String, to: String) -> Result<(), String> {
+/// A thread the record already holds is taken up and never asked twice, so a command said again on a kept record
+/// reads the answer of the life before it and asks no model for it. A thread it holds that is not done goes on, since
+/// the command wakes it, and a wake of a thread that is done says nothing.
+fn thread(opening: Opening, shape: &str, markdown: String, to: String) -> Result<(), String> {
   let mut life = Life::lived(opening)?;
   let to = life::actor(&to).0;
-  let id = match life.again(shape, &message, &to) {
+  let id = match life.again(shape, &markdown, &to) {
     Some(id) => {
       life.engine.wake(&id).map_err(|no| no.to_string())?;
       id
     }
     None => {
       let with =
-        verbs::Prompt { message: Some(message), to: Some(to), on: Some(life.root.clone()) };
-      life.engine.prompt(life::shape(shape), with).map_err(|no| no.to_string())?.id().to_owned()
+        verbs::Thread { markdown: Some(markdown), to: Some(to), on: Some(life.root.clone()) };
+      life.engine.thread(life::shape(shape), with).map_err(|no| no.to_string())?.id().to_owned()
     }
   };
   println!("{}", life.settled(&id)?.py_repr());

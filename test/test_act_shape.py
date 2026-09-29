@@ -12,8 +12,8 @@ from furb.engine import OPERATOR, Act, Refused
 async def test_the_name_of_an_act() -> None:
   """The name of an act, which is what a verb gives and what a caller holds of the act: a string, so it names the act to close, cancel, pause, peek and get, and awaitable, so it gives what the act comes to."""
   _, log, root, one = await posed(None, "hi")
-  assert isinstance(one, Act) and isinstance(one, str) and one == "prompt1"
-  assert engine.get(one)[:4] == ("prompt", one, OPERATOR, root)
+  assert isinstance(one, Act) and isinstance(one, str) and one == "thread1"
+  assert engine.get(one)[:4] == ("thread", one, OPERATOR, root)
   engine.pause(one)
   engine.wake(one)
   engine.close(21, one)

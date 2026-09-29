@@ -163,12 +163,12 @@ class Sand:
     self.loop = asyncio.get_running_loop()
     while True:
       a = yield
-      if a[0] in ("bash", "wait", "prompt", "reply", "stand", "cd", "read", "write", "feed", "clock", "chance"):
+      if a[0] in ("bash", "wait", "thread", "reply", "stand", "cd", "read", "write", "feed", "clock", "chance"):
         self.calls.append(a)
       yield from self.hear(a)
 
   def hear(self, a: tuple) -> World:
-    """What the World does with one fact: it takes a command, a wait, a prompt to the operator and a reply, answers
+    """What the World does with one fact: it takes a command, a wait, a thread to the operator and a reply, answers
     the questions that are its own, feeds and ends its commands, answers a reply with the next word of its script,
     and keeps what it is told. A World of one test overrides it for what it does otherwise, and hands it every other
     fact.
@@ -191,7 +191,7 @@ class Sand:
       case ("wait", about, _, _, seconds):
         yield "started", about
         self.loop.call_later(seconds, partial(engine.say, "done", about, None))
-      case ("prompt", about, _, _, shape, _, _):
+      case ("thread", about, _, _, shape, _, _):
         yield "started", about
         if shape not in ("None", "bool", "int", "float", "str"):
           engine.close(Refused(f"the operator answers no {shape}"), about)
@@ -404,9 +404,17 @@ def born(*script: str, **world: object) -> tuple[Sand, list[tuple], str]:
 async def lived() -> tuple[Sand, list[tuple], str]:
   """A life that reads a file, runs a command and returns what it came to: the World, what was said and the root."""
   sand, log, root = born(WORD, "close(None)")
-  assert await engine.prompt(int, "read and run", on=root) == 2
+  assert await engine.thread(int, "read and run", on=root) == 2
   await settle()
   return sand, log, root
+
+
+async def acknowledged(log: Sequence[tuple], about: str) -> str:
+  """The acknowledgment of an act, once it is done: the rung with no word that its chain made as that act."""
+  await settle()
+  (ack,) = [a[1] for a in said(log, "rung") if a[2] == about]
+  await Act(ack)
+  return ack
 
 
 def slow() -> tuple[Sand, list[tuple], str, Act[Exit]]:
@@ -416,41 +424,41 @@ def slow() -> tuple[Sand, list[tuple], str, Act[Exit]]:
   return sand, log, root, engine.bash("slow", on=root)
 
 
-async def posed(shape: object = int, message: str = "how many?") -> tuple[Sand, list[tuple], str, Act]:
-  """A life on the World of the suite whose root prompts the operator, once the loop gave the World room to take the
-  prompt: the World, what was said, the root and the prompt."""
+async def posed(shape: object = int, markdown: str = "how many?") -> tuple[Sand, list[tuple], str, Act]:
+  """A life on the World of the suite whose root threads the operator, once the loop gave the World room to take the
+  thread: the World, what was said, the root and the thread."""
   sand, log, root = born()
-  act = engine.prompt(shape, message, to=OPERATOR, on=root)
+  act = engine.thread(shape, markdown, to=OPERATOR, on=root)
   await settle()
   return sand, log, root, act
 
 
 async def hushed(*script: str) -> tuple[Sand, list[tuple], str, Act[int]]:
-  """A life whose root is paused as the operator prompts it to count, once the loop gave it room: the World, what
-  was said, the root and the prompt."""
+  """A life whose root is paused as the operator threads it to count, once the loop gave it room: the World, what
+  was said, the root and the thread."""
   sand, log, root = born(*script)
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   engine.pause(root)
   await settle()
   return sand, log, root, act
 
 
 async def stalled() -> tuple[Sand, list[tuple], str, Act[int], str, str]:
-  """A life whose prompt waits on a command that does not end: the World, what was said, the root, the prompt, the
-  rung of the prompt and the command."""
+  """A life whose thread waits on a command that does not end: the World, what was said, the root, the thread, the
+  rung of the thread and the command."""
   sand, log, root = born("x = bash('slow')\nclose((await x).code)", auto=False)
-  act = engine.prompt(int, "go", on=root)
+  act = engine.thread(int, "go", on=root)
   await settle()
   return sand, log, root, act, said(log, "rung")[0][1], said(log, "bash")[0][1]
 
 
 async def counted() -> tuple[list[tuple], str, Act, Act[int], str]:
-  """A life whose prompt counts on what a rung its caller wrote bound: what was said, the root, that rung, the
-  prompt and the rung of the prompt."""
+  """A life whose thread counts on what a rung its caller wrote bound: what was said, the root, that rung, the
+  thread and the rung of the thread."""
   _, log, root = born("close(k + 1)")
   laid = engine.rung("k = 1", on=root)
   await laid
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   assert await act == 2
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   return log, root, laid, act, step
@@ -549,10 +557,10 @@ def of(got: Sequence[tuple], name: str) -> list[str]:
   return [one for one in paragraphs(got) if re.fullmatch(f"#{named}", one.split("\n", 1)[0].split(" ", 1)[0])]
 
 
-def prompted(id: str, shape: str, message: str = "") -> str:
-  """The paragraph a prompt tells of its open: its header, the binding of a message of one line, and its own
+def threaded(id: str, shape: str, markdown: str = "") -> str:
+  """The paragraph a thread tells of its open: its header, the binding of a markdown of one line, and its own
   binding."""
-  return "\n".join([f"#{id}", *[f"{id}_message = {message!r}"] * bool(message), engine.bound(id, shape)])
+  return "\n".join([f"#{id}", *[f"{id}_markdown = {markdown!r}"] * bool(markdown), engine.bound(id, shape)])
 
 
 def written(id: str, word: str) -> str:

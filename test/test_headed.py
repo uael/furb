@@ -15,9 +15,9 @@ async def test_the_paragraph_of_an_act() -> None:
   assert engine.headed(step, "ledger", spent=0.5, filled=None) == f"#{step} ledger\n{step}_spent = 0.5"
   standing = f"#{root} standing\n{root}_cwd = '/w'\n{root}_actor = 'm/low'"
   assert engine.headed(root, "standing", cwd="/w", actor="m/low") == standing
-  asking = engine.prompt(int, "count them\n\nall of them", on=root)
-  quote = f"<s:{asking}_message>\ncount them\n\nall of them</s:{asking}_message>"
-  assert engine.headed(asking, message="count them\n\nall of them") == f"#{asking}\n{quote}"
+  asking = engine.thread(int, "count them\n\nall of them", on=root)
+  quote = f"<s:{asking}_markdown>\ncount them\n\nall of them</s:{asking}_markdown>"
+  assert engine.headed(asking, markdown="count them\n\nall of them") == f"#{asking}\n{quote}"
   got = paragraphs(engine.turns(on=root))
   assert got[3] == f"#{asking}\n{quote}\n{asking}: Act[int] = Act('{asking}')"
   engine.cancel(asking)

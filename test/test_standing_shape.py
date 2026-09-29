@@ -10,9 +10,9 @@ ROSTER = STANDS[0]
 
 
 async def test_what_a_chain_stands_on() -> None:
-  """What a chain stands on: the actors the World offers, the directory the chain starts in, and the actor a prompt goes to when it names none."""
+  """What a chain stands on: the actors the World offers, the directory the chain starts in, and the actor a thread goes to when it names none."""
   _, log, root = born("close(1)")
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   assert engine.module(root)[f"{root}_roster"] == ROSTER
   assert engine.cwd(on=root) == "/w"
   assert [a[4] for a in said(log, "reply")] == ["m/low"]
@@ -22,7 +22,7 @@ async def test_what_a_chain_stands_on() -> None:
 async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_the_transcript() -> None:
   """The roster, the directory and the actor that a model reads are in the transcript of its chain."""
   sand, log, root = born("close(1)")
-  assert await engine.prompt(int, "count", on=root) == 1
+  assert await engine.thread(int, "count", on=root) == 1
   told = takes(root)
   assert told == (
     "#chain1 standing\n"
@@ -40,7 +40,7 @@ async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_
 async def test_a_standing_holds_no_source() -> None:
   """A standing holds no source: the engine is one file the model imports, and a record made by another engine is a drift."""
   sand, _, root = born("x = bash('echo hi')\nclose(1)")
-  assert await engine.prompt(int, "run it", on=root) == 1
+  assert await engine.thread(int, "run it", on=root) == 1
   await settle()
   kept = [
     ((*fact[:4], "echo other", *fact[5:]), *rest) if fact[0] == "bash" else (fact, *rest)

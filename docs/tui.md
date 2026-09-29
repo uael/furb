@@ -220,7 +220,7 @@ paths of the project, the chains, and the acts. Enter on a value runs the comman
 
 ## Retried words
 
-A word of a model can fail: the gate refuses it, or it raises. When the next word of the same prompt takes its
+A word of a model can fail: the gate refuses it, or it raises. When the next word of the same thread takes its
 place, the failed word folds and reads as retried, in a quiet color. A failure that nothing replaced stays open, in
 red.
 

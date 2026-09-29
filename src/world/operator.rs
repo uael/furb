@@ -1,5 +1,5 @@
-//! The operator, as the console of a host puts a prompt to it: the shapes it answers, and a line it writes back, read
-//! as a value of the shape the prompt wants. Every console reads a line by these rules, so an answer means the same at
+//! The operator, as the console of a host puts a thread to it: the shapes it answers, and a line it writes back, read
+//! as a value of the shape the thread wants. Every console reads a line by these rules, so an answer means the same at
 //! every host.
 
 use indexmap::IndexMap;
@@ -14,7 +14,7 @@ use crate::{
 /// JSON.
 pub const SHAPES: [&str; 7] = ["str", "None", "bool", "int", "float", "list", "dict"];
 
-/// A line of the operator as a value of the shape a prompt wants, or why it is none. A number and a truth are read
+/// A line of the operator as a value of the shape a thread wants, or why it is none. A number and a truth are read
 /// from the line less the spaces around it, and a truth is yes, y, true or 1, or no, n, false or 0, in any case. A
 /// list and a dict are a line of JSON, whose every number is exact.
 pub fn answered(shape: &str, line: &str) -> Result<Object, Fault> {

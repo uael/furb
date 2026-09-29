@@ -10,10 +10,10 @@ from conftest import (
   gatings,
   heads,
   paragraphs,
-  prompted,
   ran,
   said,
   settle,
+  threaded,
   written,
 )
 from furb import engine
@@ -41,13 +41,13 @@ async def test_a_gate_carries_the_word_alone() -> None:
   sand, log, root = born(
     "k = 1", "x = BAD", "y = 2", "write(read(get(acting())[2]).replace('y = 2', 'k = 3'))", "close(k)"
   )
-  act = engine.prompt(int, "edit", on=root)
+  act = engine.thread(int, "edit", on=root)
   assert await act == 3
   await settle()
   assert [len(e[0]) for e in sand.record if e[0][0] == "gate"] == [5] * 6
   first, bad, after, edit, made, last = [a[1] for a in said(log, "rung") if a[2] == act]
   (copy,) = [a[1] for a in said(log, "rung") if a[5] == bad]
-  bind = fresh(root, prompted(act, "int", "edit"), f"#{first} advance on {act}")
+  bind = fresh(root, threaded(act, "int", "edit"), f"#{first} advance on {act}")
   refused = f"#{bad} refused\n{bad}_findings = {BAD!r}\n\n#{bad} closed\n{bad}_value = Refused()"
   shut = f"#{copy} closed\n{copy}_value = Refused()\n\n#{last} advance on {act}"
   told = [f"#{bad} advance on {act}", f"{refused}\n\n#{after} advance on {act}", f"#{edit} advance on {act}"]
@@ -66,7 +66,7 @@ async def test_a_gate_carries_the_word_alone() -> None:
 async def test_the_refused_paragraph_binds_the_findings_that_refused_the_word_of_a_rung() -> None:
   """The refused paragraph binds the findings that refused the word of a rung, one line for each, as rungN_findings."""
   _, log, root = born("k = BAD\nj = WORSE", "close(7)")
-  assert await engine.prompt(int, "try", on=root) == 7
+  assert await engine.thread(int, "try", on=root) == 7
   worse = "line 2: error[unresolved-reference] Name `WORSE` used when not defined"
   assert findings(log) == [[BAD, worse], []]
   step = said(log, "rung")[0][1]
@@ -77,10 +77,10 @@ async def test_the_refused_paragraph_binds_the_findings_that_refused_the_word_of
 async def test_the_chain_has_the_word_of_a_rung_gated_before_it_runs() -> None:
   """The chain has the word of a rung gated before it runs, but a word it wrote itself, and a refused word runs never."""
   _, log, root = born("k = BAD", "close(7)", "close(None)")
-  act = engine.prompt(int, "try", on=root)
+  act = engine.thread(int, "try", on=root)
   assert await act == 7
   first, last = [a[1] for a in said(log, "rung") if a[2] == act]
-  bind = fresh(root, prompted(act, "int", "try"), f"#{first} advance on {act}")
+  bind = fresh(root, threaded(act, "int", "try"), f"#{first} advance on {act}")
   refused = f"#{first} refused\n{first}_findings = {BAD!r}\n\n#{first} closed\n{first}_value = Refused()"
   again = f"{refused}\n\n#{last} advance on {act}"
   assert [a[5] for a in said(log, "run") if a[4].endswith("_told")] == [bind, again]
@@ -89,15 +89,15 @@ async def test_the_chain_has_the_word_of_a_rung_gated_before_it_runs() -> None:
   assert "k" not in engine.module(root)
 
 
-async def test_a_refused_word_of_a_rung_stands_in_the_ladder_of_its_prompt() -> None:
-  """A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run."""
+async def test_a_refused_word_of_a_rung_stands_in_the_ladder_of_its_thread() -> None:
+  """A refused word of a rung stands in the ladder of its thread, which its door shows, and it is no part of the program of the chain, which holds the words that run."""
   _, log, root = born("k = BAD", "close(7)", "close(None)")
-  act = engine.prompt(int, "try", on=root)
+  act = engine.thread(int, "try", on=root)
   assert await act == 7
   assert engine.read(act, on=root).content == "k = BAD\nclose(7)"
   program = engine.program(root)
   first, last = [a[1] for a in said(log, "rung") if a[2] == act]
-  bind = fresh(root, prompted(act, "int", "try"), f"#{first} advance on {act}")
+  bind = fresh(root, threaded(act, "int", "try"), f"#{first} advance on {act}")
   refused = f"#{first} refused\n{first}_findings = {BAD!r}\n\n#{first} closed\n{first}_value = Refused()"
   again = f"{refused}\n\n#{last} advance on {act}"
   assert list(program.values()) == [bind, again, "close(7)"] == ran(log)
@@ -106,7 +106,7 @@ async def test_a_refused_word_of_a_rung_stands_in_the_ladder_of_its_prompt() -> 
 async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells_stood() -> None:
   """A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a copy of a refused word is refused again and tells its findings not again."""
   _, log, root = born("k = 1", "x = BAD", "close(k)", "close(None)")
-  act = engine.prompt(int, "count", on=root)
+  act = engine.thread(int, "count", on=root)
   assert await act == 1
   await settle()
   engine.write(engine.read(act, on=root), on=root)
@@ -115,7 +115,7 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
   assert [a[4] for a in acts(log).values() if a[0] == "gate"] == ["k = 1", "x = BAD", "close(k)"]
   first = [a[1] for a in said(log, "rung") if not a[5]]
   copies = [(a[1], a[4], a[5]) for a in said(log, "rung") if a[5]]
-  bind = fresh(root, prompted(act, "int", "count"), f"#{first[0]} advance on {act}")
+  bind = fresh(root, threaded(act, "int", "count"), f"#{first[0]} advance on {act}")
   refused = f"#{first[1]} refused\n{first[1]}_findings = {BAD!r}\n\n#{first[1]} closed\n{first[1]}_value = Refused()"
   bad = f"{refused}\n\n#{first[2]} advance on {act}"
   assert [(word, donor) for _, word, donor in copies] == [
@@ -139,13 +139,13 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
 
 
 async def test_the_chain_tells_the_findings_that_refused_a_word() -> None:
-  """The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the prompt of it asks again as it does for a word that gave no value."""
+  """The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the thread of it asks again as it does for a word that gave no value."""
   _, log, root = born("k = BAD", "close(1)")
-  act = engine.prompt(int, "work", on=root)
+  act = engine.thread(int, "work", on=root)
   assert await act == 1
   await settle()
   first, again = (a[1] for a in said(log, "rung"))
-  bind = fresh(root, prompted(act, "int", "work"), f"#{first} advance on {act}")
+  bind = fresh(root, threaded(act, "int", "work"), f"#{first} advance on {act}")
   refused = f"#{first} refused\n{first}_findings = {BAD!r}\n\n#{first} closed\n{first}_value = Refused()"
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith(f"#{first} ")] == [
     f"#{first} advance on {act}",
