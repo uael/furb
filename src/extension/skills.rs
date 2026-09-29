@@ -48,7 +48,7 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
         None => Err(Fault::refused(format!("There is no skill {name}."))),
       };
       let answer = answer.map_or_else(|no| no.object(), |one| one.object());
-      say(&mut co, Fact::says("done", a.about(), [answer])).await;
+      say(&mut co, Fact::says("done", a.about(), [answer]));
     }
   })
 }

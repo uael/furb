@@ -27,7 +27,7 @@ pub fn files() -> Box<dyn Ear> {
         _ => served(&mut co, &a).await.map(|text| text.object()),
       };
       let answer = answer.unwrap_or_else(|fault| fault.object());
-      say(&mut co, Fact::says("done", a.about(), [answer])).await;
+      say(&mut co, Fact::says("done", a.about(), [answer]));
     }
   })
 }

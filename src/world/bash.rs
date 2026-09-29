@@ -78,14 +78,14 @@ pub fn bash() -> Box<dyn Ear> {
             }
             _ => continue,
           };
-          say(&mut co, saying).await;
+          say(&mut co, saying);
           continue;
         }
       };
       let about = a.about().to_owned();
       match a.kind() {
         "bash" if a.question() => {
-          say(&mut co, Fact::says("started", &about, [])).await;
+          say(&mut co, Fact::says("started", &about, []));
           match begun(&mut co, &a).await {
             Ok(begun) => {
               let (stdin, fed_in) = spsc::unbounded();

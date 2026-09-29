@@ -393,11 +393,12 @@ impl Held {
     }
   }
 
-  /// One call of the engine, which an ear the engine hears makes by a verb alone.
+  /// One call of the engine, which JavaScript makes only while the engine runs none of its code.
   pub fn call<T>(&self, call: impl FnOnce(&mut Engine) -> Result<T, Fault>) -> napi::Result<T> {
     let mut held = self.engine.try_borrow_mut().map_err(|_| {
       napi::Error::from_reason(
-        "The engine hears an ear, which calls the engine by its verbs alone.",
+        "The engine runs code of JavaScript now: an ear calls a verb by yielding call(verb, args, kwargs), and a \
+         function answers from its words alone.",
       )
     })?;
     let engine =

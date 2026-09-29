@@ -262,7 +262,7 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
       };
       for one in new {
         if a.kind() != ENABLE {
-          say(&mut co, one.enable()).await;
+          say(&mut co, one.enable());
         }
         for chain in &mut chains {
           play(&mut co, &one, chain).await?;

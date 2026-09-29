@@ -109,8 +109,8 @@ pub trait Ear {
   fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step;
 
   /// What the ear says of its own accord, when its work came to something: a saying, or a verb. The ear heard every
-  /// fact before it spoke, and whoever spoke hears first what it said, so the next fact a resume gives after a
-  /// saying is the one the bus made of it. A generator of a host says nothing but at a resume.
+  /// fact before it spoke, and it hears its saying as every ear does. A generator of a host says nothing but at a
+  /// resume.
   fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
     let _ = cx;
     Poll::Pending
@@ -143,19 +143,12 @@ pub enum Next<W> {
   Worked(W),
 }
 
-/// What the coroutine of an ear tells its body: a fact heard, the fact given back for what the body said, what a verb
-/// it called came to, or that the life drives the ear, which lets its works go on until it hears again.
+/// What the coroutine of an ear tells its body: a fact heard, what a verb it called came to, or that the life drives
+/// the ear, which lets its works go on until it hears again.
 enum Event {
   Heard(Fact),
-  Given(Fact),
   Answer(Result<Object, Fault>),
   Driven,
-}
-
-/// What the body waits for after it spoke: the fact given back for a saying, or what a verb came to.
-enum Back {
-  Given(Fact),
-  Answer(Result<Object, Fault>),
 }
 
 /// What the body of an ear of rust hears, says and works through, which the body owns: what the coroutine tells it,
@@ -203,7 +196,7 @@ impl<W: 'static> Co<W> {
 
   /// What the coroutine told since, taken, and what came back for what the body spoke last. The coroutine polls the
   /// body each time it tells it something, so the body takes what it was told then, and waits for no event.
-  fn told(&mut self) -> Option<Back> {
+  fn told(&mut self) -> Option<Result<Object, Fault>> {
     let mut back = None;
     while let Some(Some(event)) = self.events.recv().now_or_never() {
       back = self.took(event).or(back);
@@ -221,22 +214,17 @@ impl<W: 'static> Co<W> {
   ) -> Result<Object, Fault> {
     let kwargs = kwargs.into_iter().map(|(key, one)| (key.to_owned(), one)).collect();
     self.spoke(Spoken::Verb(Call { verb: verb.to_owned(), args, kwargs }));
-    poll_fn(|_| match self.told() {
-      Some(Back::Answer(got)) => Poll::Ready(got),
-      _ => Poll::Pending,
-    })
-    .await
+    poll_fn(|_| self.told().map_or(Poll::Pending, Poll::Ready)).await
   }
 
   /// One event, taken: a fact heard waits to be taken, and the life drives the ear until it hears again.
-  fn took(&mut self, event: Event) -> Option<Back> {
+  fn took(&mut self, event: Event) -> Option<Result<Object, Fault>> {
     match event {
       Event::Heard(fact) => {
         self.driven = false;
         self.heard.push_back(fact);
       }
-      Event::Given(fact) => return Some(Back::Given(fact)),
-      Event::Answer(got) => return Some(Back::Answer(got)),
+      Event::Answer(got) => return Some(got),
       Event::Driven => self.driven = true,
     }
     None
@@ -251,56 +239,33 @@ impl<W: 'static> Co<W> {
 type Body = Pin<Box<dyn Future<Output = Result<(), Fault>>>>;
 
 /// An ear of rust: its body, what it tells the body, what the body says, how the body ended, which the next resume
-/// gives, and what the next fact a resume gives is: the one given back for what the ear answered, or its own fact as
-/// the log gives it, after it said something of its own accord.
+/// gives, and whether the next fact a resume gives is the one the bus made of what the ear said at a resume, which
+/// goes nowhere, since the log gives the ear that fact later too.
 struct Coroutine {
   body: Option<Body>,
   events: spsc::Sender<Event>,
   spoken: spsc::Receiver<Spoken>,
   ended: Option<Step>,
-  next: Given,
-}
-
-/// What the next fact that a resume gives is, after what the ear said.
-#[derive(Clone, Copy, PartialEq)]
-enum Given {
-  /// The next fact of the log.
-  Heard,
-  /// The fact the bus made of what the ear answered, given back, which the log gives the ear later too.
-  Back,
-  /// The fact the bus made of what the ear said of its own accord, which the log gives the ear once: it is both what
-  /// the saying gives and a fact the ear hears.
-  Both,
+  given: bool,
 }
 
 impl Ear for Coroutine {
   fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
     if let Heard::Answer(got) = heard {
       self.tell(Event::Answer(got));
-    } else if let Heard::Fact(fact) = heard {
-      match std::mem::replace(&mut self.next, Given::Heard) {
-        Given::Heard => self.tell(Event::Heard(fact)),
-        Given::Back => self.tell(Event::Given(fact)),
-        Given::Both => {
-          self.tell(Event::Given(fact.clone()));
-          self.tell(Event::Heard(fact));
-        }
-      }
+    } else if let Heard::Fact(fact) = heard
+      && !std::mem::take(&mut self.given)
+    {
+      self.tell(Event::Heard(fact));
     }
     let step = self.heard(cx);
-    if matches!(step, Step::Say(_)) {
-      self.next = Given::Back;
-    }
+    self.given = matches!(step, Step::Say(_));
     step
   }
 
   fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
     self.tell(Event::Driven);
-    let spoken = self.stepped(cx);
-    if let Poll::Ready(Spoken::Saying(_)) = spoken {
-      self.next = Given::Both;
-    }
-    spoken
+    self.stepped(cx)
   }
 
   fn answered(&mut self, got: Result<Object, Fault>) {
@@ -368,13 +333,7 @@ where
     began: false,
   };
   let body = Box::pin(body(co));
-  Box::new(Coroutine {
-    body: Some(body),
-    events: told,
-    spoken: said,
-    ended: None,
-    next: Given::Heard,
-  })
+  Box::new(Coroutine { body: Some(body), events: told, spoken: said, ended: None, given: false })
 }
 
 /// The next fact the ear hears, which is `a = yield` of python, for an ear with no work.
@@ -386,14 +345,10 @@ pub async fn hear(co: &mut Co) -> Fact {
   }
 }
 
-/// One saying, said, and the fact the bus made of it, given back, which is `a = yield saying` of python.
-pub async fn say<W: 'static>(co: &mut Co<W>, saying: Fact) -> Fact {
+/// One saying, said in its turn after what the ear said before. The ear hears it as every ear does, in the order of
+/// the log, and it goes on hearing while the life says it.
+pub fn say<W: 'static>(co: &mut Co<W>, saying: Fact) {
   co.spoke(Spoken::Saying(saying));
-  poll_fn(|_| match co.told() {
-    Some(Back::Given(fact)) => Poll::Ready(fact),
-    _ => Poll::Pending,
-  })
-  .await
 }
 
 /// One verb of the engine, told with its words under the name of the ear, whose value goes nowhere: a control that

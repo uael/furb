@@ -104,7 +104,8 @@ before it took it, so `driving(ear, name)` gives an ear that brings another to l
 hears every question. `SessionOptions.ears` gives the ears of the host, which come before the ears of the session:
 one that takes a question takes it in their place, and one that takes it and asks the same again wraps it. A
 function of JavaScript crosses as a show, a filter, or a function that makes the ear of an act, and what it throws
-is raised where the word called it.
+is raised where the word called it. It answers from its words alone: a verb of the engine that it calls while the
+engine runs it is refused, since only an ear, which yields, can wait for the answer of the engine.
 
 Values use the Python record form. Text and Exit carry `is` plus their fields. Faults carry `is` and `args`.
 Lists and tuples cross as arrays, and maps keep their order. Every value of the engine crosses to JavaScript,

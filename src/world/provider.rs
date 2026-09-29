@@ -307,17 +307,17 @@ impl Provider {
               tell(&mut co, "pause", vec![Object::string(&reply.chain)], vec![]).await;
             }
             let got = got.unwrap_or_else(|fault| fault.object());
-            say(&mut co, Fact::says("done", &id, [got])).await;
+            say(&mut co, Fact::says("done", &id, [got]));
             continue;
           }
         };
         let about = a.about().to_owned();
         match a.kind() {
           "stand" if a.question() => {
-            say(&mut co, Fact::says("done", &about, [standing(&models, &directory, &actor)])).await;
+            say(&mut co, Fact::says("done", &about, [standing(&models, &directory, &actor)]));
           }
           "reply" if a.question() => {
-            say(&mut co, Fact::says("started", &about, [])).await;
+            say(&mut co, Fact::says("started", &about, []));
             let chain = a.on().to_owned();
             let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
             let turns = co.call("turns", vec![], vec![("on", Object::string(&chain))]).await?;

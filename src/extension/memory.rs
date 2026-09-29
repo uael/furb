@@ -62,8 +62,7 @@ pub fn memory(config: PathBuf) -> Box<dyn Ear> {
               told.push(one);
             }
           }
-          say(&mut co, Fact::says("done", &about, [Object::list(told.iter().map(Text::object))]))
-            .await;
+          say(&mut co, Fact::says("done", &about, [Object::list(told.iter().map(Text::object))]));
         }
         "done" => {
           let got = given(&about, a.word(0));

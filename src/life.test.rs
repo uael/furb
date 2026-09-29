@@ -109,7 +109,7 @@ fn mine() -> Box<dyn Ear> {
       let a = hear(&mut co).await;
       let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
       if a.question() && a.kind() == "read" && path.starts_with("mine://") {
-        say(&mut co, Fact::says("done", a.about(), [Text::new(path, "mine\n").object()])).await;
+        say(&mut co, Fact::says("done", a.about(), [Text::new(path, "mine\n").object()]));
       }
     }
   })

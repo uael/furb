@@ -148,7 +148,7 @@ fn standing(at: PathBuf) -> Box<dyn Ear> {
         let operator = Object::list([Object::string("operator"), Object::list([]), Object::int(1)]);
         let here = Object::string(at.display().to_string());
         let standing = Object::list([Object::list([operator]), here, Object::string("operator")]);
-        say(&mut co, Fact::says("done", a.about(), [standing])).await;
+        say(&mut co, Fact::says("done", a.about(), [standing]));
       }
     }
   })

@@ -84,10 +84,10 @@ fn provider(
             Object::string(at.display().to_string()),
             Object::string("m/low"),
           ]);
-          say(&mut co, done(a.about(), standing)).await;
+          say(&mut co, done(a.about(), standing));
         }
         "reply" => {
-          say(&mut co, Fact::says("started", a.about(), [])).await;
+          say(&mut co, Fact::says("started", a.about(), []));
           let turns = co.call("turns", vec![], vec![("on", Object::string(a.on()))]).await?;
           read.borrow_mut().push(turns.py_repr());
           let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
@@ -97,7 +97,7 @@ fn provider(
             Object::none(),
             Object::list([]),
           ]);
-          say(&mut co, done(a.about(), turn)).await;
+          say(&mut co, done(a.about(), turn));
         }
         _ => {}
       }
@@ -502,15 +502,15 @@ fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
             && a.question()
             && let Some(opens) = gate.take()
           {
-            say(&mut co, Fact::says("started", a.about(), [])).await;
+            say(&mut co, Fact::says("started", a.about(), []));
             let (about, on) = (a.about().to_owned(), a.on().to_owned());
             co.work(stream::once(opens.map(|_| (about, on))));
           }
         }
         Next::Worked((about, on)) => {
           tell(&mut co, "pause", vec![Object::string(on)], vec![]).await;
-          say(&mut co, Fact::says("due", &about, [Object::float(1.0)])).await;
-          say(&mut co, done(&about, Object::none())).await;
+          say(&mut co, Fact::says("due", &about, [Object::float(1.0)]));
+          say(&mut co, done(&about, Object::none()));
         }
       }
     }
@@ -567,12 +567,12 @@ fn quick() -> Box<dyn Ear> {
       match co.next().await {
         Next::Heard(a) => {
           if a.kind() == "wait" && a.question() {
-            say(&mut co, Fact::says("started", a.about(), [])).await;
+            say(&mut co, Fact::says("started", a.about(), []));
             co.work(stream::once(std::future::ready(a.about().to_owned())));
           }
         }
         Next::Worked(about) => {
-          say(&mut co, done(&about, Object::none())).await;
+          say(&mut co, done(&about, Object::none()));
         }
       }
     }

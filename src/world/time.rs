@@ -32,7 +32,7 @@ pub fn time() -> Box<dyn Ear> {
         // A wait whose time is up is done, unless a control ended it first.
         Next::Worked(id) => {
           if stops.remove(&id).is_some() {
-            say(&mut co, Fact::says("done", &id, [Object::none()])).await;
+            say(&mut co, Fact::says("done", &id, [Object::none()]));
           }
           continue;
         }
@@ -40,21 +40,21 @@ pub fn time() -> Box<dyn Ear> {
       let about = a.about().to_owned();
       match a.kind() {
         "clock" if a.question() => {
-          say(&mut co, Fact::says("done", &about, [Object::float(now())])).await;
+          say(&mut co, Fact::says("done", &about, [Object::float(now())]));
         }
         "chance" if a.question() => {
           let drawn = drawn().map_or_else(|fault| fault.object(), Object::float);
-          say(&mut co, Fact::says("done", &about, [drawn])).await;
+          say(&mut co, Fact::says("done", &about, [drawn]));
         }
         "wait" if a.question() => {
-          say(&mut co, Fact::says("started", &about, [])).await;
+          say(&mut co, Fact::says("started", &about, []));
           let seconds =
             a.word(1).and_then(|one| one.as_float().or_else(|| one.as_int().map(|n| n as f64)));
           let deadline = match due.get(&about) {
             Some(deadline) => *deadline,
             None => {
               let deadline = now() + seconds.unwrap_or_default();
-              say(&mut co, Fact::says("due", &about, [Object::float(deadline)])).await;
+              say(&mut co, Fact::says("due", &about, [Object::float(deadline)]));
               deadline
             }
           };

@@ -41,7 +41,7 @@ impl Asked {
       shape: word(1).unwrap_or_default(),
       message: word(2).unwrap_or_default(),
     };
-    say(co, Fact::says("started", &asked.about, [])).await;
+    say(co, Fact::says("started", &asked.about, []));
     if SHAPES.contains(&asked.shape.as_str()) {
       return Ok(Some(asked));
     }
