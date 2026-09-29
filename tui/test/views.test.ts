@@ -663,6 +663,18 @@ test("an input that has the focus takes the colors of a theme chosen after it op
     { width: 120, height: 30 },
   ));
 
+test("the inspector shows the definition of a name as the line that binds it", () =>
+  composing(async ({ app, session, frame }) => {
+    await session.command("/run # Count the notes\nnotes_count = 5");
+    await until(session, () =>
+      Object.values(session.program).some((word) => word.includes("notes_count = 5")),
+    );
+    await app.inspect("notes_count");
+    const row = (await frame()).split("\n").find((line) => line.includes("Go to definition")) ?? "";
+    expect(row).toContain("notes_count = 5");
+    expect(row).not.toMatch(/rung\d/);
+  }));
+
 test("a heading of markdown inside a quote of a word is text of the quote, and no step of the word", () =>
   composing(async ({ session, frame }) => {
     await session.engine.result(

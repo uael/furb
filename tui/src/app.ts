@@ -4710,17 +4710,16 @@ export class App {
     const choices: Choice[] = [];
     if (back) choices.push({ label: "← Back", detail: "Return to the parent value", run: back });
     if (name && /^[\p{L}_][\p{L}\p{N}_]*$/u.test(name)) {
+      // The last word that binds the name defines it, and the row shows the line that binds it.
+      const binds = (line: string) => new RegExp(`^(?:def |class )?${name}\\b(?:\\s*[:=(])`).test(line);
       const definition = [...Object.entries(this.session.program)]
         .reverse()
-        .find(([, source]) =>
-          source
-            .split("\n")
-            .some((line) => new RegExp(`^(?:def |class )?${name}\\b(?:\\s*[:=(])`).test(line)),
-        );
+        .map(([id, source]) => [id, source.split("\n").find(binds)] as const)
+        .find(([, line]) => line !== undefined);
       if (definition)
         choices.push({
           label: "Go to definition",
-          detail: definition[0],
+          detail: definition[1]?.trim() ?? "",
           run: () => {
             this.go("feed", definition[0]);
           },
