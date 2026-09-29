@@ -48,6 +48,11 @@ dev = [
 [tool.uv.workspace]
 members = ["bind/python", "cli"]
 
+[tool.uv]
+# An environment of development builds the crate in the dev profile, which optimizes each dependency and builds the
+# crates of the workspace quickly. A wheel built for a release takes the release profile of maturin.
+config-settings-package = { furb-monty = { build-args = "--profile=dev" }, furb-cli = { build-args = "--profile=dev" } }
+
 [tool.uv.sources]
 furb-monty = { workspace = true }
 furb-cli = { workspace = true }
@@ -106,9 +111,10 @@ skip-magic-trailing-comma = true
 include = ["src", "test", "script", "bind/python", "extensions"]
 
 # The suite of an extension imports the harness of the engine as conftest, as pytest does from its pythonpath, and
-# its own helpers from extensions.conftest.
+# its own helpers from extensions.conftest. The package furb_monty is read from its source and the stub of its
+# extension, so the check needs no build of the crate.
 [tool.ty.environment]
-extra-paths = ["test"]
+extra-paths = ["test", "bind/python"]
 
 # The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
 # of an act, a task or a standing it reads after the check the sentence beside it makes.

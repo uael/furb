@@ -162,7 +162,9 @@ the tools in `.venv/bin`.
 
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
   `furb-monty`, and the command line into the package `furb-cli`. After a change of the crate,
-  `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again.
+  `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again. This build, `cargo test`
+  and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them, so a word
+  runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the release.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole but for the stubs of what boot binds, which the toml excludes with their reason.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
@@ -188,7 +190,9 @@ the tools in `.venv/bin`.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint, and the tests of the TypeScript
   side. Each test has thirty seconds, and the check and the lint have no limit. The tests read the configs and the
-  cache of `.furb/tests`, and not those of the machine.
+  cache of `.furb/tests`, and not those of the machine. `tui/script/test.ts` runs each file in a process of its own,
+  all at once, and the tests of a file at once, but a test marked `test.serial`, which is the mark of a test that
+  changes what every test shares, such as the environment or the clock. A word after `bun run test` filters the files.
   As root, the test of a folder that cannot be read fails, since root reads every folder.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and

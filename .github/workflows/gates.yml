@@ -18,6 +18,9 @@ permissions:
 env:
   # The one uv every gate installs, so a run of today and a run of next month read the lock the same way.
   UV_VERSION: "0.12.17"
+  # A gate builds once and runs no debugger, so a build writes no debug information and keeps no incremental state.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_DEV_INCREMENTAL: "false"
 
 jobs:
   hooks:
@@ -28,7 +31,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The hooks check the python with its tools alone, and read furb_monty from its source.
       - uses: ./.github/actions/setup
+        with:
+          python: tools
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/pre-commit
@@ -37,6 +43,7 @@ jobs:
       - run: uv run pre-commit run --all-files --show-diff-on-failure
         env:
           SKIP: pytest
+          UV_NO_SYNC: "1"
 
   suite:
     # The engine speaks to a machine through the World, and a machine answers as itself: the suite runs on both,
@@ -70,14 +77,17 @@ jobs:
     defaults:
       run:
         shell: bash
-    env:
-      CARGO_PROFILE_DEV_DEBUG: "0"
-      CARGO_PROFILE_DEV_INCREMENTAL: "false"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+        with:
+          python: none
+      # napi builds for the triple of the machine, in a folder of its own: cargo builds for it too, so the tests and
+      # the package share every dependency.
+      - run: |
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
       # The bun:ffi of bun 1.3 builds its native callbacks with TinyCC in pages of the heap of Windows, which lose
       # their right to run code while the process lives, and a call into OpenTUI then crashes. From bun 1.4 on, the
       # engine builds them.
