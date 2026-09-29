@@ -1795,7 +1795,8 @@ export class App {
         if ((threads.of(act) ?? "") !== zoom) continue;
         const speaker = act ? threads.speaker(act) : w.actor;
         const prior = plan.at(-1);
-        const waits = prior?.is === "stream" && run?.speaker === speaker && silent(prior.stream) && silent(stream);
+        const waits =
+          prior?.is === "stream" && run?.speaker === speaker && silent(prior.stream) && silent(stream);
         speak(speaker, `stream-${id}`, id);
         if (!waits) plan.push({ is: "stream", id, stream });
       }
