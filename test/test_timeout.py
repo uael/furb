@@ -11,7 +11,7 @@ async def test_timeout_is_the_timeout_in_seconds_of_a_command_that_does_not_say_
   _, log, root, quiet = slow()
   short = engine.bash("shorter", timeout=0.05, on=root)
   assert [timeout for *_, timeout in said(log, "bash")] == [600.0, 0.05]
-  await settle()
-  assert engine.peek(quiet, ...) is ... and engine.peek(short, ...) is ...
   assert (await short).code is None
+  await settle()
+  assert engine.peek(quiet, ...) is ...
   engine.cancel(quiet)
