@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { type Renderable, RGBA, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { find, highlighted } from "../script/stage.ts";
+import { find, highlighting } from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
 import type { View } from "../src/session.ts";
@@ -228,7 +228,7 @@ test("a diff shows the source as it stands, so markdown keeps its marks", () =>
       await until(session.host, () => session.host.changes === 1);
       await session.refresh();
       await frame();
-      await highlighted(screen.renderer.root, frame);
+      await Promise.all(highlighting(screen.renderer.root));
       const shown = await frame();
       expect([shown.includes("+ ## Keyboard"), shown.includes("**Ctrl+K**")]).toEqual([true, true]);
     },
@@ -511,7 +511,7 @@ test("a heading and a strong span of an answer are bold, as their writer meant t
     await session.open(id);
     await frame();
     // The text of markdown shows once tree-sitter has read it.
-    await highlighted(screen.renderer.root, frame);
+    await Promise.all(highlighting(screen.renderer.root));
     await frame();
     const isBold = (text: string) => {
       const [x, y] = find(screen, text);
@@ -536,7 +536,7 @@ test("a block of code in an answer keeps a blank line before and after it, and s
     await session.open(id);
     await frame();
     // The text of markdown shows once tree-sitter has read it.
-    await highlighted(screen.renderer.root, frame);
+    await Promise.all(highlighting(screen.renderer.root));
     await frame();
     const rows = ["Run this:", "ls -la src", "first item", "second item", "That is all."].map(
       (text) => find(screen, text)[1],
@@ -551,12 +551,9 @@ test("a step of a model stands in the tone of the steps once it lands, and the a
       const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
       if (!thread) throw new Error("No thread of the operator.");
       await session.open(thread.id);
-      // The step lands once the feed draws it, however long the thread takes to open, and settles after that.
-      for (let tries = 0; !(await frame()).includes("Run the checks of the project"); tries++)
-        if (tries > 200) throw new Error("The step never landed.");
-        else await Bun.sleep(20);
+      await frame();
       await new Promise((done) => setTimeout(done, motion.settle * 2));
-      await highlighted(screen.renderer.root, frame);
+      await Promise.all(highlighting(screen.renderer.root));
       await frame();
       const colors = hexes(session.theme);
       const fg = (text: string) => cellAt(screen.captureSpans(), ...find(screen, text)).fg;
@@ -588,7 +585,7 @@ test("the view of a thread that closed with another names no thread above its an
     );
     await session.open(first);
     await frame();
-    await highlighted(screen.renderer.root, frame);
+    await Promise.all(highlighting(screen.renderer.root));
     const shown = await frame();
     // The rung of the model, which the close ended before it wrote a word, shows nothing.
     expect([shown.includes("README.md"), shown.includes("answers “"), shown.includes("▸ ✓")]).toEqual([
@@ -624,7 +621,7 @@ test("a user turn of the transcript stands in the colors of Python, and the name
   composing(async ({ session, screen, frame }) => {
     session.show("transcript");
     await frame();
-    await highlighted(screen.renderer.root, frame);
+    await Promise.all(highlighting(screen.renderer.root));
     await frame();
     const fg = (text: string) => {
       const [x, y] = find(screen, text);
@@ -782,7 +779,7 @@ test("a block of code in an answer stands on the surface of a block, in the colo
     await session.open(id);
     await frame();
     // The colors of the code come once tree-sitter has read it.
-    await highlighted(screen.renderer.root, frame);
+    await Promise.all(highlighting(screen.renderer.root));
     const shown = await frame();
     expect(shown).not.toContain("```");
     const [x, y] = find(screen, "answer = 42");
