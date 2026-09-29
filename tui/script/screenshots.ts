@@ -113,19 +113,28 @@ try {
   app().effortPicker();
   await capture("07-effort");
   app().closeOverlay();
-  // A question of a model waits in the feed of its chain, as a card among the threads.
+  // A question of a model waits in its thread as markdown, and as a card among the threads of its chain.
   await session.open("");
   const question = await session.engine.thread("bool", {
-    markdown: "Apply the search shortcut to the main chain?",
+    markdown: [
+      "Apply the search shortcut to the main chain? It changes three files:",
+      "",
+      "- `src/search.ts`, which exports **shortcut**",
+      "- `test/search.test.ts`, which checks what it runs",
+      "- `README.md`, which gains a **Keyboard** section",
+    ].join("\n"),
     on: session.selected,
     to: "operator",
   });
   await until(session.host, () => session.host.threads.has(question));
   await session.refresh();
+  await session.open(question);
+  await rest();
   await capture("08-operator-question");
   app().question();
   await capture("09-operator-dialog");
   app().closeOverlay();
+  await session.open("");
   await session.host.answer(session.operatorThread?.id ?? "", "yes");
   await until(session.host, () => !session.host.threads.size);
   app().toggleMode();

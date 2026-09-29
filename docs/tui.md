@@ -68,7 +68,7 @@ The model picker names the current model and the window of each. ⇧Tab chooses 
 ## A question for you
 
 A question that a model asks you stands in the feed of its chain, and under its chain in the sidebar, with `◆` and
-"asks you". While it waits, Enter answers it: the line under the input says Answer and the type of the answer, and
+"asks you". Its thread shows it as markdown, under "Question for you". While it waits, Enter answers it: the line under the input says Answer and the type of the answer, and
 the bar of the input turns warm. ⌃A opens a dialog for it. Once you answer it, it says "Asked you" in the tone of
 the chrome, and your answer stands under it.
 
