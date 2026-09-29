@@ -646,6 +646,23 @@ test("the reason that a word failed leaves out the name that the parser gives th
     expect(shown).not.toContain("<string>");
   }));
 
+test("an input that has the focus takes the colors of a theme chosen after it opened", () =>
+  composing(
+    async ({ app, frame, screen, session }) => {
+      session.theme = "midnight";
+      await frame();
+      // The dialog opens before the next frame draws the new theme.
+      session.theme = "github";
+      app.palette();
+      await frame();
+      const [x, y] = find(screen, "Type to filter");
+      expect(cellAt(screen.captureSpans(), x, y).bg?.equals(RGBA.fromHex(palettes.github.surface2))).toBe(
+        true,
+      );
+    },
+    { width: 120, height: 30 },
+  ));
+
 test("a heading of markdown inside a quote of a word is text of the quote, and no step of the word", () =>
   composing(async ({ session, frame }) => {
     await session.engine.result(

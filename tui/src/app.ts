@@ -4506,15 +4506,21 @@ export class App {
         "titleColor",
         "textColor",
         "placeholderColor",
+        "cursorColor",
       ]) {
         const color: unknown = Reflect.get(node, property);
         if (replacements.has(color as RGBA)) Reflect.set(node, property, replacements.get(color as RGBA));
       }
+      // An input hides the colors that it shows focused, and every input of the view shows the colors it shows
+      // unfocused.
+      if (node instanceof TextareaRenderable)
+        Object.assign(node, {
+          focusedBackgroundColor: node.backgroundColor,
+          focusedTextColor: node.textColor,
+        });
       for (const child of node.getChildren()) recolor(child);
     };
     recolor(this.root);
-    // An input keeps the colors that it shows focused, which the walk above cannot read.
-    for (const input of [this.composer, this.search]) Object.assign(input, inputColors(c.surface2));
     this.clear(this.scroll);
     this.cards.clear();
     const previous = this.style;
