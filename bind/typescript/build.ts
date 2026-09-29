@@ -18,8 +18,9 @@ const command = [
   "bind/typescript",
   "--dts",
   "index.d.cts",
-  // The engine runs in the interpreter, which a debug build runs many times slower: release unless asked.
-  ...(process.argv.includes("--debug") ? [] : ["--release"]),
+  // The dev profile optimizes every dependency, the interpreter among them, so a debug build runs a word as fast as a
+  // release and builds many times faster: debug unless asked.
+  ...(process.argv.includes("--release") ? ["--release"] : []),
 ];
 const child = Bun.spawn(command, { cwd: root, stdout: "inherit", stderr: "inherit" });
 if (await child.exited) process.exit(1);

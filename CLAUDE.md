@@ -162,7 +162,9 @@ the tools in `.venv/bin`.
 
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
   `furb-monty`, and the command line into the package `furb-cli`. After a change of the crate,
-  `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again.
+  `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again. This build, `cargo test`
+  and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them, so a word
+  runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the release.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole but for the stubs of what boot binds, which the toml excludes with their reason.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
