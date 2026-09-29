@@ -2507,21 +2507,22 @@ export class App {
     }
     box.add(block);
   }
-  /** A step of a word: one line of markdown in a tone, after its lead in the tone of the chrome. A step that shows first
-   * after its view opened lands bright, and settles to its tone in three steps. */
-  private step(key: string, line: string, tone: RGBA, options: TextShape, lead: string): TextRenderable {
+  /** A step of a word: one line of markdown in a tone, after its lead in the tone of the chrome. A step that wraps goes
+   * on under its own text, and not under its lead. A step that shows first after its view opened lands bright, and
+   * settles to its tone in three steps. */
+  private step(key: string, line: string, tone: RGBA, options: TextShape, lead: string): BoxRenderable {
     const born = this.landed.get(key) ?? (this.opening || !this.session.preferences.motion ? 0 : Date.now());
     this.landed.set(key, born);
     const parts = () => {
       const settled = Math.min(3, Math.floor(((Date.now() - born) * 3) / motion.settle));
-      return [
-        [lead, c.faint],
-        ...this.inline(line, settled >= 3 ? tone : mix(c.bright, tone, settled / 3)),
-      ] as Part[];
+      return this.inline(line, settled >= 3 ? tone : mix(c.bright, tone, settled / 3));
     };
-    const node = this.text(parts(), tone, options);
+    const row = this.box({ flexDirection: "row" });
+    row.add(this.text(lead, c.faint, options));
+    const node = this.text(parts(), tone, { ...options, flexShrink: 1 });
+    row.add(node);
     if (Date.now() - born < motion.settle) this.move(node, parts, born + motion.settle);
-    return node;
+    return row;
   }
   /** An act that a word made, on one line with no name: its state and what it is, then what it printed while it runs,
    * or what it told. */

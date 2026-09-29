@@ -441,16 +441,18 @@ test("the keys of the footer and the palette answer the mouse, and a drag over a
       await frame();
       // A drag over the first step of a word selects its text and leaves the word as it was.
       const word = () => app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
+      // A step is its lead and its text, side by side.
       const step = () => {
         const card = word();
-        return card && visible(card);
+        const lead = card && visible(card);
+        return lead?.parent ? { x: lead.x, y: lead.y, text: texts(lead.parent).join("") } : undefined;
       };
       const first = step();
       if (!first) throw new Error("No word in the feed.");
-      const text = first.plainText;
+      const { text } = first;
       await screen.mockMouse.drag(first.x + 2, first.y, first.x + 8, first.y);
       await frame();
-      expect(step()?.plainText).toBe(text);
+      expect(step()?.text).toBe(text);
       const selected = screen.renderer.getSelection()?.getSelectedText() ?? "";
       expect(selected.length).toBeGreaterThan(0);
       expect(text).toContain(selected);
@@ -461,7 +463,7 @@ test("the keys of the footer and the palette answer the mouse, and a drag over a
       screen.renderer.clearSelection();
       await screen.mockMouse.click(first.x + 2, first.y);
       await frame();
-      expect(step()?.plainText).toStartWith("▾ ");
+      expect(step()?.text).toStartWith("▾ ");
     },
     { width: 140, height: 40, useMouse: true },
     true,
