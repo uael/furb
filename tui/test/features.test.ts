@@ -174,53 +174,57 @@ test("queued follow-ups wait for current work, attach files, and message undo an
   }
 });
 
-test("clipboard import and share publication use bounded files and the explicitly chosen uploader", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "furb-desktop-"));
-  const bin = join(directory, "bin");
-  await mkdir(bin);
-  const oldPath = process.env.PATH;
-  const data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
-  // One reader of the clipboard under the name of each system's reader: AppKit and PowerShell print base64.
-  await writeFile(
-    join(directory, "clipboard.ts"),
-    `import { basename } from "node:path"; const data = ${JSON.stringify(data)}; process.stdout.write(/^(osascript|powershell)(\\.exe)?$/.test(basename(process.execPath)) ? data : Buffer.from(data, "base64"));\n`,
-  );
-  const reader = executable(join(directory, "clipboard.ts"), directory, "reader");
-  for (const name of ["osascript", "powershell", "wl-paste", "xclip"])
-    await link(reader, join(bin, `${name}${extname(reader)}`));
-  const log = join(directory, "uploaded.json");
-  await writeFile(
-    join(directory, "gh.ts"),
-    `import { readFileSync, writeFileSync } from "node:fs"; const args = process.argv.slice(2); writeFileSync(${JSON.stringify(log)}, JSON.stringify({ args, markdown: readFileSync(args.at(-2), "utf8"), html: readFileSync(args.at(-1), "utf8") })); console.log("https://gist.github.com/furb/test-link");\n`,
-  );
-  const gh = executable(join(directory, "gh.ts"), bin, "gh");
-
-  try {
-    process.env.PATH = `${bin}${delimiter}${oldPath ?? ""}`;
-    expect(Bun.which("gh", { PATH: process.env.PATH })).toBe(gh);
-    let temporary = "";
-    const bytes = await clipboardImage(async (path) => {
-      temporary = path;
-      return await readFile(path);
-    });
-    expect(bytes.toString("base64")).toBe(data);
-    expect(await stat(temporary).catch(() => null)).toBeNull();
-    const html = join(directory, "export.html");
-    await writeFile(html, "<p>Conversation</p>");
-    expect(await publishShare(html, "# Conversation", "Test conversation")).toBe(
-      "https://gist.github.com/furb/test-link",
+test.serial(
+  "clipboard import and share publication use bounded files and the explicitly chosen uploader",
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "furb-desktop-"));
+    const bin = join(directory, "bin");
+    await mkdir(bin);
+    const oldPath = process.env.PATH;
+    const data =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
+    // One reader of the clipboard under the name of each system's reader: AppKit and PowerShell print base64.
+    await writeFile(
+      join(directory, "clipboard.ts"),
+      `import { basename } from "node:path"; const data = ${JSON.stringify(data)}; process.stdout.write(/^(osascript|powershell)(\\.exe)?$/.test(basename(process.execPath)) ? data : Buffer.from(data, "base64"));\n`,
     );
-    const uploaded = JSON.parse(await readFile(log, "utf8"));
-    expect(uploaded.args.slice(0, 4)).toEqual(["gist", "create", "--desc", "Test conversation"]);
-    expect(uploaded.args).not.toContain("--public");
-    expect(uploaded.markdown).toBe("# Conversation");
-    expect(uploaded.html).toBe("<p>Conversation</p>");
-  } finally {
-    if (oldPath === undefined) delete process.env.PATH;
-    else process.env.PATH = oldPath;
-    await remove(directory);
-  }
-});
+    const reader = executable(join(directory, "clipboard.ts"), directory, "reader");
+    for (const name of ["osascript", "powershell", "wl-paste", "xclip"])
+      await link(reader, join(bin, `${name}${extname(reader)}`));
+    const log = join(directory, "uploaded.json");
+    await writeFile(
+      join(directory, "gh.ts"),
+      `import { readFileSync, writeFileSync } from "node:fs"; const args = process.argv.slice(2); writeFileSync(${JSON.stringify(log)}, JSON.stringify({ args, markdown: readFileSync(args.at(-2), "utf8"), html: readFileSync(args.at(-1), "utf8") })); console.log("https://gist.github.com/furb/test-link");\n`,
+    );
+    const gh = executable(join(directory, "gh.ts"), bin, "gh");
+
+    try {
+      process.env.PATH = `${bin}${delimiter}${oldPath ?? ""}`;
+      expect(Bun.which("gh", { PATH: process.env.PATH })).toBe(gh);
+      let temporary = "";
+      const bytes = await clipboardImage(async (path) => {
+        temporary = path;
+        return await readFile(path);
+      });
+      expect(bytes.toString("base64")).toBe(data);
+      expect(await stat(temporary).catch(() => null)).toBeNull();
+      const html = join(directory, "export.html");
+      await writeFile(html, "<p>Conversation</p>");
+      expect(await publishShare(html, "# Conversation", "Test conversation")).toBe(
+        "https://gist.github.com/furb/test-link",
+      );
+      const uploaded = JSON.parse(await readFile(log, "utf8"));
+      expect(uploaded.args.slice(0, 4)).toEqual(["gist", "create", "--desc", "Test conversation"]);
+      expect(uploaded.args).not.toContain("--public");
+      expect(uploaded.markdown).toBe("# Conversation");
+      expect(uploaded.html).toBe("<p>Conversation</p>");
+    } finally {
+      if (oldPath === undefined) delete process.env.PATH;
+      else process.env.PATH = oldPath;
+      await remove(directory);
+    }
+  },
+);
 
 test("a model request failure shows in the feed as the failure of an act, and not as an error of the view", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-model-failure-"));
@@ -250,76 +254,79 @@ test("a model request failure shows in the feed as the failure of an act, and no
   }
 });
 
-test("file and shell shortcuts, an external editor, and a safe standalone share use the real session", async () => {
-  const session = await demoSession();
-  const oldEditor = process.env.EDITOR,
-    oldVisual = process.env.VISUAL;
-  try {
-    const directory = session.host.directory;
-    await writeFile(join(directory, "review notes.txt"), "Unique context for this check.");
-    expect(await projectFiles(directory)).toContain("review notes.txt");
-    expect(await fileReferences('Read @"review notes.txt" and @README.md', directory)).toEqual([
-      "review notes.txt",
-      "README.md",
-    ]);
-    await session.submit('Read @"review notes.txt".');
-    await idle(session);
-    await session.refresh();
-    expect(JSON.stringify(session.turns)).toContain("Unique context for this check.");
-    await session.submit("!printf shell-shortcut");
-    const shell = session.activity.findLast(
-      (act) => act.kind === "bash" && act.words[0] === "printf shell-shortcut",
-    );
-    if (!shell) throw new Error("No shell shortcut act.");
-    expect(await session.engine.result(shell.id)).toMatchObject({
-      code: 0,
-      stdout: { content: "shell-shortcut" },
-    });
-    const editor = join(directory, "editor.sh");
-    await writeFile(editor, "#!/bin/sh\nprintf 'edited outside the TUI' > \"$1\"\n", { mode: 0o700 });
-    process.env.EDITOR = `/bin/sh '${editor.replaceAll("'", "'\\''")}'`;
-    delete process.env.VISUAL;
-    const transitions: string[] = [];
-    expect(
-      await externalEditor(
-        {
-          suspend: () => {
-            transitions.push("suspend");
+test.serial(
+  "file and shell shortcuts, an external editor, and a safe standalone share use the real session",
+  async () => {
+    const session = await demoSession();
+    const oldEditor = process.env.EDITOR,
+      oldVisual = process.env.VISUAL;
+    try {
+      const directory = session.host.directory;
+      await writeFile(join(directory, "review notes.txt"), "Unique context for this check.");
+      expect(await projectFiles(directory)).toContain("review notes.txt");
+      expect(await fileReferences('Read @"review notes.txt" and @README.md', directory)).toEqual([
+        "review notes.txt",
+        "README.md",
+      ]);
+      await session.submit('Read @"review notes.txt".');
+      await idle(session);
+      await session.refresh();
+      expect(JSON.stringify(session.turns)).toContain("Unique context for this check.");
+      await session.submit("!printf shell-shortcut");
+      const shell = session.activity.findLast(
+        (act) => act.kind === "bash" && act.words[0] === "printf shell-shortcut",
+      );
+      if (!shell) throw new Error("No shell shortcut act.");
+      expect(await session.engine.result(shell.id)).toMatchObject({
+        code: 0,
+        stdout: { content: "shell-shortcut" },
+      });
+      const editor = join(directory, "editor.sh");
+      await writeFile(editor, "#!/bin/sh\nprintf 'edited outside the TUI' > \"$1\"\n", { mode: 0o700 });
+      process.env.EDITOR = `/bin/sh '${editor.replaceAll("'", "'\\''")}'`;
+      delete process.env.VISUAL;
+      const transitions: string[] = [];
+      expect(
+        await externalEditor(
+          {
+            suspend: () => {
+              transitions.push("suspend");
+            },
+            resume: () => {
+              transitions.push("resume");
+            },
           },
-          resume: () => {
-            transitions.push("resume");
-          },
-        },
-        "old draft",
-        false,
-        directory,
-      ),
-    ).toBe("edited outside the TUI");
-    expect(transitions).toEqual(["suspend", "resume"]);
-    await session.command("/extensions");
-    expect(session.notice).toBe("This life runs no extension.");
-    session.sessionName = '<script>alert("name")</script>';
-    await session.submit('<script>alert("message")</script> [bad link](javascript:alert(1))');
-    await idle(session);
-    await session.refresh();
-    const html = shareHtml(session);
-    expect(html).toContain("&lt;script&gt;");
-    expect(html).not.toContain("<script>");
-    expect(html).toContain("Content-Security-Policy");
-    expect(html).not.toContain('href="javascript:');
-    expect(html).toContain("<strong>search shortcut</strong>");
-    expect(shareMarkdown(session)).toContain("Unique context");
-    const output = join(directory, "shared.html");
-    await session.command(`/share ${output}`);
-    expect(await readFile(output, "utf8")).toContain("Exact model transcript");
-  } finally {
-    if (oldEditor === undefined) delete process.env.EDITOR;
-    else process.env.EDITOR = oldEditor;
-    if (oldVisual === undefined) delete process.env.VISUAL;
-    else process.env.VISUAL = oldVisual;
-    await session.dispose();
-  }
-});
+          "old draft",
+          false,
+          directory,
+        ),
+      ).toBe("edited outside the TUI");
+      expect(transitions).toEqual(["suspend", "resume"]);
+      await session.command("/extensions");
+      expect(session.notice).toBe("This life runs no extension.");
+      session.sessionName = '<script>alert("name")</script>';
+      await session.submit('<script>alert("message")</script> [bad link](javascript:alert(1))');
+      await idle(session);
+      await session.refresh();
+      const html = shareHtml(session);
+      expect(html).toContain("&lt;script&gt;");
+      expect(html).not.toContain("<script>");
+      expect(html).toContain("Content-Security-Policy");
+      expect(html).not.toContain('href="javascript:');
+      expect(html).toContain("<strong>search shortcut</strong>");
+      expect(shareMarkdown(session)).toContain("Unique context");
+      const output = join(directory, "shared.html");
+      await session.command(`/share ${output}`);
+      expect(await readFile(output, "utf8")).toContain("Exact model transcript");
+    } finally {
+      if (oldEditor === undefined) delete process.env.EDITOR;
+      else process.env.EDITOR = oldEditor;
+      if (oldVisual === undefined) delete process.env.VISUAL;
+      else process.env.VISUAL = oldVisual;
+      await session.dispose();
+    }
+  },
+);
 
 test("/extensions lists what a life runs, and a cancel of the work of a chain leaves the watcher of its memory", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-extensions-"));
