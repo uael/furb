@@ -47,9 +47,8 @@ fn runs(path: &Path) -> bool {
 
 /// The ear of commands: it takes a command, says what it writes, feeds it, and says it done with its exit.
 ///
-/// A command ends with every process it started: on Unix its process group, which it leads, and on Windows, which
-/// has no process group that a program can signal, its tree of processes. A command that a control ended first,
-/// which the engine says done, is ended so and says nothing more.
+/// A command ends with every process it started, which its group holds. A command that a control ended first, which
+/// the engine says done, is ended so and says nothing more.
 pub fn bash() -> Box<dyn Ear> {
   ear(|co, voice| async move {
     let mut running: HashMap<String, Running> = HashMap::new();
@@ -101,10 +100,10 @@ struct State {
   late: bool,
 }
 
-/// One command that runs: its state, which its threads share, its process, and the door to its stdin.
+/// One command that runs: its state, which its threads share, its group, and the door to its stdin.
 struct Running {
   state: Arc<Mutex<State>>,
-  pid: u32,
+  group: Arc<Group>,
   stop: mpsc::Sender<()>,
   stdin: Option<mpsc::Sender<Option<String>>>,
 }
@@ -130,7 +129,7 @@ impl Running {
     if let Ok(state) = self.state.lock()
       && !state.over
     {
-      slay(self.pid);
+      self.group.slay();
     }
   }
 }
@@ -159,8 +158,14 @@ fn begun(a: &Fact, voice: Voice) -> Result<Running, Fault> {
   let mut child = command
     .spawn()
     .map_err(|no| Fault::refused(format!("{shown} did not start: {no}: {}", dir.display())))?;
+  let group = match Group::of(&child) {
+    Ok(group) => Arc::new(group),
+    Err(no) => {
+      let _ = child.kill();
+      return Err(Fault::refused(format!("{shown} could not be held: {no}")));
+    }
+  };
   let state = Arc::new(Mutex::new(State::default()));
-  let pid = child.id();
   let stdin = child.stdin.take().map(fed_by);
   let readers = [
     child.stdout.take().map(|out| read(out, "stdout", &about, &voice)),
@@ -170,12 +175,13 @@ fn begun(a: &Fact, voice: Voice) -> Result<Running, Fault> {
   // A timeout past what the machine counts runs to the end of the command, as no timeout does.
   if let Some(left) = timeout.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok()) {
     let state = Arc::clone(&state);
+    let group = Arc::clone(&group);
     thread::spawn(move || {
       if let Err(mpsc::RecvTimeoutError::Timeout) = stopped.recv_timeout(left) {
         let Ok(mut state) = state.lock() else { return };
         if !state.over {
           state.late = true;
-          slay(pid);
+          group.slay();
         }
       }
     });
@@ -196,7 +202,7 @@ fn begun(a: &Fact, voice: Voice) -> Result<Running, Fault> {
     };
     voice.say("done", &about, [exit.object()]);
   });
-  Ok(Running { state, pid, stop, stdin })
+  Ok(Running { state, group, stop, stdin })
 }
 
 /// The door to the stdin of a command: a thread that writes each text it is given, and closes the stdin at nothing,
@@ -308,23 +314,67 @@ fn grouped(command: &mut Command) {
   }
 }
 
-/// Every process a command started, ended: on Unix its process group, and on Windows its tree.
-fn slay(pid: u32) {
-  #[cfg(unix)]
-  {
-    let Ok(group) = libc::pid_t::try_from(pid) else { return };
-    // SAFETY: kill is given the group the command leads, whose leader stays unreaped while the command is not over.
-    unsafe {
-      libc::kill(-group, libc::SIGKILL);
+/// Every process a command started: on Unix the process group it leads, and on Windows, where a shell of Git does
+/// not keep the tree of its processes, a job that holds the command and every process it starts.
+struct Group(#[cfg(unix)] libc::pid_t, #[cfg(windows)] windows_sys::Win32::Foundation::HANDLE);
+
+// SAFETY: the handle of a job is a kernel object that any thread may terminate and close.
+#[cfg(windows)]
+unsafe impl Send for Group {}
+#[cfg(windows)]
+unsafe impl Sync for Group {}
+
+impl Group {
+  /// The group of a command that just started. On Windows the job takes the command before its shell has read a
+  /// word, since the shell starts slower than the job takes it.
+  fn of(child: &Child) -> std::io::Result<Self> {
+    #[cfg(unix)]
+    {
+      libc::pid_t::try_from(child.id()).map(Self).map_err(std::io::Error::other)
+    }
+    #[cfg(windows)]
+    {
+      use std::os::windows::io::AsRawHandle;
+
+      use windows_sys::Win32::{
+        Foundation::CloseHandle,
+        System::JobObjects::{AssignProcessToJobObject, CreateJobObjectW},
+      };
+      // SAFETY: the job is made with no name and no attributes, and it takes the process that the child holds open.
+      unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+          return Err(std::io::Error::last_os_error());
+        }
+        if AssignProcessToJobObject(job, child.as_raw_handle()) == 0 {
+          let no = std::io::Error::last_os_error();
+          CloseHandle(job);
+          return Err(no);
+        }
+        Ok(Self(job))
+      }
     }
   }
-  #[cfg(windows)]
-  {
-    let _ = Command::new("taskkill")
-      .args(["/pid", &pid.to_string(), "/t", "/f"])
-      .stdin(Stdio::null())
-      .stdout(Stdio::null())
-      .stderr(Stdio::null())
-      .status();
+
+  /// Every process of the group, ended.
+  fn slay(&self) {
+    // SAFETY: on Unix kill is given the group the command leads, whose leader stays unreaped while the command is not
+    // over; on Windows the job is open until the group drops.
+    unsafe {
+      #[cfg(unix)]
+      libc::kill(-self.0, libc::SIGKILL);
+      #[cfg(windows)]
+      windows_sys::Win32::System::JobObjects::TerminateJobObject(self.0, 1);
+    }
+  }
+}
+
+#[cfg(windows)]
+impl Drop for Group {
+  fn drop(&mut self) {
+    // SAFETY: the group alone holds the handle of its job.
+    unsafe {
+      windows_sys::Win32::Foundation::CloseHandle(self.0);
+    }
   }
 }
