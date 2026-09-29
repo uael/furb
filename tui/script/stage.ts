@@ -55,6 +55,17 @@ export function highlighting(node: Renderable): Promise<void>[] {
   ];
 }
 
+/** Every highlight under a node, once no block of code is left to come. A block of markdown makes its blocks of code
+ * only once tree-sitter has read it, so each round waits, draws, and looks again, until a round finds no new block. */
+export async function highlighted(node: Renderable, draw: () => Promise<unknown>): Promise<void> {
+  let seen = -1;
+  for (let pending = highlighting(node); pending.length !== seen; pending = highlighting(node)) {
+    seen = pending.length;
+    await Promise.all(pending);
+    await draw();
+  }
+}
+
 /** The column and the row of the first place of the screen that shows a text, at or after a column. */
 export function find(
   screen: Awaited<ReturnType<typeof createTestRenderer>>,
