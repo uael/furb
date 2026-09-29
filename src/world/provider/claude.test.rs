@@ -22,7 +22,7 @@ use rig_core::{
 use serde_json::{Value, json};
 
 use super::{Claude, Completion};
-use crate::world::provider::runtime;
+use crate::ear::reactor;
 
 /// The fake command line, which the tests of the command line of furb run too.
 const FAKE: &str = include_str!("fake-claude.sh");
@@ -126,7 +126,7 @@ fn asked(
   messages: &[Message],
   settings: Value,
 ) -> Result<rig_core::completion::CompletionResponse, rig_core::completion::CompletionError> {
-  runtime().block_on(model.completion(request("ENGINE ONLY", messages, settings)))
+  reactor().block_on(model.completion(request("ENGINE ONLY", messages, settings)))
 }
 
 #[test]
@@ -378,7 +378,7 @@ fn a_conversation_that_grows_out_of_another_forks_it() {
 fn a_thought_streams_as_it_comes_and_settles_once_at_its_place() {
   let yard = Yard::new("thought");
   let model = yard.claude(10_000).completion_model("sonnet");
-  let (texts, choice) = runtime()
+  let (texts, choice) = reactor()
     .block_on(async {
       let mut stream = model.stream(request("ENGINE ONLY", &[user("THINK")], json!({}))).await?;
       let mut texts = Vec::new();
@@ -408,6 +408,27 @@ fn a_process_that_exits_fails_its_turn_with_the_tail_of_its_stderr() {
 }
 
 #[test]
+fn a_process_that_writes_more_on_its_stderr_than_its_pipe_holds_while_it_ends_fails_its_turn() {
+  let yard = Yard::new("loud-end");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let turn = model.completion(request("ENGINE ONLY", &[user("LOUD")], json!({})));
+  let no = reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
+  let no = no.expect("the turn ends").unwrap_err();
+  assert!(no.to_string().contains("Claude exited (3): eee"), "{no}");
+}
+
+#[test]
+fn a_process_that_writes_more_on_its_stderr_than_its_pipe_holds_takes_a_long_input() {
+  let yard = Yard::new("loud-start");
+  fs::write(yard.at.join("loud"), "").expect("the cue of the fake");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let long = "a".repeat(262_144);
+  let turn = model.completion(request("ENGINE ONLY", &[user(&long)], json!({})));
+  let got = reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
+  assert!(got.expect("the turn ends").is_ok(), "the turn is answered");
+}
+
+#[test]
 fn a_turn_that_makes_no_progress_fails_at_its_stall_with_the_last_odd_line_and_ends_its_process() {
   let yard = Yard::new("stall");
   let model = yard.claude(300).completion_model("sonnet");
@@ -429,7 +450,7 @@ fn a_turn_that_is_dropped_ends_its_process() {
       tokio::time::sleep(Duration::from_millis(10)).await;
     }
   };
-  let raced = runtime().block_on(async {
+  let raced = reactor().block_on(async {
     tokio::time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
   });
   let Ok(Either::Right(((), turn))) = raced else {
@@ -443,11 +464,11 @@ fn a_turn_that_is_dropped_ends_its_process() {
 /// Whether the process of an id is gone, within a time, as a process ends a moment after it is killed. A process
 /// that ended and that nothing reaped yet is gone too.
 pub(crate) fn gone(pid: &str) -> bool {
-  let Ok(pid) = pid.parse::<libc::pid_t>() else { return false };
+  let Some(pid) = pid.parse().ok().and_then(rustix::process::Pid::from_raw) else { return false };
   for _ in 0..100 {
-    // SAFETY: a signal of zero sends nothing, and says whether the process is there.
-    let there = unsafe { libc::kill(pid, 0) } == 0;
-    let status = fs::read_to_string(format!("/proc/{pid}/status")).unwrap_or_default();
+    let there = rustix::process::test_kill_process(pid).is_ok();
+    let status =
+      fs::read_to_string(format!("/proc/{}/status", pid.as_raw_nonzero())).unwrap_or_default();
     if !there || status.contains("State:\tZ") {
       return true;
     }

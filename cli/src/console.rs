@@ -5,17 +5,18 @@
 //! asked, and never two at once on one stream. Stdout is left to what the command prints.
 
 use std::{
-  collections::HashSet,
-  io::{self, BufRead, Write},
-  sync::{Arc, Mutex, mpsc},
-  thread,
+  collections::VecDeque,
+  io::{self, Write},
 };
 
 use furb::{
-  Ear, Fact, Fault, Object, Voice,
-  ear::{Co, call, ear, hear, say},
+  Ear, Fact, Fault, Object,
+  ear::{Co, Next, ear, say, tell},
   world::{SHAPES, answered},
 };
+use futures::{Stream, stream};
+use tokio::io::{AsyncBufReadExt, BufReader, Lines, Stdin};
+use unsync::oneshot;
 
 /// A prompt put to the operator: its act, the chain it is on, its shape and its message.
 pub struct Asked {
@@ -29,7 +30,7 @@ impl Asked {
   /// The prompt a fact asks the operator, when it is one that no ear before the console took, as a console takes it:
   /// the console says its started, and closes at once a prompt of a shape outside SHAPES, with the refusal of that
   /// shape, and gives it not. So every console of furb puts to the operator the same shapes.
-  pub async fn taken(co: &Co, a: &Fact) -> Result<Option<Asked>, Fault> {
+  pub async fn taken<W: 'static>(co: &mut Co<W>, a: &Fact) -> Result<Option<Asked>, Fault> {
     if a.kind() != "prompt" || !a.question() {
       return Ok(None);
     }
@@ -40,59 +41,80 @@ impl Asked {
       shape: word(1).unwrap_or_default(),
       message: word(2).unwrap_or_default(),
     };
-    say(co, Fact::says("started", &asked.about, [])).await;
+    say(co, Fact::says("started", &asked.about, []));
     if SHAPES.contains(&asked.shape.as_str()) {
       return Ok(Some(asked));
     }
     let no = answered(&asked.shape, "").unwrap_or_else(|no| no.object());
-    call("close", vec![no], vec![("id", Object::string(&asked.about))])?;
+    co.call("close", vec![no], vec![("id", Object::string(&asked.about))]).await?;
     Ok(None)
   }
 }
 
-/// The console, as an ear: it takes a prompt to the operator, and its work closes it later by its voice. A prompt that
-/// is done before its line comes, by a cancel, is shown no more, and its work says nothing of it.
+/// The lines of stdin, which one read holds at a time.
+type Input = Lines<BufReader<Stdin>>;
+
+/// The console, as an ear: it takes each prompt to the operator and shows them in turn, and closes each with the line
+/// the operator writes back, or with why no line came. A prompt that is done before its line comes, by a cancel, is
+/// shown no more: a line the operator wrote before that goes nowhere, and the next line goes to the next prompt.
 pub fn terminal() -> Box<dyn Ear> {
-  ear(|co, voice| async move {
-    let (asks, asked) = mpsc::channel::<Asked>();
-    let over: Arc<Mutex<HashSet<String>>> = Arc::default();
-    let (shown, speaks) = (Arc::clone(&over), voice.clone());
-    thread::spawn(move || shows(&asked, &shown, &speaks));
-    let mut taken = HashSet::new();
+  ear(|mut co: Co<Read>| async move {
+    // The lines of stdin, while no read holds them.
+    let mut lines = Some(BufReader::new(tokio::io::stdin()).lines());
+    let mut waiting: VecDeque<Asked> = VecDeque::new();
+    // The prompt shown, and the stop of its read.
+    let mut shown: Option<(Asked, oneshot::Sender<()>)> = None;
     loop {
-      let a = hear(&co).await;
-      if let Some(asked) = Asked::taken(&co, &a).await? {
-        taken.insert(asked.about.clone());
-        let _ = asks.send(asked);
-      } else if a.kind() == "done" && taken.remove(a.about()) {
-        voice.hush(a.about());
-        if let Ok(mut over) = over.lock() {
-          over.insert(a.about().to_owned());
+      if shown.is_none()
+        && lines.is_some()
+        && let Some(next) = waiting.pop_front()
+        && let Some(held) = lines.take()
+      {
+        eprint!("{} wants a {}: {}\n> ", next.about, next.shape, next.message);
+        let _ = io::stderr().flush();
+        let (stop, stopped) = oneshot::channel();
+        co.work(read(held, stopped));
+        shown = Some((next, stop));
+      }
+      match co.next().await {
+        Next::Heard(a) => {
+          if let Some(asked) = Asked::taken(&mut co, &a).await? {
+            waiting.push_back(asked);
+          } else if a.kind() == "done" {
+            waiting.retain(|one| one.about != a.about());
+            shown = shown.filter(|(one, _)| one.about != a.about());
+          }
+        }
+        Next::Worked((held, line)) => {
+          lines = Some(held);
+          let (Some(line), Some((Asked { about, shape, .. }, _))) = (line, shown.take()) else {
+            continue;
+          };
+          let value = match line {
+            Ok(Some(line)) => answered(&shape, line.trim_end_matches('\r')),
+            Ok(None) => Err(Fault::refused("the operator cannot be read: the input is over")),
+            Err(no) => Err(Fault::refused(format!("the operator cannot be read: {no}"))),
+          };
+          let value = value.unwrap_or_else(|no| no.object());
+          tell(&mut co, "close", vec![value], vec![("id", Object::string(&about))]).await;
         }
       }
     }
   })
 }
 
-/// Each prompt the console took, shown in turn, and closed with what the operator answered, or with why no answer
-/// came.
-fn shows(asked: &mpsc::Receiver<Asked>, over: &Mutex<HashSet<String>>, voice: &Voice) {
-  let done = |about: &str| over.lock().is_ok_and(|over| over.contains(about));
-  for Asked { about, shape, message, .. } in asked {
-    if done(&about) {
-      continue;
-    }
-    eprint!("{about} wants a {shape}: {message}\n> ");
-    let _ = io::stderr().flush();
-    let mut line = String::new();
-    let value = match io::stdin().lock().read_line(&mut line) {
-      Ok(0) => Err(Fault::refused("the operator cannot be read: the input is over")),
-      Ok(_) => answered(&shape, line.trim_end_matches(['\n', '\r'])),
-      Err(no) => Err(Fault::refused(format!("the operator cannot be read: {no}"))),
+/// What a read of stdin gives back: the lines, and the line read, or nothing when its prompt went first.
+type Read = (Input, Option<io::Result<Option<String>>>);
+
+/// One read of a line of stdin, which ends at its stop, and gives the lines back either way.
+fn read(mut lines: Input, stopped: oneshot::Receiver<()>) -> impl Stream<Item = Read> {
+  stream::once(async move {
+    // A line that came before the stop is read, so its prompt takes it and not the next.
+    let line = tokio::select! {
+      biased;
+      line = lines.next_line() => Some(line),
+      _ = stopped => None,
     };
-    if !done(&about) {
-      let value = value.unwrap_or_else(|no| no.object());
-      voice.call(&about, "close", vec![value], vec![("id", Object::string(&about))]);
-    }
-  }
+    (lines, line)
+  })
 }

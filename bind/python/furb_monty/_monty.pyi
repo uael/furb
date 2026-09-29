@@ -8,6 +8,7 @@ the sandbox calls back.
 """
 
 from collections.abc import Awaitable, Callable, Generator, Iterable
+from contextvars import ContextVar
 from typing import NotRequired, TypedDict, Unpack, final
 
 class Extension(TypedDict):
@@ -267,14 +268,21 @@ def image_references(message: str) -> list[Named]:
 def image_type(data: bytes) -> ImageType:
   """The type of an image by its first bytes: its media type and its extension."""
 
-def hearing() -> bool:
-  """Whether a life of this thread hears an ear or a function of the host now, so that a verb said now is said by
-  what it hears."""
+class Life:
+  """The life, lent to the code of python while the life hears it: that code calls each verb of the life through it,
+  and it goes back to the life once that code is done."""
 
-def call(verb: str, args: list[object] | None = None, kwargs: dict[str, object] | None = None) -> object:
-  """One verb of the engine, called by its name with its words by the ear or the function of the host that a life
-  hears now, and what it gave. Who speaks is the verb `spoken`, and a callable the engine made is the verb `made`,
-  with its number and its words."""
+  @property
+  def lent(self) -> bool:
+    """Whether the life is lent still. A callback that the code of python left behind keeps its context, and the
+    life in it, after the life went back, and a verb it calls is a verb of the operator."""
+
+  def call(self, verb: str, args: list[object] | None = None, kwargs: dict[str, object] | None = None) -> object:
+    """One verb of the life, called by its name with its words, and what it gave or raised. Who speaks is the verb
+    `spoken`, and a callable the engine made is the verb `made`, with its number and its words."""
+
+life: ContextVar[Life | None]
+"""The life lent to the code of python that a life hears now, and nothing anywhere else."""
 
 def on_console_end(callback: Callable[[str], None]) -> None:
   """Call back when the console of Windows ends this process, with the name of the event: `break`, `close`,

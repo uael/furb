@@ -12,7 +12,7 @@ pub struct Fact(pub Object);
 
 impl Fact {
   /// A saying: a kind, what it is about, and its words, with no slot for who said it, since the bus says that.
-  /// It is what an ear yields and what a Voice says, and it is read by the engine and never by the host.
+  /// It is what an ear yields, and it is read by the engine and never by the host.
   pub fn says(kind: &str, about: &str, words: impl IntoIterator<Item = Object>) -> Self {
     let mut held = vec![Object::string(kind), Object::string(about)];
     held.extend(words);

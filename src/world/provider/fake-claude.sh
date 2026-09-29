@@ -6,7 +6,9 @@
 # "reply n", for the nth turn of its process. A line that holds FAIL ends it with a failure, a line that holds WAIT
 # gets no answer, a line that holds ODD gets a line that is no JSON and then no answer, a line that holds LONG gets a
 # line longer than a reader takes, a line that holds ERROR gets a result that says an error, a line that holds BARE
-# gets a result with no block before it, and a line that holds THINK gets a thought before the text.
+# gets a result with no block before it, a line that holds THINK gets a thought before the text, and a line that holds
+# LOUD closes the stdout, writes more on the stderr than its pipe holds, and ends it with a failure. When the file loud
+# stands beside it, it writes more on the stderr than its pipe holds before it reads any input.
 here=$(dirname "$0")
 printf '%s\0' "$@" > "$here/args.$$"
 echo "$$" >> "$here/pids"
@@ -20,12 +22,14 @@ done
 say() { printf '%s\n' "{\"type\":\"stream_event\",\"event\":$1}"; }
 settle() { printf '%s\n' "{\"type\":\"assistant\",\"message\":{\"content\":[$1]}}"; }
 part() { say "{\"type\":\"content_block_delta\",\"index\":$at,\"delta\":{\"type\":\"text_delta\",\"text\":$1}}"; }
+if [ -f "$here/loud" ]; then head -c 262144 /dev/zero | tr '\0' e >&2; fi
 n=0
 while IFS= read -r line; do
   printf '%s\n' "$line" >> "$here/in"
   case $line in
     *FAIL*) echo "deliberate failure" >&2; exit 2 ;;
     *WAIT*) continue ;;
+    *LOUD*) exec 1>&-; head -c 262144 /dev/zero | tr '\0' e >&2; exit 3 ;;
     *ODD*) echo "no line of json"; continue ;;
     *LONG*) head -c 33554433 /dev/zero | tr '\0' a; echo; continue ;;
     *ERROR*) echo '{"type":"result","is_error":true,"result":"the model is overloaded"}'; continue ;;

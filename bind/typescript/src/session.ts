@@ -178,7 +178,7 @@ export class Session extends EventEmitter {
       const fact = (yield null) as Fact | undefined;
       if (!fact || this.stopped) continue;
       this.facts.push(fact);
-      this.activity.hear(fact);
+      yield* this.activity.hear(fact);
       const [kind, id, by, ...words] = fact;
       if (kind === "reply" && isQuestion(kind, id)) this.replies.set(id, by);
       if (kind === "done" && this.streams.delete(this.replies.get(id) ?? "")) this.changed();

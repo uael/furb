@@ -24,7 +24,7 @@ use host::{Held, Word};
 
 use super::{Given, Inspection, NativeEar, Outcome, Record, Said, Told, Value, words};
 use crate::{
-  Engine, Fault, Object, ear,
+  Engine, Fault, Object,
   life::{Answer, Opening, Stream},
   wire,
 };
@@ -389,9 +389,6 @@ impl JsEngine {
     args: Vec<Object>,
     kwargs: Vec<(&str, Object)>,
   ) -> napi::Result<Object> {
-    if ear::hearing() {
-      return Ok(ear::call(name, args, kwargs)?);
-    }
     self.held.call(|engine| engine.verb(name, args, kwargs))
   }
 

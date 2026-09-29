@@ -13,8 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { call } from "../index.cjs";
-import type { Ear } from "./ears.js";
+import { call, type Ear } from "./ears.js";
 import { type Fact, isQuestion } from "./types.js";
 
 export interface FileChange {
@@ -67,7 +66,7 @@ export class FileChanges {
       if (kind === "write" && isQuestion(kind, id)) {
         const text = words[1] as { path?: unknown } | undefined;
         if (typeof text?.path !== "string" || text.path.includes("://")) continue;
-        const here = String(call("cwd", [], { on: words[0] }));
+        const here = String(yield call("cwd", [], { on: words[0] }));
         const path = resolve(directory, here, text.path);
         let old = "";
         try {

@@ -96,15 +96,16 @@ An ear is a generator of JavaScript or an ear of the crate, a `NativeEar`, and `
 them under the names the engine hears them by, in the order the engine offers them a question. A generator hears
 each fact of the life. It yields a saying, `[kind, id, ...words]`, and hears back the fact the bus made of it, and
 it yields nothing to hear the next fact. It hears nothing at its birth. While it hears, it calls a verb of the
-engine with `call(verb, args, kwargs)`, which gives what the verb gave or throws what it raised, since the engine
-answers the ear that it waits for. The first ear that says started or done of a question owns it, and
+engine by yielding `call(verb, args, kwargs)`, and hears back what the verb gave, or has what it raised thrown where
+it yielded, since the engine answers the ear that it waits for. The first ear that says started or done of a question owns it, and
 the owner answers it: now with a done, or later. What the work that an ear began says later, it says under the name
 of that ear, which `speaking(engine, name, action)` sets. An ear of the outside hears a question only when no ear
 before it took it, so `driving(ear, name)` gives an ear that brings another to life as an ear of the engine, which
 hears every question. `SessionOptions.ears` gives the ears of the host, which come before the ears of the session:
 one that takes a question takes it in their place, and one that takes it and asks the same again wraps it. A
 function of JavaScript crosses as a show, a filter, or a function that makes the ear of an act, and what it throws
-is raised where the word called it.
+is raised where the word called it. It answers from its words alone: a verb of the engine that it calls while the
+engine runs it is refused, since only an ear, which yields, can wait for the answer of the engine.
 
 Values use the Python record form. Text and Exit carry `is` plus their fields. Faults carry `is` and `args`.
 Lists and tuples cross as arrays, and maps keep their order. Every value of the engine crosses to JavaScript,

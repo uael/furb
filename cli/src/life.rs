@@ -2,18 +2,14 @@
 //! and what the operator hears of it.
 
 use std::{
-  cell::RefCell,
-  future::Future,
+  future::{Future, poll_fn},
   pin::Pin,
-  rc::Rc,
-  sync::Arc,
-  task::{Context, Poll, Wake, Waker},
-  thread,
+  task::Poll,
 };
 
 use furb::{
   Act, Ear, Engine, Fact, Fault, Object,
-  ear::{ear, hear},
+  ear::{ear, hear, reactor},
   engine::OPERATOR,
   extension::{self, Extension},
   fact,
@@ -21,6 +17,9 @@ use furb::{
   verbs,
   world::Catalog,
 };
+
+use futures::FutureExt;
+use unsync::spsc;
 
 use crate::console;
 
@@ -30,7 +29,9 @@ pub struct Life {
   pub engine: Engine,
   pub root: String,
   held: Vec<Fact>,
-  quiet: Rc<RefCell<Quiet>>,
+  quiet: Quiet,
+  /// Each fact the life said, as the observer heard it, which the quiet reads.
+  heard: spsc::Receiver<Fact>,
 }
 
 /// Whether a pause stands over the acts the operator watches, the root and the act it awaits, and the last refusal
@@ -87,19 +88,18 @@ impl Life {
     let mut quiet = Quiet::default();
     let facts = engine.transcript(verbs::Transcript { on: Some(root.clone()) }).map_err(failed)?;
     quiet.watch(vec![root.clone()], &facts);
-    let quiet = Rc::new(RefCell::new(quiet));
-    let quieted = Rc::clone(&quiet);
-    let observer = ear(move |co, _| async move {
+    let (mut tells, told) = spsc::unbounded();
+    let observer = ear(move |mut co| async move {
       loop {
-        let a = hear(&co).await;
-        quieted.borrow_mut().heard(&a);
+        let a = hear(&mut co).await;
         heard(&a);
+        let _ = tells.try_send(a);
       }
     });
     engine.drive(observer, "observer").map_err(failed)?;
     let held: Vec<Fact> =
       held.iter().filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?)).collect();
-    Ok(Life { engine, root, held, quiet })
+    Ok(Life { engine, root, held, quiet, heard: told })
   }
 
   /// A life for one command of the operator, on the terminal.
@@ -114,8 +114,8 @@ impl Life {
   }
 
   /// Whether a pause stands over the root.
-  pub fn paused(&self) -> bool {
-    self.quiet.borrow().paused
+  pub fn paused(&mut self) -> bool {
+    quieted(&mut self.quiet, &mut self.heard).paused
   }
 
   /// The name of the prompt the record already holds for this message: of the operator, on the root, of this shape
@@ -139,26 +139,32 @@ impl Life {
   pub fn settled(&mut self, id: &str) -> Result<Object, String> {
     let facts = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()) });
     let facts = facts.map_err(|no| no.to_string())?;
-    self.quiet.borrow_mut().watch(vec![self.root.clone(), id.to_owned()], &facts);
-    let waker = Waker::from(Arc::new(Parked(thread::current())));
-    let mut cx = Context::from_waker(&waker);
-    loop {
-      if let Poll::Ready(got) = Pin::new(&mut Act::<Object>::of(&mut self.engine, id)).poll(&mut cx)
-      {
-        return got.map_err(|no| no.to_string());
+    quieted(&mut self.quiet, &mut self.heard);
+    self.quiet.watch(vec![self.root.clone(), id.to_owned()], &facts);
+    let Life { engine, quiet, heard, .. } = self;
+    reactor().block_on(poll_fn(|cx| {
+      if let Poll::Ready(got) = Pin::new(&mut Act::<Object>::of(engine, id)).poll(cx) {
+        return Poll::Ready(got.map_err(|no| no.to_string()));
       }
-      let quiet = self.quiet.borrow();
-      if quiet.paused {
-        let why =
-          if quiet.refused.is_empty() { String::new() } else { format!(": {}", quiet.refused) };
-        return Err(format!(
-          "{id} is paused{why}. A wake from the TUI or from `furb --mode rpc` makes it go on."
-        ));
+      let quiet = quieted(quiet, heard);
+      if !quiet.paused {
+        return Poll::Pending;
       }
-      drop(quiet);
-      thread::park();
-    }
+      let why =
+        if quiet.refused.is_empty() { String::new() } else { format!(": {}", quiet.refused) };
+      Poll::Ready(Err(format!(
+        "{id} is paused{why}. A wake from the TUI or from `furb --mode rpc` makes it go on."
+      )))
+    }))
   }
+}
+
+/// The quiet, once it read every fact the observer heard since.
+fn quieted<'a>(quiet: &'a mut Quiet, heard: &mut spsc::Receiver<Fact>) -> &'a Quiet {
+  while let Some(Some(a)) = heard.recv().now_or_never() {
+    quiet.heard(&a);
+  }
+  quiet
 }
 
 /// The shape of a prompt of the operator that names none: a str, so the model works until it closes the prompt with
@@ -179,14 +185,5 @@ pub fn actor(to: &str) -> (String, Option<String>) {
       (actor.unwrap_or_else(|| to.to_owned()), models.first().map(|one| one.name().to_owned()))
     }
     Err(_) => (to.to_owned(), None),
-  }
-}
-
-/// A waker that unparks the thread that awaits, so a voice that speaks from another thread wakes it.
-struct Parked(thread::Thread);
-
-impl Wake for Parked {
-  fn wake(self: Arc<Self>) {
-    self.0.unpark();
   }
 }

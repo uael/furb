@@ -9,11 +9,11 @@
 //! turns, and no key is read.
 
 use std::{
-  collections::HashMap,
+  collections::{HashMap, VecDeque},
   env,
   path::{Path, PathBuf},
   process::Stdio,
-  sync::{Arc, Mutex, Once, Weak},
+  sync::Arc,
   time::{Duration, Instant},
 };
 
@@ -26,12 +26,15 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 use tokio::{
-  io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader},
-  process::{Child, ChildStdin, Command},
-  sync::mpsc,
+  io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
+  process::{Child, ChildStderr, ChildStdin, ChildStdout, Command},
+  sync::{mpsc, oneshot},
 };
 
-use super::{Model, ended, runtime, spawned, uuid};
+use futures::{FutureExt, StreamExt};
+
+use super::{Model, ended, uuid};
+use crate::ear::reactor;
 
 /// The name of the command line as a provider: each response of it says this name, and each of its models is named
 /// by it and the alias of its family.
@@ -68,19 +71,13 @@ const BUSY: i32 = 26;
 
 /// The claude command line: its program, how long a turn may go with no progress, and the conversations it holds.
 ///
-/// It is cheap to clone, and every clone holds the same conversations. When the last clone goes, every process it
-/// started ends.
+/// It is cheap to clone, and every clone holds the same conversations, which one keeper owns and lends to one turn at
+/// a time. When the last clone goes, the keeper ends, and every process it started ends.
 #[derive(Clone)]
 pub struct Claude {
-  held: Arc<Held>,
-}
-
-struct Held {
-  bin: PathBuf,
+  bin: Arc<Path>,
   stall: Duration,
-  conversations: Mutex<HashMap<String, Arc<tokio::sync::Mutex<Conversation>>>>,
-  /// The sweep of the processes that sat idle, begun at the first turn.
-  swept: Once,
+  keeper: mpsc::UnboundedSender<Kept>,
 }
 
 impl Claude {
@@ -98,8 +95,9 @@ impl Claude {
       let seconds = env::var("FURB_CLAUDE_STALL").ok().and_then(|one| one.parse::<f64>().ok());
       seconds.and_then(|one| Duration::try_from_secs_f64(one).ok()).unwrap_or(STALL)
     });
-    let held = Arc::new(Held { bin, stall, conversations: Mutex::default(), swept: Once::new() });
-    Claude { held }
+    let (keeper, asked) = mpsc::unbounded_channel();
+    reactor().spawn(kept(asked));
+    Claude { bin: bin.into(), stall, keeper }
   }
 
   /// One model of the command line, by its name, as a completion model of rig.
@@ -139,57 +137,37 @@ pub struct Completion {
 /// Where the parts of a streamed turn go as the command line writes them.
 type Deltas = mpsc::UnboundedSender<Result<RawStreamingChoice, CompletionError>>;
 
-impl Completion {
-  /// The command line, whose processes that sat idle end at the next sweep, which a turn does and a sweep of its own
-  /// does too while no turn comes; that sweep begins at the first turn, and ends when the last clone goes.
-  fn held(&self) -> Arc<Held> {
-    let held = Arc::clone(&self.claude.held);
-    held.swept.call_once(|| {
-      let weak = Arc::downgrade(&held);
-      runtime().spawn(async move {
-        let mut ticks = tokio::time::interval(IDLE);
-        ticks.tick().await;
-        loop {
-          ticks.tick().await;
-          let Some(held) = Weak::upgrade(&weak) else { return };
-          held.sweep();
-        }
-      });
-    });
-    held
-  }
-}
-
 impl CompletionModel for Completion {
   async fn completion(
     &self,
     request: CompletionRequest,
   ) -> Result<CompletionResponse, CompletionError> {
-    let (held, name) = (self.held(), self.name.clone());
-    spawned(async move { held.turn(&name, request, None).await }).await?
+    self.claude.turn(&self.name, request, None).await
   }
 
   async fn stream(
     &self,
     request: CompletionRequest,
   ) -> Result<StreamingCompletionResponse, CompletionError> {
-    let (held, name) = (self.held(), self.name.clone());
-    let (deltas, heard) = mpsc::unbounded_channel();
-    let task = spawned(async move {
-      let got = held.turn(&name, request, Some(&deltas)).await;
+    let (claude, name) = (self.claude.clone(), self.name.clone());
+    let (deltas, mut heard) = mpsc::unbounded_channel();
+    let turn = async move {
+      let got = claude.turn(&name, request, Some(&deltas)).await;
       let _ =
         deltas.send(got.map(|response| RawStreamingChoice::FinalResponse(ended(CLAUDE, response))));
-    });
-    // The task goes with the stream, so a stream that is dropped ends its turn.
-    let stream = futures::stream::unfold((heard, task), |(mut heard, task)| async move {
-      heard.recv().await.map(|one| (one, (heard, task)))
-    });
+      None
+    };
+    // The turn goes with the stream: it runs as the stream is read, and a stream that is dropped ends it.
+    let told = futures::stream::poll_fn(move |cx| heard.poll_recv(cx));
+    let stream =
+      futures::stream::select(told, futures::stream::once(turn).filter_map(async |one| one));
     Ok(StreamingCompletionResponse::stream(CLAUDE, Box::pin(stream)))
   }
 }
 
-impl Held {
-  /// One turn of a model: the conversation it continues, which answers one turn at a time, and what it came to.
+impl Claude {
+  /// One turn of a model: the conversation it continues, which the keeper lends it alone until the turn is over, and
+  /// what it came to.
   async fn turn(
     &self,
     name: &str,
@@ -216,76 +194,179 @@ impl Held {
       .filter(|one| !matches!(one, Message::System { .. }))
       .collect();
     let key = json!([name, system, session]).to_string();
-    let conversation = self.conversation(&key, &name, &system, &messages);
-    let got =
-      conversation.lock().await.turn(&messages, effort, &self.bin, self.stall, deltas).await;
-    self.sweep();
-    got
+    let (lent, borrowed) = oneshot::channel();
+    let asked = Kept::Lend { key: key.clone(), name, system, messages: messages.clone(), lent };
+    let gone = || failed("the keeper of the conversations of claude is gone");
+    self.keeper.send(asked).map_err(|_| gone())?;
+    let conversation = borrowed.await.map_err(|_| gone())?;
+    let mut lent = Lent { key, conversation: Some(conversation), keeper: self.keeper.clone() };
+    lent.conversation().turn(&messages, effort, &self.bin, self.stall, deltas).await
   }
+}
 
-  /// The conversation of a key: the one the command line holds, or a new one, which forks the idle conversation it
-  /// grows out of when there is one, so it takes all that conversation holds.
-  fn conversation(
-    &self,
-    key: &str,
-    name: &str,
-    system: &str,
-    messages: &[Message],
-  ) -> Arc<tokio::sync::Mutex<Conversation>> {
-    let mut held = self.conversations.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    if let Some(one) = held.get(key) {
-      return Arc::clone(one);
-    }
-    let incoming: Vec<String> = messages.iter().map(canonical).collect();
-    let mut made = Conversation::new(name, system);
-    let donor = held
-      .values()
-      .filter_map(|one| one.try_lock().ok())
-      .filter(|one| {
-        let chain = one.chain.len();
-        chain > 0
-          && one.name == name
-          && one.system == system
-          && chain < incoming.len()
-          && incoming[..chain] == one.chain[..]
-          && messages[chain..].iter().all(|one| !matches!(one, Message::Assistant { .. }))
-      })
-      .max_by_key(|one| one.chain.len())
-      .map(|one| (one.id.clone(), one.chain.clone()));
-    if let Some((parent, chain)) = donor {
-      made.parent = Some(parent);
-      made.chain = chain;
-    }
-    let made = Arc::new(tokio::sync::Mutex::new(made));
-    held.insert(key.to_owned(), Arc::clone(&made));
-    made
+/// What the keeper of the conversations is asked: to lend the conversation of a key to a turn, or to take it back.
+enum Kept {
+  Lend {
+    key: String,
+    name: String,
+    system: String,
+    messages: Vec<Message>,
+    lent: oneshot::Sender<Box<Conversation>>,
+  },
+  Back {
+    key: String,
+    conversation: Box<Conversation>,
+  },
+}
+
+/// The conversation of a key as the keeper holds it: at hand, or lent to a turn, with the turns that wait for it.
+enum Slot {
+  Idle(Box<Conversation>),
+  Lent(VecDeque<oneshot::Sender<Box<Conversation>>>),
+}
+
+/// A conversation lent to a turn, which goes back to the keeper however the turn ends.
+struct Lent {
+  key: String,
+  conversation: Option<Box<Conversation>>,
+  keeper: mpsc::UnboundedSender<Kept>,
+}
+
+impl Lent {
+  fn conversation(&mut self) -> &mut Conversation {
+    self.conversation.as_mut().expect("a lent conversation is held until it goes back")
   }
+}
 
-  /// What no turn needs goes: the process of a conversation that sat idle too long, or that stands past the warm
-  /// ones, the least used first, and a conversation with no process past the held ones.
-  fn sweep(&self) {
-    let mut held = self.conversations.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let mut idle: Vec<_> = held
-      .iter()
-      .filter_map(|(key, one)| one.try_lock().ok().map(|one| (key.clone(), one)))
-      .collect();
-    idle.sort_by_key(|(_, one)| one.used);
-    let mut warm = held.len() - idle.len();
-    warm += idle.iter().filter(|(_, one)| one.process.is_some()).count();
-    let mut gone = Vec::new();
-    for (key, one) in &mut idle {
-      if one.process.is_some() && (warm > WARM || one.used.elapsed() > IDLE) {
-        one.process = None;
-        warm -= 1;
-      }
-      if one.process.is_none() && held.len() - gone.len() > HELD {
-        gone.push(key.clone());
-      }
+impl Drop for Lent {
+  fn drop(&mut self) {
+    if let Some(conversation) = self.conversation.take() {
+      let key = std::mem::take(&mut self.key);
+      let _ = self.keeper.send(Kept::Back { key, conversation });
     }
-    drop(idle);
-    for key in gone {
-      held.remove(&key);
+  }
+}
+
+/// The keeper of the conversations: it lends each to one turn at a time, and the next turn of a conversation lent
+/// waits for it; it takes each back, and then sweeps; and it sweeps once in each span that a process may sit idle.
+/// It ends when the last clone of the command line goes, and every conversation goes with it.
+async fn kept(mut asked: mpsc::UnboundedReceiver<Kept>) {
+  let mut held: HashMap<String, Slot> = HashMap::new();
+  let mut ticks = tokio::time::interval(IDLE);
+  ticks.tick().await;
+  loop {
+    tokio::select! {
+      one = asked.recv() => match one {
+        None => return,
+        Some(Kept::Lend { key, name, system, messages, lent }) => {
+          lend(&mut held, key, &name, &system, &messages, lent);
+        }
+        Some(Kept::Back { key, conversation }) => {
+          back(&mut held, key, conversation);
+          swept(&mut held);
+        }
+      },
+      _ = ticks.tick() => swept(&mut held),
     }
+  }
+}
+
+/// The conversation of a key, lent to a turn: the one the keeper holds, or a new one, which forks the idle
+/// conversation it grows out of when there is one, so it takes all that conversation holds. A turn of a conversation
+/// lent waits for it.
+fn lend(
+  held: &mut HashMap<String, Slot>,
+  key: String,
+  name: &str,
+  system: &str,
+  messages: &[Message],
+  lent: oneshot::Sender<Box<Conversation>>,
+) {
+  let conversation = match held.remove(&key) {
+    Some(Slot::Idle(conversation)) => conversation,
+    Some(Slot::Lent(mut waiting)) => {
+      waiting.push_back(lent);
+      held.insert(key, Slot::Lent(waiting));
+      return;
+    }
+    None => {
+      let incoming: Vec<String> = messages.iter().map(canonical).collect();
+      let mut made = Conversation::new(name, system);
+      let donor = held
+        .values()
+        .filter_map(|one| match one {
+          Slot::Idle(one) => Some(one),
+          Slot::Lent(_) => None,
+        })
+        .filter(|one| {
+          let chain = one.chain.len();
+          chain > 0
+            && one.name == name
+            && one.system == system
+            && chain < incoming.len()
+            && incoming[..chain] == one.chain[..]
+            && messages[chain..].iter().all(|one| !matches!(one, Message::Assistant { .. }))
+        })
+        .max_by_key(|one| one.chain.len());
+      if let Some(donor) = donor {
+        made.parent = Some(donor.id.clone());
+        made.chain = donor.chain.clone();
+      }
+      Box::new(made)
+    }
+  };
+  match lent.send(conversation) {
+    Ok(()) => held.insert(key, Slot::Lent(VecDeque::new())),
+    // The turn went before it was lent the conversation, which stays at hand.
+    Err(conversation) => held.insert(key, Slot::Idle(conversation)),
+  };
+}
+
+/// A conversation taken back: lent to the next turn that waits for it and still stands, or kept at hand.
+fn back(held: &mut HashMap<String, Slot>, key: String, mut conversation: Box<Conversation>) {
+  let mut waiting = match held.remove(&key) {
+    Some(Slot::Lent(waiting)) => waiting,
+    _ => VecDeque::new(),
+  };
+  while let Some(next) = waiting.pop_front() {
+    match next.send(conversation) {
+      Ok(()) => {
+        held.insert(key, Slot::Lent(waiting));
+        return;
+      }
+      Err(again) => conversation = again,
+    }
+  }
+  held.insert(key, Slot::Idle(conversation));
+}
+
+/// What no turn needs goes: the process of a conversation that sat idle too long, or that stands past the warm ones,
+/// the least used first, and a conversation with no process past the held ones. A conversation lent stands warm.
+fn swept(held: &mut HashMap<String, Slot>) {
+  let count = held.len();
+  let mut idle: Vec<_> = held
+    .iter_mut()
+    .filter_map(|(key, one)| match one {
+      Slot::Idle(one) => Some((key.clone(), one)),
+      Slot::Lent(_) => None,
+    })
+    .collect();
+  idle.sort_by_key(|(_, one)| one.used);
+  let mut warm = count - idle.len();
+  warm += idle.iter().filter(|(_, one)| one.process.is_some()).count();
+  let mut gone = Vec::new();
+  for (key, one) in &mut idle {
+    if one.process.is_some() && (warm > WARM || one.used.elapsed() > IDLE) {
+      one.process = None;
+      warm -= 1;
+    }
+    if one.process.is_none() && count - gone.len() > HELD {
+      gone.push(key.clone());
+    }
+  }
+  drop(idle);
+  for key in gone {
+    held.remove(&key);
   }
 }
 
@@ -387,7 +468,11 @@ impl Conversation {
   }
 
   /// A process of the conversation at an effort: a new one, a resumed one, or the fork of its parent.
-  fn start(&mut self, bin: &Path, effort: Option<String>) -> Result<Process, CompletionError> {
+  async fn start(
+    &mut self,
+    bin: &Path,
+    effort: Option<String>,
+  ) -> Result<Process, CompletionError> {
     let mut command = Command::new(bin);
     command.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json"]);
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
@@ -414,7 +499,7 @@ impl Conversation {
         Err(no) if no.raw_os_error() == Some(BUSY) && tries < 50 => tries += 1,
         got => break got,
       }
-      std::thread::sleep(Duration::from_millis(10));
+      tokio::time::sleep(Duration::from_millis(10)).await;
     }
     .map_err(|no| failed(format!("{} did not start: {no}", bin.display())))?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
@@ -423,11 +508,9 @@ impl Conversation {
       return Err(failed("claude started with no pipes"));
     };
     self.resumed = true;
-    let hurt = Arc::new(Mutex::new(String::new()));
-    let tailing = Some(tokio::spawn(tailed(stderr, Arc::clone(&hurt))));
-    let (said, lines) = mpsc::unbounded_channel();
-    tokio::spawn(listened(stdout, said));
-    Ok(Process { effort, child, stdin, lines, hurt, tailing, paid: 0.0 })
+    let out = Out { reader: BufReader::new(stdout), read: Vec::new() };
+    let tail = Tail { stderr: Some(stderr), kept: String::new() };
+    Ok(Process { effort, child, stdin, out, tail, paid: 0.0 })
   }
 }
 
@@ -439,74 +522,105 @@ enum Line {
   Over(Option<String>),
 }
 
-/// One process of the command line: the effort it spends, the child, its stdin, what its stdout says, the tail of its
-/// stderr, and the running cost it said last, since it says the cost of all its turns.
+/// One process of the command line: the effort it spends, the child, its stdin, its stdout, the tail of its stderr,
+/// and the running cost it said last, since it says the cost of all its turns.
 struct Process {
   /// The effort of each turn of the process, which it started at.
   effort: Option<String>,
   child: Child,
   stdin: ChildStdin,
-  lines: mpsc::UnboundedReceiver<Line>,
-  hurt: Arc<Mutex<String>>,
-  /// The read of its stderr, which an exit waits for, so the failure says all the process wrote.
-  tailing: Option<tokio::task::JoinHandle<()>>,
+  out: Out,
+  tail: Tail,
   paid: f64,
 }
 
 impl Process {
   /// Whether the process still stands: what an earlier turn left unread goes, and an end among it says no.
   fn stands(&mut self) -> bool {
-    while let Ok(line) = self.lines.try_recv() {
+    while let Some(line) = self.out.line().now_or_never() {
       if let Line::Over(_) = line {
         return false;
       }
     }
     matches!(self.child.try_wait(), Ok(None))
   }
-
-  /// The last of what the process wrote on its stderr, after a colon, or nothing.
-  fn tail(&self) -> String {
-    let hurt = self.hurt.lock().map(|one| one.trim().to_owned()).unwrap_or_default();
-    if hurt.is_empty() { hurt } else { format!(": {hurt}") }
-  }
 }
 
-/// Every line of the stdout of a process, read as it comes, until its end.
-async fn listened(stdout: impl AsyncRead + Unpin, said: mpsc::UnboundedSender<Line>) {
-  let mut reader = BufReader::new(stdout);
-  let mut read = Vec::new();
-  loop {
-    read.clear();
-    let limit = u64::try_from(LINE).unwrap_or(u64::MAX) + 1;
-    let line = match (&mut reader).take(limit).read_until(b'\n', &mut read).await {
-      Ok(0) => Line::Over(None),
-      Ok(_) if read.len() > LINE => {
-        Line::Over(Some(format!("Claude wrote a line over {LINE} bytes.")))
-      }
-      Ok(_) => match serde_json::from_slice::<Value>(read.trim_ascii()) {
-        Ok(event) => Line::Event(event),
-        Err(_) if read.trim_ascii().is_empty() => continue,
-        Err(_) => Line::Odd(String::from_utf8_lossy(read.trim_ascii()).into_owned()),
-      },
-      Err(no) => Line::Over(Some(format!("The stdout of claude failed: {no}"))),
-    };
-    let over = matches!(line, Line::Over(_));
-    if said.send(line).is_err() || over {
-      return;
+/// The stdout of a process, read a line at a time, and the part of a line read so far, which stays when a read is
+/// dropped before its line is whole.
+struct Out {
+  reader: BufReader<ChildStdout>,
+  read: Vec<u8>,
+}
+
+impl Out {
+  /// The next line of the stdout, as it comes.
+  async fn line(&mut self) -> Line {
+    loop {
+      let limit = u64::try_from((LINE + 1).saturating_sub(self.read.len())).unwrap_or(u64::MAX);
+      let got = (&mut self.reader).take(limit).read_until(b'\n', &mut self.read).await;
+      return match got {
+        Ok(0) if self.read.is_empty() => Line::Over(None),
+        Ok(_) if self.read.len() > LINE => {
+          Line::Over(Some(format!("Claude wrote a line over {LINE} bytes.")))
+        }
+        Ok(_) => {
+          let read = std::mem::take(&mut self.read);
+          match serde_json::from_slice::<Value>(read.trim_ascii()) {
+            Ok(event) => Line::Event(event),
+            Err(_) if read.trim_ascii().is_empty() => continue,
+            Err(_) => Line::Odd(String::from_utf8_lossy(read.trim_ascii()).into_owned()),
+          }
+        }
+        Err(no) => Line::Over(Some(format!("The stdout of claude failed: {no}"))),
+      };
     }
   }
 }
 
-/// The last characters of the stderr of a process, kept for the failure that comes next.
-async fn tailed(mut stderr: impl AsyncRead + Unpin, hurt: Arc<Mutex<String>>) {
-  let mut chunk = vec![0u8; 4096];
-  while let Ok(n) = stderr.read(&mut chunk).await
-    && n > 0
-  {
-    let Ok(mut held) = hurt.lock() else { return };
-    held.push_str(&String::from_utf8_lossy(&chunk[..n]));
-    let cut = held.len() - last(&held).len();
-    held.drain(..cut);
+/// The stderr of a process, until its end, and the last characters it wrote, kept for the failure that comes next.
+struct Tail {
+  stderr: Option<ChildStderr>,
+  kept: String,
+}
+
+impl Tail {
+  /// What the stderr writes next, kept, until its end.
+  async fn heard(&mut self) {
+    let Some(stderr) = self.stderr.as_mut() else { return std::future::pending().await };
+    let mut chunk = [0u8; 4096];
+    match stderr.read(&mut chunk).await {
+      Ok(n) if n > 0 => {
+        self.kept.push_str(&String::from_utf8_lossy(&chunk[..n]));
+        let cut = self.kept.len() - last(&self.kept).len();
+        self.kept.drain(..cut);
+      }
+      _ => self.stderr = None,
+    }
+  }
+
+  /// What a work of the process comes to, with its stderr read meanwhile, so the process never stops for it.
+  async fn beside<T>(&mut self, work: impl Future<Output = T>) -> T {
+    let mut work = std::pin::pin!(work);
+    loop {
+      tokio::select! {
+        got = &mut work => return got,
+        () = self.heard() => {}
+      }
+    }
+  }
+
+  /// All that the stderr writes until its end.
+  async fn drained(&mut self) {
+    while self.stderr.is_some() {
+      self.heard().await;
+    }
+  }
+
+  /// The last of what the process wrote on its stderr, after a colon, or nothing.
+  fn said(&self) -> String {
+    let kept = self.kept.trim();
+    if kept.is_empty() { String::new() } else { format!(": {kept}") }
   }
 }
 
@@ -568,42 +682,48 @@ impl Flight<'_> {
       held.process = None;
     }
     if held.process.is_none() {
-      held.process = Some(held.start(bin, effort)?);
+      held.process = Some(held.start(bin, effort).await?);
     }
     let Conversation { process: Some(process), id, name, .. } = held else {
       return Err(failed("claude is not running"));
     };
+    let Process { stdin, tail, .. } = process;
     let wrote = async {
-      process.stdin.write_all(line.as_bytes()).await?;
-      process.stdin.flush().await
+      stdin.write_all(line.as_bytes()).await?;
+      stdin.flush().await
     };
-    if let Err(no) = wrote.await {
-      return Err(failed(format!("claude took no input: {no}{}", process.tail())));
+    if let Err(no) = tail.beside(wrote).await {
+      // A process that took no input ended, and the failure says all that it wrote on its stderr.
+      let _ = tokio::time::timeout(Duration::from_secs(1), process.tail.drained()).await;
+      return Err(failed(format!("claude took no input: {no}{}", process.tail.said())));
     }
     self.heard = true;
     let mut reply = Reply { deltas, ..Reply::default() };
     let mut odd = String::new();
     let mut due = tokio::time::Instant::now() + stall;
     loop {
-      let Ok(heard) = tokio::time::timeout_at(due, process.lines.recv()).await else {
-        let odd = if odd.is_empty() { odd } else { format!(" The last line it wrote was {odd}") };
-        let seconds = stall.as_secs_f64();
-        return Err(failed(format!("Claude made no progress for {seconds}s.{odd}")));
+      let heard = tokio::select! {
+        line = process.tail.beside(process.out.line()) => line,
+        () = tokio::time::sleep_until(due) => {
+          let odd = if odd.is_empty() { odd } else { format!(" The last line it wrote was {odd}") };
+          let seconds = stall.as_secs_f64();
+          return Err(failed(format!("Claude made no progress for {seconds}s.{odd}")));
+        }
       };
       let event = match heard {
-        Some(Line::Event(event)) => event,
-        Some(Line::Odd(text)) => {
+        Line::Event(event) => event,
+        Line::Odd(text) => {
           last(&text).clone_into(&mut odd);
           continue;
         }
-        Some(Line::Over(Some(why))) => return Err(failed(why)),
-        Some(Line::Over(None)) | None => {
-          let code = process.child.wait().await.ok().and_then(|status| status.code());
-          if let Some(tailing) = process.tailing.take() {
-            let _ = tokio::time::timeout(Duration::from_secs(1), tailing).await;
-          }
+        Line::Over(Some(why)) => return Err(failed(why)),
+        Line::Over(None) => {
+          let Process { child, tail, .. } = process;
+          let code = tail.beside(child.wait()).await.ok().and_then(|status| status.code());
+          // The failure says all that the process wrote, which its stderr gives until its end.
+          let _ = tokio::time::timeout(Duration::from_secs(1), process.tail.drained()).await;
           let code = code.map_or_else(|| "a signal".to_owned(), |code| code.to_string());
-          return Err(failed(format!("Claude exited ({code}){}", process.tail())));
+          return Err(failed(format!("Claude exited ({code}){}", process.tail.said())));
         }
       };
       let kind = event.get("type").and_then(Value::as_str).unwrap_or_default();

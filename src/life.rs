@@ -171,9 +171,9 @@ impl Opening {
 
 /// An ear that takes nothing and says nothing, which stands in the place of an ear that does work.
 fn silent() -> Box<dyn Ear> {
-  ear(|co, _| async move {
+  ear(|mut co| async move {
     loop {
-      hear(&co).await;
+      hear(&mut co).await;
     }
   })
 }

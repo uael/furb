@@ -27,15 +27,15 @@ struct Skill {
 /// skills in `.furb/skills` and `.claude/skills` of the working directory of the chain and of each folder above it,
 /// nearest first, and then in `skills` of the config directory of the user.
 pub fn skills(config: PathBuf) -> Box<dyn Ear> {
-  ear(move |co, _| async move {
+  ear(move |mut co| async move {
     loop {
-      let a = hear(&co).await;
+      let a = hear(&mut co).await;
       if a.kind() != "read" || !a.question() {
         continue;
       }
       let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
       let Some(name) = path.strip_prefix(SCHEME) else { continue };
-      let here = here(a.on())?;
+      let here = here(&mut co, a.on()).await?;
       let roots = here.ancestors().flat_map(|one| [one.join(".furb"), one.join(".claude")]);
       let found = found(roots.map(|one| one.join("skills")).chain([config.join("skills")]));
       let answer = match found.iter().find(|one| one.name == name) {
@@ -48,7 +48,7 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
         None => Err(Fault::refused(format!("There is no skill {name}."))),
       };
       let answer = answer.map_or_else(|no| no.object(), |one| one.object());
-      say(&co, Fact::says("done", a.about(), [answer])).await;
+      say(&mut co, Fact::says("done", a.about(), [answer]));
     }
   })
 }

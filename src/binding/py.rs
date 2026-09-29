@@ -7,7 +7,7 @@ use std::{
   cell::{OnceCell, RefCell},
   collections::HashMap,
   sync::Arc,
-  task::{Wake, Waker},
+  task::{Context, Poll, Wake, Waker},
 };
 
 use pyo3::{
@@ -23,9 +23,9 @@ use pyo3::{
 
 use super::{Given, NativeEar, Record, Said, Told, Value, words};
 use crate::{
-  Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step, Voice,
-  ear::{self, Call, Spoken},
-  engine::{callable, handed},
+  Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step,
+  ear::{Call, Spoken},
+  engine::{Life, handed, lending},
   life::{Answer, Opening, Stream},
   value::{IS, entry, field, marked, templated},
 };
@@ -37,6 +37,9 @@ struct Made {
   /// The engine of this interpreter, `furb.python`, which the package binds whatever the switch says.
   python: Py<PyAny>,
   faults: Py<PyDict>,
+  /// The life lent to the code of python that a life hears now, as `_monty.life` holds it, which python scopes to
+  /// each step of that code.
+  life: Py<PyAny>,
 }
 
 /// What makes a value the python object it is, for the one interpreter of this process.
@@ -48,6 +51,7 @@ fn made(py: Python<'_>) -> PyResult<&'static Made> {
     Ok(Made {
       python: py.import("furb")?.getattr("python")?.unbind(),
       faults: PyDict::new(py).unbind(),
+      life: py.import("furb_monty._monty")?.getattr("life")?.unbind(),
     })
   })
 }
@@ -280,19 +284,83 @@ struct PyEar {
 }
 
 impl Ear for PyEar {
-  fn resume(&mut self, heard: Heard) -> Step {
+  fn resume(&mut self, heard: Heard, _: &mut Context<'_>) -> Step {
     Python::attach(|py| self.step(py, heard).unwrap_or_else(|no| Step::Raised(fault_of(py, &no))))
   }
+
+  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
+    Python::attach(|py| {
+      let (step, life) = with_life(py, life, || self.resume(heard, cx));
+      (step.unwrap_or_else(|no| Step::Raised(fault_of(py, &no))), life)
+    })
+  }
+}
+
+/// The life, lent to the code of python while the life hears it: that code calls each verb of the life through it,
+/// as `furb_monty.engine` does, and it goes back to the life once that code is done.
+#[pyclass(module = "furb_monty._monty", name = "Life", unsendable)]
+struct PyLife {
+  life: Option<Life>,
+}
+
+#[pymethods]
+impl PyLife {
+  /// Whether the life is lent still. A callback that the code of python left behind keeps its context, and the life
+  /// in it, after the life went back, and a verb it calls is a verb of the operator.
+  #[getter]
+  fn lent(&self) -> bool {
+    self.life.is_some()
+  }
+
+  /// One verb of the life, called by its name with its words, and what it gave or raised. Who speaks is the verb
+  /// `spoken`, and a callable the engine made is the verb `made`, with its number and its words.
+  #[pyo3(signature = (verb, args = None, kwargs = None))]
+  fn call(
+    &mut self,
+    verb: &str,
+    args: Option<Vec<Value>>,
+    kwargs: Option<HashMap<String, Value>>,
+  ) -> Result<Value, Fault> {
+    let refused = || Fault::refused(format!("{verb} is called after the life went back"));
+    let life = self.life.as_mut().ok_or_else(refused)?;
+    let (args, kwargs) = words(args, &kwargs);
+    life.call(verb, args, kwargs).map(Value)
+  }
+}
+
+/// What `step` gives, with the life lent to the code of python it runs, which `_monty.life` holds for that code alone,
+/// and the life, taken back once `step` is done.
+fn with_life<T>(py: Python<'_>, life: Life, step: impl FnOnce() -> T) -> (PyResult<T>, Life) {
+  let lent = match Py::new(py, PyLife { life: None }) {
+    Ok(lent) => lent,
+    Err(no) => return (Err(no), life),
+  };
+  lent.borrow_mut(py).life = Some(life);
+  let scope = made(py).and_then(|made| made.life.bind(py).call_method1("set", (&lent,)));
+  let got = scope.map(|token| {
+    let got = step();
+    if let Ok(made) = made(py) {
+      let _ = made.life.bind(py).call_method1("reset", (token,));
+    }
+    got
+  });
+  let life = lent.borrow_mut(py).life.take();
+  (got, life.expect("a life lent to python comes back, since python calls it and never takes it"))
 }
 
 impl PyEar {
   fn step(&mut self, py: Python<'_>, heard: Heard) -> PyResult<Step> {
     let ear = self.ear.as_ref().ok_or_else(|| PyTypeError::new_err("the ear is over"))?.bind(py);
-    let sent = match heard {
-      Heard::Born(_) => py.None().into_bound(py),
-      Heard::Fact(fact) => to_python(py, fact.0.as_ref())?,
+    // What a verb gave is sent in as the value of the yield that called it, and what it raised is thrown in there.
+    let (way, sent) = match heard {
+      Heard::Born => ("send", py.None().into_bound(py)),
+      Heard::Fact(fact) => ("send", to_python(py, fact.0.as_ref())?),
+      Heard::Answer(Ok(got)) => ("send", to_python(py, got.as_ref())?),
+      Heard::Answer(Err(fault)) => {
+        ("throw", PyErr::from(fault).into_value(py).into_bound(py).into_any())
+      }
     };
-    let got = match ear.call_method1("send", (sent,)) {
+    let got = match ear.call_method1(way, (sent,)) {
       Ok(got) => got,
       Err(no) if no.is_instance_of::<PyStopIteration>(py) => {
         self.ear.take();
@@ -304,10 +372,10 @@ impl PyEar {
   }
 }
 
-/// What the engine of this interpreter steps an ear of the crate with once it is born: the voices its work speaks
-/// with, and what wakes the loop when one speaks.
+/// What the engine of this interpreter steps an ear of the crate with once it is born: the name it speaks by, and
+/// what wakes the loop when the ear can go on.
 pub(super) struct Stepped {
-  voices: Voice,
+  name: String,
   waker: Waker,
 }
 
@@ -322,12 +390,12 @@ impl NativeEar {
   }
 
   /// The ear heard, as the engine of this interpreter steps a generator: nothing at its birth, which is given the
-  /// voice its work speaks with under the name the engine steps it by, and each fact after. A verb it calls is said
+  /// name the ear speaks by when it says something of its own accord, and each fact after. A verb it calls is said
   /// to the engine of this interpreter at once, and what it gave is what the call gives.
   fn send(slf: &Bound<'_, Self>, a: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let py = slf.py();
     let python = made(py)?.python.bind(py);
-    let born = slf.borrow_mut().hearing.get_mut()?.stepped.is_none();
+    let born = slf.borrow_mut().hearing.stepped.is_none();
     let heard = if born {
       let name: String = python.getattr("site")?.call_method0("get")?.extract()?;
       let weak = py.import("weakref")?.getattr("ref")?.call1((slf,))?.unbind();
@@ -335,59 +403,86 @@ impl NativeEar {
         Ok(ear) => pump(ear),
         Err(_) => Ok(()),
       })?;
-      let voices = Voice::new();
-      voices.drained(&waker);
-      let heard = Heard::Born(voices.of(&name));
-      slf.borrow_mut().hearing.get_mut()?.stepped = Some(Stepped { voices, waker });
-      heard
+      slf.borrow_mut().hearing.stepped = Some(Stepped { name, waker });
+      Heard::Born
     } else {
       let fact =
         Fact::of(heard(a)?.as_ref()).ok_or_else(|| PyTypeError::new_err("an ear hears a fact"))?;
       Heard::Fact(fact)
     };
     let mut held = slf.borrow_mut();
-    let hearing = held.hearing.get_mut()?;
+    let hearing = &mut held.hearing;
     let Some(ear) = hearing.ear.as_mut() else { return Err(PyStopIteration::new_err(())) };
-    let mut answers = |call: Call| {
-      verb_said(py, &call).and_then(|got| of_python(&got)).map_err(|no| fault_of(py, &no))
-    };
-    match ear::heard(&mut answers, || ear.resume(heard)) {
-      Step::Wait => Ok(py.None()),
-      Step::Say(saying) => Ok(to_python(py, saying.0.as_ref())?.unbind()),
-      Step::Over => {
-        hearing.ear = None;
-        Err(PyStopIteration::new_err(()))
-      }
-      Step::Raised(fault) => {
-        hearing.ear = None;
-        Err(fault.into())
+    let waker =
+      hearing.stepped.as_ref().map_or_else(|| Waker::noop().clone(), |one| one.waker.clone());
+    let mut heard = heard;
+    // Each verb the ear calls is said to the engine of this interpreter, and what it came to is the next thing it
+    // hears.
+    loop {
+      match ear.resume(heard, &mut Context::from_waker(&waker)) {
+        Step::Call(call) => heard = Heard::Answer(answer_of(py, &call)),
+        Step::Wait => return Ok(py.None()),
+        Step::Say(saying) => return Ok(to_python(py, saying.0.as_ref())?.unbind()),
+        Step::Over => {
+          hearing.ear = None;
+          return Err(PyStopIteration::new_err(()));
+        }
+        Step::Raised(fault) => {
+          hearing.ear = None;
+          return Err(fault.into());
+        }
       }
     }
   }
 }
 
-/// What the work of an ear of the crate said since, said into the engine of this interpreter under the name of the
-/// ear.
+/// What an ear of the crate says of its own accord, said into the engine of this interpreter under its name, until
+/// it says no more.
 fn pump(ear: &Bound<'_, NativeEar>) -> PyResult<()> {
   let py = ear.py();
-  let said = match &ear.borrow_mut().hearing.get_mut()?.stepped {
-    Some(stepped) => stepped.voices.drained(&stepped.waker),
-    None => return Ok(()),
-  };
   let python = made(py)?.python.bind(py);
   let (site, say) = (python.getattr("site")?, python.getattr("say")?);
-  for one in said {
-    let token = site.call_method1("set", (one.by,))?;
-    let got = match one.spoken {
-      Spoken::Saying(saying) => {
-        to_python(py, saying.0.as_ref()).and_then(|saying| say.call1(saying.cast::<PyTuple>()?))
+  let Some(name) = ear.borrow_mut().hearing.stepped.as_ref().map(|one| one.name.clone()) else {
+    return Ok(());
+  };
+  loop {
+    let token = site.call_method1("set", (&name,))?;
+    let said = polled(ear).and_then(|polled| match polled {
+      Poll::Ready(Spoken::Saying(saying)) => {
+        let saying = to_python(py, saying.0.as_ref())?;
+        say.call1(saying.cast::<PyTuple>()?).map(|_| true)
       }
-      Spoken::Verb(call) => verb_said(py, &call),
-    };
+      // What the verb came to goes back to the ear, which takes it at its next poll.
+      Poll::Ready(Spoken::Verb(call)) => {
+        let got = answer_of(py, &call);
+        if let Some(one) = ear.borrow_mut().hearing.ear.as_mut() {
+          one.answered(got);
+        }
+        Ok(true)
+      }
+      Poll::Pending => Ok(false),
+    });
     site.call_method1("reset", (token,))?;
-    got?;
+    if !said? {
+      return Ok(());
+    }
   }
-  Ok(())
+}
+
+/// What an ear of the crate says of its own accord now, polled with what wakes the loop.
+fn polled(ear: &Bound<'_, NativeEar>) -> PyResult<Poll<Spoken>> {
+  let mut held = ear.borrow_mut();
+  let hearing = &mut held.hearing;
+  let (Some(stepped), Some(one)) = (hearing.stepped.as_ref(), hearing.ear.as_mut()) else {
+    return Ok(Poll::Pending);
+  };
+  let waker = stepped.waker.clone();
+  Ok(one.poll(&mut Context::from_waker(&waker)))
+}
+
+/// What a verb that an ear of the crate called came to in the engine of this interpreter.
+fn answer_of(py: Python<'_>, call: &Call) -> Result<Object, Fault> {
+  verb_said(py, call).and_then(|got| of_python(&got)).map_err(|no| fault_of(py, &no))
 }
 
 /// One verb that an ear of the crate said, said to the engine of this interpreter with its words, and what it gave.
@@ -401,7 +496,7 @@ fn verb_said<'py>(py: Python<'py>, call: &Call) -> PyResult<Bound<'py, PyAny>> {
   made(py)?.python.bind(py).getattr(call.verb.as_str())?.call(args, Some(&kwargs))
 }
 
-/// What wakes the loop of python to drive an engine, when a voice spoke from another thread: the loop the engine was
+/// What wakes the loop of python to drive an engine, when what an ear waits for is ready: the loop the engine was
 /// booted in, and what drives it there.
 struct Wakes {
   running: Py<PyAny>,
@@ -427,8 +522,8 @@ fn waker(
   Ok(Waker::from(Arc::new(Wakes { running, drive: drive.into_any().unbind() })))
 }
 
-/// One engine, held on the thread of python and driven in the loop it was booted in, when an ear of the crate speaks
-/// from a thread of its own.
+/// One engine, held on the thread of python and driven in the loop it was booted in, when an ear of the crate can go
+/// on.
 #[pyclass(module = "furb_monty._monty", name = "Engine", unsendable, weakref)]
 pub struct PyEngine {
   engine: RefCell<Option<Engine>>,
@@ -472,14 +567,11 @@ impl PyEngine {
     args: Vec<Object>,
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
-    if ear::hearing() {
-      return ear::call(name, args, kwargs);
-    }
     self.call(|engine| engine.verb(name, args, kwargs))
   }
 
-  /// The engine driven as far as it goes: what the voices of its ears said is said into it, and whoever awaits an act
-  /// that is done now is told.
+  /// The engine driven as far as it goes: what its ears say of their own accord is said into it, and whoever awaits
+  /// an act that is done now is told.
   fn pump(&self) -> Result<(), Fault> {
     let (Some(waker), true) = (self.waker.get(), self.engine.borrow().is_some()) else {
       return Ok(());
@@ -876,7 +968,12 @@ fn of_python(value: &Bound<'_, PyAny>) -> PyResult<Object> {
   }
   if value.is_callable() {
     let f = value.clone().unbind();
-    return Ok(callable(move |args| called(&f, args)));
+    return Ok(lending(move |args, life| {
+      Python::attach(|py| {
+        let (got, life) = with_life(py, life, || called(&f, args));
+        (got.map_err(|no| fault_of(py, &no)).and_then(|got| got), life)
+      })
+    }));
   }
   if kind == "Template" {
     let mut interpolations = Vec::new();
@@ -993,6 +1090,11 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   module.add_class::<PyEngine>()?;
   module.add_class::<PyAct>()?;
   module.add_class::<NativeEar>()?;
+  module.add_class::<PyLife>()?;
+  let life = module.py().import("contextvars")?.getattr("ContextVar")?;
+  let none = PyDict::new(module.py());
+  none.set_item("default", module.py().None())?;
+  module.add("life", life.call(("life",), Some(&none))?)?;
   let functions = [
     wrap_pyfunction!(files, module)?,
     wrap_pyfunction!(bash, module)?,
@@ -1020,8 +1122,6 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
     wrap_pyfunction!(image_reference, module)?,
     wrap_pyfunction!(image_references, module)?,
     wrap_pyfunction!(image_type, module)?,
-    wrap_pyfunction!(hearing, module)?,
-    wrap_pyfunction!(call, module)?,
     wrap_pyfunction!(on_console_end, module)?,
   ];
   for one in functions {

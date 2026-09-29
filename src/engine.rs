@@ -2,8 +2,8 @@
 //!
 //! An engine is driven from one thread. A verb is one call: it runs in the sandbox, the engine does what it does,
 //! every fact it says reaches its ears, and what the verb gave comes back. An act is awaited: the future drives the
-//! engine until the act is done, which means it says what the voices of its ears said since, each under the name of
-//! its ear. Nothing polls: a voice wakes whoever awaits.
+//! engine until the act is done, which means each ear is polled, and what an ear says of its own accord is said
+//! under its name. Nothing polls in vain: what an ear waits for wakes whoever awaits.
 //!
 //! The sandbox reaches the host by the gate, which reads a sheet, by each ear of the host, which the sandbox holds as
 //! an object of the host that stands at a yield, and by the functions the host gave, a show or a filter. A call of
@@ -36,7 +36,7 @@ use monty_types::{
 
 use crate::{
   ENGINE, KERNEL, SHEET,
-  ear::{Call, Ear, Heard, Said, Spoken, Step, Voice, heard},
+  ear::{Call, Ear, Heard, Spoken, Step},
   fact::Fact,
   gate::checked,
   sand::{Answer, Host, Nobody, Sand, id, object},
@@ -94,8 +94,8 @@ exec(__kernel_source, __kernel)
 /// The next number a callable or a class goes out under, in this process.
 static NUMBERS: AtomicI64 = AtomicI64::new(1);
 
-/// A function of the host, as the sandbox may call it back.
-type Callable = Box<dyn FnMut(Vec<Object>) -> Result<Object, Fault>>;
+/// A function of the host, as the sandbox may call it back, with the life lent to it while it runs.
+type Callable = Box<dyn FnMut(Vec<Object>, Life) -> (Result<Object, Fault>, Life)>;
 
 /// The words of a call: those by position, and those by name.
 type Words<'a> = (Vec<Object>, Vec<(&'a str, Object)>);
@@ -129,10 +129,45 @@ pub fn handed(ear: Box<dyn Ear>, started: bool) -> Object {
 
 /// A function of the host, handed over as a value a verb may be given: a show, a filter. The sandbox calls it back,
 /// and what it gives is what the call gave.
-pub fn callable(call: impl FnMut(Vec<Object>) -> Result<Object, Fault> + 'static) -> Object {
+pub fn callable(mut call: impl FnMut(Vec<Object>) -> Result<Object, Fault> + 'static) -> Object {
+  lending(move |args, life| (call(args), life))
+}
+
+/// A function of the host that calls verbs of the life, handed over as [`callable`] hands one: the life is lent to it
+/// while it runs, and it gives the life back with what the call gave.
+pub fn lending(
+  call: impl FnMut(Vec<Object>, Life) -> (Result<Object, Fault>, Life) + 'static,
+) -> Object {
   let name = format!("{CALL}{}", HANDS.fetch_add(1, Ordering::Relaxed));
   HANDED.with_borrow_mut(|held| held.calls.insert(name.clone(), Box::new(call)));
   Object::function(name, None)
+}
+
+/// The life, lent by value to code of a host while the life hears it, since every frame of the life waits until that
+/// code is done: the code calls each verb of the life through it, and gives it back when it is done.
+pub struct Life {
+  sand: Sand,
+  outside: Outside,
+}
+
+impl Life {
+  /// One verb of the life, called by its name with its words, and what it gave or raised. Who speaks is the verb
+  /// `spoken`, and a callable the engine made is the verb `made`, with its number and its words.
+  pub fn call(
+    &mut self,
+    verb: &str,
+    args: Vec<Object>,
+    kwargs: Vec<(&str, Object)>,
+  ) -> Result<Object, Fault> {
+    let kwargs = kwargs.into_iter().map(|(key, one)| (key.to_owned(), one)).collect();
+    self.outside.asked(&mut self.sand, Call { verb: verb.to_owned(), args, kwargs })
+  }
+}
+
+impl std::fmt::Debug for Life {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_str("Life")
+  }
 }
 
 /// The acts that the entries of a record show started and not done, by name, in the order of the record: work that
@@ -190,7 +225,8 @@ enum At {
 /// the sandbox, by which each value crosses.
 struct Outside {
   hosted: Hosted,
-  voice: Voice,
+  /// The waker of whoever drives the engine, which each ear is polled with.
+  waker: Waker,
   opened: Opened,
   /// The names of the engine that are callable, and the name of each by its handle.
   names: HashMap<String, Object>,
@@ -205,6 +241,36 @@ struct Outside {
   standing: HashMap<MontyUuid, (String, At)>,
   /// How many ids the host gave, which names the next.
   given: u128,
+}
+
+impl Default for Outside {
+  /// The side of the host of a life of nothing, which stands in for one that is lent to code of a host.
+  fn default() -> Outside {
+    let none = Object::none;
+    let opened = Opened {
+      names: none(),
+      call: none(),
+      site: none(),
+      speaks: none(),
+      spoke: none(),
+      word: none(),
+      template: none(),
+      shown: none(),
+      base: none(),
+    };
+    Outside {
+      hosted: Hosted::default(),
+      waker: Waker::noop().clone(),
+      opened,
+      names: HashMap::new(),
+      named: HashMap::new(),
+      made: HashMap::new(),
+      numbers: HashMap::new(),
+      kept: HashSet::new(),
+      standing: HashMap::new(),
+      given: 0,
+    }
+  }
 }
 
 impl Host for Outside {
@@ -256,7 +322,7 @@ impl Outside {
     let kept = (0..11).filter_map(|i| at(i).as_ref().handle()).collect();
     Outside {
       hosted,
-      voice: Voice::new(),
+      waker: Waker::noop().clone(),
       opened,
       names: HashMap::new(),
       named: HashMap::new(),
@@ -370,18 +436,43 @@ impl Outside {
     self.outward(sand, &got).map(Some)
   }
 
-  /// What the work of the ears said once the hearing that began that work was over, said into the life in the order
-  /// it was said, each under the name of its ear: a saying, or a verb, whose value goes nowhere. The first that
-  /// raises ends it.
-  fn said(&mut self, sand: &mut Sand, said: Vec<Said>) -> Result<(), Fault> {
+  /// What the first ear that stands at a yield says of its own accord, in the order the host gave the ears, which
+  /// the ids the host gives keep; and nothing when no ear says anything. A poll calls nothing in the sandbox, so an
+  /// ear may be polled while no life hears it.
+  fn spoken(&mut self) -> Option<(String, Spoken)> {
+    let mut standing: Vec<_> = self
+      .standing
+      .iter()
+      .filter(|(_, (_, at))| matches!(at, At::Waiting))
+      .map(|(id, (name, _))| (*id, name.clone()))
+      .collect();
+    standing.sort_unstable();
+    let mut cx = Context::from_waker(&self.waker);
+    standing.into_iter().find_map(|(_, name)| {
+      let ear = self.hosted.ears.get_mut(&name)?;
+      match ear.poll(&mut cx) {
+        Poll::Ready(spoken) => Some((name, spoken)),
+        Poll::Pending => None,
+      }
+    })
+  }
+
+  /// What the ears say of their own accord, said into the life, each under the name of its ear, from what one ear
+  /// said first until no ear says more: a saying, or a verb, whose value goes nowhere. The first that raises ends it.
+  fn said(&mut self, sand: &mut Sand, first: (String, Spoken)) -> Result<(), Fault> {
     let (speaks, spoke) = (self.opened.speaks.clone(), self.opened.spoke.clone());
-    for one in said {
-      let token = sand.call(self, &speaks, vec![Object::string(&one.by)], vec![])?;
-      let got = match one.spoken {
+    let mut next = Some(first);
+    while let Some((by, spoken)) = next {
+      let token = sand.call(self, &speaks, vec![Object::string(&by)], vec![])?;
+      let got = match spoken {
         Spoken::Saying(saying) => self.says(sand, &saying),
+        // What the verb came to goes back to the ear, which takes it at its next poll.
         Spoken::Verb(call) => {
-          let kwargs = call.kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
-          self.verb(sand, &call.verb, call.args, kwargs).map(drop)
+          let got = self.asked(sand, call);
+          if let Some(ear) = self.hosted.ears.get_mut(&by) {
+            ear.answered(got);
+          }
+          Ok(())
         }
       };
       let reset = sand.call(self, &spoke, vec![token.clone()], vec![]);
@@ -390,6 +481,7 @@ impl Outside {
       }
       got?;
       reset?;
+      next = self.spoken();
     }
     Ok(())
   }
@@ -443,15 +535,14 @@ impl Outside {
     let args = args.iter().map(|one| self.outward(sand, one)).collect::<Result<Vec<_>, _>>()?;
     let missing = || Fault::refused(format!("{name} is no function of the host"));
     let mut call = self.hosted.calls.remove(name).ok_or_else(missing)?;
-    let got = self.hearing(sand, || call(args));
+    let got = self.lent(sand, |life| call(args, life));
     self.hosted.calls.insert(name.to_owned(), call);
     self.inward(sand, &got?)
   }
 
   /// One step of an ear of the host, which the sandbox holds as an object that stands in for a generator.
   ///
-  /// At its birth the ear is told the name it speaks by, which is who speaks then. Then every fact it is given goes
-  /// to the ear, and what comes back is what the ear did with it. It said something, which the object yields, and the
+  /// At its birth the ear starts. Then every fact it is given goes to the ear, and what comes back is what the ear did with it. It said something, which the object yields, and the
   /// bus hands back the fact as it was said, which goes to the ear next. It said nothing, so the object waits for the
   /// next fact. It said a verb, which is said here by its name and its value handed back. It is over, so the object
   /// stops, and it raised, so the object raises. A generator that the host started before it crossed was born there,
@@ -461,7 +552,6 @@ impl Outside {
       return Answer::Abort(Fault::refused(format!("{on} is no object of the host")));
     };
     let a = a.filter(|one| one.as_ref().type_name() != "NoneType");
-    let site = self.opened.site.clone();
     let heard = match (at, a) {
       (At::Over, _) => return Answer::Fault(Fault::new("StopIteration", vec![])),
       (At::Unborn, Some(_)) => {
@@ -470,10 +560,7 @@ impl Outside {
           vec![Object::string("can't send non-None value to a just-started generator")],
         ));
       }
-      (At::Unborn, None) => match sand.call(self, &site, vec![], vec![]) {
-        Ok(by) => Heard::Born(self.voice.of(by.as_ref().as_str().unwrap_or_default())),
-        Err(fault) => return Answer::Abort(fault),
-      },
+      (At::Unborn, None) => Heard::Born,
       (At::Waiting, None) => return Answer::Value(Object::none()),
       (At::Waiting, Some(a)) => match self.outward(sand, a).map(|a| Fact::of(a.as_ref())) {
         Ok(Some(fact)) => Heard::Fact(fact),
@@ -484,26 +571,38 @@ impl Outside {
     let Some(mut ear) = self.hosted.ears.remove(&name) else {
       return Answer::Abort(Fault::refused(format!("no ear of the host is named {name}")));
     };
-    let step = self.hearing(sand, || ear.resume(heard));
-    self.hosted.ears.insert(name.clone(), ear);
-    let at = match step {
-      Step::Say(_) | Step::Wait => At::Waiting,
-      Step::Over | Step::Raised(_) => At::Over,
+    let waker = self.waker.clone();
+    let mut heard = heard;
+    // Each verb the ear calls is said here, under its name, and what it came to is the next thing it hears.
+    let (at, answer) = loop {
+      match self.lent(sand, |life| ear.lent(heard, &mut Context::from_waker(&waker), life)) {
+        Step::Call(call) => heard = Heard::Answer(self.asked(sand, call)),
+        Step::Say(saying) => {
+          break (
+            At::Waiting,
+            self.inward(sand, &saying.0).map_or_else(Answer::Abort, Answer::Value),
+          );
+        }
+        Step::Wait => break (At::Waiting, Answer::Value(Object::none())),
+        Step::Over => break (At::Over, Answer::Fault(Fault::new("StopIteration", vec![]))),
+        Step::Raised(fault) => break (At::Over, self.raising(sand, fault)),
+      }
     };
+    self.hosted.ears.insert(name.clone(), ear);
     self.standing.insert(on, (name, at));
-    match step {
-      Step::Say(saying) => self.inward(sand, &saying.0).map_or_else(Answer::Abort, Answer::Value),
-      Step::Wait => Answer::Value(Object::none()),
-      Step::Over => Answer::Fault(Fault::new("StopIteration", vec![])),
-      Step::Raised(fault) => self.raising(sand, fault),
-    }
+    answer
   }
 
-  /// What the host does in `step`, with this life answering at once each verb that the host calls while it runs,
-  /// since the sandbox takes a call before the call of the sandbox that the host answers.
-  fn hearing<R>(&mut self, sand: &mut Sand, step: impl FnOnce() -> R) -> R {
-    let mut answers = |call: Call| self.asked(sand, call);
-    heard(&mut answers, step)
+  /// What the host does in `step`, with this life lent to it, which answers at once each verb that the host calls
+  /// while it runs, since the sandbox takes a call before the call of the sandbox that the host answers.
+  ///
+  /// Every frame of the life waits until `step` is done, so the life goes to it by value, with a life of nothing in
+  /// its place, and comes back with what `step` gave.
+  fn lent<R>(&mut self, sand: &mut Sand, step: impl FnOnce(Life) -> (R, Life)) -> R {
+    let life = Life { sand: std::mem::replace(sand, Sand::none()), outside: std::mem::take(self) };
+    let (got, life) = step(life);
+    (*sand, *self) = (life.sand, life.outside);
+    got
   }
 
   /// What the host handed over under this name, which this life holds from now on.
@@ -903,17 +1002,15 @@ impl Engine {
     Ok(got)
   }
 
-  /// What the voices said since the engine was last driven, said into it in one entry, each under the name of its
-  /// ear, until they say nothing more; and the waker to wake when they do. An awaited act drives the engine so,
-  /// and a door that awaits in the loop of its own language drives it so too.
+  /// The engine driven: each ear is polled with the waker of whoever drives, and what the ears say of their own
+  /// accord is said into it, in one entry, which it makes only when an ear says something. An awaited act drives the engine so, and a door that awaits in the loop of
+  /// its own language drives it so too.
   pub(crate) fn pump(&mut self, waker: &Waker) -> Result<(), Fault> {
-    loop {
-      let said = self.outside.voice.drained(waker);
-      if said.is_empty() {
-        return Ok(());
-      }
-      self.run(|sand, outside| outside.said(sand, said))?;
+    if !self.outside.waker.will_wake(waker) {
+      self.outside.waker = waker.clone();
     }
+    let Some(first) = self.outside.spoken() else { return Ok(()) };
+    self.run(|sand, outside| outside.said(sand, first))
   }
 
   /// An engine, opened from the record, on these ears, each under the name the engine hears it by, in the order
@@ -1217,8 +1314,8 @@ impl<T: Plain> Plain for Vec<T> {
 
 /// One act of an engine, awaited for what it comes to: `Act` of the contract, a name that is awaitable.
 ///
-/// It borrows the engine for as long as it is awaited, since awaiting it drives the engine: what the voices said
-/// is said into it until the act is done. An act that completed with an exception gives that fault. Dropping it
+/// It borrows the engine for as long as it is awaited, since awaiting it drives the engine: what the ears say of
+/// their own accord is said into it until the act is done. An act that completed with an exception gives that fault. Dropping it
 /// leaves the act living; the engine holds what it comes to under its name.
 pub struct Act<'a, T> {
   engine: &'a mut Engine,

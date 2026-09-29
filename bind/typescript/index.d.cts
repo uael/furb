@@ -133,6 +133,9 @@ export type JsEngine = Engine
  * An ear that the crate writes: given once, to the boot of an engine or to a verb that takes an ear. It is let go
  * when it is disposed, so what it holds goes: a command ends, a wait ends, and a store lets its record go. The
  * engine of python steps it as a generator of its own too.
+ *
+ * It stays on the thread that made it: python refuses a reach of it from another thread, and a drop of it on
+ * another thread frees nothing, which leaves memory alone once the ear is disposed.
  */
 export declare class NativeEar {
   /**
@@ -154,13 +157,6 @@ export declare function attachImage(directory: string, path: string): ImageAttac
 
 /** The ear of commands, which runs each in a shell of this machine. */
 export declare function bash(): NativeEar
-
-/**
- * One verb of the engine, called by its name with its words by the ear or the function of the host that a life
- * hears now, and what it gave. Who speaks is the verb `spoken`, and a callable the engine made is the verb `made`,
- * with its number and its words.
- */
-export declare function call(verb: string, args?: unknown[], kwargs?: Record<string, unknown>): unknown
 
 /**
  * The config directory of the user for this process, where the configs, the extensions of the user and the
@@ -203,12 +199,6 @@ export declare function files(): NativeEar
  * The checker is the one every engine of this thread gates with, so a word is judged once and the same.
  */
 export declare function gate(sheet: string): Array<[number, string]>
-
-/**
- * Whether a life of this thread hears an ear or a function of the host now, so that a verb said now is said by
- * what it hears.
- */
-export declare function hearing(): boolean
 
 /**
  * An image a host attached: the name of its file, the uri a message names it by, its media type, and its size in

@@ -266,6 +266,31 @@ test.serial(
 );
 
 test.serial(
+  "a function of JavaScript answers from its words alone, and a verb it calls while it runs is refused",
+  () => {
+    const { engine } = open();
+    let refused = "";
+    function* silent(): Ear {
+      for (;;) yield null;
+    }
+    engine.act(
+      "note",
+      engine.root,
+      () => {
+        try {
+          engine.peek(engine.root);
+        } catch (no) {
+          refused = String(no);
+        }
+        return silent();
+      },
+      ["one"],
+    );
+    expect(refused).toContain("a function answers from its words alone");
+  },
+);
+
+test.serial(
   "the text of a paragraph drops the two marks of each quote, and a binding reads back the string it binds",
   () => {
     const [told] = paragraphs(

@@ -2,7 +2,7 @@
 //!
 //! What the engine does is the suite's to prove, on both engines. What this proves is the crate: an engine boots on
 //! the ears of the World that the crate writes, and on a provider that the test writes as a coroutine, as a host
-//! does. The files read and write, a command runs on this machine and speaks from its own thread, a wait ends at its
+//! does. The files read and write, a command runs on this machine and speaks as it writes, a wait ends at its
 //! due, a function of the host is called back, a fault crosses as itself, and the record the store kept opens a
 //! second life.
 
@@ -20,14 +20,17 @@ use std::{
   time::{Duration, Instant},
 };
 
+use futures::{FutureExt, stream};
+use unsync::oneshot;
+
 use crate::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
-  ear::{call, ear, hear, say},
+  ear::{Co, Next, ear, hear, say, tell},
   engine::callable,
   verbs, world,
 };
 
-/// A waker that unparks the thread of the test, so a voice spoken from another thread wakes the poll.
+/// A waker that unparks the thread of the test, so what an ear waits for wakes the poll when it is ready.
 struct Parked(thread::Thread);
 
 impl Wake for Parked {
@@ -60,9 +63,9 @@ fn provider(
   words: Rc<RefCell<VecDeque<String>>>,
   read: Rc<RefCell<Vec<String>>>,
 ) -> Box<dyn Ear> {
-  ear(move |co, _| async move {
+  ear(move |mut co| async move {
     loop {
-      let a = hear(&co).await;
+      let a = hear(&mut co).await;
       if !a.question() {
         continue;
       }
@@ -81,11 +84,11 @@ fn provider(
             Object::string(at.display().to_string()),
             Object::string("m/low"),
           ]);
-          say(&co, done(a.about(), standing)).await;
+          say(&mut co, done(a.about(), standing));
         }
         "reply" => {
-          say(&co, Fact::says("started", a.about(), [])).await;
-          let turns = call("turns", vec![], vec![("on", Object::string(a.on()))])?;
+          say(&mut co, Fact::says("started", a.about(), []));
+          let turns = co.call("turns", vec![], vec![("on", Object::string(a.on()))]).await?;
           read.borrow_mut().push(turns.py_repr());
           let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
           let turn = Object::tuple([
@@ -94,7 +97,7 @@ fn provider(
             Object::none(),
             Object::list([]),
           ]);
-          say(&co, done(a.about(), turn)).await;
+          say(&mut co, done(a.about(), turn));
         }
         _ => {}
       }
@@ -487,46 +490,48 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
   assert!(second.engine.pending().unwrap().is_empty(), "the wake put that work to the World again");
 }
 
-/// An ear that takes each wait and ends it from its own thread: it pauses the chain of the wait by its voice, then
-/// says the wait done; or, when told to hush, it hushes the wait before its thread speaks, and says the done itself.
-fn pauser(hushes: bool) -> Box<dyn Ear> {
-  ear(move |co, voice| async move {
+/// An ear that takes a wait and ends it by its work, of its own accord, once its gate opens: it tells a pause of the
+/// chain of the wait, says the wait due, then says it done.
+fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
+  ear(move |mut co: Co<(String, String)>| async move {
+    let mut gate = Some(gate);
     loop {
-      let a = hear(&co).await;
-      if a.kind() != "wait" || !a.question() {
-        continue;
+      match co.next().await {
+        Next::Heard(a) => {
+          if a.kind() == "wait"
+            && a.question()
+            && let Some(opens) = gate.take()
+          {
+            say(&mut co, Fact::says("started", a.about(), []));
+            let (about, on) = (a.about().to_owned(), a.on().to_owned());
+            co.work(stream::once(opens.map(|_| (about, on))));
+          }
+        }
+        Next::Worked((about, on)) => {
+          tell(&mut co, "pause", vec![Object::string(on)], vec![]).await;
+          say(&mut co, Fact::says("due", &about, [Object::float(1.0)]));
+          say(&mut co, done(&about, Object::none()));
+        }
       }
-      let (about, on) = (a.about().to_owned(), a.on().to_owned());
-      say(&co, Fact::says("started", &about, [])).await;
-      if hushes {
-        voice.call(&about, "pause", vec![Object::string(&on)], vec![]);
-        voice.hush(&about);
-        say(&co, done(&about, Object::none())).await;
-        continue;
-      }
-      let voice = voice.clone();
-      thread::spawn(move || {
-        voice.call(&about, "pause", vec![Object::string(on)], vec![]);
-        voice.say("done", &about, [Object::none()]);
-      });
     }
   })
 }
 
-/// A life on the provider of the test and on the ear that pauses.
-fn paused(yard: &str, hushes: bool) -> Engine {
+/// A life on the provider of the test and on the ear that pauses, and the gate of the work of that ear.
+fn paused(yard: &str) -> (Engine, oneshot::Sender<()>) {
   let at = std::env::temp_dir().join(format!("furb-engine-{yard}"));
-  let words = Rc::new(RefCell::new(VecDeque::new()));
-  let ears = [("provider", provider(at, words, Rc::default())), ("pauser", pauser(hushes))];
-  Engine::boot(Vec::<Object>::new(), ears).unwrap()
+  let (gate, opens) = oneshot::channel();
+  let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("pauser", pauser(opens))];
+  (Engine::boot(Vec::<Object>::new(), ears).unwrap(), gate)
 }
 
 #[test]
-fn the_work_of_an_ear_says_a_verb_by_its_voice_in_its_turn_and_under_its_name() {
-  let mut engine = paused("uttered", false);
+fn the_work_of_an_ear_tells_a_verb_in_its_turn_and_under_its_name() {
+  let (mut engine, gate) = paused("uttered");
   let root = engine.root().to_owned();
   let act = engine.wait(verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap();
   let id = act.id().to_owned();
+  let _ = gate.send(());
   block_on(act).unwrap();
   let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
   let said: Vec<(String, String)> = facts
@@ -534,42 +539,13 @@ fn the_work_of_an_ear_says_a_verb_by_its_voice_in_its_turn_and_under_its_name() 
     .filter(|one| one.by() == "pauser")
     .map(|one| (one.kind().to_owned(), one.about().to_owned()))
     .collect();
-  let expected = [("started", &id), ("pause", &root), ("done", &id)];
+  let expected = [("started", &id), ("pause", &root), ("due", &id), ("done", &id)];
   assert_eq!(said, expected.map(|(kind, about)| (kind.to_owned(), about.clone())));
 }
 
 #[test]
-fn a_hush_drops_a_verb_that_the_work_of_an_ear_has_not_yet_said() {
-  let mut engine = paused("unuttered", true);
-  let root = engine.root().to_owned();
-  block_on(engine.wait(verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap()).unwrap();
-  let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
-  assert!(facts.iter().all(|one| one.kind() != "pause"), "the hushed verb was never said");
-}
-
-/// An ear that takes each wait and ends it by its voice while it hears, as the work of an ear speaks: it pauses the
-/// chain of the wait, says the wait due, then says it done. The engine hears all three when it is next driven.
-fn voices() -> Box<dyn Ear> {
-  ear(move |co, voice| async move {
-    loop {
-      let a = hear(&co).await;
-      if a.kind() != "wait" || !a.question() {
-        continue;
-      }
-      let (about, on) = (a.about().to_owned(), a.on().to_owned());
-      say(&co, Fact::says("started", &about, [])).await;
-      voice.call(&about, "pause", vec![Object::string(on)], vec![]);
-      voice.say("due", &about, [Object::float(1.0)]);
-      voice.say("done", &about, [Object::none()]);
-    }
-  })
-}
-
-#[test]
-fn what_the_voices_said_between_two_drives_is_one_feed_of_the_sandbox() {
-  let at = std::env::temp_dir().join("furb-engine-drained");
-  let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("voices", voices())];
-  let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
+fn what_the_ears_say_of_their_own_accord_in_one_drive_is_one_feed_of_the_sandbox() {
+  let (mut engine, gate) = paused("drained");
   let root = engine.root().to_owned();
   let id = engine.wait(verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap().id().to_owned();
   let told = Rc::new(RefCell::new(Vec::new()));
@@ -577,14 +553,72 @@ fn what_the_voices_said_between_two_drives_is_one_feed_of_the_sandbox() {
   engine.watch(&id, move |value| held.borrow_mut().push(value.py_repr())).unwrap();
   let before = engine.sand.fed();
   engine.pump(Waker::noop()).unwrap();
-  assert_eq!(engine.sand.fed() - before, 1, "one drain of three things said is one feed");
+  assert_eq!(engine.sand.fed() - before, 0, "a drive where no ear says anything feeds nothing");
+  let _ = gate.send(());
+  engine.pump(Waker::noop()).unwrap();
+  assert_eq!(engine.sand.fed() - before, 1, "one drive of three things said is one feed");
   assert_eq!(*told.borrow(), ["None"], "whoever watches the wait is told in that feed");
+}
+
+/// An ear that takes each wait and ends it by a work that is ready at once, which says the wait done.
+fn quick() -> Box<dyn Ear> {
+  ear(move |mut co: Co<String>| async move {
+    loop {
+      match co.next().await {
+        Next::Heard(a) => {
+          if a.kind() == "wait" && a.question() {
+            say(&mut co, Fact::says("started", a.about(), []));
+            co.work(stream::once(std::future::ready(a.about().to_owned())));
+          }
+        }
+        Next::Worked(about) => {
+          say(&mut co, done(&about, Object::none()));
+        }
+      }
+    }
+  })
+}
+
+#[test]
+fn what_the_work_of_an_ear_came_to_lands_after_the_run_that_began_it() {
+  let at = std::env::temp_dir().join("furb-engine-landed");
+  let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("quick", quick())];
+  let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
+  let root = engine.root().to_owned();
+  let word = Some("w = wait(9)".to_owned());
+  engine.rung(verbs::Rung { word, on: on(&root), ..Default::default() }).unwrap();
+  block_on(Act::<Object>::of(&mut engine, "wait1")).unwrap();
   let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
-  let said: Vec<(String, String)> = facts
-    .iter()
-    .filter(|one| one.by() == "voices")
-    .map(|one| (one.kind().to_owned(), one.about().to_owned()))
-    .collect();
-  let expected = [("started", &id), ("pause", &root), ("due", &id), ("done", &id)];
-  assert_eq!(said, expected.map(|(kind, about)| (kind.to_owned(), about.clone())));
+  let at = |kind: &str, about: &str| {
+    facts.iter().position(|one| one.kind() == kind && one.about() == about).expect("the fact")
+  };
+  let (asked, done) = (at("wait", "wait1"), at("done", "wait1"));
+  let ran =
+    facts[asked..done].iter().any(|one| one.kind() == "done" && one.about().starts_with("run"));
+  assert!(ran, "the run that said the wait was over before its done came");
+}
+
+/// A waker that counts how often it is woken.
+struct Counted(std::sync::atomic::AtomicUsize);
+
+impl Wake for Counted {
+  fn wake(self: Arc<Self>) {
+    self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+  }
+}
+
+#[test]
+fn a_drive_that_finds_nothing_to_do_wakes_nobody() {
+  let mut lived = Lived::new("idle", &[], true).unwrap();
+  let counted = Arc::new(Counted(std::sync::atomic::AtomicUsize::new(0)));
+  let waker = Waker::from(Arc::clone(&counted));
+  lived.engine.pump(&waker).unwrap();
+  let woken = counted.0.load(std::sync::atomic::Ordering::SeqCst);
+  lived.engine.pump(&waker).unwrap();
+  lived.engine.pump(&waker).unwrap();
+  assert_eq!(
+    counted.0.load(std::sync::atomic::Ordering::SeqCst),
+    woken,
+    "a drive with nothing to do wakes nobody"
+  );
 }
