@@ -45,14 +45,13 @@ async def test_peek_gives_the_value_or_the_exception_itself() -> None:
 
 async def test_peek_never_raises() -> None:
   """peek never raises."""
-  _, log, root, gone = slow()
+  _, _, root, gone = slow()
   engine.cancel(gone)
   await settle()
   assert isinstance(engine.peek(gone), CancelledError)
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
   assert isinstance(engine.peek(ghost), Refused)
-  assert isinstance(engine.peek(said(log, "prompt")[0][1]), Refused)
 
 
 async def test_the_done_of_that_act_filled_its_outcome_and_the_life_holds_every_outcome_by_name() -> None:

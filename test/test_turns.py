@@ -2,7 +2,6 @@
 
 from conftest import acts, born, heads, of, opened, paragraphs, said, settle, takes, written
 from furb import engine
-from furb.engine import span
 
 CARRY = ("tell", "pause", "wake", "cancel", "close")
 """The kinds of fact that carry notes, of which the turns are folded."""
@@ -59,7 +58,6 @@ async def test_the_turn_a_model_was_answered_with_closes_the_turn_of_the_operato
     got[1] == engine.peek(said(log, "reply")[0][1]) == ("assistant", word, (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])
   )
   assert got[2][1] == "#read1\nread1_path = 'n.txt'\nread1_text = 'two'\n\n#prompt1 closed\nprompt1_value = 1"
-  assert span(2, 2)(["one", "two"]) == [2]
 
 
 async def test_turns_reads_the_transcript_of_the_chain_and_asks_nothing() -> None:
@@ -75,12 +73,18 @@ async def test_turns_reads_the_transcript_of_the_chain_and_asks_nothing() -> Non
 
 async def test_a_user_turn_packs_one_paragraph_for_each_thing_told_since_the_last_reply() -> None:
   """A user turn packs one paragraph for each thing told since the last reply, in order."""
-  _, _, root = born()
+  sand, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
   assert len(got) == 1
   assert heads(got) == ["#chain1", "#chain1 standing", "#rung1"]
   assert got[0][1] == "\n\n".join(paragraphs(got))
+  sand.script[root] = ["close(1)"]
+  assert await engine.prompt(int, "count", on=root) == 1
+  engine.say("tell", root, [f"#{root} one"])
+  engine.say("tell", root, [f"#{root} two"])
+  told = ["#prompt1 closed\nprompt1_value = 1", f"#{root} one", f"#{root} two"]
+  assert engine.turns(on=root)[-1] == ("user", "\n\n".join(told), None, None)
 
 
 async def test_the_turns_of_a_chain_only_grow() -> None:

@@ -36,3 +36,10 @@ async def test_a_close_is_over_the_act_it_names_and_the_words_running_under_it()
   await settle()
   assert isinstance(engine.peek(gone), CancelledError)
   assert isinstance(engine.peek(theirs), CancelledError)
+  asking = engine.prompt(int, "no answer comes", on=root)
+  await settle()
+  reply = said(log, "reply")[-1][1]
+  assert engine.get(engine.get(reply)[2])[2] == asking and engine.peek(reply, ...) is ...
+  engine.close(1, asking)
+  await settle()
+  assert engine.peek(asking) == 1 and isinstance(engine.peek(reply), CancelledError)

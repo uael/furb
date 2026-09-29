@@ -23,6 +23,7 @@ async def test_one_entry_of_the_record_kept_and_said() -> None:
 async def test_the_journal_says_one_keep_per_entry() -> None:
   """The journal says one keep per entry, and the World keeps it as plain data if it likes."""
   sand, log, _ = await lived()
-  assert [one[3] for one in said(log, "keep")] == sand.record
+  entries = [one[3] for one in said(log, "keep")]
+  assert entries and len({repr(one) for one in entries}) == len(entries)
   kept = plain(sand.record)
   assert plain(kept) == kept

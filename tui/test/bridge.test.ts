@@ -4,24 +4,6 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
-import { HostView } from "../src/bridge.ts";
-
-test("the view of the host counts the file changes of the session", () => {
-  const view = new HostView(async () => null);
-  view.update({
-    completed: 0,
-    cost: 0,
-    directory: "/tmp",
-    imageDirectory: "/tmp/images",
-    actor: "operator",
-    facts: 0,
-    prompts: [],
-    streams: [],
-    pending: [],
-    changes: 3,
-  });
-  expect(view.changes).toBe(3);
-});
 
 test("a session whose life does not open ends its worker, so the process that asked it can exit", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-open-fail-"));

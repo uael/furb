@@ -126,6 +126,11 @@ fn a_model_has_the_window_the_price_and_the_images_of_the_catalog() {
     (gpt.window, gpt.images, gpt.price, gpt.apart, gpt.tokens),
     (128_000, false, None, false, None)
   );
+  let bedrock =
+    catalog.find("amazon-bedrock:us.anthropic.claude-sonnet-5").expect("a model of Amazon");
+  assert_eq!((bedrock.apart, bedrock.tokens), (true, Some(4000)));
+  let radius = catalog.find("radius:balanced").expect("a model of Radius");
+  assert_eq!((radius.apart, radius.conversation.as_deref()), (true, Some("sessionId")));
 }
 
 #[test]
@@ -178,6 +183,20 @@ fn each_provider_reads_an_effort_in_its_own_words() {
   assert_eq!(
     efforts(&catalog, "fireworks-ai:gpt-4o"),
     [("low".to_owned(), json!({"reasoning_effort": "low"}))]
+  );
+  assert_eq!(
+    efforts(&catalog, "amazon-bedrock:us.anthropic.claude-sonnet-5")[1].1,
+    json!({"output_config": {"effort": "high"}, "thinking": {"type": "adaptive"}}),
+    "a model of Anthropic on Amazon reads an effort as Anthropic does"
+  );
+  assert_eq!(
+    efforts(&catalog, "amazon-bedrock:qwen.qwen3"),
+    [],
+    "the other models of Amazon read none"
+  );
+  assert_eq!(
+    efforts(&catalog, "radius:balanced")[2],
+    ("max".to_owned(), json!({"reasoning": "max"}))
   );
 }
 
@@ -334,28 +353,4 @@ fn a_provider_is_offered_when_the_environment_holds_its_credential_and_each_plac
     "the credentials of an application stand where the client of Google finds them"
   );
   assert!(offered(&["RADIUS_API_KEY"], "radius:balanced"));
-}
-
-#[test]
-fn each_client_reads_an_effort_in_the_words_of_its_provider() {
-  let catalog = catalog(&[]);
-  assert_eq!(
-    efforts(&catalog, "amazon-bedrock:us.anthropic.claude-sonnet-5")[1].1,
-    json!({"output_config": {"effort": "high"}, "thinking": {"type": "adaptive"}}),
-    "a model of Anthropic on Amazon reads an effort as Anthropic does"
-  );
-  assert_eq!(
-    efforts(&catalog, "amazon-bedrock:qwen.qwen3"),
-    [],
-    "the other models of Amazon read none"
-  );
-  assert_eq!(
-    efforts(&catalog, "radius:balanced")[2],
-    ("max".to_owned(), json!({"reasoning": "max"}))
-  );
-  let bedrock =
-    catalog.find("amazon-bedrock:us.anthropic.claude-sonnet-5").expect("a model of Amazon");
-  assert_eq!((bedrock.apart, bedrock.tokens), (true, Some(4000)));
-  let radius = catalog.find("radius:balanced").expect("a model of Radius");
-  assert_eq!((radius.apart, radius.conversation.as_deref()), (true, Some("sessionId")));
 }

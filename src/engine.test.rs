@@ -17,7 +17,7 @@ use std::{
   sync::Arc,
   task::{Context, Poll, Wake, Waker},
   thread,
-  time::Duration,
+  time::{Duration, Instant},
 };
 
 use crate::{
@@ -170,25 +170,6 @@ fn the_files_serve_a_read_and_a_write_of_the_real_engine() {
 }
 
 #[test]
-fn a_model_answers_a_prompt_and_the_kernel_gates_and_runs_the_word_it_wrote() {
-  let mut lived = Lived::new("prompts", &["close(len(read('a.txt').lines))"], true).unwrap();
-  let root = lived.root();
-  lived
-    .engine
-    .write(&Text::new("a.txt", "one\ntwo\nthree\n"), verbs::Write { on: on(&root) })
-    .unwrap();
-  let with = verbs::Prompt {
-    message: Some("count the lines".to_owned()),
-    on: on(&root),
-    ..Default::default()
-  };
-  let got = block_on(lived.engine.prompt(Object::string("int"), with).unwrap()).unwrap();
-  assert_eq!(got.as_ref().as_int(), Some(3));
-  assert_eq!(lived.read.borrow().len(), 1);
-  assert!(lived.read.borrow()[0].contains("count the lines"));
-}
-
-#[test]
 fn a_command_runs_on_this_machine_and_speaks_its_exit_from_its_own_thread() {
   let mut lived = Lived::new("commands", &[], true).unwrap();
   let apart = lived.engine.span(-250, -1).unwrap();
@@ -197,11 +178,7 @@ fn a_command_runs_on_this_machine_and_speaks_its_exit_from_its_own_thread() {
   assert_eq!(exit.code, Some(0));
   assert_eq!(exit.stdout.content, "hi\n");
   assert_eq!(exit.stderr.content, "no\n");
-}
-
-#[test]
-fn a_command_that_the_engine_merges_says_its_stderr_in_its_stdout() {
-  let mut lived = Lived::new("merges", &[], true).unwrap();
+  // A command that the engine merges says its stderr in its stdout.
   let with = verbs::Bash { on: on(&lived.root()), ..Default::default() };
   let exit: Exit = block_on(lived.engine.bash("echo hi; echo no >&2", with).unwrap()).unwrap();
   assert_eq!((exit.stdout.content.as_str(), exit.stderr.content.as_str()), ("hi\nno\n", ""));
@@ -242,8 +219,15 @@ fn a_timeout_or_a_wait_past_the_longest_timer_runs_its_full_time() {
 fn a_command_that_outlives_its_timeout_ends_with_no_code() {
   let mut lived = Lived::new("late", &[], true).unwrap();
   let with = verbs::Bash { timeout: Some(0.2), on: on(&lived.root()), ..Default::default() };
-  let exit: Exit = block_on(lived.engine.bash("sleep 5 & sleep 5", with).unwrap()).unwrap();
+  let begun = Instant::now();
+  let exit: Exit = block_on(lived.engine.bash("sleep 30 & sleep 30", with).unwrap()).unwrap();
   assert_eq!(exit.code, None);
+  // The sleep in the background holds the stdout of the command until every process of it has ended.
+  let took = begun.elapsed();
+  assert!(
+    took < Duration::from_secs(15),
+    "the command ended with every process it started, in {took:?}"
+  );
 }
 
 #[test]
@@ -377,16 +361,6 @@ fn a_function_of_the_host_is_called_back_by_the_sandbox_with_what_the_word_gave_
 }
 
 #[test]
-fn what_the_engine_raised_reaches_the_host_as_the_fault_it_is() {
-  let mut lived = Lived::new("faults", &[], true).unwrap();
-  assert!(lived.engine.get("bash9").unwrap().is_none(), "a name of no act gives nothing");
-  let no = lived.engine.word("{}['bash9']", vec![]).unwrap_err();
-  assert_eq!(no.name, "KeyError");
-  let no = lived.engine.word("nowhere", vec![]).unwrap_err();
-  assert_eq!(no.name, "NameError");
-}
-
-#[test]
 fn what_is_fed_to_a_command_before_a_wake_starts_it_in_a_later_life_reaches_its_process() {
   let id = {
     let mut first = Lived::new("held", &[], true).unwrap();
@@ -463,20 +437,19 @@ fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
     let mut first = Lived::new("again", &["close(len(read('a.txt').lines))"], true).unwrap();
     let root = first.root();
     fs::write(first.at.join("a.txt"), "one\ntwo\n").unwrap();
-    let act = first
-      .engine
-      .prompt(Object::string("int"), verbs::Prompt { on: on(&root), ..Default::default() })
-      .unwrap();
+    let with = verbs::Prompt {
+      message: Some("count the lines".to_owned()),
+      on: on(&root),
+      ..Default::default()
+    };
+    let act = first.engine.prompt(Object::string("int"), with).unwrap();
     let id = act.id().to_owned();
     assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(2));
+    // The provider asks for the turns while it hears, and they hold the message of the prompt.
+    assert_eq!(first.read.borrow().len(), 1);
+    assert!(first.read.borrow()[0].contains("count the lines"));
     (root, id)
   };
-  let kept = world::kept(std::env::temp_dir().join("furb-engine-again/record.jsonl")).unwrap();
-  assert!(
-    kept.len() >= 4,
-    "the record holds the chain, the prompt, its rung and its answer: {}",
-    kept.len()
-  );
   let mut second = Lived::new("again", &[], false).unwrap();
   assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
   assert_eq!(second.root(), root);

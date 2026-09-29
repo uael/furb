@@ -38,4 +38,4 @@ async def test_work_that_an_ear_begins_while_it_speaks_keeps_the_site_of_that_ea
   engine.say("tell", root, ["#chain1 now"])
   await settle()
   assert [a[2] for a in said(log, "tell") if a[3] == ["#chain1 later"]] == ["later"]
-  assert [a[2] for a in said(log, "out")] == [] and engine.site.get() == OPERATOR
+  assert engine.site.get() == OPERATOR

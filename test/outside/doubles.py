@@ -81,7 +81,7 @@ def worlds(stands: list) -> Words:
 
 @contextmanager
 def speaking(text: str) -> Iterator[None]:
-  """The operator at its terminal, saying one line and no more, which the World reads on the loop it runs on."""
+  """The operator at its terminal, saying this text and no more, which the World reads on the loop it runs on."""
   read, wrote = os.pipe()
   os.write(wrote, text.encode())
   os.close(wrote)
@@ -127,8 +127,3 @@ async def until(holds: Callable[[], bool]) -> bool:
       return True
     await asyncio.sleep(0.01)
   return holds()
-
-
-def heads(root: str) -> list[str]:
-  """The header of every paragraph in the user turns of a chain, which is the first line of each."""
-  return conftest.heads(engine.turns(on=root))

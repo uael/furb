@@ -4,17 +4,15 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, settle, slow
+from conftest import posed, settle, slow
 from furb import engine
 from furb.engine import OPERATOR, Act, Refused
 
 
 async def test_the_name_of_an_act() -> None:
   """The name of an act, which is what a verb gives and what a caller holds of the act: a string, so it names the act to close, cancel, pause, peek and get, and awaitable, so it gives what the act comes to."""
-  _, _, root = born()
-  one = engine.prompt(None, "hi", to=OPERATOR, on=root)
+  _, log, root, one = await posed(None, "hi")
   assert isinstance(one, Act) and isinstance(one, str) and one == "prompt1"
-  await settle()
   assert engine.get(one)[:4] == ("prompt", one, OPERATOR, root)
   engine.pause(one)
   engine.wake(one)
@@ -25,13 +23,13 @@ async def test_the_name_of_an_act() -> None:
   engine.cancel(two)
   await settle()
   assert isinstance(engine.peek(two), CancelledError)
+  controls = [(a[0], a[1]) for a in log if a[0] in ("pause", "wake", "cancel", "close")]
+  assert controls == [("pause", one), ("wake", one), ("close", one), ("cancel", two)]
 
 
 async def test_an_act_is_over_when_its_done_stands_and_lives_until_then() -> None:
   """An act is over when its done stands and lives until then; there is no other state, and a control over an act that is over reaches nothing, but a wake of the ear of a command that a pause holds."""
-  _, log, root = born()
-  one = engine.prompt(None, "hi", to=OPERATOR, on=root)
-  await settle()
+  _, log, root, one = await posed(None, "hi")
   assert engine.peek(one) is None
   engine.close(21, one)
   await settle()
@@ -61,9 +59,7 @@ async def test_the_outcome_of_a_cancelled_act_is_the_cancellederror_it_completed
 
 async def test_only_a_command_lives_past_its_done_and_every_other_act_is_dropped_at_its_done() -> None:
   """Only a command lives past its done, and every other act is dropped at its done."""
-  _, _, root = born()
-  one = engine.prompt(None, "hi", to=OPERATOR, on=root)
-  await settle()
+  _, _, root, one = await posed(None, "hi")
   with pytest.raises(Refused, match="hears"):
     engine.drive(engine.idle(one), one)
   engine.close(None, one)

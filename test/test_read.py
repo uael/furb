@@ -2,23 +2,12 @@
 
 import pytest
 
-from conftest import Dead, born, life, of, paragraphs, said, settle
+from conftest import NUMS, Dead, born, life, of, paragraphs, said, settle
 from furb import engine
 from furb.engine import HEAD, HIDDEN, OPERATOR, Refused, Text, span
 
 BIG = "".join(f"line {i}\n" for i in range(1, 2101))
 """A text of two thousand and one hundred lines, which is longer than HEAD."""
-NUMS = (
-  "def kept(id):\n"
-  "  while True:\n"
-  "    match (yield):\n"
-  "      case ('read', qid, _, _, path) if path.startswith('nums://'):\n"
-  "        yield 'done', qid, [1, 2]\n"
-  "\n"
-  "act('nums', '', kept)\n"
-  "close(read('nums://a'))\n"
-)
-"""A word of a rung that opens a door of its own, which answers a read with a list, and gives what it read."""
 
 
 async def test_a_read_whoever_serves_the_path_answers_it_with_the_text_of_it() -> None:
@@ -142,6 +131,6 @@ async def test_one_made_from_inside_an_act_tells_itself() -> None:
 
 async def test_a_read_answered_with_what_is_no_text_gives_that_value() -> None:
   """A read answered with what is no text gives that value, and tells it as python shows it."""
-  _, _, root = born(NUMS)
+  _, _, root = born(NUMS + "close(read('nums://a'))\n")
   assert await engine.prompt(list, "a door of my own", on=root) == [1, 2]
   assert of(engine.turns(on=root), "read") == ["#read1\nread1_path = 'nums://a'\nread1_value = [1, 2]"]

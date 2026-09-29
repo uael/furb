@@ -6,7 +6,13 @@ use std::{
 };
 
 use super::Opening;
-use crate::{Engine, Fact, Object, extension::enabled, value::entry, verbs, world};
+use crate::{
+  Ear, Engine, Fact, Object, Text,
+  ear::{ear, hear, say},
+  extension::enabled,
+  value::entry,
+  verbs, world,
+};
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> PathBuf {
@@ -55,6 +61,13 @@ fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record
   drop(later);
   let kept = world::kept(at.join("record.jsonl")).unwrap();
   assert!(!kinds(&kept[record.len()..]).contains(&"enable".to_owned()), "it enabled nothing new");
+  let fresh = Some(at.join("fresh.jsonl").display().to_string());
+  let (mut fresh, _) = Opening { record: fresh, ..opening(&at, true) }.boot::<String>([]).unwrap();
+  assert_eq!(
+    names(&mut fresh),
+    ["memory"],
+    "a life on a new record enables what the configs turn on"
+  );
 }
 
 #[test]
@@ -83,4 +96,21 @@ fn the_ears_of_the_crate_come_after_the_ears_of_the_host_each_under_the_name_eve
     names,
     ["provider", "extensions", "memory", "skills", "files", "bash", "time", "store"]
   );
+  drop(ears);
+  let (mut engine, _) = opening(&at, true).boot([("mine", mine())]).unwrap();
+  let read = verbs::Read { on: Some(engine.root().to_owned()), ..Default::default() };
+  assert_eq!(engine.read("mine://a", read).unwrap(), Text::new("mine://a", "mine\n"));
+}
+
+/// An ear of the host that takes a read of a path of its own, which the files refuse.
+fn mine() -> Box<dyn Ear> {
+  ear(|co, _| async move {
+    loop {
+      let a = hear(&co).await;
+      let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+      if a.question() && a.kind() == "read" && path.starts_with("mine://") {
+        say(&co, Fact::says("done", a.about(), [Text::new(path, "mine\n").object()])).await;
+      }
+    }
+  })
 }

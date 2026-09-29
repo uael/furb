@@ -5,9 +5,6 @@ it tells the operator a chain went quiet, the answers a record holds, and the op
 the crate, the provider and its catalog among them, are proved where the crate writes them.
 """
 
-import asyncio
-import os
-import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -113,45 +110,15 @@ async def test_the_answers_a_record_holds_are_the_turns_its_replies_came_to(yard
   assert [(one[1], one[3][1]) for one in answered(said)] == [(replies[1], "close(3)")]
 
 
-async def test_the_world_shows_a_prompt_to_the_operator_and_closes_it_with_the_line_it_read(yard: Path) -> None:
-  """A pin: the World shows a prompt of the operator on its terminal and reads one line back, on the loop and never
-  on a thread, so no read of the operator outlives the life that made it."""
-  read, wrote = os.pipe()
-  os.write(wrote, b"a word of the operator\n")
-  os.close(wrote)
-  held, sys.stdin = sys.stdin, os.fdopen(read)
-  try:
-    root = life(world(yard))
-    got = engine.prompt(str, "say a word", OPERATOR, on=root)
-    for _ in range(2000):
-      await asyncio.sleep(0.001)
-      if engine.peek(got, ...) is not ...:
-        break
-    assert await got == "a word of the operator"
-  finally:
-    sys.stdin.close()
-    sys.stdin = held
-
-
 async def test_two_prompts_of_the_operator_are_shown_and_answered_one_at_a_time(yard: Path) -> None:
   """There is one terminal and one operator, so prompts of the operator are shown and answered one at a time, in
   the order they asked, and never two at once on one stream."""
-  read, wrote = os.pipe()
-  os.write(wrote, b"first\nsecond\n")
-  os.close(wrote)
-  held, sys.stdin = sys.stdin, os.fdopen(read)
-  try:
+  with speaking("first\nsecond\n"):
     root = life(world(yard))
     one = engine.prompt(str, "the first", OPERATOR, on=root)
     two = engine.prompt(str, "the second", OPERATOR, on=root)
-    for _ in range(2000):
-      await asyncio.sleep(0.001)
-      if engine.peek(one, ...) is not ... and engine.peek(two, ...) is not ...:
-        break
+    assert await until(lambda: engine.peek(one, ...) is not ... and engine.peek(two, ...) is not ...)
     assert (await one, await two) == ("first", "second")
-  finally:
-    sys.stdin.close()
-    sys.stdin = held
 
 
 async def test_the_world_refuses_a_shape_the_operator_does_not_answer(yard: Path) -> None:
@@ -180,10 +147,7 @@ async def test_a_line_that_is_no_value_of_the_shape_closes_the_prompt_with_a_ref
   with speaking("not a number\n"):
     root = life(world(yard))
     got = engine.prompt(int, "a number please", OPERATOR, on=root)
-    for _ in range(2000):
-      await asyncio.sleep(0.001)
-      if engine.peek(got, ...) is not ...:
-        break
+    assert await until(lambda: engine.peek(got, ...) is not ...)
     with pytest.raises(Refused, match="is no int"):
       await got
 

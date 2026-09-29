@@ -86,13 +86,16 @@ test("idle snapshots add no facts or sandbox calls as the act table grows, and s
   ));
 
 test("a take reads the program, the turns and the directory of a chain again once a rung changes them", () =>
-  withLife(async ({ engine, snapshots, cwd }) => {
+  withLife(async ({ engine, snapshots, calls, cwd }) => {
     snapshots.take(engine.root);
     await engine.rung({ word: "answer = 17", on: engine.root });
     await Promise.resolve();
+    calls.length = 0;
     const view = snapshots.take(engine.root);
+    expect(calls.filter((name) => name === "turns")).toEqual(["turns"]);
     expect(Object.values(view.program)).toContain("answer = 17");
     expect(view.turns.map(([, python]) => python).join("\n")).toContain("answer = 17");
+    expect(view.turns).toEqual(engine.turns({ on: engine.root }));
     // A cd the operator asks is of the moment, and the engine keeps no answer of it, so the cd is a rung, as /cd is.
     await mkdir(join(cwd, "sub"));
     await engine.rung({ word: 'cd("sub")', on: engine.root });
@@ -118,17 +121,6 @@ test("an act of a kind an extension defines joins the act table, and what it tel
     expect(note).toMatchObject({ on: engine.root, done: true, value: "noted" });
     expect(view.turns.map(([, python]) => python).join("\n")).toContain("# hello");
     expect(view.turns).toEqual(engine.turns({ on: engine.root }));
-  }));
-
-test("a take after a change of the chain asks its turns by one question", () =>
-  withLife(async ({ engine, snapshots, calls }) => {
-    snapshots.take(engine.root);
-    await engine.result(engine.rung({ word: "changed = 1", on: engine.root }).id);
-    calls.length = 0;
-    const snapshot = snapshots.take(engine.root);
-    expect(calls.filter((name) => name === "turns")).toEqual(["turns"]);
-    expect(snapshot.turns.map(([, python]) => python).join("\n")).toContain("changed = 1");
-    expect(snapshot.turns).toEqual(engine.turns({ on: engine.root }));
   }));
 
 test("a take carries the acts that changed after the count it is given, and every act after the table is derived again", () =>

@@ -24,17 +24,17 @@ crate-type = ["rlib", "cdylib"]
 [features]
 # The python binding: the same crate, reached from python. It links no interpreter of its own, which is what an
 # extension module is, so the module feature is on only where maturin builds the wheel.
-python = ["dep:pyo3", "dep:windows-sys"]
+python = ["dep:pyo3"]
 extension-module = ["python", "pyo3/extension-module"]
-typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build", "dep:windows-sys"]
+typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
 
 [dependencies]
 # The sandbox the engine runs in, and its type checker, which is the gate of the
 # Kernel. A revision of the fork, since the interpreter the engine needs is not
 # released, and a revision reads the same interpreter at every build.
-monty = { git = "https://github.com/uael/monty", rev = "0c5ae5fb" }
-monty-type-checking = { git = "https://github.com/uael/monty", rev = "0c5ae5fb" }
-monty-types = { git = "https://github.com/uael/monty", rev = "0c5ae5fb" }
+monty = { git = "https://github.com/uael/monty", rev = "83294240" }
+monty-type-checking = { git = "https://github.com/uael/monty", rev = "83294240" }
+monty-types = { git = "https://github.com/uael/monty", rev = "83294240" }
 # A whole number past 64 bits, which a host hands in as its digits.
 num-bigint = "0.4"
 # An ear of the crate is a coroutine: a generator of rust, as an ear of python is a generator of python.
@@ -78,8 +78,8 @@ ruff_text_size = "0.0.9"
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-# The console of Windows, whose end a host hears through a door.
-windows-sys = { version = "0.61", features = ["Win32_System_Console"], optional = true }
+# The console of Windows, whose end a host hears through a door, and the job that holds every process of a command.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Console", "Win32_System_JobObjects"] }
 
 [dev-dependencies]
 # The model of rig that answers from a script, which the tests of the provider ask.

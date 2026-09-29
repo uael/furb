@@ -1,9 +1,11 @@
 import { afterAll, expect, test } from "bun:test";
+import { RGBA } from "@opentui/core";
 import { setRendererCapabilities } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
 import { count } from "../src/format.ts";
-import { composing } from "./composing.ts";
+import { palettes } from "../src/theme.ts";
+import { cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 
 // Each test opens a demo session, with its worker and its record, as the tests of the App do, and so has their time:
@@ -387,12 +389,18 @@ test("⌃Tab rolls to the next chain and ⇧⌃Tab to the one before it, round f
   ));
 
 test("the switch of the views fills the view shown with the accent, names its chord, and a click on a view shows it", () =>
-  composing(async ({ session, frame, click }) => {
+  composing(async ({ session, screen, frame, click }) => {
     const top = (await frame()).split("\n")[0] ?? "";
     expect(top).toContain("Feed");
     expect(top).toContain("⌥1-3");
+    const accent = RGBA.fromHex(palettes.github.accent);
+    const filled = (label: string) =>
+      Boolean(cellAt(screen.captureSpans(), top.indexOf(label), 0).bg?.equals(accent));
+    expect([filled("Feed"), filled("Changes")]).toEqual([true, false]);
     await click("Changes");
     await until(session, () => session.view === "changes");
+    await frame();
+    expect([filled("Feed"), filled("Changes")]).toEqual([false, true]);
     await click("Feed");
     await until(session, () => session.view === "feed");
   }));
@@ -453,17 +461,9 @@ test("the usage counts each token once, and the context share shows from the fir
     expect(shown).toContain("Cache read");
     expect(shown).not.toContain("Cached");
     expect(shown).toContain("━");
-  }));
-
-test("the usage names the whole prompt of the last answer apart from the fresh input of the chain", () =>
-  composing(async ({ session, frame }) => {
-    await session.submit("Explore this project.");
-    await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
-    await session.refresh();
-    const lines = (await frame()).split("\n");
-    const shown = (label: string) => lines.find((line) => line.includes(label)) ?? "";
-    expect(shown("Last prompt")).toContain(count(session.context ?? 0));
-    expect(shown("Fresh input")).toContain(count(session.spend.input));
+    const lines = shown.split("\n");
+    expect(lines.find((line) => line.includes("Last prompt"))).toContain("3.2k");
+    expect(lines.find((line) => line.includes("Fresh input"))).toContain(count(440 * answers));
   }));
 
 test("the usage of a fork counts the answers of the fork alone, and not those of its origin", () =>

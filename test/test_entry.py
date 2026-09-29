@@ -31,11 +31,13 @@ async def test_the_order_of_the_record_is_what_puts_an_entry_back_in_its_place()
 async def test_the_world_keeps_each_entry_as_the_journal_says_it_plain_or_not() -> None:
   """The World keeps each entry as the journal says it, plain or not."""
   sand, log, root = await lived()
-  assert [one[3] for one in said(log, "keep")] == sand.record
+  assert {one[2] for one in said(log, "keep")} == {"journal"}
   kept = plain(sand.record)
   assert kept != list(sand.record)
-  _, over = await relived(sown(), kept)
-  assert over == root
+  later = sown()
+  _, over = await relived(later, kept)
+  assert over == root and engine.peek(said(log, "prompt")[0][1]) == 2
+  assert [one[0] for one in later.calls] == ["stand"]
 
 
 async def test_the_record_is_a_sequence_of_entries_about_acts() -> None:

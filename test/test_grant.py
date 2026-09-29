@@ -2,9 +2,9 @@
 
 from asyncio import CancelledError
 
-from conftest import COST, born, chained, fresh, heads, paragraphs, prompted, ran, said, settle
+from conftest import COST, Sand, born, chained, fresh, heads, paragraphs, prompted, ran, said, settle
 from furb import engine
-from furb.engine import OPERATOR, Refused
+from furb.engine import OPERATOR, Act, Refused
 
 GRANT = "#grant1\ngrant1_usd = 1.0\ngrant1: Act[None] = Act('grant1')"
 """The paragraph a grant of one dollar tells of its open."""
@@ -17,6 +17,17 @@ def crossed(log: list[tuple], root: str, act: str, message: str) -> str:
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   ledger = "#grant1 ledger\ngrant1_spent = 1.5\ngrant1_filled = 0.2"
   return fresh(root, GRANT, prompted(act, "int", message), f"#{step} advance on {act}", ledger, f"#{root} paused")
+
+
+async def capped(*script: str, message: str = "count") -> tuple[Sand, list[tuple], str, Act[None], Act[int]]:
+  """A life whose root holds a grant of one dollar and prompts its model, which answers with the words of the script
+  at the cost COST, once the loop gave the first answer room to cross the grant: the World, what was said, the root,
+  the grant and the prompt."""
+  sand, log, root = born(*script, cost=COST)
+  ceiling = engine.grant(usd=1.0, on=root)
+  act = engine.prompt(int, message, on=root)
+  await settle()
+  return sand, log, root, ceiling, act
 
 
 async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_both() -> None:
@@ -56,33 +67,21 @@ async def test_grant_on_a_chain_puts_a_ceiling_on_it_dollars_a_share_of_the_wind
 
 async def test_the_engine_enters_a_pause_on_the_chain_when_a_response_carries_the_ledger_to_its_ceiling() -> None:
   """The engine enters a pause on the chain when a response carries the ledger to its ceiling."""
-  sand, log, root = born(cost=COST)
-  ceiling = engine.grant(usd=1.0, on=root)
-  sand.script[root] = ["a = 1", "close(2)"]
-  act = engine.prompt(int, "count", on=root)
-  await settle()
+  _, log, root, ceiling, act = await capped("a = 1", "close(2)")
   assert engine.peek(act, ...) is ...
   assert [(one[1], one[2]) for one in said(log, "pause")] == [(root, ceiling)]
 
 
 async def test_the_word_of_the_response_that_crossed_the_ceiling_runs() -> None:
   """The word of the response that crossed the ceiling runs."""
-  sand, log, root = born(cost=COST)
-  engine.grant(usd=1.0, on=root)
-  sand.script[root] = ["a = 1", "close(2)"]
-  act = engine.prompt(int, "count", on=root)
-  await settle()
+  _, log, root, _, act = await capped("a = 1", "close(2)")
   assert ran(log) == [crossed(log, root, act, "count"), "a = 1"] and engine.module(root)["a"] == 1
   assert engine.peek(act, ...) is ...
 
 
 async def test_no_reply_follows_the_response_that_carried_the_ledger_to_the_ceiling_until_a_wake() -> None:
   """No reply follows the response that carried the ledger to the ceiling, until a wake."""
-  sand, log, root = born(cost=COST)
-  engine.grant(usd=1.0, on=root)
-  sand.script[root] = ["a = 1", "close(2)"]
-  act = engine.prompt(int, "count", on=root)
-  await settle()
+  _, log, root, _, act = await capped("a = 1", "close(2)")
   assert len(said(log, "reply")) == 1 and engine.peek(act, ...) is ...
   engine.wake(root)
   await settle()
@@ -91,11 +90,7 @@ async def test_no_reply_follows_the_response_that_carried_the_ledger_to_the_ceil
 
 async def test_the_model_continues_after_a_later_grant_and_a_wake() -> None:
   """The model continues after a later grant and a wake."""
-  sand, _, root = born(cost=COST)
-  engine.grant(usd=1.0, on=root)
-  sand.script[root] = ["a = 1", "close(2)"]
-  act = engine.prompt(int, "count", on=root)
-  await settle()
+  _, _, root, _, act = await capped("a = 1", "close(2)")
   assert engine.peek(act, ...) is ...
   engine.grant(usd=4.0, on=root)
   engine.wake(root)
@@ -105,11 +100,7 @@ async def test_the_model_continues_after_a_later_grant_and_a_wake() -> None:
 
 async def test_an_answer_that_carries_the_ledger_past_the_ceiling_pauses_the_chain() -> None:
   """An answer that carries the ledger past the ceiling pauses the chain, so the word that answer brought runs and what it gave waits, and no rung of the chain asks until the wake."""
-  sand, log, root = born(cost=COST)
-  engine.grant(usd=1.0, on=root)
-  sand.script[root] = ["close(5)"]
-  act = engine.prompt(int, "spend", on=root)
-  await settle()
+  _, log, root, _, act = await capped("close(5)", message="spend")
   assert ran(log) == [crossed(log, root, act, "spend"), "close(5)"] and engine.peek(act, ...) is ...
   assert len(said(log, "reply")) == 1
   engine.wake(root)
@@ -119,11 +110,7 @@ async def test_an_answer_that_carries_the_ledger_past_the_ceiling_pauses_the_cha
 
 async def test_lifting_a_ceiling_wakes_nothing() -> None:
   """Lifting a ceiling wakes nothing: the pause stands until a wake, ceiling or no ceiling."""
-  sand, _, root = born(cost=COST)
-  ceiling = engine.grant(usd=1.0, on=root)
-  sand.script[root] = ["close(5)"]
-  act = engine.prompt(int, "spend", on=root)
-  await settle()
+  _, _, root, ceiling, act = await capped("close(5)", message="spend")
   assert engine.peek(act, ...) is ...
   engine.cancel(ceiling)
   await settle()
