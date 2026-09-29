@@ -2361,7 +2361,7 @@ export class App {
     const whole = stream.text.slice(0, stream.text.lastIndexOf("\n") + 1);
     const said = steps(whole);
     for (const [at, line] of said.entries())
-      inner.add(this.step(`${id}:${at}`, line, c.prose, {}, at ? "  " : `${glyph.closed} `));
+      inner.add(this.step([`${id}:${at}`], line, c.prose, {}, at ? "  " : `${glyph.closed} `));
     if (!said.length && whole.trim())
       inner.add(
         this.text(
@@ -2399,7 +2399,6 @@ export class App {
   ): void {
     const w = this.session;
     const { code, rung } = item;
-    const key = rung?.id ?? item.key;
     const tone = how.retried ? c.faint : c.prose;
     const inner = this.box({ paddingLeft: space.between - space.inset });
     const shape: TextShape = {
@@ -2413,7 +2412,15 @@ export class App {
     // someone said.
     const fold = `${how.closed ? glyph.closed : glyph.open} `;
     for (const [at, line] of said.entries())
-      inner.add(this.step(`${key}:${at}`, line, tone, shape, at ? "  " : fold));
+      inner.add(
+        this.step(
+          [rung?.id, item.key].flatMap((one) => (one ? [`${one}:${at}`] : [])),
+          line,
+          tone,
+          shape,
+          at ? "  " : fold,
+        ),
+      );
     if (!said.length)
       inner.add(
         this.text(
@@ -2523,10 +2530,19 @@ export class App {
   }
   /** A step of a word: one line of markdown in a tone, after its lead in the tone of the chrome. A step that wraps goes
    * on under its own text, and not under its lead. A step that shows first after its view opened lands bright, and
-   * settles to its tone in three steps. */
-  private step(key: string, line: string, tone: RGBA, options: TextShape, lead: string): BoxRenderable {
-    const born = this.landed.get(key) ?? (this.opening || !this.session.preferences.motion ? 0 : Date.now());
-    this.landed.set(key, born);
+   * settles to its tone in three steps. It lands once under all its keys: the key of its turn, and the key of its rung
+   * once the rung is known, which a word that its model streams has from the start. */
+  private step(
+    keys: readonly string[],
+    line: string,
+    tone: RGBA,
+    options: TextShape,
+    lead: string,
+  ): BoxRenderable {
+    const born =
+      keys.map((key) => this.landed.get(key)).find((one) => one !== undefined) ??
+      (this.opening || !this.session.preferences.motion ? 0 : Date.now());
+    for (const key of keys) this.landed.set(key, born);
     const parts = () => {
       const settled = Math.min(3, Math.floor(((Date.now() - born) * 3) / motion.settle));
       return this.inline(line, settled >= 3 ? tone : mix(c.bright, tone, settled / 3));
