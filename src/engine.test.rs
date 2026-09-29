@@ -220,12 +220,13 @@ fn a_command_that_outlives_its_timeout_ends_with_no_code() {
   let mut lived = Lived::new("late", &[], true).unwrap();
   let with = verbs::Bash { timeout: Some(0.2), on: on(&lived.root()), ..Default::default() };
   let begun = Instant::now();
-  let exit: Exit = block_on(lived.engine.bash("sleep 5 & sleep 5", with).unwrap()).unwrap();
+  let exit: Exit = block_on(lived.engine.bash("sleep 30 & sleep 30", with).unwrap()).unwrap();
   assert_eq!(exit.code, None);
   // The sleep in the background holds the stdout of the command until every process of it has ended.
+  let took = begun.elapsed();
   assert!(
-    begun.elapsed() < Duration::from_secs(3),
-    "the command ended with every process it started"
+    took < Duration::from_secs(15),
+    "the command ended with every process it started, in {took:?}"
   );
 }
 
