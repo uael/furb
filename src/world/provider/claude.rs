@@ -599,6 +599,17 @@ impl Tail {
     }
   }
 
+  /// What a work of the process comes to, with its stderr read meanwhile, so the process never stops for it.
+  async fn beside<T>(&mut self, work: impl Future<Output = T>) -> T {
+    let mut work = std::pin::pin!(work);
+    loop {
+      tokio::select! {
+        got = &mut work => return got,
+        () = self.heard() => {}
+      }
+    }
+  }
+
   /// All that the stderr writes until its end.
   async fn drained(&mut self) {
     while self.stderr.is_some() {
@@ -676,11 +687,12 @@ impl Flight<'_> {
     let Conversation { process: Some(process), id, name, .. } = held else {
       return Err(failed("claude is not running"));
     };
+    let Process { stdin, tail, .. } = process;
     let wrote = async {
-      process.stdin.write_all(line.as_bytes()).await?;
-      process.stdin.flush().await
+      stdin.write_all(line.as_bytes()).await?;
+      stdin.flush().await
     };
-    if let Err(no) = wrote.await {
+    if let Err(no) = tail.beside(wrote).await {
       // A process that took no input ended, and the failure says all that it wrote on its stderr.
       let _ = tokio::time::timeout(Duration::from_secs(1), process.tail.drained()).await;
       return Err(failed(format!("claude took no input: {no}{}", process.tail.said())));
@@ -690,10 +702,8 @@ impl Flight<'_> {
     let mut odd = String::new();
     let mut due = tokio::time::Instant::now() + stall;
     loop {
-      // Its stderr is read while its stdout is awaited, so a process that writes much of it never stops for it.
       let heard = tokio::select! {
-        line = process.out.line() => line,
-        () = process.tail.heard() => continue,
+        line = process.tail.beside(process.out.line()) => line,
         () = tokio::time::sleep_until(due) => {
           let odd = if odd.is_empty() { odd } else { format!(" The last line it wrote was {odd}") };
           let seconds = stall.as_secs_f64();
@@ -708,7 +718,8 @@ impl Flight<'_> {
         }
         Line::Over(Some(why)) => return Err(failed(why)),
         Line::Over(None) => {
-          let code = process.child.wait().await.ok().and_then(|status| status.code());
+          let Process { child, tail, .. } = process;
+          let code = tail.beside(child.wait()).await.ok().and_then(|status| status.code());
           // The failure says all that the process wrote, which its stderr gives until its end.
           let _ = tokio::time::timeout(Duration::from_secs(1), process.tail.drained()).await;
           let code = code.map_or_else(|| "a signal".to_owned(), |code| code.to_string());

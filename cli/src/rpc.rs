@@ -136,7 +136,10 @@ impl Server {
   async fn served(&mut self) -> io::Result<()> {
     let mut lines = BufReader::new(tokio::io::stdin()).split(b'\n');
     loop {
+      // The life is driven before each line, so the events of a command are written before the next response.
       tokio::select! {
+        biased;
+        failed = poll_fn(|cx| self.driven(cx)) => return failed,
         line = lines.next_segment() => {
           let Ok(Some(mut line)) = line else { return Ok(()) };
           if line.ends_with(b"\r") {
@@ -144,7 +147,6 @@ impl Server {
           }
           self.answer(&line)?;
         }
-        failed = poll_fn(|cx| self.driven(cx)) => return failed,
       }
     }
   }

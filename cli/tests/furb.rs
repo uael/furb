@@ -535,6 +535,18 @@ fn a_word_of_the_client_runs_as_a_rung_and_a_pause_holds_a_chain_until_its_wake(
 }
 
 #[test]
+fn the_events_of_a_command_come_before_the_response_to_the_next_command() {
+  let yard = Yard::new("rpc-order");
+  let mut client = Client::new(&yard);
+  client.data("1", json!({"type": "pause", "act": "chain1"}));
+  let prompt = json!({"type": "prompt", "message": "one", "shape": "int", "id": "2"});
+  client.line(&format!("{prompt}\n{}", json!({"type": "state", "id": "3"})));
+  client.until(|one| one["type"] == "response" && one["id"] == "3");
+  let asked = |one: &Value| one["type"] == "fact" && one.to_string().contains("prompt1");
+  assert!(client.held.iter().any(asked), "the facts of the prompt came first: {:#?}", client.held);
+}
+
+#[test]
 fn a_command_that_does_nothing_says_why() {
   let yard = Yard::new("rpc-refused");
   let mut client = Client::new(&yard);

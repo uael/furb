@@ -56,7 +56,7 @@ type Input = Lines<BufReader<Stdin>>;
 
 /// The console, as an ear: it takes each prompt to the operator and shows them in turn, and closes each with the line
 /// the operator writes back, or with why no line came. A prompt that is done before its line comes, by a cancel, is
-/// shown no more, and the line goes to the next.
+/// shown no more: a line the operator wrote before that goes nowhere, and the next line goes to the next prompt.
 pub fn terminal() -> Box<dyn Ear> {
   ear(|mut co: Co<Read>| async move {
     // The lines of stdin, while no read holds them.
@@ -109,7 +109,9 @@ type Read = (Input, Option<io::Result<Option<String>>>);
 /// One read of a line of stdin, which ends at its stop, and gives the lines back either way.
 fn read(mut lines: Input, stopped: oneshot::Receiver<()>) -> impl Stream<Item = Read> {
   stream::once(async move {
+    // A line that came before the stop is read, so its prompt takes it and not the next.
     let line = tokio::select! {
+      biased;
       line = lines.next_line() => Some(line),
       _ = stopped => None,
     };

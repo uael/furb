@@ -408,6 +408,27 @@ fn a_process_that_exits_fails_its_turn_with_the_tail_of_its_stderr() {
 }
 
 #[test]
+fn a_process_that_writes_more_on_its_stderr_than_its_pipe_holds_while_it_ends_fails_its_turn() {
+  let yard = Yard::new("loud-end");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let turn = model.completion(request("ENGINE ONLY", &[user("LOUD")], json!({})));
+  let no = reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
+  let no = no.expect("the turn ends").unwrap_err();
+  assert!(no.to_string().contains("Claude exited (3): eee"), "{no}");
+}
+
+#[test]
+fn a_process_that_writes_more_on_its_stderr_than_its_pipe_holds_takes_a_long_input() {
+  let yard = Yard::new("loud-start");
+  fs::write(yard.at.join("loud"), "").expect("the cue of the fake");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let long = "a".repeat(262_144);
+  let turn = model.completion(request("ENGINE ONLY", &[user(&long)], json!({})));
+  let got = reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
+  assert!(got.expect("the turn ends").is_ok(), "the turn is answered");
+}
+
+#[test]
 fn a_turn_that_makes_no_progress_fails_at_its_stall_with_the_last_odd_line_and_ends_its_process() {
   let yard = Yard::new("stall");
   let model = yard.claude(300).completion_model("sonnet");
