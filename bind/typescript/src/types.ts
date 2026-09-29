@@ -34,11 +34,24 @@ export interface Paragraph {
   text: string;
 }
 /** The paragraphs of the python of a user turn, in order. A blank line that a header follows is where one paragraph
- * ends, since a word its caller wrote may hold a blank line of its own. */
+ * ends, since a word its caller wrote may hold a blank line of its own. A header is # and the name of an act, and a
+ * line of a quote is text, so a heading of markdown in a quote ends no paragraph. */
 export function paragraphs(python: string): Paragraph[] {
   if (!python) return [];
-  return python.split(/\n\n(?=#\S)/).map((text) => {
-    const [header = "", ...lines] = text.split("\n");
+  const parts: string[][] = [];
+  let quote = "";
+  for (const line of python.split("\n")) {
+    const last = parts.at(-1);
+    if (!last || (!quote && /^#\w/.test(line) && last.at(-1) === "")) {
+      last?.pop();
+      parts.push([line]);
+    } else last.push(line);
+    quote ||= /^<s:(\w+)>/.exec(line)?.[1] ?? "";
+    if (quote && line.endsWith(`</s:${quote}>`)) quote = "";
+  }
+  return parts.map((part) => {
+    const text = part.join("\n");
+    const [header = "", ...lines] = part;
     const space = header.indexOf(" ");
     return {
       name: header.slice(1, space < 0 ? undefined : space),
