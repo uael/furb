@@ -24,7 +24,7 @@ async def test_a_question_is_a_fact_whose_about_is_its_own_name_and_whose_first_
   engine.read("a.txt", on=root)
   made, asked = said(log, "bash")[0], said(log, "read")[0]
   assert (made[1], made[3]) == (act, root)
-  assert (asked[1], asked[3]) == (asked[1], root)
+  assert (asked[1], asked[3]) == ("read1", root) and engine.get("read1") == asked
   assert engine.scope(act) == root and engine.scope(asked[1]) == root
 
 

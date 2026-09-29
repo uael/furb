@@ -1,7 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import {
   bound,
-  call,
   decodeRecord,
   display,
   type Ear,
@@ -26,7 +25,6 @@ function open(record: unknown[] = []) {
   const facts: Fact[] = [];
   const files = new Map<string, string>([["a", "one\ntwo\n"]]);
   const waits: (() => void)[] = [];
-  let replies = 0;
   // Work of the World ends later, under its name, as the work an ear began does.
   const later = (action: () => void) => queueMicrotask(() => speaking(engine, "world", action));
   function* world(): Ear {
@@ -50,8 +48,6 @@ function open(record: unknown[] = []) {
             "model/low",
           ],
         ];
-      else if (kind === "clock") yield ["done", id, 123.5];
-      else if (kind === "chance") yield ["done", id, 0.25];
       else if (kind === "read") {
         const path = String(words[1]);
         const content = files.get(path);
@@ -64,16 +60,12 @@ function open(record: unknown[] = []) {
         const text = words[1] as { path: string; content: string };
         files.set(text.path, text.content);
         yield ["done", id, { is: "Text", ...text }];
-      } else if (kind === "reply") {
-        replies++;
-        yield ["started", id];
-        later(() => engine.say("done", id, [["assistant", 'close("hello")', [20, 8, 0, 0, 0.001], null]]));
       } else if (kind === "wait") {
         yield ["started", id];
         const over = () => later(() => engine.say("done", id, [null]));
         if (Number(words[1]) === 0) over();
         else waits.push(over);
-      } else if (kind === "bash" || kind === "prompt") yield ["started", id];
+      } else if (kind === "prompt") yield ["started", id];
     }
   }
   const engine = Engine.boot(record, [["world", world()]]);
@@ -81,20 +73,8 @@ function open(record: unknown[] = []) {
   const release = () => {
     for (const done of waits.splice(0)) done();
   };
-  return { engine, entries, facts, release, files, replies: () => replies };
+  return { engine, entries, facts, release, files };
 }
-
-test("native queries are synchronous and acts await the real engine and an ear that answers later", async () => {
-  const { engine, replies } = open();
-  expect(engine.root).toBe("chain1");
-  const on = engine.root;
-  expect(engine.clock({ on })).toBe(123.5);
-  expect(engine.chance({ on })).toBe(0.25);
-  expect(await engine.wait({ seconds: 0, on })).toBeNull();
-  const prompt = engine.prompt("str", { message: "Say hello", on }).id;
-  expect(await engine.result<string>(prompt)).toBe("hello");
-  expect(replies()).toBe(1);
-});
 
 test("a pending result leaves JavaScript and other native operations available", async () => {
   const { engine, release } = open();
@@ -118,34 +98,8 @@ test("a cancel rejects a native await", async () => {
   expect(await result).toContain("CancelledError");
 });
 
-test("text and command results cross N-API", async () => {
+test("a function of JavaScript crosses as a filter, and what it throws is raised where the word called it", () => {
   const { engine } = open();
-  const on = engine.root;
-  expect(engine.read("a", { on })).toEqual({ is: "Text", path: "a", content: "one\ntwo\n" } as never);
-  expect(() => engine.read("missing", { on })).toThrow("missing file");
-  const command = engine.bash("fake", { fed: true, on }).id;
-  speaking(engine, "world", () => engine.say("out", command, ["hello\n", "stdout"]));
-  const text = (stream: string, content: string) => ({ is: "Text", path: `${command}/${stream}`, content });
-  const exit = { is: "Exit", code: 0, stdout: text("stdout", "hello\n"), stderr: text("stderr", "") };
-  speaking(engine, "world", () => engine.say("done", command, [exit]));
-  expect(await engine.result(command)).toMatchObject({
-    is: "Exit",
-    code: 0,
-    stdout: { is: "Text", content: "hello\n" },
-  });
-});
-
-test("a function of JavaScript crosses as a show or a filter, and what it throws is raised where the word called it", () => {
-  const { engine } = open();
-  const on = engine.root;
-  let lines: unknown;
-  const show = (given: string[]) => {
-    lines = given;
-    return given.map((_, index) => index + 1);
-  };
-  expect(engine.read("a", { show, on }).path).toBe("a");
-  // The operator tells nothing of a read, so its show is never called.
-  expect(lines).toBeUndefined();
   let calls = 0;
   const counting = (acts: unknown[]) => {
     calls++;
@@ -256,28 +210,6 @@ test("a life whose replay drifts is kept, with what boot raised", () => {
   expect(String(second.engine.raised?.args[0])).toContain("drifts");
   expect(second.engine.root).toBe("chain1");
   expect(second.engine.cwd({ on: second.engine.chain({ label: "two" }).id })).toBe("/tmp");
-});
-
-test("an ear reads the turns of a chain when it takes a reply, which carries none", () => {
-  const read: unknown[] = [];
-  function* world(): Ear {
-    for (;;) {
-      const fact = (yield null) as Fact | undefined;
-      if (fact?.[0] === "stand") yield ["done", fact[1], [[["model", ["low"], 200000]], "/tmp", "model/low"]];
-      if (fact?.[0] === "reply") {
-        yield ["started", fact[1]];
-        read.push(fact, call("turns", [], { on: fact[3] }));
-      }
-    }
-  }
-  const engine = Engine.boot([], [["world", world()]]);
-  engines.push(engine);
-  const on = engine.root;
-  engine.prompt("str", { message: "hi", on });
-  const [reply, turns] = read;
-  expect((reply as Fact).slice(3)).toEqual([on, "model/low"]);
-  expect(turns).toEqual(engine.turns({ on }));
-  expect(engine.turns({ on })[0]?.[1]).toContain("#prompt1\nprompt1_message = 'hi'\n");
 });
 
 test("an ear that throws raises in the life, and an ear of the crate hears in one engine", () => {

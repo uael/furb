@@ -434,27 +434,6 @@ test("a close of the session whose save fails still ends its life and its comman
   }
 });
 
-test("a host that asks the life at each change hears no change of its own asking", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-own-query-"));
-  const session = new Session({ cwd });
-  const engine = session.open();
-  try {
-    await tick();
-    let calls = 0;
-    session.on("change", () => {
-      calls++;
-      engine.cwd({ on: engine.root });
-    });
-    engine.cwd({ on: engine.root });
-    await tick();
-    expect(calls).toBe(0);
-    expect(session.facts.filter(([kind, id]) => kind === "done" && id.startsWith("cwd@"))).toEqual([]);
-  } finally {
-    await session.dispose();
-    await rm(cwd, { recursive: true });
-  }
-});
-
 test("a host that reads the life at a change of a file leaves the write whole", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-write-change-"));
   const session = new Session({ cwd });

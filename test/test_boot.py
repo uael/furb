@@ -181,7 +181,7 @@ async def test_the_engine_derives_the_transcripts_the_turns_the_globals_and_the_
   told = paragraphs(engine.turns(on=root))
   _, over = await relived(Sand(), list(sand.record))
   assert [x for x in ids(engine.transcript(over)) if engine.get(x)[2] != WORLD] == [*held, "stand2"]
-  assert all(one in paragraphs(engine.turns(on=over)) for one in told)
+  assert paragraphs(engine.turns(on=over)) == told
   assert engine.module(over)["k"] == 2 and engine.cwd(on=over) == "/deep"
 
 
@@ -205,6 +205,7 @@ async def test_what_the_module_holds_is_not_in_the_record() -> None:
   sand, _, root = await lived()
   assert engine.module(root)["k"] == 2
   assert [e for e in sand.record if 2 in e[0][3:]] == []
+  assert [e for e in sand.record if e[0][0] == "module"] == []
 
 
 async def test_the_root_is_the_first_act_of_the_record() -> None:
@@ -326,7 +327,6 @@ async def test_the_engine_serves_the_doors_of_the_file_itself_and_asks_the_world
   before = len(sand.calls)
   assert engine.read(f"{command}/stdout", on=root).content == "ran echo hi\n"
   assert engine.read(said(log, "prompt")[0][1], on=root).content == WORD
-  assert engine.transcript(root)
   assert len(sand.calls) == before
 
 
@@ -466,7 +466,9 @@ async def test_a_read_the_operator_makes_is_kept_like_any_other_act_of_the_opera
 async def test_what_it_keeps_it_says() -> None:
   """What it keeps it says, so that the World holds the record and the journal alone says what belongs in it; a World that is durable keeps what it is told, one that is not keeps nothing, and either way what the World holds is what the life after it is given."""
   sand, log, root = await lived()
-  assert [a[3] for a in said(log, "keep")] == sand.record
+  assert {a[2] for a in said(log, "keep")} == {"journal"}
+  _, over = await relived(Sand(), list(sand.record))
+  assert engine.module(over)["k"] == 2
   dead = Dead()
   await relived(dead, list(sand.record))
   assert dead.record == []

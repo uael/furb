@@ -22,7 +22,7 @@ async def test_get_gives_an_act_again_from_the_id_of_the_act() -> None:
   _, _, root = born()
   act = engine.bash("echo hi", on=root)
   again = engine.get(act)
-  assert again[:4] == ("bash", act, OPERATOR, root) and again == engine.get(act)
+  assert again == ("bash", act, OPERATOR, root, "echo hi", False, 600.0)
   assert (await act).code == 0 and engine.get(act) == again
 
 

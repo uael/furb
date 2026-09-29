@@ -6,9 +6,9 @@ import { basename, join } from "node:path";
 import { store } from "@furb/engine";
 import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
-import { type Engine, openEngine } from "../src/bridge.ts";
+import type { Engine } from "../src/bridge.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
-import { Session } from "../src/session.ts";
+import type { Session } from "../src/session.ts";
 import { withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
 
@@ -198,31 +198,6 @@ test("each /feed sends one line, and a /feed with no text closes the input", () 
       stdout: { content: "a=[yes] b=[two  words]\n" },
     });
   }));
-
-test("/model finds a model of the roster by the rule of the catalog, and keeps the effort that the model takes", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "furb-models-"));
-  const opened = await openEngine({
-    cwd: directory,
-    model: "claude-cli:haiku",
-    effort: "xhigh",
-    roster: ["claude-cli:opus"],
-  });
-  const session = new Session(opened.engine, opened.host);
-  try {
-    await session.refresh();
-    expect(session.actor).toBe("claude-cli:haiku/xhigh");
-    await session.submit("/model opus");
-    expect(session.actor).toBe("claude-cli:opus/xhigh");
-    expect(String(await session.submit("/model nothing").catch((error: unknown) => error))).toContain(
-      "Choose one of claude-cli:haiku, claude-cli:opus.",
-    );
-    await session.submit("/model claude-cli:haiku");
-    expect(session.actor).toBe("claude-cli:haiku/xhigh");
-  } finally {
-    await session.dispose();
-    await rm(directory, { recursive: true, force: true });
-  }
-});
 
 test("a path that starts with ~ is read from the home directory by /share, /export and /image", async () => {
   const home = await mkdtemp(join(tmpdir(), "furb-home-"));

@@ -1,3 +1,4 @@
+import type { CapturedFrame, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import * as stage from "../script/stage.ts";
 import { App } from "../src/app.ts";
@@ -64,4 +65,14 @@ export async function composing(
     screen.renderer.destroy();
     await library.dispose();
   }
+}
+
+/** The text, the color and the ground of the cell at a column of a row of the screen. */
+export function cellAt(frame: CapturedFrame, x: number, y: number): { text: string; fg?: RGBA; bg?: RGBA } {
+  let at = 0;
+  for (const span of frame.lines[y]?.spans ?? []) {
+    if (x < at + span.width) return { text: span.text, fg: span.fg, bg: span.bg };
+    at += span.width;
+  }
+  throw new Error(`No cell stands at column ${x} of row ${y}.`);
 }

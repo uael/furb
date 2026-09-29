@@ -103,12 +103,14 @@ async def test_an_act_is_on_the_chain_that_the_verb_names() -> None:
 
 async def test_an_act_is_on_a_chain_and_its_facts_are_on_its_scope() -> None:
   """An act is on a chain, and its facts are on its scope."""
-  _, log, _ = born()
+  _, log, root = born()
   two = await chained("two")
   act = engine.bash("echo hi", on=two)
   await settle()
   assert (said(log, "bash")[0][3], engine.scope(act)) == (two, two)
-  assert {engine.scope(one[1]) for one in log if one[1] == act} == {two}
+  facts = [one for one in log if one[1] == act]
+  assert facts and all(one in engine.transcript(two) for one in facts)
+  assert [one for one in engine.transcript(root) if one[1] == act] == []
 
 
 async def test_a_chain_is_on_no_chain_and_its_scope_is_itself() -> None:

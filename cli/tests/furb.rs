@@ -122,20 +122,6 @@ fn refused(command: Command, input: &str) -> String {
 }
 
 #[test]
-fn the_command_line_takes_four_commands_of_the_operator() {
-  let yard = Yard::new("commands");
-  let help = printed(yard.furb(&["--help"]), "");
-  for command in ["prompt", "turns", "run", "extensions"] {
-    assert!(help.contains(&format!("  {command} ")), "{help}");
-  }
-  assert_eq!(
-    ran(yard.furb(&["turns"]), "").status.code(),
-    Some(2),
-    "turns reads a record it is given"
-  );
-}
-
-#[test]
 fn a_word_its_caller_wrote_runs_on_the_root() {
   let yard = Yard::new("run");
   assert_eq!(printed(yard.furb(&["run", "k = 1\nclose(k + 1)"]), ""), "2\n");
@@ -159,6 +145,11 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let stands = kinds.iter().filter(|kind| *kind == "\"stand\"").count();
   assert_eq!(stands, 2, "each life that keeps keeps its stand: {kinds:?}");
   let before = fs::read(yard.record()).expect("the record");
+  assert_eq!(
+    ran(yard.furb(&["turns"]), "").status.code(),
+    Some(2),
+    "turns reads a record it is given"
+  );
   let elsewhere = yard.at.join("elsewhere");
   fs::create_dir_all(&elsewhere).expect("another directory, whose configs turn the extensions on");
   let mut turns = yard.furb(&["turns", "--record"]);
@@ -510,8 +501,7 @@ fn a_life_offers_the_model_of_its_default_actor_and_the_models_it_names_and_no_m
   let (roster, actor) = names(&mut client);
   assert_eq!(roster, ["claude-cli:sonnet", "claude-cli:haiku", "operator"]);
   assert_eq!(actor, "claude-cli:sonnet/high");
-  let refused =
-    client.data("2", json!({"type": "prompt", "message": "hi", "shape": "str", "to": "opus"}));
+  let refused = client.data("2", json!({"type": "prompt", "to": "opus"}));
   let prompt = refused["act"].as_str().expect("the act").to_owned();
   assert_eq!(client.done(&prompt)["raised"]["is"], "Refused", "the roster holds no opus");
 }
@@ -559,12 +549,6 @@ fn a_command_that_does_nothing_says_why() {
     "No act is named bash9."
   );
   assert_eq!(client.asked("4", json!({"type": "rung", "word": 1}))["error"], "word is no string.");
-  assert_eq!(client.asked("5", json!({"type": "prompt", "to": "nobody"}))["success"], true);
-  let done = client.done("prompt1");
-  assert_eq!(
-    done["raised"]["is"], "Refused",
-    "a prompt to no actor of the roster is refused: {done}"
-  );
 }
 
 #[test]

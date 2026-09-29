@@ -318,7 +318,7 @@ test("the keys of the footer and the palette answer the mouse, and a drag over a
       // A drag over the heading of a card selects its text and leaves the card as it was.
       const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
       const heading = card?.getChildren()[0];
-      if (!card || !heading) throw new Error("No rung in the feed.");
+      if (!card || !(heading instanceof TextRenderable)) throw new Error("No rung in the feed.");
       const open = card.getChildren().length;
       await screen.mockMouse.drag(heading.x, heading.y, heading.x + 6, heading.y);
       await frame();
@@ -328,7 +328,9 @@ test("the keys of the footer and the palette answer the mouse, and a drag over a
           .find((node) => node.id === card.id)
           ?.getChildren().length,
       ).toBe(open);
-      expect(screen.renderer.getSelection()?.getSelectedText()).toBeTruthy();
+      const selected = screen.renderer.getSelection()?.getSelectedText() ?? "";
+      expect(selected.length).toBeGreaterThan(0);
+      expect(heading.plainText).toContain(selected);
       expect(session.notice).toStartWith("Copied");
       // A rung that is over starts folded to its heading, and a click on the heading opens it.
       expect(open).toBe(1);

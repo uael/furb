@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, chained, paragraphs, prompted, said, settle, slow, stalled
+from conftest import born, chained, paragraphs, posed, prompted, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -21,9 +21,7 @@ async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
 
 async def test_the_close_of_the_operator_enters_the_record_as_a_fact_of_its_own() -> None:
   """The close of the operator enters the record as a fact of its own."""
-  sand, _, root = born()
-  act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
-  await settle()
+  sand, _, _, act = await posed()
   engine.close(21, act)
   await settle()
   kept = [fact for fact, *_ in sand.record if fact[0] == "close"]
@@ -40,9 +38,7 @@ async def test_a_close_ends_the_rung_of_a_prompt_at_its_next_await() -> None:
 
 async def test_the_operator_closes_a_prompt_of_shape_none_with_none() -> None:
   """The operator closes a prompt of shape None with None."""
-  _, _, root = born()
-  act = engine.prompt(None, "look at this", to=OPERATOR, on=root)
-  await settle()
+  _, _, _, act = await posed(None, "look at this")
   engine.close(None, act)
   await settle()
   assert engine.peek(act, ...) is not ... and (await act) is None
@@ -94,9 +90,7 @@ async def test_close_is_given_the_result_of_a_pending_act_and_the_id_of_that_act
 
 async def test_an_exception_closes_a_prompt_with_that_exception() -> None:
   """An exception closes a prompt with that exception."""
-  _, _, root = born()
-  act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
-  await settle()
+  _, _, _, act = await posed()
   engine.close(ValueError("boom"), act)
   await settle()
   got = engine.peek(act)
@@ -105,9 +99,7 @@ async def test_an_exception_closes_a_prompt_with_that_exception() -> None:
 
 async def test_the_close_of_the_operator_stands_in_the_transcript_with_the_name_of_the_operator() -> None:
   """The close of the operator stands in the transcript with the name of the operator."""
-  _, _, root = born()
-  act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
-  await settle()
+  _, _, root, act = await posed()
   engine.close(21, act)
   await settle()
   held = engine.transcript(root)
@@ -120,9 +112,7 @@ async def test_the_close_of_the_operator_stands_in_the_transcript_with_the_name_
 
 async def test_a_prompt_completes_with_the_exception_that_the_word_of_the_prompt_gave_to_close() -> None:
   """A prompt completes with the exception that the word of the prompt gave to close."""
-  sand, _, root = born()
-  waiting = engine.prompt(int, "count", to=OPERATOR, on=root)
-  await settle()
+  sand, _, root, waiting = await posed(int, "count")
   sand.script[root] = [f"close(ValueError('boom'), {waiting!r})\nclose(1)"]
   act = engine.prompt(int, "close it", on=root)
   await settle()

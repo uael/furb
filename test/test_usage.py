@@ -7,13 +7,16 @@ USAGE = (80000, 30, 200, 10, 1.5)
 """The usage of one answer: the words read and written, those read again and kept, and the dollars."""
 
 
-def test_what_one_answer_of_a_model_cost() -> None:
+async def test_what_one_answer_of_a_model_cost() -> None:
   """What one answer of a model cost: the words it read and wrote, of which the words it read again and the words it kept to read again, and its dollars."""
-  words, wrote, again, kept, usd = USAGE
-  assert (words, wrote) == (80000, 30)
-  assert (again, kept) == (200, 10)
-  assert usd == 1.5
-  assert len(USAGE) == 5
+  _, _, root = born("close(1)", cost=USAGE)
+  engine.grant(usd=10.0, on=root)
+  assert await engine.prompt(int, "count", on=root) == 1
+  got = engine.turns(on=root)
+  assert got[1][2] == USAGE
+  assert [one for one in paragraphs(got) if one.startswith("#grant1 ledger")] == [
+    "#grant1 ledger\ngrant1_spent = 1.5\ngrant1_filled = 0.2"
+  ]
 
 
 async def test_a_usage_holds_the_token_counts_and_the_dollars_of_one_model_response() -> None:
@@ -34,7 +37,6 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
     "#grant1 ledger\ngrant1_spent = 1.5\ngrant1_filled = 0.2",
     "#grant1 ledger\ngrant1_spent = 3.0\ngrant1_filled = 0.2",
   ]
-  assert engine.offered(STANDS[0], "m/low") == 400000 and USAGE[0] / 400000 == 0.2
   engine.cancel(ceiling)
   _, _, root = born("close(2)", cost=USAGE)
   asked = engine.prompt(int, "count", on=root)
@@ -51,7 +53,6 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   heard, _ = await relived(Sand(stands=wider, cost=USAGE), list(first.record))
   step = said(heard, "rung")[0]
   assert step[6] == "m/low" and [a[1] for a in said(heard, "stand")] == ["stand1", "stand2"]
-  assert engine.offered(wider[0], "m/low") == 800000
   share = engine.grant(share=0.9, on=root)
   (asked,) = [a for a in engine.transcript(root) if a[0] == "reply"]
   world_says("done", asked[1], ("assistant", "close(3)", USAGE, None))

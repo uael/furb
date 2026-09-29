@@ -1,6 +1,6 @@
 """pause, which holds what the acts it is over hear until the wake."""
 
-from conftest import born, chained, heads, paragraphs, ran, said, settle, slow, stalled, world_says
+from conftest import born, chained, heads, hushed, paragraphs, ran, said, settle, slow, stalled, world_says
 from furb import engine
 
 
@@ -45,10 +45,7 @@ async def test_pause_is_given_the_id_of_a_pending_act_or_the_id_of_a_chain() -> 
 
 async def test_a_pause_stops_no_reply_in_flight_the_reply_returns() -> None:
   """A pause stops no reply in flight: the reply returns."""
-  _, log, root = born("close(7)")
-  act = engine.prompt(int, "count", on=root)
-  engine.pause(root)
-  await settle()
+  _, log, root, act = await hushed("close(7)")
   assert [one[1] for one in said(log, "done") if one[1].startswith("reply")] == [said(log, "reply")[0][1]]
   assert engine.peek(act, ...) is ...
   engine.wake(root)
@@ -58,10 +55,7 @@ async def test_a_pause_stops_no_reply_in_flight_the_reply_returns() -> None:
 
 async def test_a_paused_chain_goes_quiet_as_its_in_flight_work_returns() -> None:
   """A paused chain goes quiet as its in-flight work returns."""
-  _, log, root = born("a = 1", "close(a + 1)")
-  act = engine.prompt(int, "count", on=root)
-  engine.pause(root)
-  await settle()
+  _, log, _, act = await hushed("a = 1", "close(a + 1)")
   quiet = len(log)
   await settle()
   assert len(log) == quiet and len(said(log, "reply")) == 1

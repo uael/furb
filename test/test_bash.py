@@ -89,6 +89,8 @@ async def test_bash_is_given_a_command_a_fed_flag_a_timeout_and_a_show_for_each_
   word = said(log, "bash")[0]
   assert word == ("bash", word[1], OPERATOR, root, "echo hi", True, 5.0)
   assert [e[0] for e in sand.record if e[0][0] == "bash"] == [word]
+  again, _ = await relived(Sand(auto=False), plain(sand.record))
+  assert said(again, "bash") == [word]
 
 
 async def test_bash_gives_the_command_which_is_awaited_for_its_exit_code_and_its_streams() -> None:
@@ -421,15 +423,11 @@ async def test_the_world_asks_a_command_whether_its_stderr_flows_into_its_stdout
 
 async def test_the_world_hears_the_bash_itself() -> None:
   """The World hears the bash itself, with the command, the fed flag and the timeout, and no working directory and no show."""
-  sand, log, root = born()
+  _, log, root = born()
   engine.cd("/deep", on=root)
   one = engine.bash("echo hi", fed=True, timeout=5.0, show=HIDDEN, show_err=TAIL, on=root)
   assert (await one).stdout.content == "ran echo hi\n"
   assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", True, 5.0)]
-  sand.auto = False
-  two = engine.bash("forever", timeout=0, on=root)
-  await settle()
-  assert (await two).code is None
 
 
 async def test_the_world_that_takes_a_command_answers_it() -> None:

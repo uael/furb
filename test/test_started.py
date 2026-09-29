@@ -1,16 +1,19 @@
 """Started, what an ear says to take an act whose done comes later."""
 
-from conftest import WORLD, Sand, born, plain, relived, said, settle, slow
+from conftest import WORLD, Sand, born, keeping, life, plain, relived, said, settle, sown
 from furb import engine
 from furb.engine import Act, Exit
 
 
 async def test_what_an_ear_says_to_take_an_act_whose_done_comes_later() -> None:
   """What an ear says to take an act whose done comes later, and which no ear after it hears."""
-  sand, log, root, act = slow()
+  after: list[tuple] = []
+  log, root = life(sown(auto=False), after=keeping(after))
+  act = engine.bash("slow", on=root)
   assert said(log, "started")[-1] == ("started", act, WORLD) and engine.peek(act, ...) is ...
   step = engine.rung("k = 1", on=root)
-  assert ("started", step, step) in log and said(sand.calls, "rung") == []
+  assert ("started", step, step) in log and ("started", act, WORLD) in after
+  assert engine.get(act) not in after and engine.get(step) not in after
 
 
 async def test_the_started_names_the_act_and_says_no_more_of_it() -> None:

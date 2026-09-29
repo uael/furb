@@ -12,9 +12,12 @@ from conftest import (
   chained,
   counted,
   dones,
+  findings,
   fresh,
   gated,
+  keeping,
   kept,
+  life,
   of,
   opened,
   paragraphs,
@@ -201,15 +204,19 @@ async def test_a_rung_may_await_at_its_top_level() -> None:
 
 async def test_a_rung_answers_the_prompt_of_its_chain_with_close() -> None:
   """A rung answers the prompt of its chain with close, wherever in its word the close is said."""
-  _, _, root = born()
-  assert await engine.rung("close(21)", on=root) == 21
+  _, _, root = born("def answer():\n  close(21)\n\nanswer()\nclose(0)", "x = wait(0)\nawait x\nclose(22)")
+  assert await engine.rung("close(20)", on=root) == 20
+  assert await engine.prompt(int, "close from a function", on=root) == 21
+  assert await engine.prompt(int, "close after an await", on=root) == 22
 
 
 async def test_the_kernel_gives_nothing_for_a_word_that_ran_to_its_end() -> None:
   """The Kernel gives nothing for a word that ran to its end, since a word that answers says a close and stops there."""
   _, log, root = born()
-  await engine.rung("close(21)", on=root)
-  assert [isinstance(a[3], CancelledError) for a in dones(log, "run")] == [False, True]
+  await engine.rung("k = 21", on=root)
+  await engine.rung("close(k)", on=root)
+  got = [a[3] for a in dones(log, "run")]
+  assert got[:3] == [None, None, None] and isinstance(got[3], CancelledError) and len(got) == 4
 
 
 async def test_the_kernel_gives_what_a_word_raised() -> None:
@@ -222,8 +229,6 @@ async def test_the_kernel_gives_what_a_word_raised() -> None:
   with pytest.raises(ValueError, match="boom"):
     await hurt
   assert isinstance(dones(log, "run")[3][3], ValueError)
-  with pytest.raises(SyntaxError, match="'return' outside function"):
-    compile("return 1", "<rung>", "exec")
   broken = engine.rung("k = (", on=root)
   with pytest.raises(Refused):
     await broken
@@ -236,6 +241,11 @@ async def test_the_kernel_gives_what_a_word_raised() -> None:
     "raise ValueError('boom')",
     f"{raised}\n\n{written(broken, 'k = (')}",
   ]
+  back = engine.rung("return 1", on=root)
+  with pytest.raises(Refused):
+    await back
+  assert gated(log)[-1] == "return 1" and [one.split(":")[0] for one in findings(log)[-1]] == ["line 1"]
+  assert "return 1" not in ran(log)
 
 
 async def test_the_word_of_a_rung_runs_to_its_next_await_and_continues_when_the_close_it_awaits_comes() -> None:
@@ -506,11 +516,12 @@ async def test_what_a_rung_that_retells_asks_is_named_under_the_one_it_retells()
 
 async def test_a_rung_takes_its_own_act() -> None:
   """A rung takes its own act, since the engine is the one that runs it."""
-  sand, log, root = born()
+  after: list[tuple] = []
+  log, root = life(sown(), after=keeping(after))
   act = engine.rung("k = 1", on=root)
   await act
   assert [(a[1], a[2]) for a in said(log, "started") if a[1] == act] == [(act, act)]
-  assert [a for a in sand.calls if a[1] == act] == []
+  assert ("started", act, act) in after and engine.get(act) not in after
 
 
 async def test_a_rung_with_no_word_holds_the_word_of_its_model_when_the_reply_for_it_is_done() -> None:

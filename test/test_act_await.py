@@ -5,9 +5,9 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import acts, born, heads, paragraphs, said, settle, slow, stalled
+from conftest import born, heads, paragraphs, posed, said, settle, slow, stalled
 from furb import engine
-from furb.engine import OPERATOR, Exit, Text
+from furb.engine import Exit, Refused, Text
 
 
 async def test_to_await_an_act_gives_the_value_of_the_act_when_the_act_completes() -> None:
@@ -34,17 +34,16 @@ async def test_a_rung_that_awaits_an_act_reads_the_result_of_the_act() -> None:
 
 async def test_a_rung_awaits_an_act_and_nothing_else() -> None:
   """A rung awaits an act and nothing else."""
-  _, log, _, one, _, command = await stalled()
+  _, log, root, one, _, command = await stalled()
   assert [a[4] for a in said(log, "wants")] == [command]
-  assert {a[4] for a in said(log, "wants")} <= set(acts(log))
   engine.cancel(one)
+  with pytest.raises(Refused, match="a rung awaits an act, and 1 is none"):
+    await engine.rung("class Nothing:\n  def __await__(self):\n    yield 1\n\nawait Nothing()", on=root)
 
 
 async def test_to_await_an_act_raises_the_exception_that_the_act_completed_with() -> None:
   """To await an act raises the exception that the act completed with."""
-  _, _, root = born()
-  one = engine.prompt(int, "how many?", to=OPERATOR, on=root)
-  await settle()
+  _, _, _, one = await posed()
   engine.close(ValueError("boom"), one)
   with pytest.raises(ValueError, match="boom"):
     await one

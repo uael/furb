@@ -25,6 +25,7 @@ from conftest import (
   named,
   opened,
   paragraphs,
+  posed,
   prompted,
   ran,
   relived,
@@ -260,6 +261,8 @@ async def test_a_chain_its_module_which_is_the_engine_itself_named_for_the_chain
   _, over = life(Sand(), list(sand.record))
   await settle(300)
   assert engine.module(over)["k"] == 21
+  own = await engine.rung("close(chain('own', source=__name__))", on=over)
+  assert isinstance(own, str) and engine.get(own)[4:] == ("own", over)
 
 
 async def test_a_chain_is_chain_n_whether_boot_or_chain_opened_it_and_the_root_is_chain1() -> None:
@@ -311,9 +314,7 @@ async def test_the_transcript_of_a_chain_is_the_facts_on_it_in_the_order_it_hear
 
 async def test_nothing_leaves_a_transcript_once_the_transcript_holds_it() -> None:
   """Nothing leaves a transcript once the transcript holds it."""
-  _, _, root = born()
-  one = engine.prompt(int, "how many?", to=OPERATOR, on=root)
-  await settle()
+  _, _, root, one = await posed()
   was = list(engine.transcript(root))
   engine.cancel(one)
   await settle()
@@ -428,6 +429,8 @@ async def test_a_chain_holds_every_fact_on_it_and_an_act_on_another_chain_is_tha
   await settle()
   theirs = said(log, "prompt")[-1]
   held, ours = engine.transcript(two), engine.transcript(root)
+  on_two = [a for a in log if (a[3] if engine.question(a) else engine.scope(a[1])) == two]
+  assert sorted(lasting(held), key=repr) == sorted(lasting(on_two), key=repr)
   assert theirs in held
   assert theirs not in ours
 
@@ -1080,8 +1083,13 @@ async def test_the_gate_never_reads_a_told_rung_as_a_word() -> None:
 async def test_the_turns_do_not_show_a_told_rung() -> None:
   """The turns do not show a told rung, since the turn shows its python already."""
   _, _, root, first, second = await told_read()
-  turns = engine.turns(on=root)
-  assert f"{first}_told" not in turns and f"{second}_told" not in turns
+  assert paragraphs(engine.turns(on=root)) == [
+    opened(root, "root"),
+    takes(root),
+    written(first, "t = read('a.txt')"),
+    "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>",
+    written(second, "got = read1_text"),
+  ]
 
 
 async def test_a_told_rung_is_no_act() -> None:

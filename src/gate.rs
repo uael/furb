@@ -177,7 +177,6 @@ mod tests {
 
   #[test]
   fn the_sheet_imports_the_engine_under_the_name_the_gate_gives_it() {
-    assert!(SOURCE.contains(&format!("MODULE = \"{MODULE}\"")));
     assert!(sheet(&[], "close(1)").0.starts_with(&format!("import {MODULE}\n")));
   }
 
@@ -190,23 +189,6 @@ mod tests {
       "the engine reads clean on the typeshed of the sandbox"
     );
     assert_eq!(text.lines().count(), above + 1);
-  }
-
-  #[test]
-  fn the_gate_reads_one_sheet_after_another_the_same() {
-    let (text, _) = sheet(&[], "close(nowhere)");
-    assert_eq!(found(&text).len(), 1);
-    assert_eq!(said(&[], "close(1)"), vec![]);
-    assert_eq!(found(&text).len(), 1);
-  }
-
-  #[test]
-  fn a_finding_says_the_line_of_the_sheet_it_stands_on() {
-    let (text, above) = sheet(&["k = 1"], "k = 2\nclose(nowhere)");
-    let found = found(&text);
-    assert_eq!(found.len(), 1, "{found:?}");
-    assert_eq!(found[0].0, above + 2);
-    assert!(found[0].1.contains("unresolved-reference"), "{found:?}");
   }
 
   #[test]

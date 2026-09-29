@@ -1,6 +1,6 @@
 """tell, what a question answered now tells of itself."""
 
-from conftest import born, named, paragraphs, said, settle
+from conftest import NUMS, born, named, paragraphs, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Text
 
@@ -60,19 +60,7 @@ async def test_the_question_that_tell_names_is_the_last_one_of_its_kind_on_its_c
 
 async def test_a_text_is_told_by_the_lines_that_its_show_picks_under_the_word_text() -> None:
   """A text is told by the lines that its show picks, under the word text, and any other answer under the word value."""
-  word = (
-    "def kept(id):\n"
-    "  while True:\n"
-    "    match (yield):\n"
-    "      case ('read', qid, _, _, path) if path.startswith('nums://'):\n"
-    "        yield 'done', qid, [1, 2]\n"
-    "\n"
-    "act('nums', '', kept)\n"
-    "read('nums://a')\n"
-    "read('a.txt', span(2, 2))\n"
-    "close(1)"
-  )
-  _, _, root = born(word)
+  _, _, root = born(NUMS + "read('nums://a')\nread('a.txt', span(2, 2))\nclose(1)")
   assert await engine.prompt(int, "a door of my own", on=root) == 1
   await settle()
   assert [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#read")] == [
