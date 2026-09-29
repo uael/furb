@@ -588,6 +588,24 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     expect(lines.find((line) => line.includes("A second message."))).toMatch(/A second message\. +closed/);
   }));
 
+test("a word that a model fixed in the text of its thread speaks as that model, under the heading of its words", () =>
+  composing(
+    async ({ session, frame }) => {
+      await session.submit("Give me an answer in a fence, fixed in place.");
+      const thread = session.thread;
+      await until(session, () => session.acts.some((act) => act.id === thread && act.done));
+      await idle(session);
+      await session.refresh();
+      await session.open(thread);
+      const lines = (await frame()).split("\n");
+      const heads = lines.flatMap((line) => /^\s*\S (sonnet|You)\b/.exec(line)?.[1] ?? []);
+      expect(heads).toEqual(["sonnet"]);
+      expect(lines.some((line) => line.includes("Answer in a fence, as the message asks"))).toBe(true);
+    },
+    { width: 140, height: 44 },
+    true,
+  ));
+
 test("a word that the gate refused and that a later word of the same thread replaced folds, and reads as retried", () =>
   composing(
     async ({ session, frame }) => {
@@ -601,6 +619,13 @@ test("a word that the gate refused and that a later word of the same thread repl
       expect(shown).toContain("The gate refused this word, and the next took its place.");
       expect(shown).not.toContain("failed");
       expect(shown).not.toContain("Got unexpected token");
+      // The line stands under the text of the steps of the word, after its fold.
+      const column = (text: string) =>
+        shown
+          .split("\n")
+          .find((line) => line.includes(text))
+          ?.indexOf(text);
+      expect(column("The gate refused this word")).toBe(column("Answer in a fence, as the message asks"));
     },
     { width: 140, height: 44 },
     true,

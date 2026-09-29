@@ -155,6 +155,8 @@ export class Session extends EventEmitter {
   actor: string;
   sessionName: string;
   acts: ActRow[] = [];
+  /** The act that asked each step, as a read, which is no act of its own. */
+  readonly asked = new Map<string, string>();
   turns: Turn[] = [];
   /** The usage of each answer of the chain itself, which the turns of a chain with a source do not tell apart. */
   answers: Usage[] = [];
@@ -293,7 +295,7 @@ export class Session extends EventEmitter {
       do {
         this.dirty = false;
         const selected = this.selected;
-        const { acts, count, ...snapshot } = await this.host.snapshot(selected, this.counted);
+        const { acts, asked, count, ...snapshot } = await this.host.snapshot(selected, this.counted);
         if (this.selected !== selected) {
           this.dirty = true;
           continue;
@@ -305,6 +307,7 @@ export class Session extends EventEmitter {
           for (const act of acts) rows.set(act.id, act);
           this.acts = [...rows.values()];
         }
+        for (const [step, by] of asked) this.asked.set(step, by);
         this.counted = count;
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
         const choice = this.choices.get(selected);

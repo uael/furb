@@ -183,8 +183,8 @@ export function hexes(name: ThemeName): Record<keyof Colors, string> {
   ) as Record<keyof Colors, string>;
 }
 /** The colors of code and of markdown. Code takes the hues of the roles: a keyword the model, a call the operator, a
- * string what is done, a number what needs a look, and a comment the chrome. No style is bold: bold goes to who speaks,
- * the selected thread, and what Enter does. */
+ * string what is done, a number what needs a look, and a comment the chrome. Of code, no style is bold. Of markdown, a
+ * heading and a strong span are bold, as their writer meant them to stand out. */
 export function syntax(): SyntaxStyle {
   return SyntaxStyle.fromStyles({
     default: { fg: theme.bright },
@@ -199,15 +199,15 @@ export function syntax(): SyntaxStyle {
     diagnostic: { fg: theme.warm, bg: theme.removed, underline: true },
     matching: { fg: theme.operator, bg: theme.selected },
     conceal: { fg: theme.faint },
-    "markup.heading": { fg: theme.bright },
+    "markup.heading": { fg: theme.bright, bold: true },
     // A heading takes the style of its level, and no level falls back to the style of a heading.
-    "markup.heading.1": { fg: theme.bright },
-    "markup.heading.2": { fg: theme.bright },
-    "markup.heading.3": { fg: theme.bright },
-    "markup.heading.4": { fg: theme.prose },
-    "markup.heading.5": { fg: theme.prose },
-    "markup.heading.6": { fg: theme.prose },
-    "markup.strong": { fg: theme.bright },
+    "markup.heading.1": { fg: theme.bright, bold: true },
+    "markup.heading.2": { fg: theme.bright, bold: true },
+    "markup.heading.3": { fg: theme.bright, bold: true },
+    "markup.heading.4": { fg: theme.prose, bold: true },
+    "markup.heading.5": { fg: theme.prose, bold: true },
+    "markup.heading.6": { fg: theme.prose, bold: true },
+    "markup.strong": { fg: theme.bright, bold: true },
     "markup.italic": { fg: theme.prose, italic: true },
     "markup.strikethrough": { fg: theme.faint },
     "markup.list": { fg: theme.faint },

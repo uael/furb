@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { display, imageContent, imageReferences } from "@furb/engine";
 import { Marked } from "marked";
-import { conversation, type Note } from "./conversation.ts";
+import { conversation, type Note, notesOf } from "./conversation.ts";
 import { escaped } from "./format.ts";
 import type { Session } from "./session.ts";
 import { palettes } from "./theme.ts";
@@ -31,11 +31,11 @@ const prose = (text: string) => markdown.parse(text, { async: false });
 export function shareHtml(session: Session): string {
   const theme = palettes[session.theme];
   const sections: string[] = [];
-  for (const item of conversation(session.turns, session.acts)) {
+  for (const item of conversation(session.turns, session.acts, session.asked)) {
     if (item.type === "word")
       sections.push(
         `<section><h2>Python</h2><pre><code>${escaped(item.code)}</code></pre></section>`,
-        ...item.notes.map(noteHtml),
+        ...notesOf(item).map(noteHtml),
       );
     else if (item.type === "thread") {
       const message = String(item.act.words[1] ?? "");
@@ -77,13 +77,13 @@ function noteMarkdown(note: Note): string[] {
 
 export function shareMarkdown(session: Session): string {
   const lines = [`# ${session.sessionName}`, "", `Chain: ${session.label}`, ""];
-  for (const item of conversation(session.turns, session.acts)) {
+  for (const item of conversation(session.turns, session.acts, session.asked)) {
     if (item.type === "word")
       lines.push(
         "## Python",
         ...fenced(item.code, "python"),
         "",
-        ...item.notes.flatMap((note) => noteMarkdown(note)),
+        ...notesOf(item).flatMap((note) => noteMarkdown(note)),
       );
     else if (item.type === "thread") {
       const message = String(item.act.words[1] ?? "");

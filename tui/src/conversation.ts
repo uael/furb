@@ -17,19 +17,25 @@ export type Note = { key: string; label: string; detail: string; body: string; a
 /** One thing the conversation shows, read off the python of the turns of a chain.
  *
  * - `word`: a word, which an assistant turn holds, or which the open of a rung its caller wrote binds as rungN_word,
- *   with the rung it is the word of, each act that the word made, and what those acts and the queries of its run
- *   told after it.
+ *   with the rung it is the word of, and what came of it in the order the chain told it: each act that the word made,
+ *   at its first paragraph, and what those acts and the queries of its run told.
  * - `thread`: the open of a thread, which tells its markdown.
  * - `result`: the close of a thread, and whether other threads closed in the same turn.
  * - `act`: an act that no word made, as a command of the operator, with what it told of itself.
  * - `note`: any other paragraph that no word holds.
  */
 export type Item =
-  | { type: "word"; key: string; code: string; rung?: ActRow; acts: ActRow[]; notes: Note[] }
+  | { type: "word"; key: string; code: string; rung?: ActRow; told: (ActRow | Note)[] }
   | { type: "thread"; key: string; act: ActRow }
   | { type: "result"; key: string; act: ActRow; parallel: boolean }
   | { type: "act"; key: string; act: ActRow; notes: Note[] }
   | ({ type: "note" } & Note);
+
+type Word = Extract<Item, { type: "word" }>;
+/** The acts that a word made, in the order it made them. */
+export const actsOf = (word: Word): ActRow[] => word.told.filter((one): one is ActRow => "id" in one);
+/** What a word and its acts told, in order. */
+export const notesOf = (word: Word): Note[] => word.told.filter((one): one is Note => !("id" in one));
 
 /** The headers that tell how an act ended, which the card of the act shows as its state. */
 const ENDS = ["closed", "exited", "cancelled"];
@@ -53,18 +59,23 @@ export function isNote(word: string): boolean {
 export const operatorNote = (act: ActRow) =>
   act.kind === "rung" && act.by === OPERATOR && isNote(String(act.words[0] ?? ""));
 
-/** What the conversation of a chain shows, in the order of its turns. */
-export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): Item[] {
+/** What the conversation of a chain shows, in the order of its turns, with the act that asked each step, such as a
+ * read, which is no act of its own. */
+export function conversation(
+  turns: readonly Turn[],
+  acts: readonly ActRow[],
+  asked: ReadonlyMap<string, string>,
+): Item[] {
   const rows = new Map(acts.map((act) => [act.id, act]));
   const items: Item[] = [];
   const seen = new Set<string>();
   /** The item of each word by its rung, and of each act that no word made, which take what their acts tell. */
-  const words = new Map<string, Extract<Item, { type: "word" }>>();
+  const words = new Map<string, Word>();
   const owned = new Map<string, Extract<Item, { type: "act" }>>();
-  let last: Extract<Item, { type: "word" }> | undefined;
+  let last: Word | undefined;
   let rung: ActRow | undefined;
   const word = (key: string, code: string, of?: ActRow) => {
-    const item: Extract<Item, { type: "word" }> = { type: "word", key, code, rung: of, acts: [], notes: [] };
+    const item: Word = { type: "word", key, code, rung: of, told: [] };
     items.push(item);
     if (of) words.set(of.id, item);
     last = item;
@@ -82,14 +93,21 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
     for (const [part, paragraph] of told.entries()) {
       const key = `turn-${index}-${part}`;
       const act = rows.get(paragraph.name);
-      if (act && !fromOperator(act, rows)) continue;
+      const asker = rows.get(asked.get(paragraph.name) ?? "");
+      const source = act ?? asker;
+      if (source && !fromOperator(source, rows)) continue;
       const [head = "", ...rest] = paragraph.words.split(" ");
-      // A note goes to the act that no word made, to the word of its rung, or to the word that made its act, or else,
-      // for a query of a run, to the word that ran last.
+      // A note goes to the act that no word made, to the word of its rung, to the word that made its act or asked its
+      // step, or, for a paragraph whose maker the life does not say, to the word that ran last.
       const note = () => {
         const one = noted(key, paragraph, act, head, rest.join(" "));
-        const holder = act ? (owned.get(act.id) ?? words.get(act.id) ?? words.get(act.by)) : last;
-        if (holder) holder.notes.push(one);
+        const holder = act
+          ? (owned.get(act.id) ?? words.get(act.id) ?? words.get(act.by))
+          : asked.has(paragraph.name)
+            ? words.get(asker?.id ?? "")
+            : last;
+        if (holder?.type === "word") holder.told.push(one);
+        else if (holder) holder.notes.push(one);
         else items.push({ type: "note", ...one });
       };
       if (head === "ledger") continue;
@@ -118,7 +136,7 @@ export function conversation(turns: readonly Turn[], acts: readonly ActRow[]): I
       } else if (act && (opens(paragraph) || ENDS.includes(head))) {
         if (!seen.has(act.id)) {
           const maker = words.get(act.by);
-          if (maker) maker.acts.push(act);
+          if (maker) maker.told.push(act);
           else {
             const item: Extract<Item, { type: "act" }> = { type: "act", key: act.id, act, notes: [] };
             items.push(item);
@@ -217,10 +235,12 @@ export class Threads {
   on(chain: string): ActRow[] {
     return this.acts.filter((act) => act.on === chain && this.listed(act));
   }
-  /** Who speaks in a word: the actor of its rung, or the one who wrote the word that made it, or the operator. */
+  /** Who speaks in a word: the actor of its rung, or of the nearest rung or thread among the acts that made it, or the
+   * operator. A word that a model wrote into the text of its thread, as the fix of a word the gate refused, runs as a
+   * rung of that thread with no actor of its own, and it is the word of the actor of the thread. */
   speaker(rung: ActRow): string {
     for (let at: ActRow | undefined = rung; at; at = this.rows.get(at.by))
-      if (at.kind === "rung" && at.words[2]) return String(at.words[2]);
+      if (["rung", "thread"].includes(at.kind) && at.words[2]) return String(at.words[2]);
     return OPERATOR;
   }
   private holderOfNote(note: ActRow): string | undefined {

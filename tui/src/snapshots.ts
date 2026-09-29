@@ -103,10 +103,11 @@ export class Snapshots {
       this.entries = this.session.entries.length;
       this.dispatched = [...queueDispatches(this.session.entries).keys()];
     }
-    const { acts, count } = this.session.activity.since(since);
+    const { acts, asked, count } = this.session.activity.since(since);
     return {
       selected,
       acts: acts.map(row),
+      asked,
       count,
       paused: this.session.isPaused(selected) || this.session.pending.size > 0,
       dispatched: this.dispatched,

@@ -13,6 +13,8 @@ export interface Snapshot {
   roster: [string, string[], number][];
   /** The acts that changed after the count the session asked with. */
   acts: ActRow[];
+  /** The steps asked after the count the session asked with, each with the act that asked it. */
+  asked: [string, string][];
   /** The count of changes of the act table that the acts are read at. */
   count: number;
   selected: string;

@@ -329,6 +329,7 @@ test("/extensions lists what a life runs, and a cancel of the work of a chain le
         expect(shown).not.toContain("running");
         expect(shown).not.toContain("def memory");
         expect(shown).not.toContain("def skills");
+        expect(shown).not.toContain("skills://");
         expect(shown).not.toContain("remember");
       },
       { width: 140, height: 42 },

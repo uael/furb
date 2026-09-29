@@ -22,9 +22,11 @@ session does and offers the keys that act now, each a button that does what its 
 Each message that you send starts a thread, and the feed shows that thread. Your message stands in a panel. Under the
 name of the model, each word that the model wrote shows as its steps: the comments of the word, `#` and one line of
 markdown each, which say what the lines under them do. The feed shows no name of an act. A word folds to its steps,
-which `▸` marks, and a click on a step opens its Python and what each act that it made came to, which `▾` marks. The
+which `▸` marks, and under them each command that it ran, with the last line that the command printed. A click on a
+step opens its Python and what each act that it made came to, in the order that it made them, which `▾` marks. The
 fold stays the same across views and after a reopen, and `/autocollapse` turns the automatic fold off, and on again.
-Under the steps of a word stands the diff of each file that its writes changed. The answer of the thread comes last.
+Under the steps of a word stands the diff of each file that its writes changed, with `⋯` where the diff leaves out
+lines between two changes. The answer of the thread comes last.
 A right click on a word inspects it, edits its program, or branches after it.
 
 ![Feed](screenshots/02-feed.png)

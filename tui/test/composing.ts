@@ -68,10 +68,15 @@ export async function composing(
 }
 
 /** The text, the color and the ground of the cell at a column of a row of the screen. */
-export function cellAt(frame: CapturedFrame, x: number, y: number): { text: string; fg?: RGBA; bg?: RGBA } {
+export function cellAt(
+  frame: CapturedFrame,
+  x: number,
+  y: number,
+): { text: string; fg?: RGBA; bg?: RGBA; attributes: number } {
   let at = 0;
   for (const span of frame.lines[y]?.spans ?? []) {
-    if (x < at + span.width) return { text: span.text, fg: span.fg, bg: span.bg };
+    if (x < at + span.width)
+      return { text: span.text, fg: span.fg, bg: span.bg, attributes: span.attributes };
     at += span.width;
   }
   throw new Error(`No cell stands at column ${x} of row ${y}.`);

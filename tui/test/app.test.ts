@@ -56,8 +56,18 @@ test("the real native life drives the feed, the transcript, and responsive views
       await frame();
       expect(screen.captureCharFrame()).toContain("exit 0");
       expect(screen.captureCharFrame()).toContain("✓ local storage");
-      // A read says its file and what it gave, and the feed names no act.
+      // A read says its file and what it gave, before the command that the word ran after it, and the feed names no act.
       expect(screen.captureCharFrame()).toMatch(/read {2}README\.md/);
+      expect(screen.captureCharFrame().search(/read {2}README\.md/)).toBeLessThan(
+        screen.captureCharFrame().indexOf("$ printf"),
+      );
+      // The code of the word stands apart from what came of it by one line.
+      const rows = screen.captureCharFrame().split("\n");
+      const code = rows.findIndex((line) => line.includes('focused test.")'));
+      expect([rows[code + 1]?.trim(), rows[code + 2]]).toEqual([
+        "",
+        expect.stringMatching(/read {2}README\.md/),
+      ]);
       expect(screen.captureCharFrame()).toContain("A small place to keep ideas.");
       expect(screen.captureCharFrame()).not.toMatch(/\b(read|bash|rung|thread)\d+/);
       await screen.mockMouse.click(...find(screen, "Run the checks of the project"));

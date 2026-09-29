@@ -24,6 +24,7 @@ import {
   type KeyEvent,
   type LineNumberOptions,
   LineNumberRenderable,
+  type MarkdownOptions,
   MarkdownRenderable,
   type MouseEvent,
   type OptimizedBuffer,
@@ -42,11 +43,13 @@ import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { clipboardImage } from "./clipboard.ts";
 import { commands, slashes } from "./commands.ts";
 import {
+  actsOf,
   asksOperator,
   conversation,
   fromOperator,
   type Item,
   type Note,
+  notesOf,
   operatorNote,
   refusal,
   steps,
@@ -1502,26 +1505,53 @@ export class App {
     return node;
   }
   private markdown(content: string, fg = c.prose): MarkdownRenderable {
+    // A block of code stands on the surface of a block, in the colors of its language. OpenTUI spaces the other blocks
+    // only while the renderer says it draws code alone, and it gives no margin to a node of its own, so the block keeps
+    // the blank line under it but at the end of the text.
+    const text = safeText(content);
+    const code: NonNullable<MarkdownOptions["renderNode"]> = (token) => {
+      if (token.type !== "code") return undefined;
+      const end = text.trimEnd().endsWith(token.raw.trimEnd());
+      const block = this.box({
+        backgroundColor: c.surface2,
+        paddingX: space.inset,
+        marginBottom: end ? 0 : 1,
+      });
+      const language = token.lang?.trim().toLowerCase() ?? "";
+      // A diff tints each line that it adds or removes, as the diffs of the feed do.
+      if (["diff", "patch"].includes(language)) {
+        for (const line of safeText(token.text).split("\n")) {
+          const [tone, tint] = /^(\+\+\+|---)( |$)/.test(line)
+            ? [c.faint, undefined]
+            : line.startsWith("+")
+              ? [c.done, c.added]
+              : line.startsWith("-")
+                ? [c.warm, c.removed]
+                : line.startsWith("@@")
+                  ? [c.faint, undefined]
+                  : [c.bright, undefined];
+          const row = this.box(tint ? { backgroundColor: tint } : {});
+          row.add(this.text(line || " ", tone));
+          block.add(row);
+        }
+        return block;
+      }
+      block.add(
+        new CodeRenderable(this.renderer, {
+          content: safeText(token.text),
+          filetype: filetype(`.${language}`) ?? (languages.has(language) ? language : undefined),
+          syntaxStyle: this.style,
+          wrapMode: "word",
+          drawUnstyledText: true,
+        }),
+      );
+      return block;
+    };
     return new MarkdownRenderable(this.renderer, {
-      content: safeText(content),
+      content: text,
       syntaxStyle: this.style,
       fg,
-      // A block of code stands on the surface of a block, in the colors of its language.
-      renderNode: (token) => {
-        if (token.type !== "code") return undefined;
-        const block = this.box({ backgroundColor: c.surface2, paddingX: space.inset });
-        const language = token.lang?.trim().toLowerCase() ?? "";
-        block.add(
-          new CodeRenderable(this.renderer, {
-            content: safeText(token.text),
-            filetype: filetype(`.${language}`) ?? (languages.has(language) ? language : undefined),
-            syntaxStyle: this.style,
-            wrapMode: "word",
-            drawUnstyledText: true,
-          }),
-        );
-        return block;
-      },
+      renderNode: Object.assign(code, { codeBlockOnly: true }),
     });
   }
 
@@ -1625,7 +1655,7 @@ export class App {
     if (w.view === "feed") {
       const threads = w.threads;
       const rows = new Map(w.acts.map((act) => [act.id, act]));
-      const listed = conversation(w.turns, w.acts);
+      const listed = conversation(w.turns, w.acts, w.asked);
       const words = new Map(
         listed.flatMap((item) => (item.type === "word" && item.rung ? [[item.rung.id, item] as const] : [])),
       );
@@ -1633,7 +1663,7 @@ export class App {
       const told = new Set(
         listed.flatMap((item) =>
           item.type === "word"
-            ? [item.rung?.id ?? "", ...item.acts.map((act) => act.id)]
+            ? [item.rung?.id ?? "", ...actsOf(item).map((act) => act.id)]
             : [item.act?.id ?? ""],
         ),
       );
@@ -1660,7 +1690,7 @@ export class App {
           continue;
         if (act.kind === "rung" && cancelled(act) && !w.program[act.id]) continue;
         const maker = words.get(act.by);
-        if (maker && act.kind !== "thread") maker.acts.push(act);
+        if (maker && act.kind !== "thread") maker.told.push(act);
         else
           loose.push({
             at: position.get(act.id) ?? Number.POSITIVE_INFINITY,
@@ -2010,8 +2040,9 @@ export class App {
         JSON.stringify([
           code,
           rung?.run,
-          item.acts.map((act) => [act.id, act.done, act.paused, working(act) ? act.value : null]),
-          item.notes.map((note) => note.key),
+          item.told.map((one) =>
+            "id" in one ? [one.id, one.done, one.paused, working(one) ? one.value : null] : one.key,
+          ),
           changes.map((change) => change.patch),
           findings,
           retried,
@@ -2023,7 +2054,7 @@ export class App {
         {
           word: true,
           act: rung,
-          shown: [code, ...item.notes.map((note) => note.body)].join("\n"),
+          shown: [code, ...notesOf(item).map((note) => note.body)].join("\n"),
         },
       );
     } else if (item.type === "thread" && asksOperator(item.act)) {
@@ -2353,25 +2384,38 @@ export class App {
       );
     if (!how.closed) {
       const detail = this.box({ marginTop: space.section, marginBottom: space.section, gap: space.stack });
-      if (code) detail.add(this.numbered(code));
-      for (const act of item.acts)
-        this.made(
-          detail,
-          act,
-          item.notes.filter((note) => note.act?.id === act.id),
-          how.retried,
+      // The code of the word stands apart from what came of it by one line.
+      if (code)
+        detail.add(
+          this.numbered(code, {
+            fg: c.faint,
+            minWidth: 3,
+            marginBottom: item.told.length ? space.section : 0,
+          }),
         );
-      for (const note of item.notes)
-        if (!item.acts.some((act) => act.id === note.act?.id)) this.noteLine(detail, note);
+      // Each act stands in the order the word made it, with what it told, and each note of a query among them.
+      const acts = new Set(actsOf(item).map((act) => act.id));
+      const notes = notesOf(item);
+      for (const one of item.told)
+        if ("id" in one)
+          this.made(
+            detail,
+            one,
+            notes.filter((note) => note.act?.id === one.id),
+            how.retried,
+          );
+        else if (!acts.has(one.act?.id ?? "")) this.noteLine(detail, one);
       inner.add(detail);
     } else
-      for (const act of item.acts)
+      for (const act of actsOf(item))
         if (act.kind === "bash") this.commandBlock(inner, act);
         else if (working(act)) this.made(inner, act, [], false);
     this.diffs(inner, how.changes);
     // A word that a later word replaced says so in one line, and what refused it, or what it raised, no longer counts.
+    // Each line stands under the text of the steps, after the fold.
+    const under = this.box({ marginLeft: Bun.stringWidth(fold) });
     if (rung?.run?.status === "failed" && !cancelled(rung) && how.retried)
-      inner.add(
+      under.add(
         this.text(
           `${how.findings.length ? "The gate refused this word" : "This word raised"}, and the next took its place.`,
           c.faint,
@@ -2379,14 +2423,15 @@ export class App {
       );
     else if (rung?.run?.status === "failed" && !cancelled(rung)) {
       if (how.findings.length) {
-        inner.add(this.text("The gate refused this word", c.warm));
+        under.add(this.text("The gate refused this word", c.warm));
         for (const finding of how.findings.filter(Boolean))
-          inner.add(this.branched(shortenHomes(finding), c.warm));
+          under.add(this.branched(shortenHomes(finding), c.warm));
       } else
-        inner.add(
+        under.add(
           this.text(shortenHomes((rung.run.reason ?? "").replace(/\s*\(<string>, line \d+\)$/, "")), c.warm),
         );
     }
+    if (under.getChildren().length) inner.add(under);
     box.add(inner);
   }
   /** A command that a word ran, as a block of its own under the steps of the word: its line, then the last line that
@@ -2521,8 +2566,19 @@ export class App {
     }
   }
   /** A patch as a diff: each added and removed line tinted, in the colors of the language of its file, and in two
-   * sides where the view asks for them. */
-  private diff(patch: string, path: string, split: boolean): DiffRenderable {
+   * sides where the view asks for them. The lines that two hunks leave out between them show as one faint mark, so a
+   * jump of the line numbers never reads as a line that was there. */
+  private diff(patch: string, path: string, split: boolean): Renderable {
+    const [head = "", ...hunks] = patch.split(/^(?=@@ )/m);
+    if (hunks.length < 2) return this.hunk(patch, path, split);
+    const box = this.box({});
+    for (const [at, hunk] of hunks.entries()) {
+      if (at) box.add(this.text("⋯", c.faint, { marginLeft: 1 }));
+      box.add(this.hunk(head + hunk, path, split));
+    }
+    return box;
+  }
+  private hunk(patch: string, path: string, split: boolean): DiffRenderable {
     return new DiffRenderable(this.renderer, {
       diff: patch,
       view: split ? "split" : "unified",
@@ -2939,7 +2995,13 @@ export class App {
           ] as Part[])
         : []),
       [input === true ? `${act.done ? "   " : ""}input open` : "", c.faint],
-      [typeof timeout === "number" && timeout !== TIMEOUT ? `   times out after ${timeout}s` : "", c.faint],
+      // A limit of time holds while the command runs; once it ends, its exit says whether the limit ended it.
+      [
+        !act.done && typeof timeout === "number" && timeout !== TIMEOUT
+          ? `${input === true ? "   " : ""}times out after ${timeout}s`
+          : "",
+        c.faint,
+      ],
     ];
     meta.add(this.text(notes, c.faint));
     details.add(meta);

@@ -4,11 +4,12 @@ import { join } from "node:path";
 import { type Renderable, RGBA, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { find } from "../script/stage.ts";
+import { find, highlighting } from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession, removeDemoDirectories } from "../src/demo.ts";
 import type { View } from "../src/session.ts";
-import { palettes } from "../src/theme.ts";
+import { hexes, palettes } from "../src/theme.ts";
+import { bold } from "../src/ui.ts";
 import { type Composing, cellAt, composing, withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
 
@@ -105,6 +106,38 @@ test("a command that printed more than a row holds sends the tail and its length
     { width: 120, height: 40, useMouse: true },
   ));
 
+test("the open card of a command says its limit of time while it runs, and only its exit once it ends", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      // The command waits for a line that the test feeds, so it runs for as long as the test reads it.
+      const id = await session.engine.bash("read -r line; printf ended", {
+        fed: true,
+        on: session.engine.root,
+        timeout: 30,
+      });
+      await until(session, () => session.acts.some((act) => act.id === id));
+      await frame();
+      const card = app.scroll.getChildren().find((node) => node.id === id);
+      const heading = card?.getChildren()[0];
+      if (!card || !heading) throw new Error("No card for the command.");
+      await screen.mockMouse.click(heading.x + 1, heading.y);
+      const shown = () => {
+        const node = app.scroll.getChildren().find((one) => one.id === id);
+        if (!node) throw new Error("No card for the command.");
+        return texts(node).join("\n");
+      };
+      await frame();
+      expect(shown()).toContain("times out after 30s");
+      await session.submit(`/feed ${id} go`);
+      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      await frame();
+      await screen.waitFor(() => shown().includes("\nended"), { maxPasses: 200 });
+      expect(shown()).toContain("exit 0");
+      expect(shown()).not.toContain("times out");
+    },
+    { width: 120, height: 40, useMouse: true },
+  ));
+
 test("the views say each quantity one way, read a page of changes once, and set a heading only when it changes", () =>
   composing(
     async ({ session, app, frame }) => {
@@ -152,6 +185,32 @@ test("the views say each quantity one way, read a page of changes once, and set 
       }
     },
     { width: 150, height: 40 },
+  ));
+
+test("the lines that two hunks of a diff leave out between them show as one faint mark", () =>
+  composing(
+    async ({ session, frame }) => {
+      const lines = Array.from({ length: 12 }, (_, index) => `line ${index + 1}`);
+      const write = async (text: string[]) => {
+        await session.engine.result(
+          await session.engine.rung({
+            word: `write(Text("lines.txt", ${JSON.stringify(`${text.join("\n")}\n`)}))`,
+            on: session.engine.root,
+          }),
+        );
+      };
+      await write(lines);
+      await until(session.host, () => session.host.changes === 1);
+      await write(["first", ...lines.slice(1, -1), "last"]);
+      await until(session.host, () => session.host.changes === 2);
+      await session.refresh();
+      const shown = (await frame()).split("\n");
+      const first = shown.findLastIndex((line) => line.includes("+ first"));
+      const last = shown.findLastIndex((line) => line.includes("+ last"));
+      const marks = shown.slice(first, last).filter((line) => line.trim().startsWith("⋯"));
+      expect([first > 0, last > first, marks.length]).toEqual([true, true, 1]);
+    },
+    { width: 120, height: 60 },
   ));
 
 test("a relative path that the operator types is read from the directory of the selected chain", () =>
@@ -413,6 +472,78 @@ test("a title longer than its room keeps its start, and ends with an ellipsis", 
     { width: 120, height: 30 },
     true,
   ));
+
+test("a heading and a strong span of an answer are bold, as their writer meant them to stand out", () =>
+  composing(async ({ session, screen, frame }) => {
+    const id = await session.engine.thread("str", {
+      markdown: "Say it plainly.",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.threads.has(id));
+    await session.refresh();
+    await session.submit("## The outcome\n\nEvery check is **green** now.");
+    await until(session, () => session.acts.some((act) => act.id === id && act.done));
+    await session.open(id);
+    await frame();
+    // The text of markdown shows once tree-sitter has read it.
+    await Promise.all(highlighting(screen.renderer.root));
+    await frame();
+    const isBold = (text: string) => {
+      const [x, y] = find(screen, text);
+      return (cellAt(screen.captureSpans(), x, y).attributes & bold) === bold;
+    };
+    expect([isBold("The outcome"), isBold("green"), isBold("Every check")]).toEqual([true, true, false]);
+  }));
+
+test("a block of code in an answer keeps a blank line before and after it, and so do the blocks after it", () =>
+  composing(async ({ session, screen, frame }) => {
+    const id = await session.engine.thread("str", {
+      markdown: "Show the command.",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.threads.has(id));
+    await session.refresh();
+    await session.submit(
+      "Run this:\n\n```sh\nls -la src\n```\n\n- first item\n- second item\n\nThat is all.",
+    );
+    await until(session, () => session.acts.some((act) => act.id === id && act.done));
+    await session.open(id);
+    await frame();
+    // The text of markdown shows once tree-sitter has read it.
+    await Promise.all(highlighting(screen.renderer.root));
+    await frame();
+    const rows = ["Run this:", "ls -la src", "first item", "second item", "That is all."].map(
+      (text) => find(screen, text)[1],
+    );
+    expect(rows.slice(1).map((row, index) => row - (rows[index] ?? 0))).toEqual([2, 2, 1, 2]);
+  }));
+
+test("a diff in an answer tints each line that it adds or removes, as the diffs of the feed do", () =>
+  composing(async ({ session, screen, frame }) => {
+    const id = await session.engine.thread("str", {
+      markdown: "Show the diff.",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.threads.has(id));
+    await session.refresh();
+    await session.submit("```diff\n--- a/words.py\n+++ b/words.py\n-    return old\n+    return new\n```");
+    await until(session, () => session.acts.some((act) => act.id === id && act.done));
+    await session.open(id);
+    await frame();
+    const colors = hexes(session.theme);
+    const cell = (text: string) => cellAt(screen.captureSpans(), ...find(screen, text));
+    const [added, removed, header] = [cell("return new"), cell("return old"), cell("+++ b/words.py")];
+    expect([
+      added.fg?.equals(RGBA.fromHex(colors.done)),
+      added.bg?.equals(RGBA.fromHex(colors.added)),
+      removed.fg?.equals(RGBA.fromHex(colors.warm)),
+      removed.bg?.equals(RGBA.fromHex(colors.removed)),
+      header.fg?.equals(RGBA.fromHex(colors.faint)),
+    ]).toEqual([true, true, true, true, true]);
+  }));
 
 test("a block of code in an answer stands on the surface of a block, in the colors of its language", () =>
   composing(async ({ session, screen, frame }) => {

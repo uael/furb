@@ -107,13 +107,17 @@ function scriptedSession(options: SessionOptions): Session {
         ? ["I read the README and run the checks before I answer.", ""]
         : reply(last);
       // A message that asks for an answer in a fence gets one, as a model sometimes writes it, which the gate refuses,
-      // and the model answers again once it reads the refusal.
+      // and the model answers again once it reads the refusal. A thread that asks for the fix in place gets it as a
+      // model sometimes writes it: the text of the thread again, with the fence taken away.
       const fenced = !first && last.includes("an answer in a fence");
+      const inPlace = /#(thread\d+)\\n\1_markdown = '[^']*fixed in place/.exec(JSON.stringify(messages))?.[1];
       const code = fenced
         ? '```python\n# Answer in a fence, as the message asks\nclose("Here is the answer, in a fence.")\n```'
-        : first
-          ? '# Read the README to learn what the project is for\nnotes = read("README.md")\n# Run the checks of the project\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\n# All three checks pass: report what the project holds and a next step\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
-          : word;
+        : inPlace && last.includes("refused")
+          ? `# Fix the refused word in place, with no fence around it\nwrite(read("${inPlace}", HIDDEN).replace("\`\`\`python\\n", "").replace("\\n\`\`\`", ""))`
+          : first
+            ? '# Read the README to learn what the project is for\nnotes = read("README.md")\n# Run the checks of the project\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\n# All three checks pass: report what the project holds and a next step\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
+            : word;
       if (slow) {
         write({ thinking });
         await pause(200);
