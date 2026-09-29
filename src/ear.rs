@@ -194,8 +194,8 @@ impl<W: 'static> Co<W> {
     .await
   }
 
-  /// What the coroutine told since, taken, and what came back for what the body spoke last. The coroutine polls the
-  /// body each time it tells it something, so the body takes what it was told then, and waits for no event.
+  /// What the coroutine told since, taken, and what the verb the body called last came to, when it came. The coroutine
+  /// polls the body each time it tells it something, so the body takes what it was told then, and waits for no event.
   fn told(&mut self) -> Option<Result<Object, Fault>> {
     let mut back = None;
     while let Some(Some(event)) = self.events.recv().now_or_never() {
@@ -349,17 +349,6 @@ pub async fn hear(co: &mut Co) -> Fact {
 /// the log, and it goes on hearing while the life says it.
 pub fn say<W: 'static>(co: &mut Co<W>, saying: Fact) {
   co.spoke(Spoken::Saying(saying));
-}
-
-/// One verb of the engine, told with its words under the name of the ear, whose value goes nowhere: a control that
-/// the ear says before a done, such as a pause.
-pub async fn tell<W: 'static>(
-  co: &mut Co<W>,
-  verb: &str,
-  args: Vec<Object>,
-  kwargs: Vec<(&str, Object)>,
-) {
-  let _ = co.call(verb, args, kwargs).await;
 }
 
 /// The reactor that wakes an ear when what it waits for is ready: a pipe, a timer, a socket. It is one runtime of

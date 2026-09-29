@@ -25,7 +25,7 @@ use unsync::oneshot;
 
 use crate::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
-  ear::{Co, Next, ear, hear, say, tell},
+  ear::{Co, Next, ear, hear, say},
   engine::callable,
   verbs, world,
 };
@@ -508,7 +508,7 @@ fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
           }
         }
         Next::Worked((about, on)) => {
-          tell(&mut co, "pause", vec![Object::string(on)], vec![]).await;
+          let _ = co.call("pause", vec![Object::string(on)], vec![]).await;
           say(&mut co, Fact::says("due", &about, [Object::float(1.0)]));
           say(&mut co, done(&about, Object::none()));
         }
