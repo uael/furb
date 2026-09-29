@@ -394,7 +394,7 @@ test("the switch of the views fills the view shown with the accent, names its ch
     const top = (await frame()).split("\n")[0] ?? "";
     expect(top).toContain("Feed");
     expect(top).toContain("⌥1-3");
-    const accent = RGBA.fromHex(palettes.github.accent);
+    const accent = RGBA.fromHex(palettes.furb.operator);
     const filled = (label: string) =>
       Boolean(cellAt(screen.captureSpans(), top.indexOf(label), 0).bg?.equals(accent));
     expect([filled("Feed"), filled("Changes")]).toEqual([true, false]);
@@ -406,17 +406,17 @@ test("the switch of the views fills the view shown with the accent, names its ch
     await until(session, () => session.view === "feed");
   }));
 
-test("the switch of the input shows Prompt and Python, ⌃R names it, and a click on a mode chooses it", () =>
+test("the switch of the input shows markdown and python, ⌃R names it, and a click on a mode chooses it", () =>
   composing(async ({ session, screen, frame }) => {
     const lines = (await frame()).split("\n");
-    const row = lines.findIndex((line) => line.includes("Python") && line.includes("Prompt"));
+    const row = lines.findIndex((line) => line.includes(" python ") && line.includes(" markdown "));
     expect(row).toBeGreaterThanOrEqual(0);
     expect(lines[row]).toContain("⌃R");
-    await screen.mockMouse.click((lines[row] ?? "").indexOf("Python") + 1, row);
+    await screen.mockMouse.click((lines[row] ?? "").indexOf(" python ") + 2, row);
     await until(session, () => session.mode === "python");
     await frame();
-    await screen.mockMouse.click((lines[row] ?? "").indexOf("Prompt") + 1, row);
-    await until(session, () => session.mode === "prompt");
+    await screen.mockMouse.click((lines[row] ?? "").indexOf(" markdown ") + 2, row);
+    await until(session, () => session.mode === "markdown");
   }));
 
 test("the meter of the context says its share and where the chain pauses when the pointer is over it", () =>
@@ -574,19 +574,18 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     app.composer.setText("A second message.");
     await app.submit();
     await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
-    await session.refresh();
+    // The feed of the chain holds a card for each thread.
+    await session.open("");
     const shown = await frame();
     expect(shown).not.toContain("failed");
     expect(shown).not.toContain("CancelledError");
-    // The first message says its cancel at its right, above the second message, and the rung that the cancel ended
-    // before it wrote a word shows nothing.
-    const lines = shown.split("\n");
-    const first = lines.findIndex((line) => line.includes("show live progress"));
-    expect(lines[first]).toContain("⊘ cancelled");
+    // The first thread says its cancel, above the second thread, and the rung that the cancel ended before it wrote a
+    // word shows nothing.
+    const lines = shown.split("\n").map((line) => line.slice(0, 120 - session.preferences.sidebarWidth));
+    const first = lines.findIndex((line) => line.includes("⊘ show live progress"));
+    expect(lines[first]).toMatch(/⊘ show live progress +cancelled/);
     expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
-    expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);
-    // A message that its answer closed says no state, only the type of its answer.
-    expect(lines.find((line) => line.includes("A second message."))).not.toContain("✓");
+    expect(lines.find((line) => line.includes("A second message."))).toMatch(/A second message\. +closed/);
   }));
 
 test("a word that the gate refused and that a later word of the same thread replaced folds, and reads as retried", () =>
@@ -599,7 +598,7 @@ test("a word that the gate refused and that a later word of the same thread repl
       await idle(session);
       await session.refresh();
       const shown = await frame();
-      expect(shown).toMatch(/▸ ✗ rung\d+ .*retried as rung\d+/);
+      expect(shown).toContain("The gate refused this word, and the next took its place.");
       expect(shown).not.toContain("failed");
       expect(shown).not.toContain("Got unexpected token");
     },

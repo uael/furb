@@ -219,7 +219,7 @@ function terminal(frame: CapturedFrame): string {
 }
 
 /** The colors of a window that the palette of a theme gives. */
-type Window = { background: string; border: string; muted: string };
+type Window = { ground: string; rule: string; faint: string };
 
 /** A frame as a PNG of a terminal window: the cells, a title bar with the title, and a soft shadow on a clear
  * ground. The palette gives the colors of the window. */
@@ -250,13 +250,13 @@ export function pixels(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width * zoom}" height="${height * zoom}" viewBox="0 0 ${width} ${height}">`,
     `<defs><filter id="shadow" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity="0.35"/></filter>`,
     `<clipPath id="window"><rect x="${margin}" y="${margin}" width="${window.width}" height="${window.height}" rx="12"/></clipPath></defs>`,
-    `<rect x="${margin}" y="${margin}" width="${window.width}" height="${window.height}" rx="12" fill="${palette.background}" filter="url(#shadow)"/>`,
+    `<rect x="${margin}" y="${margin}" width="${window.width}" height="${window.height}" rx="12" fill="${palette.ground}" filter="url(#shadow)"/>`,
     `<g clip-path="url(#window)">`,
     lights,
-    `<text x="${margin + window.width / 2}" y="${margin + bar / 2 + 4.5}" text-anchor="middle" font-family="${family}" font-size="13" fill="${palette.muted}">${escaped(title)}</text>`,
+    `<text x="${margin + window.width / 2}" y="${margin + bar / 2 + 4.5}" text-anchor="middle" font-family="${family}" font-size="13" fill="${palette.faint}">${escaped(title)}</text>`,
     `<g transform="translate(${margin + inset} ${margin + bar})">${terminal(frame)}</g>`,
     `</g>`,
-    `<rect x="${margin + 0.5}" y="${margin + 0.5}" width="${window.width - 1}" height="${window.height - 1}" rx="11.5" fill="none" stroke="${palette.border}" stroke-opacity="0.9"/>`,
+    `<rect x="${margin + 0.5}" y="${margin + 0.5}" width="${window.width - 1}" height="${window.height - 1}" rx="11.5" fill="none" stroke="${palette.rule}" stroke-opacity="0.9"/>`,
     `</svg>`,
   ].join("");
   const image = new Resvg(svg, {

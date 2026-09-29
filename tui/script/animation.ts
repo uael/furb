@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
-import { palettes } from "../src/theme.ts";
+import { hexes } from "../src/theme.ts";
 import { idle } from "../test/idle.ts";
 import { gif, pack, type Still } from "./gif.ts";
 import { pixels } from "./raster.ts";
@@ -34,7 +34,7 @@ async function still(delay: number): Promise<void> {
   await test.flush();
   await Promise.all(highlighting(test.renderer.root));
   await test.flush();
-  const image = pixels(test.captureSpans(), palettes[session.theme], "furb", zoom);
+  const image = pixels(test.captureSpans(), hexes(session.theme), "furb", zoom);
   size = { width: image.width, height: image.height };
   stills.push(pack(image.pixels, delay));
 }

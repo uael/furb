@@ -1,14 +1,15 @@
 import { afterAll, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type Renderable, TextRenderable } from "@opentui/core";
+import { type Renderable, RGBA, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { find } from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession, removeDemoDirectories } from "../src/demo.ts";
 import type { View } from "../src/session.ts";
-import { type Composing, composing, withDemo } from "./composing.ts";
+import { palettes } from "../src/theme.ts";
+import { type Composing, cellAt, composing, withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
 
 afterAll(removeDemoDirectories);
@@ -18,6 +19,15 @@ const texts = (node: Renderable): string[] =>
   node
     .getChildren()
     .flatMap((child) => [...(child instanceof TextRenderable ? [child.plainText] : []), ...texts(child)]);
+
+/** The first text under a node that the view shows. */
+const visible = (node: Renderable): TextRenderable | undefined => {
+  for (const child of node.getChildren()) {
+    const found = child instanceof TextRenderable && child.visible ? child : visible(child);
+    if (found) return found;
+  }
+  return undefined;
+};
 
 /** A view shown, read, and laid out, so that it stands where it opens. */
 async function show({ session, app, screen }: Pick<Composing, "session" | "app" | "screen">, view: View) {
@@ -175,9 +185,10 @@ test("the standing of a chain is no card of the conversation, though its turns b
         `${root}_cwd`,
         `${root}_actor`,
       ]);
-      const headings = app.scroll.getChildren().map((card) => (texts(card)[0] ?? "").replace(/^[▸▾] /, ""));
-      expect(headings).toContain("You");
-      expect(headings.filter((heading) => /^(standing|roster|cwd|actor)\b/.test(heading))).toEqual([]);
+      const shown = texts(app.scroll).map((text) => text.replace(/^\S+ /, ""));
+      const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
+      expect(shown.some((text) => text.includes(String(thread?.words[1])))).toBe(true);
+      expect(shown.filter((text) => /^(standing|roster|cwd|actor)\b/.test(text))).toEqual([]);
     },
     { width: 120, height: 30 },
     true,
@@ -341,35 +352,35 @@ test("the keys of the footer and the palette answer the mouse, and a drag over a
       await screen.mockMouse.click(x, y);
       expect(session.view).toBe("transcript");
       session.show("feed");
+      // The words of a model stand in the feed of their thread.
+      const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
+      if (!thread) throw new Error("No thread of the operator.");
+      await session.open(thread.id);
       // The screen draws the feed, with the palette gone, before the pointer acts on it again.
       await frame();
-      // A drag over the heading of a card selects its text and leaves the card as it was.
-      const card = app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
-      const heading = card?.getChildren()[0];
-      if (!card || !(heading instanceof TextRenderable)) throw new Error("No rung in the feed.");
-      const open = card.getChildren().length;
-      await screen.mockMouse.drag(heading.x, heading.y, heading.x + 6, heading.y);
+      // A drag over the first step of a word selects its text and leaves the word as it was.
+      const word = () => app.scroll.getChildren().find((node) => /^rung\d+$/.test(node.id));
+      const step = () => {
+        const card = word();
+        return card && visible(card);
+      };
+      const first = step();
+      if (!first) throw new Error("No word in the feed.");
+      const text = first.plainText;
+      await screen.mockMouse.drag(first.x + 2, first.y, first.x + 8, first.y);
       await frame();
-      expect(
-        app.scroll
-          .getChildren()
-          .find((node) => node.id === card.id)
-          ?.getChildren().length,
-      ).toBe(open);
+      expect(step()?.plainText).toBe(text);
       const selected = screen.renderer.getSelection()?.getSelectedText() ?? "";
       expect(selected.length).toBeGreaterThan(0);
-      expect(heading.plainText).toContain(selected);
+      expect(text).toContain(selected);
       expect(session.notice).toStartWith("Copied");
-      // A rung that is over starts folded to its heading, and a click on the heading opens it.
-      expect(open).toBe(1);
-      await screen.mockMouse.click(heading.x + 2, heading.y);
+      // A word that is over starts folded to its steps, and a click on a step opens it.
+      expect(text).toStartWith("▸ ");
+      // A click right after a drag is a second click, which selects a word, so the selection goes first.
+      screen.renderer.clearSelection();
+      await screen.mockMouse.click(first.x + 2, first.y);
       await frame();
-      expect(
-        app.scroll
-          .getChildren()
-          .find((node) => node.id === card.id)
-          ?.getChildren().length,
-      ).toBeGreaterThan(1);
+      expect(step()?.plainText).toStartWith("▾ ");
     },
     { width: 140, height: 40, useMouse: true },
     true,
@@ -389,3 +400,42 @@ test("the root chain stands in the list of chains when it rests, and the other r
     },
     { width: 140, height: 30 },
   ));
+
+test("a title longer than its room keeps its start, and ends with an ellipsis", () =>
+  composing(
+    async ({ session, frame }) => {
+      const left = 120 - session.preferences.sidebarWidth;
+      const rows = (await frame()).split("\n").map((line) => line.slice(left));
+      const row = rows.find((line) => line.includes("Explore this project")) ?? "";
+      expect(row.trimEnd()).toMatch(/Explore this project, .*…$/);
+      expect(row).not.toContain("...");
+    },
+    { width: 120, height: 30 },
+    true,
+  ));
+
+test("a block of code in an answer stands on the surface of a block, in the colors of its language", () =>
+  composing(async ({ session, screen, frame }) => {
+    const id = await session.engine.thread("str", {
+      markdown: "Show the code.",
+      to: "operator",
+      on: session.engine.root,
+    });
+    await until(session.host, () => session.host.threads.has(id));
+    await session.refresh();
+    await session.submit("```python\nanswer = 42\n```");
+    await until(session, () => session.acts.some((act) => act.id === id && act.done));
+    await session.open(id);
+    const shown = await frame();
+    expect(shown).not.toContain("```");
+    const [x, y] = find(screen, "answer = 42");
+    const surface = RGBA.fromHex(palettes[session.theme].surface2);
+    expect(cellAt(screen.captureSpans(), x, y).bg?.equals(surface)).toBe(true);
+    // A name keeps the color of text, and a number takes the warm color, as in the Python of a word.
+    expect(cellAt(screen.captureSpans(), x, y).fg?.equals(RGBA.fromHex(palettes[session.theme].bright))).toBe(
+      true,
+    );
+    expect(
+      cellAt(screen.captureSpans(), x + 9, y).fg?.equals(RGBA.fromHex(palettes[session.theme].warm)),
+    ).toBe(true);
+  }));

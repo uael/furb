@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { display, imageContent, imageReferences } from "@furb/engine";
 import { Marked } from "marked";
-import { conversation } from "./conversation.ts";
+import { conversation, type Note } from "./conversation.ts";
 import { escaped } from "./format.ts";
 import type { Session } from "./session.ts";
 import { palettes } from "./theme.ts";
@@ -32,8 +32,11 @@ export function shareHtml(session: Session): string {
   const theme = palettes[session.theme];
   const sections: string[] = [];
   for (const item of conversation(session.turns, session.acts)) {
-    if (item.type === "python")
-      sections.push(`<section><h2>Python</h2><pre><code>${escaped(item.code)}</code></pre></section>`);
+    if (item.type === "word")
+      sections.push(
+        `<section><h2>Python</h2><pre><code>${escaped(item.code)}</code></pre></section>`,
+        ...item.notes.map(noteHtml),
+      );
     else if (item.type === "thread") {
       const message = String(item.act.words[1] ?? "");
       const references = imageReferences(message);
@@ -49,24 +52,39 @@ export function shareHtml(session: Session): string {
       );
     } else if (item.type === "result")
       sections.push(`<section><h2>Result</h2>${prose(display(item.act.value))}</section>`);
-    else if (item.type === "note")
-      sections.push(
-        `<details><summary>${escaped(item.label)} ${escaped(item.act?.id ?? item.detail)}</summary><pre>${escaped([item.detail, item.body].filter(Boolean).join("\n"))}</pre></details>`,
-      );
+    else if (item.type === "note") sections.push(noteHtml(item));
   }
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><title>${escaped(session.sessionName)} · furb</title><style>
-body{color:${theme.text};background:${theme.background};font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:48px auto;padding:0 24px}h1{font-size:28px}h2{font-size:14px;color:${theme.muted};font-weight:500}section{margin:32px 0}.prompt{background:${theme.panel};border-left:3px solid ${theme.accent};padding:12px 20px}p,pre{white-space:pre-wrap;overflow-wrap:anywhere}pre{font:14px/1.6 ui-monospace,monospace;background:${theme.panel};padding:16px}summary{cursor:pointer;color:${theme.muted}}details{margin:16px 0}footer{color:${theme.muted};font-size:13px;margin:48px 0}img{max-width:100%;height:auto}
+body{color:${theme.bright};background:${theme.ground};font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:48px auto;padding:0 24px}h1{font-size:28px}h2{font-size:14px;color:${theme.faint};font-weight:500}section{margin:32px 0}.prompt{background:${theme.surface2};border-left:3px solid ${theme.operator};padding:12px 20px}p,pre{white-space:pre-wrap;overflow-wrap:anywhere}pre{font:14px/1.6 ui-monospace,monospace;background:${theme.surface2};padding:16px}summary{cursor:pointer;color:${theme.faint}}details{margin:16px 0}footer{color:${theme.faint};font-size:13px;margin:48px 0}img{max-width:100%;height:auto}
 </style><main><h1>${escaped(session.sessionName)}</h1><p>${escaped(session.label)}</p>${sections.join("\n")}<details><summary>Exact model transcript</summary>${session.turns.map(([, python]) => `<pre>${escaped(python)}</pre>`).join("\n")}</details></main><footer>Exported from furb. This file contains the selected chain's conversation and transcript.</footer></html>`;
+}
+
+/** What an act told, folded under its label. */
+function noteHtml(note: Note): string {
+  return `<details><summary>${escaped(note.label)} ${escaped(note.act?.id ?? note.detail)}</summary><pre>${escaped([note.detail, note.body].filter(Boolean).join("\n"))}</pre></details>`;
+}
+
+/** A text in a fence longer than any run of backticks it holds. */
+function fenced(text: string, language: string): string[] {
+  const fence = "`".repeat(Math.max(3, ...[...text.matchAll(/`+/g)].map((match) => match[0].length + 1)));
+  return [`${fence}${language}`, text, fence];
+}
+
+/** What an act told, under its label. */
+function noteMarkdown(note: Note): string[] {
+  return [`### ${note.label}`, ...fenced([note.detail, note.body].filter(Boolean).join("\n"), "text"), ""];
 }
 
 export function shareMarkdown(session: Session): string {
   const lines = [`# ${session.sessionName}`, "", `Chain: ${session.label}`, ""];
-  const fenced = (text: string, language: string) => {
-    const fence = "`".repeat(Math.max(3, ...[...text.matchAll(/`+/g)].map((match) => match[0].length + 1)));
-    return [`${fence}${language}`, text, fence];
-  };
   for (const item of conversation(session.turns, session.acts)) {
-    if (item.type === "python") lines.push("## Python", ...fenced(item.code, "python"), "");
+    if (item.type === "word")
+      lines.push(
+        "## Python",
+        ...fenced(item.code, "python"),
+        "",
+        ...item.notes.flatMap((note) => noteMarkdown(note)),
+      );
     else if (item.type === "thread") {
       const message = String(item.act.words[1] ?? "");
       lines.push(
@@ -80,12 +98,7 @@ export function shareMarkdown(session: Session): string {
         "",
       );
     } else if (item.type === "result") lines.push("## Result", "", display(item.act.value), "");
-    else if (item.type === "note")
-      lines.push(
-        `### ${item.label}`,
-        ...fenced([item.detail, item.body].filter(Boolean).join("\n"), "text"),
-        "",
-      );
+    else if (item.type === "note") lines.push(...noteMarkdown(item));
   }
   return lines.join("\n");
 }

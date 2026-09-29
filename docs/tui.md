@@ -13,21 +13,28 @@ generators are in `tui/script/`.
 An empty feed shows the logo of furb, what it does, the project and the model, three ways to start, and the keys
 to know. A click on a way to start puts its prompt in the input. The top line names the session, the chain, and the
 directory of the chain, and the toggle at its right switches the three views of the chain. The footer says what the
-session does and offers the keys that act now, each a button that does what its key does. GitHub Dark is the default.
+session does and offers the keys that act now, each a button that does what its key does. Furb is the default palette.
 
 ![Welcome](screenshots/01-welcome.png)
 
 ## Feed
 
-Your message stands in a panel. Each rung shows the numbered Python that the model wrote, and the acts that it
-made stand under it with a preview of their output. The answer comes under the name of the model that gave it.
-An act that no turn tells yet, such as a command that you started, stands at the end of the feed until a turn tells
-it. A rung opens while it runs, and folds to its mark, its name, and its first line when it completes. A click on its
-heading, or ⌥D, opens or folds it, and the fold stays the same across views and after a reopen. `/autocollapse` turns
-the automatic fold off, and on again. A right click on an act inspects it, edits its program, or branches after it.
-The sidebar shows the chains, the context and the cost, and the workspaces.
+Each message that you send starts a thread, and the feed shows that thread. Your message stands in a panel. Under the
+name of the model, each word that the model wrote shows as its steps: the comments of the word, `#` and one line of
+markdown each, which say what the lines under them do. The feed shows no name of an act. A word folds to its steps,
+which `▸` marks, and a click on a step opens its Python and what each act that it made came to, which `▾` marks. The
+fold stays the same across views and after a reopen, and `/autocollapse` turns the automatic fold off, and on again.
+Under the steps of a word stands the diff of each file that its writes changed. The answer of the thread comes last.
+A right click on a word inspects it, edits its program, or branches after it.
 
 ![Feed](screenshots/02-feed.png)
+
+![A thread that changed a file](screenshots/22-thread.png)
+
+The name of a chain in the top line, or in the sidebar, opens the feed of the chain: a card for each thread, with its
+first line, its state, and the last step of its model. A click on a card opens its thread. An act that no thread
+holds, such as a command that you started, stands among the cards in the order it came. The sidebar lists the threads
+of each chain under it, then the context and the cost, and the workspaces.
 
 ## Transcript
 
@@ -58,19 +65,22 @@ The model picker names the current model and the window of each. ⇧Tab chooses 
 
 ## A question for you
 
-A question that a model asks you stands in the feed with a yellow bar, and your answer follows it. The input takes
-its answer, or ⌃A opens a dialog for it.
+A question that a model asks you stands in the feed of its chain, and under its chain in the sidebar, with `◆` and
+"asks you". While it waits, Enter answers it: the line under the input says Answer and the type of the answer, and
+the bar of the input turns warm. ⌃A opens a dialog for it.
 
 ![Operator question](screenshots/08-operator-question.png)
 
 ![Answer dialog](screenshots/09-operator-dialog.png)
 
-## Python input
+## The input
 
-The input grows as you type, and its bar and the line under it name the mode: Prompt, Python, Answer, or Edit
-program. Each part of that line is a button: the mode, the chain, the model, the effort, and the type of the answer.
-⌃R writes Python with the same gate as the model. The bar and the line under the input take the color of
-Python.
+The input grows as you type, and the line under it says what Enter does. On a chain, or on a closed thread, Enter
+starts a New thread, with the type of its answer. On a thread that a model works, Enter notifies that thread: the
+model reads your note at its next reply. On a question for you, Enter answers it. Each part of that line is a button:
+the mode, the model, the effort, and the type of the answer. ⌃R switches the two modes of the input, markdown and
+python. In python, Enter runs your Python through the same gate as a word of the model, and the bar of the input
+takes the color of a model.
 
 ![Python input](screenshots/10-python-input.png)
 
@@ -83,7 +93,9 @@ definition.
 
 ## Themes
 
-Paper is light, and Midnight and Forest are dark. ⌃T opens the themes, each with a swatch of its colors.
+Furb is the default. GitHub Dark, Forest, and Midnight are dark, and Paper is light. ⌃T opens the themes, each with a
+swatch of its colors. Each palette gives the same roles: the ground, two surfaces, three tones of text, and four
+colors, for you, for a model, for what needs a look, and for what is done.
 
 ![Paper theme](screenshots/12-light-theme.png)
 
@@ -103,8 +115,10 @@ under Finished.
 
 One mark means one state in every view, dialog, and sidebar: a spinner for work that runs, `◉` for a chain or a
 session at work, `◆` for a question that waits for you, `◌` for paused work, `✓` for a done act, `✗` for a failure,
-`●` for a chain you started or a session that finished while you were away, and `○` for rest. F1 lists the chords
-that the terminal in use sends, what each mark means, and every slash command.
+`⊘` for a cancel, `●` for a chain you started or a session that finished while you were away, and `○` for rest. A
+thread that closes shows `✓` for a moment, then `·`. F1 lists the chords that the terminal in use sends, what each
+mark means, and every slash command. Only work moves: `/motion` stops every spinner, the bar of the footer, and the
+blink of the caret, and a still `◉` marks work in place of a spinner.
 
 ![Help](screenshots/16-help.png)
 
@@ -116,8 +130,9 @@ On a narrow terminal the sidebar is hidden, and the top line keeps the session, 
 
 ## Work in progress
 
-A command streams its output while it runs, and a model shows each word as it writes it. A word that the gate
-refuses shows the line and the reason.
+A command streams its output while it runs. While a model writes, a spinner turns before its name with the seconds
+it has taken, each step shows once its line is whole, and a bar walks in the footer. A word that the gate refuses
+shows each line that it refused and the reason.
 
 ![Command streaming](screenshots/18-live-command.png)
 
@@ -156,16 +171,15 @@ that cannot load offers to read it again.
 ## Workspaces
 
 The sidebar groups sessions under project folders, and its list scrolls on its own. A click on a workspace folds its
-sessions, and a click on a session opens it. Open sessions keep running while another is selected. A dot shows the
-state of each session and workspace, from live work and saved records: blue for work, yellow for input needed or
-paused work, green for an unread completion, and red for an error. An open grey dot means ready or saved, and a click
-on a completed session clears its unread mark. A rung folds its program to one line and
-keeps its acts, a workspace folds to its name, and ⌃\ hides the sidebar. ⌃W lists the workspaces and their
+sessions, and a click on a session opens it. Open sessions keep running while another is selected. A mark shows the
+state of each session and workspace, from live work and saved records, as the marks above say. A click on a completed
+session clears its unread mark. A click on a step opens its word and a second click folds it, a workspace folds to
+its name, and ⌃\ hides the sidebar. ⌃W lists the workspaces and their
 sessions, each with its state, the time since its last save, its cost, and its size.
 
 ![Workspace tree](screenshots/28-workspace-tree.png)
 
-![Collapsed rung](screenshots/29-collapsed-rung.png)
+![An open word](screenshots/29-open-word.png)
 
 ![Collapsed workspace](screenshots/30-collapsed-workspace.png)
 
@@ -221,8 +235,8 @@ paths of the project, the chains, and the acts. Enter on a value runs the comman
 ## Retried words
 
 A word of a model can fail: the gate refuses it, or it raises. When the next word of the same thread takes its
-place, the failed word folds and reads as retried, in a quiet color. A failure that nothing replaced stays open, in
-red.
+place, the failed word keeps its steps and says in one quiet line that the next word took its place. A failure that
+nothing replaced shows what refused it, or what it raised, in the warm color.
 
 ![Retried word](screenshots/47-retried-word.png)
 

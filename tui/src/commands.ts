@@ -4,7 +4,7 @@ export const commands = {
   new: ["New session", "", "Start a fresh life"],
   model: ["Choose model", "[model]", "Choose the model that answers on this chain"],
   effort: ["Choose effort", "[level]", "Set the reasoning effort of the selected model"],
-  shape: ["Response shape", "[type]", "Choose the result type of the next prompt"],
+  shape: ["Response shape", "[type]", "Choose the result type of the next thread"],
   theme: ["Color theme", "[name]", "Change the palette of every surface"],
   chain: ["New chain", "<label>", "A conversation with its own state"],
   fork: ["Fork chain", "<label>", "Copy this chain's current transcript and program"],
@@ -37,6 +37,11 @@ export const commands = {
   sidebar: ["Toggle sidebar", "", "Show or hide the chains, the usage, and the workspaces"],
   delete: ["Delete session", "", "Archive a session, or move it and its files to the workspace trash"],
   autocollapse: ["Automatic rung collapse", "", "Toggle collapse of completed rungs"],
+  motion: [
+    "Toggle motion",
+    "",
+    "Turn the spinners, the bar of a reply, and the blink of the caret on or off",
+  ],
   extensions: ["Extensions", "", "List the extensions that this life runs"],
   exit: ["Exit", "", "Save every session and quit"],
 } as const;

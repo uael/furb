@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
+import { find } from "../script/stage.ts";
 import { App, sessionDetail } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
@@ -19,7 +20,7 @@ test("the real native life drives the feed, the transcript, and responsive views
   composing(
     async ({ session, app, screen, frame }) => {
       expect(screen.captureCharFrame()).toContain("Explore a codebase");
-      expect(session.theme).toBe("github");
+      expect(session.theme).toBe("furb");
       expect(app.scroll.x).toBe(2);
       expect(app.scroll.height).toBeGreaterThanOrEqual(36);
       expect(app.scroll.height).toBeLessThanOrEqual(38);
@@ -30,6 +31,9 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(screen.captureCharFrame()).not.toContain("No budget set");
       expect(screen.captureCharFrame()).not.toContain("Session saved");
       await seedDemo(session);
+      const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
+      if (!thread) throw new Error("No thread of the operator.");
+      await session.open(thread.id);
       await frame();
       // The answer of a thread stands under the name of the model that gave it, once its markdown is drawn.
       expect(screen.captureCharFrame()).toContain("● sonnet");
@@ -45,24 +49,20 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(conversation.indexOf("Explore this project")).toBeLessThan(
         conversation.indexOf("A clear starting point"),
       );
-      // A command that is over folds to its heading, and its output shows once it opens.
-      expect(conversation).not.toContain("└ ✓ capture");
-      const command = app.scroll.getChildren().find((node) => /^bash\d+$/.test(node.id));
-      const heading = command?.getChildren()[0];
-      if (!heading) throw new Error("No command heading.");
-      await screen.mockMouse.click(heading.x, heading.y);
-      await screen.flush();
+      // A word that is over folds to its steps, and what its command printed shows once it opens.
+      expect(conversation).not.toContain("exit 0");
+      const [x, y] = find(screen, "Run the checks of the project");
+      await screen.mockMouse.click(x, y);
+      await frame();
       expect(screen.captureCharFrame()).toContain("exit 0");
       expect(screen.captureCharFrame()).toContain("✓ local storage");
-      const expanded = app.scroll
-        .getChildren()
-        .find((node) => node.id === command?.id)
-        ?.getChildren()[0];
-      expect(expanded?.visible).toBe(true);
-      if (expanded) await screen.mockMouse.click(expanded.x, expanded.y);
-      await screen.flush();
+      // A read says its file and what it gave, and the feed names no act.
+      expect(screen.captureCharFrame()).toMatch(/read {2}README\.md/);
+      expect(screen.captureCharFrame()).toContain("A small place to keep ideas.");
+      expect(screen.captureCharFrame()).not.toMatch(/\b(read|bash|rung|thread)\d+/);
+      await screen.mockMouse.click(...find(screen, "Run the checks of the project"));
+      await frame();
       expect(screen.captureCharFrame()).not.toContain("exit 0");
-      expect(app.scroll.getChildren().some((child) => /^bash\d+$/.test(child.id))).toBe(true);
       expect(screen.captureCharFrame()).not.toContain("failed");
       session.show("transcript");
       expect(await frame()).toContain('notes = read("README.md")');
@@ -111,7 +111,7 @@ test("model and effort change independently, a model is named by its id alone, a
     expect(first.actorChoice).toEqual({ model: "claude-cli:org/high", effort: "off" });
     await writeFile(first.preferences.path, "{");
     recovered = await demoSession({ preferences: new Preferences(first.preferences.path) });
-    expect(recovered.theme).toBe("github");
+    expect(recovered.theme).toBe("furb");
     expect(recovered.preferences.notice).toContain("Could not read preferences");
     expect(await readFile(first.preferences.path, "utf8")).toBe("{");
   } finally {

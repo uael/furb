@@ -5,6 +5,7 @@ import { delimiter, extname, join } from "node:path";
 import { executable } from "../../bind/typescript/test/executable.ts";
 import { remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
+import { find } from "../script/stage.ts";
 import { openEngine } from "../src/bridge.ts";
 import { clipboardImage } from "../src/clipboard.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
@@ -18,57 +19,40 @@ import { transcriptOf } from "./transcript.ts";
 
 afterAll(removeDemoDirectories);
 
-test("rungs retain clicked folds across views and reopen, with running, failed, and done labels and gate findings", async () => {
+test("a word keeps the fold that a click gave it across views and when its session opens again, and a refused word shows its findings", async () => {
   let rung = "";
   let record: string | undefined;
   await composing(
-    async ({ session, app, screen, frame }) => {
+    async ({ session, screen, frame }) => {
       rung = await session.engine.rung({ word: "await wait(60)", on: session.engine.root });
       await session.refresh();
+      // The word shows its first line, since it says no step, after its fold.
+      const line = () =>
+        screen
+          .captureCharFrame()
+          .split("\n")
+          .find((one) => one.includes("await wait(60)")) ?? "";
       await frame();
-      let card = app.scroll.getChildren().find((card) => card.id === rung);
-      let heading = card?.getChildren()[0];
-      if (!heading) throw new Error("No rung header.");
-      expect(screen.captureCharFrame()).toContain(`${rung}  by you  running`);
-      expect(card?.getChildren().length).toBeGreaterThan(1);
-      await screen.mockMouse.click(heading.x + 1, heading.y);
+      const [x, y] = find(screen, "await wait(60)");
+      expect(line()).toMatch(/[▸▾] await wait\(60\)/);
+      const folded = line().includes("▸");
+      await screen.mockMouse.click(x, y);
       await frame();
-      expect(
-        app.scroll
-          .getChildren()
-          .find((card) => card.id === rung)
-          ?.getChildren(),
-      ).toHaveLength(1);
+      expect(line().includes("▸")).toBe(!folded);
       const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
       if (!wait) throw new Error("No pending wait.");
       await session.engine.close(null, { id: wait.id });
       await session.engine.result(rung);
       await session.refresh();
-      expect(await frame()).toContain(`✓ ${rung}`);
-      expect(screen.captureCharFrame()).not.toContain(`${rung}  by you  running`);
-      expect(
-        app.scroll
-          .getChildren()
-          .find((card) => card.id === rung)
-          ?.getChildren(),
-      ).toHaveLength(1);
+      await frame();
+      expect(line().includes("▸")).toBe(!folded);
       session.show("transcript");
       await session.refresh();
       await frame();
       session.show("feed");
       await session.refresh();
       await frame();
-      card = app.scroll.getChildren().find((card) => card.id === rung);
-      expect(card?.getChildren()).toHaveLength(1);
-      heading = card?.getChildren()[0];
-      if (heading) await screen.mockMouse.click(heading.x + 1, heading.y);
-      await frame();
-      expect(
-        app.scroll
-          .getChildren()
-          .find((card) => card.id === rung)
-          ?.getChildren().length,
-      ).toBeGreaterThan(1);
+      expect(line().includes("▸")).toBe(!folded);
       await session.submit("/run this is invalid python !!!");
       const refused = session.activity.findLast(
         (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
@@ -77,24 +61,21 @@ test("rungs retain clicked folds across views and reopen, with running, failed, 
       expect(session.error).toBe("");
       expect(session.findings.join("\n")).toContain("line 1");
       await session.refresh();
-      expect(await frame()).toContain("line 1");
-      expect(screen.captureCharFrame()).toContain("failed");
+      expect(await frame()).toContain("The gate refused this word");
+      expect(screen.captureCharFrame()).toContain("line 1");
       record = session.host.record;
+      expect(session.folds[rung]).toBe(!folded);
     },
     { width: 140, height: 42, useMouse: true },
   );
   if (!record) throw new Error("No record.");
   const session = await demoSession({ record });
   await composing(
-    async ({ app }) => {
-      expect(session.folds[rung]).toBe(false);
+    async ({ screen, frame }) => {
       expect(session.acts.find((act) => act.id === rung)?.run?.status).toBe("done");
-      expect(
-        app.scroll
-          .getChildren()
-          .find((card) => card.id === rung)
-          ?.getChildren().length,
-      ).toBeGreaterThan(1);
+      const line = (await frame()).split("\n").find((one) => one.includes("await wait(60)")) ?? "";
+      expect(line).toContain(session.folds[rung] ? "▸" : "▾");
+      expect(screen.captureCharFrame()).toContain("await wait(60)");
     },
     { width: 140, height: 42, useMouse: true },
     session,
@@ -342,9 +323,13 @@ test("/extensions lists what a life runs, and a cancel of the work of a chain le
         await session.command("/cancel");
         await until(session, () => session.activity.every((act) => act.kind !== "wait" || act.done));
         await session.refresh();
-        // The watcher lives on, and shows no work in the feed.
+        // The watcher lives on, and shows no work in the feed: no word of an extension and no act that one made.
         expect((await session.engine.outcome("remember1")).done).toBe(false);
-        expect(await frame()).not.toContain("running");
+        const shown = await frame();
+        expect(shown).not.toContain("running");
+        expect(shown).not.toContain("def memory");
+        expect(shown).not.toContain("def skills");
+        expect(shown).not.toContain("remember");
       },
       { width: 140, height: 42 },
       new Session(opened.engine, opened.host, true),

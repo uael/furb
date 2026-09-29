@@ -20,7 +20,7 @@ import {
 } from "@furb/engine";
 import { createTwoFilesPatch } from "diff";
 import type { Engine, HostView, Usage } from "./bridge.ts";
-import { refusal } from "./conversation.ts";
+import { asksOperator, refusal, Threads } from "./conversation.ts";
 import { expandHome, fileReferences, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
 import { Preferences } from "./preferences.ts";
@@ -93,6 +93,7 @@ const kept = [
   "sessionName",
   "demo",
   "selected",
+  "thread",
   "actor",
   "view",
   "mode",
@@ -113,6 +114,13 @@ const kept = [
 /** What `<record>.ui.json` holds: the kept fields of a session, and what the session had cost. */
 export type SavedView = Partial<Pick<Session, (typeof kept)[number]>> & { cost?: number };
 
+/** A change of a file, with the patch that shows it and the lines of context around each hunk of it: the Changes view
+ * reads a change whole, and the feed shows at a glance what a word changed. */
+const shown = (change: FileChange, context: number): ShownChange => ({
+  ...change,
+  patch: createTwoFilesPatch(change.path, change.path, change.before, change.after, "", "", { context }),
+});
+
 /** The saved view of a record: nothing when it has none, and the defaults with the reason when its file holds no
  * view that can be read. */
 export function savedView(record: string): { view: SavedView; damage?: string } {
@@ -131,8 +139,18 @@ export function savedView(record: string): { view: SavedView; damage?: string } 
   }
 }
 
+/** What Enter does in the composer, by what the operator selected: answer the question that the selected thread
+ * holds, notify the thread that a model works, or start a new thread on the chain. Python input and a program under
+ * edit run in its place. */
+export type Intent =
+  | { does: "answer"; question: { id: string; shape: string; markdown: string } }
+  | { does: "notify"; thread: ActRow }
+  | { does: "thread" };
+
 export class Session extends EventEmitter {
   selected: string;
+  /** The thread of the selected chain whose feed the view shows, or none for the feed of the chain. */
+  thread = "";
   view: View = "feed";
   actor: string;
   sessionName: string;
@@ -141,6 +159,10 @@ export class Session extends EventEmitter {
   /** The usage of each answer of the chain itself, which the turns of a chain with a source do not tell apart. */
   answers: Usage[] = [];
   changes: ShownChange[] = [];
+  /** The changes that the words of the feed shown made, by the rung of each word. */
+  made: Record<string, ShownChange[]> = {};
+  /** The count of changes and the rungs that `made` was read at. */
+  private madeRead = "";
   changePage = 0;
   program: Record<string, string> = {};
   /** The text of the search box, which the rows of the view must hold. */
@@ -152,7 +174,7 @@ export class Session extends EventEmitter {
   paused = false;
   editing?: string;
   readonly preferences: Preferences;
-  mode: "prompt" | "python" = "prompt";
+  mode: "markdown" | "python" = "markdown";
   shape = "str";
   drafts: Record<string, string> = {};
   /** Where each view was left, by its key. */
@@ -208,8 +230,9 @@ export class Session extends EventEmitter {
       this.queueHeld = this.queued.length > 0;
       if (damage) this.notice = damage;
     }
-    // A view that an older release saved, and that this release has no more, opens as the feed.
+    // A view or a mode that an older release saved, and that this release has no more, opens as the feed, in markdown.
     if (!views.includes(this.view)) this.view = "feed";
+    if (this.mode !== "python") this.mode = "markdown";
     host.on("change", this.changed);
     host.on("facts", this.factsChanged);
     host.on("fault", this.fail);
@@ -298,13 +321,23 @@ export class Session extends EventEmitter {
           }
           this.save();
         }
+        const rungs = this.shownRungs();
+        const read = `${this.host.changes}:${rungs.join(",")}`;
+        if (read !== this.madeRead) {
+          this.madeRead = read;
+          const made: Record<string, ShownChange[]> = {};
+          for (const change of rungs.length ? await this.host.changesOf(rungs) : []) {
+            const by = change.by ?? "";
+            made[by] = [...(made[by] ?? []), shown(change, 1)];
+          }
+          this.made = made;
+        }
         const page = `${this.changePage}:${this.host.changes}`;
         if (this.view === "changes" && page !== this.changesRead) {
           this.changesRead = page;
-          this.changes = (await this.host.readChanges(this.changePage * 20, 20)).map((change) => ({
-            ...change,
-            patch: createTwoFilesPatch(change.path, change.path, change.before, change.after),
-          }));
+          this.changes = (await this.host.readChanges(this.changePage * 20, 20)).map((change) =>
+            shown(change, 4),
+          );
         }
         const rows = this.acts;
         for (const act of rows) if (!act.done) this.started[act.id] ??= Date.now();
@@ -415,6 +448,34 @@ export class Session extends EventEmitter {
   get chains(): ActRow[] {
     return this.acts.filter((act) => act.kind === "chain");
   }
+  /** The threads of the life and what stands under each, read again when the acts change. */
+  get threads(): Threads {
+    if (this.held?.acts !== this.acts) this.held = new Threads(this.acts);
+    return this.held;
+  }
+  private held?: Threads;
+  /** The rungs whose words the feed shows: those under the selected thread, or those under no thread of the selected
+   * chain. */
+  private shownRungs(): string[] {
+    const threads = this.threads;
+    return this.activity
+      .filter((act) => act.kind === "rung" && (threads.of(act) ?? "") === this.thread)
+      .map((act) => act.id);
+  }
+  /** What Enter does in the composer: a typed reply closes the oldest question to the operator that waits in the
+   * selected thread, or on the selected chain when no thread is selected; else a thread that a model works takes a
+   * note, and a chain or a closed thread starts a new thread. */
+  get intent(): Intent {
+    const thread = this.acts.find((act) => act.id === this.thread);
+    const threads = this.threads;
+    const question = [...this.host.threads.values()].find((one) => {
+      const act = this.acts.find((act) => act.id === one.id);
+      return act?.on === this.selected && (!thread || threads.of(act) === thread.id);
+    });
+    if (question) return { does: "answer", question };
+    if (thread && !thread.done && !asksOperator(thread)) return { does: "notify", thread };
+    return { does: "thread" };
+  }
   get activity(): ActRow[] {
     return this.acts.filter((act) => act.on === this.selected && act.kind !== "chain");
   }
@@ -511,7 +572,17 @@ export class Session extends EventEmitter {
       this.program = {};
     }
     this.selected = id;
+    this.thread = "";
     this.search = "";
+    await this.refresh();
+  }
+  /** The feed of a thread, on its chain, or the feed of the chain for a thread of none. */
+  async open(thread: string): Promise<void> {
+    const act = this.acts.find((act) => act.id === thread);
+    if (act && act.on !== this.selected) await this.select(act.on);
+    this.thread = act ? act.id : "";
+    this.search = "";
+    this.save();
     await this.refresh();
   }
   show(view: View): void {
@@ -521,6 +592,11 @@ export class Session extends EventEmitter {
     void this.refresh().catch(this.fail);
   }
 
+  /** The feed of the selected chain, where an act that the operator makes on the chain stands. */
+  private showChain(): void {
+    this.view = "feed";
+    this.thread = "";
+  }
   private track(id: string): void {
     void this.engine
       .result(id)
@@ -713,9 +789,17 @@ export class Session extends EventEmitter {
       this.editing = undefined;
     } else if (text.startsWith("!")) await this.command(`/bash ${text.slice(1).trimStart()}`);
     else {
-      const pending = this.operatorThread;
-      if (pending) await this.host.answer(pending.id, input);
-      else {
+      const intent = this.intent;
+      if (intent.does === "answer") await this.host.answer(intent.question.id, input);
+      else if (intent.does === "notify") {
+        // A note is a rung of comments, one for each line of the markdown, which the model reads at its next reply.
+        const word = input
+          .trimEnd()
+          .split("\n")
+          .map((line) => `# ${line}`.trimEnd())
+          .join("\n");
+        this.track(await this.engine.rung({ word, on: this.selected }));
+      } else {
         await this.attachFiles(input);
         this.redo = [];
         const pending = this.host.pending.size > 0;
@@ -725,6 +809,7 @@ export class Session extends EventEmitter {
           to: this.actor,
         });
         delete this.images[this.selected];
+        this.thread = id;
         this.save();
         if (pending) this.emit("resume");
         this.track(id);
@@ -794,8 +879,15 @@ export class Session extends EventEmitter {
         this.preferences.foldRungs = !this.preferences.foldRungs;
         this.preferences.save();
         this.notice = this.preferences.foldRungs
-          ? "Completed rungs collapse automatically."
-          : "Rungs keep their open state.";
+          ? "Each word starts folded to its comments."
+          : "Each word starts open on its Python.";
+        break;
+      case "motion":
+        this.preferences.motion = !this.preferences.motion;
+        this.preferences.save();
+        this.notice = this.preferences.motion
+          ? "Work in progress moves."
+          : "Nothing moves. A still ◉ marks work.";
         break;
       case "grant": {
         const amount = Number(argument);
@@ -850,7 +942,7 @@ export class Session extends EventEmitter {
       case "run": {
         this.findings = [];
         const id = await this.engine.rung({ word: argument, on: this.selected });
-        this.view = "feed";
+        this.showChain();
         if ((await this.engine.outcome(id)).done) {
           try {
             await this.engine.result(id);
@@ -871,14 +963,14 @@ export class Session extends EventEmitter {
         break;
       case "bash":
         this.track(await this.engine.bash(argument, { on: this.selected }));
-        this.view = "feed";
+        this.showChain();
         break;
       case "read":
       case "cd":
         this.track(
           await this.engine.rung({ word: `${command}(${JSON.stringify(argument)})`, on: this.selected }),
         );
-        if (command === "read") this.view = "feed";
+        if (command === "read") this.showChain();
         break;
       case "edit": {
         // The latest thread with a program.

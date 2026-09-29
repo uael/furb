@@ -37,41 +37,47 @@ const state = () => {
   sentFacts = owner.facts.length;
   self.postMessage({ state: snapshot });
 };
-/** What the demo thinks and answers on a later turn, by what the turn says. */
-const replies: [cue: string, thinking: string, answer: string][] = [
+/** What the demo thinks, and the word it writes, on a later turn, by what the turn says. Each word says its steps in
+ * comments, as a model does. */
+const replies: [cue: string, thinking: string, word: string][] = [
+  [
+    "Document the search shortcut",
+    "The README has no section for keys yet, so the word adds one.",
+    '# Add the shortcut to the README, under a heading of its own\nwrite(read("README.md", HIDDEN).append("\\n## Keyboard\\nPress Ctrl+K to find a note.\\n"))\n# The README documents the shortcut: report it\nclose("The README now documents **Ctrl+K**, which opens the search.")',
+  ],
   [
     "refused",
     "The gate refused the fence, so the word is Python alone.",
-    "Here it is again as plain Python, with no fence around it.",
+    '# Answer again in plain Python, since the gate refused the fence\nclose("Here it is again as plain Python, with no fence around it.")',
   ],
   [
     "show live progress",
     "The index is ready, so the answer says what it holds.",
-    "The index is built, and three notes are ready to search. Each word streamed into the feed as it ran.",
+    '# The index is built: report what it holds\nclose("The index is built, and three notes are ready to search. Each word streamed into the feed as it ran.")',
   ],
   [
     "keyboard navigation",
     "The keys work, so the answer lists them.",
-    "Keyboard navigation works: Ctrl+K opens the search, and the arrows move between notes.",
+    '# List the keys that move through the notes\nclose("Keyboard navigation works: Ctrl+K opens the search, and the arrows move between notes.")',
   ],
   [
     "layout",
     "The image shows the welcome, so the answer reads its layout.",
-    "The layout reads well. The logo leads, the starters sit under it, and the keys close the column.",
+    '# Read the layout of the welcome from the image\nclose("The layout reads well. The logo leads, the starters sit under it, and the keys close the column.")',
   ],
   [
     " advance on bash",
     "The command is done, so the answer says what it found.",
-    "The checks finished and all three passed, so the project is ready for the search shortcut.",
+    '# The checks passed: report what they found\nclose("The checks finished and all three passed, so the project is ready for the search shortcut.")',
   ],
 ];
-function reply(turn: string): [thinking: string, answer: string] {
+function reply(turn: string): [thinking: string, word: string] {
   const found = replies.find(([cue]) => turn.includes(cue));
   return found
     ? [found[1], found[2]]
     : [
         "The change is small, so the answer says where it is.",
-        "Done. The change is small, its checks pass, and the result is in the feed.",
+        '# The change is small and its checks pass: report it\nclose("Done. The change is small, its checks pass, and the result is in the feed.")',
       ];
 }
 
@@ -97,17 +103,17 @@ function scriptedSession(options: SessionOptions): Session {
       const slow = process.env.FURB_DEMO_STREAM === "1" || last.includes("show live progress");
       await pause(slow ? 300 : 180);
       const first = !messages.some((message) => (message as { role?: string }).role === "assistant");
-      const [thinking, answer] = first
+      const [thinking, word] = first
         ? ["I read the README and run the checks before I answer.", ""]
         : reply(last);
       // A message that asks for an answer in a fence gets one, as a model sometimes writes it, which the gate refuses,
       // and the model answers again once it reads the refusal.
       const fenced = !first && last.includes("an answer in a fence");
       const code = fenced
-        ? '```python\nclose("Here is the answer, in a fence.")\n```'
+        ? '```python\n# Answer in a fence, as the message asks\nclose("Here is the answer, in a fence.")\n```'
         : first
-          ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
-          : `close(${JSON.stringify(answer)})`;
+          ? '# Read the README to learn what the project is for\nnotes = read("README.md")\n# Run the checks of the project\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\n# All three checks pass: report what the project holds and a next step\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
+          : word;
       if (slow) {
         write({ thinking });
         await pause(200);
@@ -180,6 +186,8 @@ async function answer(data: { target: string; method: string; args: unknown[] })
   if (data.target === "library" && data.method === "source") return ENGINE;
   if (data.target === "library" && data.method === "changes")
     return session?.changes.read(Number(data.args[0]), Number(data.args[1]));
+  if (data.target === "library" && data.method === "changesOf")
+    return session?.changes.of((data.args[0] as unknown[]).map(String));
   if (data.target === "library" && data.method === "act")
     return session?.activity.acts.get(String(data.args[0]));
   if (data.target === "library" && data.method === "look") {
