@@ -2,10 +2,12 @@
 
 use std::{
   collections::HashMap,
-  sync::mpsc::{self, RecvTimeoutError},
-  thread,
+  future,
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
+use futures::{FutureExt, StreamExt, future::LocalBoxFuture, stream::FuturesUnordered};
+use unsync::oneshot;
 
 use crate::{
   ear::{Ear, ear, hear, say},
@@ -18,13 +20,23 @@ use crate::{
 ///
 /// It says when a wait it takes is due, as a fact of its own, which the record keeps since it comes from outside
 /// and says again in a later life, so a wait that a wake starts again ends when it would have ended then. A wait
-/// that a control ended first says nothing more.
+/// that a control ended first ends at once, and says nothing more.
 pub fn time() -> Box<dyn Ear> {
-  ear(|co, voice| async move {
+  ear(|co| async move {
     let mut due: HashMap<String, f64> = HashMap::new();
-    let mut running: HashMap<String, mpsc::Sender<()>> = HashMap::new();
+    let mut stops: HashMap<String, oneshot::Sender<()>> = HashMap::new();
+    let mut waits: FuturesUnordered<LocalBoxFuture<'static, Option<String>>> =
+      FuturesUnordered::new();
     loop {
-      let a = hear(&co).await;
+      let a = tokio::select! {
+        biased;
+        a = hear(&co) => a,
+        Some(Some(id)) = waits.next() => {
+          stops.remove(&id);
+          say(&co, Fact::says("done", &id, [Object::none()])).await;
+          continue;
+        }
+      };
       let about = a.about().to_owned();
       match a.kind() {
         "clock" if a.question() => {
@@ -46,21 +58,9 @@ pub fn time() -> Box<dyn Ear> {
               deadline
             }
           };
-          let (stop, stopped) = mpsc::channel::<()>();
-          let voice = voice.clone();
-          let id = about.clone();
-          thread::spawn(move || {
-            // A wait past what the machine counts waits until a control ends it.
-            let left = Duration::try_from_secs_f64((deadline - now()).max(0.0)).ok();
-            let ended = match left {
-              Some(left) => stopped.recv_timeout(left),
-              None => stopped.recv().map_err(|_| RecvTimeoutError::Disconnected),
-            };
-            if let Err(RecvTimeoutError::Timeout) = ended {
-              voice.say("done", &id, [Object::none()]);
-            }
-          });
-          running.insert(about, stop);
+          let (stop, stopped) = oneshot::channel();
+          waits.push(waited(about.clone(), deadline, stopped).boxed_local());
+          stops.insert(about, stop);
         }
         "due" => {
           if let Some(deadline) = a.word(0).and_then(|one| one.as_float()) {
@@ -68,15 +68,29 @@ pub fn time() -> Box<dyn Ear> {
           }
         }
         "done" => {
-          if running.remove(&about).is_some() {
-            voice.hush(&about);
-          }
+          stops.remove(&about);
           due.remove(&about);
         }
         _ => {}
       }
     }
   })
+}
+
+/// A wait: its id once its deadline passed, or nothing when it was stopped first. A wait past what the machine
+/// counts waits until it is stopped.
+async fn waited(id: String, deadline: f64, stopped: oneshot::Receiver<()>) -> Option<String> {
+  let left = Duration::try_from_secs_f64((deadline - now()).max(0.0)).ok();
+  let up = async {
+    match left {
+      Some(left) => tokio::time::sleep(left).await,
+      None => future::pending().await,
+    }
+  };
+  tokio::select! {
+    () = up => Some(id),
+    _ = stopped => None,
+  }
 }
 
 /// The seconds since the epoch, on the clock of the machine.

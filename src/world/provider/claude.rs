@@ -31,7 +31,10 @@ use tokio::{
   sync::mpsc,
 };
 
-use super::{Model, ended, runtime, spawned, uuid};
+use futures::StreamExt;
+
+use super::{Model, ended, uuid};
+use crate::ear::reactor;
 
 /// The name of the command line as a provider: each response of it says this name, and each of its models is named
 /// by it and the alias of its family.
@@ -146,7 +149,7 @@ impl Completion {
     let held = Arc::clone(&self.claude.held);
     held.swept.call_once(|| {
       let weak = Arc::downgrade(&held);
-      runtime().spawn(async move {
+      reactor().spawn(async move {
         let mut ticks = tokio::time::interval(IDLE);
         ticks.tick().await;
         loop {
@@ -165,8 +168,7 @@ impl CompletionModel for Completion {
     &self,
     request: CompletionRequest,
   ) -> Result<CompletionResponse, CompletionError> {
-    let (held, name) = (self.held(), self.name.clone());
-    spawned(async move { held.turn(&name, request, None).await }).await?
+    self.held().turn(&self.name, request, None).await
   }
 
   async fn stream(
@@ -174,16 +176,17 @@ impl CompletionModel for Completion {
     request: CompletionRequest,
   ) -> Result<StreamingCompletionResponse, CompletionError> {
     let (held, name) = (self.held(), self.name.clone());
-    let (deltas, heard) = mpsc::unbounded_channel();
-    let task = spawned(async move {
+    let (deltas, mut heard) = mpsc::unbounded_channel();
+    let turn = async move {
       let got = held.turn(&name, request, Some(&deltas)).await;
       let _ =
         deltas.send(got.map(|response| RawStreamingChoice::FinalResponse(ended(CLAUDE, response))));
-    });
-    // The task goes with the stream, so a stream that is dropped ends its turn.
-    let stream = futures::stream::unfold((heard, task), |(mut heard, task)| async move {
-      heard.recv().await.map(|one| (one, (heard, task)))
-    });
+      None
+    };
+    // The turn goes with the stream: it runs as the stream is read, and a stream that is dropped ends it.
+    let told = futures::stream::poll_fn(move |cx| heard.poll_recv(cx));
+    let stream =
+      futures::stream::select(told, futures::stream::once(turn).filter_map(async |one| one));
     Ok(StreamingCompletionResponse::stream(CLAUDE, Box::pin(stream)))
   }
 }
@@ -387,7 +390,11 @@ impl Conversation {
   }
 
   /// A process of the conversation at an effort: a new one, a resumed one, or the fork of its parent.
-  fn start(&mut self, bin: &Path, effort: Option<String>) -> Result<Process, CompletionError> {
+  async fn start(
+    &mut self,
+    bin: &Path,
+    effort: Option<String>,
+  ) -> Result<Process, CompletionError> {
     let mut command = Command::new(bin);
     command.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json"]);
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
@@ -414,7 +421,7 @@ impl Conversation {
         Err(no) if no.raw_os_error() == Some(BUSY) && tries < 50 => tries += 1,
         got => break got,
       }
-      std::thread::sleep(Duration::from_millis(10));
+      tokio::time::sleep(Duration::from_millis(10)).await;
     }
     .map_err(|no| failed(format!("{} did not start: {no}", bin.display())))?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
@@ -568,7 +575,7 @@ impl Flight<'_> {
       held.process = None;
     }
     if held.process.is_none() {
-      held.process = Some(held.start(bin, effort)?);
+      held.process = Some(held.start(bin, effort).await?);
     }
     let Conversation { process: Some(process), id, name, .. } = held else {
       return Err(failed("claude is not running"));

@@ -29,7 +29,7 @@ use serde_json::{Value, json};
 use super::{Hosted, Model, Provider, Writes, catalog::Catalog, images};
 use crate::{Act, Ear, Engine, Object, SYSTEM, verbs, world};
 
-/// A waker that unparks the thread of the test, so a voice spoken from another thread wakes the poll.
+/// A waker that unparks the thread of the test, so what an ear waits for wakes the poll when it is ready.
 struct Parked(thread::Thread);
 
 impl Wake for Parked {

@@ -27,7 +27,7 @@ struct Skill {
 /// skills in `.furb/skills` and `.claude/skills` of the working directory of the chain and of each folder above it,
 /// nearest first, and then in `skills` of the config directory of the user.
 pub fn skills(config: PathBuf) -> Box<dyn Ear> {
-  ear(move |co, _| async move {
+  ear(move |co| async move {
     loop {
       let a = hear(&co).await;
       if a.kind() != "read" || !a.question() {

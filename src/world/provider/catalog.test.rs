@@ -7,9 +7,10 @@ use rig_core::{completion::CompletionRequest, message::Message};
 use serde_json::{Value, json};
 
 use super::{
-  super::{Asked, Told, clients::Client, runtime},
+  super::{Asked, Told, clients::Client},
   Catalog, SNAPSHOT, clamp, parsed,
 };
+use crate::ear::reactor;
 
 /// A snapshot of the tests: a provider of each dialect, and models that think in each way.
 const LISTED: &str = r#"{
@@ -269,7 +270,7 @@ fn a_model_whose_credential_stands_nowhere_is_refused_when_it_is_asked() {
   };
   let told: Told = Arc::new(|_, _| {});
   let asked = Asked { actor: "google:gemini-flash".into(), chain: "chain1".into(), request, told };
-  let Err(no) = runtime().block_on((model.answers)(asked)) else {
+  let Err(no) = reactor().block_on((model.answers)(asked)) else {
     panic!("a model with no credential answers nothing")
   };
   assert!(no.to_string().contains("set GOOGLE_API_KEY or GEMINI_API_KEY"), "{no}");

@@ -8,23 +8,22 @@
 use std::{
   cell::RefCell,
   collections::HashMap,
-  future::Future,
-  io::{self, BufRead, Write},
+  future::{Future, poll_fn},
+  io::{self, Write},
   path::{Path, PathBuf},
   pin::Pin,
   rc::Rc,
-  sync::{Arc, mpsc},
-  task::{Context, Poll, Wake, Waker},
-  thread,
+  task::{Context, Poll},
 };
 
 use furb::{
   Act, Ear, Fact, Fault, Object,
-  ear::{ear, hear},
+  ear::{ear, hear, reactor},
   life::Opening,
   verbs, wire,
 };
 use serde_json::{Value, json, value::RawValue};
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::{
   console::Asked,
@@ -40,18 +39,14 @@ pub fn serve(opening: Opening, record: Option<&Path>) -> Result<(), String> {
     let fact = wire::outward(fact.0.as_ref());
     facts.borrow_mut().records.push(json!({"type": "fact", "fact": fact}));
   })?;
-  let (sends, heard) = mpsc::channel();
-  let reads = sends.clone();
-  thread::spawn(move || lines(&reads));
   let mut server = Server {
     life,
     client,
     record: record.map(|one| std::path::absolute(one).unwrap_or_else(|_| one.to_path_buf())),
     awaited: Vec::new(),
-    waker: Waker::from(Arc::new(Wakes(sends))),
     out: io::BufWriter::new(io::stdout().lock()),
   };
-  server.served(&heard).map_err(|no| no.to_string())
+  reactor().block_on(server.served()).map_err(|no| no.to_string())
 }
 
 /// The client as the server holds it: the records not yet written to it, and each prompt of the operator that waits
@@ -70,7 +65,7 @@ fn fields(asked: &Asked) -> Value {
 /// The console of the client, as an ear of the World: it takes each prompt put to the operator and sends it to the
 /// client, whose close answers it.
 fn console(client: Rc<RefCell<Client>>) -> Box<dyn Ear> {
-  ear(move |co, _| async move {
+  ear(move |co| async move {
     loop {
       let a = hear(&co).await;
       if let Some(asked) = Asked::taken(&co, &a).await? {
@@ -84,46 +79,6 @@ fn console(client: Rc<RefCell<Client>>) -> Box<dyn Ear> {
       }
     }
   })
-}
-
-/// What reaches the loop of the server: a line of the client, a voice of the life, or the end of stdin.
-enum Input {
-  Line(Vec<u8>),
-  Wake,
-  End,
-}
-
-/// The waker of the loop: a voice that speaks from any thread wakes the loop, which drives the life.
-struct Wakes(mpsc::Sender<Input>);
-
-impl Wake for Wakes {
-  fn wake(self: Arc<Self>) {
-    let _ = self.0.send(Input::Wake);
-  }
-}
-
-/// Each line of stdin, sent as it comes, split at a line feed alone and without a carriage return before it, and then
-/// its end.
-fn lines(sends: &mpsc::Sender<Input>) {
-  let mut input = io::stdin().lock();
-  loop {
-    let mut line = Vec::new();
-    match input.read_until(b'\n', &mut line) {
-      Ok(0) | Err(_) => break,
-      Ok(_) => {
-        if line.ends_with(b"\n") {
-          line.pop();
-        }
-        if line.ends_with(b"\r") {
-          line.pop();
-        }
-        if sends.send(Input::Line(line)).is_err() {
-          return;
-        }
-      }
-    }
-  }
-  let _ = sends.send(Input::End);
 }
 
 /// One command of the client: its fields, each as the JSON it was written in.
@@ -142,37 +97,40 @@ impl Command {
   }
 }
 
-/// The server of one life: the life, the client, the acts its commands made that are not done, the waker of its loop,
-/// and stdout.
+/// The server of one life: the life, the client, the acts its commands made that are not done, and stdout.
 struct Server {
   life: Life,
   client: Rc<RefCell<Client>>,
   record: Option<PathBuf>,
   awaited: Vec<String>,
-  waker: Waker,
   out: io::BufWriter<io::StdoutLock<'static>>,
 }
 
 impl Server {
-  /// The loop: the life is driven, then the next line or voice is heard, until stdin ends.
-  fn served(&mut self, heard: &mpsc::Receiver<Input>) -> io::Result<()> {
+  /// The loop: the life is driven while the next line of stdin comes, and each line is answered, until stdin ends. A
+  /// line is split at a line feed alone, and without a carriage return before it.
+  async fn served(&mut self) -> io::Result<()> {
+    let mut lines = BufReader::new(tokio::io::stdin()).split(b'\n');
     loop {
-      self.driven()?;
-      match heard.recv() {
-        Ok(Input::Line(line)) => self.answer(&line)?,
-        Ok(Input::Wake) => {}
-        Ok(Input::End) | Err(_) => return Ok(()),
+      tokio::select! {
+        line = lines.next_segment() => {
+          let Ok(Some(mut line)) = line else { return Ok(()) };
+          if line.ends_with(b"\r") {
+            line.pop();
+          }
+          self.answer(&line)?;
+        }
+        failed = poll_fn(|cx| self.driven(cx)) => return failed,
       }
     }
   }
 
-  /// The life driven: what the voices of its ears said is said into it, the done of each act a command made that is
-  /// done now is sent, and every record is written.
-  fn driven(&mut self) -> io::Result<()> {
+  /// The life driven: what its ears say of their own accord is said into it, the done of each act a command made
+  /// that is done now is sent, and every record is written. It is over only when stdout fails.
+  fn driven(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
     // To await an act drives the life, and the root never completes.
-    let mut cx = Context::from_waker(&self.waker);
     let mut root = Act::<Object>::of(&mut self.life.engine, self.life.root.clone());
-    if let Poll::Ready(Err(no)) = Pin::new(&mut root).poll(&mut cx) {
+    if let Poll::Ready(Err(no)) = Pin::new(&mut root).poll(cx) {
       eprintln!("furb: {no}");
     }
     let mut waiting = Vec::new();
@@ -188,6 +146,14 @@ impl Server {
       }
     }
     self.awaited = waiting;
+    match self.written() {
+      Ok(()) => Poll::Pending,
+      Err(no) => Poll::Ready(Err(no)),
+    }
+  }
+
+  /// Every record written to the client.
+  fn written(&mut self) -> io::Result<()> {
     let records = std::mem::take(&mut self.client.borrow_mut().records);
     for one in records {
       writeln!(self.out, "{one}")?;

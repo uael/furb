@@ -24,7 +24,7 @@ const NAMES: [&str; 2] = ["CLAUDE.md", "AGENTS.md"];
 /// texts of the answer of each memory question, the text of each read and each write of a memory file, and what the
 /// prefix of a chain holds of them, each when an act that tells made the question, since nothing else is told.
 pub fn memory(config: PathBuf) -> Box<dyn Ear> {
-  ear(move |co, _| async move {
+  ear(move |co| async move {
     // What each chain holds of the memory files, by path, and each question of one that an act that tells made and
     // whose done the ear has not heard yet, with its chain.
     let mut held: HashMap<String, HashMap<String, String>> = HashMap::new();

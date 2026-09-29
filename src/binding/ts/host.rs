@@ -10,7 +10,7 @@ use std::{
   ptr,
   rc::{Rc, Weak},
   sync::Arc,
-  task::{Wake, Waker},
+  task::{Context, Wake, Waker},
 };
 
 use napi::{
@@ -260,7 +260,7 @@ impl Drop for JsEar {
 }
 
 impl Ear for JsEar {
-  fn resume(&mut self, heard: Heard) -> Step {
+  fn resume(&mut self, heard: Heard, _: &mut Context<'_>) -> Step {
     self.stepped(heard).unwrap_or_else(Step::Raised)
   }
 }
@@ -271,7 +271,7 @@ impl JsEar {
     let held = self.generator.as_ref().ok_or_else(|| Fault::refused("the ear is over"))?;
     let generator = held.get_value(env).map_err(refused)?;
     let args = match heard {
-      Heard::Born(_) => vec![],
+      Heard::Born => vec![],
       Heard::Fact(fact) => vec![outward(env, &fact.0)?],
     };
     let next: Unknown = generator.get_named_property("next").map_err(refused)?;
@@ -293,7 +293,7 @@ type Pending = Rc<RefCell<Option<JsDeferred<Json, Resolver>>>>;
 /// A function of JavaScript that another thread may call, which keeps JavaScript alive when it is strong.
 type Waking<const WEAK: bool> = ThreadsafeFunction<(), (), (), napi::Status, false, WEAK>;
 
-/// What wakes the thread of JavaScript to drive the engine, when a voice spoke from another thread.
+/// What wakes the thread of JavaScript to drive the engine, when what an ear waits for is ready.
 struct Wakes(Waking<true>);
 
 impl Wake for Wakes {
@@ -303,7 +303,7 @@ impl Wake for Wakes {
 }
 
 /// One engine, held on the thread of JavaScript, the results that JavaScript awaits of it, and what wakes the thread
-/// when a voice speaks.
+/// when an ear can go on.
 pub struct Held {
   pub engine: RefCell<Option<Engine>>,
   env: Env,
@@ -311,7 +311,7 @@ pub struct Held {
   wakes: Arc<Wakes>,
   /// The function that drives the engine, from which the one that keeps JavaScript alive is made.
   drives: FunctionRef<(), ()>,
-  /// What keeps JavaScript alive while it awaits a result, which only a voice of another thread may give.
+  /// What keeps JavaScript alive while it awaits a result, which only an ear that waits may give.
   alive: RefCell<Option<Waking<false>>>,
 }
 
@@ -340,7 +340,8 @@ impl Held {
     Ok(held)
   }
 
-  /// The engine driven as far as it goes: what the voices said is said into it, and each awaited result told.
+  /// The engine driven as far as it goes: what its ears say of their own accord is said into it, and each awaited
+  /// result told.
   pub fn drive(&self) {
     let waker = Waker::from(Arc::clone(&self.wakes));
     let _ = self.call(|engine| engine.pump(&waker));

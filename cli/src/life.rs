@@ -3,17 +3,15 @@
 
 use std::{
   cell::RefCell,
-  future::Future,
+  future::{Future, poll_fn},
   pin::Pin,
   rc::Rc,
-  sync::Arc,
-  task::{Context, Poll, Wake, Waker},
-  thread,
+  task::Poll,
 };
 
 use furb::{
   Act, Ear, Engine, Fact, Fault, Object,
-  ear::{ear, hear},
+  ear::{ear, hear, reactor},
   engine::OPERATOR,
   extension::{self, Extension},
   fact,
@@ -89,7 +87,7 @@ impl Life {
     quiet.watch(vec![root.clone()], &facts);
     let quiet = Rc::new(RefCell::new(quiet));
     let quieted = Rc::clone(&quiet);
-    let observer = ear(move |co, _| async move {
+    let observer = ear(move |co| async move {
       loop {
         let a = hear(&co).await;
         quieted.borrow_mut().heard(&a);
@@ -140,24 +138,20 @@ impl Life {
     let facts = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()) });
     let facts = facts.map_err(|no| no.to_string())?;
     self.quiet.borrow_mut().watch(vec![self.root.clone(), id.to_owned()], &facts);
-    let waker = Waker::from(Arc::new(Parked(thread::current())));
-    let mut cx = Context::from_waker(&waker);
-    loop {
-      if let Poll::Ready(got) = Pin::new(&mut Act::<Object>::of(&mut self.engine, id)).poll(&mut cx)
-      {
-        return got.map_err(|no| no.to_string());
+    reactor().block_on(poll_fn(|cx| {
+      if let Poll::Ready(got) = Pin::new(&mut Act::<Object>::of(&mut self.engine, id)).poll(cx) {
+        return Poll::Ready(got.map_err(|no| no.to_string()));
       }
       let quiet = self.quiet.borrow();
-      if quiet.paused {
-        let why =
-          if quiet.refused.is_empty() { String::new() } else { format!(": {}", quiet.refused) };
-        return Err(format!(
-          "{id} is paused{why}. A wake from the TUI or from `furb --mode rpc` makes it go on."
-        ));
+      if !quiet.paused {
+        return Poll::Pending;
       }
-      drop(quiet);
-      thread::park();
-    }
+      let why =
+        if quiet.refused.is_empty() { String::new() } else { format!(": {}", quiet.refused) };
+      Poll::Ready(Err(format!(
+        "{id} is paused{why}. A wake from the TUI or from `furb --mode rpc` makes it go on."
+      )))
+    }))
   }
 }
 
@@ -179,14 +173,5 @@ pub fn actor(to: &str) -> (String, Option<String>) {
       (actor.unwrap_or_else(|| to.to_owned()), models.first().map(|one| one.name().to_owned()))
     }
     Err(_) => (to.to_owned(), None),
-  }
-}
-
-/// A waker that unparks the thread that awaits, so a voice that speaks from another thread wakes it.
-struct Parked(thread::Thread);
-
-impl Wake for Parked {
-  fn wake(self: Arc<Self>) {
-    self.0.unpark();
   }
 }

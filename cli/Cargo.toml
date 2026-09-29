@@ -15,6 +15,8 @@ path = "src/main.rs"
 # The engine, the ears of the World and the provider of models, at the version of this program.
 furb = { path = "..", version = "0.1.0" }
 clap = { version = "4.6", features = ["derive"] }
+# The stdin of the operator, read by the console as the reactor of furb wakes it.
+tokio = { version = "1", features = ["io-std", "io-util", "macros"] }
 # The protocol: one command or one event per line, as JSON, whose value is read before anything rounds it.
 serde_json = { version = "1", features = ["raw_value"] }
 

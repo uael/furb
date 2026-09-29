@@ -30,8 +30,8 @@ use super::{
   Hosted, Model, Provider, Streams,
   claude::{self, Claude},
   clients::{Client, Reach},
-  runtime,
 };
+use crate::ear::reactor;
 
 /// The levels of effort, from least to most, which an actor names after its model, as `claude-cli:opus/low`.
 pub const LEVELS: [&str; 7] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -524,7 +524,7 @@ fn listed(cached: Option<&PathBuf>) -> &'static IndexMap<String, Listed> {
   LISTED.get_or_init(|| {
     let age = cached.and_then(|at| fs::metadata(at).ok()?.modified().ok()?.elapsed().ok());
     if let Some(at) = cached.filter(|_| !cfg!(test) && age.is_none_or(|age| age > STALE)) {
-      runtime().spawn(refreshed(at.clone()));
+      reactor().spawn(refreshed(at.clone()));
     }
     let text = cached.and_then(|at| fs::read_to_string(at).ok());
     parsed(SNAPSHOT, text.as_deref())

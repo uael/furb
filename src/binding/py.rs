@@ -7,7 +7,7 @@ use std::{
   cell::{OnceCell, RefCell},
   collections::HashMap,
   sync::Arc,
-  task::{Wake, Waker},
+  task::{Context, Poll, Wake, Waker},
 };
 
 use pyo3::{
@@ -23,7 +23,7 @@ use pyo3::{
 
 use super::{Given, NativeEar, Record, Said, Told, Value, words};
 use crate::{
-  Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step, Voice,
+  Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step,
   ear::{self, Call, Spoken},
   engine::{callable, handed},
   life::{Answer, Opening, Stream},
@@ -280,7 +280,7 @@ struct PyEar {
 }
 
 impl Ear for PyEar {
-  fn resume(&mut self, heard: Heard) -> Step {
+  fn resume(&mut self, heard: Heard, _: &mut Context<'_>) -> Step {
     Python::attach(|py| self.step(py, heard).unwrap_or_else(|no| Step::Raised(fault_of(py, &no))))
   }
 }
@@ -289,7 +289,7 @@ impl PyEar {
   fn step(&mut self, py: Python<'_>, heard: Heard) -> PyResult<Step> {
     let ear = self.ear.as_ref().ok_or_else(|| PyTypeError::new_err("the ear is over"))?.bind(py);
     let sent = match heard {
-      Heard::Born(_) => py.None().into_bound(py),
+      Heard::Born => py.None().into_bound(py),
       Heard::Fact(fact) => to_python(py, fact.0.as_ref())?,
     };
     let got = match ear.call_method1("send", (sent,)) {
@@ -304,10 +304,10 @@ impl PyEar {
   }
 }
 
-/// What the engine of this interpreter steps an ear of the crate with once it is born: the voices its work speaks
-/// with, and what wakes the loop when one speaks.
+/// What the engine of this interpreter steps an ear of the crate with once it is born: the name it speaks by, and
+/// what wakes the loop when the ear can go on.
 pub(super) struct Stepped {
-  voices: Voice,
+  name: String,
   waker: Waker,
 }
 
@@ -322,7 +322,7 @@ impl NativeEar {
   }
 
   /// The ear heard, as the engine of this interpreter steps a generator: nothing at its birth, which is given the
-  /// voice its work speaks with under the name the engine steps it by, and each fact after. A verb it calls is said
+  /// name the ear speaks by when it says something of its own accord, and each fact after. A verb it calls is said
   /// to the engine of this interpreter at once, and what it gave is what the call gives.
   fn send(slf: &Bound<'_, Self>, a: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let py = slf.py();
@@ -335,11 +335,8 @@ impl NativeEar {
         Ok(ear) => pump(ear),
         Err(_) => Ok(()),
       })?;
-      let voices = Voice::new();
-      voices.drained(&waker);
-      let heard = Heard::Born(voices.of(&name));
-      slf.borrow_mut().hearing.get_mut()?.stepped = Some(Stepped { voices, waker });
-      heard
+      slf.borrow_mut().hearing.get_mut()?.stepped = Some(Stepped { name, waker });
+      Heard::Born
     } else {
       let fact =
         Fact::of(heard(a)?.as_ref()).ok_or_else(|| PyTypeError::new_err("an ear hears a fact"))?;
@@ -348,10 +345,12 @@ impl NativeEar {
     let mut held = slf.borrow_mut();
     let hearing = held.hearing.get_mut()?;
     let Some(ear) = hearing.ear.as_mut() else { return Err(PyStopIteration::new_err(())) };
+    let waker =
+      hearing.stepped.as_ref().map_or_else(|| Waker::noop().clone(), |one| one.waker.clone());
     let mut answers = |call: Call| {
       verb_said(py, &call).and_then(|got| of_python(&got)).map_err(|no| fault_of(py, &no))
     };
-    match ear::heard(&mut answers, || ear.resume(heard)) {
+    match ear::heard(&mut answers, || ear.resume(heard, &mut Context::from_waker(&waker))) {
       Step::Wait => Ok(py.None()),
       Step::Say(saying) => Ok(to_python(py, saying.0.as_ref())?.unbind()),
       Step::Over => {
@@ -366,28 +365,43 @@ impl NativeEar {
   }
 }
 
-/// What the work of an ear of the crate said since, said into the engine of this interpreter under the name of the
-/// ear.
+/// What an ear of the crate says of its own accord, said into the engine of this interpreter under its name, until
+/// it says no more.
 fn pump(ear: &Bound<'_, NativeEar>) -> PyResult<()> {
   let py = ear.py();
-  let said = match &ear.borrow_mut().hearing.get_mut()?.stepped {
-    Some(stepped) => stepped.voices.drained(&stepped.waker),
-    None => return Ok(()),
-  };
   let python = made(py)?.python.bind(py);
   let (site, say) = (python.getattr("site")?, python.getattr("say")?);
-  for one in said {
-    let token = site.call_method1("set", (one.by,))?;
-    let got = match one.spoken {
-      Spoken::Saying(saying) => {
-        to_python(py, saying.0.as_ref()).and_then(|saying| say.call1(saying.cast::<PyTuple>()?))
+  let Some(name) = ear.borrow_mut().hearing.get_mut()?.stepped.as_ref().map(|one| one.name.clone())
+  else {
+    return Ok(());
+  };
+  loop {
+    let token = site.call_method1("set", (&name,))?;
+    let said = polled(ear).and_then(|polled| match polled {
+      Poll::Ready(Spoken::Saying(saying)) => {
+        let saying = to_python(py, saying.0.as_ref())?;
+        say.call1(saying.cast::<PyTuple>()?).map(|_| true)
       }
-      Spoken::Verb(call) => verb_said(py, &call),
-    };
+      Poll::Ready(Spoken::Verb(call)) => verb_said(py, &call).map(|_| true),
+      Poll::Pending => Ok(false),
+    });
     site.call_method1("reset", (token,))?;
-    got?;
+    if !said? {
+      return Ok(());
+    }
   }
-  Ok(())
+}
+
+/// What an ear of the crate says of its own accord now, polled with what wakes the loop.
+fn polled(ear: &Bound<'_, NativeEar>) -> PyResult<Poll<Spoken>> {
+  let mut held = ear.borrow_mut();
+  let hearing = held.hearing.get_mut()?;
+  let (Some(stepped), Some(one)) = (hearing.stepped.as_ref(), hearing.ear.as_mut()) else {
+    return Ok(Poll::Pending);
+  };
+  let waker = stepped.waker.clone();
+  let _inside = ear::reactor().enter();
+  Ok(one.poll(&mut Context::from_waker(&waker)))
 }
 
 /// One verb that an ear of the crate said, said to the engine of this interpreter with its words, and what it gave.
@@ -401,7 +415,7 @@ fn verb_said<'py>(py: Python<'py>, call: &Call) -> PyResult<Bound<'py, PyAny>> {
   made(py)?.python.bind(py).getattr(call.verb.as_str())?.call(args, Some(&kwargs))
 }
 
-/// What wakes the loop of python to drive an engine, when a voice spoke from another thread: the loop the engine was
+/// What wakes the loop of python to drive an engine, when what an ear waits for is ready: the loop the engine was
 /// booted in, and what drives it there.
 struct Wakes {
   running: Py<PyAny>,
@@ -427,8 +441,8 @@ fn waker(
   Ok(Waker::from(Arc::new(Wakes { running, drive: drive.into_any().unbind() })))
 }
 
-/// One engine, held on the thread of python and driven in the loop it was booted in, when an ear of the crate speaks
-/// from a thread of its own.
+/// One engine, held on the thread of python and driven in the loop it was booted in, when an ear of the crate can go
+/// on.
 #[pyclass(module = "furb_monty._monty", name = "Engine", unsendable, weakref)]
 pub struct PyEngine {
   engine: RefCell<Option<Engine>>,
@@ -478,8 +492,8 @@ impl PyEngine {
     self.call(|engine| engine.verb(name, args, kwargs))
   }
 
-  /// The engine driven as far as it goes: what the voices of its ears said is said into it, and whoever awaits an act
-  /// that is done now is told.
+  /// The engine driven as far as it goes: what its ears say of their own accord is said into it, and whoever awaits
+  /// an act that is done now is told.
   fn pump(&self) -> Result<(), Fault> {
     let (Some(waker), true) = (self.waker.get(), self.engine.borrow().is_some()) else {
       return Ok(());

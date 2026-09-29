@@ -16,7 +16,7 @@ const LARGEST: u64 = 524_288;
 /// and a write with the text as it stands after, each resolved against the working directory of the chain, or with
 /// the refusal.
 pub fn files() -> Box<dyn Ear> {
-  ear(|co, _| async move {
+  ear(|co| async move {
     loop {
       let a = hear(&co).await;
       if !a.question() || !matches!(a.kind(), "cd" | "read" | "write") {

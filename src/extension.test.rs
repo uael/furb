@@ -141,7 +141,7 @@ const NOTE: &str = "def note(on=\"\"):\n  return read(\"note.txt\", on=on)";
 
 /// The ear that answers a stand with the standing of the tests: the operator alone, in their directory.
 fn standing(at: PathBuf) -> Box<dyn Ear> {
-  ear(move |co, _| async move {
+  ear(move |co| async move {
     loop {
       let a = hear(&co).await;
       if a.kind() == "stand" && a.question() {

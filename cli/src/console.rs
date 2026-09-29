@@ -5,17 +5,16 @@
 //! asked, and never two at once on one stream. Stdout is left to what the command prints.
 
 use std::{
-  collections::HashSet,
-  io::{self, BufRead, Write},
-  sync::{Arc, Mutex, mpsc},
-  thread,
+  collections::VecDeque,
+  io::{self, Write},
 };
 
 use furb::{
-  Ear, Fact, Fault, Object, Voice,
-  ear::{Co, call, ear, hear, say},
+  Ear, Fact, Fault, Object,
+  ear::{Co, call, ear, hear, say, tell},
   world::{SHAPES, answered},
 };
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 /// A prompt put to the operator: its act, the chain it is on, its shape and its message.
 pub struct Asked {
@@ -50,49 +49,43 @@ impl Asked {
   }
 }
 
-/// The console, as an ear: it takes a prompt to the operator, and its work closes it later by its voice. A prompt that
-/// is done before its line comes, by a cancel, is shown no more, and its work says nothing of it.
+/// The console, as an ear: it takes each prompt to the operator and shows them in turn, and closes each with the line
+/// the operator writes back, or with why no line came. A prompt that is done before its line comes, by a cancel, is
+/// shown no more, and the line goes to the next.
 pub fn terminal() -> Box<dyn Ear> {
-  ear(|co, voice| async move {
-    let (asks, asked) = mpsc::channel::<Asked>();
-    let over: Arc<Mutex<HashSet<String>>> = Arc::default();
-    let (shown, speaks) = (Arc::clone(&over), voice.clone());
-    thread::spawn(move || shows(&asked, &shown, &speaks));
-    let mut taken = HashSet::new();
+  ear(|co| async move {
+    let mut lines = BufReader::new(tokio::io::stdin()).lines();
+    let mut waiting: VecDeque<Asked> = VecDeque::new();
+    let mut shown: Option<Asked> = None;
     loop {
-      let a = hear(&co).await;
-      if let Some(asked) = Asked::taken(&co, &a).await? {
-        taken.insert(asked.about.clone());
-        let _ = asks.send(asked);
-      } else if a.kind() == "done" && taken.remove(a.about()) {
-        voice.hush(a.about());
-        if let Ok(mut over) = over.lock() {
-          over.insert(a.about().to_owned());
+      if shown.is_none()
+        && let Some(next) = waiting.pop_front()
+      {
+        eprint!("{} wants a {}: {}\n> ", next.about, next.shape, next.message);
+        let _ = io::stderr().flush();
+        shown = Some(next);
+      }
+      tokio::select! {
+        biased;
+        a = hear(&co) => {
+          if let Some(asked) = Asked::taken(&co, &a).await? {
+            waiting.push_back(asked);
+          } else if a.kind() == "done" {
+            waiting.retain(|one| one.about != a.about());
+            shown = shown.filter(|one| one.about != a.about());
+          }
+        }
+        line = lines.next_line(), if shown.is_some() => {
+          let Some(Asked { about, shape, .. }) = shown.take() else { continue };
+          let value = match line {
+            Ok(Some(line)) => answered(&shape, line.trim_end_matches('\r')),
+            Ok(None) => Err(Fault::refused("the operator cannot be read: the input is over")),
+            Err(no) => Err(Fault::refused(format!("the operator cannot be read: {no}"))),
+          };
+          let value = value.unwrap_or_else(|no| no.object());
+          tell(&co, "close", vec![value], vec![("id", Object::string(&about))]).await;
         }
       }
     }
   })
-}
-
-/// Each prompt the console took, shown in turn, and closed with what the operator answered, or with why no answer
-/// came.
-fn shows(asked: &mpsc::Receiver<Asked>, over: &Mutex<HashSet<String>>, voice: &Voice) {
-  let done = |about: &str| over.lock().is_ok_and(|over| over.contains(about));
-  for Asked { about, shape, message, .. } in asked {
-    if done(&about) {
-      continue;
-    }
-    eprint!("{about} wants a {shape}: {message}\n> ");
-    let _ = io::stderr().flush();
-    let mut line = String::new();
-    let value = match io::stdin().lock().read_line(&mut line) {
-      Ok(0) => Err(Fault::refused("the operator cannot be read: the input is over")),
-      Ok(_) => answered(&shape, line.trim_end_matches(['\n', '\r'])),
-      Err(no) => Err(Fault::refused(format!("the operator cannot be read: {no}"))),
-    };
-    if !done(&about) {
-      let value = value.unwrap_or_else(|no| no.object());
-      voice.call(&about, "close", vec![value], vec![("id", Object::string(&about))]);
-    }
-  }
 }

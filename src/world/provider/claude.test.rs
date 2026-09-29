@@ -22,7 +22,7 @@ use rig_core::{
 use serde_json::{Value, json};
 
 use super::{Claude, Completion};
-use crate::world::provider::runtime;
+use crate::ear::reactor;
 
 /// The fake command line, which the tests of the command line of furb run too.
 const FAKE: &str = include_str!("fake-claude.sh");
@@ -126,7 +126,7 @@ fn asked(
   messages: &[Message],
   settings: Value,
 ) -> Result<rig_core::completion::CompletionResponse, rig_core::completion::CompletionError> {
-  runtime().block_on(model.completion(request("ENGINE ONLY", messages, settings)))
+  reactor().block_on(model.completion(request("ENGINE ONLY", messages, settings)))
 }
 
 #[test]
@@ -378,7 +378,7 @@ fn a_conversation_that_grows_out_of_another_forks_it() {
 fn a_thought_streams_as_it_comes_and_settles_once_at_its_place() {
   let yard = Yard::new("thought");
   let model = yard.claude(10_000).completion_model("sonnet");
-  let (texts, choice) = runtime()
+  let (texts, choice) = reactor()
     .block_on(async {
       let mut stream = model.stream(request("ENGINE ONLY", &[user("THINK")], json!({}))).await?;
       let mut texts = Vec::new();
@@ -429,7 +429,7 @@ fn a_turn_that_is_dropped_ends_its_process() {
       tokio::time::sleep(Duration::from_millis(10)).await;
     }
   };
-  let raced = runtime().block_on(async {
+  let raced = reactor().block_on(async {
     tokio::time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
   });
   let Ok(Either::Right(((), turn))) = raced else {

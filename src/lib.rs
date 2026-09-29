@@ -24,7 +24,7 @@ pub mod world;
 pub mod binding;
 
 pub use crate::{
-  ear::{Ear, Heard, Step, Voice},
+  ear::{Ear, Heard, Spoken, Step},
   engine::{Act, Engine, Plain, verbs},
   fact::Fact,
   value::{Exit, Fault, Object, ObjectRef, Text},

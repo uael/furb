@@ -3,8 +3,8 @@
 //!
 //! A model is any completion model of rig, which the [`catalog`] makes of the models of the providers of the network
 //! and of the claude command line, or a function of the host that answers a request with a turn. A call of a model
-//! runs on a runtime of its own, off the thread that drives the engine. It streams, and the host is told what the
-//! model writes as it writes it; what the reply came to it says by the voice of the ear.
+//! is a future of the ear, which the life polls, and a call that its reply no longer needs ends. It streams, and the host is told what the
+//! model writes as it writes it; what the reply came to the ear says of its own accord.
 
 pub mod catalog;
 pub mod claude;
@@ -14,29 +14,30 @@ mod pi;
 
 use std::{
   collections::{HashMap, HashSet},
-  future::Future,
   path::PathBuf,
-  pin::Pin,
   sync::{
-    Arc, OnceLock,
+    Arc,
     atomic::{AtomicBool, Ordering},
   },
-  task::{Context, Poll},
 };
 
-use futures::{StreamExt, future::BoxFuture};
+use futures::{
+  FutureExt, StreamExt,
+  future::{BoxFuture, LocalBoxFuture},
+  stream::FuturesUnordered,
+};
 use rig_core::{
   completion::{CompletionError, CompletionModel, CompletionRequest, CompletionResponse},
   message::{AssistantContent, Message, Text, UserContent},
   streaming::{StreamFinal, StreamedAssistantContent, StreamingCompletionResponse},
 };
 use serde_json::{Map, Value, json};
-use tokio::{runtime::Runtime, task::JoinHandle};
+use unsync::oneshot;
 
 use self::images::Images;
 use crate::{
   SYSTEM,
-  ear::{Ear, Voice, call, ear, hear, say},
+  ear::{Ear, call, ear, hear, say, tell},
   engine::{OPERATOR, WINDOW},
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
@@ -287,14 +288,29 @@ impl Provider {
       models.first().map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
     let mut images = Images::new(images);
-    ear(move |co, voice| async move {
+    ear(move |co| async move {
       // The ids of chains repeat in every life, so a conversation of this life is keyed by the life too.
       let life = uuid();
       let mut replies: HashMap<String, Reply> = HashMap::new();
+      let mut calls: FuturesUnordered<LocalBoxFuture<'static, Option<Called>>> =
+        FuturesUnordered::new();
       // The actor whose last reply on each chain the ear refused.
       let mut mute: HashMap<String, String> = HashMap::new();
       loop {
-        let a = hear(&co).await;
+        let a = tokio::select! {
+          biased;
+          a = hear(&co) => a,
+          Some(Some((id, got))) = calls.next() => {
+            let Some(reply) = replies.get(&id) else { continue };
+            let got = got.map_err(|no| Fault::refused(format!("{} answered nothing: {no}", reply.actor)));
+            if got.is_err() && reply.again {
+              tell(&co, "pause", vec![Object::string(&reply.chain)], vec![]).await;
+            }
+            let got = got.unwrap_or_else(|fault| fault.object());
+            say(&co, Fact::says("done", &id, [got])).await;
+            continue;
+          }
+        };
         let about = a.about().to_owned();
         match a.kind() {
           "stand" if a.question() => {
@@ -310,15 +326,13 @@ impl Provider {
             let key = format!("{life}/{chain}");
             let asked = requested(&models, &actor, &chain, turns.as_ref(), &key, &mut images, told);
             let again = mute.get(&chain) == Some(&actor);
-            let said = Said { voice: voice.clone(), id: about.clone(), chain: chain.clone() };
-            let call = spawned(answered(said, actor.clone(), again, asked));
-            replies.insert(about, Reply { chain, actor, call, over });
+            let (stop, stopped) = oneshot::channel();
+            calls.push(answered(about.clone(), asked, stopped).boxed_local());
+            replies.insert(about, Reply { chain, actor, again, over, _stop: stop });
           }
           "done" => {
-            let Some(Reply { chain, actor, call, over }) = replies.remove(&about) else { continue };
-            drop(call);
+            let Some(Reply { chain, actor, over, .. }) = replies.remove(&about) else { continue };
             over.store(true, Ordering::SeqCst);
-            voice.hush(&about);
             // A done that the ear said of its own reply ends the row of refusals on the chain with a turn, or adds
             // to it with a refusal, which is what the ear says when it says no turn; a done that a control said
             // leaves the row as it is.
@@ -342,20 +356,15 @@ impl Provider {
   }
 }
 
-/// A reply the ear took: its chain, its actor, the call of its model, which ends when the reply goes, and whether it
-/// went, after which the host is told nothing more of what a model writes for it.
+/// A reply the ear took: its chain, its actor, whether a refusal of it pauses its chain, whether it went, after which
+/// the host is told nothing more of what a model writes for it, and the stop of the call of its model, which ends
+/// that call when the reply goes.
 struct Reply {
   chain: String,
   actor: String,
-  call: Spawned<()>,
+  again: bool,
   over: Arc<AtomicBool>,
-}
-
-/// Who says what a reply came to: the voice of the ear, the reply, and the chain it is on.
-struct Said {
-  voice: Voice,
-  id: String,
-  chain: String,
+  _stop: oneshot::Sender<()>,
 }
 
 /// What a turn tells as it streams, told to the host under the rung it writes for and the chain of that rung, until
@@ -490,31 +499,26 @@ fn ended(provider: &str, response: CompletionResponse) -> StreamFinal {
   record
 }
 
-/// What a reply came to, said by the voice of the ear: the turn of the model, or the refusal of an actor that
-/// answered nothing, after the pause of its chain when the refusal before it on that chain was of the same actor.
+/// A reply and what its call came to.
+type Called = (String, Result<Object, CompletionError>);
+
+/// What a reply came to: the turn of the model, or why it answered nothing; or nothing, when the reply went first,
+/// which ends the call.
 async fn answered(
-  said: Said,
-  actor: String,
-  again: bool,
+  id: String,
   asked: Result<(Model, Asked), CompletionError>,
-) {
-  let got = match asked {
-    Ok((model, asked)) => match (model.answers)(asked).await {
-      Ok(Answer::Response(response)) => turn(&model, &response),
-      Ok(Answer::Turn(turn)) => hosted(turn.as_ref()),
-      Err(no) => Err(no),
-    },
-    Err(no) => Err(no),
-  };
-  let Said { voice, id, chain } = said;
-  match got {
-    Ok(turn) => voice.say("done", &id, [turn]),
-    Err(no) => {
-      if again {
-        voice.call(&id, "pause", vec![Object::string(chain)], vec![]);
-      }
-      voice.say("done", &id, [Fault::refused(format!("{actor} answered nothing: {no}")).object()]);
+  stopped: oneshot::Receiver<()>,
+) -> Option<Called> {
+  let got = async {
+    let (model, asked) = asked?;
+    match (model.answers)(asked).await? {
+      Answer::Response(response) => turn(&model, &response),
+      Answer::Turn(turn) => hosted(turn.as_ref()),
     }
+  };
+  tokio::select! {
+    got = got => Some((id, got)),
+    _ = stopped => None,
   }
 }
 
@@ -584,48 +588,6 @@ fn uuid() -> String {
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   let hex: String = bytes.iter().map(|one| format!("{one:02x}")).collect();
   format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..])
-}
-
-/// The runtime that every call of a model runs on, made once for the process, since a model of rig asks a runtime
-/// of tokio and the engine is driven on a thread of its own.
-fn runtime() -> &'static Runtime {
-  static RUNTIME: OnceLock<Runtime> = OnceLock::new();
-  RUNTIME.get_or_init(|| {
-    tokio::runtime::Builder::new_multi_thread()
-      .worker_threads(2)
-      .thread_name("furb-models")
-      .enable_all()
-      .build()
-      .expect("the machine gives the models a runtime")
-  })
-}
-
-/// Work on the runtime of the models, which gives what it came to, and ends when it is dropped before it is done.
-struct Spawned<T>(JoinHandle<T>);
-
-impl<T> Drop for Spawned<T> {
-  fn drop(&mut self) {
-    self.0.abort();
-  }
-}
-
-impl<T> Future for Spawned<T> {
-  type Output = Result<T, CompletionError>;
-
-  fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    Pin::new(&mut self.0)
-      .poll(cx)
-      .map(|got| got.map_err(|no| CompletionError::ProviderError(no.to_string())))
-  }
-}
-
-/// Work put on the runtime of the models.
-fn spawned<F>(work: F) -> Spawned<F::Output>
-where
-  F: Future + Send + 'static,
-  F::Output: Send + 'static,
-{
-  Spawned(runtime().spawn(work))
 }
 
 #[cfg(test)]
