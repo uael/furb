@@ -25,7 +25,7 @@ use std::{
 use serde_json::Value;
 
 use crate::{
-  ear::{Ear, call, ear, hear, say},
+  ear::{Co, Ear, ear, hear, say},
   engine::ROOT,
   fact::{Fact, named},
   value::{Fault, Object, entry},
@@ -243,14 +243,14 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
       let new: Vec<Extension> = match a.kind() {
         // A chain says its started at its birth, and it has what its origin had, which it made again.
         "started" if named(a.about(), "chain") => {
-          let got = call("get", vec![Object::string(a.about())], vec![])?;
+          let got = co.call("get", vec![Object::string(a.about())], vec![]).await?;
           let source = entry(&got.as_ref(), 5).and_then(|one| one.as_str().map(str::to_owned));
           let had =
             chains.iter().find(|one| Some(&one.0) == source.as_ref()).map(|one| one.1.clone());
           chains.push((a.about().to_owned(), had.unwrap_or_default()));
           let born = chains.len() - 1;
           for one in &enabled {
-            play(one, &mut chains[born])?;
+            play(&mut co, one, &mut chains[born]).await?;
           }
           continue;
         }
@@ -265,7 +265,7 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
           say(&mut co, one.enable()).await;
         }
         for chain in &mut chains {
-          play(&one, chain)?;
+          play(&mut co, &one, chain).await?;
         }
         enabled.push(one);
       }
@@ -275,7 +275,11 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
 
 /// One extension played on a chain as a rung: its word then its life word, or its life word alone on a chain that
 /// has the extension already.
-fn play(one: &Extension, (chain, had): &mut (String, Vec<String>)) -> Result<(), Fault> {
+async fn play(
+  co: &mut Co,
+  one: &Extension,
+  (chain, had): &mut (String, Vec<String>),
+) -> Result<(), Fault> {
   let word = if had.contains(&one.name) {
     one.life.clone()
   } else {
@@ -284,7 +288,7 @@ fn play(one: &Extension, (chain, had): &mut (String, Vec<String>)) -> Result<(),
   };
   if !word.is_empty() {
     let on = vec![("on", Object::string(chain.as_str()))];
-    call("rung", vec![Object::string(word)], on)?;
+    co.call("rung", vec![Object::string(word)], on).await?;
   }
   Ok(())
 }

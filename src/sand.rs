@@ -68,6 +68,11 @@ impl Sand {
     Self { idle: Some(repl), answering: None, ended: None, fed: 0 }
   }
 
+  /// A sandbox of nothing, which holds no session, and stands in for one that is lent to code of a host.
+  pub(crate) fn none() -> Self {
+    Self { idle: None, answering: None, ended: None, fed: 0 }
+  }
+
   /// How many runs the session began.
   #[cfg_attr(not(test), allow(dead_code))]
   pub(crate) fn fed(&self) -> usize {

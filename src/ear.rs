@@ -6,10 +6,10 @@
 //! TypeScript, or a coroutine of rust.
 //!
 //! An ear of rust is an [`Ear`]: it is resumed with what it heard and gives back what it does, which are the steps
-//! of a generator of the engine. It says a saying and hears back the fact the bus made of it; it waits and hears
-//! the next fact. While it hears, it calls a verb of the engine with [`call`], as an ear of the engine calls one,
-//! and the life that hears it answers at once, since the sandbox takes a call of the host while it waits for the
-//! host. It tells a verb with [`tell`] when it speaks of its own accord, which the life says in its turn.
+//! of a generator of the engine. It says a saying and hears back the fact the bus made of it; it calls a verb of the
+//! engine and hears back what the verb gave; it waits and hears the next fact. The life answers each verb with the
+//! ear in its place, so no ear reaches into a life that hears it. Code of a host that calls a verb while it runs,
+//! as the ears of the engine do, calls it through the [`Life`] lent to it for as long as it runs.
 //!
 //! [`ear`] makes one from an async body: [`hear`] and [`say`] read like the ears of the engine. The work an ear
 //! begins, a command, a wait, a call of a model, is a stream the ear gives its [`Co`] with [`Co::work`], and the ear
@@ -18,11 +18,9 @@
 //! life was doing; and whatever a work waits for wakes whoever drives.
 
 use std::{
-  cell::Cell,
   collections::VecDeque,
   future::{Future, poll_fn},
   pin::Pin,
-  ptr::NonNull,
   sync::OnceLock,
   task::{Context, Poll},
   thread,
@@ -36,6 +34,7 @@ use tokio::runtime::Handle;
 use unsync::spsc;
 
 use crate::{
+  engine::Life,
   fact::Fact,
   value::{Fault, Object},
 };
@@ -47,6 +46,8 @@ pub enum Heard {
   Born,
   /// One fact: the next of the log, or the one the bus made of what the ear said.
   Fact(Fact),
+  /// What the verb the ear called gave, or what it raised.
+  Answer(Result<Object, Fault>),
 }
 
 /// What an ear does with what it heard.
@@ -54,6 +55,8 @@ pub enum Heard {
 pub enum Step {
   /// One saying, which the bus makes whole and gives back as the next fact the ear hears.
   Say(Fact),
+  /// One verb of the engine, which the life says under the name of the ear and answers as the next thing it hears.
+  Call(Call),
   /// Nothing more: the ear waits for the next fact.
   Wait,
   /// The ear is over, as a generator that returned, and hears nothing more.
@@ -71,12 +74,26 @@ pub struct Call {
 }
 
 impl Step {
-  /// What a generator of a host yielded, as a step: nothing is a wait, and a list or a tuple is a saying.
+  /// What a generator of a host yielded, as a step: nothing is a wait, a map that names a verb under `call` is that
+  /// verb, with its words under `args` and `kwargs`, and a list or a tuple is a saying.
   #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
   pub(crate) fn of(yielded: &Object) -> Result<Step, Fault> {
     let got = yielded.as_ref();
     if got.type_name() == "NoneType" {
       return Ok(Step::Wait);
+    }
+    if let Some(pairs) = got.pairs() {
+      let field =
+        |key: &str| pairs.iter().find(|(name, _)| name.as_str() == Some(key)).map(|(_, one)| one);
+      let verb = field("call").and_then(|one| one.as_str()).map(str::to_owned);
+      let verb = verb
+        .ok_or_else(|| Fault::refused("an ear yields a verb as a map that names it under call"))?;
+      let args = field("args").and_then(|one| one.items()).unwrap_or_default();
+      let kwargs = field("kwargs").and_then(|one| one.pairs()).unwrap_or_default();
+      let kwargs =
+        kwargs.iter().filter_map(|(key, one)| Some((key.as_str()?.to_owned(), one.to_owned())));
+      let args = args.into_iter().map(|one| one.to_owned()).collect();
+      return Ok(Step::Call(Call { verb, args, kwargs: kwargs.collect() }));
     }
     let items = got.items().ok_or_else(|| Fault::refused("an ear yields a saying or nothing"))?;
     let saying = Object::tuple(items.into_iter().map(|one| one.to_owned()));
@@ -98,9 +115,21 @@ pub trait Ear {
     let _ = cx;
     Poll::Pending
   }
+
+  /// What a verb that [`Ear::poll`] gave came to, which the ear takes at its next poll.
+  fn answered(&mut self, got: Result<Object, Fault>) {
+    let _ = got;
+  }
+
+  /// What the ear does with what it heard, as [`Ear::resume`] does, with the life lent to it until it is done: code
+  /// of a host that calls a verb of the life while it runs calls it through the life. The life comes back with the
+  /// step. An ear of rust calls a verb by yielding it, and needs no life.
+  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
+    (self.resume(heard, cx), life)
+  }
 }
 
-/// What an ear says of its own accord: a saying, or a verb of the engine with its words, whose value goes nowhere.
+/// What an ear says of its own accord: a saying, or a verb of the engine with its words, which the life answers.
 #[derive(Debug)]
 pub enum Spoken {
   Saying(Fact),
@@ -114,12 +143,19 @@ pub enum Next<W> {
   Worked(W),
 }
 
-/// What the coroutine of an ear tells its body: a fact heard, the fact given back for what the body said, or that
-/// the life drives the ear, which lets its works go on until it hears again.
+/// What the coroutine of an ear tells its body: a fact heard, the fact given back for what the body said, what a verb
+/// it called came to, or that the life drives the ear, which lets its works go on until it hears again.
 enum Event {
   Heard(Fact),
   Given(Fact),
+  Answer(Result<Object, Fault>),
   Driven,
+}
+
+/// What the body waits for after it spoke: the fact given back for a saying, or what a verb came to.
+enum Back {
+  Given(Fact),
+  Answer(Result<Object, Fault>),
 }
 
 /// What the body of an ear of rust hears, says and works through, which the body owns: what the coroutine tells it,
@@ -165,24 +201,42 @@ impl<W: 'static> Co<W> {
     .await
   }
 
-  /// What the coroutine told since, taken. The coroutine polls the body each time it tells it something, so the body
-  /// takes what it was told then, and waits for no event.
-  fn told(&mut self) -> Option<Fact> {
-    let mut given = None;
+  /// What the coroutine told since, taken, and what came back for what the body spoke last. The coroutine polls the
+  /// body each time it tells it something, so the body takes what it was told then, and waits for no event.
+  fn told(&mut self) -> Option<Back> {
+    let mut back = None;
     while let Some(Some(event)) = self.events.recv().now_or_never() {
-      given = self.took(event).or(given);
+      back = self.took(event).or(back);
     }
-    given
+    back
+  }
+
+  /// One verb of the engine, called with its words under the name of the ear, and what it gave or raised: `a =
+  /// verb(...)` of python.
+  pub async fn call(
+    &mut self,
+    verb: &str,
+    args: Vec<Object>,
+    kwargs: Vec<(&str, Object)>,
+  ) -> Result<Object, Fault> {
+    let kwargs = kwargs.into_iter().map(|(key, one)| (key.to_owned(), one)).collect();
+    self.spoke(Spoken::Verb(Call { verb: verb.to_owned(), args, kwargs }));
+    poll_fn(|_| match self.told() {
+      Some(Back::Answer(got)) => Poll::Ready(got),
+      _ => Poll::Pending,
+    })
+    .await
   }
 
   /// One event, taken: a fact heard waits to be taken, and the life drives the ear until it hears again.
-  fn took(&mut self, event: Event) -> Option<Fact> {
+  fn took(&mut self, event: Event) -> Option<Back> {
     match event {
       Event::Heard(fact) => {
         self.driven = false;
         self.heard.push_back(fact);
       }
-      Event::Given(fact) => return Some(fact),
+      Event::Given(fact) => return Some(Back::Given(fact)),
+      Event::Answer(got) => return Some(Back::Answer(got)),
       Event::Driven => self.driven = true,
     }
     None
@@ -221,7 +275,9 @@ enum Given {
 
 impl Ear for Coroutine {
   fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
-    if let Heard::Fact(fact) = heard {
+    if let Heard::Answer(got) = heard {
+      self.tell(Event::Answer(got));
+    } else if let Heard::Fact(fact) = heard {
       match std::mem::replace(&mut self.next, Given::Heard) {
         Given::Heard => self.tell(Event::Heard(fact)),
         Given::Back => self.tell(Event::Given(fact)),
@@ -246,6 +302,10 @@ impl Ear for Coroutine {
     }
     spoken
   }
+
+  fn answered(&mut self, got: Result<Object, Fault>) {
+    self.tell(Event::Answer(got));
+  }
 }
 
 impl Coroutine {
@@ -254,26 +314,15 @@ impl Coroutine {
     let _ = self.events.try_send(event);
   }
 
-  /// What the ear does with what it heard: what it says, each verb it tells said at once, until it waits.
+  /// What the ear does with what it heard: a saying, a verb, or a wait, or how it ended.
   fn heard(&mut self, cx: &mut Context<'_>) -> Step {
-    loop {
-      match self.stepped(cx) {
-        Poll::Ready(Spoken::Saying(saying)) => return Step::Say(saying),
-        // A verb told while the ear hears is said at once, by the life that hears it.
-        Poll::Ready(Spoken::Verb(Call { verb, args, kwargs })) => {
-          let kwargs = kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
-          if let Err(fault) = call(&verb, args, kwargs) {
-            (self.body, self.ended) = (None, Some(Step::Over));
-            return Step::Raised(fault);
-          }
-        }
-        Poll::Pending => {
-          return self.ended.take().map_or(Step::Wait, |ended| {
-            self.ended = Some(Step::Over);
-            ended
-          });
-        }
-      }
+    match self.stepped(cx) {
+      Poll::Ready(Spoken::Saying(saying)) => Step::Say(saying),
+      Poll::Ready(Spoken::Verb(call)) => Step::Call(call),
+      Poll::Pending => self.ended.take().map_or(Step::Wait, |ended| {
+        self.ended = Some(Step::Over);
+        ended
+      }),
     }
   }
 
@@ -284,7 +333,12 @@ impl Coroutine {
       return Poll::Ready(spoken);
     }
     let Some(body) = self.body.as_mut() else { return Poll::Pending };
-    if let Poll::Ready(done) = body.as_mut().poll(cx) {
+    // What the body waits for, a pipe, a timer, a socket, the reactor wakes.
+    let polled = {
+      let _inside = reactor().enter();
+      body.as_mut().poll(cx)
+    };
+    if let Poll::Ready(done) = polled {
       self.body = None;
       self.ended = Some(done.map_or_else(Step::Raised, |()| Step::Over));
     }
@@ -335,69 +389,22 @@ pub async fn hear(co: &mut Co) -> Fact {
 /// One saying, said, and the fact the bus made of it, given back, which is `a = yield saying` of python.
 pub async fn say<W: 'static>(co: &mut Co<W>, saying: Fact) -> Fact {
   co.spoke(Spoken::Saying(saying));
-  poll_fn(|_| co.told().map_or(Poll::Pending, Poll::Ready)).await
+  poll_fn(|_| match co.told() {
+    Some(Back::Given(fact)) => Poll::Ready(fact),
+    _ => Poll::Pending,
+  })
+  .await
 }
 
-/// One verb of the engine, told with its words under the name of the ear, whose value goes nowhere. An ear that
-/// speaks of its own accord tells a verb so, since no life hears it then: a control that it must say before a done,
-/// such as a pause. While the ear hears, the verb is said at once, and in either case before what the ear says next.
-pub fn tell<W: 'static>(
+/// One verb of the engine, told with its words under the name of the ear, whose value goes nowhere: a control that
+/// the ear says before a done, such as a pause.
+pub async fn tell<W: 'static>(
   co: &mut Co<W>,
   verb: &str,
   args: Vec<Object>,
   kwargs: Vec<(&str, Object)>,
 ) {
-  let kwargs = kwargs.into_iter().map(|(key, one)| (key.to_owned(), one)).collect();
-  co.spoke(Spoken::Verb(Call { verb: verb.to_owned(), args, kwargs }));
-}
-
-/// What answers a verb that an ear calls while it hears: the life that hears the ear.
-pub(crate) type Answers<'a> = dyn FnMut(Call) -> Result<Object, Fault> + 'a;
-
-thread_local! {
-  /// What answers the verbs of the ear that a life of this thread hears now, when it hears one, and nothing while one
-  /// of those verbs runs.
-  static ANSWERS: Cell<Option<NonNull<Answers<'static>>>> = const { Cell::new(None) };
-}
-
-/// What `step` gives, with `answers` as what answers each verb that an ear calls while `step` runs, and inside the
-/// reactor, which wakes what the ear waits for. What answered before answers again once `step` is over, even when it
-/// panics. A life polls an ear inside the reactor alone, since no life hears it then.
-pub(crate) fn heard<R>(answers: &mut Answers<'_>, step: impl FnOnce() -> R) -> R {
-  struct Before(Option<NonNull<Answers<'static>>>);
-  impl Drop for Before {
-    fn drop(&mut self) {
-      ANSWERS.set(self.0.take());
-    }
-  }
-  // SAFETY: the pointer stands in the slot only while `step` runs, which `answers` outlives, and `call` alone reads
-  // it, out of the slot, so no two borrows of `answers` live at once.
-  let answering = unsafe {
-    std::mem::transmute::<NonNull<Answers<'_>>, NonNull<Answers<'static>>>(NonNull::from(answers))
-  };
-  let _before = Before(ANSWERS.replace(Some(answering)));
-  let _inside = reactor().enter();
-  step()
-}
-
-/// Whether a life of this thread hears an ear now, which answers each verb that the ear calls.
-pub fn hearing() -> bool {
-  ANSWERS.get().is_some()
-}
-
-/// One verb of the engine, called by its name with its words by the ear that a life of this thread hears now, and
-/// what it gave or raised.
-pub fn call(verb: &str, args: Vec<Object>, kwargs: Vec<(&str, Object)>) -> Result<Object, Fault> {
-  let kwargs = kwargs.into_iter().map(|(key, one)| (key.to_owned(), one)).collect();
-  let call = Call { verb: verb.to_owned(), args, kwargs };
-  let Some(mut answers) = ANSWERS.take() else {
-    return Err(Fault::refused(format!("{verb} is called while no life hears an ear")));
-  };
-  // SAFETY: the pointer stands in the slot only while the step that set it runs, and this borrow of it lives while
-  // the pointer is out of the slot.
-  let got = unsafe { answers.as_mut() }(call);
-  ANSWERS.set(Some(answers));
-  got
+  let _ = co.call(verb, args, kwargs).await;
 }
 
 /// The reactor that wakes an ear when what it waits for is ready: a pipe, a timer, a socket. It is one runtime of

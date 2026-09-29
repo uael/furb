@@ -25,7 +25,7 @@ pub mod binding;
 
 pub use crate::{
   ear::{Ear, Heard, Spoken, Step},
-  engine::{Act, Engine, Plain, verbs},
+  engine::{Act, Engine, Life, Plain, verbs},
   fact::Fact,
   value::{Exit, Fault, Object, ObjectRef, Text},
 };

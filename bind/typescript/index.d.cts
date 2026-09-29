@@ -159,13 +159,6 @@ export declare function attachImage(directory: string, path: string): ImageAttac
 export declare function bash(): NativeEar
 
 /**
- * One verb of the engine, called by its name with its words by the ear or the function of the host that a life
- * hears now, and what it gave. Who speaks is the verb `spoken`, and a callable the engine made is the verb `made`,
- * with its number and its words.
- */
-export declare function call(verb: string, args?: unknown[], kwargs?: Record<string, unknown>): unknown
-
-/**
  * The config directory of the user for this process, where the configs, the extensions of the user and the
  * preferences of the TUI stand.
  */
@@ -206,12 +199,6 @@ export declare function files(): NativeEar
  * The checker is the one every engine of this thread gates with, so a word is judged once and the same.
  */
 export declare function gate(sheet: string): Array<[number, string]>
-
-/**
- * Whether a life of this thread hears an ear or a function of the host now, so that a verb said now is said by
- * what it hears.
- */
-export declare function hearing(): boolean
 
 /**
  * An image a host attached: the name of its file, the uri a message names it by, its media type, and its size in

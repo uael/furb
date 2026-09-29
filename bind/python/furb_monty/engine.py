@@ -65,14 +65,21 @@ def held_engine() -> _monty.Engine:
   return engine
 
 
+def lent() -> _monty.Life | None:
+  """The life lent to the code of this interpreter that the life hears now, if any. A callback that such code left
+  behind keeps the life in its context after the life went back, and there the life is lent no more."""
+  life = _monty.life.get()
+  return life if life is not None and life.lent else None
+
+
 def call(name: str, args: tuple, kwargs: dict[str, object]) -> object:
   """One verb of the engine, said by its name with its words, and what it gave.
 
-  While the life hears a generator of this interpreter, the verb is that generator's, and the life that waits on it
-  answers it. Anywhere else it is a verb of the operator.
+  While the life hears code of this interpreter, the verb is that code's, and the life lent to it answers it.
+  Anywhere else it is a verb of the operator.
   """
-  if _monty.hearing():
-    return _monty.call(name, list(args), dict(kwargs))
+  if (life := lent()) is not None:
+    return life.call(name, list(args), dict(kwargs))
   engine = held_engine()
   while FORGOTTEN:
     engine.forget(FORGOTTEN.pop())
@@ -88,7 +95,8 @@ def call(name: str, args: tuple, kwargs: dict[str, object]) -> object:
 
 def speaks(value: str | None) -> str:
   """Who speaks in the life, and who speaks from now on when a value is given."""
-  got = _monty.call("spoken", [value], {}) if _monty.hearing() else held_engine().site(value)
+  life = lent()
+  got = life.call("spoken", [value], {}) if life is not None else held_engine().site(value)
   assert isinstance(got, str)
   return got
 
@@ -135,8 +143,8 @@ class Living:
 def calling(n: int, args: tuple[object, ...], kwargs: dict[str, object]) -> object:
   """One call of what the engine holds under a handle, through the sandbox: by the generator the life hears, while
   it hears one, and as a call of the operator anywhere else."""
-  if _monty.hearing():
-    return _monty.call("made", [n, list(args), dict(kwargs)], {})
+  if (life := lent()) is not None:
+    return life.call("made", [n, list(args), dict(kwargs)], {})
   return held_engine().made(n, list(args), dict(kwargs))
 
 

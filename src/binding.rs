@@ -24,7 +24,7 @@ use napi_derive::napi;
 use pyo3::pyfunction;
 
 use crate::{
-  Ear, Fact, Fault, Object, ear,
+  Ear, Fact, Fault, Object,
   extension::{self, Extension},
   life::Opening,
   wire,
@@ -389,34 +389,6 @@ pub fn image_references(message: String) -> Vec<images::Named> {
 pub fn image_type(data: &[u8]) -> Result<ImageType, Fault> {
   let (media, extension) = images::kind(data).map_err(Fault::refused)?;
   Ok(ImageType { mime_type: media.to_owned(), extension: extension.to_owned() })
-}
-
-/// Whether a life of this thread hears an ear or a function of the host now, so that a verb said now is said by
-/// what it hears.
-#[cfg_attr(feature = "python", pyfunction)]
-#[cfg_attr(feature = "typescript", napi)]
-pub fn hearing() -> bool {
-  ear::hearing()
-}
-
-/// One verb of the engine, called by its name with its words by the ear or the function of the host that a life
-/// hears now, and what it gave. Who speaks is the verb `spoken`, and a callable the engine made is the verb `made`,
-/// with its number and its words.
-#[cfg_attr(feature = "python", pyfunction, pyo3(signature = (verb, args = None, kwargs = None)))]
-#[cfg_attr(
-  feature = "typescript",
-  napi(
-    ts_args_type = "verb: string, args?: unknown[], kwargs?: Record<string, unknown>",
-    ts_return_type = "unknown"
-  )
-)]
-pub fn call(
-  verb: String,
-  args: Option<Vec<Value>>,
-  kwargs: Option<HashMap<String, Value>>,
-) -> Result<Value, Fault> {
-  let (args, kwargs) = words(args, &kwargs);
-  ear::call(&verb, args, kwargs).map(Value)
 }
 
 /// The words of a call that a host gave, by position and by name, as the engine takes them.

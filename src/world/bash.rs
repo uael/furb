@@ -23,7 +23,7 @@ use unsync::{oneshot, spsc};
 
 use super::here;
 use crate::{
-  ear::{Co, Ear, Next, call, ear, say},
+  ear::{Co, Ear, Next, ear, say},
   fact::Fact,
   value::{Exit, Fault, Object, Text},
 };
@@ -86,7 +86,7 @@ pub fn bash() -> Box<dyn Ear> {
       match a.kind() {
         "bash" if a.question() => {
           say(&mut co, Fact::says("started", &about, [])).await;
-          match begun(&a) {
+          match begun(&mut co, &a).await {
             Ok(begun) => {
               let (stdin, fed_in) = spsc::unbounded();
               let (stop, stopped) = oneshot::channel();
@@ -100,7 +100,7 @@ pub fn bash() -> Box<dyn Ear> {
             // The machine would not start it, so the ear closes it with why, as a prompt that the operator cannot
             // answer is closed, and the chain is told why.
             Err(fault) => {
-              call("close", vec![fault.object()], vec![("id", Object::string(&about))])?;
+              co.call("close", vec![fault.object()], vec![("id", Object::string(&about))]).await?;
             }
           }
         }
@@ -149,7 +149,7 @@ struct Begun {
 }
 
 /// A command begun: its shell spawned in the directory of its chain.
-fn begun(a: &Fact) -> Result<Begun, Fault> {
+async fn begun(co: &mut Co<Said>, a: &Fact) -> Result<Begun, Fault> {
   let about = a.about().to_owned();
   let on = a.on().to_owned();
   let line = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
@@ -158,9 +158,9 @@ fn begun(a: &Fact) -> Result<Begun, Fault> {
   let timeout = a.word(3).and_then(|one| one.as_float().or_else(|| one.as_int().map(|n| n as f64)));
   // A timeout past what the machine counts runs to the end of the command, as no timeout does.
   let timeout = timeout.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
-  let dir = here(&on)?;
+  let dir = here(co, &on).await?;
   let asked = vec![Object::string("merged"), Object::string(on), Object::string(about.clone())];
-  let merged = call("ask", asked, vec![])?.as_ref().as_bool().unwrap_or_default();
+  let merged = co.call("ask", asked, vec![]).await?.as_ref().as_bool().unwrap_or_default();
   let mut command = Command::new(SHELL);
   command
     .arg("-c")

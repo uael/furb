@@ -25,7 +25,7 @@ use unsync::oneshot;
 
 use crate::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
-  ear::{Co, Next, call, ear, hear, say, tell},
+  ear::{Co, Next, ear, hear, say, tell},
   engine::callable,
   verbs, world,
 };
@@ -88,7 +88,7 @@ fn provider(
         }
         "reply" => {
           say(&mut co, Fact::says("started", a.about(), [])).await;
-          let turns = call("turns", vec![], vec![("on", Object::string(a.on()))])?;
+          let turns = co.call("turns", vec![], vec![("on", Object::string(a.on()))]).await?;
           read.borrow_mut().push(turns.py_repr());
           let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
           let turn = Object::tuple([
@@ -508,7 +508,7 @@ fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
           }
         }
         Next::Worked((about, on)) => {
-          tell(&mut co, "pause", vec![Object::string(on)], vec![]);
+          tell(&mut co, "pause", vec![Object::string(on)], vec![]).await;
           say(&mut co, Fact::says("due", &about, [Object::float(1.0)])).await;
           say(&mut co, done(&about, Object::none())).await;
         }

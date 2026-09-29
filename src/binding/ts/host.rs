@@ -6,13 +6,14 @@
 //! was made with, or an error by its message.
 
 use std::{
-  cell::RefCell,
+  cell::{OnceCell, RefCell},
   ptr,
   rc::{Rc, Weak},
   sync::Arc,
   task::{Context, Wake, Waker},
 };
 
+use futures::FutureExt;
 use napi::{
   Env, JsDeferred, JsValue, ValueType,
   bindgen_prelude::{
@@ -22,6 +23,7 @@ use napi::{
   threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
 };
 use serde_json::Value as Json;
+use unsync::oneshot;
 
 use super::{JsAct, native, refused};
 use crate::{
@@ -270,11 +272,14 @@ impl JsEar {
     let env = &self.env;
     let held = self.generator.as_ref().ok_or_else(|| Fault::refused("the ear is over"))?;
     let generator = held.get_value(env).map_err(refused)?;
-    let args = match heard {
-      Heard::Born => vec![],
-      Heard::Fact(fact) => vec![outward(env, &fact.0)?],
+    // What a verb gave is the value of the yield that called it, and what it raised is thrown in there.
+    let (way, args) = match heard {
+      Heard::Born => ("next", vec![]),
+      Heard::Fact(fact) => ("next", vec![outward(env, &fact.0)?]),
+      Heard::Answer(Ok(got)) => ("next", vec![outward(env, &got)?]),
+      Heard::Answer(Err(fault)) => ("throw", vec![outward(env, &fault.object())?]),
     };
-    let next: Unknown = generator.get_named_property("next").map_err(refused)?;
+    let next: Unknown = generator.get_named_property(way).map_err(refused)?;
     let got = match call(env, next, Some(generator.to_unknown()), args) {
       Ok(got) => got.coerce_to_object().map_err(refused)?,
       Err(fault) => return Ok(Step::Raised(fault)),
@@ -288,7 +293,13 @@ impl JsEar {
 }
 
 type Resolver = Box<dyn FnOnce(Env) -> napi::Result<Json>>;
-type Pending = Rc<RefCell<Option<JsDeferred<Json, Resolver>>>>;
+
+/// A result that JavaScript awaits: what the act comes to, which its watcher sends, and the promise it settles. The
+/// watcher goes with the engine, so a result whose engine was disposed comes to nothing.
+struct Pending {
+  came: oneshot::Receiver<Object>,
+  deferred: JsDeferred<Json, Resolver>,
+}
 
 /// A function of JavaScript that another thread may call, which keeps JavaScript alive when it is strong.
 type Waking<const WEAK: bool> = ThreadsafeFunction<(), (), (), napi::Status, false, WEAK>;
@@ -317,10 +328,11 @@ pub struct Held {
 
 impl Held {
   pub fn new(env: &Env, engine: Engine) -> napi::Result<Rc<Held>> {
-    let slot: Rc<RefCell<Weak<Held>>> = Rc::default();
+    // The function that drives the engine is made before what it drives, which it is given once that stands.
+    let slot: Rc<OnceCell<Weak<Held>>> = Rc::default();
     let driven = Rc::clone(&slot);
     let drive = env.create_function_from_closure("drive", move |_| {
-      if let Some(held) = driven.borrow().upgrade() {
+      if let Some(held) = driven.get().and_then(Weak::upgrade) {
         held.drive();
       }
       Ok(())
@@ -335,7 +347,7 @@ impl Held {
       drives: drive.create_ref()?,
       alive: RefCell::default(),
     });
-    *slot.borrow_mut() = Rc::downgrade(&held);
+    let _ = slot.set(Rc::downgrade(&held));
     held.drive();
     Ok(held)
   }
@@ -345,12 +357,27 @@ impl Held {
   pub fn drive(&self) {
     let waker = Waker::from(Arc::clone(&self.wakes));
     let _ = self.call(|engine| engine.pump(&waker));
-    self.kept();
   }
 
-  /// JavaScript is kept alive while it awaits a result, and let go when it awaits none.
+  /// Each awaited result that came settles its promise, and JavaScript is kept alive while it awaits a result, and
+  /// let go when it awaits none.
   fn kept(&self) {
-    self.pending.borrow_mut().retain(|waiting| waiting.borrow().is_some());
+    let pending = std::mem::take(&mut *self.pending.borrow_mut());
+    for mut one in pending {
+      match (&mut one.came).now_or_never() {
+        None => self.pending.borrow_mut().push(one),
+        Some(Some(value)) => match Fault::of(value.as_ref()) {
+          Some(fault) => one.deferred.reject(fault.into()),
+          None => {
+            let value = wire::outward(value.as_ref());
+            one.deferred.resolve(Box::new(move |_| Ok(value)));
+          }
+        },
+        Some(None) => {
+          one.deferred.reject(napi::Error::from_reason("CancelledError: the engine was disposed"));
+        }
+      }
+    }
     let awaited = !self.pending.borrow().is_empty();
     let mut alive = self.alive.borrow_mut();
     if !awaited {
@@ -375,34 +402,31 @@ impl Held {
     })?;
     let engine =
       held.as_mut().ok_or_else(|| napi::Error::from_reason("The engine is disposed."))?;
-    Ok(call(engine)?)
+    let got = call(engine);
+    drop(held);
+    self.kept();
+    Ok(got?)
   }
 
   /// What an act comes to, as a promise of JavaScript.
   pub fn result<'env>(&self, env: &'env Env, id: &str) -> napi::Result<JsObject<'env>> {
     let (deferred, promise) = env.create_deferred::<Json, Resolver>()?;
-    let waiting = Rc::new(RefCell::new(Some(deferred)));
-    self.pending.borrow_mut().push(waiting.clone());
-    let settled = waiting.clone();
-    let result = self.call(|engine| {
+    let (told, came) = oneshot::channel();
+    let mut told = Some(told);
+    let watched = self.call(|engine| {
       engine.watch(id, move |value| {
-        if let Some(deferred) = settled.borrow_mut().take() {
-          match Fault::of(value.as_ref()) {
-            Some(fault) => deferred.reject(fault.into()),
-            None => {
-              let value = wire::outward(value.as_ref());
-              deferred.resolve(Box::new(move |_| Ok(value)));
-            }
-          }
+        if let Some(told) = told.take() {
+          let _ = told.send(value.clone());
         }
       })
     });
-    if let Err(error) = result
-      && let Some(deferred) = waiting.borrow_mut().take()
-    {
-      deferred.reject(error);
+    match watched {
+      Ok(()) => {
+        self.pending.borrow_mut().push(Pending { came, deferred });
+        self.kept();
+      }
+      Err(error) => deferred.reject(error),
     }
-    self.kept();
     Ok(promise)
   }
 
@@ -412,11 +436,6 @@ impl Held {
       .try_borrow_mut()
       .map_err(|_| napi::Error::from_reason("The engine is in a call of the host."))?;
     engine.take();
-    for waiting in self.pending.borrow_mut().drain(..) {
-      if let Some(deferred) = waiting.borrow_mut().take() {
-        deferred.reject(napi::Error::from_reason("CancelledError: the engine was disposed"));
-      }
-    }
     drop(engine);
     self.kept();
     Ok(())

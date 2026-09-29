@@ -11,7 +11,7 @@ use std::{
 
 use furb::{
   Ear, Fact, Fault, Object,
-  ear::{Co, Next, call, ear, say, tell},
+  ear::{Co, Next, ear, say, tell},
   world::{SHAPES, answered},
 };
 use futures::{Stream, stream};
@@ -46,7 +46,7 @@ impl Asked {
       return Ok(Some(asked));
     }
     let no = answered(&asked.shape, "").unwrap_or_else(|no| no.object());
-    call("close", vec![no], vec![("id", Object::string(&asked.about))])?;
+    co.call("close", vec![no], vec![("id", Object::string(&asked.about))]).await?;
     Ok(None)
   }
 }
@@ -96,7 +96,7 @@ pub fn terminal() -> Box<dyn Ear> {
             Err(no) => Err(Fault::refused(format!("the operator cannot be read: {no}"))),
           };
           let value = value.unwrap_or_else(|no| no.object());
-          tell(&mut co, "close", vec![value], vec![("id", Object::string(&about))]);
+          tell(&mut co, "close", vec![value], vec![("id", Object::string(&about))]).await;
         }
       }
     }

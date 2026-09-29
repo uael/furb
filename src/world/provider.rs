@@ -31,7 +31,7 @@ use unsync::oneshot;
 use self::images::Images;
 use crate::{
   SYSTEM,
-  ear::{Co, Ear, Next, call, ear, say, tell},
+  ear::{Co, Ear, Next, ear, say, tell},
   engine::{OPERATOR, WINDOW},
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
@@ -304,7 +304,7 @@ impl Provider {
             let got =
               got.map_err(|no| Fault::refused(format!("{} answered nothing: {no}", reply.actor)));
             if got.is_err() && reply.again {
-              tell(&mut co, "pause", vec![Object::string(&reply.chain)], vec![]);
+              tell(&mut co, "pause", vec![Object::string(&reply.chain)], vec![]).await;
             }
             let got = got.unwrap_or_else(|fault| fault.object());
             say(&mut co, Fact::says("done", &id, [got])).await;
@@ -320,7 +320,7 @@ impl Provider {
             say(&mut co, Fact::says("started", &about, [])).await;
             let chain = a.on().to_owned();
             let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
-            let turns = call("turns", vec![], vec![("on", Object::string(&chain))])?;
+            let turns = co.call("turns", vec![], vec![("on", Object::string(&chain))]).await?;
             let (tells, told) = mpsc::unbounded_channel();
             let wrote = written(writes.is_some(), &about, &tells);
             let key = format!("{life}/{chain}");
