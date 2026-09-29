@@ -101,6 +101,9 @@ const twice = 800;
 const viewLabels: Record<View, string> = { feed: "Feed", transcript: "Transcript", changes: "Changes" };
 /** A text with its first letter in upper case. */
 const title = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+/** Why a word failed, as the operator reads it: each home as ~, and without the name <string> that the parser gives
+ * the word and the line that it says a second time. */
+const readable = (reason: string) => shortenHomes(reason).replace(/\s*\(<string>, line \d+\)$/gm, "");
 /** What an act is doing: the word that says it, the glyph that shows it, and their color. */
 type State = { word: string; mark: string; color: RGBA };
 /** The state of an act that failed, that a cancel ended, that is done, or that a pause holds. */
@@ -1863,8 +1866,8 @@ export class App {
             ],
             failure
               ? this.whole(
-                  this.text(clip(shortenHomes(failure).split("\n")[0] ?? "", this.feedWidth - 8), c.warm),
-                  () => shortenHomes(failure),
+                  this.text(clip(readable(failure).split("\n")[0] ?? "", this.feedWidth - 8), c.warm),
+                  () => readable(failure),
                 )
               : undefined,
             ["Wake", "runs what waits, once the cause is fixed", () => this.action("/wake")],
@@ -2468,11 +2471,8 @@ export class App {
       if (how.findings.length) {
         under.add(this.text("The gate refused this word", c.warm));
         for (const finding of how.findings.filter(Boolean))
-          under.add(this.branched(shortenHomes(finding), c.warm));
-      } else
-        under.add(
-          this.text(shortenHomes((rung.run.reason ?? "").replace(/\s*\(<string>, line \d+\)$/, "")), c.warm),
-        );
+          under.add(this.branched(readable(finding), c.warm));
+      } else under.add(this.text(readable(rung.run.reason ?? ""), c.warm));
     }
     if (under.getChildren().length) inner.add(under);
     box.add(inner);
@@ -2914,7 +2914,7 @@ export class App {
   private actPreview(act: ActRow): BlockOptions["preview"] {
     if (act.run)
       return act.run.reason && !cancelled(act)
-        ? (box) => this.excerpt(box, act.run?.reason ?? "", false, c.warm)
+        ? (box) => this.excerpt(box, readable(act.run?.reason ?? ""), false, c.warm)
         : undefined;
     if (failed(act)) {
       const fault = act.value as { is: string; args: unknown[] };
@@ -3017,9 +3017,7 @@ export class App {
     const inner = this.box({ gap: space.stack, paddingLeft: space.inset });
     // A rung whose word has not come yet shows no code.
     if (word) inner.add(this.numbered(word));
-    // The parser names the word as <string> and says its line twice, which the reason leaves out.
-    if (reason)
-      inner.add(this.branched(shortenHomes(reason.replace(/\s*\(<string>, line \d+\)$/, "")), c.warm));
+    if (reason) inner.add(this.branched(readable(reason), c.warm));
     box.add(inner);
   }
   /** What an act that no word made holds, open: the Python of a rung, or the words and the value of any other act, then

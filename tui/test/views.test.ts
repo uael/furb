@@ -637,6 +637,15 @@ test("a user turn of the transcript stands in the colors of Python, and the name
     ]).toEqual([true, true, true]);
   }));
 
+test("the reason that a word failed leaves out the name that the parser gives the word and the line that it says again", () =>
+  composing(async ({ session, frame }) => {
+    await session.submit("/run this is invalid python !!!");
+    await session.refresh();
+    const shown = await frame();
+    expect(shown).toContain("line 1: Simple statements must be separated by newlines or semicolons");
+    expect(shown).not.toContain("<string>");
+  }));
+
 test("a heading of markdown inside a quote of a word is text of the quote, and no step of the word", () =>
   composing(async ({ session, frame }) => {
     await session.engine.result(
