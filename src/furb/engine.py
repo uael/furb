@@ -11,6 +11,7 @@ WINDOW = 200000
 OPERATOR = "operator"
 TIMEOUT = 600.0
 ROOT = "chain1"
+NOTES = ("tell", "pause", "wake", "cancel", "close")
 site = ContextVar("site", default=OPERATOR)
 raised = None
 type Show = Callable[[list[str]], list[int]]
@@ -92,7 +93,7 @@ def turns(on: str = "") -> list[tuple]:
       case ("done", about, _, (_, _, _, _) as turn) if question(("reply", about)):
         folded += [("user", "\n\n".join(user[:cut]), None, None), turn]
         del user[:cut]
-      case (kind, *_, notes) if kind in ("tell", "pause", "wake", "cancel", "close"):
+      case (kind, *_, notes) if kind in NOTES:
         user.append("\n".join(notes))
   return [*folded, ("user", "\n\n".join(user), None, None)]
 
@@ -113,11 +114,7 @@ def program(on: str = "") -> dict[str, str]:
 
 
 def standing() -> list:
-  for x in reversed(transcript(ROOT)):
-    match x:
-      case ("done", about, _, [_, _, _] as now) if question(("stand", about)):
-        return now
-  return []
+  return latest("stand", ROOT, list) or []
 
 
 def stand(on: str = ROOT) -> list:
@@ -143,11 +140,7 @@ def cd(path: str, on: str = "") -> str:
 
 
 def cwd(on: str = "") -> str:
-  for x in reversed(transcript(on)):
-    match x:
-      case ("done", about, _, str() as path) if question(("cd", about)):
-        return path
-  return standing()[1]
+  return latest("cd", on, str) or standing()[1]
 
 
 def pause(id: str) -> None:
@@ -311,7 +304,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           yield "done", about, text
         case ("rung", rid, maker, _, "", _, to):
           waiting[rid] = maker, to
-        case (kind, *_, notes) if kind in ("tell", "pause", "wake", "cancel", "close"):
+        case (kind, *_, notes) if kind in NOTES:
           heard.append("\n".join(notes))
         case ("ready", rid, _, word):
           waiting.pop(rid, None)
@@ -350,7 +343,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       if (
         unseen
         and module().get("actor") != OPERATOR
-        and all(peek(x[1], ...) is not ... for x in transcript() if x[0] == "thread" and x[3] == id)
+        and all(settled(x[1]) for x in transcript() if x[0] == "thread" and x[3] == id)
       ):
         with site.set(unseen):
           rung(on=id)
@@ -542,7 +535,7 @@ def told(id, what="", *notes, **words):
 def control(kind, name, id, *words):
   return (
     get(id)
-    and (peek(id, ...) is ... or (kind == "wake" and paused(id)))
+    and (not settled(id) or (kind == "wake" and paused(id)))
     and say(kind, id, *words, [headed(id, name, value=(*words, None)[0])])
   )
 
@@ -574,6 +567,13 @@ def unquoted(word):
   return word
 
 
+def latest(kind, on, shape):
+  return next(
+    (x[3] for x in reversed(transcript(on)) if x[0] == "done" and question((kind, x[1])) and isinstance(x[3], shape)),
+    None,
+  )
+
+
 def offered(roster, to):
   return next((w for name, efforts, w in roster if to in (name, *[name + "/" + x for x in efforts])), None)
 
@@ -591,6 +591,10 @@ def paused(id):
   return next(
     (x[0] == "pause" for x in reversed(transcript(scope(id))) if x[0] in ("pause", "wake") and covers(x, id)), False
   )
+
+
+def settled(id):
+  return peek(id, ...) is not ...
 
 
 def ended(a, id):
@@ -635,7 +639,7 @@ def ending(ear):
     g, a = ear(id), None
     while lives(g, a):
       a = yield
-      if peek(id, ...) is not ...:
+      if settled(id):
         return
       if a[0] in ("cancel", "close") and covers(a, id):
         yield "done", id, ended(a, id)
@@ -684,7 +688,7 @@ def boot(record=(), **outside):
               if a is not known[about]:
                 yield "keep", "", (a,)
             if kind == "wake":
-              for name in [x for x in holding if covers(a, x) and peek(x, ...) is ...]:
+              for name in [x for x in holding if covers(a, x) and not settled(x)]:
                 holding.remove(name)
                 taken.discard(name)
                 offers(known[name])
