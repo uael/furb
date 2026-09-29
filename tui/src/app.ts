@@ -34,9 +34,8 @@ import {
   RGBA,
   type ScrollBoxOptions,
   ScrollBoxRenderable,
-  StyledText,
+  type SimpleHighlight,
   TextareaRenderable,
-  type TextChunk,
   type TextOptions,
   TextRenderable,
 } from "@opentui/core";
@@ -1454,13 +1453,28 @@ export class App {
     box.add(edge("bottom"));
     return inner;
   }
-  private code(content: string): CodeRenderable {
+  /** Python in the colors of its syntax. In a user turn, a header is a comment to Python, and the start of an entry to
+   * the reader: the name of its act or the kind of its query stands in the color of a reference, and the rest of its
+   * line as text. An image attachment there is a reference too. */
+  private code(content: string, user = false): CodeRenderable {
     const code = new CodeRenderable(this.renderer, {
       content: safeText(content),
       filetype: "python",
       syntaxStyle: this.style,
       wrapMode: "word",
       drawUnstyledText: true,
+      onHighlight: user
+        ? (highlights, { content: text }) => [
+            ...highlights,
+            ...[...text.matchAll(/^(#(?! |$)\S+)(.*)$/gm)].flatMap((header): SimpleHighlight[] => [
+              [header.index, header.index + (header[1]?.length ?? 0), "reference"],
+              [header.index + (header[1]?.length ?? 0), header.index + header[0].length, "header"],
+            ]),
+            ...[...text.matchAll(/furb-image:\/\/[\w.]+/g)].map(
+              (image): SimpleHighlight => [image.index, image.index + image[0].length, "attachment"],
+            ),
+          ]
+        : undefined,
     });
     return this.pointable(code, content);
   }
@@ -1879,7 +1893,7 @@ export class App {
           ],
           (box) => {
             const inner = this.box({ paddingLeft: space.between });
-            inner.add(turn[0] === "assistant" ? this.code(text) : this.transcriptText(text));
+            inner.add(this.code(text, turn[0] === "user"));
             box.add(inner);
           },
           { group: turn[0], shown: text },
@@ -3185,28 +3199,6 @@ export class App {
     } catch {
       /* A path can have disappeared since the turn was written. */
     }
-  }
-
-  /** The python of a user turn: a header is `#` and the name of an act or the kind of a query, a comment is `#` and
-   * a space, and a header that names an act and an image attachment are references. */
-  private transcriptText(source: string): TextRenderable {
-    const text = safeText(source);
-    const chunks: TextChunk[] = [];
-    let at = 0;
-    for (const match of text.matchAll(/^#(?! |$)\S+|^#(?: .*)?$|furb-image:\/\/[\w.]+/gm)) {
-      if (match.index > at) chunks.push({ __isChunk: true, text: text.slice(at, match.index), fg: c.bright });
-      chunks.push({
-        __isChunk: true,
-        text: match[0],
-        fg: match[0].startsWith("furb-image://") ? c.done : /^#(?! |$)/.test(match[0]) ? c.model : c.faint,
-      });
-      at = match.index + match[0].length;
-    }
-    chunks.push({ __isChunk: true, text: text.slice(at), fg: c.bright });
-    return this.pointable(
-      new TextRenderable(this.renderer, { content: new StyledText(chunks), wrapMode: "word", flexShrink: 0 }),
-      text,
-    );
   }
 
   private renderRail(): void {

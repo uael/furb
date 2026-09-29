@@ -218,5 +218,9 @@ export function syntax(): SyntaxStyle {
     "markup.link.label": { fg: theme.operator },
     "markup.link.url": { fg: theme.faint, underline: true },
     "markup.quote": { fg: theme.prose, italic: true },
+    // The header of an entry of a user turn, and an image attachment in it.
+    reference: { fg: theme.model, italic: false },
+    header: { fg: theme.bright, italic: false },
+    attachment: { fg: theme.done, italic: false },
   });
 }

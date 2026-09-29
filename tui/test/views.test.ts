@@ -617,6 +617,26 @@ test("a question for the operator says it waits, and once answered says it is pa
     ]).toEqual([true, false, true]);
   }));
 
+test("a user turn of the transcript stands in the colors of Python, and the name that starts a header in the color of a reference", () =>
+  composing(async ({ session, screen, frame }) => {
+    session.show("transcript");
+    await frame();
+    await Promise.all(highlighting(screen.renderer.root));
+    await frame();
+    const fg = (text: string) => {
+      const [x, y] = find(screen, text);
+      return cellAt(screen.captureSpans(), x, y).fg;
+    };
+    const [model, done, bright] = [palettes.furb.model, palettes.furb.done, palettes.furb.bright].map(
+      RGBA.fromHex,
+    );
+    expect([
+      fg("#chain1")?.equals(model),
+      fg("'root'")?.equals(done),
+      fg("chain1_label")?.equals(bright),
+    ]).toEqual([true, true, true]);
+  }));
+
 test("a heading of markdown inside a quote of a word is text of the quote, and no step of the word", () =>
   composing(async ({ session, frame }) => {
     await session.engine.result(
