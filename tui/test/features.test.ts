@@ -354,6 +354,33 @@ test("/extensions lists what a life runs, and a cancel of the work of a chain le
   }
 });
 
+test("an act that ended and told nothing shows nothing in the feed, as a question of memory that found no file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-untold-"));
+  try {
+    await writeFile(join(directory, "a.txt"), "one");
+    const opened = await openEngine({ cwd: directory, record: join(directory, "session.jsonl") });
+    await composing(
+      async ({ session, frame }) => {
+        await session.command('/run read("a.txt")');
+        await until(session, () =>
+          session.activity.some(
+            (act) => act.kind === "memory" && String(act.words[0]).endsWith("a.txt") && act.done,
+          ),
+        );
+        await session.refresh();
+        const shown = await frame();
+        expect(shown).toContain("read1");
+        // The word of the rung that defines memory still shows, but no act named memory does.
+        expect(shown).not.toContain("✓ memory");
+      },
+      { width: 140, height: 42 },
+      new Session(opened.engine, opened.host, true),
+    );
+  } finally {
+    await remove(directory);
+  }
+});
+
 test("a queued dispatch recovers both sides of the prompt-write boundary without sending twice", async () => {
   let session = await demoSession();
   try {

@@ -1476,17 +1476,12 @@ export class App {
           writing.push([act.id, { chain: w.selected, text: "", thinking: "" }]);
       const waiting = new Set(writing.map(([id]) => id));
       // An act that no turn tells yet stands where it came in time, among the items that the turns tell, so the
-      // feed never moves a card once it shows it.
+      // feed never moves a card once it shows it. The last turn tells all that an act told up to now, so an act that
+      // ended and that no turn tells told nothing, such as a question of memory that found no new file, or a rung
+      // that a cancel ended before it wrote a word, whose message says the cancel. It shows nothing.
       const position = new Map(w.activity.map((act, index) => [act.id, index]));
       const untold = w.activity
-        // A rung that a cancel ended before it wrote a word shows nothing, since its message says the cancel.
-        .filter(
-          (act) =>
-            !told.has(act.id) &&
-            !waiting.has(act.id) &&
-            this.isPoint(act) &&
-            !(act.kind === "rung" && cancelled(act) && !w.program[act.id]),
-        )
+        .filter((act) => !act.done && !told.has(act.id) && !waiting.has(act.id) && this.isPoint(act))
         .map((act) => ({
           at: position.get(act.id) ?? Number.POSITIVE_INFINITY,
           item: (w.isUserPrompt(act) || asksOperator(act)
