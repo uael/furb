@@ -790,10 +790,6 @@ export class App {
   render = (): void => {
     if (this.closed) return;
     const w = this.session;
-    // A view that stands at its end stays there when a row above the input opens or the input grows, which makes the
-    // view shorter.
-    const end = !this.tree && this.scrollTarget === undefined && this.place === "end";
-    const shown = this.lastView;
     if (w.theme !== this.theme) this.applyTheme(w.theme);
     if (this.draftKey !== w.draftKey) this.showDraft(w.draftKey);
     this.rail.visible = w.preferences.sidebar && this.renderer.width >= 100;
@@ -889,7 +885,6 @@ export class App {
     this.renderContent();
     this.renderRail();
     this.suggest();
-    if (end && this.lastView === shown && this.scrollTarget === undefined) this.scrollAfterLayout("end");
     const diagnostics = JSON.stringify([w.rejectedWord, w.findings]);
     if (diagnostics !== this.diagnosticsKey) {
       this.diagnosticsKey = diagnostics;
