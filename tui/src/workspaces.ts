@@ -230,12 +230,15 @@ export class Workspaces extends EventEmitter {
   /** Find the unfinished work of saved records by their replay, which takes a time that grows with each record, so
    * the rows show their state when it comes and nothing waits for it. */
   private inspect(paths: string[]): void {
+    // A replay tells a record as it was when the replay began, so a row whose record changed or opened since then keeps
+    // what that change or that open told it.
+    const keys = new Map(paths.map((path) => [path, this.inspected.get(path)]));
     inspectRecords(paths, this.stop.signal).then(
       (states) => {
         for (const group of this.groups)
           for (const entry of group.sessions) {
             const state = states[entry.path];
-            if (!state || entry.session || this.opening.has(entry.path)) continue;
+            if (!state || entry.session || this.inspected.get(entry.path) !== keys.get(entry.path)) continue;
             entry.error = state.error;
             entry.status = state.error ? "error" : state.pending ? "paused" : "saved";
           }
@@ -296,6 +299,7 @@ export class Workspaces extends EventEmitter {
     const pending = this.opening.get(entry.path);
     if (pending) return pending;
     const opening = (async () => {
+      this.inspected.delete(entry.path);
       entry.status = "opening";
       entry.error = undefined;
       this.emit("change");
