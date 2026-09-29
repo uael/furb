@@ -175,10 +175,7 @@ impl Images {
     for paragraph in paragraphs(python) {
       let name = paragraph.strip_prefix('#').and_then(|rest| rest.split([' ', '\n']).next());
       let name = name.unwrap_or_default();
-      let prompt = name
-        .strip_prefix("prompt")
-        .is_some_and(|n| !n.is_empty() && n.bytes().all(|one| one.is_ascii_digit()));
-      let opens = prompt
+      let opens = crate::fact::named(name, "prompt")
         && paragraph.lines().last().is_some_and(|last| last.starts_with(&format!("{name}: Act[")));
       if !opens {
         continue;

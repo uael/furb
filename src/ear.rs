@@ -147,13 +147,10 @@ pub async fn hear(co: &Co) -> Fact {
 
 /// One saying, said, and the fact the bus made of it, which is `a = yield saying` of python.
 pub async fn say(co: &Co, saying: Fact) -> Fact {
-  let mut said = co.yield_(Step::Say(saying)).await;
-  loop {
-    if let Heard::Fact(fact) = said {
-      return fact;
-    }
-    said = co.yield_(Step::Wait).await;
+  if let Heard::Fact(fact) = co.yield_(Step::Say(saying)).await {
+    return fact;
   }
+  hear(co).await
 }
 
 /// What answers a verb that an ear calls while it hears: the life that hears the ear.

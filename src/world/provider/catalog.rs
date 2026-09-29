@@ -173,7 +173,7 @@ impl Catalog {
   ) -> Catalog {
     let env = |name: &str| env(name).filter(|one| !one.is_empty());
     let found = claude.is_some();
-    let claude = claude.unwrap_or_default().models().into_iter();
+    let claude = claude.unwrap_or_else(|| Claude::with(None, None)).models().into_iter();
     let mut models: Vec<_> = claude.map(|model| (model, found)).collect();
     for (provider, one) in listed {
       let credential = one.credential(&env);

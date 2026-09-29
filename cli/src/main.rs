@@ -122,13 +122,10 @@ enum Command {
 impl Place {
   /// A life in the directory of this place, on its record, which it keeps what it says to when `keeps` says so.
   fn opening(&self, keeps: bool) -> Opening {
+    let cwd = self.cwd.clone().unwrap_or_else(|| PathBuf::from("."));
+    let directory = std::path::absolute(&cwd).unwrap_or(cwd).display().to_string();
     let record = self.record.as_ref().map(|one| one.display().to_string());
-    Opening {
-      directory: life::directory(self.cwd.as_deref()),
-      record,
-      keeps: Some(keeps),
-      ..Opening::default()
-    }
+    Opening { directory, record, keeps: Some(keeps), ..Opening::default() }
   }
 }
 
@@ -145,7 +142,7 @@ fn main() -> ExitCode {
   let done = match furb.command {
     Some(Command::Prompt { message, to, shape, place, mut stand }) => {
       // The actor of the prompt is one the life offers.
-      stand.roster.extend(life::model(&to));
+      stand.roster.extend(life::actor(&to).1);
       prompt(stand.on(place.opening(true)), &shape, message, to)
     }
     Some(Command::Turns { record, cwd, stand }) => {
@@ -182,7 +179,7 @@ fn main() -> ExitCode {
 /// the command wakes it, and a wake of a prompt that is done says nothing.
 fn prompt(opening: Opening, shape: &str, message: String, to: String) -> Result<(), String> {
   let mut life = Life::lived(opening)?;
-  let to = life::actor(&to);
+  let to = life::actor(&to).0;
   let id = match life.again(shape, &message, &to) {
     Some(id) => {
       life.engine.wake(&id).map_err(|no| no.to_string())?;

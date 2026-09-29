@@ -83,26 +83,15 @@ struct Held {
   swept: Once,
 }
 
-impl Default for Claude {
-  fn default() -> Self {
-    Claude::new()
-  }
-}
-
 impl Claude {
-  /// The command line that `FURB_CLAUDE_BIN` names, or the one found on this machine, with the stall that
-  /// `FURB_CLAUDE_STALL` gives in seconds, or 900 seconds.
-  pub fn new() -> Claude {
-    Claude::with(None, None)
-  }
-
-  /// The command line of [`Claude::new`], when `FURB_CLAUDE_BIN` names one or this machine holds one.
+  /// The command line of [`Claude::with`] and no program, when `FURB_CLAUDE_BIN` names one or this machine holds one.
   pub fn found() -> Option<Claude> {
     located().map(|bin| Claude::with(Some(bin), None))
   }
 
-  /// The command line at this program, and how long a turn may go with no progress; each the one [`Claude::new`]
-  /// takes when none is given.
+  /// The command line at this program, and how long a turn may go with no progress. With no program, it is the one
+  /// that `FURB_CLAUDE_BIN` names, or the one found on this machine; with no stall, `FURB_CLAUDE_STALL` gives it in
+  /// seconds, or it is 900 seconds.
   pub fn with(bin: Option<PathBuf>, stall: Option<Duration>) -> Claude {
     let bin = bin.or_else(located).unwrap_or_else(|| PROGRAM.into());
     let stall = stall.unwrap_or_else(|| {

@@ -340,8 +340,7 @@ impl Outside {
     args: Vec<Object>,
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
-    let made =
-      self.made.get(&n).cloned().ok_or_else(|| Fault::new("KeyError", vec![Object::int(n)]))?;
+    let made = self.held(n)?;
     let (args, kwargs) = self.inwards(sand, args, kwargs)?;
     let got = sand.call(self, &made, args, kwargs)?;
     self.outward(sand, &got)
@@ -409,6 +408,11 @@ impl Outside {
     if !self.kept.contains(handle) && !self.numbers.contains_key(handle) {
       sand.release(handle);
     }
+  }
+
+  /// A callable the engine made or a class a word defined, by the number the host holds it by.
+  fn held(&self, n: i64) -> Result<Object, Fault> {
+    self.made.get(&n).cloned().ok_or_else(|| Fault::new("KeyError", vec![Object::int(n)]))
   }
 
   /// A callable the engine made or a class a word defined, forgotten by the host, so the sandbox holds it no more.
@@ -540,10 +544,7 @@ impl Outside {
   /// What the host raised, raised in the sandbox as the exception it is: a builtin one by its name, and one of the
   /// engine made from what it was made with.
   fn raising(&mut self, sand: &mut Sand, fault: Fault) -> Answer {
-    if fault.name.parse::<ExcType>().is_ok() {
-      return Answer::Fault(fault);
-    }
-    if !self.names.contains_key(&fault.name) {
+    if fault.name.parse::<ExcType>().is_ok() || !self.names.contains_key(&fault.name) {
       return Answer::Fault(fault);
     }
     let made = fault.args.iter().map(|one| self.inward(sand, one)).collect::<Result<Vec<_>, _>>();
@@ -727,17 +728,11 @@ impl Outside {
         Ok(Some(held))
       }
       // A callable the engine made, or a class a word defined, back from the host by the number it went out under.
-      "made" if let Some(n) = number("id") => self
-        .made
-        .get(&n)
-        .cloned()
-        .map(Some)
-        .ok_or_else(|| Fault::new("KeyError", vec![Object::int(n)])),
+      "made" if let Some(n) = number("id") => self.held(n).map(Some),
       // An instance of a class a word defined, back from the host by the number of its class and its fields, made
       // here from them as the interpreter makes one, with no `__init__` run.
       "instance" if let (Some(n), Some(fields)) = (number("class"), at("fields")) => {
-        let class =
-          self.made.get(&n).cloned().ok_or_else(|| Fault::new("KeyError", vec![Object::int(n)]))?;
+        let class = self.held(n)?;
         let MontyNode::Dict(fields) = graph.node(fields) else { return Ok(None) };
         let mut held = Vec::new();
         for (key, one) in fields {

@@ -85,7 +85,8 @@ impl Sand {
   ) -> Result<Object, Fault> {
     self.fed += 1;
     self.ended = None;
-    let step = self.repl().feed_start(code, inputs, PrintWriter::Disabled);
+    let repl = self.idle.take().expect("a sandbox holds its session between two runs");
+    let step = repl.feed_start(code, inputs, PrintWriter::Disabled);
     self.drive(step, host)
   }
 
@@ -190,11 +191,6 @@ impl Sand {
         ),
       };
     }
-  }
-
-  /// The session, which is there between two runs.
-  fn repl(&mut self) -> MontyRepl {
-    self.idle.take().expect("a sandbox holds its session between two runs")
   }
 
   /// What the sandbox raised, as the fault a host reads, with the session kept for the next run. Every call the host

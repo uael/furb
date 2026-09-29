@@ -27,8 +27,12 @@ PURE = frozenset({
   "question", "headed", "bound", "shown", "unquoted", "offered", "ended", "idle",
 })  # fmt: skip
 """PURE are the callables of the engine that read no life, so the engine of this interpreter answers them."""
-ACTS = frozenset({"wait", "rung", "prompt", "chain", "grant", "bash", "act"})
-"""ACTS are the verbs that give an act, whose name comes back as the act it names."""
+ACTS = frozenset(
+  node.name
+  for node in ast.parse(Path(python.__file__).with_suffix(".pyi").read_text(encoding="utf-8")).body
+  if isinstance(node, ast.FunctionDef) and node.returns is not None and ast.unparse(node.returns).startswith("Act")
+)
+"""ACTS are the verbs that the contract says give an act, whose name comes back as the act it names."""
 FORGOTTEN: list[int] = []
 """FORGOTTEN holds the handles of the callables the engine made and of the classes a word defined that this
 interpreter dropped since the life last heard of them, which the next verb of the operator says into the sandbox,
