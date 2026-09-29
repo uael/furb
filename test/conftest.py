@@ -33,9 +33,9 @@ EXTENSIONS = HERE.parent / "extensions"
 """EXTENSIONS is the folder of the extensions, whose conftest holds the helpers that only their suites need."""
 SUITES = (HERE, *sorted(EXTENSIONS.glob("*/test")))
 """SUITES are the suite of the engine and the suite of each extension, each test of which runs on both engines."""
-BOUND = (*SUITES, EXTENSIONS / "conftest.py")
+BOUND = (*(f"{suite}{os.sep}" for suite in SUITES), str(EXTENSIONS / "conftest.py"))
 """BOUND are the files whose modules bind the names of the engine under test: the suites, and the conftest of the
-suites of the extensions."""
+suites of the extensions, each as the start of the path of such a file, which every test reads twice."""
 ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
@@ -591,7 +591,7 @@ def swapped(to: object) -> None:
   # pytest drops the name conftest before it loads each conftest outside a package, so this module may stand under
   # no name, and it rebinds its own names as well.
   for names in [globals(), *(vars(mod) for mod in list(sys.modules.values()) if getattr(mod, "__file__", None))]:
-    if id(names) in seen or not any(Path(names["__file__"]).is_relative_to(one) for one in BOUND):
+    if id(names) in seen or not names["__file__"].startswith(BOUND):
       continue
     seen.add(id(names))
     for key, value in list(names.items()):
