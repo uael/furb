@@ -1451,8 +1451,10 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "furb",
+ "futures",
  "serde_json",
  "tokio",
+ "unsync",
  "windows-sys 0.61.2",
 ]
 

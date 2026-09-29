@@ -6,11 +6,11 @@ use std::{
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use futures::{FutureExt, StreamExt, future::LocalBoxFuture, stream::FuturesUnordered};
+use futures::{Stream, StreamExt, stream};
 use unsync::oneshot;
 
 use crate::{
-  ear::{Ear, ear, hear, say},
+  ear::{Co, Ear, Next, ear, say},
   fact::Fact,
   value::{Fault, Object},
 };
@@ -22,18 +22,18 @@ use crate::{
 /// and says again in a later life, so a wait that a wake starts again ends when it would have ended then. A wait
 /// that a control ended first ends at once, and says nothing more.
 pub fn time() -> Box<dyn Ear> {
-  ear(|co| async move {
+  ear(|co: Co<String>| async move {
     let mut due: HashMap<String, f64> = HashMap::new();
+    // The stop of each wait that runs, which ends it when it drops.
     let mut stops: HashMap<String, oneshot::Sender<()>> = HashMap::new();
-    let mut waits: FuturesUnordered<LocalBoxFuture<'static, Option<String>>> =
-      FuturesUnordered::new();
     loop {
-      let a = tokio::select! {
-        biased;
-        a = hear(&co) => a,
-        Some(Some(id)) = co.working(waits.next()), if !waits.is_empty() => {
-          stops.remove(&id);
-          say(&co, Fact::says("done", &id, [Object::none()])).await;
+      let a = match co.next().await {
+        Next::Heard(a) => a,
+        // A wait whose time is up is done, unless a control ended it first.
+        Next::Worked(id) => {
+          if stops.remove(&id).is_some() {
+            say(&co, Fact::says("done", &id, [Object::none()])).await;
+          }
           continue;
         }
       };
@@ -59,7 +59,7 @@ pub fn time() -> Box<dyn Ear> {
             }
           };
           let (stop, stopped) = oneshot::channel();
-          waits.push(waited(about.clone(), deadline, stopped).boxed_local());
+          co.work(waited(about.clone(), deadline, stopped));
           stops.insert(about, stop);
         }
         "due" => {
@@ -79,18 +79,21 @@ pub fn time() -> Box<dyn Ear> {
 
 /// A wait: its id once its deadline passed, or nothing when it was stopped first. A wait past what the machine
 /// counts waits until it is stopped.
-async fn waited(id: String, deadline: f64, stopped: oneshot::Receiver<()>) -> Option<String> {
+fn waited(id: String, deadline: f64, stopped: oneshot::Receiver<()>) -> impl Stream<Item = String> {
   let left = Duration::try_from_secs_f64((deadline - now()).max(0.0)).ok();
-  let up = async {
+  let up = async move {
     match left {
       Some(left) => tokio::time::sleep(left).await,
       None => future::pending().await,
     }
   };
-  tokio::select! {
-    () = up => Some(id),
-    _ = stopped => None,
-  }
+  let ended = async move {
+    tokio::select! {
+      () = up => Some(id),
+      _ = stopped => None,
+    }
+  };
+  stream::once(ended).filter_map(future::ready)
 }
 
 /// The seconds since the epoch, on the clock of the machine.

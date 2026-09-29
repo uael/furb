@@ -20,12 +20,12 @@ use std::{
   time::{Duration, Instant},
 };
 
-use futures::{FutureExt, StreamExt, future::LocalBoxFuture, stream::FuturesUnordered};
+use futures::{FutureExt, stream};
 use unsync::oneshot;
 
 use crate::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
-  ear::{call, ear, hear, say, tell},
+  ear::{Co, Next, call, ear, hear, say, tell},
   engine::callable,
   verbs, world,
 };
@@ -493,21 +493,21 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
 /// An ear that takes a wait and ends it by its work, of its own accord, once its gate opens: it tells a pause of the
 /// chain of the wait, says the wait due, then says it done.
 fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
-  ear(move |co| async move {
+  ear(move |co: Co<(String, String)>| async move {
     let mut gate = Some(gate);
-    let mut works: FuturesUnordered<LocalBoxFuture<'static, (String, String)>> =
-      FuturesUnordered::new();
     loop {
-      tokio::select! {
-        biased;
-        a = hear(&co) => {
-          if a.kind() == "wait" && a.question() && let Some(opens) = gate.take() {
+      match co.next().await {
+        Next::Heard(a) => {
+          if a.kind() == "wait"
+            && a.question()
+            && let Some(opens) = gate.take()
+          {
             say(&co, Fact::says("started", a.about(), [])).await;
             let (about, on) = (a.about().to_owned(), a.on().to_owned());
-            works.push(opens.map(|_| (about, on)).boxed_local());
+            co.work(stream::once(opens.map(|_| (about, on))));
           }
         }
-        Some((about, on)) = co.working(works.next()), if !works.is_empty() => {
+        Next::Worked((about, on)) => {
           tell(&co, "pause", vec![Object::string(on)], vec![]).await;
           say(&co, Fact::says("due", &about, [Object::float(1.0)])).await;
           say(&co, done(&about, Object::none())).await;
@@ -562,18 +562,16 @@ fn what_the_ears_say_of_their_own_accord_in_one_drive_is_one_feed_of_the_sandbox
 
 /// An ear that takes each wait and ends it by a work that is ready at once, which says the wait done.
 fn quick() -> Box<dyn Ear> {
-  ear(move |co| async move {
-    let mut works: FuturesUnordered<LocalBoxFuture<'static, String>> = FuturesUnordered::new();
+  ear(move |co: Co<String>| async move {
     loop {
-      tokio::select! {
-        biased;
-        a = hear(&co) => {
+      match co.next().await {
+        Next::Heard(a) => {
           if a.kind() == "wait" && a.question() {
             say(&co, Fact::says("started", a.about(), [])).await;
-            works.push(std::future::ready(a.about().to_owned()).boxed_local());
+            co.work(stream::once(std::future::ready(a.about().to_owned())));
           }
         }
-        Some(about) = co.working(works.next()), if !works.is_empty() => {
+        Next::Worked(about) => {
           say(&co, done(&about, Object::none())).await;
         }
       }

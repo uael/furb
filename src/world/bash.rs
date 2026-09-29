@@ -11,10 +11,9 @@ use std::{
 };
 
 use futures::{
-  FutureExt, StreamExt,
+  Stream, StreamExt,
   channel::mpsc::{UnboundedSender, unbounded},
-  future::LocalBoxFuture,
-  stream::FuturesUnordered,
+  stream,
 };
 use tokio::{
   io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
@@ -24,7 +23,7 @@ use unsync::{oneshot, spsc};
 
 use super::here;
 use crate::{
-  ear::{Ear, call, ear, hear, say},
+  ear::{Co, Ear, Next, call, ear, say},
   fact::Fact,
   value::{Exit, Fault, Object, Text},
 };
@@ -61,18 +60,15 @@ fn runs(path: &Path) -> bool {
 /// A command ends with every process it started, which its group holds. A command that a control ended first, which
 /// the engine says done, is ended so and says nothing more.
 pub fn bash() -> Box<dyn Ear> {
-  ear(|co| async move {
+  ear(|co: Co<Said>| async move {
     let mut running: HashMap<String, Running> = HashMap::new();
     // What the operator fed a command that runs nowhere yet, which a later life holds until a wake starts it.
     let mut fed: HashMap<String, Vec<Option<String>>> = HashMap::new();
-    let mut commands: FuturesUnordered<LocalBoxFuture<'static, ()>> = FuturesUnordered::new();
-    // What every command says, in the order it says it.
-    let (says, mut said) = unbounded::<Said>();
     loop {
-      let a = tokio::select! {
-        biased;
-        a = hear(&co) => a,
-        Some(one) = co.working(said.next()), if !running.is_empty() => {
+      let a = match co.next().await {
+        Next::Heard(a) => a,
+        // What a command says while it runs, which a control that ended it first silences.
+        Next::Worked(one) => {
           let saying = match one {
             Said::Out { about, text, stream } if running.contains_key(&about) => {
               Fact::says("out", &about, [Object::string(text), Object::string(stream)])
@@ -85,7 +81,6 @@ pub fn bash() -> Box<dyn Ear> {
           say(&co, saying).await;
           continue;
         }
-        Some(()) = co.working(commands.next()), if !commands.is_empty() => continue,
       };
       let about = a.about().to_owned();
       match a.kind() {
@@ -99,7 +94,7 @@ pub fn bash() -> Box<dyn Ear> {
               for text in fed.remove(&about).unwrap_or_default() {
                 one.feed(text);
               }
-              commands.push(ran(begun, fed_in, stopped, says.clone()).boxed_local());
+              co.work(command(begun, fed_in, stopped));
               running.insert(about, one);
             }
             // The machine would not start it, so the ear closes it with why, as a prompt that the operator cannot
@@ -185,6 +180,18 @@ fn begun(a: &Fact) -> Result<Begun, Fault> {
       Err(Fault::refused(format!("{shown} could not be held: {no}")))
     }
   }
+}
+
+/// What a command says as it runs: each text its streams write, then its exit; or nothing more once it stops.
+fn command(
+  begun: Begun,
+  fed: spsc::Receiver<Option<String>>,
+  stopped: oneshot::Receiver<()>,
+) -> impl Stream<Item = Said> {
+  let (says, said) = unbounded();
+  let ran = ran(begun, fed, stopped, says);
+  // The command says through the channel alone, so its exit comes after all it wrote.
+  stream::select(said, stream::once(ran).filter_map(|()| future::ready(None)))
 }
 
 /// A command run to its end: what its streams write is said as it comes, what is fed goes into its stdin, and its

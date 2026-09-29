@@ -11,10 +11,12 @@ use std::{
 
 use furb::{
   Ear, Fact, Fault, Object,
-  ear::{Co, call, ear, hear, say, tell},
+  ear::{Co, Next, call, ear, say, tell},
   world::{SHAPES, answered},
 };
-use tokio::io::{AsyncBufReadExt, BufReader};
+use futures::{Stream, stream};
+use tokio::io::{AsyncBufReadExt, BufReader, Lines, Stdin};
+use unsync::oneshot;
 
 /// A prompt put to the operator: its act, the chain it is on, its shape and its message.
 pub struct Asked {
@@ -28,7 +30,7 @@ impl Asked {
   /// The prompt a fact asks the operator, when it is one that no ear before the console took, as a console takes it:
   /// the console says its started, and closes at once a prompt of a shape outside SHAPES, with the refusal of that
   /// shape, and gives it not. So every console of furb puts to the operator the same shapes.
-  pub async fn taken(co: &Co, a: &Fact) -> Result<Option<Asked>, Fault> {
+  pub async fn taken<W: 'static>(co: &Co<W>, a: &Fact) -> Result<Option<Asked>, Fault> {
     if a.kind() != "prompt" || !a.question() {
       return Ok(None);
     }
@@ -49,34 +51,45 @@ impl Asked {
   }
 }
 
+/// The lines of stdin, which one read holds at a time.
+type Input = Lines<BufReader<Stdin>>;
+
 /// The console, as an ear: it takes each prompt to the operator and shows them in turn, and closes each with the line
 /// the operator writes back, or with why no line came. A prompt that is done before its line comes, by a cancel, is
 /// shown no more, and the line goes to the next.
 pub fn terminal() -> Box<dyn Ear> {
-  ear(|co| async move {
-    let mut lines = BufReader::new(tokio::io::stdin()).lines();
+  ear(|co: Co<Read>| async move {
+    // The lines of stdin, while no read holds them.
+    let mut lines = Some(BufReader::new(tokio::io::stdin()).lines());
     let mut waiting: VecDeque<Asked> = VecDeque::new();
-    let mut shown: Option<Asked> = None;
+    // The prompt shown, and the stop of its read.
+    let mut shown: Option<(Asked, oneshot::Sender<()>)> = None;
     loop {
       if shown.is_none()
+        && lines.is_some()
         && let Some(next) = waiting.pop_front()
+        && let Some(held) = lines.take()
       {
         eprint!("{} wants a {}: {}\n> ", next.about, next.shape, next.message);
         let _ = io::stderr().flush();
-        shown = Some(next);
+        let (stop, stopped) = oneshot::channel();
+        co.work(read(held, stopped));
+        shown = Some((next, stop));
       }
-      tokio::select! {
-        biased;
-        a = hear(&co) => {
+      match co.next().await {
+        Next::Heard(a) => {
           if let Some(asked) = Asked::taken(&co, &a).await? {
             waiting.push_back(asked);
           } else if a.kind() == "done" {
             waiting.retain(|one| one.about != a.about());
-            shown = shown.filter(|one| one.about != a.about());
+            shown = shown.filter(|(one, _)| one.about != a.about());
           }
         }
-        line = co.working(lines.next_line()), if shown.is_some() => {
-          let Some(Asked { about, shape, .. }) = shown.take() else { continue };
+        Next::Worked((held, line)) => {
+          lines = Some(held);
+          let (Some(line), Some((Asked { about, shape, .. }, _))) = (line, shown.take()) else {
+            continue;
+          };
           let value = match line {
             Ok(Some(line)) => answered(&shape, line.trim_end_matches('\r')),
             Ok(None) => Err(Fault::refused("the operator cannot be read: the input is over")),
@@ -87,5 +100,19 @@ pub fn terminal() -> Box<dyn Ear> {
         }
       }
     }
+  })
+}
+
+/// What a read of stdin gives back: the lines, and the line read, or nothing when its prompt went first.
+type Read = (Input, Option<io::Result<Option<String>>>);
+
+/// One read of a line of stdin, which ends at its stop, and gives the lines back either way.
+fn read(mut lines: Input, stopped: oneshot::Receiver<()>) -> impl Stream<Item = Read> {
+  stream::once(async move {
+    let line = tokio::select! {
+      line = lines.next_line() => Some(line),
+      _ = stopped => None,
+    };
+    (lines, line)
   })
 }

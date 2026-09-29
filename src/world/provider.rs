@@ -21,11 +21,7 @@ use std::{
   },
 };
 
-use futures::{
-  FutureExt, StreamExt,
-  future::{BoxFuture, LocalBoxFuture},
-  stream::FuturesUnordered,
-};
+use futures::{Stream, StreamExt, future::BoxFuture, stream};
 use rig_core::{
   completion::{CompletionError, CompletionModel, CompletionRequest, CompletionResponse},
   message::{AssistantContent, Message, Text, UserContent},
@@ -37,7 +33,7 @@ use unsync::oneshot;
 use self::images::Images;
 use crate::{
   SYSTEM,
-  ear::{Ear, call, ear, hear, say, tell},
+  ear::{Co, Ear, Next, call, ear, say, tell},
   engine::{OPERATOR, WINDOW},
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
@@ -288,21 +284,20 @@ impl Provider {
       models.first().map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
     let mut images = Images::new(images);
-    ear(move |co| async move {
+    ear(move |co: Co<Called>| async move {
       // The ids of chains repeat in every life, so a conversation of this life is keyed by the life too.
       let life = uuid();
       let mut replies: HashMap<String, Reply> = HashMap::new();
-      let mut calls: FuturesUnordered<LocalBoxFuture<'static, Option<Called>>> =
-        FuturesUnordered::new();
       // The actor whose last reply on each chain the ear refused.
       let mut mute: HashMap<String, String> = HashMap::new();
       loop {
-        let a = tokio::select! {
-          biased;
-          a = hear(&co) => a,
-          Some(Some((id, got))) = co.working(calls.next()), if !calls.is_empty() => {
+        let a = match co.next().await {
+          Next::Heard(a) => a,
+          // What the model of a reply that still stands came to.
+          Next::Worked((id, got)) => {
             let Some(reply) = replies.get(&id) else { continue };
-            let got = got.map_err(|no| Fault::refused(format!("{} answered nothing: {no}", reply.actor)));
+            let got =
+              got.map_err(|no| Fault::refused(format!("{} answered nothing: {no}", reply.actor)));
             if got.is_err() && reply.again {
               tell(&co, "pause", vec![Object::string(&reply.chain)], vec![]).await;
             }
@@ -327,7 +322,7 @@ impl Provider {
             let asked = requested(&models, &actor, &chain, turns.as_ref(), &key, &mut images, told);
             let again = mute.get(&chain) == Some(&actor);
             let (stop, stopped) = oneshot::channel();
-            calls.push(answered(about.clone(), asked, stopped).boxed_local());
+            co.work(answered(about.clone(), asked, stopped));
             replies.insert(about, Reply { chain, actor, again, over, _stop: stop });
           }
           "done" => {
@@ -504,11 +499,11 @@ type Called = (String, Result<Object, CompletionError>);
 
 /// What a reply came to: the turn of the model, or why it answered nothing; or nothing, when the reply went first,
 /// which ends the call.
-async fn answered(
+fn answered(
   id: String,
   asked: Result<(Model, Asked), CompletionError>,
   stopped: oneshot::Receiver<()>,
-) -> Option<Called> {
+) -> impl Stream<Item = Called> {
   let got = async {
     let (model, asked) = asked?;
     match (model.answers)(asked).await? {
@@ -516,10 +511,13 @@ async fn answered(
       Answer::Turn(turn) => hosted(turn.as_ref()),
     }
   };
-  tokio::select! {
-    got = got => Some((id, got)),
-    _ = stopped => None,
-  }
+  let ended = async move {
+    tokio::select! {
+      got = got => Some((id, got)),
+      _ = stopped => None,
+    }
+  };
+  stream::once(ended).filter_map(std::future::ready)
 }
 
 /// The turn of a model: its text, which is the word of the rung, what it read and wrote, and the blocks it gave.
