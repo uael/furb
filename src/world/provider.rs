@@ -31,7 +31,7 @@ use unsync::oneshot;
 use self::images::Images;
 use crate::{
   SYSTEM,
-  ear::{Co, Ear, Next, ear, say, tell},
+  ear::{Co, Ear, Next, ear, say},
   engine::{OPERATOR, WINDOW},
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
@@ -304,7 +304,7 @@ impl Provider {
             let got =
               got.map_err(|no| Fault::refused(format!("{} answered nothing: {no}", reply.actor)));
             if got.is_err() && reply.again {
-              tell(&mut co, "pause", vec![Object::string(&reply.chain)], vec![]).await;
+              let _ = co.call("pause", vec![Object::string(&reply.chain)], vec![]).await;
             }
             let got = got.unwrap_or_else(|fault| fault.object());
             say(&mut co, Fact::says("done", &id, [got]));

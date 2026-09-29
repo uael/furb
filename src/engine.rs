@@ -164,12 +164,6 @@ impl Life {
   }
 }
 
-impl std::fmt::Debug for Life {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_str("Life")
-  }
-}
-
 /// The acts that the entries of a record show started and not done, by name, in the order of the record: work that
 /// the outside took in an earlier life. The record keeps the started of the outside alone, since a later life says
 /// again what an act said.
@@ -210,6 +204,23 @@ struct Opened {
   base: Object,
 }
 
+impl Opened {
+  /// The callables of the opening, each by its place in what the opening gave.
+  fn of(at: impl Fn(usize) -> Object) -> Opened {
+    Opened {
+      names: at(0),
+      call: at(1),
+      site: at(4),
+      speaks: at(5),
+      spoke: at(6),
+      word: at(7),
+      template: at(8),
+      shown: at(9),
+      base: at(10),
+    }
+  }
+}
+
 /// Where an ear of the host stands, as its object in the sandbox steps it.
 #[derive(Clone, Copy, PartialEq)]
 enum At {
@@ -246,22 +257,10 @@ struct Outside {
 impl Default for Outside {
   /// The side of the host of a life of nothing, which stands in for one that is lent to code of a host.
   fn default() -> Outside {
-    let none = Object::none;
-    let opened = Opened {
-      names: none(),
-      call: none(),
-      site: none(),
-      speaks: none(),
-      spoke: none(),
-      word: none(),
-      template: none(),
-      shown: none(),
-      base: none(),
-    };
     Outside {
       hosted: Hosted::default(),
       waker: Waker::noop().clone(),
-      opened,
+      opened: Opened::of(|_| Object::none()),
       names: HashMap::new(),
       named: HashMap::new(),
       made: HashMap::new(),
@@ -308,30 +307,9 @@ impl Outside {
     let at = |i: usize| {
       entry(&got, i).map(|one| one.to_owned()).expect("the opening gives eleven callables")
     };
-    let opened = Opened {
-      names: at(0),
-      call: at(1),
-      site: at(4),
-      speaks: at(5),
-      spoke: at(6),
-      word: at(7),
-      template: at(8),
-      shown: at(9),
-      base: at(10),
-    };
+    let opened = Opened::of(at);
     let kept = (0..11).filter_map(|i| at(i).as_ref().handle()).collect();
-    Outside {
-      hosted,
-      waker: Waker::noop().clone(),
-      opened,
-      names: HashMap::new(),
-      named: HashMap::new(),
-      made: HashMap::new(),
-      numbers: HashMap::new(),
-      kept,
-      standing: HashMap::new(),
-      given: 0,
-    }
+    Outside { hosted, opened, kept, ..Outside::default() }
   }
 
   /// A new id of the host, for an object of the host or for an instance made again in the sandbox.
@@ -542,11 +520,11 @@ impl Outside {
 
   /// One step of an ear of the host, which the sandbox holds as an object that stands in for a generator.
   ///
-  /// At its birth the ear starts. Then every fact it is given goes to the ear, and what comes back is what the ear did with it. It said something, which the object yields, and the
-  /// bus hands back the fact as it was said, which goes to the ear next. It said nothing, so the object waits for the
-  /// next fact. It said a verb, which is said here by its name and its value handed back. It is over, so the object
-  /// stops, and it raised, so the object raises. A generator that the host started before it crossed was born there,
-  /// so its object begins where it waits.
+  /// At its birth the ear starts. Then every fact it is given goes to the ear, and what comes back is what the ear did
+  /// with it. It said something, which the object yields, and the bus hands back the fact as it was said, which goes to
+  /// the ear next. It said nothing, so the object waits for the next fact. It said a verb, which is said here by its
+  /// name and its value handed back. It is over, so the object stops, and it raised, so the object raises. A generator
+  /// that the host started before it crossed was born there, so its object begins where it waits.
   fn sent(&mut self, sand: &mut Sand, on: MontyUuid, a: Option<&Object>) -> Answer {
     let Some((name, at)) = self.standing.get(&on).cloned() else {
       return Answer::Abort(Fault::refused(format!("{on} is no object of the host")));
@@ -1002,9 +980,9 @@ impl Engine {
     Ok(got)
   }
 
-  /// The engine driven: each ear is polled with the waker of whoever drives, and what the ears say of their own
-  /// accord is said into it, in one entry, which it makes only when an ear says something. An awaited act drives the engine so, and a door that awaits in the loop of
-  /// its own language drives it so too.
+  /// The engine driven: each ear is polled with the waker of whoever drives, and what the ears say of their own accord
+  /// is said into it, in one entry, which it makes only when an ear says something. An awaited act drives the engine
+  /// so, and a door that awaits in the loop of its own language drives it so too.
   pub(crate) fn pump(&mut self, waker: &Waker) -> Result<(), Fault> {
     if !self.outside.waker.will_wake(waker) {
       self.outside.waker = waker.clone();
@@ -1314,9 +1292,9 @@ impl<T: Plain> Plain for Vec<T> {
 
 /// One act of an engine, awaited for what it comes to: `Act` of the contract, a name that is awaitable.
 ///
-/// It borrows the engine for as long as it is awaited, since awaiting it drives the engine: what the ears say of
-/// their own accord is said into it until the act is done. An act that completed with an exception gives that fault. Dropping it
-/// leaves the act living; the engine holds what it comes to under its name.
+/// It borrows the engine for as long as it is awaited, since awaiting it drives the engine: what the ears say of their
+/// own accord is said into it until the act is done. An act that completed with an exception gives that fault. Dropping
+/// it leaves the act living; the engine holds what it comes to under its name.
 pub struct Act<'a, T> {
   engine: &'a mut Engine,
   id: String,
