@@ -6,9 +6,9 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { find, highlighting } from "../script/stage.ts";
 import { App } from "../src/app.ts";
-import { demoLibrary, demoSession, removeDemoDirectories } from "../src/demo.ts";
+import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
 import type { View } from "../src/session.ts";
-import { hexes, palettes } from "../src/theme.ts";
+import { hexes, motion, palettes } from "../src/theme.ts";
 import { bold } from "../src/ui.ts";
 import { type Composing, cellAt, composing, withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
@@ -519,6 +519,27 @@ test("a block of code in an answer keeps a blank line before and after it, and s
     );
     expect(rows.slice(1).map((row, index) => row - (rows[index] ?? 0))).toEqual([2, 2, 1, 2]);
   }));
+
+test("a step of a model stands in the tone of the steps once it lands, and the answer in the tone of what someone said", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      await seedDemo(session);
+      const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
+      if (!thread) throw new Error("No thread of the operator.");
+      await session.open(thread.id);
+      await frame();
+      await new Promise((done) => setTimeout(done, motion.settle * 2));
+      await Promise.all(highlighting(screen.renderer.root));
+      await frame();
+      const colors = hexes(session.theme);
+      const fg = (text: string) => cellAt(screen.captureSpans(), ...find(screen, text)).fg;
+      expect([
+        fg("Run the checks of the project")?.equals(RGBA.fromHex(colors.prose)),
+        fg("Fieldnotes keeps ideas close")?.equals(RGBA.fromHex(colors.bright)),
+      ]).toEqual([true, true]);
+    },
+    { width: 145, height: 45 },
+  ));
 
 test("a diff in an answer tints each line that it adds or removes, as the diffs of the feed do", () =>
   composing(async ({ session, screen, frame }) => {

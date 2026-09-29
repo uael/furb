@@ -7,7 +7,7 @@ import { demoSession, removeDemoDirectories, seedDemo, seedDemoFiles } from "../
 import { loadParsers } from "../src/parsers.ts";
 import { Preferences } from "../src/preferences.ts";
 import type { Exit, Session } from "../src/session.ts";
-import { hexes } from "../src/theme.ts";
+import { hexes, motion } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { idle } from "../test/idle.ts";
 import { rasterize } from "./raster.ts";
@@ -74,6 +74,9 @@ async function capture(name: string): Promise<void> {
   await Promise.all(highlighting(test.renderer.root));
   await test.flush();
   if (only && !only.test(name)) return;
+  // A step that the view shows first lands bright and settles to its tone, which is the tone an operator reads.
+  await new Promise((done) => setTimeout(done, motion.settle));
+  await test.flush();
   await writeFile(`${output}/${name}.png`, rasterize(test.captureSpans(), hexes(session.theme), "furb"));
   // The text of each shot goes to a folder that FURB_GALLERY_TEXT names, to read the gallery without its pictures.
   const texts = process.env.FURB_GALLERY_TEXT;
