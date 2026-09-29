@@ -597,6 +597,22 @@ test("a question for the operator says it waits, and once answered says it is pa
     ]).toEqual([true, false, true]);
   }));
 
+test("a heading of markdown inside a quote of a word is text of the quote, and no step of the word", () =>
+  composing(async ({ session, frame }) => {
+    await session.engine.result(
+      await session.engine.rung({
+        word: "# Write the brief of the second model\n<s:brief>\n# Usage\nAdd a section.\n</s:brief>\nsent = brief",
+        on: session.engine.root,
+      }),
+    );
+    await session.refresh();
+    const shown = await frame();
+    expect([shown.includes("Write the brief of the second model"), shown.includes("Usage")]).toEqual([
+      true,
+      false,
+    ]);
+  }));
+
 test("a diff in an answer tints each line that it adds or removes, as the diffs of the feed do", () =>
   composing(async ({ session, screen, frame }) => {
     const id = await session.engine.thread("str", {

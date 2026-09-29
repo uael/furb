@@ -44,9 +44,18 @@ const ENDS = ["closed", "exited", "cancelled"];
 export const asksOperator = (act: ActRow) => act.kind === "thread" && act.words[2] === OPERATOR;
 
 /** The comments of a word, in order: each line that is `#`, a space and text, which says a step as one line of
- * markdown. */
+ * markdown. A quote is text, from `<s:name>` at the start of a line to `</s:name>` at the end of a line, so a heading
+ * of markdown that it holds is no step. */
 export function steps(word: string): string[] {
-  return word.split("\n").flatMap((line) => /^\s*# (.*\S.*)$/.exec(line)?.[1] ?? []);
+  const said: string[] = [];
+  let quote = "";
+  for (const line of word.split("\n")) {
+    const opened = quote ? undefined : /^<s:(\w+)>/.exec(line)?.[1];
+    if (opened) quote = opened;
+    else if (!quote) said.push(...(/^\s*# (.*\S.*)$/.exec(line)?.slice(1) ?? []));
+    if (quote && line.endsWith(`</s:${quote}>`)) quote = "";
+  }
+  return said;
 }
 
 /** Whether a word is a note: it holds a comment, and no line of it is anything but a comment or blank. */
