@@ -6,6 +6,7 @@ import {
   paragraphs,
   plain,
   questionKind,
+  quotes,
   type Turn,
 } from "@furb/engine";
 import { type ActRow, failed } from "./session.ts";
@@ -43,24 +44,20 @@ const ENDS = ["closed", "exited", "cancelled"];
 /** Whether an act is a question to the operator: a thread whose actor is the operator. */
 export const asksOperator = (act: ActRow) => act.kind === "thread" && act.words[2] === OPERATOR;
 
-/** The comments of a word, in order, each with the index of its line: each line that is `#`, a space and text, which
- * says a step as one line of markdown. A quote is text, from `<s:name>` at the start of a line to `</s:name>` at the
- * end of a line, so a heading of markdown that it holds is no step. */
+/** The comments of a word, in order, each with the index of its line: each line outside a quote that is `#`, a space
+ * and text, which says a step as one line of markdown. */
 function stepLines(word: string): [line: number, text: string][] {
+  const spans = quotes(word);
   const said: [number, string][] = [];
-  let quote = "";
+  let offset = 0;
   for (const [index, line] of word.split("\n").entries()) {
-    const opened = quote ? undefined : /^<s:(\w+)>/.exec(line)?.[1];
-    if (opened) quote = opened;
-    else if (!quote)
-      said.push(
-        ...(/^\s*# (.*\S.*)$/.exec(line)?.slice(1) ?? []).map((text): [number, string] => [index, text]),
-      );
-    if (quote && line.endsWith(`</s:${quote}>`)) quote = "";
+    const quoted = spans.some(([, from, to]) => offset >= from && offset <= to);
+    const text = /^\s*# (.*\S.*)$/.exec(line)?.[1];
+    if (!quoted && text) said.push([index, text]);
+    offset += line.length + 1;
   }
   return said;
 }
-
 /** The steps of a word, in order. */
 export const steps = (word: string): string[] => stepLines(word).map(([, text]) => text);
 

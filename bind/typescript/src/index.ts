@@ -16,5 +16,6 @@ export {
   paragraphs,
   plain,
   questionKind,
+  quotes,
   safeText,
 } from "./types.js";

@@ -6,6 +6,7 @@ import {
   imagePath,
   imageReferences,
   OPERATOR,
+  quotes,
   type Stream,
   safeText,
   shapes,
@@ -1457,9 +1458,10 @@ export class App {
     box.add(edge("bottom"));
     return inner;
   }
-  /** Python in the colors of its syntax. In a user turn, a header is a comment to Python, and the start of an entry to
-   * the reader: the name of its act or the kind of its query stands in the color of a reference, and the rest of its
-   * line as text. An image attachment there is a reference too. */
+  /** Python in the colors of its syntax. A quote is text and no Python: it stands in the tone of prose, between its
+   * marks in the tone of the chrome. In a user turn, a header is a comment to Python, and the start of an entry to the
+   * reader: the name of its act or the kind of its query stands in the color of a reference, and the rest of its line
+   * as text. An image attachment there is a reference too. */
   private code(content: string, user = false): CodeRenderable {
     const code = new CodeRenderable(this.renderer, {
       content: safeText(content),
@@ -1467,18 +1469,28 @@ export class App {
       syntaxStyle: this.style,
       wrapMode: "word",
       drawUnstyledText: true,
-      onHighlight: user
-        ? (highlights, { content: text }) => [
-            ...highlights,
-            ...[...text.matchAll(/^(#(?! |$)\S+)(.*)$/gm)].flatMap((header): SimpleHighlight[] => [
-              [header.index, header.index + (header[1]?.length ?? 0), "reference"],
-              [header.index + (header[1]?.length ?? 0), header.index + header[0].length, "header"],
-            ]),
-            ...[...text.matchAll(/furb-image:\/\/[\w.]+/g)].map(
-              (image): SimpleHighlight => [image.index, image.index + image[0].length, "attachment"],
-            ),
-          ]
-        : undefined,
+      onHighlight: (highlights, { content: text }) => {
+        const spans = quotes(text);
+        const outside = ([start, end]: SimpleHighlight) =>
+          !spans.some(([, from, to]) => start < to && end > from);
+        const marks = spans.flatMap(([name, from, to]): SimpleHighlight[] => [
+          [from, from + `<s:${name}>`.length, "punctuation"],
+          [from + `<s:${name}>`.length, to - `</s:${name}>`.length, "quote"],
+          [to - `</s:${name}>`.length, to, "punctuation"],
+        ]);
+        const told: SimpleHighlight[] = user
+          ? [
+              ...[...text.matchAll(/^(#(?! |$)\S+)(.*)$/gm)].flatMap((header): SimpleHighlight[] => [
+                [header.index, header.index + (header[1]?.length ?? 0), "reference"],
+                [header.index + (header[1]?.length ?? 0), header.index + header[0].length, "header"],
+              ]),
+              ...[...text.matchAll(/furb-image:\/\/[\w.]+/g)].map(
+                (image): SimpleHighlight => [image.index, image.index + image[0].length, "attachment"],
+              ),
+            ]
+          : [];
+        return [...[...highlights, ...told].filter(outside), ...marks];
+      },
     });
     return this.pointable(code, content);
   }

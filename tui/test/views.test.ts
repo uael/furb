@@ -741,6 +741,26 @@ test("a folded word shows each command under the step that ran it", () =>
     { width: 145, height: 45 },
   ));
 
+test("the text of a quote in a word stands in the tone of prose, and no word of it in the colors of Python", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      await seedDemo(session);
+      const thread = session.acts.find((act) => act.kind === "thread" && act.by === "operator");
+      if (!thread) throw new Error("No thread of the operator.");
+      await session.open(thread.id);
+      await frame();
+      await screen.mockMouse.click(...find(screen, "Read the README and the search module"));
+      await frame();
+      await Promise.all(highlighting(screen.renderer.root));
+      await frame();
+      const [x, y] = find(screen, "saves a note with the time");
+      const prose = RGBA.fromHex(palettes[session.theme].prose);
+      // "with" is a keyword of Python, and here a word of the quote.
+      expect(cellAt(screen.captureSpans(), x + "saves a note ".length, y).fg?.equals(prose)).toBe(true);
+    },
+    { width: 145, height: 70, useMouse: true },
+  ));
+
 test("a heading of markdown inside a quote of a word is text of the quote, and no step of the word", () =>
   composing(async ({ session, frame }) => {
     await session.engine.result(

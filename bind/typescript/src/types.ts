@@ -33,21 +33,43 @@ export interface Paragraph {
   lines: string[];
   text: string;
 }
+/** The quotes of a text of python, each as its name and the offsets where it starts and ends: from `<s:name>` at the start of a
+ * line to `</s:name>` at the end of a line, or to the end of the word while the quote is still open. A quote is text,
+ * and no Python. */
+export function quotes(python: string): [name: string, from: number, to: number][] {
+  const found: [string, number, number][] = [];
+  let quote = "";
+  let from = 0;
+  let offset = 0;
+  for (const line of python.split("\n")) {
+    const opened = quote ? undefined : /^<s:(\w+)>/.exec(line)?.[1];
+    if (opened) [quote, from] = [opened, offset];
+    if (quote && line.endsWith(`</s:${quote}>`)) {
+      found.push([quote, from, offset + line.length]);
+      quote = "";
+    }
+    offset += line.length + 1;
+  }
+  if (quote) found.push([quote, from, python.length]);
+  return found;
+}
+
 /** The paragraphs of the python of a user turn, in order. A blank line that a header follows is where one paragraph
  * ends, since a word its caller wrote may hold a blank line of its own. A header is # and the name of an act, and a
  * line of a quote is text, so a heading of markdown in a quote ends no paragraph. */
 export function paragraphs(python: string): Paragraph[] {
   if (!python) return [];
   const parts: string[][] = [];
-  let quote = "";
+  const spans = quotes(python);
+  let offset = 0;
   for (const line of python.split("\n")) {
     const last = parts.at(-1);
-    if (!last || (!quote && /^#\w/.test(line) && last.at(-1) === "")) {
+    const quoted = spans.some(([, from, to]) => offset > from && offset <= to);
+    if (!last || (!quoted && /^#\w/.test(line) && last.at(-1) === "")) {
       last?.pop();
       parts.push([line]);
     } else last.push(line);
-    quote ||= /^<s:(\w+)>/.exec(line)?.[1] ?? "";
-    if (quote && line.endsWith(`</s:${quote}>`)) quote = "";
+    offset += line.length + 1;
   }
   return parts.map((part) => {
     const text = part.join("\n");
