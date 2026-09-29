@@ -236,21 +236,21 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
   """A life opens on its record and on the ears of the crate, in the order every host boots them after its own, and
   enables at its tip what the configs turn on; a life that turns the extensions off enables nothing new."""
   path = str(tmp_path / "record.jsonl")
-  record, ears = _monty.opened(str(tmp_path), path, config=str(tmp_path / "config"))
+  record, ears = _monty.opened(directory=str(tmp_path), record=path, config=str(tmp_path / "config"))
   assert (record, [name for name, _ in ears]) == (
     [],
     ["provider", "extensions", "memory", "skills", "files", "bash", "time", "store"],
   )
   root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
   await settle()
-  assert [name for name, _, _ in _monty.enabled(engine.transcript(on=root))] == ["memory", "skills"]
+  assert [one["name"] for one in _monty.enabled(engine.transcript(on=root))] == ["memory", "skills"]
   assert {a[0] for a in engine.transcript(on=root) if a[2] == "memory"} == {"done"}, "the memory ear answered"
   for _, one in ears:
     one.dispose()
-  record, ears = _monty.opened(str(tmp_path), path, keeps=False, extensions=False)
+  record, ears = _monty.opened(directory=str(tmp_path), record=path, keeps=False, extensions=False)
   assert [name for name, _ in ears] == ["provider", "extensions", "memory", "skills", "files", "bash", "time"]
   root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
-  assert [name for name, _, _ in _monty.enabled(engine.transcript(on=root))] == ["memory", "skills"]
+  assert [one["name"] for one in _monty.enabled(engine.transcript(on=root))] == ["memory", "skills"]
 
 
 async def test_the_door_names_the_work_that_an_earlier_life_left_pending(tmp_path: Path) -> None:
@@ -269,9 +269,11 @@ def test_the_door_gives_the_catalog_of_the_crate(tmp_path: Path) -> None:
   its name whether this machine offers it or not, and the models this machine offers."""
   assert _monty.levels() == ["off", "minimal", "low", "medium", "high", "xhigh", "max"]
   efforts = ["low", "medium", "high", "xhigh", "max"]
-  assert _monty.model("claude-cli:haiku") == ("claude-cli:haiku", efforts, 200000, True, None)
+  haiku = {"name": "claude-cli:haiku", "efforts": efforts, "window": 200000, "images": True, "price": None}
+  assert _monty.model("claude-cli:haiku") == haiku
   assert _monty.model("nobody:none") is None
   claude = tmp_path / "claude"
   claude.write_text("#!/bin/sh\n")
   claude.chmod(0o755)
-  assert ("claude-cli:opus", efforts, 1000000, True, None) in _monty.models(str(claude))
+  opus = {"name": "claude-cli:opus", "efforts": efforts, "window": 1000000, "images": True, "price": None}
+  assert opus in _monty.models(str(claude))

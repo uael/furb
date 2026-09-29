@@ -191,21 +191,8 @@ class Act[T = object](str):
   act to close, cancel, pause, peek and get, and awaitable, so it gives what the act comes to."""
 
   def __await__(self) -> Generator[object, None, T]:
-    return self.came().__await__()
-
-  async def came(self) -> T:
     """What the act came to, once the life holds it: the value, or the exception it completed with, raised."""
-    done = asyncio.get_running_loop().create_future()
-
-    def told(value: object) -> None:
-      if not done.done():
-        done.set_result(value)
-
-    held_engine().watch(str(self), told)
-    got = await done
-    if isinstance(got, BaseException):
-      raise got
-    return got
+    return held_engine().result(str(self)).__await__()
 
 
 class Site:

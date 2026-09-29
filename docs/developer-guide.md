@@ -72,12 +72,11 @@ uv run pre-commit install
 
 | File | What it holds |
 | --- | --- |
-| `src/binding.rs` | The doors of the crate, one for each host language, each behind the feature that names it. |
+| `src/binding.rs` | The host API that both doors give, each function once, and the doors, each behind the feature that names it. |
 | `src/binding/py.rs` | The door to python, which `bind/python` makes into the package `furb-monty`. |
 | `bind/python/furb_monty/engine.py` | Every name of the contract over one life of the engine in the sandbox. |
 | `src/binding/ts.rs` | The door to TypeScript through N-API, which also makes the declarations of `bind/typescript`. |
 | `src/binding/ts/host.rs` | The door on the thread of JavaScript: a value as the engine takes it, and a generator heard as an ear. |
-| `src/binding/ts/console.rs` | The end of a process that the console of Windows asks for. |
 
 ## Changing the suite
 

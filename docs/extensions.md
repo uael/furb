@@ -96,7 +96,7 @@ rights of the user on the engine of CPython, as a word of a model does there.
 - The TUI has no part of its own for an extension. `/extensions` lists what the life runs, and `/run` runs a word
   of one on the chain on screen.
 - `Session` takes `extensions`, false to enable nothing new, and `config`, the config directory of the user.
-- `_monty.opened` gives the record and the ears of the crate to a python host, and `extensions=False` enables
+- `opened` gives the record and the ears of the crate to a host of either door, and `extensions` false enables
   nothing new.
-- `Engine.extensions()` in TypeScript, and `_monty.enabled` on the facts of the root in python, give the extensions
-  that a life runs, in the order it enabled them.
+- `enabled`, on the facts of the root, gives the extensions that a life runs, in the order it enabled them, in either
+  door.

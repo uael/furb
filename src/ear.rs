@@ -183,6 +183,11 @@ pub(crate) fn heard<R>(answers: &mut Answers<'_>, step: impl FnOnce() -> R) -> R
   step()
 }
 
+/// Whether a life of this thread hears an ear now, which answers each verb that the ear calls.
+pub fn hearing() -> bool {
+  ANSWERS.get().is_some()
+}
+
 /// One verb of the engine, called by its name with its words by the ear that a life of this thread hears now, and
 /// what it gave or raised.
 pub fn call(verb: &str, args: Vec<Object>, kwargs: Vec<(&str, Object)>) -> Result<Object, Fault> {

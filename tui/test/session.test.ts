@@ -72,7 +72,7 @@ test("a session that cannot save its view still ends its life, its commands and 
     expect(session.engine.disposed).toBe(true);
     for (let tries = 0; alive(pid()) && tries < 100; tries++) await Bun.sleep(20);
     expect(alive(pid())).toBe(false);
-    store(record).ear.dispose();
+    store(record)[1].dispose();
   } finally {
     await remove(directory);
   }

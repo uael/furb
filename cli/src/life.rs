@@ -4,7 +4,7 @@
 use std::{
   cell::RefCell,
   future::Future,
-  path::{Path, PathBuf},
+  path::Path,
   pin::Pin,
   rc::Rc,
   sync::Arc,
@@ -186,9 +186,9 @@ pub fn model(to: &str) -> Option<String> {
 }
 
 /// The directory a life stands on: the one given, or the current one, as an absolute path.
-pub fn directory(cwd: Option<&Path>) -> PathBuf {
+pub fn directory(cwd: Option<&Path>) -> String {
   let cwd = cwd.unwrap_or(Path::new("."));
-  std::path::absolute(cwd).unwrap_or_else(|_| cwd.to_path_buf())
+  std::path::absolute(cwd).unwrap_or_else(|_| cwd.to_path_buf()).display().to_string()
 }
 
 /// A waker that unparks the thread that awaits, so a voice that speaks from another thread wakes it.

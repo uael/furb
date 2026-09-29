@@ -75,8 +75,8 @@ class Live:
     the store of the record when the life keeps, which holds its lease until the World ends. The life enables at its
     tip the extensions that the configs turn on, unless `extensions` is false."""
     stored, ears = _monty.opened(
-      self.directory,
-      None if record is None else str(record),
+      directory=self.directory,
+      record=None if record is None else str(record),
       keeps=keeps,
       extensions=extensions,
       actor=self.actor,
@@ -117,7 +117,7 @@ class Live:
     """
     try:
       line = ""
-      if shape in _monty.SHAPES:
+      if shape in _monty.shapes():
         async with self.reading:
           sys.stdout.write(f"{about} wants a {shape}: {message}\n> ")
           sys.stdout.flush()

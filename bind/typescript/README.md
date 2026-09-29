@@ -4,8 +4,8 @@ The same Rust crate and Monty sandbox, through N-API. Views, queries and control
 an `id`, converts to its name as a string, and can be awaited. Its Promise resolves with its outcome or rejects
 with an error that names the engine's fault. A TUI is not part of this package.
 
-`napi-rs` builds `furb.node` from the door in `src/binding/ts.rs` and its modules `src/binding/ts/host.rs` and
-`src/binding/ts/console.rs`, and generates `index.d.cts` from them. `index.cjs` loads `furb.node`. The optional
+`napi-rs` builds `furb.node` from the host API in `src/binding.rs`, which the door to python gives too, and from the
+door in `src/binding/ts.rs` and its module `src/binding/ts/host.rs`, and generates `index.d.cts` from them. `index.cjs` loads `furb.node`. The optional
 `typescript` feature builds the binding in the existing crate. There is no Rust worker or second crate. The
 `Engine` of the package has one method for each verb of the contract, which the build of the crate makes from
 `src/furb/engine.pyi`, as it makes the methods of the crate: the words that the verb needs, in their order, then an
@@ -39,7 +39,7 @@ try {
 ```
 
 A `Session` opens an engine on the ears of the World that the crate writes and on the console of the operator, which
-this package writes. `Engine.open(options, ears)` opens it as every host of the crate opens a life: on the record, on
+this package writes. `Engine.open(ears, opening)` opens it as every host of the crate opens a life: on the record, on
 the ears of the host, and then on the ears of the crate, which are the provider of the models, the extensions, the ear
 of each official extension, the files, the commands, time, and the store of the record. Its `record` getter gives the
 record it opened on. The extensions enable at the start of the life what the configs of the user and of the directory
@@ -145,7 +145,7 @@ size, and `furb-image://` reference. A session with no record copies it into `.f
 `.furb` that it makes holds a `.gitignore` that keeps it out of version control but its `config.json`, as
 `furbDirectory` makes it.
 Put that reference in the prompt as a Markdown image,
-`![design](furb-image://...)`, which `imageReference(image)` writes and `imageReferences(message)` reads. The
+`![design](furb-image://...)`, which `imageReference(name, uri)` writes and `imageReferences(message)` reads. The
 provider hands the python of the turn as it is, and adds each image that the message of a prompt of that turn
 references, to a model that takes images. The stored bytes are checked against their digest before use. PNG, JPEG, GIF,
 and WebP are supported, with a 20 MiB limit per image. Keep `.images` with the record when moving a session.

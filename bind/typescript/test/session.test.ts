@@ -2,7 +2,17 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { actorParts, boot, type Ear, type Fact, inspectRecord, Session, type Turn } from "../src/index.ts";
+import {
+  actorParts,
+  boot,
+  type Ear,
+  enabled,
+  type Fact,
+  inspectRecord,
+  ROOT,
+  Session,
+  type Turn,
+} from "../src/index.ts";
 import { alive, printPid, remove } from "./processes.ts";
 import { until } from "./until.ts";
 
@@ -562,11 +572,12 @@ test("a session enables the extensions of the configs, and a later session on it
   const config = join(cwd, "config");
   await writeFile(join(cwd, "CLAUDE.md"), "Use two spaces.\n");
   /** The names of the extensions that the life of a session runs, which the root says it enabled. */
-  const enabled = (session: Session) => (session.engine?.extensions() ?? []).map(({ name }) => name);
+  const running = (session: Session) =>
+    enabled(session.engine?.transcript({ on: ROOT }) ?? []).map(({ name }) => name);
   const first = new Session({ cwd, record, config });
   try {
     first.open();
-    expect(enabled(first)).toEqual(["memory", "skills"]);
+    expect(running(first)).toEqual(["memory", "skills"]);
     const told = first.engine?.turns({ on: "chain1" }).at(-1)?.[1] ?? "";
     expect(told).toContain(
       `#memory1\nmemory1_path = '${join(cwd, "CLAUDE.md").replaceAll("\\", "\\\\")}'\nmemory1_text = 'Use two spaces.'`,
@@ -579,7 +590,7 @@ test("a session enables the extensions of the configs, and a later session on it
   try {
     later.open();
     fresh.open();
-    expect([enabled(later), enabled(fresh)]).toEqual([["memory", "skills"], []]);
+    expect([running(later), running(fresh)]).toEqual([["memory", "skills"], []]);
   } finally {
     await later.dispose();
     await fresh.dispose();

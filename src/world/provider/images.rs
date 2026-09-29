@@ -38,6 +38,8 @@ pub struct Attached {
 }
 
 /// An image a message names: its text in the message, its name, and its uri.
+#[cfg_attr(feature = "typescript", napi_derive::napi(object, object_from_js = false))]
+#[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct Named {
   pub text: String,
   pub name: String,

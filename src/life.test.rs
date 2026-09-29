@@ -19,8 +19,15 @@ fn place(name: &str) -> PathBuf {
 /// A life in a directory of the tests, on its record and on the configs of that directory, whose provider offers
 /// the operator alone.
 fn opening(at: &Path, keeps: bool) -> Opening {
-  let opening = Opening::new(at).config(Some(at.join("config"))).roster(Some(Vec::new()));
-  opening.record(Some(at.join("record.jsonl")), keeps)
+  let place = |name: &str| Some(at.join(name).display().to_string());
+  Opening {
+    directory: at.display().to_string(),
+    record: place("record.jsonl"),
+    keeps: Some(keeps),
+    config: place("config"),
+    roster: Some(Vec::new()),
+    ..Opening::default()
+  }
 }
 
 /// The names of the extensions that a life runs.
@@ -55,9 +62,10 @@ fn a_life_that_inspects_its_record_keeps_nothing_enables_nothing_new_and_its_ear
  {
   let at = place("inspects");
   fs::write(at.join("a.txt"), "one\n").unwrap();
-  drop(opening(&at, true).extending(false).boot::<String>([]).unwrap());
+  drop(Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap());
   let before = fs::read_to_string(at.join("record.jsonl")).unwrap();
-  let (mut engine, _) = opening(&at, true).inspecting(true).boot::<String>([]).unwrap();
+  let (mut engine, _) =
+    Opening { inspecting: Some(true), ..opening(&at, true) }.boot::<String>([]).unwrap();
   let read = verbs::Read { on: Some("chain1".to_owned()), ..Default::default() };
   assert_eq!(engine.read("a.txt", read).unwrap_err().message(), "nothing takes read");
   assert_eq!(names(&mut engine), Vec::<String>::new(), "it enables nothing the record does not");

@@ -44,7 +44,7 @@ async def test_memory_gives_the_texts_of_the_answer(tmp_path: Path) -> None:
 
 async def test_a_memory_question_that_the_world_refuses_raises_refused_in_the_caller() -> None:
   """A memory question that the World refuses raises Refused in the caller."""
-  name, word, _ = next(one for one in _monty.official() if one[0] == "memory")
-  _, root = life(Dead(stands=STANDS), extensions=_monty.extensions([(name, word, "")]))
+  one = next(one for one in _monty.official() if one["name"] == "memory")
+  _, root = life(Dead(stands=STANDS), extensions=_monty.extensions([{**one, "life": ""}]))
   with pytest.raises(Refused, match="a dead World answers no memory"):
     await engine.rung("close(memory())", on=root)

@@ -122,7 +122,13 @@ enum Command {
 impl Place {
   /// A life in the directory of this place, on its record, which it keeps what it says to when `keeps` says so.
   fn opening(&self, keeps: bool) -> Opening {
-    Opening::new(life::directory(self.cwd.as_deref())).record(self.record.clone(), keeps)
+    let record = self.record.as_ref().map(|one| one.display().to_string());
+    Opening {
+      directory: life::directory(self.cwd.as_deref()),
+      record,
+      keeps: Some(keeps),
+      ..Opening::default()
+    }
   }
 }
 
@@ -130,7 +136,7 @@ impl Stand {
   /// A life that stands on the actor and the roster of this stand.
   fn on(&self, opening: Opening) -> Opening {
     let roster = (!self.roster.is_empty()).then(|| self.roster.clone());
-    opening.actor(self.model.clone()).roster(roster)
+    Opening { actor: self.model.clone(), roster, ..opening }
   }
 }
 
@@ -143,8 +149,8 @@ fn main() -> ExitCode {
       prompt(stand.on(place.opening(true)), &shape, message, to)
     }
     Some(Command::Turns { record, cwd, stand }) => {
-      let opening = Opening::new(life::directory(cwd.as_deref())).record(Some(record), false);
-      turns(stand.on(opening.inspecting(true)))
+      let place = Place { record: Some(record), cwd };
+      turns(stand.on(Opening { inspecting: Some(true), ..place.opening(false) }))
     }
     Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word),
     Some(Command::Extensions { place }) => extensions(place.opening(false)),

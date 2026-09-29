@@ -1,5 +1,4 @@
-//! The build: the contract is read here, and every verb of it becomes a method of the engine and of the door to
-//! TypeScript.
+//! The build: the contract is read here, and every verb of it becomes a method of the engine and of each door.
 //!
 //! A verb is a function that `src/furb/engine.pyi` gives before its classes, which is what a model or an operator
 //! says; the functions after them are the engine's own. A verb that the contract gives only as overloads is the last
@@ -7,7 +6,8 @@
 //!
 //! The method of a verb takes the parameters that have no default, in their order, then a list for its star
 //! parameter, then one struct of the rest, named after the verb, whose fields are none until a host gives them, so
-//! the engine keeps its own defaults. The door to TypeScript takes the same, with an object of options for the struct.
+//! the engine keeps its own defaults. The door to TypeScript takes the same, with an object of options for the struct,
+//! and the door to python takes each of those words by its name.
 //! What each annotation is, in rust and in TypeScript, is the table of [`Kind::of`] and [`Answer::of`], and an
 //! annotation that the tables do not hold stops the build, so no verb of the contract goes without its method.
 //!
@@ -100,7 +100,7 @@ impl Kind {
       Kind::MaybeCallable => format!("{name}.unwrap_or_else(Object::none)"),
       Kind::Text => format!("{name}.object()"),
       Kind::Strs => format!("Object::list({name}.iter().map(|one| Object::string(*one)))"),
-      Kind::Ear => format!("self.hosted().ear({name}, false)"),
+      Kind::Ear => format!("handed({name}, false)"),
       Kind::Template => format!("templated({name})"),
     }
   }
@@ -317,10 +317,12 @@ fn doc(def: &StmtFunctionDef) -> String {
   }
 }
 
-/// Each constant of the contract that is a number or a text, as a constant of rust with the sentence that says it.
+/// Each constant of the contract that is a number or a text, as a constant of rust with the sentence that says it,
+/// which the door to TypeScript gives, and the function that gives each to the module of python.
 fn constants(source: &str) -> String {
   let module = parse_module(source).expect("the contract parses").into_syntax();
   let mut out = String::new();
+  let mut python = String::new();
   for (stmt, said) in module.body.iter().zip(module.body.iter().skip(1)) {
     let (Stmt::AnnAssign(one), Stmt::Expr(said)) = (stmt, said) else { continue };
     let (Expr::Name(name), Some(value), Expr::StringLiteral(doc)) =
@@ -337,8 +339,20 @@ fn constants(source: &str) -> String {
       Expr::StringLiteral(text) => ("&str", format!("{:?}", text.value.to_str())),
       _ => continue,
     };
-    let _ = writeln!(out, "/// {}\npub const {}: {kind} = {value};", doc.value.to_str(), name.id);
+    let _ = writeln!(
+      out,
+      "/// {}\n#[cfg_attr(feature = \"typescript\", napi_derive::napi)]\npub const {1}: {kind} = {value};",
+      doc.value.to_str(),
+      name.id
+    );
+    let _ = writeln!(python, "  module.add({0:?}, {0})?;", name.id.as_str());
   }
+  let _ = writeln!(
+    out,
+    "/// Each constant of the contract, added to the module of python.\n#[cfg(feature = \"python\")]\npub(crate) fn \
+     constants(module: &pyo3::Bound<'_, pyo3::types::PyModule>) -> pyo3::PyResult<()> {{\n  use \
+     pyo3::types::PyModuleMethods;\n{python}  Ok(())\n}}"
+  );
   out
 }
 
@@ -449,7 +463,7 @@ fn scripted(verbs: &[Verb]) -> String {
       verb.defaults().map(|one| format!("({:?}, {})", one.name, one.kind.carried())).collect();
     let (called, answer) = match verb.answer {
       Answer::Act(_) => ("acted", "napi::Result<JsAct>"),
-      _ => ("plain", "napi::Result<Unknown<'env>>"),
+      _ => ("plain", "napi::Result<Value>"),
     };
     let _ = writeln!(out, "  /// {}", verb.doc);
     let _ = writeln!(
@@ -458,9 +472,11 @@ fn scripted(verbs: &[Verb]) -> String {
       typed.join(", "),
       verb.answer.script()
     );
+    // A verb that takes no word of JavaScript names no lifetime of its env.
+    let env = if given.is_empty() { "" } else { "'env" };
     let _ = writeln!(
       out,
-      "  pub fn {}<'env>(&self, env: &'env Env, {}) -> {answer} {{",
+      "  pub fn {}<{env}>(&self, env: &{env} Env, {}) -> {answer} {{",
       verb.name,
       given.join(", ")
     );
@@ -471,6 +487,59 @@ fn scripted(verbs: &[Verb]) -> String {
       words.join(", "),
       keys.join(", ")
     );
+  }
+  out.push_str("}\n");
+  out
+}
+
+/// The methods of the engine that the door to python gives, one per verb: the words it needs by position, then the
+/// words of its star parameter, then each word with a default by its name alone, as the options of TypeScript are.
+fn pythonic(verbs: &[Verb]) -> String {
+  let mut out = String::from("#[pymethods]\nimpl PyEngine {\n");
+  for verb in verbs {
+    let mut signature: Vec<String> = verb.needed().map(|one| one.name.clone()).collect();
+    let mut given: Vec<String> = verb.needed().map(|one| format!("{}: Value", one.name)).collect();
+    match &verb.rest {
+      Some(rest) => {
+        signature.push(format!("*{}", rest.name));
+        given.push(format!("{}: Vec<Value>", rest.name));
+      }
+      None if verb.with().is_some() => signature.push("*".to_owned()),
+      None => {}
+    }
+    signature.extend(verb.defaults().map(|one| format!("{} = None", one.name)));
+    given.extend(verb.defaults().map(|one| format!("{}: Option<Value>", one.name)));
+    let words: Vec<String> = verb.needed().map(|one| format!("{}.0", one.name)).collect();
+    let keys: Vec<String> = verb.defaults().map(|one| format!("({0:?}, {0})", one.name)).collect();
+    let (answer, made) = match verb.answer {
+      Answer::Act(_) => ("PyAct", "PyAct::of(slf, got)?"),
+      _ => ("Value", "Value(got)"),
+    };
+    let _ = writeln!(out, "  /// {}", verb.doc);
+    let _ = writeln!(out, "  #[pyo3(signature = ({}))]", signature.join(", "));
+    let _ = writeln!(
+      out,
+      "  fn {}(slf: &Bound<'_, Self>, {}) -> PyResult<{answer}> {{",
+      verb.name,
+      given.join(", ")
+    );
+    let mutable = if verb.rest.is_some() { "mut " } else { "" };
+    let _ = writeln!(out, "    let {mutable}args: Vec<Object> = vec![{}];", words.join(", "));
+    if let Some(rest) = &verb.rest {
+      let _ = writeln!(out, "    args.extend({}.into_iter().map(|one| one.0));", rest.name);
+    }
+    let _ = writeln!(
+      out,
+      "    let kwargs: [(&str, Option<Value>); {}] = [{}];",
+      keys.len(),
+      keys.join(", ")
+    );
+    let _ = writeln!(
+      out,
+      "    let kwargs = kwargs.into_iter().filter_map(|(key, one)| Some((key, one?.0))).collect();"
+    );
+    let _ = writeln!(out, "    let got = slf.borrow().said({:?}, args, kwargs)?;", verb.name);
+    let _ = writeln!(out, "    Ok({made})\n  }}\n");
   }
   out.push_str("}\n");
   out
@@ -656,6 +725,7 @@ fn main() {
   written("methods.rs", methods(&verbs));
   written("verbs.rs", structs(&verbs));
   written("ts.rs", scripted(&verbs));
+  written("py.rs", pythonic(&verbs));
   let engine = fs::read_to_string("src/furb/engine.py").expect("the engine is beside the contract");
   written("system.py", minified(&engine));
 }

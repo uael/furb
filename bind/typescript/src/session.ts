@@ -1,14 +1,7 @@
 import { EventEmitter } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import {
-  attachImage,
-  Engine,
-  type ImageAttachment,
-  model,
-  type NativeEar,
-  type OpenOptions,
-} from "../index.cjs";
+import { attachImage, Engine, type ImageAttachment, model, type NativeEar, type Opening } from "../index.cjs";
 import { Activity, WORK } from "./activity.js";
 import { FileChanges } from "./changes.js";
 import { Console, type ConsoleOptions } from "./console.js";
@@ -24,7 +17,7 @@ function* silent(): Ear {
 /** A function that answers each request of the provider in place of a model: it is given the request, the actor,
  * the chain, the messages and the settings of the effort, and a function that tells what it writes as it writes it,
  * and gives the turn of the model. */
-export type Answer = NonNullable<OpenOptions["answer"]>;
+export type Answer = NonNullable<Opening["answer"]>;
 /** What a model writes while it answers a rung, on the chain of the rung. */
 export type Stream = { chain: string; text: string; thinking: string };
 
@@ -152,22 +145,19 @@ export class Session extends EventEmitter {
     ];
     try {
       // The crate refuses a life that drifted, since it keeps nothing more.
-      const engine = Engine.open(
-        {
-          directory: this.directory,
-          record: this.record,
-          inspecting: !working,
-          extensions: this.options.extensions,
-          config: this.options.config,
-          actor: [this.options.model, this.options.effort].filter(Boolean).join("/") || undefined,
-          roster: this.options.roster,
-          claude: this.options.claude,
-          images: this.imageDirectory,
-          answer: this.options.answer,
-          stream: (rung, chain, text, thinking) => this.wrote(rung, chain, text, thinking),
-        },
-        ears,
-      );
+      const engine = Engine.open(ears, {
+        directory: this.directory,
+        record: this.record,
+        inspecting: !working,
+        extensions: this.options.extensions,
+        config: this.options.config,
+        actor: [this.options.model, this.options.effort].filter(Boolean).join("/") || undefined,
+        roster: this.options.roster,
+        claude: this.options.claude,
+        images: this.imageDirectory,
+        answer: this.options.answer,
+        stream: (rung, chain, text, thinking) => this.wrote(rung, chain, text, thinking),
+      });
       this.engine = this.console.engine = engine;
       // The observer heard the entries that the life kept as it opened, after the record it opened on.
       this.entries = [...(engine.record as Entry[]), ...this.entries];
