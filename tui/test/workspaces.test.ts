@@ -105,10 +105,15 @@ test("workspaces keep sessions alive, report background completion and input, an
     expect(beta.sessions).toHaveLength(1);
     if (!first.session || !second.session || !third.session) throw new Error("Sessions did not open.");
     const worker = first.session.engine;
-    const command = await worker.bash("sleep 0.6; printf 'background finished'", { on: worker.root });
+    // The command waits for a line that the test feeds, so the session works for as long as the test reads it.
+    const command = await worker.bash("read -r line; printf 'background finished'", {
+      fed: true,
+      on: worker.root,
+    });
     await until(library, () => first.status === "working");
     expect(library.groupStatus(alpha)).toBe("working");
     expect(library.current).toBe(third);
+    await worker.write({ path: `${command}/stdin`, content: "go\n" }, { on: worker.root });
     await worker.result(command);
     await until(library, () => first.status === "done");
     await library.select(first);
