@@ -147,6 +147,8 @@ export function spin(now = Date.now(), place = 0): string {
   const frames = motion.spinner;
   return frames[(Math.floor(now / motion.frame) + place) % frames.length] ?? "⠋";
 }
+/** How much of its color a selected row or a chosen segment takes over the surface under it. */
+export const selectedMix = 0.2;
 /** The roles of a palette and what the view derives from them, each as a color. */
 type Colors = Record<keyof Palette | "selected" | "rule" | "added" | "removed" | "backdrop", RGBA>;
 /** The colors of a palette: its roles, and the tints that the view derives from them. */
@@ -158,7 +160,7 @@ function colors(name: ThemeName): Colors {
   const veil = light ? roles.bright : RGBA.fromValues(0, 0, 0, 1);
   return {
     ...roles,
-    selected: mix(roles.surface2, roles.operator, 0.2),
+    selected: mix(roles.surface2, roles.operator, selectedMix),
     rule: mix(roles.surface1, roles.faint, 0.35),
     added: mix(roles.ground, roles.done, 0.16),
     removed: mix(roles.ground, roles.warm, 0.16),

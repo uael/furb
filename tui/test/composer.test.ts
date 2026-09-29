@@ -4,7 +4,8 @@ import { setRendererCapabilities } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
 import { count } from "../src/format.ts";
-import { palettes } from "../src/theme.ts";
+import { palettes, selectedMix } from "../src/theme.ts";
+import { mix } from "../src/ui.ts";
 import { cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 
@@ -389,14 +390,17 @@ test("⌃Tab rolls to the next chain and ⇧⌃Tab to the one before it, round f
     true,
   ));
 
-test("the switch of the views fills the view shown with the accent, names its chord, and a click on a view shows it", () =>
+test("the switch of the views tints the view shown and writes its label in the accent, names its chord, and a click on a view shows it", () =>
   composing(async ({ session, screen, frame, click }) => {
     const top = (await frame()).split("\n")[0] ?? "";
     expect(top).toContain("Feed");
     expect(top).toContain("⌥1-3");
     const accent = RGBA.fromHex(palettes.furb.operator);
-    const filled = (label: string) =>
-      Boolean(cellAt(screen.captureSpans(), top.indexOf(label), 0).bg?.equals(accent));
+    const tint = mix(RGBA.fromHex(palettes.furb.surface2), accent, selectedMix);
+    const filled = (label: string) => {
+      const cell = cellAt(screen.captureSpans(), top.indexOf(label), 0);
+      return Boolean(cell.fg?.equals(accent) && cell.bg?.equals(tint));
+    };
     expect([filled("Feed"), filled("Changes")]).toEqual([true, false]);
     await click("Changes");
     await until(session, () => session.view === "changes");

@@ -83,6 +83,7 @@ import {
   glyph,
   motion,
   palettes,
+  selectedMix,
   setTheme,
   spacing as space,
   spin,
@@ -990,9 +991,10 @@ export class App {
   };
 
   /** A switch between a few choices, which the views and the mode of the input share. A track in a color of its own
-   * holds a segment for each choice, two columns of space at each side of its label. The chosen segment is filled
-   * with the color of its choice from edge to edge, the segment under the pointer lights in place, and a click chooses
-   * a segment. The chord that moves the switch stands after the track. */
+   * holds a segment for each choice, two columns of space at each side of its label. The chosen segment is tinted
+   * with the color of its choice from edge to edge, as a selected row is, and its label stands in that color. The
+   * segment under the pointer lights in place, and a click chooses a segment. The chord that moves the switch stands
+   * after the track. */
   private switcher(
     box: BoxRenderable,
     choices: { label: string; badge?: string; color: RGBA; run?: () => void }[],
@@ -1002,10 +1004,10 @@ export class App {
   ): void {
     for (const [index, choice] of choices.entries()) {
       const active = index === chosen;
-      const fill = active ? choice.color : track;
+      const fill = active ? mix(track, choice.color, selectedMix) : track;
       const parts = (lit: boolean): Part[] => [
-        [`  ${choice.label}`, active ? c.ground : lit ? c.bright : c.prose, active ? bold : 0, fill],
-        [choice.badge ? ` ${choice.badge}` : "", active ? c.ground : lit ? c.bright : c.faint, 0, fill],
+        [`  ${choice.label}`, active ? choice.color : lit ? c.bright : c.prose, active ? bold : 0, fill],
+        [choice.badge ? ` ${choice.badge}` : "", active ? choice.color : lit ? c.bright : c.faint, 0, fill],
         ["  ", c.bright, 0, fill],
       ];
       // The pointer recolors the segment that it is over, and builds no node, so that a press and its release land on
