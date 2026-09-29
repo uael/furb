@@ -246,53 +246,56 @@ test("operator answers and program edits act through the binding", () =>
     { width: 120, height: 40, exitOnCtrlC: false },
   ));
 
-test("resume preserves chains, programs, theme, and input drafts while unfinished work stays paused", async () => {
-  const first = await demoSession({ seed: true });
-  let library = await demoLibrary(first);
-  const screen = await createTestRenderer({ width: 120, height: 40 });
-  const app = new App(screen.renderer, first, { quit() {}, workspaces: library });
-  const fork = first.chains.find((chain) => chain.id !== first.engine.root);
-  if (!fork) throw new Error("No fork in the fixture.");
-  await first.select(fork.id);
-  first.mode = "python";
-  first.theme = "paper";
-  first.view = "transcript";
-  app.render();
-  app.composer.setText('draft = "keep this"');
-  const pending = await first.engine.wait({ seconds: 10, on: fork.id });
-  const ids = first.chains.map((chain) => chain.id);
-  const program = { ...first.program };
-  const record = first.host.record;
-  app.dispose();
-  screen.renderer.destroy();
-  await library.dispose();
-  if (!record) throw new Error("No saved record.");
-  library = new Workspaces(first.preferences, { demo: true });
-  await library.refresh();
-  // The replay of a saved record comes after the list, and the picker shows its state once it lands.
-  await until(library, () => library.groups[0]?.sessions[0]?.status === "paused");
-  const saved = library.groups[0]?.sessions ?? [];
-  expect(saved).toHaveLength(1);
-  const detail = sessionDetail(saved[0] as SessionEntry, false);
-  expect(detail).toContain("KiB");
-  expect(detail).toContain("Paused");
-  await library.dispose();
-  const second = await demoSession({ record });
-  await composing(
-    async ({ app }) => {
-      expect(second.chains.map((chain) => chain.id)).toEqual(ids);
-      expect(second.program).toEqual(program);
-      expect(second.selected).toBe(fork.id);
-      expect(second.theme).toBe("paper");
-      expect(second.mode).toBe("python");
-      expect(app.composer.plainText).toBe('draft = "keep this"');
-      expect(second.host.pending.has(pending)).toBe(true);
-      expect((await second.engine.outcome(pending)).done).toBe(false);
-    },
-    { width: 120, height: 40 },
-    second,
-  );
-});
+test.serial(
+  "resume preserves chains, programs, theme, and input drafts while unfinished work stays paused",
+  async () => {
+    const first = await demoSession({ seed: true });
+    let library = await demoLibrary(first);
+    const screen = await createTestRenderer({ width: 120, height: 40 });
+    const app = new App(screen.renderer, first, { quit() {}, workspaces: library });
+    const fork = first.chains.find((chain) => chain.id !== first.engine.root);
+    if (!fork) throw new Error("No fork in the fixture.");
+    await first.select(fork.id);
+    first.mode = "python";
+    first.theme = "paper";
+    first.view = "transcript";
+    app.render();
+    app.composer.setText('draft = "keep this"');
+    const pending = await first.engine.wait({ seconds: 10, on: fork.id });
+    const ids = first.chains.map((chain) => chain.id);
+    const program = { ...first.program };
+    const record = first.host.record;
+    app.dispose();
+    screen.renderer.destroy();
+    await library.dispose();
+    if (!record) throw new Error("No saved record.");
+    library = new Workspaces(first.preferences, { demo: true });
+    await library.refresh();
+    // The replay of a saved record comes after the list, and the picker shows its state once it lands.
+    await until(library, () => library.groups[0]?.sessions[0]?.status === "paused");
+    const saved = library.groups[0]?.sessions ?? [];
+    expect(saved).toHaveLength(1);
+    const detail = sessionDetail(saved[0] as SessionEntry, false);
+    expect(detail).toContain("KiB");
+    expect(detail).toContain("Paused");
+    await library.dispose();
+    const second = await demoSession({ record });
+    await composing(
+      async ({ app }) => {
+        expect(second.chains.map((chain) => chain.id)).toEqual(ids);
+        expect(second.program).toEqual(program);
+        expect(second.selected).toBe(fork.id);
+        expect(second.theme).toBe("paper");
+        expect(second.mode).toBe("python");
+        expect(app.composer.plainText).toBe('draft = "keep this"');
+        expect(second.host.pending.has(pending)).toBe(true);
+        expect((await second.engine.outcome(pending)).done).toBe(false);
+      },
+      { width: 120, height: 40 },
+      second,
+    );
+  },
+);
 
 test("rewind is a recorded rung and keeps the selected transcript after reopening", async () => {
   let rewound = "";
