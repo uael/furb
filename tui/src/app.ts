@@ -3031,7 +3031,9 @@ export class App {
   private sender(act: ActRow): string {
     const model = this.model(String(act.words[2] ?? "")).name;
     const maker = this.session.actOf(act.by);
-    return maker?.kind === "chain" ? `the chain told ${model}` : `${act.by} asked ${model}`;
+    if (maker?.kind === "chain") return `the chain told ${model}`;
+    const asker = maker?.kind === "rung" ? this.session.threads.speaker(maker) : OPERATOR;
+    return `${asker === OPERATOR ? "you" : this.model(asker).name} asked ${model}`;
   }
   /** A word of Python in a card: its numbered lines, and the reason it failed. */
   private python(box: BoxRenderable, word: string, reason?: string): void {
@@ -5022,7 +5024,7 @@ export class App {
       const status = this.session.chainStatus(act.id);
       return {
         parts: [statusMark(status), [w.labelOf(act.id), current ? c.bright : c.prose, bold]],
-        tag: current ? "current" : act.id,
+        tag: current ? "current" : "",
         hint: "open it",
         run: async () => {
           this.closeTree();
@@ -5040,14 +5042,21 @@ export class App {
           [`${glyph.prompt} `, c.operator],
           [String(act.words[1] ?? "").split("\n")[0] ?? "", c.bright],
         ],
-        tag: act.id,
+        tag: "",
         hint: "edit it on a new branch",
         run: branch,
       };
     const { mark, color } = this.actState(act);
     const subject = this.subject(act);
     const observation = act.kind === "thread" && !asksOperator(act) && !w.isUserThread(act);
-    const name = asksOperator(act) ? "question" : act.kind === "rung" ? act.id : act.kind;
+    // A rung shows its first step, or the first line of its program where it says none, a command its line after $,
+    // and any other act its kind and its words on one line, as the feed does.
+    const named: Part[] =
+      act.kind === "rung"
+        ? []
+        : act.kind === "bash"
+          ? [["$ ", c.faint]]
+          : [[asksOperator(act) ? "question" : act.kind, c.bright], ["  "]];
     return {
       parts: observation
         ? [
@@ -5057,14 +5066,15 @@ export class App {
           ]
         : [
             [`${mark} `, color],
-            [name, c.bright],
-            // A rung shows the first line of its program, and any other act its words on one line, as the feed does.
+            ...named,
             [
-              `  ${act.kind === "rung" ? (subject.split("\n")[0] ?? "") : subject.replace(/\s+/g, " ").trim()}`,
-              c.prose,
+              act.kind === "rung"
+                ? (steps(subject)[0] ?? subject.split("\n")[0] ?? "")
+                : subject.replace(/\s+/g, " ").trim(),
+              act.kind === "rung" ? c.bright : c.prose,
             ],
           ],
-      tag: act.kind === "rung" ? "" : act.id,
+      tag: "",
       hint: "branch after it",
       run: branch,
     };

@@ -691,6 +691,20 @@ test("a model that has written nothing yet is waited for once under its name, ho
     expect(shown.split("Waiting for the first words of the model").length - 1).toBe(1);
   }));
 
+test("the rewind tree names each act as the feed does, and no act by its name in the record", () =>
+  composing(
+    async ({ session, app, frame }) => {
+      await seedDemo(session);
+      await idle(session);
+      app.rewind();
+      const shown = await frame();
+      expect(shown).toContain("Read the README and the search module, to learn what the project holds");
+      expect(shown).toContain("$ bun run check");
+      expect(shown).not.toMatch(/\b(?:rung|thread|bash|chain|wait)\d+\b/);
+    },
+    { width: 140, height: 44 },
+  ));
+
 test("a heading of markdown inside a quote of a word is text of the quote, and no step of the word", () =>
   composing(async ({ session, frame }) => {
     await session.engine.result(
