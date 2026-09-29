@@ -649,7 +649,7 @@ test("the reason that a word failed leaves out the name that the parser gives th
     expect(shown).not.toContain("<string>");
   }));
 
-test("an input that has the focus takes the colors of a theme chosen after it opened", () =>
+test.serial("an input that has the focus takes the colors of a theme chosen after it opened", () =>
   composing(
     async ({ app, frame, screen, session }) => {
       session.theme = "midnight";
