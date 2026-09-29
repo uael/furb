@@ -678,6 +678,19 @@ test("the inspector shows the definition of a name as the line that binds it", (
     expect(row).not.toMatch(/rung\d/);
   }));
 
+test("a model that has written nothing yet is waited for once under its name, however many of its rungs wait", () =>
+  composing(async ({ session, frame }) => {
+    // Each command that the word leaves running wakes a rung of the model once it ends.
+    await session.submit('/run bash("printf a")\nbash("printf b")');
+    await until(
+      session,
+      () => session.acts.filter((act) => act.kind === "rung" && act.by.startsWith("bash")).length === 2,
+    );
+    await session.refresh();
+    const shown = await frame();
+    expect(shown.split("Waiting for the first words of the model").length - 1).toBe(1);
+  }));
+
 test("a heading of markdown inside a quote of a word is text of the quote, and no step of the word", () =>
   composing(async ({ session, frame }) => {
     await session.engine.result(

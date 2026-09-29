@@ -1788,11 +1788,16 @@ export class App {
       }
       // A thread that no turn tells yet has its card after the others.
       if (!zoom) for (const thread of threads.on(w.selected)) card(thread);
+      // A model that has written nothing yet is waited for once under its name, however many of its rungs wait.
+      const silent = (stream: Stream) => !stream.text.trim() && !stream.thinking.trim();
       for (const [id, stream] of writing) {
         const act = rows.get(id);
         if ((threads.of(act) ?? "") !== zoom) continue;
-        speak(act ? threads.speaker(act) : w.actor, `stream-${id}`, id);
-        plan.push({ is: "stream", id, stream });
+        const speaker = act ? threads.speaker(act) : w.actor;
+        const prior = plan.at(-1);
+        const waits = prior?.is === "stream" && run?.speaker === speaker && silent(prior.stream) && silent(stream);
+        speak(speaker, `stream-${id}`, id);
+        if (!waits) plan.push({ is: "stream", id, stream });
       }
       // The last step of each thread, which its card says: the last comment of the last word under it, or of the words
       // that its model writes now.
