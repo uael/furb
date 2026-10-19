@@ -619,16 +619,44 @@ impl Line<'_> {
 }
 
 /// The logical lines of a program, from its tokens: no comment, no line break inside brackets, and every string that
-/// holds expressions as the one part it is in the source, so what stands between its quotes stays as it is.
+/// holds expressions as the one part it is in the source, so what stands between its quotes stays as it is. What the
+/// formatter adds to break a long line goes with the line break: a comma that a line break and a closing bracket
+/// follow, and the parentheses that a return or a yield opens a line break with.
 fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
   let (mut lines, mut depth, mut parts) = (Vec::new(), 0, Vec::new());
+  // Each bracket that stands open, and whether it is one that the formatter added and the line goes without.
+  let mut open: Vec<bool> = Vec::new();
   let mut at = 0;
   while at < tokens.len() {
     let token = tokens[at];
     at += 1;
+    let broken = tokens.get(at).map(Token::kind) == Some(TokenKind::NonLogicalNewline);
     match token.kind() {
       TokenKind::Newline if !parts.is_empty() => {
         lines.push(Line { depth, parts: std::mem::take(&mut parts) });
+      }
+      TokenKind::Comma
+        if broken
+          && tokens[at..]
+            .iter()
+            .map(Token::kind)
+            .find(|kind| !matches!(kind, TokenKind::NonLogicalNewline | TokenKind::Comment))
+            .is_some_and(|kind| {
+              matches!(kind, TokenKind::Rpar | TokenKind::Rsqb | TokenKind::Rbrace)
+            }) => {}
+      TokenKind::Lpar | TokenKind::Lsqb | TokenKind::Lbrace => {
+        let added = token.kind() == TokenKind::Lpar
+          && broken
+          && matches!(parts.last(), Some((TokenKind::Return | TokenKind::Yield, _)));
+        open.push(added);
+        if !added {
+          parts.push((token.kind(), &source[token.range()]));
+        }
+      }
+      TokenKind::Rpar | TokenKind::Rsqb | TokenKind::Rbrace => {
+        if !open.pop().unwrap_or_default() {
+          parts.push((token.kind(), &source[token.range()]));
+        }
       }
       TokenKind::Comment
       | TokenKind::NonLogicalNewline
