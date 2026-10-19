@@ -44,6 +44,12 @@ fn the_word_of_a_file_is_the_file_less_its_imports_of_furb_and_its_runs_of_empty
   let file = "from furb.engine import (\r\n  Text,\r\n  read,\r\n)\r\nfrom furb import engine\r\nimport furb\r\n\r\n\r\ndef note(on=''):\r\n  return read('n', on=on)\r\n\r\n\r\n\r\n\r\nclass Note:\r\n\r\n  x = 1\r\n\r\n";
   assert_eq!(word(file), "def note(on=''):\n  return read('n', on=on)\n\n\nclass Note:\n\n  x = 1");
   assert_eq!(word("import json\nfrom furb.engine import read\nx = 1\n"), "import json\nx = 1");
+  let others = "import furbish\nfrom furbish import x\nimport furb.engine\nfrom furb import (\n  read,\n)\ny = x";
+  assert_eq!(
+    word(others),
+    "import furbish\nfrom furbish import x\ny = x",
+    "a module of another name stays"
+  );
 }
 
 #[test]
