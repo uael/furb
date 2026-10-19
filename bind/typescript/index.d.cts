@@ -117,7 +117,7 @@ export declare class Engine {
   /** A wait: the World takes it and says it is done when its seconds have passed, and it is over then. */
   wait(options?: { seconds?: number; on?: string } | null): Act & PromiseLike<null>
   /** The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is. */
-  rung(options?: { word?: string; retells?: string; actor?: string; on?: string } | null): Act & PromiseLike<unknown>
+  rung(options?: { word?: string; retells?: string; to?: string; on?: string } | null): Act & PromiseLike<unknown>
   /** A prompt: it makes the rung of one turn of its model, makes another while the rung it made gives no value, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike. */
   prompt(shape: unknown, options?: { message?: string; to?: string; on?: string } | null): Act & PromiseLike<unknown>
   /** chain says what a chain does: how it is opened, what it tells, and what it answers for. */

@@ -13,6 +13,7 @@ TIMEOUT = 600.0
 ROOT = "chain1"
 site = ContextVar("site", default=OPERATOR)
 raised = None
+actor = ""
 type Show = Callable[[list[str]], list[int]]
 type Filter = Callable[[list[tuple]], list[tuple]]
 
@@ -173,7 +174,7 @@ def wait(seconds: float = 0.0, on: str = "") -> Act[None]:
   return act("wait", on, ending(idle), seconds)
 
 
-def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Act:
+def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   def ear(id):
     yield "started", id
     if word:
@@ -200,23 +201,23 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
           yield "done", id, value
           return
 
-  if not (word or actor):
-    actor = module(on).get("actor", "")
-  return act("rung", on, ending(pausing(ear)), word, retells, actor)
+  if not (word or to):
+    to = module(on).get("actor", "")
+  return act("rung", on, ending(pausing(ear)), word, retells, to)
 
 
 def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str = "") -> Act[T]:
   named = shape if isinstance(shape, str) else re.sub(r"<class '|'>|[\w.:/]*\.", "", repr(shape))
-  actor = to or module(on).get("actor")
+  asks = (to or module(on).get("actor")) != OPERATOR
 
   def ear(id):
-    if actor != OPERATOR:
+    if asks:
       yield "started", id
     yield told(id, "", bound(id, named), message=message)
     while True:
-      while actor == OPERATOR or paused(id):
+      while not asks or paused(id):
         yield
-      asking = rung(actor=to)
+      asking = rung(to=to)
       while (yield)[:2] != ("done", asking):
         pass
 
