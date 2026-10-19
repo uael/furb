@@ -166,7 +166,7 @@ the tools in `.venv/bin`.
   and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them, so a word
   runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the release.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
-  whole but for the stubs of what boot binds, which the toml excludes with their reason.
+  whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
 - `uv run ruff format src test script extensions` then `uv run ruff check src test script extensions`: format and
   lint. Two spaces of indentation, 120 columns.

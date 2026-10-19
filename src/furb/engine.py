@@ -17,30 +17,6 @@ type Show = Callable[[list[str]], list[int]]
 type Filter = Callable[[list[tuple]], list[tuple]]
 
 
-def say(kind, about, *words):
-  raise RuntimeError("no life")
-
-
-def act(kind, on, ear, *words):
-  raise RuntimeError("no life")
-
-
-def drive(g, name):
-  raise RuntimeError("no life")
-
-
-def get(about: str) -> tuple:
-  raise RuntimeError("no life")
-
-
-def peek(at: str, waiting: object = None) -> object:
-  raise RuntimeError("no life")
-
-
-def transcript(on: str = "") -> list[tuple]:
-  raise RuntimeError("no life")
-
-
 def ask(kind, on, *words):
   if isinstance(got := peek(a := act(kind, on, None, *words), Refused(a + " not done")), Refused):
     raise got
@@ -640,6 +616,7 @@ def ending(ear):
 
 
 def boot(record=(), **outside):
+  global say, act, drive, get, peek, transcript
   get_running_loop()
   made, known, done, held, log, alive, born, busy, left = Counter(), {}, {}, {}, [], {}, {}, set(), []
   first, driven, taken, holding = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), set(), []
@@ -687,7 +664,7 @@ def boot(record=(), **outside):
       for pile in log, left, due, first, kept:
         pile.clear()
 
-  def says(kind, about, *words):
+  def say(kind, about, *words):
     a = (kind, about, site.get(), *words)
     if about in known and kind in ("started", "done"):
       taken.add(about)
@@ -697,7 +674,7 @@ def boot(record=(), **outside):
     dispatch()
     return a
 
-  def makes(kind, on, ear, *words):
+  def act(kind, on, ear, *words):
     speaker = site.get()
     made[speaker, kind] += 1
     by = (question(("rung", speaker)) and known[speaker][5]) or speaker
@@ -719,12 +696,12 @@ def boot(record=(), **outside):
             heard.append(n)
         if ear:
           heard.append(name)
-          live(ear(name), name)
+          drive(ear(name), name)
         if kept.get(name, a) == a:
           if name not in taken and (f := first.get(name)):
             if f[0] == "done":
               with site.set("journal"):
-                says("done", name, f[3])
+                say("done", name, f[3])
             else:
               taken.add(name)
               holding.append(name)
@@ -732,7 +709,7 @@ def boot(record=(), **outside):
             offers(a)
         if name not in taken:
           with site.set(""):
-            says("done", name, Refused("nothing takes " + kind))
+            say("done", name, Refused("nothing takes " + kind))
       finally:
         busy.discard(id(a))
       dispatch()
@@ -770,7 +747,7 @@ def boot(record=(), **outside):
         busy.discard(name)
         living or alive.pop(name)
 
-  def live(g, name):
+  def drive(g, name):
     if name in alive:
       raise Refused(name + " hears")
     if acting():
@@ -779,16 +756,17 @@ def boot(record=(), **outside):
     hears(name, g, None)
     dispatch()
 
-  globals().update(
-    say=says,
-    act=makes,
-    drive=live,
-    get=lambda about: known.get(about),
-    peek=lambda at, waiting=None: done.get(at, waiting),
-    transcript=lambda on="": [*held.get(on or scope(site.get()), [])],
-  )
+  def get(about: str) -> tuple:
+    return known.get(about)
+
+  def peek(at: str, waiting: object = None) -> object:
+    return done.get(at, waiting)
+
+  def transcript(on: str = "") -> list[tuple]:
+    return [*held.get(on or scope(site.get()), [])]
+
   for who, hearer in [(OPERATOR, idle(OPERATOR)), *outside.items(), ("journal", journal())]:
-    live(hearer, who)
+    drive(hearer, who)
   root = Act(ROOT) if known else chain("root")
   stand()
   return root
