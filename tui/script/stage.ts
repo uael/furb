@@ -1,4 +1,4 @@
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type CliRenderer, CodeRenderable, type Renderable } from "@opentui/core";
@@ -11,21 +11,24 @@ import type { Workspaces } from "../src/workspaces.ts";
 /** The home of a script of the gallery, so that the paths it shows read as the paths of a user do: ~/fieldnotes. The
  * runtime reads the home directory once, so the script runs again as a child that starts in that home, with more of
  * the environment, and the script ends when the child ends. The home has the same path at each run, so that the
- * transcript, which shows the exact paths, reads the same. */
+ * transcript, which shows the exact paths, reads the same. On a system with /tmp it stands there, since the temporary
+ * directory of a user differs on each machine of macOS. Its path holds no link, as the workspaces hold each folder by
+ * such a path, and /tmp of macOS is a link to /private/tmp. */
 export async function home(name: string, environment: Record<string, string> = {}): Promise<string> {
   const given = process.env.FURB_GALLERY_HOME;
   if (given) return given;
-  const gallery = join(tmpdir(), name);
+  const gallery = join(process.platform === "win32" ? tmpdir() : "/tmp", name);
   await rm(gallery, { recursive: true, force: true });
   await mkdir(gallery, { recursive: true });
+  const real = await realpath(gallery);
   try {
     const child = Bun.spawn([process.execPath, Bun.main], {
       env: {
         ...process.env,
         ...environment,
-        HOME: gallery,
-        USERPROFILE: gallery,
-        FURB_GALLERY_HOME: gallery,
+        HOME: real,
+        USERPROFILE: real,
+        FURB_GALLERY_HOME: real,
       },
       stdio: ["inherit", "inherit", "inherit"],
     });
