@@ -7,8 +7,9 @@
 # gets no answer, a line that holds ODD gets a line that is no JSON and then no answer, a line that holds LONG gets a
 # line longer than a reader takes, a line that holds ERROR gets a result that says an error, a line that holds BARE
 # gets a result with no block before it, a line that holds THINK gets a thought before the text, and a line that holds
-# LOUD closes the stdout, writes more on the stderr than its pipe holds, and ends it with a failure. When the file loud
-# stands beside it, it writes more on the stderr than its pipe holds before it reads any input.
+# LOUD closes the stdout, writes more on the stderr than its pipe holds, and ends it with a failure, and a line that
+# holds GAP streams its text with its first part left out, and settles the text whole. When the file loud stands
+# beside it, it writes more on the stderr than its pipe holds before it reads any input.
 here=$(dirname "$0")
 printf '%s\0' "$@" > "$here/args.$$"
 echo "$$" >> "$here/pids"
@@ -55,7 +56,7 @@ while IFS= read -r line; do
     part "$word"
   else
     word="\"close(\\\"reply $n\\\")\""
-    part '"close("'
+    case $line in *GAP*) ;; *) part '"close("' ;; esac
     part "\"\\\"reply $n\\\")\""
   fi
   say "{\"type\":\"content_block_stop\",\"index\":$at}"
