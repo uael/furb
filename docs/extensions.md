@@ -70,7 +70,7 @@ journal answers again in a later life, so a replay is exact and the World is ask
   user, in the config directory, then that of each folder from the root down to the working directory of the chain,
   then that of each folder under it down to the folder of the path, when the path is under it. The memory of a
   folder is its `CLAUDE.md`, or its `AGENTS.md` when the folder holds no `CLAUDE.md`. A memory file enters the chain
-  whole the first time, and after that only when it changed, and then only by the lines that changed. `remember()`
+  whole the first time, and after that again whole, only when it changed. `remember()`
   is an act that tells the memory of the working directory when it is made, then the memory of the folder of each
   file that the chain reads, and the memory that changed at each stand. Its life word is `remember()`.
 
