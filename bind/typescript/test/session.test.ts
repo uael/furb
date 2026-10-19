@@ -212,6 +212,65 @@ test("what a model writes streams into the session under its rung until its repl
   }
 });
 
+test("what a model writes after its reply is done streams nothing", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-late-"));
+  const { promise: held, resolve: release } = Promise.withResolvers<void>();
+  let calls = 0;
+  const session = new Session({
+    cwd,
+    record: join(cwd, "life.jsonl"),
+    ...modeled,
+    answer: async (_, write) => {
+      calls++;
+      write({ text: `close(${calls})` });
+      if (calls === 2) await held;
+      return said(`close(${calls})`);
+    },
+  });
+  try {
+    const engine = session.open();
+    // The door tells what a model wrote on the next turn of the loop of the host, so the session hears the part of
+    // the first reply after the done of that reply.
+    expect(await engine.prompt("int", { message: "one", on: engine.root })).toBe(1);
+    const second = engine.prompt("int", { message: "two", on: engine.root });
+    // The parts of the replies come in the order the models wrote them, so the part of the first reply has come
+    // once the second streams.
+    await until(session, () => [...session.streams.values()].some((stream) => stream.text === "close(2)"));
+    expect([...session.streams.values()]).toEqual([{ chain: engine.root, text: "close(2)", thinking: "" }]);
+    release();
+    expect(await second).toBe(2);
+    expect(session.streams.size).toBe(0);
+  } finally {
+    await session.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
+test("a later session on a record holds no stream of the life before it", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-saved-streams-"));
+  const record = join(cwd, "life.jsonl");
+  const first = new Session({
+    cwd,
+    record,
+    ...modeled,
+    answer: (_, write) => {
+      write({ text: "close(" });
+      return new Promise(() => {});
+    },
+  });
+  const engine = first.open();
+  engine.prompt("int", { message: "count", on: engine.root });
+  await until(first, () => first.streams.size === 1);
+  await first.dispose();
+  const second = new Session({ record });
+  try {
+    expect(second.streams.size).toBe(0);
+  } finally {
+    await second.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
 test("unfinished model work and waits reopen pending until the host resumes them", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-resume-"));
   const record = join(cwd, "life.jsonl");
