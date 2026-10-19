@@ -44,18 +44,21 @@ async def test_one_that_returns_is_over_and_lives_no_more() -> None:
 
 
 async def test_one_that_raises_while_it_hears_is_broken_the_same_way() -> None:
-  """One that raises while it hears is broken the same way, and what went wrong goes to the one that spoke."""
+  """One that raises while it hears is broken the same way: the next fact it is given finds it over, and what went wrong goes to the one that spoke."""
   sand, log, root = born()
   heard: list[tuple] = []
   engine.drive(keeping(heard), "before")
   engine.drive(breaks(), "broken")
   with pytest.raises(ValueError, match="boom"):
     engine.bash("echo hi", on=root)
+  with pytest.raises(Refused, match="broken hears"):
+    engine.drive(keeping([]), "broken")
+  engine.bash("echo again", on=root)
   after: list[tuple] = []
   engine.drive(keeping(after), "broken")
-  engine.bash("echo again", on=root)
-  assert len(said(log, "bash")) == 2
-  assert said(heard, "bash") == said(log, "bash") and said(after, "bash") == said(log, "bash")[1:]
+  engine.bash("echo last", on=root)
+  assert len(said(log, "bash")) == 3
+  assert said(heard, "bash") == said(log, "bash") and said(after, "bash") == said(log, "bash")[2:]
   assert [e[0] for e in sand.record if e[0][0] == "bash"] == said(log, "bash")
   sand.files["/w/a.txt"] = "one\n"
   engine.drive(breaks(), "reader")
