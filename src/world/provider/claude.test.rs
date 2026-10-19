@@ -433,8 +433,12 @@ fn a_process_that_writes_more_on_its_stderr_than_its_pipe_holds_takes_a_long_inp
 #[test]
 fn a_turn_that_makes_no_progress_fails_at_its_stall_with_the_last_odd_line_and_ends_its_process() {
   let yard = Yard::new("stall");
+  fs::write(yard.at.join("odd"), "").expect("the cue of the fake");
   let model = yard.claude(300).completion_model("sonnet");
-  let no = asked(&model, &[user("ODD")], json!({"session": "stall"})).unwrap_err();
+  // The fake writes its odd line before it reads, and the turn writes more than a pipe holds, so the write ends, and
+  // the stall starts, only once the odd line waits in the pipe, however slow the fake is.
+  let long = format!("WAIT {}", "a".repeat(262_144));
+  let no = asked(&model, &[user(&long)], json!({"session": "stall"})).unwrap_err();
   let why = "Claude made no progress for 0.3s. The last line it wrote was no line of json";
   assert!(no.to_string().contains(why), "{no}");
   let pid = yard.pids().remove(0);
