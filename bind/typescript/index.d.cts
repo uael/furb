@@ -134,8 +134,8 @@ export type JsEngine = Engine
  * when it is disposed, so what it holds goes: a command ends, a wait ends, and a store lets its record go. The
  * engine of python steps it as a generator of its own too.
  *
- * It stays on the thread that made it: python refuses a reach of it from another thread, and a drop of it on
- * another thread frees nothing, which leaves memory alone once the ear is disposed.
+ * It stays on the thread that made it, as a [`Homed`] value: a reach of it from another thread panics, and a drop of
+ * it on another thread leaves it for the thread that made it to drop.
  */
 export declare class NativeEar {
   /**
