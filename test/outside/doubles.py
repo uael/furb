@@ -9,16 +9,14 @@ import asyncio
 import math
 import os
 import sys
-from collections.abc import Callable, Generator, Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
 import conftest
+from conftest import World
 from furb import engine
 from furb.world import Answer, Live
-
-type Words = Generator[tuple | None, tuple]
-"""The World, an Ear of engine.pyi: engine.py binds no such name, so the suite says the type itself."""
 
 ROSTER = ["claude-cli:opus"]
 """ROSTER is the roster of a World of the suite: one model, whose requests a double answers."""
@@ -73,7 +71,7 @@ def world(yard: object, answer: Answer | None = None) -> Live:
   return Live(str(yard), roster=ROSTER, answer=answer)
 
 
-def worlds(stands: list) -> Words:
+def worlds(stands: list) -> World:
   """The World in memory of the suite on a standing: it answers the stand and takes a wait, which is what a test of
   the Kernel stands a life on, since the Kernel neither reads a disk nor asks a model."""
   return conftest.Sand(stands=stands).hears()
@@ -93,7 +91,7 @@ def speaking(text: str) -> Iterator[None]:
     sys.stdin = held
 
 
-def blind() -> Words:
+def blind() -> World:
   """A gate that finds nothing in any word, so every word runs: the gate of a life whose test is not the gate."""
   while True:
     match (yield):
@@ -101,7 +99,7 @@ def blind() -> Words:
         yield "done", qid, []
 
 
-def booted(said: Words, record: Sequence[tuple] = (), *, gated: bool = True, **ears: Words) -> str:
+def booted(said: World, record: Sequence[tuple] = (), *, gated: bool = True, **ears: World) -> str:
   """A life on a World and these ears, with the Kernel of this interpreter and its gate when it is gated, and the id
   of its root; a life that is not gated reads every word with a gate that finds nothing, so it refuses no word."""
   py = conftest.Py()
