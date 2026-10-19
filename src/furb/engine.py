@@ -10,6 +10,7 @@ from typing import Any, Never
 WINDOW = 200000
 OPERATOR = "operator"
 TIMEOUT = 600.0
+LARGEST = 524288
 ROOT = "chain1"
 site = ContextVar("site", default=OPERATOR)
 raised = None
@@ -48,6 +49,8 @@ def take(*ids: str, inside: bool = True) -> Filter:
 
 def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   got = ask("read", on, path)
+  if isinstance(got, Text) and (size := len(shown(got, show).encode())) > LARGEST:
+    raise Refused(f"{path} shows {size} bytes, over {LARGEST}")
   show is HIDDEN or tell("read", on, path, got, show)
   return got
 

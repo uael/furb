@@ -13,9 +13,6 @@ use crate::{
   value::{Fault, Object, Text},
 };
 
-/// The largest text a read gives, in bytes.
-const LARGEST: u64 = 524_288;
-
 /// The ear of the files: it answers a cd with the directory that the path names, a read with the text at the path
 /// and a write with the text as it stands after, each resolved against the working directory of the chain, or with
 /// the refusal. The path of a read or a write that is `~` or starts with `~/` resolves against the home of the user.
@@ -73,12 +70,12 @@ async fn served(co: &mut Co, a: &Fact) -> Result<Text, Fault> {
   read(&at)
 }
 
-/// The text at a path: a file of utf-8 no larger than a read gives.
+/// The text at a path: a file of utf-8 of any size, since the engine bounds what a read tells.
 pub(crate) fn read(at: &Path) -> Result<Text, Fault> {
   let shown = at.display();
   let info = fs::metadata(at).map_err(|no| failed(&no, at))?;
-  if !info.is_file() || info.len() > LARGEST {
-    return Err(Fault::refused(format!("Read needs a text file at most {LARGEST} bytes: {shown}")));
+  if !info.is_file() {
+    return Err(Fault::refused(format!("Read needs a text file: {shown}")));
   }
   let bytes = fs::read(at).map_err(|no| failed(&no, at))?;
   let content = String::from_utf8(bytes)
