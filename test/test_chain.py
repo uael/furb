@@ -25,6 +25,7 @@ from conftest import (
   named,
   opened,
   paragraphs,
+  plain,
   posed,
   prompted,
   ran,
@@ -602,6 +603,18 @@ async def test_a_chain_with_a_source_inherits_the_default_actor_with_the_globals
   _, _, root = born()
   twin = await chained("twin", root)
   assert engine.module(twin)["actor"] == engine.module(root)["actor"] == "m/low"
+
+
+async def test_a_chain_with_no_source_stands_on_the_default_actor_of_the_chain_it_is_on() -> None:
+  """A chain with no source stands on the default actor of the chain it is on when it is made, which for a chain that a word opens is the chain of that word, and on the actor of the standing when it is on no chain, and its standing tells that actor."""
+  sand, _, root = born("actor = 'n/low'\nkid = chain('kid')\nclose(kid)", "close(None)")
+  kid = await engine.prompt(str, "open one", on=root)
+  ours = await chained("ours")
+  assert [engine.module(one)["actor"] for one in (root, kid, ours)] == ["n/low", "n/low", "m/low"]
+  assert paragraphs(engine.turns(on=kid))[1] == takes(kid, [*STANDS[:2], "n/low"])
+  assert paragraphs(engine.turns(on=ours))[1] == takes(ours)
+  await relived(Sand(), plain(sand.record))
+  assert [engine.module(one)["actor"] for one in (root, kid, ours)] == ["n/low", "n/low", "m/low"]
 
 
 async def test_a_chain_with_a_source_that_holds_an_act_reads_the_close_of_the_act() -> None:
