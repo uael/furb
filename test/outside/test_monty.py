@@ -5,11 +5,15 @@ ear of this interpreter that says a verb while it hears and is answered with wha
 engine made that an ear calls back while it hears, a class a word defined held as a type of this interpreter
 and its instances as objects of it, both ways, the Kernel of this interpreter refused, since the engine of monty
 holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, an ear the
-crate writes, which serves a life of either engine, and a life longer than the tables of its session could count.
-What the ears of the crate do, the crate proves.
+crate writes, which serves a life of either engine, a life longer than the tables of its session could count, and
+an engine and an ear that the collector of cycles drops on another thread. What the ears of the crate do, the crate
+proves.
 """
 
 import builtins
+import gc
+import sys
+import threading
 from collections.abc import Generator
 from pathlib import Path
 
@@ -230,6 +234,29 @@ async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_gen
   assert [fact[3] for fact in kept if fact[:2] == ["done", "read1"]] == [
     furb.python.Text(str(tmp_path / "a.txt"), "one\n")
   ]
+
+
+async def test_an_engine_and_an_ear_that_the_collector_of_cycles_drops_on_another_thread_go_with_no_error() -> None:
+  """An engine and an ear of the crate that a cycle alone holds, as a traceback holds the frame of a verb, go with no
+  error when the collector of cycles drops them on another thread, as the reader of a gateway of xdist does."""
+  gc.disable()
+  heard: list[str] = []
+  hook = sys.unraisablehook
+  sys.unraisablehook = lambda one: heard.append(str(one.exc_value))
+  try:
+    engine.boot((), world=Dead(stands=STANDS).hears())
+    cycle: list[object] = [furb_monty.engine.held_engine(), _monty.files()]
+    cycle.append(cycle)
+    # The second life ends the first, and the cycle alone holds its engine.
+    engine.boot((), world=Dead(stands=STANDS).hears())
+    del cycle
+    collector = threading.Thread(target=gc.collect)
+    collector.start()
+    collector.join()
+  finally:
+    sys.unraisablehook = hook
+    gc.enable()
+  assert heard == []
 
 
 async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> None:
