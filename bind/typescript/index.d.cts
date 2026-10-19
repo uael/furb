@@ -258,6 +258,9 @@ export interface Inspection {
 /** What the store kept at a path, read with no lease and changed in nothing. */
 export declare function kept(path: string): unknown[]
 
+/** LARGEST is the largest number of bytes that a read tells of the lines that its show picks. */
+export declare const LARGEST: number
+
 /** The levels of effort, from least to most, which an actor names after its model. */
 export declare function levels(): Array<string>
 

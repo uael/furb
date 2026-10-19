@@ -11,6 +11,8 @@ OPERATOR: Final[str] = "operator"
 """OPERATOR is the name of the operator in the roster and as an actor."""
 TIMEOUT: Final[float] = 600.0
 """TIMEOUT is the timeout, in seconds, of a command that does not say one."""
+LARGEST: Final[int] = 524288
+"""LARGEST is the largest number of bytes that a read tells of the lines that its show picks."""
 ROOT: Final[str] = "chain1"
 """ROOT is the name of the root, which every life opens first under that one name, and on which boot stands the life."""
 site: Final[ContextVar[str]] = ContextVar("site", default=OPERATOR)
@@ -158,6 +160,7 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   A read of a door that a rung of that ladder says leaves the word of that rung out, since a rung is no part of the program it reads.
   One made from inside an act tells itself under its own name, with its path and what it was answered, on the scope of that act; one made from outside an act tells nothing, and neither does one whose show is hidden.
   A read answered with what is no text gives that value, and tells it as python shows it.
+  A read whose show picks more than LARGEST bytes of its text raises Refused, which names those bytes and LARGEST, and tells nothing.
   """
 
 def write(text: Text, on: str = "") -> Text:
