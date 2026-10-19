@@ -150,7 +150,7 @@ def close(value: object, id: str = "") -> None:
       try:
         fits = isinstance(value, (s := eval(shape, module(on))) or object)
       except TypeError:
-        fits = isinstance(value, s.__origin__)
+        fits = isinstance(value, getattr(s, "__origin__", ()))
       except NameError:
         fits = False
       if not fits:
