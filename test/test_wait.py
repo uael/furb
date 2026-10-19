@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import WORLD, born, paragraphs, said, settle
+from conftest import WORLD, born, paragraphs, said
 from furb import engine
 from furb.engine import Refused
 
@@ -11,7 +11,7 @@ async def test_a_wait_the_world_takes_it_and_says_it_is_done_when_its_seconds_ha
   """A wait: the World takes it and says it is done when its seconds have passed, and it is over then."""
   _, log, root = born()
   act = engine.wait(0.1, on=root)
-  await settle()
+  # The World takes the wait while it is made, so these hold before the loop runs, whatever the load of the machine.
   assert [a[2] for a in said(log, "started") if a[1] == act] == [WORLD]
   assert engine.peek(act, ...) is ...
   assert await act is None
