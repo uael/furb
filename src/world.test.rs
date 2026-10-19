@@ -1,6 +1,5 @@
-//! The parts of the ears of the World that stand apart from a life: how a path resolves, how a file is read whole,
-//! how the store holds and mends its record, and how the stream of a command is read whole. The tests of the engine
-//! drive each ear in a life.
+//! The parts of the ears of the World that stand apart from a life: how a path resolves, how the store holds and
+//! mends its record, and how the stream of a command is read whole. The tests of the engine drive each ear in a life.
 
 use std::{
   fs,
@@ -9,7 +8,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use super::{bash::whole, files, kept, resolved, store};
+use super::{bash::whole, kept, resolved, store};
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> PathBuf {
@@ -28,15 +27,6 @@ fn a_path_resolves_against_its_directory_with_every_dot_read_and_an_absolute_pat
   let elsewhere = std::env::temp_dir().join("elsewhere");
   assert_eq!(resolved(&base, &elsewhere.display().to_string()), elsewhere);
   assert_eq!(resolved(Path::new(&base), ""), base);
-}
-
-#[test]
-fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_refuses_what_is_no_file() {
-  let at = place("large");
-  let content = "x".repeat(1_000_000) + "\n";
-  fs::write(at.join("large.txt"), &content).unwrap();
-  assert_eq!(files::read(&at.join("large.txt")).unwrap().content, content);
-  assert!(files::read(&at).is_err());
 }
 
 #[test]

@@ -1,8 +1,8 @@
-//! The paths of the files, proved where no life reaches the home of the user.
+//! The paths and the texts of the files, proved where no life reaches the home of the user.
 
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
-use super::homed;
+use super::{homed, read};
 
 #[test]
 fn a_path_that_is_a_tilde_or_starts_with_one_and_a_slash_resolves_against_the_home_of_the_user() {
@@ -15,4 +15,16 @@ fn a_path_that_is_a_tilde_or_starts_with_one_and_a_slash_resolves_against_the_ho
   assert_eq!(at("a/~/b"), None);
   let none = homed("~/a.txt", None).expect("a path of the home").unwrap_err();
   assert_eq!(none.message(), "There is no home of the user for ~/a.txt.");
+}
+
+#[test]
+fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_refuses_what_is_no_file() {
+  let at = std::env::temp_dir().join(format!("furb-files-large-{}", std::process::id()));
+  let _ = fs::remove_dir_all(&at);
+  fs::create_dir_all(&at).unwrap();
+  let content = "x".repeat(1_000_000) + "\n";
+  fs::write(at.join("large.txt"), &content).unwrap();
+  assert_eq!(read(&at.join("large.txt")).unwrap().content, content);
+  assert_eq!(read(&at).unwrap_err().message(), format!("Read needs a text file: {}", at.display()));
+  fs::remove_dir_all(&at).unwrap();
 }
