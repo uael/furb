@@ -43,8 +43,13 @@ const OFFICIAL: [(&str, &str); 2] = [
   (include_str!("../extensions/skills/furb.json"), include_str!("../extensions/skills/skills.py")),
 ];
 
-/// The start of each line that imports furb, which the word of a file leaves out.
-const IMPORTS: [&str; 3] = ["from furb ", "from furb.", "import furb"];
+/// Whether a line imports furb or a module of it, as `from furb import`, `from furb.engine import` or `import
+/// furb`, which the word of a file leaves out. A module whose name only starts with furb is another module.
+fn imports_furb(line: &str) -> bool {
+  let module = line.strip_prefix("from ").or_else(|| line.strip_prefix("import "));
+  let after = module.and_then(|one| one.strip_prefix("furb"));
+  after.is_some_and(|rest| rest.is_empty() || rest.starts_with([' ', '\t', '.', ',']))
+}
 
 /// An extension: its name, its word, and its life word, which is empty when it has none.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -200,7 +205,7 @@ fn beside(file: &Path, path: &str, places: &Places) -> PathBuf {
 pub fn word(source: &str) -> String {
   let (mut out, mut empty, mut open) = (String::new(), 0, false);
   for line in source.split('\n').map(|one| one.strip_suffix('\r').unwrap_or(one)) {
-    if open || IMPORTS.iter().any(|one| line.starts_with(one)) {
+    if open || imports_furb(line) {
       open = !line.contains(')') && (open || line.contains('('));
     } else if line.is_empty() {
       empty += 1;
