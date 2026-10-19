@@ -15,6 +15,7 @@ from conftest import (
   findings,
   fresh,
   gated,
+  heads,
   keeping,
   kept,
   life,
@@ -141,6 +142,18 @@ async def test_the_raised_paragraph_binds_the_exception_as_rungn_raised() -> Non
   assert of(engine.turns(on=root), act) == [
     f"#{act}\n{act}_word = \"raise ValueError('boom')\"",
     f"#{act} raised\n{act}_raised = ValueError('boom')",
+  ]
+
+
+async def test_a_word_that_raises_a_cancellederror_tells_cancelled_and_no_raised_header() -> None:
+  """A word that raises a CancelledError tells cancelled and no raised header, since a cancel is no fault of the word."""
+  _, _, root = born()
+  act = engine.rung("w = wait(5)\ncancel(w)\nawait w", on=root)
+  with pytest.raises(CancelledError):
+    await act
+  assert [head for head in heads(engine.turns(on=root)) if head.startswith(f"#{act}")] == [
+    f"#{act}",
+    f"#{act} cancelled",
   ]
 
 
@@ -375,7 +388,7 @@ async def test_the_chain_has_the_kernel_begin_it_in_the_module_of_that_chain() -
 
 
 async def test_it_is_done_with_what_the_word_gave() -> None:
-  """It is done with what the word gave, nothing for a word that ran to its end and the exception for a raise, which it tells with its type and its message, which its close then holds none of."""
+  """It is done with what the word gave, nothing for a word that ran to its end and the exception for a raise, which it tells with its type and its message, or as cancelled for a CancelledError, which its close then holds none of."""
   _, log, root = born()
   ended = engine.rung("k = 1", on=root)
   await ended
@@ -392,6 +405,10 @@ async def test_it_is_done_with_what_the_word_gave() -> None:
     f"#{hurt}\n{hurt}_word = \"raise ValueError('boom')\"",
     f"#{hurt} raised\n{hurt}_raised = ValueError('boom')",
   ]
+  stopped = engine.rung("w = wait(5)\ncancel(w)\nawait w", on=root)
+  with pytest.raises(CancelledError):
+    await stopped
+  assert [one.split("\n")[0] for one in of(engine.turns(on=root), stopped)] == [f"#{stopped}", f"#{stopped} cancelled"]
 
 
 async def test_of_the_acts_its_word_made_and_read_at_once_it_tells_nothing() -> None:
