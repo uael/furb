@@ -484,13 +484,14 @@ export class Workspaces extends EventEmitter {
     if (!group) throw new Error("This session has no workspace.");
     await this.leave(entry, group);
     await this.release(entry);
-    // The lock file moves with the record while this store holds it, and a process that locked it meanwhile opens
-    // the path again.
+    // The record and its files move to the trash while this store holds the lease, so no other process opens them
+    // meanwhile. The lock file stays at its path, empty: on macOS a lookup of a renamed path can go on giving the
+    // moved file for seconds, so the lease holds only while no holder moves or removes the lock file.
     const lease = store(entry.path)[1];
     const moved: [string, string][] = [];
     try {
       const directory = furbDirectory(group.directory, "trash", randomUUID());
-      for (const suffix of ["", ".ui.json", ".session.json", ".changes.jsonl", ".images", ".lock"]) {
+      for (const suffix of ["", ".ui.json", ".session.json", ".changes.jsonl", ".images"]) {
         const source = `${entry.path}${suffix}`;
         if (!existsSync(source)) continue;
         const target = join(directory, basename(source));

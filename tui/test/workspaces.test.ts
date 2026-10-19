@@ -177,10 +177,10 @@ test("deleting a session moves its record and state to trash, keeps other sessio
       await otherEngine.result(await otherEngine.rung({ word: "still_alive = 17", on: otherEngine.root }));
       expect((await otherEngine.inspect("still_alive", second.session.selected)).value).toBe(17);
       expect(await stat(first.path).catch(() => null)).toBeNull();
-      expect(await stat(`${first.path}.lock`).catch(() => null)).toBeNull();
+      expect((await stat(`${first.path}.lock`)).size).toBe(0);
       const archived = join(trash, basename(first.path));
       expect((await stat(archived)).isFile()).toBe(true);
-      expect((await stat(`${archived}.lock`)).isFile()).toBe(true);
+      expect(await stat(`${archived}.lock`).catch(() => null)).toBeNull();
       const restored = await library.import(archived, group);
       expect((await restored.session?.engine.inspect("kept_value", restored.session.selected))?.value).toBe(
         41,
