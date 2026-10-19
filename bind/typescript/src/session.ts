@@ -55,7 +55,6 @@ interface Saved {
   /** The directory, and the model and the effort the host chose last, which a later session takes when its host
    * names none. */
   options: Pick<SessionOptions, "cwd" | "model" | "effort">;
-  streams?: [string, Stream][];
 }
 
 /** One session: an engine, and the ears it hears by. The World is ears: the provider of models, and the files, the
@@ -66,7 +65,8 @@ export class Session extends EventEmitter {
   readonly directory: string;
   /** The path of the record, when the session keeps one. */
   readonly record?: string;
-  /** What each rung that asked a model streams while the model writes, by that rung, until its reply is done. */
+  /** What each rung that asked a model streams while the model writes, by that rung, while its reply runs. A stream
+   * lives no longer than its reply, so the session keeps none for a later life. */
   readonly streams = new Map<string, Stream>();
   readonly console: Console;
   readonly activity = new Activity();
@@ -79,7 +79,7 @@ export class Session extends EventEmitter {
   /** The engine, once the session opened it. */
   engine?: Engine;
   private readonly options: SessionOptions;
-  /** The rung that each reply the life made asks a model for. */
+  /** The rung that each reply of the life that runs asks a model for, until the done of that reply. */
   private readonly replies = new Map<string, string>();
   private stopped = false;
   /** How many of the facts the session has given its host. */
@@ -107,7 +107,6 @@ export class Session extends EventEmitter {
     const preferred = saved?.options.model;
     const held = preferred && model(preferred) ? preferred : undefined;
     this.options = { ...options, model: named.model ?? held ?? named.roster?.[0] };
-    for (const [id, stream] of saved?.streams ?? []) this.streams.set(id, stream);
     this.console = new Console({ operator: options.operator, changed, fault });
     this.changes = new FileChanges(this.record, options.readOnly);
   }
@@ -181,15 +180,20 @@ export class Session extends EventEmitter {
       yield* this.activity.hear(fact);
       const [kind, id, by, ...words] = fact;
       if (kind === "reply" && isQuestion(kind, id)) this.replies.set(id, by);
-      if (kind === "done" && this.streams.delete(this.replies.get(id) ?? "")) this.changed();
+      const rung = kind === "done" ? this.replies.get(id) : undefined;
+      if (rung !== undefined) {
+        this.replies.delete(id);
+        if (this.streams.delete(rung)) this.changed();
+      }
       if (kind === "keep") this.entries.push(words[0] as Entry);
       this.heard();
     }
   }
 
-  /** What a model wrote for a rung, added to what it streams. */
+  /** What a model wrote for a rung, added to what it streams while its reply runs. The door tells it on a later turn
+   * of the loop of the host, so a part can come after the done of its reply, and then it streams nothing. */
   private wrote(rung: string, chain: string, text: string, thinking: string): void {
-    if (this.stopped) return;
+    if (this.stopped || ![...this.replies.values()].includes(rung)) return;
     const held = this.streams.get(rung) ?? { chain, text: "", thinking: "" };
     held.text += text;
     held.thinking += thinking;
@@ -219,7 +223,7 @@ export class Session extends EventEmitter {
   private save(): void {
     if (!this.record || this.options.readOnly) return;
     const chosen = this.actor === "operator" ? {} : actorParts(this.actor);
-    const saved: Saved = { options: { cwd: this.directory, ...chosen }, streams: [...this.streams] };
+    const saved: Saved = { options: { cwd: this.directory, ...chosen } };
     saveFile(`${this.record}.session.json`, JSON.stringify(saved));
   }
 
