@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import type { Entry, Fact } from "@furb/engine";
 
-export function queueHash(chain: string, shape: string, message: string, actor: string): string {
+/** The hash of the words of a prompt, which the begin fact of a follow-up holds. */
+export function queueHash(chain: string, shape: string, message: string, to: string): string {
   return createHash("sha256")
-    .update(JSON.stringify([chain, shape, message, actor]))
+    .update(JSON.stringify([chain, shape, message, to]))
     .digest("hex");
 }
 function queueEvent(fact: Fact): { step: string; key: string; value: unknown } | undefined {

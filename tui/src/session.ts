@@ -82,7 +82,6 @@ export interface FollowUp {
   chain: string;
   text: string;
   shape: string;
-  actor: string;
 }
 
 /** Where a view stands: the end of a view that follows its end while it stands there, and an offset otherwise. */
@@ -440,12 +439,15 @@ export class Session extends EventEmitter {
     return this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2]?.[0];
   }
   /** The share of the window that the last answer of the chain filled, as the ledger of a grant says it: the whole
-   * prompt of that answer over the window of the model that the last prompt went to, or the window of the engine for
-   * a model that the roster does not name. Nothing before the first answer. */
+   * prompt of that answer over the window of the model that the last rung of a prompt asked, or the window of the
+   * engine for a model that the roster does not name. Nothing before the first answer. */
   get filled(): number | undefined {
     const usage = this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2];
     if (!usage) return undefined;
-    const asked = this.activity.findLast((act) => act.kind === "prompt" && act.words[2] !== "operator");
+    // A rung of a prompt writes the actor it asks into its actor word, and a rung of the operator leaves it empty.
+    const asked = this.activity.findLast(
+      (act) => act.kind === "rung" && act.words[2] && act.words[2] !== "operator",
+    );
     const names = this.roster.map(([name]) => name);
     const { model } = actorParts(String(asked?.words[2] || this.actor), names);
     const window = Number(this.roster.find(([name]) => name === model)?.[2]) || WINDOW;
@@ -547,7 +549,6 @@ export class Session extends EventEmitter {
       chain: this.selected,
       text: this.withImages(text),
       shape: this.shape,
-      actor: this.actor,
     });
     delete this.images[this.selected];
     this.save();
@@ -680,7 +681,7 @@ export class Session extends EventEmitter {
   }
 
   /** Set the actor of the selected chain by a rung of the operator. Until that rung has run, the session shows the
-   * choice and sends prompts to it. */
+   * choice. A prompt leaves its actor unsaid, so each of its rungs asks the actor of the chain at that time. */
   private async choose(actor: string): Promise<void> {
     const chain = this.selected;
     const choice: { actor: string; rung?: string } = { actor };
@@ -722,7 +723,6 @@ export class Session extends EventEmitter {
         const id = await this.engine.prompt(this.shape, {
           message: this.withImages(input),
           on: this.selected,
-          to: this.actor,
         });
         delete this.images[this.selected];
         this.save();

@@ -100,9 +100,12 @@ test("a snapshot asked before a model choice lands after it, and the choice hold
     expect(session.actor).toBe("claude-cli:opus/high");
     await session.submit("Which model reads this?");
     const prompt = session.acts.findLast((act) => session.isUserPrompt(act));
-    expect(prompt?.words).toEqual(["str", "Which model reads this?", "claude-cli:opus/high"]);
+    expect(prompt?.words).toEqual(["str", "Which model reads this?", ""]);
     await idle(session);
     await session.refresh();
+    expect(session.acts.find((act) => act.kind === "rung" && act.by === prompt?.id)?.words[2]).toBe(
+      "claude-cli:opus/high",
+    );
     expect((await session.engine.inspect("actor", session.engine.root)).value).toBe("claude-cli:opus/high");
     expect(session.actor).toBe("claude-cli:opus/high");
   } finally {
@@ -111,6 +114,54 @@ test("a snapshot asked before a model choice lands after it, and the choice hold
     await session.dispose();
   }
 });
+
+/** The actor word of each rung that a prompt made, in order. */
+const asked = (session: Session, prompt: string | undefined) =>
+  session.acts.filter((act) => act.kind === "rung" && act.by === prompt).map((act) => act.words[2]);
+
+/** Make the demo hold its prompt on a question to the operator, set the effort low while it is held, and wait until
+ * that choice has run on the chain, so the next rung of the prompt comes after the choice. */
+async function heldWhileEffortChanges(
+  session: Session,
+  during: () => void = () => {},
+): Promise<string | undefined> {
+  await session.submit("Look around.");
+  await idle(session);
+  // The demo asks the operator and closes nothing, so its prompt makes no next rung until the operator answers.
+  await session.submit("Ask me first, then answer.");
+  const prompt = session.acts.findLast((act) => session.isUserPrompt(act))?.id;
+  await until(session, () => session.operatorPrompt !== undefined);
+  during();
+  await session.submit("/effort low");
+  await until(session, () =>
+    session.acts.some(
+      (act) => act.by === "operator" && act.words[0] === 'actor = "claude-cli:sonnet/low"' && act.done,
+    ),
+  );
+  await session.submit("Take the low effort.");
+  await idle(session);
+  return prompt;
+}
+
+test("/effort changes the actor of the next rung of a running chain", () =>
+  withDemo(async (session) => {
+    const prompt = await heldWhileEffortChanges(session);
+    await session.refresh();
+    expect(asked(session, prompt)).toEqual(["claude-cli:sonnet/high", "claude-cli:sonnet/low"]);
+  }));
+
+test("a follow-up goes to the actor of its chain when it is sent", () =>
+  withDemo(async (session) => {
+    await heldWhileEffortChanges(session, () =>
+      session.enqueue("Check keyboard navigation after this answer."),
+    );
+    await until(session, () => session.queued.length === 0);
+    await idle(session);
+    await session.refresh();
+    const follow = session.acts.findLast((act) => session.isUserPrompt(act));
+    expect(asked(session, follow?.id)).toEqual(["claude-cli:sonnet/low"]);
+    expect(follow?.words).toEqual(["str", "Check keyboard navigation after this answer.", ""]);
+  }));
 
 test("a follow-up that the operator removes while an earlier one is sent is not sent", async () => {
   const session = await demoSession();

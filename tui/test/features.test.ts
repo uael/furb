@@ -391,7 +391,6 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
       chain: session.selected,
       shape: "str",
       text: "A queued question",
-      actor: "operator",
     };
     session.queued = [entry];
     session.queueHeld = true;
@@ -424,7 +423,6 @@ test("a queued dispatch recovers both sides of the prompt-write boundary without
     const manual = await session.engine.prompt(entry.shape, {
       message: entry.text,
       on: entry.chain,
-      to: entry.actor,
     });
     await session.refresh();
     expect(session.queued).toHaveLength(1);
