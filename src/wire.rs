@@ -59,7 +59,8 @@ pub fn parsed(text: &str) -> Result<Object, Fault> {
   inward(&decoded(raw, 0)?)
 }
 
-/// A value of the sandbox, as the record holds it: a whole float keeps its mark, so a later life reads a float.
+/// A value of the sandbox, as the record holds it: a whole float and a tuple keep their marks, so a later life reads
+/// a float and a tuple.
 pub(crate) fn record(value: ObjectRef<'_>) -> Value {
   outward_at(value, 0, true)
 }
@@ -108,9 +109,15 @@ fn outward_at(value: ObjectRef<'_>, depth: usize, durable: bool) -> Value {
     return json!(value.py_repr());
   }
   if let Some(values) = value.items() {
-    return Value::Array(
-      values.into_iter().map(|value| outward_at(value, depth + 1, durable)).collect(),
-    );
+    let values =
+      Value::Array(values.into_iter().map(|value| outward_at(value, depth + 1, durable)).collect());
+    // The store reads a line as an entry that holds one fact, and boot takes both as the tuples they are, so in the
+    // record a tuple keeps its mark only below them.
+    return if durable && depth > 1 && value.type_name() == "tuple" {
+      mark("tuple", values)
+    } else {
+      values
+    };
   }
   if let Some(values) = value.pairs() {
     let dict = value.type_name() == "dict";

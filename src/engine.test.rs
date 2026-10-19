@@ -462,6 +462,14 @@ fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
   );
   assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
   assert_eq!(second.settled(&id).unwrap().as_ref().as_int(), Some(2));
+  let turn = second.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let turn = turn.iter().find(|one| one.kind() == "done" && one.about() == "reply1");
+  let turn = turn.and_then(|one| one.word(0)).map(|one| one.type_name().to_owned());
+  assert_eq!(
+    turn.as_deref(),
+    Some("tuple"),
+    "the record gives back the tuple that the provider said"
+  );
 }
 
 #[test]

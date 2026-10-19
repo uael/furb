@@ -38,9 +38,12 @@ def entries(record: list[list[list[object]]]) -> list[tuple]:
 
 def answered(entries: Sequence[tuple]) -> list[tuple]:
   """Every answer of a model that the entries of a record hold: the done of each reply that came to a turn, which a
-  record gives back as a list, and none of a reply that came to a refusal."""
+  record gives back as the tuple it is, or as a list when the store kept it before it kept tuples, and none of a
+  reply that came to a refusal."""
   return [
-    one for one, *_ in entries if one[0] == "done" and engine.question(("reply", one[1])) and isinstance(one[3], list)
+    one
+    for one, *_ in entries
+    if one[0] == "done" and engine.question(("reply", one[1])) and isinstance(one[3], tuple | list)
   ]
 
 

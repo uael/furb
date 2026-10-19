@@ -33,7 +33,7 @@ async def test_the_world_keeps_each_entry_as_the_journal_says_it_plain_or_not() 
   sand, log, root = await lived()
   assert {one[2] for one in said(log, "keep")} == {"journal"}
   kept = plain(sand.record)
-  assert kept != list(sand.record)
+  assert kept == list(sand.record)
   later = sown()
   _, over = await relived(later, kept)
   assert over == root and engine.peek(said(log, "prompt")[0][1]) == 2

@@ -108,8 +108,8 @@ NUMS = (
 
 
 def plain(record: Sequence[tuple]) -> list:
-  """A record as a later life is given it: kept by the store of the crate and read again, so every tuple is a list,
-  and every other value is what the crate makes of it."""
+  """A record as a later life is given it: kept by the store of the crate and read again, so every value is what the
+  crate makes of it."""
   with tempfile.TemporaryDirectory() as folder:
     path = str(Path(folder) / "record.jsonl")
     _, store = _monty.store(path)
