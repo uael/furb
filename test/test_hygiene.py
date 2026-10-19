@@ -217,12 +217,26 @@ def test_no_name_is_bound_again_beneath_itself() -> None:
   assert shadows(PY.read_text(encoding="utf-8")) == [], "these bindings shadow an enclosing one"
 
 
+def of_furb(statement: ast.stmt) -> bool:
+  """Whether a statement imports furb or a module of it, as the crate leaves it out of the word of a file: an import
+  whose first module is furb or under it, and an import from furb or from a module under it. A module whose name
+  only starts with furb, as furbish, is another module."""
+  match statement:
+    case ast.Import(names=[first, *_]):
+      module = first.name
+    case ast.ImportFrom(module=str(module), level=0):
+      pass
+    case _:
+      return False
+  return module == "furb" or module.startswith("furb.")
+
+
 def test_the_word_of_an_extension_is_its_file_less_its_imports_of_furb() -> None:
   """The word that a chain runs is the program of the file of the extension, which ruff and ty read."""
   for one in _monty.official():
     name, word = one["name"], one["word"]
     body = ast.parse((EXTENSIONS / name / f"{name}.py").read_text(encoding="utf-8")).body
-    kept = [one for one in body if not (isinstance(one, ast.ImportFrom) and (one.module or "").startswith("furb"))]
+    kept = [one for one in body if not of_furb(one)]
     assert ast.dump(ast.parse(word)) == ast.dump(ast.Module(body=kept, type_ignores=[]))
 
 
