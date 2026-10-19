@@ -144,13 +144,30 @@ async def test_a_value_closes_an_act_with_that_value_and_a_prompt_with_a_value_t
 
 async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the_shape_of_the_prompt_raises() -> None:
   """A close that answers a prompt with a value that does not have the shape of the prompt raises Refused in the word that said it, so the prompt asks again."""
-  _, log, root = born("close('nope')", "close(1)")
+  _, log, root = born(
+    "close('nope')",
+    "close(1)",
+    "close(1)",
+    "class Missing:\n  pass\nclose(Missing())",
+    "close(1)",
+    "close(ValueError('no value fits'))",
+  )
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
   assert len(said(log, "reply")) == 2
-  step = said(log, "reply")[0][2]
+  # A shape that names what the chain does not bind yet has no value, until a word binds it.
+  assert type(await engine.prompt("Missing", "make one", on=root)).__name__ == "Missing"
+  # A shape that python reads no instance against, as Any, has no value at all.
+  with pytest.raises(ValueError, match="no value fits"):
+    await engine.prompt("Any", "anything", on=root)
+  await settle()
+  steps = [one[2] for one in said(log, "reply")]
   raised = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].endswith(" raised")]
-  assert raised == [f"#{step} raised\n{step}_raised = Refused(\"'nope' not int\")"]
+  assert raised == [
+    f"#{steps[0]} raised\n{steps[0]}_raised = Refused(\"'nope' not int\")",
+    f"#{steps[2]} raised\n{steps[2]}_raised = Refused('1 not Missing')",
+    f"#{steps[4]} raised\n{steps[4]}_raised = Refused('1 not Any')",
+  ]
 
 
 async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
