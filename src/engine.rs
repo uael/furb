@@ -857,7 +857,8 @@ impl Outside {
     mark: &str,
     pairs: &[(NodeId, NodeId)],
   ) -> Result<Option<Object>, Fault> {
-    let builtin = matches!(mark, "int" | "float" | "dict") || mark.parse::<ExcType>().is_ok();
+    let builtin =
+      matches!(mark, "int" | "float" | "dict" | "tuple") || mark.parse::<ExcType>().is_ok();
     if !builtin && !self.names.contains_key(mark) {
       return Ok(None);
     }
@@ -910,6 +911,10 @@ impl Outside {
         Some(Object::dict(
           pairs.ok_or_else(|| Fault::refused("a map comes in as its pairs of two"))?,
         ))
+      }
+      "tuple" => {
+        let items = first.and_then(|one| one.items()).unwrap_or_default();
+        Some(Object::tuple(items.into_iter().map(|one| one.to_owned())))
       }
       _ => mark.parse::<ExcType>().ok().map(|kind| {
         Object::exception(
