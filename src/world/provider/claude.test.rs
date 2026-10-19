@@ -34,7 +34,9 @@ pub(crate) struct Yard {
 
 impl Yard {
   pub fn new(name: &str) -> Yard {
-    let at = std::env::temp_dir().join(format!("furb-claude-{name}"));
+    // The name holds the id of the process, as every yard of the tests of the crate does: two runs of the suite at
+    // once, as a hook and a check in two checkouts, would otherwise remove the files of each other.
+    let at = std::env::temp_dir().join(format!("furb-claude-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&at);
     fs::create_dir_all(&at).expect("a yard of the test");
     fs::hard_link(ran(), at.join("claude")).expect("the fake is linked");
@@ -72,7 +74,7 @@ impl Yard {
 fn ran() -> &'static Path {
   static RAN: OnceLock<PathBuf> = OnceLock::new();
   RAN.get_or_init(|| {
-    let at = std::env::temp_dir().join("furb-claude-fake");
+    let at = std::env::temp_dir().join(format!("furb-claude-fake-{}", std::process::id()));
     let _ = fs::remove_dir_all(&at);
     fs::create_dir_all(&at).expect("the folder of the fake");
     let bin = at.join("claude");

@@ -11,7 +11,7 @@ const PNG: &[u8] = b"\x89PNG\r\n\x1a\nthe rest";
 
 /// A yard of one test, empty.
 fn yard(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-images-{name}"));
+  let at = std::env::temp_dir().join(format!("furb-images-{name}-{}", std::process::id()));
   let _ = fs::remove_dir_all(&at);
   fs::create_dir_all(&at).expect("a yard of the test");
   at

@@ -115,7 +115,7 @@ struct Lived {
 impl Lived {
   /// A life in a yard of its own, fresh, or opened on what the store kept there.
   fn new(yard: &str, words: &[&str], fresh: bool) -> Result<Self, Fault> {
-    let at = std::env::temp_dir().join(format!("furb-engine-{yard}"));
+    let at = std::env::temp_dir().join(format!("furb-engine-{yard}-{}", std::process::id()));
     if fresh {
       let _ = fs::remove_dir_all(&at);
     }
@@ -519,7 +519,7 @@ fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
 
 /// A life on the provider of the test and on the ear that pauses, and the gate of the work of that ear.
 fn paused(yard: &str) -> (Engine, oneshot::Sender<()>) {
-  let at = std::env::temp_dir().join(format!("furb-engine-{yard}"));
+  let at = std::env::temp_dir().join(format!("furb-engine-{yard}-{}", std::process::id()));
   let (gate, opens) = oneshot::channel();
   let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("pauser", pauser(opens))];
   (Engine::boot(Vec::<Object>::new(), ears).unwrap(), gate)
@@ -581,7 +581,7 @@ fn quick() -> Box<dyn Ear> {
 
 #[test]
 fn what_the_work_of_an_ear_came_to_lands_after_the_run_that_began_it() {
-  let at = std::env::temp_dir().join("furb-engine-landed");
+  let at = std::env::temp_dir().join(format!("furb-engine-landed-{}", std::process::id()));
   let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("quick", quick())];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
   let root = engine.root().to_owned();

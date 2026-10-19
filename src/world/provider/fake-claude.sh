@@ -31,7 +31,7 @@ while IFS= read -r line; do
     *WAIT*) continue ;;
     *LOUD*) exec 1>&-; head -c 262144 /dev/zero | tr '\0' e >&2; exit 3 ;;
     *ODD*) echo "no line of json"; continue ;;
-    *LONG*) head -c 33554433 /dev/zero | tr '\0' a; echo; continue ;;
+    *LONG*) head -c 33554433 /dev/zero; echo; continue ;;
     *ERROR*) echo '{"type":"result","is_error":true,"result":"the model is overloaded"}'; continue ;;
     *BARE*) echo '{"type":"result","result":"close(1)","usage":{}}'; continue ;;
   esac
