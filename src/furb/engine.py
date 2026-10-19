@@ -193,10 +193,15 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
             pass
           yield "done", about, peek(call)
         case ("done", about, _, value) if question(("run", about)) and get(about)[4] == id:
-          if retells and isinstance(value, CancelledError):
-            value = None
-          if isinstance(value, BaseException) and tells(id):
-            yield told(id, "raised", raised=value)
+          if isinstance(value, CancelledError):
+            if retells:
+              value = None
+            elif tells(id):
+              yield told(id, "cancelled")
+          elif isinstance(value, BaseException):
+            module()["raised"] = value
+            if tells(id):
+              yield told(id, "raised", raised=value)
           yield "done", id, value
           return
 
@@ -308,8 +313,6 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
           pause(id)
         case ("done", about, _, value):
           waiting.pop(about, None)
-          if isinstance(value, Exception) and question(("run", about)):
-            module()["raised"] = value
       if (r := get(a[1]))[0] in ("run", "wants"):
         running[r[4] if r[0] == "run" else get(r[2])[4]] = (a[0] == "started") == (r[0] == "run")
       if any(running.values()):

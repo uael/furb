@@ -350,6 +350,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
   A rung with no word tells nothing where it is made, since the chain tells it as the last line of the turn it asks for it with.
   A rung with no word and no actor takes the default actor of its chain when it is made, and writes it into its actor word, so its reply and its ledger read the one actor.
   The raised paragraph binds the exception as rungN_raised, as python shows it, which says its type and its message.
+  A word that raises a CancelledError tells cancelled and no raised header, since a cancel is no fault of the word.
   A rung that retells another rung names its acts under that one, so it makes the same acts and shares them.
   A cancel of a rung is the Kernel's to do, since the Kernel is the one running the word.
   The word of a model is python code and nothing else.
@@ -450,7 +451,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A chain that the word of a rung opens is a scope of its own: its words are on itself, though the chain fact itself stands on the chain of the rung that opened it; and when that rung is retold, the word makes the same chain, since a rung that retells another shares the acts it makes, so a word that opens a chain opens it once.
   The engine refuses a prompt to an actor outside the roster.
   The chain holds the control it says itself, so what it closes tells the model what was done to it.
-  The engine binds the exception of a raise in the globals of the chain, under the name raised.
+  The engine binds the exception of every raise but a CancelledError in the globals of the chain, under the name raised.
   The engine binds the exception again at each raise.
   A chain: its module, which is the engine itself, named for the chain, since everything the file defines is the model's to call and nothing of it is bound to one chain, and what the operator would add to it, it makes a rung of, which binds it, stands in the program and is said again in a later life, a fact said from a run being on the chain of that run, and a word that wants a chain of its own giving the name of its own as the source.
   A chain is chainN whether boot or chain opened it, and the root is chain1.
@@ -1006,7 +1007,7 @@ actor: str
 The program rebinds actor like any name, and the last binding wins.
 """
 raised: BaseException | None
-"""raised is the exception object that the last rung raised, rebound at each raise.
+"""raised is the exception object that the last rung raised, rebound at each raise but a CancelledError.
 raised is None at the birth of the module of a chain, so a word reads it before any rung raised."""
 doctrine: str
 """doctrine is the quote after the engine in the system prompt, which says how a model works in furb and holds no law."""
