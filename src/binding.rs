@@ -16,7 +16,14 @@ pub mod py;
 #[cfg(feature = "typescript")]
 pub mod ts;
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+  any::Any,
+  collections::HashMap,
+  mem::ManuallyDrop,
+  ops::{Deref, DerefMut},
+  sync::{Arc, Mutex, PoisonError},
+  thread::{self, ThreadId},
+};
 
 #[cfg(feature = "typescript")]
 use napi_derive::napi;
@@ -50,12 +57,12 @@ pub struct Told(pub Arc<dyn Fn(&str) -> bool + Send + Sync>);
 /// when it is disposed, so what it holds goes: a command ends, a wait ends, and a store lets its record go. The
 /// engine of python steps it as a generator of its own too.
 ///
-/// It stays on the thread that made it: python refuses a reach of it from another thread, and a drop of it on
-/// another thread frees nothing, which leaves memory alone once the ear is disposed.
-#[cfg_attr(feature = "python", pyo3::pyclass(module = "furb_monty._monty", weakref, unsendable))]
+/// It stays on the thread that made it, as a [`Homed`] value: a reach of it from another thread panics, and a drop of
+/// it on another thread leaves it for the thread that made it to drop.
+#[cfg_attr(feature = "python", pyo3::pyclass(module = "furb_monty._monty", weakref))]
 #[cfg_attr(feature = "typescript", napi)]
 pub struct NativeEar {
-  hearing: Hearing,
+  hearing: Homed<Hearing>,
 }
 
 /// The ear, and what the engine of python steps it with once it is born there.
@@ -65,6 +72,83 @@ struct Hearing {
   stepped: Option<py::Stepped>,
 }
 
+/// A value of the thread that made it, in an object of a host, which only that thread reaches. The collector of
+/// cycles of python drops an object on whatever thread runs it, as the reader of a gateway of xdist, so a value that
+/// another thread drops goes to [`ORPHANS`], and its home thread drops it when it makes its next homed value.
+pub(crate) struct Homed<T: 'static> {
+  home: ThreadId,
+  held: ManuallyDrop<T>,
+}
+
+// SAFETY: the value is reached on its home thread alone, which each deref checks. Another thread only moves it, whole
+// and untouched, into ORPHANS, and the home thread alone drops it there.
+unsafe impl<T> Send for Homed<T> {}
+// SAFETY: as for Send, since no thread but the home thread reaches the value.
+unsafe impl<T> Sync for Homed<T> {}
+
+/// A value that another thread dropped, which waits for its home thread.
+struct Orphan {
+  home: ThreadId,
+  _held: Box<dyn Any>,
+}
+
+// SAFETY: an orphan is moved between threads whole, and only its home thread drops it, in `Homed::new`.
+unsafe impl Send for Orphan {}
+
+/// The values that another thread dropped, each dropped later by its home thread. A thread that ends with some keeps
+/// them.
+static ORPHANS: Mutex<Vec<Orphan>> = Mutex::new(Vec::new());
+
+impl<T: 'static> Homed<T> {
+  /// A value of this thread, made after this thread drops each of its values that another thread dropped. They are
+  /// dropped outside the lock, since a drop may make a homed value.
+  pub(crate) fn new(held: T) -> Homed<T> {
+    let home = thread::current().id();
+    let mine: Vec<Orphan> = {
+      let mut orphans = ORPHANS.lock().unwrap_or_else(PoisonError::into_inner);
+      let (mine, others) = orphans.drain(..).partition(|one| one.home == home);
+      *orphans = others;
+      mine
+    };
+    drop(mine);
+    Homed { home, held: ManuallyDrop::new(held) }
+  }
+
+  fn home(&self) {
+    assert_eq!(thread::current().id(), self.home, "a value of one thread is reached on another");
+  }
+}
+
+impl<T> Deref for Homed<T> {
+  type Target = T;
+
+  fn deref(&self) -> &T {
+    self.home();
+    &self.held
+  }
+}
+
+impl<T> DerefMut for Homed<T> {
+  fn deref_mut(&mut self) -> &mut T {
+    self.home();
+    &mut self.held
+  }
+}
+
+impl<T> Drop for Homed<T> {
+  fn drop(&mut self) {
+    if thread::current().id() == self.home {
+      // SAFETY: the value is dropped once, here, and never reached after.
+      unsafe { ManuallyDrop::drop(&mut self.held) };
+    } else {
+      // SAFETY: the value is taken once, here, and never reached after.
+      let held = Box::new(unsafe { ManuallyDrop::take(&mut self.held) });
+      let orphan = Orphan { home: self.home, _held: held };
+      ORPHANS.lock().unwrap_or_else(PoisonError::into_inner).push(orphan);
+    }
+  }
+}
+
 impl NativeEar {
   fn of(ear: Box<dyn Ear>) -> NativeEar {
     let hearing = Hearing {
@@ -72,7 +156,7 @@ impl NativeEar {
       #[cfg(feature = "python")]
       stepped: None,
     };
-    NativeEar { hearing }
+    NativeEar { hearing: Homed::new(hearing) }
   }
 
   /// The ear, taken out, since an ear hears in one engine.

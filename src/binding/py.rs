@@ -21,7 +21,7 @@ use pyo3::{
   },
 };
 
-use super::{Given, NativeEar, Record, Said, Told, Value, words};
+use super::{Given, Homed, NativeEar, Record, Said, Told, Value, words};
 use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step,
   ear::{Call, Spoken},
@@ -298,9 +298,9 @@ impl Ear for PyEar {
 
 /// The life, lent to the code of python while the life hears it: that code calls each verb of the life through it,
 /// as `furb_monty.engine` does, and it goes back to the life once that code is done.
-#[pyclass(module = "furb_monty._monty", name = "Life", unsendable)]
+#[pyclass(module = "furb_monty._monty", name = "Life")]
 struct PyLife {
-  life: Option<Life>,
+  life: Homed<Option<Life>>,
 }
 
 #[pymethods]
@@ -331,11 +331,11 @@ impl PyLife {
 /// What `step` gives, with the life lent to the code of python it runs, which `_monty.life` holds for that code alone,
 /// and the life, taken back once `step` is done.
 fn with_life<T>(py: Python<'_>, life: Life, step: impl FnOnce() -> T) -> (PyResult<T>, Life) {
-  let lent = match Py::new(py, PyLife { life: None }) {
+  let lent = match Py::new(py, PyLife { life: Homed::new(None) }) {
     Ok(lent) => lent,
     Err(no) => return (Err(no), life),
   };
-  lent.borrow_mut(py).life = Some(life);
+  *lent.borrow_mut(py).life = Some(life);
   let scope = made(py).and_then(|made| made.life.bind(py).call_method1("set", (&lent,)));
   let got = scope.map(|token| {
     let got = step();
@@ -411,7 +411,7 @@ impl NativeEar {
       Heard::Fact(fact)
     };
     let mut held = slf.borrow_mut();
-    let hearing = &mut held.hearing;
+    let hearing = &mut *held.hearing;
     let Some(ear) = hearing.ear.as_mut() else { return Err(PyStopIteration::new_err(())) };
     let waker =
       hearing.stepped.as_ref().map_or_else(|| Waker::noop().clone(), |one| one.waker.clone());
@@ -472,7 +472,7 @@ fn pump(ear: &Bound<'_, NativeEar>) -> PyResult<()> {
 /// What an ear of the crate says of its own accord now, polled with what wakes the loop.
 fn polled(ear: &Bound<'_, NativeEar>) -> PyResult<Poll<Spoken>> {
   let mut held = ear.borrow_mut();
-  let hearing = &mut held.hearing;
+  let hearing = &mut *held.hearing;
   let (Some(stepped), Some(one)) = (hearing.stepped.as_ref(), hearing.ear.as_mut()) else {
     return Ok(Poll::Pending);
   };
@@ -524,12 +524,17 @@ fn waker(
 
 /// One engine, held on the thread of python and driven in the loop it was booted in, when an ear of the crate can go
 /// on.
-#[pyclass(module = "furb_monty._monty", name = "Engine", unsendable, weakref)]
+#[pyclass(module = "furb_monty._monty", name = "Engine", weakref)]
 pub struct PyEngine {
-  engine: RefCell<Option<Engine>>,
+  home: Homed<Driven>,
   root: String,
   raised: Option<Fault>,
   record: Vec<Object>,
+}
+
+/// The engine of a [`PyEngine`] and the waker it is driven with, which are of the thread of python that booted it.
+struct Driven {
+  engine: RefCell<Option<Engine>>,
   waker: OnceCell<Waker>,
 }
 
@@ -539,22 +544,22 @@ impl PyEngine {
     made(py)?.faults.bind(py).clear();
     let root = engine.root().to_owned();
     let raised = engine.raised().cloned();
-    let held =
-      PyEngine { engine: RefCell::new(Some(engine)), root, raised, record, waker: OnceCell::new() };
+    let home = Homed::new(Driven { engine: RefCell::new(Some(engine)), waker: OnceCell::new() });
+    let held = PyEngine { home, root, raised, record };
     let held = Py::new(py, held)?;
     let weak = py.import("weakref")?.getattr("ref")?.call1((&held,))?.unbind();
     let waker = waker(py, move |py| match weak.bind(py).call0()?.cast::<PyEngine>() {
       Ok(engine) => engine.borrow().pump().map_err(Into::into),
       Err(_) => Ok(()),
     })?;
-    let _ = held.borrow(py).waker.set(waker);
+    let _ = held.borrow(py).home.waker.set(waker);
     held.borrow(py).pump()?;
     Ok(held)
   }
 
   /// One call of the engine.
   fn call<T>(&self, call: impl FnOnce(&mut Engine) -> Result<T, Fault>) -> Result<T, Fault> {
-    let mut held = self.engine.try_borrow_mut().map_err(|_| {
+    let mut held = self.home.engine.try_borrow_mut().map_err(|_| {
       Fault::refused("the engine hears an ear, which calls the engine by its verbs alone")
     })?;
     call(held.as_mut().ok_or_else(|| Fault::refused("the engine is disposed"))?)
@@ -573,7 +578,7 @@ impl PyEngine {
   /// The engine driven as far as it goes: what its ears say of their own accord is said into it, and whoever awaits
   /// an act that is done now is told.
   fn pump(&self) -> Result<(), Fault> {
-    let (Some(waker), true) = (self.waker.get(), self.engine.borrow().is_some()) else {
+    let (Some(waker), true) = (self.home.waker.get(), self.home.engine.borrow().is_some()) else {
       return Ok(());
     };
     self.call(|engine| engine.pump(waker))
@@ -631,7 +636,7 @@ impl PyEngine {
   /// Whether the engine is gone.
   #[getter]
   fn disposed(&self) -> bool {
-    self.engine.try_borrow().is_ok_and(|engine| engine.is_none())
+    self.home.engine.try_borrow().is_ok_and(|engine| engine.is_none())
   }
 
   /// Who speaks in the life, and who speaks from now on when a name is given: the site of the contract, which the
@@ -717,6 +722,7 @@ impl PyEngine {
   /// record go.
   fn dispose(&self) -> Result<(), Fault> {
     let mut held = self
+      .home
       .engine
       .try_borrow_mut()
       .map_err(|_| Fault::refused("the engine is in a call of the host"))?;
