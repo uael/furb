@@ -401,7 +401,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A model answers any shape.
   A model asked with the shape None reads the message, works, and closes with nothing.
   A rung need not wait for a prompt of shape None.
-  The actor left unsaid is the default actor of the chain when the prompt is made, which the prompt writes into the actor word of every rung it makes, so every life asks the one actor the record holds.
+  The actor left unsaid is the default actor of the chain when each rung of the prompt is made, which that rung writes into its actor word, so a rung asks the actor the chain stands on then, a prompt that names an actor asks that one at every rung, and every life asks the actor the record holds.
   A prompt to a model runs in steps until the prompt completes.
   The binding of a prompt gives the shape as python shows the expression, as prompt1: Act[int] = Act('prompt1').
   A rung whose word closes nothing ends its step, and the engine asks the model again.
@@ -480,6 +480,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   What a chain binds is its own, and a chain with a source is how a chain gets isolation.
   Two chains from one source hold the same values, since both ran the same rungs.
   A chain with a source inherits the default actor with the globals of its origin at that source.
+  A chain with no source stands on the default actor of the chain it is on when it is made, which for a chain that a word opens is the chain of that word, and on the actor of the standing when it is on no chain, and its standing tells that actor.
   A chain with a source that holds an act reads the close of the act in its transcript.
   A chain with a source awaits or peeks an inherited act as it likes.
   The engine does not wake a chain with a source for the result of an inherited act.

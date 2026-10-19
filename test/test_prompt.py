@@ -188,17 +188,18 @@ async def test_a_rung_need_not_wait_for_a_prompt_of_shape_none() -> None:
 
 
 async def test_the_actor_left_unsaid_is_the_default_actor_of_the_chain() -> None:
-  """The actor left unsaid is the default actor of the chain when the prompt is made, which the prompt writes into the actor word of every rung it makes, so every life asks the one actor the record holds."""
+  """The actor left unsaid is the default actor of the chain when each rung of the prompt is made, which that rung writes into its actor word, so a rung asks the actor the chain stands on then, a prompt that names an actor asks that one at every rung, and every life asks the actor the record holds."""
   sand, log, root = born("actor = 'n/low'", "close(1)")
   assert await engine.prompt(int, "count", on=root) == 1
-  assert (
-    [one[4] for one in said(log, "reply")] == ["m/low", "m/low"] == [one[6] for one in said(log, "rung") if not one[4]]
-  )
   assert engine.module(root)["actor"] == "n/low"
+  sand.script[root] = ["actor = 'm/low'", "close(2)"]
+  assert await engine.prompt(int, "count", to="m/high", on=root) == 2
+  asked = ["m/low", "n/low", "m/high", "m/high"]
+  assert [one[4] for one in said(log, "reply")] == asked == [one[6] for one in said(log, "rung") if not one[4]]
   later = Sand(stands=[STANDS[0], "/w", "n/low"])
   again, _ = await relived(later, plain(sand.record))
-  assert [one[6] for one in said(again, "rung") if not one[4]] == ["m/low", "m/low"]
-  assert [one[4] for one in said(again, "reply")] == ["m/low", "m/low"] and said(later.calls, "reply") == []
+  assert [one[6] for one in said(again, "rung") if not one[4]] == asked
+  assert [one[4] for one in said(again, "reply")] == asked and said(later.calls, "reply") == []
   alone, log, root = born(stands=[[[OPERATOR, [], 200000]], "/w", OPERATOR])
   shown = engine.prompt(str, "what now?", on=root)
   await settle()

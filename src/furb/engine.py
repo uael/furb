@@ -216,7 +216,7 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
     while True:
       while actor == OPERATOR or paused(id):
         yield
-      asking = rung(actor=actor)
+      asking = rung(actor=to)
       while (yield)[:2] != ("done", asking):
         pass
 
@@ -230,13 +230,13 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   def ear(id):
     rungs, refused, running, waiting = program(source), set(), {}, {}
     asking, unseen, last, heard = "", "", standing(), []
+    stood = module(get(id)[3]).get("actor", last and last[2])
 
-    def takes(roster, where, actor):
-      module()["actor"] = actor
-      return told(id, "standing", roster=roster, cwd=where, actor=actor)
+    def takes():
+      return told(id, "standing", roster=last[0], cwd=last[1], actor=stood)
 
     def replay(of="", words="", writer=""):
-      yield "module", id, {**globals(), "__name__": id, "actor": last[2] if last else ""}
+      yield "module", id, {**globals(), "__name__": id, "actor": stood}
       for whose, said in rungs.items():
         if under(whose, of):
           if whose == writer or not (words + "\n").startswith(said + "\n"):
@@ -265,11 +265,12 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     yield told(id, "", bound(id), label=label, source=source)
     yield from replay()
     if last and not source:
-      yield takes(*last)
+      yield takes()
     while True:
       match a := (yield):
         case ("done", about, *_) if question(("stand", about)) and standing() != last:
-          yield takes(*(last := standing()))
+          stood = module()["actor"] = (last := standing())[2]
+          yield takes()
         case ("done", about, _, value) if running.get(maker := (get(about) or a)[2]) is False and about not in [
           x[4] for x in transcript() if x[0] == "wants"
         ]:
