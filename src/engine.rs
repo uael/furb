@@ -103,9 +103,9 @@ type Words<'a> = (Vec<Object>, Vec<(&'a str, Object)>);
 /// What a host does when an act is done, given what it came to.
 type Watcher = Box<dyn FnMut(&Object)>;
 
-/// The ears and the functions of a host, by the names the sandbox calls them by.
+/// The ears and the functions that a host handed over, by the names the sandbox calls them by.
 #[derive(Default)]
-struct Hosted {
+struct Handed {
   ears: HashMap<String, Box<dyn Ear>>,
   calls: HashMap<String, Callable>,
 }
@@ -113,7 +113,7 @@ struct Hosted {
 thread_local! {
   /// What a host of this thread handed over and no life took yet. A life takes each the first time a value that names
   /// it comes into its sandbox, and holds it from then on, so each is the life's that was given it.
-  static HANDED: RefCell<Hosted> = RefCell::default();
+  static HANDED: RefCell<Handed> = RefCell::default();
 }
 
 /// How many ears and functions the hosts of this process handed over, which names the next.
@@ -235,7 +235,7 @@ enum At {
 /// The side of the host in one life: its ears and its functions, which the sandbox calls, and what the host holds of
 /// the sandbox, by which each value crosses.
 struct Outside {
-  hosted: Hosted,
+  handed: Handed,
   /// The waker of whoever drives the engine, which each ear is polled with.
   waker: Waker,
   opened: Opened,
@@ -258,7 +258,7 @@ impl Default for Outside {
   /// The side of the host of a life of nothing, which stands in for one that is lent to code of a host.
   fn default() -> Outside {
     Outside {
-      hosted: Hosted::default(),
+      handed: Handed::default(),
       waker: Waker::noop().clone(),
       opened: Opened::of(|_| Object::none()),
       names: HashMap::new(),
@@ -302,14 +302,14 @@ fn gated(sheet: Option<&Object>) -> Result<Object, Fault> {
 
 impl Outside {
   /// The side of the host, on what the opening gave.
-  fn new(hosted: Hosted, opened: &Object) -> Outside {
+  fn new(given: Handed, opened: &Object) -> Outside {
     let got = opened.as_ref();
     let at = |i: usize| {
       entry(&got, i).map(|one| one.to_owned()).expect("the opening gives eleven callables")
     };
     let opened = Opened::of(at);
     let kept = (0..11).filter_map(|i| at(i).as_ref().handle()).collect();
-    Outside { hosted, opened, kept, ..Outside::default() }
+    Outside { handed: given, opened, kept, ..Outside::default() }
   }
 
   /// A new id of the host, for an object of the host or for an instance made again in the sandbox.
@@ -427,7 +427,7 @@ impl Outside {
     standing.sort_unstable();
     let mut cx = Context::from_waker(&self.waker);
     standing.into_iter().find_map(|(_, name)| {
-      let ear = self.hosted.ears.get_mut(&name)?;
+      let ear = self.handed.ears.get_mut(&name)?;
       match ear.poll(&mut cx) {
         Poll::Ready(spoken) => Some((name, spoken)),
         Poll::Pending => None,
@@ -447,7 +447,7 @@ impl Outside {
         // What the verb came to goes back to the ear, which takes it at its next poll.
         Spoken::Verb(call) => {
           let got = self.asked(sand, call);
-          if let Some(ear) = self.hosted.ears.get_mut(&by) {
+          if let Some(ear) = self.handed.ears.get_mut(&by) {
             ear.answered(got);
           }
           Ok(())
@@ -512,9 +512,9 @@ impl Outside {
   fn called(&mut self, sand: &mut Sand, name: &str, args: &[Object]) -> Result<Object, Fault> {
     let args = args.iter().map(|one| self.outward(sand, one)).collect::<Result<Vec<_>, _>>()?;
     let missing = || Fault::refused(format!("{name} is no function of the host"));
-    let mut call = self.hosted.calls.remove(name).ok_or_else(missing)?;
+    let mut call = self.handed.calls.remove(name).ok_or_else(missing)?;
     let got = self.lent(sand, |life| call(args, life));
-    self.hosted.calls.insert(name.to_owned(), call);
+    self.handed.calls.insert(name.to_owned(), call);
     self.inward(sand, &got?)
   }
 
@@ -546,7 +546,7 @@ impl Outside {
         Err(fault) => return Answer::Abort(fault),
       },
     };
-    let Some(mut ear) = self.hosted.ears.remove(&name) else {
+    let Some(mut ear) = self.handed.ears.remove(&name) else {
       return Answer::Abort(Fault::refused(format!("no ear of the host is named {name}")));
     };
     let waker = self.waker.clone();
@@ -566,7 +566,7 @@ impl Outside {
         Step::Raised(fault) => break (At::Over, self.raising(sand, fault)),
       }
     };
-    self.hosted.ears.insert(name.clone(), ear);
+    self.handed.ears.insert(name.clone(), ear);
     self.standing.insert(on, (name, at));
     answer
   }
@@ -587,10 +587,10 @@ impl Outside {
   fn take(&mut self, name: &str) {
     HANDED.with_borrow_mut(|held| {
       if let Some(ear) = held.ears.remove(name) {
-        self.hosted.ears.insert(name.to_owned(), ear);
+        self.handed.ears.insert(name.to_owned(), ear);
       }
       if let Some(call) = held.calls.remove(name) {
-        self.hosted.calls.insert(name.to_owned(), call);
+        self.handed.calls.insert(name.to_owned(), call);
       }
     });
   }
@@ -1000,11 +1000,11 @@ impl Engine {
     record: impl IntoIterator<Item = Object>,
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
   ) -> Result<Engine, Fault> {
-    let mut hosted = Hosted::default();
+    let mut given = Handed::default();
     let mut names = Vec::new();
     for (name, ear) in ears {
       let name = name.into();
-      if hosted.ears.insert(name.clone(), ear).is_some() {
+      if given.ears.insert(name.clone(), ear).is_some() {
         return Err(Fault::refused(format!("{name} hears")));
       }
       names.push(name);
@@ -1016,7 +1016,7 @@ impl Engine {
     inputs.push("__kernel_source", Object::string(KERNEL));
     inputs.push("__gate", Object::function(GATE, None));
     let opened = sand.run(OPENING, inputs, &mut Nobody("the opening"))?;
-    let outside = Outside::new(hosted, &opened);
+    let outside = Outside::new(given, &opened);
     let got = opened.as_ref();
     let (kernel, gate) = (entry(&got, 2), entry(&got, 3));
     let (kernel, gate) = (
