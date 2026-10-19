@@ -6,7 +6,6 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use same_file::Handle;
 use serde_json::value::RawValue;
 
 use crate::{
@@ -18,8 +17,9 @@ use crate::{
 /// The record at a path, read under its lease, and the ear that keeps on it what the journal says to keep.
 ///
 /// The lease is a lock on the file beside the record, `<record>.lock`, which the store holds until its ear is gone
-/// or the process ends; the kernel ends the lease of a process that ends. A final line that a crash tore is removed,
-/// and a final line that is whole but not ended is ended, before the store keeps anything after it.
+/// or the process ends; the kernel ends the lease of a process that ends. The lock file never moves and is never
+/// removed, so its name always means the one file that every process locks. A final line that a crash tore is
+/// removed, and a final line that is whole but not ended is ended, before the store keeps anything after it.
 pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
   let path = path.as_ref().to_path_buf();
   let lease = leased(&path)?;
@@ -102,46 +102,37 @@ fn read(path: &Path, repair: bool) -> Result<Vec<Object>, Fault> {
 /// The lease of a record: the lock on the file beside it, which ends when the lease goes. A process that this one
 /// starts holds a copy of the file until its program runs, so the lease ends the lock itself, and not with the last
 /// copy of the file.
-struct Lease(Handle);
+struct Lease(File);
 
 impl Drop for Lease {
   fn drop(&mut self) {
-    let _ = self.0.as_file().unlock();
+    let _ = self.0.unlock();
   }
 }
 
 /// The lease of the record at a path, or the refusal when another process holds it.
 ///
-/// The lock is the lease only while its file is the one at the path. A holder that moved or removed the file after
-/// this process opened it leaves a lock that no later process meets, so this process opens the path again. On
-/// Windows the identity of a file holds only while a handle keeps the file open, as both handles do here.
+/// The lease is the lock on the file at the path, and nothing checks which file that is. A rename of the file would
+/// leave a lock that no later process meets, and on macOS a lookup of a renamed path can go on giving the moved file
+/// to every process for seconds, so no holder moves or removes the lock file.
 fn leased(path: &Path) -> Result<Lease, Fault> {
   let lock = PathBuf::from(format!("{}.lock", path.display()));
   let failed = |no: std::io::Error| Fault::refused(format!("{no}: {}", lock.display()));
   if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
     create_dir_all(parent).map_err(failed)?;
   }
-  loop {
-    let file: File = OpenOptions::new()
-      .read(true)
-      .write(true)
-      .create(true)
-      .truncate(false)
-      .open(&lock)
-      .map_err(failed)?;
-    match file.try_lock() {
-      Ok(()) => {}
-      Err(TryLockError::WouldBlock) => {
-        return Err(Fault::refused(format!("Another process owns {}.", path.display())));
-      }
-      Err(TryLockError::Error(no)) => return Err(failed(no)),
+  let file = OpenOptions::new()
+    .read(true)
+    .write(true)
+    .create(true)
+    .truncate(false)
+    .open(&lock)
+    .map_err(failed)?;
+  match file.try_lock() {
+    Ok(()) => Ok(Lease(file)),
+    Err(TryLockError::WouldBlock) => {
+      Err(Fault::refused(format!("Another process owns {}.", path.display())))
     }
-    let held = Handle::from_file(file).map_err(failed)?;
-    match Handle::from_path(&lock) {
-      Ok(now) if now == held => return Ok(Lease(held)),
-      Ok(_) => {}
-      Err(no) if no.kind() == ErrorKind::NotFound => {}
-      Err(no) => return Err(failed(no)),
-    }
+    Err(TryLockError::Error(no)) => Err(failed(no)),
   }
 }

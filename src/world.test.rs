@@ -4,6 +4,11 @@
 use std::{
   fs,
   path::{Path, PathBuf},
+  process::{Command, Stdio},
+  sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+  },
   thread,
   time::{Duration, Instant},
 };
@@ -94,11 +99,29 @@ fn a_stream_is_read_whole_in_utf8_and_a_character_cut_at_a_read_waits_for_the_ne
 }
 
 #[test]
-fn a_holder_may_move_the_lock_file_and_two_holders_never_own_the_record_at_once() {
+fn two_holders_never_own_the_record_at_once_while_programs_start_and_the_record_moves_away() {
   let at = place("race");
   let path = at.join("record.jsonl");
-  // Each holder makes a file that one alone can make while it owns the record, and two move the lock file away
-  // before they let it go, each to a name of its own, as the delete of a session does.
+  // Programs start all the while, from other threads of this process, since that is when macOS can give for a
+  // renamed path the file that a rename moved away.
+  let over = Arc::new(AtomicBool::new(false));
+  let starters: Vec<_> = (0..4)
+    .map(|_| {
+      let over = over.clone();
+      thread::spawn(move || {
+        let program = std::env::current_exe().unwrap();
+        while !over.load(Ordering::Relaxed) {
+          let _ = Command::new(&program)
+            .arg("--help")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output();
+        }
+      })
+    })
+    .collect();
+  // Each holder makes a file that one alone can make while it owns the record, and two move the record away before
+  // they let it go, each to a name of its own, as the delete of a session does, which leaves the lock file.
   let holders: Vec<_> = (0..8)
     .map(|n| {
       let (path, at) = (path.clone(), at.clone());
@@ -113,15 +136,19 @@ fn a_holder_may_move_the_lock_file_and_two_holders_never_own_the_record_at_once(
           taken += 1;
           fs::remove_file(&owner).unwrap();
           if n < 2 {
-            let lock = format!("{}.lock", path.display());
-            fs::rename(lock, at.join(format!("moved.{n}.{taken}"))).unwrap();
+            fs::rename(&path, at.join(format!("moved.{n}.{taken}"))).unwrap();
           }
           drop(ear);
         }
       })
     })
     .collect();
-  for one in holders {
+  let held = holders.into_iter().map(thread::JoinHandle::join).collect::<Vec<_>>();
+  over.store(true, Ordering::Relaxed);
+  for one in starters {
     one.join().unwrap();
+  }
+  for one in held {
+    one.unwrap();
   }
 }
