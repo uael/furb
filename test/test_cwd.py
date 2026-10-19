@@ -30,7 +30,7 @@ async def test_the_working_directory_of_a_chain_is_the_directory_of_the_standing
 
 
 async def test_the_world_resolves_the_path_of_a_read_a_write_and_a_command_against_the_working_directory() -> None:
-  """The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads."""
+  """The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads, and the path of a read or a write that is ~ or starts with ~/ against the home of the user."""
   sand = Where(files={"/x/a.txt": "two\n"})
   _, root = life(sand)
   engine.cd("/x", on=root)
@@ -39,6 +39,10 @@ async def test_the_world_resolves_the_path_of_a_read_a_write_and_a_command_again
   assert sand.files["/x/b.txt"] == "kept"
   await engine.bash("echo hi", on=root)
   assert sand.where == ["/x"]
+  _, _, root = born(files={"/h/a.txt": "home\n", "/w/~a.txt": "here\n"})
+  assert engine.read("~/a.txt", on=root) == Text("/h/a.txt", "home\n")
+  assert engine.read("~a.txt", on=root) == Text("/w/~a.txt", "here\n")
+  assert engine.write(Text("~/b.txt", "kept"), on=root) == Text("/h/b.txt", "kept")
 
 
 async def test_cwd_gives_the_working_directory_that_the_paths_of_the_chain_resolve_against() -> None:

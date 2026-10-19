@@ -120,6 +120,12 @@ def plain(record: Sequence[tuple]) -> list:
     return entries(_monty.kept(path))
 
 
+def resolved(here: str, path: str) -> str:
+  """A path against a working directory, as a World of the suite reads it: a path of its own stands as it is, and any
+  other hangs off it."""
+  return path if path.startswith("/") or "://" in path else f"{here}/{path}"
+
+
 @dataclass
 class Sand:
   """A World in memory, outside the engine.
@@ -131,7 +137,8 @@ class Sand:
   `cost` the usage of one answer, and `auto` says whether a command tells a line and exits at once. `tick` counts
   the readings of its clock and the chances it drew, so a later life reads what the life before it read. `outs`
   holds each command it runs: whether its stderr flows into its stdout, and its two streams as they came. `gone`
-  names the directories that are not there, which a cd into is refused; every other directory is there. `loop` is
+  names the directories that are not there, which a cd into is refused; every other directory is there. `home` is
+  the home of its user, which a read or a write of a path that is ~ or starts with ~/ resolves against. `loop` is
   the loop of the life it hears.
   """
 
@@ -147,6 +154,7 @@ class Sand:
   turns: dict[str, list] = field(default_factory=dict)
   outs: dict[str, list] = field(default_factory=dict)
   gone: set[str] = field(default_factory=set)
+  home: str = "/h"
   loop: asyncio.AbstractEventLoop = field(init=False, repr=False, compare=False)
 
   def exits(self, about: str, code: int | None) -> None:
@@ -167,16 +175,17 @@ class Sand:
         self.calls.append(a)
       yield from self.hear(a)
 
+  def placed(self, on: str, path: str) -> str:
+    """The path of a read or a write: one that is ~ or starts with ~/ hangs off the home of the user, and any other
+    resolves against the working directory of the chain."""
+    return self.home + path[1:] if path == "~" or path.startswith("~/") else resolved(engine.cwd(on=on), path)
+
   def hear(self, a: tuple) -> World:
     """What the World does with one fact: it takes a command, a wait, a prompt to the operator and a reply, answers
     the questions that are its own, feeds and ends its commands, answers a reply with the next word of its script,
     and keeps what it is told. A World of one test overrides it for what it does otherwise, and hands it every other
     fact.
     """
-
-    def resolved(here: str, path: str) -> str:
-      """A path against a working directory: a path of its own stands as it is, and any other hangs off it."""
-      return path if path.startswith("/") or "://" in path else f"{here}/{path}"
 
     match a:
       case ("bash", about, _, on, command, _, timeout):
@@ -200,12 +209,12 @@ class Sand:
       case ("cd", qid, _, on, path):
         full = resolved(engine.cwd(on=on), path)
         yield "done", qid, Refused(f"No directory at {full}.") if full in self.gone else full
-      case ("read", qid, _, on, path) if (full := resolved(engine.cwd(on=on), path)) in self.files:
+      case ("read", qid, _, on, path) if (full := self.placed(on, path)) in self.files:
         yield "done", qid, Text(full, self.files[full])
       case ("write", qid, _, on, Text(path=path, content=content)) if (
         "://" not in path and engine.get(path.split("/")[0]) is None
       ):
-        self.files[full := resolved(engine.cwd(on=on), path)] = content
+        self.files[full := self.placed(on, path)] = content
         yield "done", qid, Text(full, content)
       case ("reply", about, _, on, _):
         yield "started", about

@@ -1,6 +1,10 @@
 //! The files of the machine: a cd, a read and a write of a path that nobody of the engine serves.
 
-use std::{fs, io::ErrorKind, path::Path};
+use std::{
+  fs,
+  io::ErrorKind,
+  path::{Path, PathBuf},
+};
 
 use super::{here, resolved};
 use crate::{
@@ -14,7 +18,7 @@ const LARGEST: u64 = 524_288;
 
 /// The ear of the files: it answers a cd with the directory that the path names, a read with the text at the path
 /// and a write with the text as it stands after, each resolved against the working directory of the chain, or with
-/// the refusal.
+/// the refusal. The path of a read or a write that is `~` or starts with `~/` resolves against the home of the user.
 pub fn files() -> Box<dyn Ear> {
   ear(|mut co| async move {
     loop {
@@ -56,7 +60,10 @@ async fn served(co: &mut Co, a: &Fact) -> Result<Text, Fault> {
   if path.contains("://") {
     return Err(Fault::refused(format!("No file at {path}.")));
   }
-  let at = resolved(&here(co, a.on()).await?, &path);
+  let at = match homed(&path, std::env::home_dir()) {
+    Some(at) => at?,
+    None => resolved(&here(co, a.on()).await?, &path),
+  };
   if let Some(content) = content {
     if let Some(parent) = at.parent() {
       fs::create_dir_all(parent).map_err(|no| failed(&no, &at))?;
@@ -79,6 +86,14 @@ pub(crate) fn read(at: &Path) -> Result<Text, Fault> {
   Ok(Text::new(shown.to_string(), content))
 }
 
+/// A path that is `~` or starts with `~/`, resolved against the home of the user, as a shell reads it, or the refusal
+/// when the user has no home; and nothing for any other path, which resolves against the working directory.
+fn homed(path: &str, home: Option<PathBuf>) -> Option<Result<PathBuf, Fault>> {
+  let rest = path.strip_prefix('~').filter(|rest| rest.is_empty() || rest.starts_with('/'))?;
+  let refused = || Fault::refused(format!("There is no home of the user for {path}."));
+  Some(home.map(|home| resolved(&home, rest.trim_start_matches('/'))).ok_or_else(refused))
+}
+
 /// What the machine refused, in plain words, which the model and the operator both read.
 fn failed(no: &std::io::Error, at: &Path) -> Fault {
   match no.kind() {
@@ -86,3 +101,7 @@ fn failed(no: &std::io::Error, at: &Path) -> Fault {
     _ => Fault::refused(format!("{no}: {}", at.display())),
   }
 }
+
+#[cfg(test)]
+#[path = "files.test.rs"]
+mod test;
