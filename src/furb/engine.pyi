@@ -341,7 +341,7 @@ def wait(seconds: float = 0.0, on: str = "") -> Act[None]:
   It tells nothing and answers nothing, since a wait is no work of a model.
   """
 
-def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Act:
+def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   """The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is.
   A rung is an act: the run of one word in the globals of its chain, which the chain has the Kernel run.
   The engine tells what a step raised.
@@ -1003,7 +1003,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   """
 
 actor: str
-"""actor is the default actor of the chain, bound from the standing.
+"""actor is the default actor of the chain, bound from the standing, and empty in the module of the engine, where no chain stands.
 The program rebinds actor like any name, and the last binding wins.
 """
 raised: BaseException | None
