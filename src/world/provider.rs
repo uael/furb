@@ -472,7 +472,9 @@ fn messages(
 }
 
 /// One response of a model of rig, streamed: what it writes is told as it comes, and the response holds it whole,
-/// with the raw record of its end, where a model says what the turn cost.
+/// with the raw record of its end, where a model says what the turn cost. A model that says each block whole once it
+/// streamed it, as the claude command line does, gives those blocks in that record as `settled`, and they are the
+/// choice of the response, since a part of the stream may be lost where the whole block holds it.
 async fn streamed(streams: Streams, asked: Asked) -> Result<CompletionResponse, CompletionError> {
   let Asked { request, told, .. } = asked;
   let mut stream = streams(request).await?;
@@ -492,7 +494,12 @@ async fn streamed(streams: Streams, asked: Asked) -> Result<CompletionResponse, 
     }
   }
   let raw = stream.response.as_ref().map(|end| end.raw.clone()).unwrap_or_default();
-  Ok(CompletionResponse::from(stream).with_raw(raw))
+  let settled = raw.get("settled").and_then(|one| serde_json::from_value(one.clone()).ok());
+  let mut response = CompletionResponse::from(stream).with_raw(raw);
+  if let Some(settled) = settled {
+    response.choice = settled;
+  }
+  Ok(response)
 }
 
 /// The terminal record of a stream of a provider, from a response of it that came whole.

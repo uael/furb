@@ -153,8 +153,13 @@ impl CompletionModel for Completion {
     let (deltas, mut heard) = mpsc::unbounded_channel();
     let turn = async move {
       let got = claude.turn(&name, request, Some(&deltas)).await;
-      let _ =
-        deltas.send(got.map(|response| RawStreamingChoice::FinalResponse(ended(CLAUDE, response))));
+      // Rig makes the choice of a stream of the parts it streamed, so the raw record of its end holds the blocks the
+      // command line settled whole, which stand over those parts.
+      let got = got.map(|mut response| {
+        response.raw["settled"] = serde_json::to_value(&response.choice).unwrap_or_default();
+        RawStreamingChoice::FinalResponse(ended(CLAUDE, response))
+      });
+      let _ = deltas.send(got);
       None
     };
     // The turn goes with the stream: it runs as the stream is read, and a stream that is dropped ends it.

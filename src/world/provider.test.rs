@@ -364,6 +364,22 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   );
 }
 
+#[cfg(unix)]
+#[test]
+fn the_word_of_the_claude_command_line_is_the_text_it_settled_over_the_parts_it_streamed() {
+  use super::claude::test::Yard;
+  let yard = Yard::new("gap");
+  let claude = yard.claude(10_000);
+  let (mut engine, _) = life("claude-gap", claude.models());
+  let root = engine.root().to_owned();
+  // The command line streams the text of its reply less its first part, and then says the text whole.
+  let with =
+    verbs::Prompt { message: Some("GAP task".into()), on: on(&root), ..Default::default() };
+  let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
+  assert_eq!(block_on(act).map(|got| got.py_repr()).expect("an answer"), "'reply 1'");
+  assert_eq!(yard.heard().len(), 1, "the first reply answered the prompt");
+}
+
 /// Whom a test tells what a model writes, and what it was told, each as its rung, its chain, its text and its
 /// thought.
 fn heard() -> (Writes, Arc<Mutex<Vec<[String; 4]>>>) {
