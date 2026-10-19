@@ -762,13 +762,11 @@ def boot(record=(), **outside):
     if name in busy or alive.get(name) is not g:
       return
     with site.set(name):
-      living = False
       busy.add(name)
       try:
-        living = lives(g, a)
+        lives(g, a) or alive.pop(name)
       finally:
         busy.discard(name)
-        living or alive.pop(name)
 
   def live(g, name):
     if name in alive:

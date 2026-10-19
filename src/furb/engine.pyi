@@ -100,7 +100,7 @@ def act(kind: str, on: str, ear: Callable[[str], Ear] | None, *words: object) ->
 def drive(g: Ear, name: str) -> None:
   """The other way to speak: a generator is brought to life under a name, and from then it hears every fact that is said and says its own.
   One that returns is over and lives no more, which is how a thing that watches for one fact alone is dropped the moment it hears it.
-  One that raises while it hears is broken the same way, and what went wrong goes to the one that spoke.
+  One that raises while it hears is broken the same way: the next fact it is given finds it over, and what went wrong goes to the one that spoke.
   A generator brought to life under a name and nothing more: it hears from the tip and runs to its first wait, and one born while a fact goes round hears from the next.
   It lives until it returns, and an act that hears nothing more returns at the first fact it hears after its own end.
   A generator that yields a saying is given the fact as the bus said it, and one that yields nothing waits for the next fact said.
