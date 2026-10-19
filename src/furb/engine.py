@@ -151,6 +151,8 @@ def close(value: object, id: str = "") -> None:
         fits = isinstance(value, (s := eval(shape, module(on))) or object)
       except TypeError:
         fits = isinstance(value, s.__origin__)
+      except NameError:
+        fits = False
       if not fits:
         raise Refused(f"{value!r} not {shape}")
   control("close", "closed", id, value)
