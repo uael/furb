@@ -103,11 +103,16 @@ function scriptedSession(options: SessionOptions): Session {
       // A message that asks for an answer in a fence gets one, as a model sometimes writes it, which the gate refuses,
       // and the model answers again once it reads the refusal.
       const fenced = !first && last.includes("an answer in a fence");
+      // A message that says to ask first gets a question to the operator and no close, so the model answers again
+      // once the operator has answered.
+      const asks = !first && last.includes("Ask me first");
       const code = fenced
         ? '```python\nclose("Here is the answer, in a fence.")\n```'
-        : first
-          ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
-          : `close(${JSON.stringify(answer)})`;
+        : asks
+          ? 'await prompt(str, "Which effort should the next step take?", to=OPERATOR)'
+          : first
+            ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
+            : `close(${JSON.stringify(answer)})`;
       if (slow) {
         write({ thinking });
         await pause(200);

@@ -119,28 +119,42 @@ test("a snapshot asked before a model choice lands after it, and the choice hold
 const asked = (session: Session, prompt: string | undefined) =>
   session.acts.filter((act) => act.kind === "rung" && act.by === prompt).map((act) => act.words[2]);
 
+/** Make the demo hold its prompt on a question to the operator, set the effort low while it is held, and wait until
+ * that choice has run on the chain, so the next rung of the prompt comes after the choice. */
+async function heldWhileEffortChanges(
+  session: Session,
+  during: () => void = () => {},
+): Promise<string | undefined> {
+  await session.submit("Look around.");
+  await idle(session);
+  // The demo asks the operator and closes nothing, so its prompt makes no next rung until the operator answers.
+  await session.submit("Ask me first, then answer.");
+  const prompt = session.acts.findLast((act) => session.isUserPrompt(act))?.id;
+  await until(session, () => session.operatorPrompt !== undefined);
+  during();
+  await session.submit("/effort low");
+  await until(session, () =>
+    session.acts.some(
+      (act) => act.by === "operator" && act.words[0] === 'actor = "claude-cli:sonnet/low"' && act.done,
+    ),
+  );
+  await session.submit("Take the low effort.");
+  await idle(session);
+  return prompt;
+}
+
 test("/effort changes the actor of the next rung of a running chain", () =>
   withDemo(async (session) => {
-    await session.submit("Look around.");
-    await idle(session);
-    // The demo streams this turn slowly, and the gate refuses its fence, so the prompt asks the model again.
-    await session.submit("Give an answer in a fence, and show live progress.");
-    const prompt = session.acts.findLast((act) => session.isUserPrompt(act))?.id;
-    await until(session.host, () => session.host.streams.size > 0);
-    await session.submit("/effort low");
-    await idle(session);
+    const prompt = await heldWhileEffortChanges(session);
     await session.refresh();
     expect(asked(session, prompt)).toEqual(["claude-cli:sonnet/high", "claude-cli:sonnet/low"]);
   }));
 
 test("a follow-up goes to the actor of its chain when it is sent", () =>
   withDemo(async (session) => {
-    await session.submit("Look around.");
-    await idle(session);
-    await session.submit("Give an answer in a fence, and show live progress.");
-    await until(session.host, () => session.host.streams.size > 0);
-    session.enqueue("Check keyboard navigation after this answer.");
-    await session.submit("/effort low");
+    await heldWhileEffortChanges(session, () =>
+      session.enqueue("Check keyboard navigation after this answer."),
+    );
     await until(session, () => session.queued.length === 0);
     await idle(session);
     await session.refresh();
