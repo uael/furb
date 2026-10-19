@@ -12,7 +12,7 @@ struct Yard {
 
 impl Yard {
   fn new(name: &str) -> Yard {
-    let at = std::env::temp_dir().join(format!("furb-tui-{name}"));
+    let at = std::env::temp_dir().join(format!("furb-tui-{name}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&at);
     let (bin, checkout) = (at.join("bin"), at.join("checkout"));
     fs::create_dir_all(&bin).expect("a PATH of the test");

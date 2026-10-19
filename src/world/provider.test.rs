@@ -53,7 +53,7 @@ fn block_on<T>(fut: impl Future<Output = T>) -> T {
 
 /// A yard of one test, empty.
 fn yard(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-provider-{name}"));
+  let at = std::env::temp_dir().join(format!("furb-provider-{name}-{}", std::process::id()));
   let _ = fs::remove_dir_all(&at);
   fs::create_dir_all(&at).expect("a yard of the test");
   at
