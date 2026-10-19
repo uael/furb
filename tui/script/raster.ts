@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CapturedFrame, RGBA } from "@opentui/core";
 import { Resvg } from "@resvg/resvg-js";
@@ -21,6 +22,55 @@ const family = "JetBrains Mono";
 const fonts = ["Regular", "Bold", "Italic"].map((weight) =>
   join(import.meta.dir, "fonts", `JetBrainsMono-${weight}.ttf`),
 );
+/** The characters that every file of the family draws. A capture takes no font of the machine, since a character
+ * that the family lacks would then take the font that each machine has, and the capture would differ on each. */
+const [regular = new Set<number>(), ...others] = fonts.map((path) => characters(readFileSync(path)));
+const drawable = new Set([...regular].filter((code) => others.every((one) => one.has(code))));
+
+/** The characters a font draws, read off its table of characters: the subtable of format 12 or of format 4. */
+function characters(font: Buffer): Set<number> {
+  const tables = font.readUInt16BE(4);
+  let cmap = -1;
+  for (let at = 12; at < 12 + tables * 16; at += 16)
+    if (font.toString("latin1", at, at + 4) === "cmap") cmap = font.readUInt32BE(at + 8);
+  if (cmap < 0) throw new Error("A font of the gallery has no table of characters.");
+  const subtables = Array.from({ length: font.readUInt16BE(cmap + 2) }, (_, index) => {
+    const at = cmap + 4 + index * 8;
+    return cmap + font.readUInt32BE(at + 4);
+  });
+  const codes = new Set<number>();
+  const twelve = subtables.find((at) => font.readUInt16BE(at) === 12);
+  if (twelve !== undefined) {
+    for (let group = 0; group < font.readUInt32BE(twelve + 12); group++) {
+      const at = twelve + 16 + group * 12;
+      const [first, last, glyph] = [
+        font.readUInt32BE(at),
+        font.readUInt32BE(at + 4),
+        font.readUInt32BE(at + 8),
+      ];
+      for (let code = first; code <= last; code++) if (glyph + code - first) codes.add(code);
+    }
+    return codes;
+  }
+  const four = subtables.find((at) => font.readUInt16BE(at) === 4);
+  if (four === undefined)
+    throw new Error("A font of the gallery has no table of characters of format 12 or 4.");
+  const segments = font.readUInt16BE(four + 6) / 2;
+  const ends = four + 14,
+    starts = ends + segments * 2 + 2,
+    deltas = starts + segments * 2,
+    ranges = deltas + segments * 2;
+  for (let segment = 0; segment < segments; segment++) {
+    const [last, first] = [font.readUInt16BE(ends + segment * 2), font.readUInt16BE(starts + segment * 2)];
+    const delta = font.readInt16BE(deltas + segment * 2),
+      range = font.readUInt16BE(ranges + segment * 2);
+    for (let code = first; code <= last && code !== 0xffff; code++) {
+      const index = range ? font.readUInt16BE(ranges + segment * 2 + range + (code - first) * 2) : code;
+      if (index && (index + delta) & 0xffff) codes.add(code);
+    }
+  }
+  return codes;
+}
 
 const hex = (value: RGBA) =>
   `#${value
@@ -92,6 +142,16 @@ function mark(glyph: string, x: number, y: number, color: string): string | unde
       return fill(`M ${x - 1.8} ${y - 3} L ${x + 2.4} ${y} L ${x - 1.8} ${y + 3} Z`);
     case "▾":
       return fill(`M ${x - 3} ${y - 1.7} L ${x + 3} ${y - 1.7} L ${x} ${y + 2.5} Z`);
+    case "↳":
+      return stroke(
+        1.2,
+        `M ${x - 2.8} ${y - 3.8} L ${x - 2.8} ${y + 1.4} L ${x + 3.4} ${y + 1.4} M ${x + 1.2} ${y - 0.8} L ${x + 3.4} ${y + 1.4} L ${x + 1.2} ${y + 3.6}`,
+      );
+    case "✎":
+      return stroke(
+        1.1,
+        `M ${x + 1.6} ${y - 3.8} L ${x + 3.8} ${y - 1.6} L ${x - 1.2} ${y + 3.4} L ${x - 3.6} ${y + 3.6} L ${x - 3.4} ${y + 1.2} Z M ${x + 0.4} ${y - 2.6} L ${x + 2.6} ${y - 0.4}`,
+      );
   }
   const code = glyph.codePointAt(0) ?? 0;
   // A braille cell holds eight dots in two columns, and each bit of the code point above U+2800 sets one of them.
@@ -121,6 +181,7 @@ function mark(glyph: string, x: number, y: number, color: string): string | unde
  * as a terminal that extends its padding shows it, so a sidebar reaches the edge of the window. */
 function terminal(frame: CapturedFrame): string {
   const parts: string[] = [];
+  const lacking = new Set<string>();
   const width = frame.cols * cell,
     last = frame.lines.length - 1;
   for (const [line, content] of frame.lines.entries()) {
@@ -208,6 +269,8 @@ function terminal(frame: CapturedFrame): string {
         } else {
           if (!run) start = at;
           run += segment;
+          for (const one of segment)
+            if (!/\s/.test(one) && !drawable.has(one.codePointAt(0) ?? 0)) lacking.add(one);
         }
         at += Bun.stringWidth(segment);
       }
@@ -215,6 +278,10 @@ function terminal(frame: CapturedFrame): string {
       column += span.width;
     }
   }
+  if (lacking.size)
+    throw new Error(
+      `The fonts of the gallery draw no ${[...lacking].join(" ")}: draw each in mark, or in drawn.`,
+    );
   return parts.join("");
 }
 
@@ -260,7 +327,7 @@ export function pixels(
     `</svg>`,
   ].join("");
   const image = new Resvg(svg, {
-    font: { fontFiles: fonts, loadSystemFonts: true, defaultFontFamily: family },
+    font: { fontFiles: fonts, loadSystemFonts: false, defaultFontFamily: family },
   }).render();
   return { width: image.width, height: image.height, pixels: new Uint8Array(image.pixels) };
 }
