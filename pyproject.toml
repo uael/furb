@@ -81,8 +81,8 @@ ignore = ["S101"]
 # A word speaks the vocabulary of the engine, which a model reads: the ear of an act takes its id, untyped, as the
 # ears of the engine do.
 "extensions/*/*.py" = ["A002", "ANN001"]
-# The sandbox carries no bound method as a value, so boot binds each read of the life through a lambda.
-"src/furb/engine.py" = ["PLW0108", "S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "FBT001", "FBT002", "ARG001", "ANN", "EM101", "EM102", "TRY003", "PLR0917", "PLR0912", "PLR0915", "SIM105"]
+# boot binds the names of its life, the bus and the reads of its tables, as globals of the module.
+"src/furb/engine.py" = ["PLW0603", "S307", "TID251", "FBT003", "N818", "A001", "A002", "PLR0913", "FBT001", "FBT002", "ARG001", "ANN", "EM101", "EM102", "TRY003", "PLR0917", "PLR0912", "PLR0915", "SIM105"]
 
 [tool.ruff.lint.pycodestyle]
 max-line-length = 160
@@ -117,7 +117,9 @@ include = ["src", "test", "script", "bind/python", "extensions"]
 extra-paths = ["test", "bind/python"]
 
 # The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
-# of an act, a task or a standing it reads after the check the sentence beside it makes.
+# of an act, a task or a standing it reads after the check the sentence beside it makes. boot binds the names of its
+# life as globals of the module, which no statement at the top binds, and get gives the act that a word reads as a
+# tuple, and nothing for a name of no act.
 [[tool.ty.overrides]]
 include = ["src/furb/engine.py"]
 
@@ -125,6 +127,8 @@ include = ["src/furb/engine.py"]
 unresolved-attribute = "ignore"
 unsupported-operator = "ignore"
 invalid-argument-type = "ignore"
+unresolved-global = "ignore"
+invalid-return-type = "ignore"
 
 # The engine of monty reads the engine of this interpreter as the module the switch keeps, whose names ty does not
 # see through a module object, and the extension it stands on is built and not read.
@@ -148,8 +152,5 @@ asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["error"]
 
 [tool.coverage.report]
-# The suite runs every line of engine.py. The lines it cannot reach are the bodies of say, act, drive, get, peek
-# and transcript before a life is living: boot binds the six to itself before anything can call them, so the stubs
-# stand only to name the error of a call outside a life.
+# The suite runs every line of engine.py.
 fail_under = 100
-exclude_also = ['raise RuntimeError\("no life"\)']

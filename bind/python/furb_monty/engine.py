@@ -285,11 +285,15 @@ def worded(name: str) -> Callable[..., object]:
 
 
 def defined() -> list[str]:
-  """Every name the engine defines at its top, in order, which is the surface this module gives."""
+  """Every name the engine defines at its top, in order, which is the surface this module gives: and after a function,
+  each name it declares global, which is how boot binds the names of its life."""
   said: list[str] = []
   for node in ast.parse(Path(python.__file__).read_text(encoding="utf-8")).body:
     match node:
-      case ast.FunctionDef() | ast.AsyncFunctionDef() | ast.ClassDef():
+      case ast.FunctionDef() | ast.AsyncFunctionDef():
+        said.append(node.name)
+        said.extend(name for one in node.body if isinstance(one, ast.Global) for name in one.names)
+      case ast.ClassDef():
         said.append(node.name)
       case ast.TypeAlias(name=ast.Name(id=name)) | ast.AnnAssign(target=ast.Name(id=name)):
         said.append(name)
@@ -303,10 +307,11 @@ def defined() -> list[str]:
 for _name in defined():
   if _name in ("boot", "Act"):
     continue
-  _held = NAMES[_name]
+  # A name that boot binds is held by no engine before a life, and it is a verb of the life.
+  _held = NAMES.get(_name)
   if _name == "site":
     globals()[_name] = Site()
-  elif _name in PURE or isinstance(_held, type) or not callable(_held):
+  elif _name in NAMES and (_name in PURE or isinstance(_held, type) or not callable(_held)):
     globals()[_name] = _held
   else:
     globals()[_name] = worded(_name)
