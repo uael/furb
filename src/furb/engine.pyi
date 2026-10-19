@@ -1005,8 +1005,8 @@ actor: str
 """actor is the default actor of the chain, bound from the standing.
 The program rebinds actor like any name, and the last binding wins.
 """
-raised: BaseException | None
-"""raised is the exception object that the last rung raised, rebound at each raise.
+raised: Exception | None
+"""raised is the Exception that the last rung raised, rebound at each raise of one, so a word that a close or a cancel ends, with a CancelledError, rebinds nothing.
 raised is None at the birth of the module of a chain, so a word reads it before any rung raised."""
 doctrine: str
 """doctrine is the quote after the engine in the system prompt, which says how a model works in furb and holds no law."""

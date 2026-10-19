@@ -12,7 +12,7 @@ The word stands on a sheet of its own::
     <each name ty gives a module that a chain in the sandbox does not hold>: object
     <each name of the engine that is not private> = __engine__.<that name>
     actor = ""
-    raised: BaseException | None = None
+    raised: Exception | None = None
     try:
       acting()
       <a word of the program of the chain before the word>
@@ -61,7 +61,7 @@ ty adds itself. A chain in the sandbox holds __name__, which the engine binds, a
 __loader__ and __debug__, which the module of the engine holds before the engine runs. A word is judged the same on
 every engine, in the vocabulary of the sandbox, so the gate of python refuses these names too, though python runs
 some of them."""
-BOUND = '  actor = ""\n  raised: BaseException | None = None\n'
+BOUND = '  actor = ""\n  raised: Exception | None = None\n'
 """BOUND binds the two names a chain binds of its own."""
 OPENED = "  try:\n    acting()\n"
 """OPENED opens the try of a word of the program."""

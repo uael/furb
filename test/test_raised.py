@@ -7,8 +7,8 @@ from furb import engine
 from furb.engine import Refused
 
 
-async def test_raised_is_the_exception_object_that_the_last_rung_raised_rebound_at_each_raise() -> None:
-  """raised is the exception object that the last rung raised, rebound at each raise."""
+async def test_raised_is_the_exception_that_the_last_rung_raised_rebound_at_each_raise_of_one() -> None:
+  """raised is the Exception that the last rung raised, rebound at each raise of one, so a word that a close or a cancel ends, with a CancelledError, rebinds nothing."""
   _, _, root = born()
   assert engine.module(root)["raised"] is None
   with pytest.raises(ValueError, match="one"):
@@ -23,6 +23,7 @@ async def test_raised_is_the_exception_object_that_the_last_rung_raised_rebound_
     await engine.rung("k = BAD", on=root)
   assert engine.module(root)["raised"] is second
   assert await engine.rung("close(str(raised))", on=root) == "'two'"
+  assert engine.module(root)["raised"] is second
 
 
 async def test_raised_is_none_at_the_birth_of_the_module_of_a_chain() -> None:
