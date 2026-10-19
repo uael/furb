@@ -388,7 +388,7 @@ async def test_the_chain_has_the_kernel_begin_it_in_the_module_of_that_chain() -
 
 
 async def test_it_is_done_with_what_the_word_gave() -> None:
-  """It is done with what the word gave, nothing for a word that ran to its end and the exception for a raise, which it tells with its type and its message, which its close then holds none of."""
+  """It is done with what the word gave, nothing for a word that ran to its end and the exception for a raise, which it tells with its type and its message, or as cancelled for a CancelledError, which its close then holds none of."""
   _, log, root = born()
   ended = engine.rung("k = 1", on=root)
   await ended
@@ -405,6 +405,10 @@ async def test_it_is_done_with_what_the_word_gave() -> None:
     f"#{hurt}\n{hurt}_word = \"raise ValueError('boom')\"",
     f"#{hurt} raised\n{hurt}_raised = ValueError('boom')",
   ]
+  stopped = engine.rung("w = wait(5)\ncancel(w)\nawait w", on=root)
+  with pytest.raises(CancelledError):
+    await stopped
+  assert [one.split("\n")[0] for one in of(engine.turns(on=root), stopped)] == [f"#{stopped}", f"#{stopped} cancelled"]
 
 
 async def test_of_the_acts_its_word_made_and_read_at_once_it_tells_nothing() -> None:

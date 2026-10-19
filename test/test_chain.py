@@ -246,9 +246,12 @@ async def test_the_engine_binds_the_exception_of_every_raise_but_a_cancellederro
 
 
 async def test_the_engine_binds_the_exception_again_at_each_raise() -> None:
-  """The engine binds the exception again at each raise."""
+  """The engine binds the exception again at each raise but a CancelledError."""
   _, _, root = born("raise ValueError('one')", "raise KeyError('two')", "close(1)", "close(None)")
   assert await engine.prompt(int, "try", on=root) == 1
+  assert isinstance(engine.module(root)["raised"], KeyError)
+  with pytest.raises(CancelledError):
+    await engine.rung("w = wait(5)\ncancel(w)\nawait w", on=root)
   assert isinstance(engine.module(root)["raised"], KeyError)
 
 

@@ -370,7 +370,7 @@ def rung(word: str = "", retells: str = "", actor: str = "", on: str = "") -> Ac
   A chain with a source awaits what its origin started, through the name of the act.
   It says its word may run as soon as it holds one, whichever way that word came, and what the chain makes of the word is the chain's.
   The chain has the Kernel begin it in the module of that chain, and the run carries it forward at the done of every act the word waits for, so that the engine owns the order of it.
-  It is done with what the word gave, nothing for a word that ran to its end and the exception for a raise, which it tells with its type and its message, which its close then holds none of.
+  It is done with what the word gave, nothing for a word that ran to its end and the exception for a raise, which it tells with its type and its message, or as cancelled for a CancelledError, which its close then holds none of.
   Of the acts its word made and read at once it tells nothing, since such an act tells of itself or not at all.
   An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the model is asked again.
   A replay makes a rung of its own retelling each rung of the donor it keeps.
@@ -452,7 +452,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   The engine refuses a prompt to an actor outside the roster.
   The chain holds the control it says itself, so what it closes tells the model what was done to it.
   The engine binds the exception of every raise but a CancelledError in the globals of the chain, under the name raised.
-  The engine binds the exception again at each raise.
+  The engine binds the exception again at each raise but a CancelledError.
   A chain: its module, which is the engine itself, named for the chain, since everything the file defines is the model's to call and nothing of it is bound to one chain, and what the operator would add to it, it makes a rung of, which binds it, stands in the program and is said again in a later life, a fact said from a run being on the chain of that run, and a word that wants a chain of its own giving the name of its own as the source.
   A chain is chainN whether boot or chain opened it, and the root is chain1.
   A chain is an act of Never, so the chain never completes.
