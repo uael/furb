@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, setSystemTime, test } from "bun:test";
 import { RGBA } from "@opentui/core";
 import { setRendererCapabilities } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
@@ -314,14 +314,21 @@ test("Ctrl+S puts the input aside, the line under the input shows it, and Ctrl+S
     expect(await frame()).not.toContain("stashed");
   }));
 
-test("Escape twice opens the rewind tree in the feed, which keys move, fold, and close", () =>
+test.serial("Escape twice opens the rewind tree in the feed, which keys move, fold, and close", () =>
   composing(
     async ({ session, app, screen, frame }) => {
       await idle(session);
       await frame();
-      screen.mockInput.pressEscape();
-      expect(await frame()).toContain("Press Escape again to rewind.");
-      screen.mockInput.pressEscape();
+      // Two Escapes rewind when the clock moved less than the window between them. The clock stands still between
+      // the two, so the window holds them however long the frame between them takes.
+      setSystemTime(new Date());
+      try {
+        screen.mockInput.pressEscape();
+        expect(await frame()).toContain("Press Escape again to rewind.");
+        screen.mockInput.pressEscape();
+      } finally {
+        setSystemTime();
+      }
       const tree = await frame();
       expect(tree).toContain("Rewind");
       const rows = () => app.scroll.getChildren().map((node) => node.id);
@@ -348,7 +355,8 @@ test("Escape twice opens the rewind tree in the feed, which keys move, fold, and
     },
     { width: 120, height: 44, kittyKeyboard: true },
     true,
-  ));
+  ),
+);
 
 test("a space after a command whose values are known lists them, and Enter on a value runs the command", () =>
   composing(async ({ session, app, screen, frame }) => {
