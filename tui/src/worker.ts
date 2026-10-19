@@ -154,9 +154,9 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     engine.say("queue", entry.chain, [
       "begin",
       entry.id,
-      queueHash(entry.chain, entry.shape, entry.text, entry.actor),
+      queueHash(entry.chain, entry.shape, entry.text, ""),
     ]);
-    const act = engine.prompt(entry.shape, { message: entry.text, on: entry.chain, to: entry.actor });
+    const act = engine.prompt(entry.shape, { message: entry.text, on: entry.chain });
     engine.say("queue", entry.chain, ["sent", entry.id, act.id]);
     return act.id;
   }

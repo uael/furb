@@ -3149,7 +3149,9 @@ export class App {
           : []),
         ...session.queued.map((entry) => ({
           label: entry.text.split("\n")[0] ?? "Follow-up",
-          detail: `to ${this.model(entry.actor).name} on ${session.labelOf(entry.chain)}`,
+          // A follow-up asks the actor of its chain when it is sent, and the session reads that actor for the
+          // selected chain alone.
+          detail: `${entry.chain === session.selected ? `to ${this.model("").name} ` : ""}on ${session.labelOf(entry.chain)}`,
           mark: [`${glyph.ring} `, c.faint] as Part,
           run: () =>
             this.openPalette("Queued message", [

@@ -100,9 +100,12 @@ test("a snapshot asked before a model choice lands after it, and the choice hold
     expect(session.actor).toBe("claude-cli:opus/high");
     await session.submit("Which model reads this?");
     const prompt = session.acts.findLast((act) => session.isUserPrompt(act));
-    expect(prompt?.words).toEqual(["str", "Which model reads this?", "claude-cli:opus/high"]);
+    expect(prompt?.words).toEqual(["str", "Which model reads this?", ""]);
     await idle(session);
     await session.refresh();
+    expect(session.acts.find((act) => act.kind === "rung" && act.by === prompt?.id)?.words[2]).toBe(
+      "claude-cli:opus/high",
+    );
     expect((await session.engine.inspect("actor", session.engine.root)).value).toBe("claude-cli:opus/high");
     expect(session.actor).toBe("claude-cli:opus/high");
   } finally {
@@ -111,6 +114,40 @@ test("a snapshot asked before a model choice lands after it, and the choice hold
     await session.dispose();
   }
 });
+
+/** The actor word of each rung that a prompt made, in order. */
+const asked = (session: Session, prompt: string | undefined) =>
+  session.acts.filter((act) => act.kind === "rung" && act.by === prompt).map((act) => act.words[2]);
+
+test("/effort changes the actor of the next rung of a running chain", () =>
+  withDemo(async (session) => {
+    await session.submit("Look around.");
+    await idle(session);
+    // The demo streams this turn slowly, and the gate refuses its fence, so the prompt asks the model again.
+    await session.submit("Give an answer in a fence, and show live progress.");
+    const prompt = session.acts.findLast((act) => session.isUserPrompt(act))?.id;
+    await until(session.host, () => session.host.streams.size > 0);
+    await session.submit("/effort low");
+    await idle(session);
+    await session.refresh();
+    expect(asked(session, prompt)).toEqual(["claude-cli:sonnet/high", "claude-cli:sonnet/low"]);
+  }));
+
+test("a follow-up goes to the actor of its chain when it is sent", () =>
+  withDemo(async (session) => {
+    await session.submit("Look around.");
+    await idle(session);
+    await session.submit("Give an answer in a fence, and show live progress.");
+    await until(session.host, () => session.host.streams.size > 0);
+    session.enqueue("Check keyboard navigation after this answer.");
+    await session.submit("/effort low");
+    await until(session, () => session.queued.length === 0);
+    await idle(session);
+    await session.refresh();
+    const follow = session.acts.findLast((act) => session.isUserPrompt(act));
+    expect(asked(session, follow?.id)).toEqual(["claude-cli:sonnet/low"]);
+    expect(follow?.words).toEqual(["str", "Check keyboard navigation after this answer.", ""]);
+  }));
 
 test("a follow-up that the operator removes while an earlier one is sent is not sent", async () => {
   const session = await demoSession();

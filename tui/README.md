@@ -155,7 +155,9 @@ model that the catalog of the crate offers. `/model name` takes `provider:model`
 rule of the catalog. A model of the catalog that the session does not offer joins the session: the session saves
 it, opens again on its record, starts again the work that was running, and sends the next prompt of the chain to
 that model. Each model offers the efforts that the catalog gives it, saved in the chain's roster. A model change
-keeps the current effort if the new model offers it.
+keeps the current effort if the new model offers it. A choice of a model or an effort sets the actor of the chain
+by a rung of the operator. A prompt names no actor, so the next rung of a prompt that runs, and each follow-up that
+the queue sends, asks the actor that the chain has then.
 
 The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
 historical checkpoint. A branch that the rewind tree makes uses the engine's `take` filter and runs as an operator
