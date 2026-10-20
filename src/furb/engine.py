@@ -52,14 +52,14 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   got = ask("read", on, path)
   if acting() and isinstance(got, Text) and (size := len(shown(got, show).encode())) > LARGEST:
     raise Refused(f"{path} shows {size} bytes, over {LARGEST}")
-  show is HIDDEN or tell("read", on, path, got, show)
+  show is HIDDEN or tell(on, path, got, show)
   return got
 
 
 def write(text: Text, on: str = "") -> Text:
   got = ask("write", on, Text(text.path, text.content))
   if not isinstance(got, Text) or got.lines != text.lines:
-    tell("write", on, text.path, got, differs(text.lines))
+    tell(on, text.path, got, differs(text.lines))
   return got
 
 
@@ -114,7 +114,7 @@ def gate(word: str, on: str = "") -> list[str]:
 
 def cd(path: str, on: str = "") -> str:
   path = ask("cd", on, path)
-  tell("cd", on, path)
+  tell(on, path)
   return path
 
 
@@ -505,14 +505,14 @@ def scope(name):
   return ""
 
 
-def tell(kind, on, path, got=None, show=HEAD):
+def tell(on, path, got=None, show=HEAD):
   if (who := acting()) and tells(who):
     say(
       "tell",
       who,
       [
         headed(
-          [x[1] for x in transcript(on) if x[0] == kind and x[2] == who][-1],
+          [x[1] for x in transcript(on) if x[2] == who and question(x)][-1],
           path=path,
           **{"text": shown(got, show)} if isinstance(got, Text) else {"value": got},
         )

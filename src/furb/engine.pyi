@@ -880,10 +880,10 @@ def question(a: Saying) -> bool:
 def scope(name: str) -> str:
   """The scope of a question, from its name: the chain it is on, and itself for a chain, and nothing for a name of no question of the life."""
 
-def tell(kind: str, on: str, path: str, got: object = None, show: Show = HEAD) -> None:
+def tell(on: str, path: str, got: object = None, show: Show = HEAD) -> None:
   """What a question answered now that shows a text or changes a state tells of itself: a paragraph headed with the name of the question, which binds its path and what it was answered, said on the run that asked it, and nothing at all outside a run; one that only reads a value tells nothing, since the word that asked it holds the value, which it debugs to see.
   A question is put to the ears of the engine before those of the outside, so the World is asked for nothing that the engine knows.
-  The question that tell names is the last one of its kind on its chain that the run made.
+  The question that tell names is the last question on its chain that the run made.
   A text is told by the lines that its show picks, under the word text, and any other answer under the word value.
   """
 
