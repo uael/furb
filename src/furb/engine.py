@@ -243,7 +243,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   def ear(id):
     rungs, refused, running, waiting = program(source), set(), {}, {}
     asking, unseen, last, heard = "", "", standing(), []
-    stood = module(get(id)[3]).get("actor", last and last[2])
+    stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def takes():
       return told(id, "standing", roster=last[0], cwd=last[1], actor=stood)

@@ -612,6 +612,10 @@ async def test_a_chain_with_a_source_inherits_the_default_actor_with_the_globals
   _, _, root = born()
   twin = await chained("twin", root)
   assert engine.module(twin)["actor"] == engine.module(root)["actor"] == "m/low"
+  _, _, root = born("actor = 'n/low'\nkid = chain('kid')\nclose(kid)", "close(None)")
+  kid = await engine.prompt(str, "open one", on=root)
+  twin = await chained("twin", kid)
+  assert engine.module(twin)["actor"] == engine.module(kid)["actor"] == "n/low"
 
 
 async def test_a_chain_with_no_source_stands_on_the_default_actor_of_the_chain_it_is_on() -> None:
