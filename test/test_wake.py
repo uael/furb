@@ -47,7 +47,7 @@ async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_hea
   engine.wake(act)
   await settle()
   assert (await act).code == 3
-  assert paragraphs(engine.turns(on=root))[-3:] == [f"#{act} paused", f"#{act} woke", f"#{act} exited 3"]
+  assert paragraphs(engine.turns(on=root))[-2:] == [f"#{act} paused", f"#{act} exited 3"]
 
 
 async def test_delivery_carries_on_the_rungs_that_await_the_result_on_whatever_chain() -> None:
@@ -72,7 +72,7 @@ async def test_a_wake_on_one_act_lifts_a_pause_of_its_chain_for_that_act_alone()
   root, one, _ = await withheld()
   engine.wake(one)
   await settle()
-  assert heads(engine.turns(on=root))[-2:] == [f"#{one} woke", f"#{one} exited 0"]
+  assert heads(engine.turns(on=root))[-1] == f"#{one} exited 0"
   asked, log, root = born()
   engine.pause(root)
   counting, other = engine.prompt(int, "count", on=root), engine.prompt(int, "wait", on=root)
@@ -91,7 +91,8 @@ async def test_wake_is_given_the_id_of_an_act_or_the_id_of_a_chain() -> None:
   for woken, exited in ((one, one), (root, two)):
     engine.wake(woken)
     await settle()
-    assert heads(engine.turns(on=root))[-2:] == [f"#{woken} woke", f"#{exited} exited 0"]
+    assert heads(engine.turns(on=root))[-1] == f"#{exited} exited 0"
+    assert (f"#{woken} woke" in heads(engine.turns(on=root))) == (woken == root)
 
 
 async def test_a_wake_lifts_the_pause_and_delivers_every_held_result() -> None:

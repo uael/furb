@@ -408,7 +408,7 @@ async def test_a_chain_holds_whole_every_act_made_on_the_chain() -> None:
   assert [a for a in acts(log).values() if a[3] == root and a not in mine] == []
   kinds = ["stand", "prompt", "rung", "reply", "run", "gate", "run", "read", "bash", "merged"]
   assert [a[0] for a in mine] == [*kinds, "prompt", "rung", "reply", "run", "gate", "run"]
-  engine.write(engine.read(act, on=root), on=root)
+  engine.write(Text(act, ""), on=root)
   await settle()
   held = engine.transcript(root)
   assert [a for a in acts(log).values() if a[3] == root and a not in held] == []
@@ -421,9 +421,8 @@ async def test_a_chain_holds_whole_every_act_made_on_the_chain() -> None:
     "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",
     "#rung2 advance on prompt2",
   ]
-  assert own == ["rung3", "rung4", "rung5", "rung6"] and [engine.get(one)[4:6] for one in own] == [
+  assert own == ["rung3", "rung4", "rung5"] and [engine.get(one)[4:6] for one in own] == [
     (fresh(root, prompted(act, "int", "work"), "#rung1 advance on prompt1"), "rung1_told"),
-    ("t = read('a.txt')\nx = bash('echo hi')\nclose(1)", "rung1"),
     ("\n\n".join(told), "rung2_told"),
     ("close(None)", "rung2"),
   ]
@@ -1009,9 +1008,13 @@ async def test_the_donor_of_a_replay_is_the_ladder_of_the_origin_or_the_ladder_a
   act = engine.prompt(int, "more", to=OPERATOR, on=twin)
   engine.write(Text(act, "k = 2"), on=twin)
   await settle()
+  engine.write(Text(act, "k = 3"), on=twin)
+  await settle()
   mine = [a for a in said(log, "rung") if a[3] == twin]
-  assert [a[5] for a in mine[len(theirs) :]] == [f"{theirs[0][1]}_told", theirs[0][5], theirs[1][5], ""]
-  assert engine.module(twin)["k"] == 2 and engine.module(root)["k"] == 1
+  (made, again) = [a[1] for a in mine if a[2] == act]
+  donors = [f"{theirs[0][1]}_told", theirs[0][5], theirs[1][5], f"{made}_told"]
+  assert [a[5] for a in mine[len(theirs) :]] == ["", *donors, ""] and mine[-1][1] == again
+  assert engine.module(twin)["k"] == 3 and engine.module(root)["k"] == 1
 
 
 async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
@@ -1041,10 +1044,11 @@ async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
 
 
 async def test_a_write_of_a_door_cancels_each_rung_that_it_drops() -> None:
-  """A write of a door cancels each rung of that ladder that it drops and that is not done, but the rung that writes, so a word of the program it replaces ends where it waits, with every act under it, the rung that writes among them when it answers that word."""
+  """A write of a door cancels each rung of that ladder that it drops, but the rung that writes, so the plan that it replaces ends wholly: a word that waits ends where it waits, with every act under it, the rung that writes among them when it answers that word, and a word that is done ends each act that it made and that is not done."""
   _, log, root = born(
     "got = await prompt(str, 'next?')\nclose(got)",
     "door = get(get(get(acting())[2])[2])[2]\nwrite(Text(door, 'close(\"new\")'))",
+    auto=False,
   )
   act = engine.prompt(str, "plan", on=root)
   assert await act == "new"
@@ -1056,6 +1060,32 @@ async def test_a_write_of_a_door_cancels_each_rung_that_it_drops() -> None:
   assert [type(engine.peek(one)).__name__ for one in (old, asked, writer)] == ["CancelledError"] * 3
   assert [a[4] for a in said(log, "rung") if a[1] in (old, new)] == ["", 'close("new")']
   assert said(log, "cancel") == [("cancel", old, root)]
+  later = engine.prompt(None, "more", to=OPERATOR, on=root)
+  engine.write(Text(later, "b = bash('slow')"), on=root)
+  await settle()
+  (ended,) = [a[1] for a in said(log, "rung") if a[2] == later]
+  command = said(log, "bash")[-1][1]
+  assert engine.peek(ended, ...) is None and engine.peek(command, ...) is ...
+  engine.write(Text(later, "c = 1"), on=root)
+  await settle()
+  assert isinstance(engine.peek(command), CancelledError)
+  assert said(log, "cancel")[-1] == ("cancel", ended, root)
+
+
+async def test_a_write_of_a_door_that_drops_no_rung_that_ran_keeps_the_module() -> None:
+  """A write of a door that drops no rung that ran, since the gate refused each rung that it drops, keeps the module and every rung of the chain as they stand, and makes only the rung of what is new."""
+  _, log, root = born(
+    "k = 1", "ok = BAD", "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))", "close(ok)"
+  )
+  act = engine.prompt(int, "fix it", on=root)
+  assert await act == 2
+  await settle()
+  one, _, writer, made, _ = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert len(said(engine.transcript(root), "module")) == 1 and engine.module(root)["mine"] == act
+  assert [a for a in said(log, "rung") if a[2] == root] == []
+  ran = [a[4] for a in said(log, "run")]
+  assert {a[6] for a in said(log, "run")} == {""} and [ran.count(one) for one in (one, writer, made)] == [1, 1, 1]
+  assert engine.read(act, on=root).content == "k = 1\nok = 2\nclose(ok)"
 
 
 async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_birth() -> None:
@@ -1068,7 +1098,7 @@ async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_bir
   await settle()
   assert engine.read(act, on=root) == Text(act, "a = 1")
   assert engine.module(root)["a"] == 1 and "b" not in engine.module(root)
-  sand.script[root] = ["write(Text(get(acting())[2], 'c = 3'))\nd = 4", "close(None)"]
+  sand.script[root] = ["c = 0", "write(Text(get(acting())[2], 'c = 3'))\nd = 4", "close(None)"]
   later = engine.prompt(None, "edit", on=root)
   assert await later is None
   await settle(300)

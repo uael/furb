@@ -4,22 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import (
-  Dead,
-  Sand,
-  World,
-  born,
-  faulted,
-  fresh,
-  life,
-  machine,
-  of,
-  paragraphs,
-  prompted,
-  said,
-  settle,
-  written,
-)
+from conftest import Dead, Sand, World, born, fresh, life, machine, of, paragraphs, prompted, said, settle, written
 from furb import engine
 from furb.engine import OPERATOR, Refused, Text
 from furb_monty import _monty
@@ -147,19 +132,12 @@ async def test_a_write_to_the_door_of_a_prompt_edits_the_program_of_its_ladder()
   assert [(a[2], a[4], a[5]) for a in said(log, "rung")] == [(act, "k = 21", "")]
   engine.write(Text(act, "k = 21\nk = 22"), on=root)
   await settle()
-  first = said(log, "rung")[0][1]
-  bound = fresh(root, prompted(act, "int", "count"), written(first, "k = 21"))
-  assert [(a[2], a[4], a[5]) for a in said(log, "rung")] == [
-    (act, "k = 21", ""),
-    (root, bound, f"{first}_told"),
-    (root, "k = 21", first),
-    (act, "k = 22", ""),
-  ]
+  assert [(a[2], a[4], a[5]) for a in said(log, "rung")] == [(act, "k = 21", ""), (act, "k = 22", "")]
   assert engine.read(act, on=root) == Text(act, "k = 21\nk = 22") and engine.module(root)["k"] == 22
 
 
 async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_the_text_it_took() -> None:
-  """The chain answers a write of the door of one of its prompts with the text it took, and makes its rungs again from it."""
+  """The chain answers a write of the door of one of its prompts with the text it took, and makes its ladder from it."""
   sand, log, root = born()
   act = engine.prompt(int, "count", to=OPERATOR, on=root)
   got = engine.write(Text(act, "k = 21"), on=root)
@@ -176,41 +154,26 @@ async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_
 
 
 async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_of_that_rung_out() -> None:
-  """A write of a door that a rung of that ladder says leaves the word of that rung out, and that rung is no rung of the chain after it."""
+  """A write of a door that a rung of that ladder says leaves the word of that rung out of the ladder, so the door shows it no more."""
   _, log, root = born(
     "k = 1",
     "ok = BAD",
-    "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))",
+    "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))\nwrite(read(mine))",
     "close((k, ok, read(get(acting())[2]).content))",
   )
   act = engine.prompt(object, "fix it", on=root)
   assert await act == (1, 2, "k = 1\nok = 2")
   await settle()
-  binding, first, advance, refusal, writer = (a[4] for a in said(log, "run")[:5])
-  one, bad, _, made, last = [a[1] for a in said(log, "rung") if a[2] == act]
-  bound = fresh(root, prompted(act, "object", "fix it"), f"#{one} advance on {act}")
-  refused = f"#{bad} refused\n{bad}_findings = {faulted('ok = BAD')!r}\n\n#{bad} closed\n{bad}_value = Refused()"
-  read = engine.unquoted(f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\nok = BAD</s:read1_text>")
-  assert [(a[5], a[6]) for a in said(log, "run")] == [
-    (bound, ""),
-    ("k = 1", ""),
-    (f"#{bad} advance on {act}", ""),
-    (f"{refused}\n\n#{writer} advance on {act}", ""),
-    ("mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))", ""),
-    (read, ""),
-    (bound, binding),
-    ("k = 1", first),
-    (f"#{bad} advance on {act}", advance),
-    (f"{refused}\n\n#{writer} advance on {act}", refusal),
-    (written(made, "ok = 2"), ""),
-    ("ok = 2", ""),
-    (f"#{last} advance on {act}", ""),
-    ("close((k, ok, read(get(acting())[2]).content))", ""),
-  ]
-  program = engine.program(root)
-  assert isinstance(program, dict) and writer not in program
-  assert list(program.values()) == [a[5] for a in said(log, "run")[5:]]
+  one, _, writer, made, last = [a[1] for a in said(log, "rung") if a[2] == act]
+  read = f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\nok = BAD</s:read1_text>"
+  assert said(log, "run")[4][4:] == (
+    writer,
+    "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))\nwrite(read(mine))",
+    "",
+  )
+  assert said(log, "run")[5][4:] == (f"{made}_told", engine.unquoted(f"{read}\n\n{written(made, 'ok = 2')}"), "")
   assert engine.read(act, on=root) == Text(act, "k = 1\nok = 2\nclose((k, ok, read(get(acting())[2]).content))")
+  assert engine.read(act, on=root) == Text(act, "\n".join(engine.program(root)[x] for x in (one, made, last)))
 
 
 async def test_a_new_file_is_a_write_of_a_text_made_of_its_path_and_its_content() -> None:

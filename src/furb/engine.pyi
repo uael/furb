@@ -176,9 +176,9 @@ def write(text: Text, on: str = "") -> Text:
   A write takes no show, since what a write would show the word of the model already said: it tells the lines of what came back that differ from what it asked for, so a write that the disk took as it was asked tells nothing at all.
   A door that answers a write with more than it was asked for tells each line of what came back that differs from the line it was asked for at the same place.
   A write to the door of a prompt edits the program of its ladder, so the door and the verb are one act.
-  The chain answers a write of the door of one of its prompts with the text it took, and makes its rungs again from it.
+  The chain answers a write of the door of one of its prompts with the text it took, and makes its ladder from it.
   The chain makes the rungs of a write of a door from its text less the line breaks at its end, since a read of the door joins the words of its rungs with one, so an append to the door makes a rung of what it adds alone.
-  A write of a door that a rung of that ladder says leaves the word of that rung out, and that rung is no rung of the chain after it.
+  A write of a door that a rung of that ladder says leaves the word of that rung out of the ladder, so the door shows it no more.
   A new file is a write of a Text made of its path and its content.
   A write of scratch://plan.md puts its text in that file of the scratch directory, and makes the directory and the folders of the file first when they are not there.
   """
@@ -278,7 +278,7 @@ def get(about: str) -> Question:
 
 def pause(id: str) -> None:
   """A pause: while it stands, nothing it is over hears, and what is said meanwhile waits for the wake.
-  A control tells a header of its own name, so a model reads what was done to its work.
+  A control over an act that is not over tells a header of its own name, so a model reads what was done to its work.
   pause is given the id of a pending act or the id of a chain.
   A pause stops no reply in flight: the reply returns.
   A paused chain goes quiet as its in-flight work returns.
@@ -325,7 +325,7 @@ def close(value: object, id: str = "") -> None:
   close is given the value first, since a word that answers its own prompt names no act at all.
   A value closes an act with that value, and a prompt with a value that has its shape.
   A close that answers a prompt with a value that does not have the shape of the prompt raises Refused in the word that said it, so the prompt asks again.
-  A close on an act that is over reaches nothing.
+  A close on an act that is over tells nothing, and reaches only the words that still run under it.
   A close said from a word that names no act is over the prompt that made the rung of the word, and over the rung itself for a word its caller wrote, which answers no prompt.
   A close said from a word that retells reaches nothing and says nothing: it stops the word where it stands, so the rung is done with nothing and answers no prompt.
   A close of the prompt of the running word stops that word where it stands, as a raise does, and nothing after the call runs.
@@ -395,6 +395,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   A rung that retells is done with nothing when its word answers, runs to its end or is cancelled, whatever the Kernel makes of the word, and with what that word raised.
   A rung takes its own act, since the engine is the one that runs it.
   A rung with no word holds the word of its model when the reply for it is done, and it is done with the refusal a reply came to.
+  A rung with a word that it does not retell says its word ready only while the one that made it is not paused, so a paused prompt runs no word that a write of its door gives until the wake.
   """
 
 @overload
@@ -526,7 +527,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A replay makes the module of the chain again, as it was at its birth but on the standing the chain stands on then, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in.
   The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.
   A write of a door gives the words of that ladder alone, so every rung of the chain that is no rung of that ladder stands as it did.
-  A write of a door cancels each rung of that ladder that it drops and that is not done, but the rung that writes, so a word of the program it replaces ends where it waits, with every act under it, the rung that writes among them when it answers that word.
+  A write of a door cancels each rung of that ladder that it drops, but the rung that writes, so the plan that it replaces ends wholly: a word that waits ends where it waits, with every act under it, the rung that writes among them when it answers that word, and a word that is done ends each act that it made and that is not done.
+  A write of a door that drops no rung that ran, since the gate refused each rung that it drops, keeps the module and every rung of the chain as they stand, and makes only the rung of what is new.
   Before every reply the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
   The chain holds the text of each paragraph told on it, in order.
   At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.
@@ -649,7 +651,7 @@ class Exit:
 
 class Act[T = object](str):
   """The name of an act, which is what a verb gives and what a caller holds of the act: a string, so it names the act to close, cancel, pause, peek and get, and awaitable, so it gives what the act comes to.
-  An act is over when its done stands and lives until then; there is no other state, and a control over an act that is over reaches nothing, but a wake of the ear of a command that a pause holds.
+  An act is over when its done stands and lives until then; there is no other state, and a control over an act that is over tells nothing and reaches only the acts that it covers and that are not over, as control says, but a wake also reaches the ear of a command that a pause holds.
   The outcome of a cancelled act is the CancelledError it completed with.
   An act is dropped at its done, and so is its ear, but a lasting ear, which lives on until it returns, as the ear of a command does once it heard that done and told the exit.
   """
@@ -916,7 +918,7 @@ def told(id: str, what: str = "", *notes: Note, **words: object) -> Tell:
 def control(kind: str, name: str, id: str, *words: object) -> Fact:
   """A control said over the act it names, after a tell of a header of its name headed with that act, which is how pause, wake, cancel and close say theirs.
   The call gives the control as the life made it whole, so a close that named no act reads which act it is over.
-  A control is said while the act it names is not done, and a wake also while that act is paused, done or not, so a control that reaches nothing says nothing.
+  A control is said over any act of the life, and it tells its header only while the act it names is not over, so a control over an act that is over tells nothing and still reaches each act under it that is not over.
   """
 
 def headed(id: str, what: str = "", **words: object) -> str:

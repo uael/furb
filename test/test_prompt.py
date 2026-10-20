@@ -329,8 +329,8 @@ async def test_a_word_written_to_its_door_is_a_rung_of_it() -> None:
   await settle()
   first, asking, made = [a[1] for a in said(log, "rung") if a[2] == act]
   bind = fresh(root, prompted(act, "int", "count"), f"#{first} advance on {act}")
-  told = [f"#{asking} advance on {act}", written(made, "close(5)")]
-  assert (await act) == 5 and ran(log) == [bind, "a = 1", told[0], bind, "a = 1", told[1], "close(5)"]
+  told = f"#{asking} advance on {act}\n\n{written(made, 'close(5)')}"
+  assert (await act) == 5 and ran(log) == [bind, "a = 1", told, "close(5)"]
   assert [a[2] for a in said(log, "rung") if a[4] == "close(5)"] == [act]
 
 
