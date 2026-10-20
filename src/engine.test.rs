@@ -282,14 +282,18 @@ fn a_timeout_or_a_wait_past_the_longest_timer_runs_its_full_time() {
 fn a_command_that_outlives_its_timeout_ends_with_no_code() {
   let mut lived = Lived::new("late", &[], true).unwrap();
   let with = verbs::Bash { timeout: Some(0.2), on: on(&lived.root()), ..Default::default() };
+  // Each process of the command sleeps for LONG, and the one in the background holds the stdout of the command, which
+  // the World reads to its end before it says the exit. So an exit before LONG has passed proves that the World ended
+  // every process at the timeout, and the bound holds under any load that delays the test by less than LONG.
+  const LONG: u64 = 120;
   let begun = Instant::now();
-  let exit: Exit = block_on(lived.engine.bash("sleep 30 & sleep 30", with).unwrap()).unwrap();
+  let exit: Exit =
+    block_on(lived.engine.bash(&format!("sleep {LONG} & sleep {LONG}"), with).unwrap()).unwrap();
   assert_eq!(exit.code, None);
-  // The sleep in the background holds the stdout of the command until every process of it has ended.
   let took = begun.elapsed();
   assert!(
-    took < Duration::from_secs(15),
-    "the command ended with every process it started, in {took:?}"
+    took < Duration::from_secs(LONG),
+    "a process of the command outlived its timeout, for {took:?}"
   );
 }
 
