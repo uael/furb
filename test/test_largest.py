@@ -15,4 +15,4 @@ async def test_largest_is_the_largest_number_of_bytes_that_a_read_tells_of_the_l
   assert await engine.prompt(int, "read the most", on=root) == 1
   assert of(engine.turns(on=root), "read") == [f"#read1\nread1_path = 'most.txt'\nread1_text = {most!r}"]
   with pytest.raises(Refused, match=f"^past.txt shows {LARGEST + 1} bytes, over {LARGEST}$"):
-    engine.read("past.txt", on=root)
+    await engine.rung("read('past.txt')", on=root)

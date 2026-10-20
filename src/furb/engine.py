@@ -50,7 +50,7 @@ def take(*ids: str, inside: bool = True) -> Filter:
 
 def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   got = ask("read", on, path)
-  if isinstance(got, Text) and (size := len(shown(got, show).encode())) > LARGEST:
+  if acting() and isinstance(got, Text) and (size := len(shown(got, show).encode())) > LARGEST:
     raise Refused(f"{path} shows {size} bytes, over {LARGEST}")
   show is HIDDEN or tell("read", on, path, got, show)
   return got
