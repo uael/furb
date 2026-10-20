@@ -403,7 +403,12 @@ def bash(
           yield "done", qid, took
         case ("done", about, _, Exit(code, out, err) as got) if about == id and got is peek(id):
           if show is not HIDDEN:
-            yield told(id, f"exited {code}", stdout=shown(out, show), stderr=show_err and shown(err, show_err))
+            yield told(
+              id,
+              f"exited {code}" if code is not None else f"timed out after {timeout}s",
+              stdout=shown(out, show),
+              stderr=show_err and shown(err, show_err),
+            )
 
   return act("bash", on, controlled(ear, True), command, stdin, timeout)
 
@@ -844,8 +849,8 @@ How to work
   shares it, and a command finds it in $TMPDIR, where tools put their temp files too.
 - Use bash to run commands and to find paths, as bash("grep -rln pattern src"). Let its show pick the lines of a long
   command, as bash(command, show=span(-40, -1)), since its stream flows while it runs. Give a long command a timeout
-  that fits. The code None, as in "exited None", means that the timeout or a signal ended the command. bash runs
-  the command in /bin/sh, not in bash, so it takes no syntax of bash alone, as <(command).
+  that fits. A command that its timeout ended tells "timed out", with what it wrote before it. bash runs the
+  command in /bin/sh, not in bash, so it takes no syntax of bash alone, as <(command).
 - Start all independent acts first, then await each one.
 - A report of another chain is a claim. Examine a claim before you give it as a fact, and give each result from what
   an act showed.

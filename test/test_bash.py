@@ -141,6 +141,24 @@ async def test_the_exit_code_of_the_command_is_none_after_a_timeout() -> None:
   assert (await engine.bash("forever", timeout=0, on=root)).code is None
 
 
+async def test_a_signal_that_ends_the_command_gives_the_code_128_and_the_number_of_the_signal(tmp_path: Path) -> None:
+  """A signal that ends the command gives the code 128 and the number of the signal, as a shell gives, so the code None says that the timeout ended it."""
+  live, root = machine(tmp_path)
+  got = await engine.bash("kill -KILL $$", on=root)
+  late = await engine.bash("echo before; sleep 30", timeout=0.5, on=root)
+  ended(live)
+  assert (got.code, late.code, late.stdout.content) == (137, None, "before\n")
+
+
+async def test_a_command_that_its_timeout_ended_tells_timed_out_and_its_timeout_in_its_header() -> None:
+  """A command that its timeout ended tells timed out and its timeout in its header, as #bash1 timed out after 5.0s, with what it wrote before."""
+  _, _, root = born(auto=False)
+  one = engine.bash("forever", timeout=0.0, on=root)
+  world_says("out", one, "before\n", "stdout")
+  assert (await one).code is None
+  assert paragraphs(engine.turns(on=root))[-1] == f"#{one} timed out after 0.0s\n{one}_stdout = 'before'"
+
+
 async def test_a_stdin_of_text_is_fed_whole_to_the_command_at_its_start_and_then_it_closes() -> None:
   """A stdin of text is fed whole to the command at its start, and then it closes, so the default, an empty text, gives a stdin that is empty and closed."""
   # The World feeds the text and closes the stdin, which the test of the crate

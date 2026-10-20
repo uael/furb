@@ -578,6 +578,8 @@ def bash(
   The World ends the command at its timeout.
   The command completes with its exit code and its streams.
   The exit code of the command is None after a timeout.
+  A signal that ends the command gives the code 128 and the number of the signal, as a shell gives, so the code None says that the timeout ended it.
+  A command that its timeout ended tells timed out and its timeout in its header, as #bash1 timed out after 5.0s, with what it wrote before.
   A stdin of text is fed whole to the command at its start, and then it closes, so the default, an empty text, gives a stdin that is empty and closed.
   Without a stderr show, the stderr of the command flows into its stdout.
   A command without a timeout has the timeout TIMEOUT that the file names.
@@ -680,7 +682,7 @@ A paragraph is what one fact that tells stands as in a turn: its notes, one afte
 The first line of a paragraph is its header: # and, with no space, the id of the act it is of, then what happened to the act, as #bash1 exited 0 or #prompt1, and no text that the act tells.
 Every other line of a paragraph is python: a binding of each value that the act tells, and the binding of the act on its open.
 The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write or a cd stands at the place in the run where it was asked.
-The headers of the file are the open of an act, closed, done, exited, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled.
+The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled.
 A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing.
 A paragraph binds each value that it tells under a name: the id of the act, an underscore, and the word that holds the value, as prompt2_message, bash1_command, read3_text or prompt2_value.
 A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr.
