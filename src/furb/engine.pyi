@@ -933,16 +933,13 @@ def covers(a: Fact, id: str) -> bool:
 def paused(id: str) -> bool:
   """paused reads whether an act is paused off the transcript of its chain, so an ear born while a pause over its act stands is born paused, and takes its act all the same."""
 
-def ended(a: Fact, id: str) -> object:
-  """What an act a control is over is done with: the value a close carries for the act it names, and a CancelledError for every other."""
-
 def idle(id: str) -> Generator[None, Fact]:
   """idle hears every fact and says nothing of its own, which is the ear of a wait and the ear of the operator."""
 
 def lives(g: Ear, a: Fact | None) -> bool:
   """lives carries a fact into an ear, says everything the ear yields, and gives whether the ear lives on."""
 
-def pausing(ear: Callable[[str], Ear]) -> Callable[[str], Ear]:
+def controlled(ear: Callable[[str], Ear], lasting: bool = False) -> Callable[[str], Ear]:
   """An act is paused while the last control in record order that is over it is a pause.
   A pause holds delivery: a result that arrives enters the record and waits.
   A paused prompt stops at its next boundary, with its loop where it stood.
@@ -950,11 +947,10 @@ def pausing(ear: Callable[[str], Ear]) -> Callable[[str], Ear]:
   A rung carries on only while its own chain is not paused.
   A control from outside reaches a paused act at once, where what the words of the act say waits for the wake.
   A paused ear hears at once an act put to it, and every other fact at the wake.
-  """
-
-def ending(ear: Callable[[str], Ear]) -> Callable[[str], Ear]:
-  """A close from outside still ends what a pause is over.
-  It is over as it says a done of its own, so it never hears that done and says nothing after it.
+  A close from outside still ends what a pause is over.
+  What an act a control is over is done with: the value a close carries for the act it names, and a CancelledError for every other.
+  An ear that is not lasting is over as it says a done of its own, so it never hears that done and says nothing after it.
+  A lasting ear lives past the done of its act, as the ear of a command does, so it answers the questions put to it after, and a cancel or a close over its act ends the act all the same.
   """
 
 def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:

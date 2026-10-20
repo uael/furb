@@ -173,7 +173,7 @@ def debug(template: Template) -> None:
 
 
 def wait(seconds: float = 0.0, on: str = "") -> Act[None]:
-  return act("wait", on, ending(idle), seconds)
+  return act("wait", on, controlled(idle), seconds)
 
 
 def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
@@ -210,7 +210,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
 
   if not (word or to):
     to = module(on).get("actor", "")
-  return act("rung", on, ending(pausing(ear)), word, retells, to)
+  return act("rung", on, controlled(ear), word, retells, to)
 
 
 def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str = "") -> Act[T]:
@@ -228,7 +228,7 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
       while (yield)[:2] != ("done", asking):
         pass
 
-  return act("prompt", on, pausing(ending(ear)), named, message, to)
+  return act("prompt", on, controlled(ear), named, message, to)
 
 
 def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act[Never]:
@@ -330,7 +330,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         else:
           yield told(asking, f"advance on {maker}")
           with site.set(asking):
-            act("reply", id, ending(idle), to)
+            act("reply", id, controlled(idle), to)
           unseen = ""
       if unseen and all(peek(x[1], ...) is not ... for x in transcript() if x[0] == "prompt" and x[3] == id):
         prompt(None, unseen + " done")
@@ -360,7 +360,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
           if (usd and spent >= usd) or (share and filled >= share):
             pause(here)
 
-  return act("grant", on, ending(ear), usd, share)
+  return act("grant", on, controlled(ear), usd, share)
 
 
 def bash(
@@ -375,7 +375,7 @@ def bash(
     mute = "" if fed else "not fed"
     yield told(id, "", bound(id, "Exit"), command="" if show is HIDDEN else command)
     while True:
-      match a := (yield):
+      match (yield):
         case ("merged", qid, *_, about) if about == id:
           yield "done", qid, show_err is None
         case ("read", qid, *_, path) if path in (id + "/stdout", id + "/stderr"):
@@ -393,23 +393,17 @@ def bash(
             ),
           )
         case ("write", qid, *_, Text(path, text) as took) if path == id + "/stdin":
-          if mute:
+          if mute := "ended" if peek(id, ...) is not ... else mute:
             took = Refused(mute)
           else:
             yield "feed", id, text or None
             mute = "" if text else "closed"
           yield "done", qid, took
-        case _ if mute == "ended":
-          continue
-        case ("done", about, _, Exit(code, out, err)) if about == id:
-          mute = "ended"
+        case ("done", about, _, Exit(code, out, err) as got) if about == id and got is peek(id):
           if show is not HIDDEN:
             yield told(id, f"exited {code}", stdout=shown(out, show), stderr=show_err and shown(err, show_err))
-        case ("cancel" | "close", *_) if covers(a, id):
-          mute = "ended"
-          yield "done", id, ended(a, id)
 
-  return act("bash", on, pausing(ear), command, fed, timeout)
+  return act("bash", on, controlled(ear, True), command, fed, timeout)
 
 
 @dataclass
@@ -582,10 +576,6 @@ def paused(id):
   )
 
 
-def ended(a, id):
-  return a[3] if a[:2] == ("close", id) else CancelledError()
-
-
 def idle(id):
   while True:
     yield
@@ -600,35 +590,25 @@ def lives(g, a):
   return True
 
 
-def pausing(ear):
+def controlled(ear, lasting=False):
   def lived(id):
-    g, later, stopped = ear(id), [None], paused(id)
-    while True:
-      while later and not (stopped and later[0]):
-        if not lives(g, later.pop(0)):
+    g, later, stopped = ear(id), [], paused(id)
+    if lives(g, None):
+      while True:
+        a = later.pop(0) if later and not stopped else (yield)
+        if peek(id, ...) is not ... and not lasting:
           return
-      match a := (yield):
-        case ("pause" | "wake", *_) if covers(a, id):
-          stopped = a[0] == "pause"
-        case _ if get(a[1]) is a or (a[0] in ("cancel", "close") and covers(a, id) and not under(a[2], id)):
-          if not lives(g, a):
+        match a:
+          case ("pause" | "wake", *_) if covers(a, id):
+            stopped = a[0] == "pause"
+          case ("cancel" | "close", _, by, *_) if (
+            covers(a, id) and peek(id, ...) is ... and not (stopped and under(by, id))
+          ):
+            yield "done", id, a[3] if a[:2] == ("close", id) else CancelledError()
+          case _ if stopped and get(a[1]) is not a:
+            later.append(a)
+          case _ if not lives(g, a):
             return
-        case _:
-          later.append(a)
-
-  return lived
-
-
-def ending(ear):
-  def lived(id):
-    g, a = ear(id), None
-    while lives(g, a):
-      a = yield
-      if peek(id, ...) is not ...:
-        return
-      if a[0] in ("cancel", "close") and covers(a, id):
-        yield "done", id, ended(a, id)
-        return
 
   return lived
 

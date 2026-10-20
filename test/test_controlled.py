@@ -1,10 +1,11 @@
-"""pausing, the kind that holds what an act hears while a pause over it stands."""
+"""controlled, the ear of an act that the controls over that act reach."""
 
 from asyncio import CancelledError
 from collections.abc import Generator
 
 from conftest import born, dones, hushed, said, settle, slow, stalled
 from furb import engine
+from furb.engine import Text
 
 
 async def test_an_act_is_paused_while_the_last_control_in_record_order_that_is_over_it_is_a_pause() -> None:
@@ -91,7 +92,7 @@ async def test_a_control_from_outside_reaches_a_paused_act_at_once() -> None:
     while True:
       heard.append((yield))
 
-  probe = engine.act("probe", root, engine.pausing(listening))
+  probe = engine.act("probe", root, engine.controlled(listening))
   engine.pause(probe)
   await settle()
   before = len(heard)
@@ -114,7 +115,7 @@ async def test_a_paused_ear_hears_at_once_an_act_put_to_it() -> None:
     while True:
       heard.append((yield))
 
-  probe = engine.act("probe", root, engine.pausing(listening))
+  probe = engine.act("probe", root, engine.controlled(listening))
   engine.pause(probe)
   before = len(heard)
   read = engine.act("read", root, None, "a.txt")
@@ -122,3 +123,55 @@ async def test_a_paused_ear_hears_at_once_an_act_put_to_it() -> None:
   engine.wake(probe)
   await settle()
   assert [a for a in heard[before:] if a[1] == read] == [engine.get(read), ("done", read, "world", engine.peek(read))]
+
+
+async def test_a_close_from_outside_still_ends_what_a_pause_is_over() -> None:
+  """A close from outside still ends what a pause is over."""
+  _, _, root = born()
+  act = engine.prompt(int, "how many?", on=root)
+  await settle()
+  engine.pause(act)
+  engine.close(21, act)
+  await settle()
+  assert engine.peek(act, ...) is not ... and (await act) == 21
+
+
+async def test_an_ear_that_is_not_lasting_is_over_as_it_says_a_done_of_its_own() -> None:
+  """An ear that is not lasting is over as it says a done of its own, so it never hears that done and says nothing after it."""
+  _, log, root = born()
+  act = engine.rung("close(21)", on=root)
+  await act
+  ends = [one for one in said(log, "done") if one[1] == act]
+  assert [(one[2], one[3]) for one in ends] == [(act, 21)]
+  mark = len(log)
+  engine.cancel(act)
+  await settle()
+  assert [one for one in log[mark:] if one[2] == act] == []
+  assert engine.peek(act) == 21
+
+
+async def test_a_lasting_ear_lives_past_the_done_of_its_act() -> None:
+  """A lasting ear lives past the done of its act, as the ear of a command does, so it answers the questions put to it after, and a cancel or a close over its act ends the act all the same."""
+  _, _, root = born()
+
+  def serving(id: str) -> Generator[tuple | None, tuple]:
+    yield "started", id
+    while True:
+      match (yield):
+        case ("read", qid, *_, path) if path == f"{id}/door":
+          yield "done", qid, Text(path, "open")
+
+  door = engine.act("door", root, engine.controlled(serving, True))
+  assert engine.read(f"{door}/door", on=root).content == "open"
+  engine.cancel(door)
+  await settle()
+  assert isinstance(engine.peek(door), CancelledError)
+  assert engine.read(f"{door}/door", on=root).content == "open"
+
+
+async def test_what_an_act_a_control_is_over_is_done_with() -> None:
+  """What an act a control is over is done with: the value a close carries for the act it names, and a CancelledError for every other."""
+  _, _, _, act, step, _ = await stalled()
+  engine.close(21, act)
+  await settle()
+  assert engine.peek(act) == 21 and isinstance(engine.peek(step), CancelledError)

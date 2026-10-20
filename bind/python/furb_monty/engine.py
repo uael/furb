@@ -24,7 +24,7 @@ NAMES = vars(python)
 """NAMES are the names of the engine of this interpreter."""
 PURE = frozenset({
   "span", "grep", "differs", "HEAD", "TAIL", "HIDDEN",
-  "question", "headed", "bound", "shown", "unquoted", "offered", "ended", "idle",
+  "question", "headed", "bound", "shown", "unquoted", "offered", "idle",
 })  # fmt: skip
 """PURE are the callables of the engine that read no life, so the engine of this interpreter answers them."""
 ACTS = frozenset(
@@ -268,7 +268,7 @@ def eared(name: str, args: tuple) -> tuple:
       return (living().crossed(str(rest[0]) if name == "drive" else None, g), *rest)
     case ("act", (kind, on, making, *rest)) if ours(making):
       return (kind, on, lambda act: living().crossed(act, making(act)), *rest)
-    case ("pausing" | "ending", (making, *rest)) if ours(making):
+    case ("controlled", (making, *rest)) if ours(making):
       return (lambda act: living().crossed(act, making(act)), *rest)
   return args
 
