@@ -8,7 +8,9 @@
 # that says an error, a line that holds BARE gets a result with no block before it, a line that holds THINK gets a
 # thought before the text, and a line that holds LOUD closes the stdout, writes more on the stderr than its pipe holds,
 # and ends it with a failure, and a line that holds GAP streams its text with its first part left out, and settles the
-# text whole. A line that holds MUTE closes the stdout and lives on, and a line that holds ORPHAN starts a process that
+# text whole. A line that holds LOOP gets a message that calls a tool before the last one, as a turn of many
+# requests does, and a result whose usage is the sum of the two. A line that holds MUTE closes the stdout and lives
+# on, and a line that holds ORPHAN starts a process that
 # holds the stdout and the stderr open, writes the id of that process in the file orphan beside it, says so on the
 # stderr, and ends it with a failure. When the file loud stands beside it, it writes more on the stderr than its pipe
 # holds before it reads any input, when the file odd stands beside it, it writes a line that is no JSON before it reads
@@ -24,7 +26,7 @@ for arg in "$@"; do
   last=$arg
 done
 say() { printf '%s\n' "{\"type\":\"stream_event\",\"event\":$1}"; }
-settle() { printf '%s\n' "{\"type\":\"assistant\",\"message\":{\"content\":[$1]}}"; }
+settle() { printf '%s\n' "{\"type\":\"assistant\",\"message\":{\"content\":[$1]${2:+,\"usage\":$2}}}"; }
 part() { say "{\"type\":\"content_block_delta\",\"index\":$at,\"delta\":{\"type\":\"text_delta\",\"text\":$1}}"; }
 if [ -f "$here/loud" ]; then head -c 262144 /dev/zero | tr '\0' e >&2; fi
 if [ -f "$here/odd" ]; then echo "no line of json"; fi
@@ -45,6 +47,13 @@ while IFS= read -r line; do
   n=$((n + 1))
   count=$(( $(cat "$here/count" 2>/dev/null || echo 0) + 1 ))
   echo "$count" > "$here/count"
+  used="{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}"
+  case $line in
+    *LOOP*)
+      say '{"type":"message_start"}'
+      settle '{"type":"tool_use","id":"t1","name":"Bash","input":{}}' '{"input_tokens":1000,"output_tokens":900,"cache_read_input_tokens":2000,"cache_creation_input_tokens":0}'
+      used='{"input_tokens":1010,"output_tokens":905,"cache_read_input_tokens":2020,"cache_creation_input_tokens":3}' ;;
+  esac
   say '{"type":"message_start"}'
   at=0
   case $line in
@@ -67,6 +76,6 @@ while IFS= read -r line; do
   fi
   say "{\"type\":\"content_block_stop\",\"index\":$at}"
   say '{"type":"message_stop"}'
-  settle "{\"type\":\"text\",\"text\":$word}"
-  printf '%s\n' "{\"type\":\"result\",\"session_id\":\"$id\",\"total_cost_usd\":0.0$n,\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}}"
+  settle "{\"type\":\"text\",\"text\":$word}" "{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}"
+  printf '%s\n' "{\"type\":\"result\",\"session_id\":\"$id\",\"total_cost_usd\":0.0$n,\"usage\":$used}"
 done
