@@ -787,6 +787,8 @@ Your reply
 - The transcript binds each value that it tells under a name, as bash2_command or prompt3_value: a string of more than
   one line as a quote, and any other value as a statement. Use these names as the values that they hold.
 - The transcript binds the name of each act that it shows. Await an act for its value, as await bash2.
+- read, write, cd, clock, chance, gate and stand give their value at once: await none of them. bash, prompt, wait,
+  rung and grant give an act to await. chain gives a chain, which never settles: prompt on it, and never await it.
 - A comment in the transcript is what the chain tells you. It binds nothing.
 
 Your prompt
@@ -841,7 +843,8 @@ How to work
   shares it, and a command finds it in $TMPDIR, where tools put their temp files too.
 - Use bash to run commands and to find paths, as bash("grep -rln pattern src"). Let its show pick the lines of a long
   command, as bash(command, show=span(-40, -1)), since its stream flows while it runs. Give a long command a timeout
-  that fits. The code None, as in "exited None", means that the timeout or a signal ended the command.
+  that fits. The code None, as in "exited None", means that the timeout or a signal ended the command. bash runs
+  the command in /bin/sh, not in bash, so it takes no syntax of bash alone, as <(command).
 - Start all independent acts first, then await each one.
 - A report of another chain is a claim. Examine a claim before you give it as a fact, and give each result from what
   an act showed.
