@@ -156,14 +156,16 @@ is the folder `test` beside it.
 ## Commands
 
 Run every command from the root of the repository. Before it runs a command, `uv run` syncs the environment. The
-sync builds a package of the workspace again when the environment does not hold it, as in a new checkout, or when
-its `pyproject.toml` changed, so a short command can take minutes. A change of the crate alone starts no build, so
-after it, run the `uv sync` with `--reinstall-package` below. To run with no sync, use `uv run --no-sync`, or run
-the tools in `.venv/bin`.
+sync builds a package of the workspace again when the environment does not hold it, as in a new checkout, or when a
+file that its build reads changed, which the `cache-keys` of its `pyproject.toml` name: the crate, the engine and the
+python that the crate carries, and the extensions. So a change of `src/furb/engine.py` reaches the suite at the next
+`uv run`, after a build of a few seconds, and a short command can take minutes. To run with no sync, which builds
+nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
 
 - `uv sync`: install the environment, which builds the crate with its `python` feature into the package
-  `furb-monty`, and the command line into the package `furb-cli`. After a change of the crate,
-  `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again. This build, `cargo test`
+  `furb-monty`, and the command line into the package `furb-cli`, and builds them again after a change that their
+  `cache-keys` name. `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again in any
+  case. This build, `cargo test`
   and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them, so a word
   runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the release.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be

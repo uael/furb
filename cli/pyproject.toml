@@ -29,3 +29,21 @@ build-backend = "maturin"
 bindings = "bin"
 # The symbols of debugging are a third of the program, and no user of the wheel reads them.
 strip = true
+
+# The files that the build of the crate reads. When one of them changes, the next sync builds the package again, so a
+# change of the engine reaches the suite with no reinstall.
+[tool.uv]
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "../Cargo.toml" },
+  { file = "../Cargo.lock" },
+  { file = "../build.rs" },
+  { file = "../src/**/*.rs" },
+  { file = "../src/**/*.py" },
+  { file = "../src/**/*.pyi" },
+  { file = "../src/**/*.json" },
+  { file = "../extensions/*/*.py" },
+  { file = "../extensions/*/furb.json" },
+  { file = "Cargo.toml" },
+  { file = "src/**/*.rs" },
+]
