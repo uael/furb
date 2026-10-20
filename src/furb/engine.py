@@ -152,10 +152,12 @@ def close(value: object, id: str = "") -> None:
   match get(id := id or who):
     case ("prompt", _, _, on, shape, *_) if not isinstance(value, BaseException):
       try:
-        fits = isinstance(value, (s := eval(shape, module(on))) or object)
-      except TypeError:
-        fits = isinstance(value, getattr(s, "__origin__", ()))
-      except NameError:
+        s = eval(shape, module(on)) or object
+        try:
+          fits = isinstance(value, s)
+        except TypeError:
+          fits = isinstance(value, s.__origin__)
+      except Exception:
         fits = False
       if not fits:
         raise Refused(f"{value!r} not {shape}")
