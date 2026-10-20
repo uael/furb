@@ -95,6 +95,7 @@ class Opening(TypedDict):
   images: NotRequired[str | None]
   answer: NotRequired[Callable[[dict, Callable[..., None]], object] | None]
   stream: NotRequired[Callable[[str, str, str, str], None] | None]
+  log: NotRequired[Callable[[str], None] | None]
 
 type Ears = Iterable[tuple[str, object]]
 """The ears of a host, each a generator or an ear of the crate under the name the engine hears it by, in the order

@@ -127,6 +127,10 @@ export async function openEngine(options: EngineOptions): Promise<{ engine: Engi
       host.emit("fault", new Error(data.fault));
       return;
     }
+    if (data.log) {
+      host.emit("log", data.log);
+      return;
+    }
     if (data.state) {
       host.update(data.state as HostState);
       return;

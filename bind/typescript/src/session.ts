@@ -156,6 +156,7 @@ export class Session extends EventEmitter {
         images: this.imageDirectory,
         answer: this.options.answer,
         stream: (rung, chain, text, thinking) => this.wrote(rung, chain, text, thinking),
+        log: (line) => this.emit("log", line),
       });
       this.engine = this.console.engine = engine;
       // The observer heard the entries that the life kept as it opened, after the record it opened on.

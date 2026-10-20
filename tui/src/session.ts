@@ -212,6 +212,11 @@ export class Session extends EventEmitter {
     host.on("change", this.changed);
     host.on("facts", this.factsChanged);
     host.on("fault", this.fail);
+    // A report of the life that no model reads, such as a file that the scratch directory leaves out, shows as a
+    // notice, since a write to stderr would draw over the screen.
+    host.on("log", (line: string) => {
+      this.notice = line;
+    });
     void host.catalog().then((catalog) => {
       this.catalog = catalog;
       this.emit("change");
