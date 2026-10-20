@@ -63,7 +63,7 @@ uv run pre-commit install
 | `src/world/scratch.rs` | The scratch directory of a life: its place in the cache of furb for each record, the paths of `scratch://`, and the files that a record makes again in it. |
 | `src/world/bash.rs` | The commands: each runs in a shell of the machine, in the working directory of its chain, with `TMPDIR` set to the scratch directory. |
 | `src/world/time.rs` | The clock, a chance, and a wait. |
-| `src/world/store.rs` | The store: the record on the disk, one fact on each line, which one process at a time owns. |
+| `src/world/store.rs` | The store: the record on the disk, one fact on each line with the time the store kept it after the fact, which one process at a time owns. |
 | `src/world/operator.rs` | The rules by which every console reads what the operator answers. |
 | `src/world/provider.rs`, `src/world/provider/` | The provider of models, which [Changing the provider](#changing-the-provider) gives file by file. |
 | `src/life.rs` | The opening of a life, which every host shares: the record, the ears of the crate, and the extensions. |
