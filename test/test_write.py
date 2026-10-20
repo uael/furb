@@ -5,12 +5,12 @@ from pathlib import Path
 import pytest
 
 from conftest import (
-  BAD,
   Dead,
   Sand,
   World,
   born,
   ended,
+  faulted,
   fresh,
   life,
   machine,
@@ -190,7 +190,7 @@ async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word
   binding, first, advance, refusal, writer = (a[4] for a in said(log, "run")[:5])
   one, bad, _, made, last = [a[1] for a in said(log, "rung") if a[2] == act]
   bound = fresh(root, prompted(act, "object", "fix it"), f"#{one} advance on {act}")
-  refused = f"#{bad} refused\n{bad}_findings = {BAD!r}\n\n#{bad} closed\n{bad}_value = Refused()"
+  refused = f"#{bad} refused\n{bad}_findings = {faulted('ok = BAD')!r}\n\n#{bad} closed\n{bad}_value = Refused()"
   read = engine.unquoted(f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\nok = BAD</s:read1_text>")
   assert [(a[5], a[6]) for a in said(log, "run")] == [
     (bound, ""),

@@ -4,6 +4,7 @@ from conftest import (
   BAD,
   acts,
   born,
+  faulted,
   findings,
   fresh,
   gated,
@@ -48,7 +49,7 @@ async def test_a_gate_carries_the_word_alone() -> None:
   first, bad, after, edit, made, last = [a[1] for a in said(log, "rung") if a[2] == act]
   (copy,) = [a[1] for a in said(log, "rung") if a[5] == bad]
   bind = fresh(root, prompted(act, "int", "edit"), f"#{first} advance on {act}")
-  refused = f"#{bad} refused\n{bad}_findings = {BAD!r}\n\n#{bad} closed\n{bad}_value = Refused()"
+  refused = f"#{bad} refused\n{bad}_findings = {faulted('x = BAD')!r}\n\n#{bad} closed\n{bad}_value = Refused()"
   shut = f"#{copy} closed\n{copy}_value = Refused()\n\n#{last} advance on {act}"
   told = [f"#{bad} advance on {act}", f"{refused}\n\n#{after} advance on {act}", f"#{edit} advance on {act}"]
   read = engine.unquoted(f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\nx = BAD\ny = 2</s:read1_text>")
@@ -67,7 +68,7 @@ async def test_the_refused_paragraph_binds_the_findings_that_refused_the_word_of
   """The refused paragraph binds the findings that refused the word of a rung, one line for each, as rungN_findings."""
   _, log, root = born("k = BAD\nj = WORSE", "close(7)")
   assert await engine.prompt(int, "try", on=root) == 7
-  worse = "line 2: error[unresolved-reference] Name `WORSE` used when not defined"
+  worse = "line 2: error[unresolved-reference] Name `WORSE` used when not defined, in 'j = WORSE'"
   assert findings(log) == [[BAD, worse], []]
   step = said(log, "rung")[0][1]
   refused = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n", 1)[0].endswith(" refused")]
@@ -116,7 +117,7 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
   first = [a[1] for a in said(log, "rung") if not a[5]]
   copies = [(a[1], a[4], a[5]) for a in said(log, "rung") if a[5]]
   bind = fresh(root, prompted(act, "int", "count"), f"#{first[0]} advance on {act}")
-  refused = f"#{first[1]} refused\n{first[1]}_findings = {BAD!r}\n\n#{first[1]} closed\n{first[1]}_value = Refused()"
+  refused = f"#{first[1]} refused\n{first[1]}_findings = {faulted('x = BAD')!r}\n\n#{first[1]} closed\n{first[1]}_value = Refused()"
   bad = f"{refused}\n\n#{first[2]} advance on {act}"
   assert [(word, donor) for _, word, donor in copies] == [
     (bind, f"{first[0]}_told"),

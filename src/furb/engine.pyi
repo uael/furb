@@ -244,6 +244,9 @@ def gate(word: str, on: str = "") -> list[str]:
   The word of a rung runs only if the gate accepts the word, or if the chain wrote it.
   The gate checks the word of a rung against the rungs before it in record order.
   A response that is not python is a finding like any other.
+  Each finding names the line of the word it is found on, and quotes that line, cut to 80 characters, so a model reads what the gate read.
+  A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds that a reply is python and quotes only, with no fence, no markup and no prose.
+  An open mark of a quote that has no close mark is a finding of its own, which names that mark and the close mark it wants.
   The gate gives no finding when the gate accepts the rung.
   The journal keeps what the gate found, since the gate is of the outside, so a later life reads the same findings and asks the gate nothing again.
   """
