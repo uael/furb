@@ -314,7 +314,7 @@ test("Ctrl+S puts the input aside, the line under the input shows it, and Ctrl+S
     expect(await frame()).not.toContain("stashed");
   }));
 
-test.serial("Escape twice opens the rewind tree in the feed, which keys move, fold, and close", () =>
+test("Escape twice opens the rewind tree in the feed, which keys move, fold, and close", () =>
   composing(
     async ({ session, app, screen, frame }) => {
       await idle(session);
@@ -355,8 +355,7 @@ test.serial("Escape twice opens the rewind tree in the feed, which keys move, fo
     },
     { width: 120, height: 44, kittyKeyboard: true },
     true,
-  ),
-);
+  ));
 
 test("a space after a command whose values are known lists them, and Enter on a value runs the command", () =>
   composing(async ({ session, app, screen, frame }) => {

@@ -336,7 +336,7 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
   }
 });
 
-test.serial("a progress tick keeps an in-flight act's card and body in place", () =>
+test("a progress tick keeps an in-flight act's card and body in place", () =>
   composing(
     async ({ session, app, screen, frame }) => {
       // The clock stands still from before the wait starts, so the elapsed time is what the test moves it by, however
@@ -361,8 +361,7 @@ test.serial("a progress tick keeps an in-flight act's card and body in place", (
       }
     },
     { width: 120, height: 40 },
-  ),
-);
+  ));
 
 test("a name inside a transcript tag opens the same live inspector as Python code", () =>
   composing(
