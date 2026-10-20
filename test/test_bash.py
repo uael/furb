@@ -16,7 +16,6 @@ from conftest import (
   born,
   chained,
   dones,
-  ended,
   life,
   machine,
   paragraphs,
@@ -146,7 +145,7 @@ async def test_a_signal_that_ends_the_command_gives_the_code_128_and_the_number_
   live, root = machine(tmp_path)
   got = await engine.bash("kill -KILL $$", on=root)
   late = await engine.bash("echo before; sleep 30", timeout=0.5, on=root)
-  ended(live)
+  live.end()
   assert (got.code, late.code, late.stdout.content) == (137, None, "before\n")
 
 
@@ -435,7 +434,7 @@ async def test_the_world_runs_each_command_with_tmpdir_set_to_the_scratch_direct
   made = f'{shlex.quote(sys.executable)} -c "import tempfile; print(tempfile.mkstemp()[1])"'
   got = await engine.bash(f'cat "$TMPDIR/plan.md" && {made}', on=root)
   listed = engine.read("scratch://", on=root).content
-  ended(live)
+  live.end()
   plan, one = got.stdout.content.splitlines()
   assert (first.stdout.content, plan) == ("made\n", "plan")
   assert listed == f"plan.md\n{Path(one).name}"

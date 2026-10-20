@@ -18,10 +18,13 @@ pub mod ts;
 
 use std::{
   any::Any,
+  cell::RefCell,
   collections::HashMap,
   mem::ManuallyDrop,
   ops::{Deref, DerefMut},
+  rc::{Rc, Weak},
   sync::{Arc, Mutex, PoisonError},
+  task::{Context, Poll},
   thread::{self, ThreadId},
 };
 
@@ -31,7 +34,7 @@ use napi_derive::napi;
 use pyo3::pyfunction;
 
 use crate::{
-  Ear, Fact, Fault, Object,
+  Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
   extension::{self, Extension},
   life::Opening,
   wire,
@@ -65,9 +68,12 @@ pub struct NativeEar {
   hearing: Homed<Hearing>,
 }
 
+/// The ear that a [`Lent`] lends, which is gone once the ear is given back.
+type Loan = RefCell<Option<Box<dyn Ear>>>;
 /// The ear, and what the engine of python steps it with once it is born there.
 struct Hearing {
   ear: Option<Box<dyn Ear>>,
+  lent: Option<Weak<Loan>>,
   #[cfg(feature = "python")]
   stepped: Option<py::Stepped>,
 }
@@ -153,23 +159,59 @@ impl NativeEar {
   fn of(ear: Box<dyn Ear>) -> NativeEar {
     let hearing = Hearing {
       ear: Some(ear),
+      lent: None,
       #[cfg(feature = "python")]
       stepped: None,
     };
     NativeEar { hearing: Homed::new(hearing) }
   }
 
-  /// The ear, taken out, since an ear hears in one engine.
+  /// The ear, lent out, since an ear hears in one engine. The engine holds it, and this ear holds the way to it, so a
+  /// dispose lets it go while the engine lives.
   fn taken(&mut self) -> Result<Box<dyn Ear>, Fault> {
     let hearing = &mut self.hearing;
     #[cfg(feature = "python")]
     if hearing.stepped.is_some() {
       return Err(Fault::refused("an ear of the crate hears in one engine, and this one hears"));
     }
-    hearing
-      .ear
-      .take()
-      .ok_or_else(|| Fault::refused("an ear of the crate hears in one engine, and this one hears"))
+    let ear = hearing.ear.take().ok_or_else(|| {
+      Fault::refused("an ear of the crate hears in one engine, and this one hears")
+    })?;
+    let shared = Rc::new(RefCell::new(Some(ear)));
+    hearing.lent = Some(Rc::downgrade(&shared));
+    Ok(Box::new(Lent(shared)))
+  }
+}
+
+/// An ear of the crate as an engine holds it, which its [`NativeEar`] lets go at a dispose: from then on it is over.
+struct Lent(Rc<Loan>);
+
+impl Ear for Lent {
+  fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
+    match self.0.borrow_mut().as_mut() {
+      Some(ear) => ear.resume(heard, cx),
+      None => Step::Over,
+    }
+  }
+
+  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
+    match self.0.borrow_mut().as_mut() {
+      Some(ear) => ear.poll(cx),
+      None => Poll::Pending,
+    }
+  }
+
+  fn answered(&mut self, got: Result<Object, Fault>) {
+    if let Some(ear) = self.0.borrow_mut().as_mut() {
+      ear.answered(got);
+    }
+  }
+
+  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
+    match self.0.borrow_mut().as_mut() {
+      Some(ear) => ear.lent(heard, cx, life),
+      None => (Step::Over, life),
+    }
   }
 }
 
@@ -180,7 +222,15 @@ impl NativeEar {
   /// ends, a wait ends, and a store lets its record go.
   #[cfg_attr(feature = "typescript", napi)]
   pub fn dispose(&mut self) -> Result<(), Fault> {
-    self.hearing.ear.take();
+    let hearing = &mut self.hearing;
+    hearing.ear.take();
+    if let Some(shared) = hearing.lent.take().and_then(|one| one.upgrade()) {
+      let ear = shared
+        .try_borrow_mut()
+        .map_err(|_| Fault::refused("the ear hears, and cannot be let go now"))?
+        .take();
+      drop(ear);
+    }
     Ok(())
   }
 }

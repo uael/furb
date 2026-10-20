@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import NUMS, Dead, born, ended, life, machine, of, paragraphs, said, settle
+from conftest import NUMS, Dead, born, life, machine, of, paragraphs, said, settle
 from furb import engine
 from furb.engine import HEAD, HIDDEN, LARGEST, OPERATOR, Refused, Text, span
 from furb_monty import _monty
@@ -160,7 +160,7 @@ async def test_the_world_serves_the_scratch_directory_as_scratch(tmp_path: Path)
   engine.write(Text("scratch://notes/a.md", "a\n"), on=root)
   engine.write(Text("scratch://plan.md", "plan\n"), on=root)
   got = [engine.read(path, on=root) for path in ("scratch://plan.md", "scratch://", "scratch://notes")]
-  ended(live)
+  live.end()
   assert got == [
     Text("scratch://plan.md", "plan\n"),
     Text("scratch://", "notes/\nplan.md"),
@@ -179,7 +179,7 @@ async def test_each_text_and_each_refusal_of_scratch_names_its_path_under_scratc
     engine.read("scratch://none.md", on=root)
   with pytest.raises(Refused) as out:
     engine.write(Text("scratch://../out.md", "out"), on=root)
-  ended(live)
+  live.end()
   assert wrote == Text("scratch://plan.md", "plan\n")
   assert [str(none.value), str(out.value)] == [
     "There is no file at scratch://none.md.",
@@ -200,7 +200,7 @@ async def test_a_path_of_scratch_that_leaves_the_scratch_directory_is_refused(tm
     refused.append(str(one.value))
   with pytest.raises(Refused):
     engine.write(Text("scratch://away/new.md", "x"), on=root)
-  ended(live)
+  live.end()
   assert refused == [
     "scratch://../out.md is outside the scratch directory.",
     "scratch://away/away.md is outside the scratch directory.",

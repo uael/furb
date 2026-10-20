@@ -9,7 +9,6 @@ from conftest import (
   Sand,
   World,
   born,
-  ended,
   faulted,
   fresh,
   life,
@@ -243,6 +242,6 @@ async def test_a_write_of_scratch_puts_its_text_in_that_file_of_the_scratch_dire
   place = Path(_monty.scratch(str(record)) or tmp_path / "none")
   assert not place.exists()
   wrote = engine.write(Text("scratch://deep/er/plan.md", "plan\n"), on=root)
-  ended(live)
+  live.end()
   assert wrote == Text("scratch://deep/er/plan.md", "plan\n")
   assert (place / "deep" / "er" / "plan.md").read_text() == "plan\n"
