@@ -19,16 +19,27 @@ runs:
         version: ${{ env.UV_VERSION }}
         enable-cache: true
         cache-python: ${{ runner.os != 'Windows' }}
-    # The rust of rust-toolchain.toml, and the cache of what cargo built of the dependencies the last time.
-    # The key of the cache holds the files that tell cargo what to build, because the action does not read them.
+    # The rust of rust-toolchain.toml. The cache is the step after it, so that its key can leave out the rust of the
+    # machine.
+    - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+      with:
+        cache: false
+    # The cache of what cargo built of the dependencies the last time.
+    # The key of the cache holds the files that tell cargo what to build, because the action does not read them, and
+    # rust-toolchain.toml, which names the one rust that builds. The key holds no hash of the rust environment: that
+    # hash holds each rust that the image of the runner has, which the build does not use. Two images of one runner
+    # have each its own rust, so the jobs of one key saved two caches, which took the store of the repository past
+    # its 10 GB. The store then dropped caches, and a job that found none built every crate again, in up to 25
+    # minutes.
     # Only main saves the cache, and a pull request reads the cache of main.
     # Only a job that passes saves it. A job that fails or is cancelled holds part of the build, and a key that
     # matches whole is never saved again, so every later run would build again what that part lacks.
-    - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
-        cache-key: >-
-          ${{ hashFiles('.github/workflows/gates.yml', '.github/actions/setup/action.yml', '.pre-commit-config.yaml', 'pyproject.toml', 'bind/python/pyproject.toml', 'cli/pyproject.toml', 'bind/typescript/build.ts') }}
-        cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+        key: >-
+          ${{ hashFiles('rust-toolchain.toml', '.github/workflows/gates.yml', '.github/actions/setup/action.yml', '.pre-commit-config.yaml', 'pyproject.toml', 'bind/python/pyproject.toml', 'cli/pyproject.toml', 'bind/typescript/build.ts') }}
+        add-rust-environment-hash-key: false
+        save-if: ${{ github.ref == 'refs/heads/main' }}
         cache-on-failure: false
     - if: inputs.python != 'none'
       run: uv python install
