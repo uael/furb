@@ -225,15 +225,10 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
     if asks:
       yield "started", id
     yield told(id, "", bound(id, named), message=message)
-    live = set()
     while True:
-      if asks and not (live or paused(id)):
-        live.add(rung(to=to))
-      match (yield):
-        case ("rung", about, by, *_) if by == id:
-          live.add(about)
-        case ("done", about, *_):
-          live.discard(about)
+      if asks and all(map(over, asked(id, scope(id)))) and not paused(id):
+        rung(to=to)
+      yield
 
   return act("prompt", on, controlled(ear), named, message, to)
 
@@ -521,17 +516,17 @@ def scope(name):
   return ""
 
 
+def asked(id, on=""):
+  return [x[1] for x in transcript(on) if x[2] == id and question(x)]
+
+
 def tell(on, path, got=None, show=HEAD):
   if (who := acting()) and tells(who):
     say(
       "tell",
       who,
       [
-        headed(
-          [x[1] for x in transcript(on) if x[2] == who and question(x)][-1],
-          path=path,
-          **{"text": shown(got, show)} if isinstance(got, Text) else {"value": got},
-        )
+        headed(asked(who, on)[-1], path=path, **{"text": shown(got, show)} if isinstance(got, Text) else {"value": got})
       ],
     )
 
