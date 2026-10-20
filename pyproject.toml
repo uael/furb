@@ -118,8 +118,7 @@ extra-paths = ["test", "bind/python"]
 
 # The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
 # of an act, a task or a standing it reads after the check the sentence beside it makes. boot binds the names of its
-# life as globals of the module, which no statement at the top binds, and get gives the act that a word reads as a
-# tuple, and nothing for a name of no act.
+# life as globals of the module, which no statement at the top binds.
 [[tool.ty.overrides]]
 include = ["src/furb/engine.py"]
 
@@ -128,7 +127,6 @@ unresolved-attribute = "ignore"
 unsupported-operator = "ignore"
 invalid-argument-type = "ignore"
 unresolved-global = "ignore"
-invalid-return-type = "ignore"
 
 # The engine of monty reads the engine of this interpreter as the module the switch keeps, whose names ty does not
 # see through a module object, and the extension it stands on is built and not read.

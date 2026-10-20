@@ -778,7 +778,7 @@ def boot(record=(), **outside):
     hears(name, g, None)
     dispatch()
 
-  def get(about: str) -> tuple:
+  def get(about: str) -> Any:
     return known.get(about)
 
   def peek(at: str, waiting: object = None) -> object:
