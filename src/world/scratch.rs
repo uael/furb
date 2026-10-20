@@ -142,7 +142,7 @@ impl Scratch {
   /// the scheme with the last text that a write of it came to, which the journal kept, in the order of those last
   /// writes, and a write puts aside a file or a folder that stands in its way. A file that the machine refuses is
   /// told to the log of the host, since the World renders nothing to a model.
-  pub fn remade(&self, record: &[Object]) {
+  pub fn remade(&self, record: &[Object], log: &dyn Fn(&str)) {
     let at = &self.0.at;
     if record.is_empty() {
       let _ = fs::remove_dir_all(at);
@@ -167,17 +167,17 @@ impl Scratch {
     let beside = Scratch::at(at.with_file_name(name));
     let _ = fs::remove_dir_all(beside.path());
     if let Err(no) = beside.made() {
-      eprintln!("furb: the scratch directory of the record was not made again: {}", no.message());
+      log(&format!("the scratch directory of the record was not made again: {}", no.message()));
       return;
     }
     for (_, path, content) in files {
       if let Err(no) = put(beside.path(), &path, &content) {
-        eprintln!("furb: the scratch directory of the record leaves out {SCRATCH}{path}: {no}");
+        log(&format!("the scratch directory of the record leaves out {SCRATCH}{path}: {no}"));
       }
     }
     let _ = fs::remove_dir_all(at);
     if let Err(no) = fs::rename(beside.path(), at) {
-      eprintln!("furb: the scratch directory of the record was not made again: {no}");
+      log(&format!("the scratch directory of the record was not made again: {no}"));
       let _ = fs::remove_dir_all(beside.path());
     }
   }

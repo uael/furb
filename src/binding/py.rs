@@ -26,7 +26,7 @@ use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step,
   ear::{Call, Spoken},
   engine::{Life, handed, lending},
-  life::{Answer, Opening, Stream},
+  life::{Answer, Log, Opening, Stream},
   value::{IS, entry, field, marked, templated},
 };
 
@@ -241,6 +241,23 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Stream {
     Ok(Stream(Arc::new(move |rung, chain, text, thinking| {
       Python::attach(|py| {
         if let Err(no) = stream.call1(py, (rung, chain, text, thinking)) {
+          no.write_unraisable(py, None);
+        }
+      });
+    })))
+  }
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for Log {
+  type Error = PyErr;
+
+  /// A function of python, told on the thread that opens the life; what it raised goes to the hook of python for
+  /// what no one can raise.
+  fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+    let log = value.to_owned().unbind();
+    Ok(Log(Arc::new(move |line| {
+      Python::attach(|py| {
+        if let Err(no) = log.call1(py, (line,)) {
           no.write_unraisable(py, None);
         }
       });

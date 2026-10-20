@@ -151,6 +151,7 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     opened.on("fault", (error) =>
       self.postMessage({ fault: error instanceof Error ? error.message : String(error) }),
     );
+    opened.on("log", (line: string) => self.postMessage({ log: line }));
     opened.on("change", () => {
       timer ??= setTimeout(() => {
         timer = undefined;

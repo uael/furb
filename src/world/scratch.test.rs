@@ -13,6 +13,9 @@ fn place(name: &str) -> PathBuf {
   at
 }
 
+/// A log of the host that keeps nothing, for a record whose files the machine takes.
+fn quiet(_: &str) {}
+
 /// One entry of a record: the done of an act with what it came to, as the World said it.
 fn done(about: &str, value: Object) -> Object {
   let fact = [Object::string("done"), Object::string(about), Object::string("files"), value];
@@ -110,14 +113,14 @@ fn a_missing_directory_takes_the_last_write_of_each_path_in_the_order_of_those_w
     wrote("write4", "a/b.md", "in a folder"),
     wrote("write5", "plan.md", "new"),
   ];
-  Scratch::at(&at).remade(&record);
+  Scratch::at(&at).remade(&record, &quiet);
   assert!(at.join(WHOLE).is_file());
   assert_eq!(Scratch::at(&at).served("", None).unwrap().content, "a/\nplan.md");
   assert_eq!(fs::read_to_string(at.join("a").join("b.md")).unwrap(), "in a folder");
   assert_eq!(fs::read_to_string(at.join("plan.md")).unwrap(), "new");
   let folded = place("folded");
   Scratch::at(&folded)
-    .remade(&[wrote("write1", "Plan.md", "first"), wrote("write2", "plan.md", "last")]);
+    .remade(&[wrote("write1", "Plan.md", "first"), wrote("write2", "plan.md", "last")], &quiet);
   assert_eq!(
     fs::read_to_string(folded.join("plan.md")).unwrap(),
     "last",
@@ -128,27 +131,45 @@ fn a_missing_directory_takes_the_last_write_of_each_path_in_the_order_of_those_w
 }
 
 #[test]
+fn a_file_that_the_machine_refuses_is_told_to_the_log_of_the_host() {
+  let at = place("refused");
+  let told = std::sync::Mutex::new(Vec::new());
+  Scratch::at(&at)
+    .remade(&[wrote("write1", "../out.md", "out"), wrote("write2", "plan.md", "in")], &|line| {
+      told.lock().unwrap().push(line.to_owned())
+    });
+  assert_eq!(
+    *told.lock().unwrap(),
+    [format!(
+      "the scratch directory of the record leaves out {SCRATCH}../out.md: it is outside the scratch directory"
+    )]
+  );
+  assert_eq!(fs::read_to_string(at.join("plan.md")).unwrap(), "in");
+  fs::remove_dir_all(&at).unwrap();
+}
+
+#[test]
 fn a_whole_directory_stands_a_directory_that_is_not_whole_is_made_again_and_a_new_record_starts_empty()
  {
   let at = place("whole");
   let record = [wrote("write1", "plan.md", "kept")];
-  Scratch::at(&at).remade(&record);
+  Scratch::at(&at).remade(&record, &quiet);
   fs::write(at.join("plan.md"), "since").unwrap();
-  Scratch::at(&at).remade(&record);
+  Scratch::at(&at).remade(&record, &quiet);
   assert_eq!(
     fs::read_to_string(at.join("plan.md")).unwrap(),
     "since",
     "a whole directory stands as it is"
   );
   fs::remove_file(at.join(WHOLE)).unwrap();
-  Scratch::at(&at).remade(&record);
+  Scratch::at(&at).remade(&record, &quiet);
   assert_eq!(
     fs::read_to_string(at.join("plan.md")).unwrap(),
     "kept",
     "a directory that is not whole is made again"
   );
   assert!(!at.with_file_name(format!("{}.new", at.file_name().unwrap().display())).exists());
-  Scratch::at(&at).remade(&[]);
+  Scratch::at(&at).remade(&[], &quiet);
   assert!(!at.exists(), "a new record starts with an empty directory");
 }
 

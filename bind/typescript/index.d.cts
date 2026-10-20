@@ -380,6 +380,11 @@ export interface Opening {
   answer?: (request: { actor: string; chain: string; messages: unknown[]; settings: Record<string, unknown> }, write: (delta: { text?: string; thinking?: string }) => void) => Promise<unknown>
   /** A function of the host that is told what a model writes, as it writes it. */
   stream?: (rung: string, chain: string, text: string, thinking: string) => void
+  /**
+   * A function of the host that is told each report of the life that no model reads, one line each; the stderr of
+   * this process when unsaid.
+   */
+  log?: (line: string) => void
 }
 
 /** OPERATOR is the name of the operator in the roster and as an actor. */

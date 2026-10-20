@@ -26,7 +26,8 @@ root = engine.boot(record, world=world, **dict(ears))
 The provider offers the model of its `actor` and the models of its `roster`, or the first model the catalog offers when
 it names neither, and the operator alone when the roster names none and no actor is said. Its `answer`, a function,
 answers each request in place of the models, which the suite of furb does. Its `stream`, a function, is told what a
-model writes as it writes it, and `images` is the directory of the images that a message names. A life that is
+model writes as it writes it, its `log`, a function, is told each report of the life that no model reads, one line
+each, in place of the stderr of the process, and `images` is the directory of the images that a message names. A life that is
 `inspecting` keeps nothing, enables nothing new and asks no model. `models(claude)` gives the models the catalog of this
 machine offers, `model(name)` one model by its name, and `levels()` the levels of effort. `files(scratch)`,
 `bash(scratch)`, `time()`, `store(path)`, `official()`, `extensions(given)`, `memory(config)` and `skills(config)` give

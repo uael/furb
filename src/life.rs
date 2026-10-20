@@ -32,6 +32,10 @@ pub struct Answer(pub world::Hosted);
 /// that rung, and what it added to its text and to its thought.
 pub struct Stream(pub Writes);
 
+/// A function of the host that is told each report of the life that no model reads, one line each, such as a file
+/// of the record that the scratch directory leaves out. The host shows it in its log.
+pub struct Log(pub Arc<dyn Fn(&str) + Send + Sync>);
+
 /// What a life is opened on, which every host gives the same: the directory it stands on, the record it opens on and
 /// whether it keeps what it says there, whether it does work or only inspects its record, whether it enables the
 /// extensions that the configs turn on, the config directory of the user, and what its provider offers. Each part
@@ -98,6 +102,11 @@ pub struct Opening {
   )]
   #[cfg_attr(feature = "python", pyo3(default))]
   pub stream: Option<Stream>,
+  /// A function of the host that is told each report of the life that no model reads, one line each; the stderr of
+  /// this process when unsaid.
+  #[cfg_attr(feature = "typescript", napi(ts_type = "(line: string) => void"))]
+  #[cfg_attr(feature = "python", pyo3(default))]
+  pub log: Option<Log>,
 }
 
 impl Opening {
@@ -120,11 +129,16 @@ impl Opening {
       (Some(path), false) => (world::kept(path)?, None),
       (None, _) => (Vec::new(), None),
     };
+    let log = self.log.as_ref().map(|log| log.0.clone());
+    let told = |line: &str| match &log {
+      Some(log) => log(line),
+      None => eprintln!("furb: {line}"),
+    };
     let scratch = works.then(|| {
       let kept =
         self.record.as_ref().filter(|_| keeps).and_then(|path| Scratch::of(Path::new(path)));
       let scratch = kept.unwrap_or_else(Scratch::own);
-      scratch.remade(&record);
+      scratch.remade(&record, &told);
       scratch
     });
     let here = Places::here();
