@@ -139,8 +139,9 @@ class Sand:
   holds each command it runs: whether its stderr flows into its stdout, which it writes into its stdout then, and
   its two streams as they came. `gone`
   names the directories that are not there, which a cd into is refused; every other directory is there. `home` is
-  the home of its user, which a read or a write of a path that is ~ or starts with ~/ resolves against. `loop` is
-  the loop of the life it hears.
+  the home of its user, which a read or a write of a path that is ~ or starts with ~/ resolves against. `timers`
+  holds the timer of each wait that it took, which a done of that wait stops. `loop` is the loop of the life it
+  hears.
   """
 
   files: dict[str, str] = field(default_factory=dict)
@@ -156,6 +157,7 @@ class Sand:
   outs: dict[str, list] = field(default_factory=dict)
   gone: set[str] = field(default_factory=set)
   home: str = "/h"
+  timers: dict[str, asyncio.TimerHandle] = field(default_factory=dict)
   loop: asyncio.AbstractEventLoop = field(init=False, repr=False, compare=False)
 
   def writes(self, about: str, text: str, stream: str) -> None:
@@ -202,13 +204,14 @@ class Sand:
         if self.auto:
           self.loop.call_soon(partial(self.writes, about, f"ran {command}\n", "stdout"))
           self.loop.call_soon(partial(self.exits, about, 0))
-        if stdin:
-          self.fed += [stdin, None]
+        self.fed += [stdin, None] if stdin else []
       case ("out", about, _, text, stream) if about in self.outs:
         self.outs[about][1 if stream == "stdout" else 2] += text
-      case ("wait", about, _, _, seconds):
+      case ("wait", about, _, _, seconds, *_):
         yield "started", about
-        self.loop.call_later(seconds, partial(engine.say, "done", about, None))
+        self.timers[about] = self.loop.call_later(seconds, partial(engine.say, "done", about, None))
+      case ("done", about, *_) if about in self.timers:
+        self.timers.pop(about).cancel()
       case ("prompt", about, _, _, shape, _, _):
         yield "started", about
         if shape not in ("None", "bool", "int", "float", "str"):

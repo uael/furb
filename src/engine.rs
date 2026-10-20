@@ -1281,9 +1281,9 @@ macro_rules! made {
 
 made!(Text => "text", Exit => "exit", Fact => "fact");
 
-impl Plain for Option<Fact> {
+impl<T: Plain> Plain for Option<T> {
   fn plain(got: Object) -> Result<Self, Fault> {
-    if got.as_ref().type_name() == "NoneType" { Ok(None) } else { Fact::plain(got).map(Some) }
+    if got.as_ref().type_name() == "NoneType" { Ok(None) } else { T::plain(got).map(Some) }
   }
 }
 

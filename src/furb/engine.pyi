@@ -346,10 +346,12 @@ def debug(template: Template) -> None:
   A tell is on the scope of the act it is of, so debug takes no chain of its own.
   """
 
-def wait(seconds: float = 0.0, on: str = "") -> Act[None]:
-  """A wait: the World takes it and says it is done when its seconds have passed, and it is over then.
+def wait(seconds: float = 0.0, *acts: str, on: str = "") -> Act[str | None]:
+  """A wait: the World takes it and says it is done with nothing when its seconds have passed, and it is over then.
   A wait stands in no turns, since a wait is no work of a model.
-  It tells nothing and answers nothing, since a wait is no work of a model.
+  It tells nothing, since a wait is no work of a model.
+  wait(seconds, *acts) is done at the first of two events: with the name of the first of its acts that is done, or, of those that are done already when the wait is made, the first in the order it is given them, or with None when its seconds pass first.
+  The ear of a wait says it done when one of its acts is done, and the World stops its timer when it hears that done, as when a control ends it.
   """
 
 def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
@@ -863,8 +865,8 @@ type Merged = tuple[Literal["merged"], str, str, str, str]
 """A merged is the question of whether the stderr of a command flows into its stdout, which the command answers from what its verb was given, and which the World asks when it takes the command.
 The World runs a merged command with its stderr in its stdout, so no out fact of it is of its stderr, and the door of its stderr stays empty.
 """
-type Wait = tuple[Literal["wait"], str, str, str, float]
-"""A wait carries the seconds that must pass before the World is done with it."""
+type Wait = tuple[Literal["wait"], str, str, str, float, *tuple[str, ...]]
+"""A wait carries the seconds that must pass before the World is done with it, and the names of its acts, which are plain, so the journal makes it again."""
 type Rung = tuple[Literal["rung"], str, str, str, str, str, str]
 """A rung carries the word, the rung it retells and the actor."""
 type Prompt = tuple[Literal["prompt"], str, str, str, str, str, str]

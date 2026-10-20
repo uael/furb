@@ -393,11 +393,13 @@ impl JsEngine {
   }
 
   /// One verb of the contract with the words JavaScript gave, each as the contract says its type, and what it gave.
+  #[allow(clippy::too_many_arguments)]
   fn worded<'env>(
     &self,
     env: &'env Env,
     name: &str,
     given: Vec<(Unknown<'env>, Word)>,
+    placed: &[(&str, Word, Object)],
     rest: Option<Vec<Unknown<'env>>>,
     options: Option<JsObject<'env>>,
     keys: &[(&str, Word)],
@@ -406,41 +408,52 @@ impl JsEngine {
     for (one, word) in given {
       args.push(host::inward(env, one, word, 0)?);
     }
+    let words: Vec<(&str, Word)> =
+      placed.iter().map(|(key, word, _)| (*key, *word)).chain(keys.iter().copied()).collect();
+    let mut kwargs = match options {
+      Some(options) => host::named(env, options, &words)?,
+      None => Vec::new(),
+    };
+    // A word with a default that stands before the star goes by its place, so the words of the star follow it.
+    for (key, _, default) in placed {
+      let at = kwargs.iter().position(|(one, _)| one == key);
+      args.push(at.map_or_else(|| default.clone(), |at| kwargs.remove(at).1));
+    }
     for one in rest.unwrap_or_default() {
       args.push(host::inward(env, one, Word::Plain, 0)?);
     }
-    let kwargs = match options {
-      Some(options) => host::named(env, options, keys)?,
-      None => Vec::new(),
-    };
     let kwargs = kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
     self.said(name, args, kwargs)
   }
 
   /// One verb of the contract that gives a value, as JavaScript reads it.
+  #[allow(clippy::too_many_arguments)]
   fn plain<'env>(
     &self,
     env: &'env Env,
     name: &str,
     given: Vec<(Unknown<'env>, Word)>,
+    placed: &[(&str, Word, Object)],
     rest: Option<Vec<Unknown<'env>>>,
     options: Option<JsObject<'env>>,
     keys: &[(&str, Word)],
   ) -> napi::Result<Value> {
-    self.worded(env, name, given, rest, options, keys).map(Value)
+    self.worded(env, name, given, placed, rest, options, keys).map(Value)
   }
 
   /// One verb of the contract that makes an act, and the act.
+  #[allow(clippy::too_many_arguments)]
   fn acted<'env>(
     &self,
     env: &'env Env,
     name: &str,
     given: Vec<(Unknown<'env>, Word)>,
+    placed: &[(&str, Word, Object)],
     rest: Option<Vec<Unknown<'env>>>,
     options: Option<JsObject<'env>>,
     keys: &[(&str, Word)],
   ) -> napi::Result<JsAct> {
-    let got = self.worded(env, name, given, rest, options, keys)?;
+    let got = self.worded(env, name, given, placed, rest, options, keys)?;
     let id = got.as_ref().as_str().ok_or_else(|| napi::Error::from_reason("a verb gave no act"))?;
     Ok(JsAct { held: Rc::clone(&self.held), id: id.to_owned() })
   }

@@ -6,10 +6,13 @@
 //!
 //! The method of a verb takes the parameters that have no default, in their order, then a list for its star
 //! parameter, then one struct of the rest, named after the verb, whose fields are none until a host gives them, so
-//! the engine keeps its own defaults. The door to TypeScript takes the same, with an object of options for the struct,
-//! and the door to python takes each of those words by its name. A word whose type holds None beside a default of
-//! its own, as the stdin of bash, takes None as a word apart from that default: its field holds an option of an
-//! option, TypeScript gives it as null, and python as None, and a word left out leaves the default of the engine.
+//! the engine keeps its own defaults. A parameter with a default that stands before the star parameter goes to the
+//! engine by its place, with the default of the contract when the host gives none, so the words of the star follow
+//! it. The door to TypeScript takes the same, with an object of options for the struct, and the door to python takes
+//! each of those words by its name, but a word that stands before the star there too. A word whose type holds None
+//! beside a default of its own, as the stdin of bash, takes None as a word apart from that default: its field holds
+//! an option of an option, TypeScript gives it as null, and python as None, and a word left out leaves the default of
+//! the engine.
 //! What each annotation is, in rust and in TypeScript, is the table of [`Kind::of`] and [`Answer::of`], and an
 //! annotation that the tables do not hold stops the build, so no verb of the contract goes without its method.
 //!
@@ -154,6 +157,8 @@ enum Came {
   Object,
   Unit,
   Exit,
+  /// A text, or nothing.
+  MaybeStr,
 }
 
 /// What a verb gives.
@@ -189,6 +194,7 @@ impl Answer {
       "Act" | "Act[object]" | "Act[T]" | "Act[Never]" => Answer::Act(Came::Object),
       "Act[None]" => Answer::Act(Came::Unit),
       "Act[Exit]" => Answer::Act(Came::Exit),
+      "Act[str | None]" => Answer::Act(Came::MaybeStr),
       _ => panic!("the build holds no kind of answer for `{annotation}`"),
     }
   }
@@ -209,6 +215,7 @@ impl Answer {
       Answer::Act(Came::Object) => "Act<'_, Object>",
       Answer::Act(Came::Unit) => "Act<'_, ()>",
       Answer::Act(Came::Exit) => "Act<'_, Exit>",
+      Answer::Act(Came::MaybeStr) => "Act<'_, Option<String>>",
     }
   }
 
@@ -230,6 +237,7 @@ impl Answer {
       Answer::Act(Came::Object) => "Act & PromiseLike<unknown>",
       Answer::Act(Came::Unit) => "Act & PromiseLike<null>",
       Answer::Act(Came::Exit) => "Act & PromiseLike<ExitValue>",
+      Answer::Act(Came::MaybeStr) => "Act & PromiseLike<string | null>",
     }
   }
 }
@@ -240,6 +248,9 @@ struct Parameter {
   kind: Kind,
   /// Whether it has a default, which puts it in the struct of the verb.
   default: bool,
+  /// The default, as rust makes it, of a parameter with a default that stands before the star parameter of its
+  /// verb, which goes by its place so that the words of the star follow it.
+  placed: Option<String>,
 }
 
 /// One verb of the contract.
@@ -260,21 +271,26 @@ impl Verb {
       Kind::of(&one.annotation.as_deref().map(text).unwrap_or_default())
     };
     let given = &def.parameters;
+    let starred = given.vararg.is_some();
+    let positional = given.posonlyargs.len() + given.args.len();
     let parameters = given
       .posonlyargs
       .iter()
       .chain(&given.args)
       .chain(&given.kwonlyargs)
-      .map(|one| Parameter {
+      .enumerate()
+      .map(|(at, one)| Parameter {
         name: one.parameter.name.as_str().to_owned(),
         kind: annotated(&one.parameter),
         default: one.default.is_some(),
+        placed: one.default.as_deref().filter(|_| starred && at < positional).map(made),
       })
       .collect();
     let rest = given.vararg.as_deref().map(|one| Parameter {
       name: one.name.as_str().to_owned(),
       kind: annotated(one),
       default: false,
+      placed: None,
     });
     let answer = Answer::of(&def.returns.as_deref().map(text).unwrap_or_else(|| "None".to_owned()));
     Verb { name: def.name.as_str().to_owned(), doc: doc(def), parameters, rest, answer }
@@ -372,7 +388,14 @@ fn methods(verbs: &[Verb]) -> String {
   for verb in verbs {
     let mut given: Vec<String> =
       verb.needed().map(|one| format!("{}: {}", one.name, one.kind.given())).collect();
-    let words: Vec<String> = verb.needed().map(|one| one.kind.word(&one.name)).collect();
+    let mut words: Vec<String> = verb.needed().map(|one| one.kind.word(&one.name)).collect();
+    words.extend(verb.defaults().filter_map(|one| {
+      let held = one.kind.held("one");
+      one
+        .placed
+        .as_ref()
+        .map(|value| format!("match with.{} {{ Some(one) => {held}, None => {value} }}", one.name))
+    }));
     if let Some(rest) = &verb.rest {
       let typed = if rest.kind == Kind::Str { "&[&str]" } else { "Vec<Object>" };
       given.push(format!("{}: {typed}", rest.name));
@@ -402,7 +425,7 @@ fn methods(verbs: &[Verb]) -> String {
     }
     let mutable = if verb.with().is_some() { "mut " } else { "" };
     let _ = writeln!(out, "    let {mutable}kwargs: Vec<(&str, Object)> = Vec::new();");
-    for one in verb.defaults() {
+    for one in verb.defaults().filter(|one| one.placed.is_none()) {
       let held = one.kind.held("one");
       let _ = writeln!(
         out,
@@ -417,6 +440,23 @@ fn methods(verbs: &[Verb]) -> String {
   }
   out.push_str("}\n");
   out
+}
+
+/// A default of the contract as rust makes it: a number, a text, a boolean or nothing.
+fn made(value: &Expr) -> String {
+  match value {
+    Expr::NumberLiteral(number) => match &number.value {
+      Number::Int(int) => format!("Object::int({int})"),
+      Number::Float(float) => format!("Object::float({float:?})"),
+      Number::Complex { .. } => panic!("the build holds no complex default"),
+    },
+    Expr::StringLiteral(text) => format!("Object::string({:?})", text.value.to_str()),
+    Expr::BooleanLiteral(one) => format!("Object::bool({})", one.value),
+    Expr::NoneLiteral(_) => "Object::none()".to_owned(),
+    _ => panic!(
+      "the build holds a default of a number, a text, a boolean or nothing before a star alone"
+    ),
+  }
 }
 
 /// The struct of the defaults of each verb that has one.
@@ -469,8 +509,19 @@ fn scripted(verbs: &[Verb]) -> String {
       }
       None => "None",
     };
-    let keys: Vec<String> =
-      verb.defaults().map(|one| format!("({:?}, {})", one.name, one.kind.carried())).collect();
+    let keys: Vec<String> = verb
+      .defaults()
+      .filter(|one| one.placed.is_none())
+      .map(|one| format!("({:?}, {})", one.name, one.kind.carried()))
+      .collect();
+    // A word with a default that stands before the star goes by its place, with the default of the contract.
+    let placed: Vec<String> = verb
+      .defaults()
+      .filter_map(|one| {
+        let value = one.placed.as_ref()?;
+        Some(format!("({:?}, {}, {value})", one.name, one.kind.carried()))
+      })
+      .collect();
     let (called, answer) = match verb.answer {
       Answer::Act(_) => ("acted", "napi::Result<JsAct>"),
       _ => ("plain", "napi::Result<Value>"),
@@ -492,9 +543,10 @@ fn scripted(verbs: &[Verb]) -> String {
     );
     let _ = writeln!(
       out,
-      "    self.{called}(env, {:?}, vec![{}], {rest}, {options}, &[{}])\n  }}\n",
+      "    self.{called}(env, {:?}, vec![{}], &[{}], {rest}, {options}, &[{}])\n  }}\n",
       verb.name,
       words.join(", "),
+      placed.join(", "),
       keys.join(", ")
     );
   }
@@ -509,6 +561,10 @@ fn pythonic(verbs: &[Verb]) -> String {
   for verb in verbs {
     let mut signature: Vec<String> = verb.needed().map(|one| one.name.clone()).collect();
     let mut given: Vec<String> = verb.needed().map(|one| format!("{}: Value", one.name)).collect();
+    // A word with a default that stands before the star stands before it here too, as in python.
+    let (placed, named): (Vec<_>, Vec<_>) = verb.defaults().partition(|one| one.placed.is_some());
+    signature.extend(placed.iter().map(|one| format!("{} = None", one.name)));
+    given.extend(placed.iter().map(|one| format!("{}: Option<Value>", one.name)));
     match &verb.rest {
       Some(rest) => {
         signature.push(format!("*{}", rest.name));
@@ -519,17 +575,20 @@ fn pythonic(verbs: &[Verb]) -> String {
     }
     // A word whose None is a word of its own is left out apart from None, so a None that python gives goes in as
     // None, and a word left out leaves the default of the engine.
-    signature.extend(verb.defaults().map(|one| match one.kind {
+    signature.extend(named.iter().map(|one| match one.kind {
       Kind::MaybeStr => format!("{} = Maybe(None)", one.name),
       _ => format!("{} = None", one.name),
     }));
-    given.extend(verb.defaults().map(|one| match one.kind {
+    given.extend(named.iter().map(|one| match one.kind {
       Kind::MaybeStr => format!("{}: Maybe", one.name),
       _ => format!("{}: Option<Value>", one.name),
     }));
-    let words: Vec<String> = verb.needed().map(|one| format!("{}.0", one.name)).collect();
-    let keys: Vec<String> = verb
-      .defaults()
+    let mut words: Vec<String> = verb.needed().map(|one| format!("{}.0", one.name)).collect();
+    words.extend(placed.iter().filter_map(|one| {
+      one.placed.as_ref().map(|value| format!("{}.map_or_else(|| {value}, |one| one.0)", one.name))
+    }));
+    let keys: Vec<String> = named
+      .iter()
       .map(|one| match one.kind {
         Kind::MaybeStr => format!("({0:?}, {0}.0)", one.name),
         _ => format!("({0:?}, {0})", one.name),

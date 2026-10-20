@@ -171,8 +171,13 @@ def debug(template: Template) -> None:
     say(*told(who, "debugged", debug=text))
 
 
-def wait(seconds: float = 0.0, on: str = "") -> Act[None]:
-  return act("wait", on, controlled(idle), seconds)
+def wait(seconds: float = 0.0, *acts: str, on: str = "") -> Act[str | None]:
+  def ear(id):
+    while not (got := [x for x in acts if peek(x, ...) is not ...]):
+      yield
+    yield "done", id, got[0]
+
+  return act("wait", on, controlled(ear), seconds, *acts)
 
 
 def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
@@ -869,7 +874,7 @@ How to work
 - Use bash to run commands and to find paths, as bash("grep -rln pattern src"). Let its show pick the lines of a long
   command, as bash(command, show=span(-40, -1)), since its stream flows while it runs. Give a long command a timeout
   that fits. The code None, as in "exited None", means that the timeout or a signal ended the command.
-- Start all independent acts first, then await each one.
+- Start all independent acts first, then await each one, or await wait(seconds, *acts) for the first that ends.
 - A report of another chain is a claim. Examine a claim before you give it as a fact, and give each result from what
   an act showed.
 - To see a value, debug it: debug(t"{x=}") or debug(t"{x!r}") tells the text that the same f-string makes. When a

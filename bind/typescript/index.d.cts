@@ -114,8 +114,8 @@ export declare class Engine {
   close(value: unknown, options?: { id?: string } | null): void
   /** What a word tells of itself as it runs: the text of a template, which debug makes as python makes the f-string of the same template. */
   debug(template: Array<[string, unknown]>): void
-  /** A wait: the World takes it and says it is done when its seconds have passed, and it is over then. */
-  wait(options?: { seconds?: number; on?: string } | null): Act & PromiseLike<null>
+  /** A wait: the World takes it and says it is done with nothing when its seconds have passed, and it is over then. */
+  wait(acts?: string[], options?: { seconds?: number; on?: string } | null): Act & PromiseLike<string | null>
   /** The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is. */
   rung(options?: { word?: string; retells?: string; to?: string; on?: string } | null): Act & PromiseLike<unknown>
   /** A prompt: it makes the rung of one turn of its model, makes another when no rung that it made runs, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike. */
