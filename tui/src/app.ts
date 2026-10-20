@@ -2296,7 +2296,7 @@ export class App {
             [String(exit.code ?? "timeout"), exit.code === 0 ? c.success : c.danger],
           ] as Part[])
         : []),
-      [input === true ? "   input open" : "", c.faint],
+      [input === null ? "   input open" : "", c.faint],
       [typeof timeout === "number" && timeout !== TIMEOUT ? `   times out after ${timeout}s` : "", c.faint],
     ];
     meta.add(this.text(notes, c.faint));
@@ -3444,7 +3444,7 @@ export class App {
         })),
     feed: () =>
       this.session.activity
-        .filter((act) => act.kind === "bash" && !act.done && act.words[1] === true)
+        .filter((act) => act.kind === "bash" && !act.done && act.words[1] === null)
         .map((act) => ({ value: act.id, detail: clip(String(act.words[0] ?? ""), 48), more: true })),
     close: () =>
       this.session.activity

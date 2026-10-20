@@ -125,7 +125,7 @@ export declare class Engine {
   /** A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells that ledger at each answer of a model, so no turn a reply has sent grows a line after it. */
   grant(options?: { usd?: number; share?: number; on?: string } | null): Act & PromiseLike<null>
   /** A command: its streams as they come, its exit, the door of its streams and of its stdin, and what it came to. */
-  bash(command: string, options?: { fed?: boolean; timeout?: number; show?: unknown; show_err?: unknown; on?: string } | null): Act & PromiseLike<ExitValue>
+  bash(command: string, options?: { stdin?: string | null; timeout?: number; show?: unknown; show_err?: unknown; on?: string } | null): Act & PromiseLike<ExitValue>
 }
 export type JsEngine = Engine
 

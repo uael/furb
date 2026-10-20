@@ -195,13 +195,15 @@ class Sand:
     """
 
     match a:
-      case ("bash", about, _, on, command, _, timeout):
+      case ("bash", about, _, on, command, stdin, timeout):
         yield "started", about
         self.outs[about] = [engine.ask("merged", on, about), "", ""]
         self.loop.call_later(timeout, self.exits, about, None)
         if self.auto:
           self.loop.call_soon(partial(self.writes, about, f"ran {command}\n", "stdout"))
           self.loop.call_soon(partial(self.exits, about, 0))
+        if stdin:
+          self.fed += [stdin, None]
       case ("out", about, _, text, stream) if about in self.outs:
         self.outs[about][1 if stream == "stdout" else 2] += text
       case ("wait", about, _, _, seconds):

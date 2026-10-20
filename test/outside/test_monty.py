@@ -23,7 +23,7 @@ import furb
 import furb_monty.engine
 from conftest import OPERATOR, STANDS, Dead, Py, Sand, settle, swapped
 from furb import engine
-from furb.engine import Refused
+from furb.engine import TIMEOUT, Refused
 from furb_monty import _monty
 
 
@@ -293,6 +293,18 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
   root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
   await settle()
   assert _monty.enabled(engine.transcript(on=root)) == []
+
+
+async def test_the_door_gives_none_where_the_contract_holds_none_beside_a_default_of_its_own() -> None:
+  """A verb of the door takes None as a word where its type holds None beside a default of its own, as the stdin of
+  bash, and takes the default of the contract when the word is left out."""
+  root = furb_monty.engine.boot(world=Dead(stands=STANDS).hears())
+  held = furb_monty.engine.held_engine()
+  opened, shut = held.bash("cat", stdin=None, on=root), held.bash("cat", on=root)
+  assert [held.get(str(one)) for one in (opened, shut)] == [
+    ("bash", str(opened), OPERATOR, root, "cat", None, TIMEOUT),
+    ("bash", str(shut), OPERATOR, root, "cat", "", TIMEOUT),
+  ]
 
 
 async def test_the_door_names_the_work_that_an_earlier_life_left_pending(tmp_path: Path) -> None:

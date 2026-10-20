@@ -38,7 +38,7 @@ def door(one: str, part: str) -> str:
 async def test_a_command_its_streams_as_they_come_its_exit_and_its_doors() -> None:
   """A command: its streams as they come, its exit, the door of its streams and of its stdin, and what it came to."""
   sand, _, root = born(auto=False)
-  one = engine.bash("run", fed=True, show_err=TAIL, on=root)
+  one = engine.bash("run", stdin=None, show_err=TAIL, on=root)
   assert engine.write(Text(door(one, "stdin"), "go"), on=root) == Text(door(one, "stdin"), "go")
   assert sand.fed == ["go"]
   world_says("out", one, "half\n", "stdout")
@@ -61,18 +61,6 @@ async def test_bash_is_given_one_show_for_each_stream_that_bash_tells() -> None:
   assert paragraphs(engine.turns(on=root))[-1] == (f"#{one} exited 0\n{one}_stdout = 'two'\n{one}_stderr = 'b'")
 
 
-async def test_a_feed_whose_text_is_none_closes_the_stdin_of_the_command() -> None:
-  """A feed whose text is None closes the stdin of the command."""
-  sand, log, root = born(auto=False)
-  one = engine.bash("run", fed=True, on=root)
-  engine.write(Text(door(one, "stdin"), "go"), on=root)
-  engine.write(Text(door(one, "stdin")), on=root)
-  assert [a[3] for a in said(log, "feed")] == ["go", None]
-  assert sand.fed == ["go", None]
-  with pytest.raises(Refused, match="closed"):
-    engine.write(Text(door(one, "stdin"), "late"), on=root)
-
-
 async def test_the_commands_of_the_world_run_at_the_same_time() -> None:
   """The commands of the World run at the same time."""
   sand, _, root = born(auto=False)
@@ -87,12 +75,12 @@ async def test_the_commands_of_the_world_run_at_the_same_time() -> None:
   assert ((await one).code, (await two).code) == (0, 1)
 
 
-async def test_bash_is_given_a_command_a_fed_flag_a_timeout_and_a_show_for_each_stream() -> None:
-  """bash is given a command, a fed flag, a timeout, and a show for each stream, the plain words first, so the journal makes it again."""
+async def test_bash_is_given_a_command_its_stdin_a_timeout_and_a_show_for_each_stream() -> None:
+  """bash is given a command, its stdin, a timeout, and a show for each stream, the plain words first, so the journal makes it again."""
   sand, log, root = born(auto=False)
-  engine.bash("echo hi", True, 5.0, HEAD, TAIL, on=root)
+  engine.bash("echo hi", "go", 5.0, HEAD, TAIL, on=root)
   word = said(log, "bash")[0]
-  assert word == ("bash", word[1], OPERATOR, root, "echo hi", True, 5.0)
+  assert word == ("bash", word[1], OPERATOR, root, "echo hi", "go", 5.0)
   assert [e[0] for e in sand.record if e[0][0] == "bash"] == [word]
   again, _ = await relived(Sand(auto=False), plain(sand.record))
   assert said(again, "bash") == [word]
@@ -153,15 +141,17 @@ async def test_the_exit_code_of_the_command_is_none_after_a_timeout() -> None:
   assert (await engine.bash("forever", timeout=0, on=root)).code is None
 
 
-async def test_the_stdin_of_the_command_is_closed_unless_bash_opened_the_command_fed() -> None:
-  """The stdin of the command is closed unless bash opened the command fed."""
-  sand, _, root = born(auto=False)
-  shut, open_ = engine.bash("first", on=root), engine.bash("second", fed=True, on=root)
+async def test_a_stdin_of_text_is_fed_whole_to_the_command_at_its_start_and_then_it_closes() -> None:
+  """A stdin of text is fed whole to the command at its start, and then it closes, so the default, an empty text, gives a stdin that is empty and closed."""
+  # The World feeds the text and closes the stdin, which the test of the crate
+  # a_command_is_fed_a_stdin_of_text_whole_at_its_start_and_then_its_stdin_closes proves; the engine carries the text
+  # to the World in the words of the act and says no feed of it.
+  _, log, root = born(auto=False)
+  engine.bash("git commit -F -", stdin="a message\n", on=root)
+  engine.bash("second", on=root)
   await settle()
-  with pytest.raises(Refused, match="not fed"):
-    engine.write(Text(door(shut, "stdin"), "x"), on=root)
-  assert engine.write(Text(door(open_, "stdin"), "x"), on=root) == Text(door(open_, "stdin"), "x")
-  assert sand.fed == ["x"]
+  assert [a[5] for a in said(log, "bash")] == ["a message\n", ""]
+  assert said(log, "feed") == []
 
 
 async def test_without_a_stderr_show_the_stderr_of_the_command_flows_into_its_stdout() -> None:
@@ -182,27 +172,15 @@ async def test_a_command_without_a_timeout_has_the_timeout_timeout_that_the_file
   assert [a[6] for a in said(log, "bash")] == [engine.TIMEOUT]
 
 
-async def test_the_stdin_door_is_writable_while_a_fed_command_runs() -> None:
-  """The door bash1/stdin is writable while a fed command runs."""
+async def test_a_stdin_of_none_stays_open_and_the_stdin_door_is_writable_while_the_command_runs() -> None:
+  """A stdin of None stays open, and the door bash1/stdin is writable while the command runs."""
   sand, _, root = born(auto=False)
-  one = engine.bash("run", fed=True, on=root)
+  one = engine.bash("run", stdin=None, on=root)
   assert one == "bash1"
   await settle()
   assert engine.write(Text("bash1/stdin", "go"), on=root) == Text("bash1/stdin", "go")
   assert engine.write(Text("bash1/stdin", "more"), on=root) == Text("bash1/stdin", "more")
   assert sand.fed == ["go", "more"]
-
-
-async def test_a_write_of_nothing_to_the_stdin_door_closes_the_stdin() -> None:
-  """A write of nothing to bash1/stdin closes the stdin."""
-  sand, _, root = born(auto=False)
-  one = engine.bash("run", fed=True, on=root)
-  assert one == "bash1"
-  assert engine.write(Text("bash1/stdin", "go"), on=root) == Text("bash1/stdin", "go")
-  assert engine.write(Text("bash1/stdin"), on=root) == Text("bash1/stdin")
-  assert sand.fed == ["go", None]
-  with pytest.raises(Refused, match="closed"):
-    engine.write(Text("bash1/stdin", "late"), on=root)
 
 
 async def test_the_stdout_and_the_stderr_doors_are_readable_while_the_command_runs_and_after_it() -> None:
@@ -236,17 +214,6 @@ async def test_the_stdout_and_the_stderr_doors_are_readable_while_the_command_ru
   world_says("done", one, Exit(0, Text(door(one, "stdout"), "kept\n"), Text(door(one, "stderr"))))
   await settle()
   assert engine.read(door(one, "stdout"), on=over).content == "kept\n"
-
-
-async def test_the_engine_refuses_a_write_to_the_door_of_a_stream() -> None:
-  """The engine refuses a write to the door bash1/stdout or bash1/stderr."""
-  sand, _, root = born(auto=False)
-  one = engine.bash("run", on=root)
-  assert one == "bash1"
-  for path in ("bash1/stdout", "bash1/stderr"):
-    with pytest.raises(Refused, match="takes no write"):
-      engine.write(Text(path, "x"), on=root)
-  assert [a for a in sand.calls if a[0] == "write"] == []
 
 
 async def test_a_wake_on_a_chain_with_a_source_starts_no_inherited_command_again() -> None:
@@ -288,24 +255,6 @@ async def test_the_world_takes_it_and_a_later_life_has_it_take_it_again_only_whe
   await settle()
   got = engine.peek(two)
   assert [a[1] for a in said(third.calls, "bash")] == [two] and isinstance(got, Exit) and got.code == 0
-
-
-async def test_its_stdin_is_written_while_it_runs_and_it_is_fed() -> None:
-  """Its stdin is written while it runs and it is fed, which it says to the World as a feed and answers with the text that landed, and a write of nothing closes it; a write of it takes no word once the command ended, and none at all when the command was not opened fed."""
-  sand, _, root = born(auto=False)
-  one = engine.bash("run", fed=True, on=root)
-  bare = engine.bash("other", on=root)
-  await settle()
-  assert engine.write(Text(door(one, "stdin"), "go"), on=root) == Text(door(one, "stdin"), "go")
-  assert sand.fed == ["go"]
-  engine.write(Text(door(one, "stdin")), on=root)
-  assert sand.fed == ["go", None]
-  with pytest.raises(Refused, match="not fed"):
-    engine.write(Text(door(bare, "stdin"), "x"), on=root)
-  sand.exits(one, 0)
-  await one
-  with pytest.raises(Refused, match="ended"):
-    engine.write(Text(door(one, "stdin"), "late"), on=root)
 
 
 async def test_with_a_hidden_show_it_tells_its_header_and_its_binding_alone() -> None:
@@ -383,20 +332,29 @@ async def test_the_stdout_of_a_command_without_a_show_is_told_as_tail() -> None:
   assert paragraphs(engine.turns(on=root))[-1] == f"#{one} exited 0\n<s:{one}_stdout>\n{told}</s:{one}_stdout>"
 
 
-async def test_the_engine_refuses_a_write_to_the_stdin_door_after_the_command_ended() -> None:
-  """The engine refuses a write to bash1/stdin once the command ended or was cancelled."""
+async def test_the_engine_refuses_a_write_to_a_door_of_a_command_that_takes_no_write() -> None:
+  """The engine refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, or once its stdin is closed, as a stdin of text is from the start."""
   sand, _, root = born()
-  one = engine.bash("echo hi", fed=True, on=root)
+  one = engine.bash("echo hi", stdin=None, on=root)
   assert one == "bash1"
+  for path in ("bash1/stdout", "bash1/stderr"):
+    with pytest.raises(Refused, match="takes no write"):
+      engine.write(Text(path, "x"), on=root)
   await one
   with pytest.raises(Refused, match="ended"):
     engine.write(Text("bash1/stdin", "late"), on=root)
   sand.auto = False
-  gone = engine.bash("sleep", fed=True, on=root)
+  gone, shut = engine.bash("sleep", stdin=None, on=root), engine.bash("sleep", stdin=None, on=root)
+  given, bare = engine.bash("cat", stdin="x", on=root), engine.bash("cat", on=root)
   engine.cancel(gone)
   await settle()
   with pytest.raises(Refused, match="ended"):
     engine.write(Text(door(gone, "stdin"), "late"), on=root)
+  engine.write(Text(door(shut, "stdin")), on=root)
+  for one in (shut, given, bare):
+    with pytest.raises(Refused, match="closed"):
+      engine.write(Text(door(one, "stdin"), "late"), on=root)
+  assert [a for a in sand.calls if a[0] == "write"] == []
 
 
 async def test_its_close_tells_what_its_stdout_shows() -> None:
@@ -429,12 +387,12 @@ async def test_the_world_asks_a_command_whether_its_stderr_flows_into_its_stdout
 
 
 async def test_the_world_hears_the_bash_itself() -> None:
-  """The World hears the bash itself, with the command, the fed flag and the timeout, and no working directory and no show."""
+  """The World hears the bash itself, with the command, the stdin and the timeout, and no working directory and no show."""
   _, log, root = born()
   engine.cd("/deep", on=root)
-  one = engine.bash("echo hi", fed=True, timeout=5.0, show=HIDDEN, show_err=TAIL, on=root)
+  one = engine.bash("echo hi", stdin=None, timeout=5.0, show=HIDDEN, show_err=TAIL, on=root)
   assert (await one).stdout.content == "ran echo hi\n"
-  assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", True, 5.0)]
+  assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", None, 5.0)]
 
 
 async def test_the_world_that_takes_a_command_answers_it() -> None:

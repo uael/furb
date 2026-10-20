@@ -90,7 +90,7 @@ async def test_a_fact_said_it_says_its_kind_the_act_it_is_about_who_said_it_and_
   """A fact said: it says its kind, the act it is about, who said it and its words, in that order, and nothing else, since the chain it is on is the scope of the act it is about."""
   sand, log, root = born()
   act = engine.bash("echo hi", on=root)
-  assert said(log, "bash")[0] == ("bash", act, OPERATOR, root, "echo hi", False, 600.0)
+  assert said(log, "bash")[0] == ("bash", act, OPERATOR, root, "echo hi", "", 600.0)
   assert engine.scope(act) == root
   engine.cancel(act)
   over = said(log, "cancel")[0]
@@ -107,7 +107,7 @@ async def test_the_bus_makes_every_fact_whole_from_what_it_is_given() -> None:
   assert engine.get("read1") == ("read", "read1", OPERATOR, "chain1", "a.txt")
   assert got == Text("/w/a.txt", "one\ntwo\n")
   act = engine.bash("echo hi", on=root)
-  assert said(log, "bash")[0] == ("bash", act, OPERATOR, root, "echo hi", False, 600.0)
+  assert said(log, "bash")[0] == ("bash", act, OPERATOR, root, "echo hi", "", 600.0)
   assert all(len(a) >= 3 and a[2] for a in log)
 
 

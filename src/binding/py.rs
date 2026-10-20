@@ -157,6 +157,18 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Value {
   }
 }
 
+/// A word that a caller may leave out of a verb where its type holds None beside a default of its own: what the
+/// caller gave, None among it, or nothing for a word left out, which leaves the default of the engine.
+struct Maybe(Option<Value>);
+
+impl<'a, 'py> FromPyObject<'a, 'py> for Maybe {
+  type Error = PyErr;
+
+  fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+    of_python(&value).map(|one| Maybe(Some(Value(one))))
+  }
+}
+
 impl<'py> IntoPyObject<'py> for Value {
   type Target = PyAny;
   type Output = Bound<'py, PyAny>;

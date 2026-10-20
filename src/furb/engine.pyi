@@ -558,7 +558,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
 
 def bash(
   command: str,
-  fed: bool = False,
+  stdin: str | None = "",
   timeout: float = TIMEOUT,
   show: Show = TAIL,
   show_err: Show | None = None,
@@ -566,9 +566,8 @@ def bash(
 ) -> Act[Exit]:
   """A command: its streams as they come, its exit, the door of its streams and of its stdin, and what it came to.
   bash is given one show for each stream that bash tells.
-  A feed whose text is None closes the stdin of the command.
   The commands of the World run at the same time.
-  bash is given a command, a fed flag, a timeout, and a show for each stream, the plain words first, so the journal makes it again.
+  bash is given a command, its stdin, a timeout, and a show for each stream, the plain words first, so the journal makes it again.
   bash gives the command, which is awaited for its exit code and its streams.
   The World runs the command in the working directory of the chain, which it reads.
   The World runs each command with TMPDIR set to the scratch directory, and TMP and TEMP too on Windows, which it makes first, so the command finds the files of scratch:// in $TMPDIR, and a program that reads TMPDIR, as tempfile of python does, makes its files there.
@@ -576,26 +575,23 @@ def bash(
   The World ends the command at its timeout.
   The command completes with its exit code and its streams.
   The exit code of the command is None after a timeout.
-  The stdin of the command is closed unless bash opened the command fed.
+  A stdin of text is fed whole to the command at its start, and then it closes, so the default, an empty text, gives a stdin that is empty and closed.
   Without a stderr show, the stderr of the command flows into its stdout.
   A command without a timeout has the timeout TIMEOUT that the file names.
   The World that takes a command answers it: it says it done with its Exit, the code and the streams it kept, since the owner of an act is the one that answers it.
-  The door bash1/stdin is writable while a fed command runs.
-  A write of nothing to bash1/stdin closes the stdin.
+  A stdin of None stays open, and the door bash1/stdin is writable while the command runs.
   The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it: a read gives that stream of the Exit once the command exited, and otherwise the out facts of that stream since the World last started it, so a command that runs again starts its streams again.
-  The engine refuses a write to the door bash1/stdout or bash1/stderr.
   A wake on a chain with a source starts no inherited command again, since only the owner starts an act.
   The World takes it, and a later life has the World take it again only when the record shows it started and not ended, and then only at a wake.
-  Its stdin is written while it runs and it is fed, which it says to the World as a feed and answers with the text that landed, and a write of nothing closes it; a write of it takes no word once the command ended, and none at all when the command was not opened fed.
   With a hidden show it tells its header and its binding alone, and not its command and not its close.
   Once it has ended it lives on to answer its doors, and nothing else reaches it, so a cancel does not end it, as it ends every other act.
   It runs until it ends, until its timeout or until a cancel: the World is the one that ends it, at the timeout it reads off the act as at a cancel, since the World is the one running it, and the engine says nothing to make it.
   A pause stops no command: it runs on, the World says it done when it ends, and its ear tells its exit at the wake.
   Its close tells what its stdout shows, and what its stderr shows when that stream has a show of its own that is no hidden one, so a merged command tells no stderr.
   The stdout of a command without a show is told as TAIL, which is the span of its last 250 lines.
-  The engine refuses a write to bash1/stdin once the command ended or was cancelled.
+  The engine refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, or once its stdin is closed, as a stdin of text is from the start.
   The World asks a command whether its stderr flows into its stdout, and the command answers from what its verb was given.
-  The World hears the bash itself, with the command, the fed flag and the timeout, and no working directory and no show.
+  The World hears the bash itself, with the command, the stdin and the timeout, and no working directory and no show.
   """
 
 @dataclass
@@ -820,7 +816,7 @@ type Out = tuple[Literal["out"], str, str, str, str]
 A later life reads the parts that a command told before the death of the process.
 """
 type Feed = tuple[Literal["feed"], str, str, str | None]
-"""A write to the stdin door of a fed command hands the World a feed with the text."""
+"""A write to the stdin door of a command with a stdin of None hands the World a feed with the text and gives that text, and a write of nothing hands it a feed of None, which closes the stdin."""
 type Read = tuple[Literal["read"], str, str, str, str]
 """A read is the question of the text at a path."""
 type Write = tuple[Literal["write"], str, str, str, Text]
@@ -873,8 +869,8 @@ type Chain = tuple[Literal["chain"], str, str, str, str, str]
 """A chain carries the label and the source of a chain, and every chain is chainN whether boot or chain opened it."""
 type Grant = tuple[Literal["grant"], str, str, str, float | None, float | None]
 """A grant carries the ceiling in dollars and the ceiling in share of the window."""
-type Bash = tuple[Literal["bash"], str, str, str, str, bool, float]
-"""A bash carries the command, the fed flag and the timeout, and no show and no working directory."""
+type Bash = tuple[Literal["bash"], str, str, str, str, str | None, float]
+"""A bash carries the command, the stdin and the timeout, and no show and no working directory."""
 
 def under(name: str, of: str) -> bool:
   """Whether one act is another or was made by it, which the life says, since every question says who made it.
