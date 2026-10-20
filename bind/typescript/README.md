@@ -135,7 +135,9 @@ drifts.
 `session.pending` names the work that an earlier life left, which waits for a wake that this life says, by the kind of
 each act, as `engine.pending()` finds it: among each act that the outside started and did not end, and the acts that
 made it, each prompt, rung, command and wait that is not done and that no pause holds. `session.resume()` wakes each
-chain that holds some, and an act that a wake puts to the outside again is pending no more. The record's
+chain that holds some, and an act that a wake puts to the outside again is pending no more. The engine reads the
+pending work off the transcripts, so the session asks it again only after a pause, a wake, or a start or a done of
+an act of that work, and keeps what it gave until then. The record's
 `.session.json` companion holds the directory, the model and the effort that the host chose last, and no stream,
 since a stream lives only while its reply runs. File snapshots append to `.changes.jsonl`;
 `session.changes.read` loads a page of them. Keep both companions with the JSONL record. The session saves

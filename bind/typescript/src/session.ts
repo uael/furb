@@ -82,6 +82,9 @@ export class Session extends EventEmitter {
   /** The rung that each reply of the life that runs asks a model for, until the done of that reply. */
   private readonly replies = new Map<string, string>();
   private stopped = false;
+  /** The pending work as the engine last gave it, which the engine reads off the transcripts at each call, so the
+   * session asks it again only after a fact that can change it. */
+  private held?: Map<string, string>;
   /** How many of the facts the session has given its host. */
   private emitted = 0;
   private queued = false;
@@ -179,6 +182,13 @@ export class Session extends EventEmitter {
       this.facts.push(fact);
       yield* this.activity.hear(fact);
       const [kind, id, by, ...words] = fact;
+      // Only a pause, a wake, or a start or a done of an act of the pending work changes what is pending.
+      if (
+        kind === "pause" ||
+        kind === "wake" ||
+        ((kind === "started" || kind === "done") && this.held?.has(id))
+      )
+        this.held = undefined;
       if (kind === "reply" && isQuestion(kind, id)) this.replies.set(id, by);
       const rung = kind === "done" ? this.replies.get(id) : undefined;
       if (rung !== undefined) {
@@ -230,7 +240,9 @@ export class Session extends EventEmitter {
   /** The work that an earlier life left, which waits for a wake that this life says, by the kind of each act, as the
    * engine of the crate finds it. */
   get pending(): Map<string, string> {
-    return new Map(this.engine?.pending());
+    if (!this.engine) return new Map();
+    this.held ??= new Map(this.engine.pending());
+    return new Map(this.held);
   }
 
   /** Start the pending work: a wake of each chain that holds some, which the engine answers by starting each

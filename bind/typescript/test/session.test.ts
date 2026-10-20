@@ -306,6 +306,45 @@ test("unfinished model work and waits reopen pending until the host resumes them
   }
 });
 
+test("the session asks the engine for the pending work again only after a fact that can change it", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-pending-"));
+  const record = join(cwd, "life.jsonl");
+  const first = new Session({ cwd, record, ...modeled, answer: () => new Promise(() => {}) });
+  const engine = first.open();
+  const gone = engine.wait({ seconds: 600, on: engine.root }).id;
+  const wait = engine.wait({ seconds: 600, on: engine.root }).id;
+  await first.dispose();
+  const second = new Session({ record, ...modeled, answer: () => new Promise(() => {}) });
+  const resumed = second.open();
+  try {
+    let asked = 0;
+    const pending = resumed.pending.bind(resumed);
+    resumed.pending = () => {
+      asked++;
+      return pending();
+    };
+    const read = () => [[...second.pending.keys()], asked];
+    expect(read()).toEqual([[gone, wait], 1]);
+    resumed.clock({ on: resumed.root });
+    await tick();
+    expect(read()).toEqual([[gone, wait], 1]);
+    // The done of an act of the pending work, which a cancel says.
+    resumed.cancel(gone);
+    await tick();
+    expect(read()).toEqual([[wait], 2]);
+    resumed.pause(resumed.root);
+    await tick();
+    expect(read()).toEqual([[], 3]);
+    // The wake, and the started of the wait that the World takes again.
+    resumed.wake(resumed.root);
+    await tick();
+    expect(read()).toEqual([[], 4]);
+  } finally {
+    await second.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
 test("a function of the host that throws answers nothing, and two in a row pause the chain with the reason", async () => {
   let calls = 0;
   const broken = boot({
