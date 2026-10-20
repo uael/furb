@@ -464,7 +464,7 @@ async def test_a_prompt_that_a_step_of_another_chain_made_reads_nothing_of_that_
 
 
 async def test_the_word_of_a_rung_rebinds_the_default_actor_like_any_name() -> None:
-  """The word of a rung rebinds the default actor like any name, and so does an answer of a stand that changes the standing, and the last binding in record order wins."""
+  """The word of a rung rebinds the default actor like any name, and so does an answer of a stand that changes the actor of the standing, and the last binding in record order wins."""
   sand, log, root = born("actor = 'n/low'\nclose(1)", "close(None)")
   assert await engine.prompt(int, "rebind", on=root) == 1
   await settle()
@@ -473,6 +473,8 @@ async def test_the_word_of_a_rung_rebinds_the_default_actor_like_any_name() -> N
   assert await engine.prompt(int, "again", on=root) == 2
   assert said(log, "reply")[-1][4] == "n/low"
   await relived(Sand(), list(sand.record))
+  assert engine.module(root)["actor"] == "n/low"
+  await relived(Sand(stands=[STANDS[0], "/v", STANDS[2]]), list(sand.record))
   assert engine.module(root)["actor"] == "n/low"
   await relived(Sand(stands=[STANDS[0], "/w", "m/high"]), list(sand.record))
   assert engine.module(root)["actor"] == "m/high"

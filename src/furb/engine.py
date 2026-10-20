@@ -246,7 +246,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def takes():
-      return told(id, "standing", roster=last[0], cwd=last[1], actor=stood)
+      return told(id, "standing", roster=last[0], cwd=last[1], actor=module().get("actor"))
 
     def replay(of="", words="", writer=""):
       yield "module", id, {**globals(), "__name__": id, "actor": stood}
@@ -282,7 +282,9 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     while True:
       match a := (yield):
         case ("done", about, *_) if question(("stand", about)) and standing() != last:
-          stood = module()["actor"] = (last := standing())[2]
+          if standing()[2:] != last[2:]:
+            stood = module()["actor"] = standing()[2]
+          last = standing()
           yield takes()
         case ("done", about, _, value) if running.get(maker := (get(about) or a)[2]) is False and about not in [
           x[4] for x in transcript() if x[0] == "wants"

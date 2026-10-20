@@ -471,7 +471,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A chain holds whole every act made on the chain, the rungs it makes itself among them, which tell nothing.
   A chain holds every fact on it, and an act on another chain is that chain's.
   A prompt that a step of another chain made reads nothing of that chain.
-  The word of a rung rebinds the default actor like any name, and so does an answer of a stand that changes the standing, and the last binding in record order wins.
+  The word of a rung rebinds the default actor like any name, and so does an answer of a stand that changes the actor of the standing, and the last binding in record order wins.
   The transcript of the root begins with the open of the root and then the standing.
   The transcript then holds the prompt of the operator, and the replies of the model, each with its turn.
   The engine reads its own names through the globals of the chain.
@@ -827,8 +827,8 @@ A model asked on any chain of a later life finds the new roster in the transcrip
 The World answers it with a done at once, so the life stands on that answer before boot returns.
 The journal keeps each stand and its answer, so a later life says them again at their places and replays every chain on what it stood on there.
 At its tip, once the record is said again whole, boot stands the life again, so a change of the World reaches every chain after what it replayed.
-Every chain hears the done of every stand, and a chain whose standing that answer changes binds its default actor and tells it there, so the transcript grows at one end.
-Each standing binds the default actor of the chain, under the name actor.
+Every chain hears the done of every stand, and a chain whose standing that answer changes tells it there, and binds its default actor again when the actor of the standing changes, so the transcript grows at one end.
+A standing binds the default actor of the chain, under the name actor, when its actor differs from that of the standing before it, so a new roster or a new directory alone keeps the actor that a word chose.
 The chain tells each standing it takes in one paragraph headed standing, which binds its roster, its directory and its actor, as chain1_roster, chain1_cwd and chain1_actor.
 The standing a chain tells is what its transcript holds of it, and the stand itself tells nothing.
 """
