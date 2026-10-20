@@ -172,6 +172,7 @@ def write(text: Text, on: str = "") -> Text:
   A door that answers a write with more than it was asked for tells each line of what came back that differs from the line it was asked for at the same place.
   A write to the door of a prompt edits the program of its ladder, so the door and the verb are one act.
   The chain answers a write of the door of one of its prompts with the text it took, and makes its rungs again from it.
+  The chain makes the rungs of a write of a door from its text less the line breaks at its end, since a read of the door joins the words of its rungs with one, so an append to the door makes a rung of what it adds alone.
   A write of a door that a rung of that ladder says leaves the word of that rung out, and that rung is no rung of the chain after it.
   A new file is a write of a Text made of its path and its content.
   """
@@ -607,6 +608,7 @@ class Text:
   def edit(self, lo: int, hi: int, lines: list[str]) -> Text:
     """The text with one more edit; an edit whose lines are not there is refused.
     The edits that say themselves are one edit each: a replace of a string, an append at the end, an insert before a line, and a delete of lines.
+    An edit of lines, as an append, an insert or a delete, ends the last line of the text with a line break, so what it puts after a text that ends with none starts a line of its own.
     """
   def replace(self, old: str, new: str, once: bool = False) -> Text:
     """replace(old, new, once) gives a new text with the edit added."""
