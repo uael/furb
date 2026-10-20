@@ -52,12 +52,16 @@ fn kinds(record: &[Object]) -> Vec<String> {
 fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record_enables() {
   let at = place("configs");
   let (mut first, _) = opening(&at, true).boot::<String>([]).unwrap();
-  assert_eq!(names(&mut first), ["memory", "skills"]);
+  assert_eq!(names(&mut first), ["memory", "skills", "compaction"]);
   drop(first);
   fs::create_dir_all(at.join("config")).unwrap();
   fs::write(at.join("config").join("config.json"), r#"{"extensions": {"skills": false}}"#).unwrap();
   let (mut later, record) = opening(&at, true).boot::<String>([]).unwrap();
-  assert_eq!(names(&mut later), ["memory", "skills"], "the record wins over the configs");
+  assert_eq!(
+    names(&mut later),
+    ["memory", "skills", "compaction"],
+    "the record wins over the configs"
+  );
   drop(later);
   let kept = world::kept(at.join("record.jsonl")).unwrap();
   assert!(!kinds(&kept[record.len()..]).contains(&"enable".to_owned()), "it enabled nothing new");
@@ -65,7 +69,7 @@ fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record
   let (mut fresh, _) = Opening { record: fresh, ..opening(&at, true) }.boot::<String>([]).unwrap();
   assert_eq!(
     names(&mut fresh),
-    ["memory"],
+    ["memory", "compaction"],
     "a life on a new record enables what the configs turn on"
   );
 }

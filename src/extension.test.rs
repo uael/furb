@@ -87,7 +87,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   let names = |got: Vec<Extension>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["memory", "skills"],
+    ["memory", "skills", "compaction"],
     "the official ones are on"
   );
   folder(&at.join("home").join("tilde"), r#"{"name": "tilde", "word": "note.py"}"#, "t = 1");
@@ -97,14 +97,17 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
     &at.join("user").join("config.json"),
     r#"{"extensions": {"tilde": "~/tilde", "near": "near", "far": false, "skills": false}}"#,
   );
-  assert_eq!(names(configured(&places, &project).unwrap()), ["memory", "tilde", "near"]);
+  assert_eq!(
+    names(configured(&places, &project).unwrap()),
+    ["memory", "compaction", "tilde", "near"]
+  );
   config(
     &project.join(".furb").join("config.json"),
     r#"{"extensions": {"near": false, "far": "../far", "tilde": true, "skills": true}}"#,
   );
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["memory", "skills", "tilde", "far"],
+    ["memory", "skills", "compaction", "tilde", "far"],
     "each stands where a config first names it, after the official ones"
   );
 }
@@ -120,7 +123,7 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
   };
   let refused = |text: &str| read(text).unwrap_err().message();
   let shown = file.display();
-  assert_eq!(read(r#"{"theme": "dark"}"#).unwrap().len(), 2, "a config may name no extension");
+  assert_eq!(read(r#"{"theme": "dark"}"#).unwrap().len(), 3, "a config may name no extension");
   assert_eq!(refused("[]"), format!("A config is a map, whose extensions is a map: {shown}"));
   assert_eq!(
     refused(r#"{"extensions": []}"#),
