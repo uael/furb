@@ -1,15 +1,17 @@
 //! The provider of models: the ear of the World that answers what the chains stand on, and takes each reply, which a
 //! model answers with its turn.
 //!
-//! A model is any completion model of rig, which the [`catalog`] makes of the models of the providers of the network
-//! and of the claude command line, or a function of the host that answers a request with a turn. A call of a model
-//! is a future of the ear, which the life polls, and a call that its reply no longer needs ends. It streams, and the host is told what the
-//! model writes as it writes it; what the reply came to the ear says of its own accord.
+//! A model is any completion model of rig, which the [`catalog`] makes of the models of the providers of the network,
+//! of a local server and of the claude command line, or a function of the host that answers a request with a turn. A
+//! call of a model is a future of the ear, which the life polls, and a call that its reply no longer needs ends. It
+//! streams, and the host is told what the model writes as it writes it; what the reply came to the ear says of its
+//! own accord.
 
 pub mod catalog;
 pub mod claude;
 mod clients;
 pub mod images;
+mod local;
 mod pi;
 
 use std::{
@@ -20,8 +22,10 @@ use std::{
 
 use futures::{Stream, StreamExt, future::BoxFuture, stream};
 use rig_core::{
-  completion::{CompletionError, CompletionModel, CompletionRequest, CompletionResponse},
-  message::{AssistantContent, Message, Text, UserContent},
+  completion::{
+    CompletionError, CompletionModel, CompletionRequest, CompletionResponse, FinishReason,
+  },
+  message::{AssistantContent, Message, Reasoning, Text, UserContent},
   streaming::{StreamFinal, StreamedAssistantContent, StreamingCompletionResponse},
 };
 use serde_json::{Map, Value, json};
@@ -105,6 +109,12 @@ pub struct Model {
   apart: bool,
   /// The most it writes in one turn, which a provider that asks for it is told.
   tokens: Option<u64>,
+  /// Whether it says why each of its turns ended, so a turn that says nothing of its end, or that the most it writes
+  /// ended, was cut.
+  ends: bool,
+  /// Whether its server may write its thought in its text, between `<think>` and `</think>`, which the host is told as
+  /// text while it streams.
+  tagged: bool,
   answers: Answers,
 }
 
@@ -137,6 +147,8 @@ impl Model {
       images: false,
       apart: false,
       tokens: None,
+      ends: false,
+      tagged: false,
       answers,
     }
   }
@@ -541,16 +553,26 @@ fn answered(
 ///
 /// A model speaks python alone, so a fence or prose around the code stays in the word, for the gate to refuse. What
 /// it read is every token of its input, the cache among them, and what it wrote is the rest of its total, its
-/// thought among it.
+/// thought among it. A model that says why each turn ended, and says nothing of the end of this one or says that
+/// the most it writes ended it, was cut, so its turn is refused, and a part of a word never runs. The thought that a
+/// model writes in its text, before its word, is a block of reasoning of its turn.
 fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, CompletionError> {
-  let text: String = response
-    .choice
-    .iter()
-    .filter_map(|one| match one {
-      AssistantContent::Text(text) => Some(text.text.as_str()),
-      _ => None,
-    })
-    .collect();
+  let cut = match response.finish_reason() {
+    _ if !model.ends => None,
+    None => Some(format!("the stream of {} stopped before its end", model.name)),
+    Some(FinishReason::Length) => {
+      Some(format!("the turn of {} reached the most it writes before its end", model.name))
+    }
+    Some(_) => None,
+  };
+  if let Some(why) = cut {
+    return Err(CompletionError::ResponseError(why));
+  }
+  let mut choice: Vec<AssistantContent> = response.choice.to_vec();
+  if model.tagged {
+    choice = untagged(choice);
+  }
+  let text = texts(&choice);
   let spent = response.usage;
   let (read, wrote) = (spent.cached_input_tokens, spent.cache_creation_input_tokens);
   let input = spent.input_tokens + if model.apart { read + wrote } else { 0 };
@@ -562,12 +584,49 @@ fn turn(model: &Model, response: &CompletionResponse) -> Result<Object, Completi
   });
   let dollars = response.raw.get("cost").and_then(Value::as_f64).or(priced).unwrap_or_default();
   let failed = |why: String| CompletionError::ResponseError(why);
-  let blocks = serde_json::to_value(&response.choice).map_err(|no| failed(no.to_string()))?;
+  let blocks = serde_json::to_value(&choice).map_err(|no| failed(no.to_string()))?;
   let blocks = wire::inward(&blocks).map_err(|fault| failed(fault.message()))?;
   let count = |n: u64| Object::int(i64::try_from(n).unwrap_or(i64::MAX));
   let usage =
     Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)]);
   Ok(Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]))
+}
+
+/// The text of these blocks, whole.
+fn texts(choice: &[AssistantContent]) -> String {
+  let text = choice.iter().filter_map(|one| match one {
+    AssistantContent::Text(text) => Some(text.text.as_str()),
+    _ => None,
+  });
+  text.collect()
+}
+
+/// The blocks of a turn whose text starts with a thought between `<think>` and `</think>`, as a server with no reader
+/// of thought writes it: at the place of its first text, the thought as a block of reasoning when it holds any, and the
+/// text after it.
+fn untagged(choice: Vec<AssistantContent>) -> Vec<AssistantContent> {
+  let text = texts(&choice);
+  let Some((thought, word)) =
+    text.trim_start().strip_prefix("<think>").and_then(|rest| rest.split_once("</think>"))
+  else {
+    return choice;
+  };
+  let (thought, word) = (thought.trim().to_owned(), word.trim().to_owned());
+  let mut blocks = Vec::new();
+  for one in choice {
+    match one {
+      AssistantContent::Text(_)
+        if blocks.iter().any(|one| matches!(one, AssistantContent::Text(_))) => {}
+      AssistantContent::Text(_) => {
+        if !thought.is_empty() {
+          blocks.push(AssistantContent::Reasoning(Reasoning::new(&thought)));
+        }
+        blocks.push(AssistantContent::text(&word));
+      }
+      other => blocks.push(other),
+    }
+  }
+  blocks
 }
 
 /// The turn that a function of the host gave, as a turn of a model: its role, its python, its usage, whose dollars

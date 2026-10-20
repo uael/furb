@@ -12,6 +12,14 @@
 //! environment, with every name that its address holds a place for, and the models of the claude command line when
 //! it finds the program. An effort is one of [`LEVELS`], which each provider reads in its own words, an actor that
 //! names none takes [`LEVEL`], and a level that a model does not take moves to the nearest one it takes.
+//!
+//! The models of the local server that the environment names are the provider `local`, which [`local`] lists. The
+//! catalog asks that server only when a roster or an actor names a model of the provider local, or of a provider
+//! that the catalog does not know, when a host lists the models that the catalog offers, and when no other model
+//! stands for the default actor. It offers them after the claude command line and the providers of the network, so
+//! its first model is the default actor.
+//!
+//! [`local`]: super::local
 
 use std::{
   collections::{HashMap, HashSet},
@@ -30,6 +38,7 @@ use super::{
   Hosted, Model, Provider, Streams,
   claude::{self, Claude},
   clients::{Client, Reach},
+  local::{ENV_URL, Heard, LOCAL, Server},
 };
 use crate::{ear::reactor, world::cache};
 
@@ -138,17 +147,24 @@ enum Dialect {
   Silent,
 }
 
-/// The models this machine can ask, each with whether the catalog offers it.
+/// The models this machine can ask, each with whether the catalog offers it: those of the claude command line and of
+/// the network, and the local server that the environment names, which holds what it listed.
 pub struct Catalog {
   models: Vec<(Model, bool)>,
+  local: Option<Arc<Server>>,
 }
 
 impl Catalog {
-  /// The catalog of this machine: the snapshot, with the models the cache holds of its providers, and the claude
-  /// command line when it finds one. A cache a day old is refreshed in the background, for the next life.
+  /// The catalog of this machine: the snapshot, with the models the cache holds of its providers, the claude command
+  /// line when it finds one, and the local server that the environment of the process names, one for the process, so
+  /// what it listed holds for every catalog after. A cache a day old is refreshed in the background, for the next
+  /// life.
   pub fn load() -> Catalog {
+    static SERVER: OnceLock<Option<Arc<Server>>> = OnceLock::new();
+    let env = |name: &str| env::var(name).ok();
+    let server = SERVER.get_or_init(|| Server::named(env).map(Arc::new)).clone();
     let cached = cache().map(|at| at.join("models.json"));
-    Catalog::of(listed(cached.as_ref()), Claude::found(), |name| env::var(name).ok())
+    Catalog::of(listed(cached.as_ref()), Claude::found(), server, env)
   }
 
   /// The catalog with the claude command line at a path, or the one of this machine when only a stall is given, which
@@ -161,14 +177,16 @@ impl Catalog {
     let network = self.models.into_iter().filter(|(model, _)| !model.name.starts_with(&prefix));
     let mut models: Vec<_> = claude.models().into_iter().map(|model| (model, true)).collect();
     models.extend(network);
-    Catalog { models }
+    Catalog { models, ..self }
   }
 
-  /// The catalog of these providers and of the claude command line, which it offers when it found the program, and
-  /// each model offered when the environment holds its credential and each name its address holds a place for.
+  /// The catalog of the claude command line, which it offers when it found the program, of these providers, each model
+  /// of which it offers when the environment holds its credential and each name its address holds a place for, and of
+  /// a local server, which it asks when it needs its models.
   pub(super) fn of(
     listed: &IndexMap<String, Listed>,
     claude: Option<Claude>,
+    local: Option<Arc<Server>>,
     env: impl Fn(&str) -> Option<String>,
   ) -> Catalog {
     let env = |name: &str| env(name).filter(|one| !one.is_empty());
@@ -184,35 +202,71 @@ impl Catalog {
         models.push((model(provider, id, listing, client, reach), offered));
       }
     }
-    Catalog { models }
+    Catalog { models, local }
   }
 
-  /// Every model the catalog offers, by its name.
-  pub fn offered(&self) -> Vec<&Model> {
-    self.models.iter().filter(|(_, offered)| *offered).map(|(model, _)| model).collect()
+  /// What the local server lists, for the name that the catalog wants of it, if any; and nothing when the environment
+  /// names no server.
+  fn heard(&self, wanted: Option<&str>) -> Option<Heard> {
+    self.local.as_ref().map(|server| server.heard(wanted))
   }
 
-  /// The model a name names: its name, `provider:id`, or an id that one model of the catalog alone holds.
-  pub fn find(&self, name: &str) -> Option<&Model> {
-    let models = || self.models.iter().map(|(model, _)| model);
-    if let Some(model) = models().find(|model| model.name == name) {
-      return Some(model);
+  /// Every model the catalog offers, by its name: those of the claude command line, then those of the network, then
+  /// those of the local server, so the first is the default actor.
+  pub fn offered(&self) -> Vec<Model> {
+    let offered =
+      self.models.iter().filter(|(_, offered)| *offered).map(|(model, _)| model.clone());
+    offered.chain(self.heard(None).into_iter().flat_map(|heard| heard.models)).collect()
+  }
+
+  /// The model a name names: its name, `provider:id`, or an id that one model alone holds, among the models of the
+  /// claude command line and of the network, and then, for a name of the provider local or of a provider that the
+  /// catalog does not know, among those of the local server.
+  pub fn find(&self, name: &str) -> Option<Model> {
+    named(&self.known(), name).cloned().or_else(|| self.served(name))
+  }
+
+  /// The models of the claude command line and of the network.
+  fn known(&self) -> Vec<&Model> {
+    self.models.iter().map(|(model, _)| model).collect()
+  }
+
+  /// Whether the local server may hold a model of a name: a name of the provider local, or of a provider that the
+  /// catalog does not know.
+  fn asks(&self, name: &str) -> bool {
+    let Some((provider, _)) = name.split_once(':') else { return false };
+    let known = |model: &&Model| model.name.split_once(':').is_some_and(|(one, _)| one == provider);
+    provider == LOCAL || !self.known().iter().any(known)
+  }
+
+  /// The model of the local server that a name with a colon names: among what the server listed, which the catalog
+  /// asks the server for only when the server may hold it, and among what it listed already for any other name, as an
+  /// id of Ollama whose part before its colon is the name of a provider of the network.
+  fn served(&self, name: &str) -> Option<Model> {
+    let server = self.local.as_ref().filter(|_| name.contains(':'))?;
+    let heard = if self.asks(name) { server.heard(Some(name)) } else { server.held() };
+    named(&heard.models.iter().collect::<Vec<_>>(), name).cloned()
+  }
+
+  /// The model and the level an actor names: a model alone, or a model and a level after a slash, among the models of
+  /// the claude command line and of the network first, and then among those of the local server.
+  fn actor<'a>(&self, actor: &'a str) -> Option<(Model, Option<&'a str>)> {
+    let split = actor.rsplit_once('/');
+    let known = self.known();
+    if let Some(model) = named(&known, actor) {
+      return Some((model.clone(), None));
     }
-    let mut found =
-      models().filter(|model| model.name.split_once(':').is_some_and(|(_, id)| id == name));
-    match (found.next(), found.next()) {
-      (Some(model), None) => Some(model),
-      _ => None,
+    if let Some((name, level)) = split
+      && let Some(model) = named(&known, name)
+    {
+      return Some((model.clone(), Some(level)));
     }
-  }
-
-  /// The model and the level an actor names: a model alone, or a model and a level after a slash.
-  fn actor<'a>(&self, actor: &'a str) -> Option<(&Model, Option<&'a str>)> {
-    if let Some(model) = self.find(actor) {
+    if let Some(model) = self.served(actor) {
       return Some((model, None));
     }
-    let (name, level) = actor.rsplit_once('/')?;
-    Some((self.find(name)?, Some(level)))
+    // A model of the local server takes no effort, so a word after its slash is a level of effort or no name of it.
+    let (name, level) = split.filter(|(_, level)| LEVELS.contains(level))?;
+    Some((self.served(name)?, Some(level)))
   }
 
   /// The models of a roster, and its default actor: the model of the actor, and the models the host names; or, when
@@ -223,26 +277,43 @@ impl Catalog {
     names: Option<&[String]>,
     actor: Option<&str>,
   ) -> Result<(Vec<Model>, Option<String>), String> {
-    let unknown = |name: &str| format!("No model is {name}. Name one as provider:id.");
+    let unknown = |name: &str| {
+      let unnamed = self.local.is_none() && name.starts_with(&format!("{LOCAL}:"));
+      let why = unnamed.then(|| format!("no local server is named: set {ENV_URL}"));
+      let heard = || self.asks(name).then(|| self.heard(Some(name))).flatten();
+      let why = why.or_else(|| Some(heard()?.why(name)?.to_owned()));
+      why.map_or_else(
+        || format!("No model is {name}. Name one as provider:id."),
+        |why| format!("No model is {name}: {why}."),
+      )
+    };
     let mut models = match names {
       Some(names) => names
         .iter()
-        .map(|name| self.find(name).cloned().ok_or_else(|| unknown(name)))
+        .map(|name| self.find(name).ok_or_else(|| unknown(name)))
         .collect::<Result<Vec<_>, _>>()?,
-      None if actor.is_none() => self.offered().into_iter().take(1).cloned().collect(),
+      None if actor.is_none() => self.default().into_iter().collect(),
       None => Vec::new(),
     };
     let actor = match actor {
       Some(actor) => {
         let (model, level) = self.actor(actor).ok_or_else(|| unknown(actor))?;
-        models.insert(0, model.clone());
-        Some(model.at(level))
+        let named = model.at(level);
+        models.insert(0, model);
+        Some(named)
       }
       None => None,
     };
     let mut seen = HashSet::new();
     models.retain(|model| seen.insert(model.name.clone()));
     Ok((models, actor))
+  }
+
+  /// The model a host that names none stands on: the first that the catalog offers, which asks the local server only
+  /// when the catalog offers no model of the claude command line or of the network.
+  fn default(&self) -> Option<Model> {
+    let first = self.models.iter().find(|(_, offered)| *offered).map(|(model, _)| model.clone());
+    first.or_else(|| self.heard(None)?.models.into_iter().next())
   }
 
   /// The provider of a roster of the catalog on a directory, with the default actor of the roster, whose models a
@@ -260,6 +331,19 @@ impl Catalog {
       None => models,
     };
     Ok(Provider::new(directory, models).actor(actor))
+  }
+}
+
+/// The model that a name names among these models: the one of that name, or the one model of that id.
+fn named<'a>(models: &[&'a Model], name: &str) -> Option<&'a Model> {
+  if let Some(model) = models.iter().find(|model| model.name == name) {
+    return Some(model);
+  }
+  let mut found =
+    models.iter().filter(|model| model.name.split_once(':').is_some_and(|(_, id)| id == name));
+  match (found.next(), found.next()) {
+    (Some(model), None) => Some(model),
+    _ => None,
   }
 }
 
@@ -489,8 +573,8 @@ impl Client {
   }
 }
 
-/// A model of a provider of the network, whose client is made when it is first asked, or why it cannot be. A model
-/// of Anthropic, of Amazon or of pi-ai counts what it read of the cache apart, and is told the most it writes.
+/// A model of a provider of the network. A model of Anthropic, of Amazon or of pi-ai counts what it read of the cache
+/// apart, and is told the most it writes.
 fn model(
   provider: &str,
   id: &str,
@@ -499,11 +583,7 @@ fn model(
   reach: Result<Reach, String>,
 ) -> Model {
   let dialect = client.dialect(id);
-  let made: Arc<OnceLock<Result<Streams, String>>> = Arc::default();
-  let mut model = Model::lazy(format!("{provider}:{id}"), listing.limit.context, move || {
-    let got = made.get_or_init(|| reach.clone().and_then(|reach| client.streams(&reach)));
-    got.clone().map_err(CompletionError::ProviderError)
-  });
+  let mut model = reached(format!("{provider}:{id}"), listing.limit.context, client, reach);
   model.efforts = listing.efforts(dialect);
   model.images = listing.modalities.input.iter().any(|one| one == "image");
   model.price =
@@ -515,6 +595,20 @@ fn model(
     Client::Pi => model.conversation("sessionId"),
     _ => model,
   }
+}
+
+/// A model under a name, with the window it reads, whose client is made when it is first asked, or why it cannot be.
+pub(super) fn reached(
+  name: String,
+  window: u64,
+  client: Client,
+  reach: Result<Reach, String>,
+) -> Model {
+  let made: Arc<OnceLock<Result<Streams, String>>> = Arc::default();
+  Model::lazy(name, window, move || {
+    let got = made.get_or_init(|| reach.clone().and_then(|reach| client.streams(&reach)));
+    got.clone().map_err(CompletionError::ProviderError)
+  })
 }
 
 /// The providers of the snapshot, with the models of each that the cache at a path holds, read once in a process;

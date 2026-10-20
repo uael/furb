@@ -1,13 +1,20 @@
 //! The catalog of models, read from a snapshot of the tests and from the snapshot the crate carries, with the
 //! credentials a test gives, so no test reads the environment or the network.
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use rig_core::{completion::CompletionRequest, message::Message};
 use serde_json::{Value, json};
 
 use super::{
-  super::{Asked, Told, clients::Client},
+  super::{
+    Asked, Model, Told,
+    clients::Client,
+    local::{
+      Server,
+      test::{dropping, fake},
+    },
+  },
   Catalog, SNAPSHOT, clamp, parsed,
 };
 use crate::ear::reactor;
@@ -52,16 +59,18 @@ const LISTED: &str = r#"{
 }}
 }"#;
 
-/// The catalog of the snapshot of the tests, with an environment that holds these names, each with the value after
-/// its `=`, or `key`.
+/// The catalog of the snapshot of the tests and of the local server that the environment names, with an environment
+/// that holds these names, each with the value after its `=`, or `key`.
 fn catalog(environment: &[&str]) -> Catalog {
   let environment: Vec<(String, String)> = (environment.iter())
     .map(|one| one.split_once('=').unwrap_or((one, "key")))
     .map(|(name, value)| (name.to_owned(), value.to_owned()))
     .collect();
-  Catalog::of(&parsed(LISTED, None), None, move |name| {
+  let env = move |name: &str| {
     environment.iter().find(|(held, _)| held == name).map(|(_, value)| value.clone())
-  })
+  };
+  let server = Server::named(&env).map(Arc::new);
+  Catalog::of(&parsed(LISTED, None), None, server, env)
 }
 
 /// Each effort of a model, with its settings as JSON.
@@ -313,7 +322,7 @@ fn the_snapshot_that_the_crate_carries_names_a_client_of_rig_for_each_provider()
   let addressed =
     |one: &&super::Listed| matches!(one.rig, Client::Chat | Client::Gateway | Client::Pi);
   assert!(listed.values().filter(addressed).all(|one| one.api.is_some()));
-  let catalog = Catalog::of(&listed, None, |_| None);
+  let catalog = Catalog::of(&listed, None, None, |_| None);
   let opus = catalog.find("anthropic:claude-opus-5").expect("the snapshot holds opus");
   assert!(opus.window >= 200_000 && opus.images && opus.price.is_some());
   let radius =
@@ -354,4 +363,117 @@ fn a_provider_is_offered_when_the_environment_holds_its_credential_and_each_plac
     "the credentials of an application stand where the client of Google finds them"
   );
   assert!(offered(&["RADIUS_API_KEY"], "radius:balanced"));
+}
+
+/// The names of these models.
+fn names_of(models: &[Model]) -> Vec<String> {
+  models.iter().map(|one| one.name.clone()).collect()
+}
+
+/// A local server that lists one model, qwen, with its window; and its address as the environment names it, and each
+/// request it reads.
+fn qwen() -> (String, std::sync::mpsc::Receiver<String>) {
+  let list = json!({"data": [{"id": "qwen", "max_model_len": 1000}]});
+  let (address, told) =
+    fake(move |request| request.starts_with("GET /v1/models ").then(|| list.clone()));
+  (format!("FURB_LOCAL_URL={address}"), told)
+}
+
+#[test]
+fn the_catalog_asks_the_local_server_only_when_a_name_needs_it_or_a_host_lists_what_it_offers() {
+  let (url, told) = qwen();
+  let catalog = catalog(&[&url, "OPENAI_API_KEY"]);
+  let (models, actor) = catalog.roster(None, None).expect("the default");
+  assert_eq!((names_of(&models), actor), (vec!["openai:gpt-5".to_owned()], None));
+  let named = ["openai:gpt-4o".to_owned()];
+  catalog.roster(Some(&named), Some("openai:gpt-5")).expect("a roster of the network");
+  catalog.roster(None, Some("openai:gpt-5/high")).expect("an actor of the network at an effort");
+  assert!(catalog.find("openai:gpt-6").is_none() && catalog.find("gpt-6").is_none());
+  assert_eq!(
+    told.try_iter().count(),
+    0,
+    "a roster that names no model of the local server asks it nothing"
+  );
+  let offered: Vec<_> = catalog.offered().iter().map(|one| one.name.clone()).collect();
+  assert_eq!(
+    offered,
+    ["openai:gpt-5", "openai:gpt-4o", "local:qwen"],
+    "the local server comes after the network, as for the default actor"
+  );
+  assert_eq!(told.try_iter().count(), 1);
+  assert!(
+    catalog.find("qwen").is_none(),
+    "an id alone with no colon finds no model of the local server"
+  );
+  assert!(
+    catalog.roster(None, Some("local:qwen/x")).is_err(),
+    "a word after a slash that is no level names nothing"
+  );
+  let high = catalog.roster(None, Some("local:qwen/high")).map(|(_, actor)| actor);
+  assert_eq!(high, Ok(Some("local:qwen".to_owned())));
+  assert_eq!(catalog.find("local:qwen").map(|one| one.window), Some(1000));
+  assert_eq!(told.try_iter().count(), 0, "a catalog asks the server once");
+}
+
+#[test]
+fn the_default_actor_is_a_model_of_the_claude_command_line_then_of_the_network_then_of_the_local_server()
+ {
+  let (url, _) = qwen();
+  let (models, _) = catalog(&[&url]).roster(None, None).expect("the default");
+  assert_eq!(
+    names_of(&models),
+    ["local:qwen"],
+    "the local server stands when nothing else is offered"
+  );
+  let claude = catalog(&[&url]).claude(Some(PathBuf::from("/bin/true")), None);
+  let (models, _) = claude.roster(None, None).expect("the default");
+  assert_eq!(names_of(&models), ["claude-cli:opus"]);
+  assert_eq!(claude.find("local:qwen").map(|one| one.name.clone()).as_deref(), Some("local:qwen"));
+}
+
+#[test]
+fn a_roster_that_names_a_model_of_the_local_server_that_the_catalog_does_not_offer_says_why() {
+  let port = dropping();
+  let gone = catalog(&[&format!("FURB_LOCAL_URL=http://127.0.0.1:{port}")]);
+  let no = gone.roster(Some(&["local:qwen".to_owned()]), None).err().unwrap_or_default();
+  let why =
+    format!("No model is local:qwen: the local server at http://127.0.0.1:{port} lists no model: ");
+  assert!(no.starts_with(&why), "{no}");
+  let bare = gone.roster(None, Some("qwen3:8b")).err().unwrap_or_default();
+  assert!(bare.starts_with("No model is qwen3:8b: the local server at "), "{bare}");
+  assert_eq!(
+    catalog(&[]).roster(None, Some("local:qwen")).err().as_deref(),
+    Some("No model is local:qwen: no local server is named: set FURB_LOCAL_URL.")
+  );
+  let (address, _) =
+    fake(|request| request.starts_with("GET /v1/models ").then(|| json!({"data": [{"id": "z"}]})));
+  let windowless = catalog(&[&format!("FURB_LOCAL_URL={address}")]);
+  assert_eq!(
+    windowless.roster(None, Some("local:z/high")).err().as_deref(),
+    Some(
+      "No model is local:z/high: the local server gives no window of it: set FURB_LOCAL_WINDOW."
+    )
+  );
+}
+
+#[test]
+fn an_id_alone_of_the_local_server_whose_part_before_its_colon_is_a_provider_is_found_in_what_it_listed()
+ {
+  let list = json!({"data": [{"id": "google:gemma3", "max_model_len": 1000}]});
+  let (address, told) =
+    fake(move |request| request.starts_with("GET /v1/models ").then(|| list.clone()));
+  let catalog = catalog(&[&format!("FURB_LOCAL_URL={address}")]);
+  assert!(
+    catalog.find("google:gemma3").is_none(),
+    "a name of a provider of the network asks the server nothing"
+  );
+  assert_eq!(told.try_iter().count(), 0);
+  assert_eq!(names_of(&catalog.offered()), ["local:google:gemma3"]);
+  assert_eq!(told.try_iter().count(), 1);
+  let found = catalog.find("google:gemma3").map(|one| one.name.clone());
+  assert_eq!(
+    (found.as_deref(), told.try_iter().count()),
+    (Some("local:google:gemma3"), 0),
+    "what it listed holds it"
+  );
 }

@@ -54,10 +54,12 @@ goes with it. A session has the scratch directory of its record, in the cache of
 so a host removes it when it deletes the record. Time gives the clock and a chance, and ends a wait. The provider asks
 the models of the catalog of the crate, which `models(claude?)` lists and `model(name)` finds, and it preserves
 provider response blocks in the record. The catalog offers the models of a provider when a credential
-of it stands in the environment, such as `ANTHROPIC_API_KEY`, and the models of the claude command line when it finds
-the program. The host names what the provider offers beside the model of the default actor in `roster`, as
-`provider:id`, and the default actor in `model` and `effort`: the first of the roster when unsaid. When the roster is
-unsaid too, the session stands on the default of the crate, the first model that the catalog offers. A roster that names
+of it stands in the environment, such as `ANTHROPIC_API_KEY`, the models of the claude command line when it finds
+the program, and the models of the local server that `FURB_LOCAL_URL` names, each named `local:` and its id. The host
+names what the provider offers beside the model of the default actor in `roster`, as `provider:id`, and the default
+actor in `model` and `effort`: the first of the roster when unsaid. When the roster is unsaid too, the session stands on
+the default of the crate: a model of the claude command line, then of a provider of the network, then of the local
+server. A roster that names
 no model, with no model, offers the operator alone, and a prompt that names no actor goes to the operator. The standing
 of every chain tells the roster, so a session offers the models it names and not the whole catalog. An actor that names
 no effort takes `high`, and an effort moves to the nearest one the model takes, among `levels()`. A name without its

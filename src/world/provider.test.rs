@@ -26,8 +26,8 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 
-use super::{Hosted, Model, Provider, Writes, catalog::Catalog, images};
-use crate::{Act, Ear, Engine, Object, SYSTEM, verbs, world};
+use super::{Hosted, Model, Provider, Writes, catalog::Catalog, images, local::Server};
+use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, verbs, world};
 
 /// A waker that unparks the thread of the test, so what an ear waits for wakes the poll when it is ready.
 struct Parked(thread::Thread);
@@ -464,29 +464,44 @@ fn a_function_of_the_host_answers_a_request_with_a_turn_in_place_of_the_model() 
 
 /// A provider on a port of this machine, which reads one request and streams these events. It gives the request it
 /// read.
-fn served(listener: TcpListener, events: String) -> std::thread::JoinHandle<String> {
-  std::thread::spawn(move || {
-    let (stream, _) = listener.accept().expect("the provider is asked");
-    let mut reader = BufReader::new(stream);
-    let mut head = String::new();
-    while !head.ends_with("\r\n\r\n") {
-      reader.read_line(&mut head).expect("the head of the request");
+pub(super) fn served(listener: TcpListener, events: String) -> std::thread::JoinHandle<String> {
+  std::thread::spawn(move || exchanged(&listener, &events))
+}
+
+/// One request that a provider on a port of this machine reads, and the events it streams in answer; and the request
+/// it read.
+fn exchanged(listener: &TcpListener, events: &str) -> String {
+  // A provider that is never asked, or a request that never ends, fails the test and holds it not.
+  listener.set_nonblocking(true).expect("a listener that waits not");
+  let end = Instant::now() + Duration::from_secs(10);
+  let stream = loop {
+    match listener.accept() {
+      Ok((stream, _)) => break stream,
+      Err(no) if no.kind() == std::io::ErrorKind::WouldBlock && Instant::now() < end => {
+        thread::sleep(Duration::from_millis(10));
+      }
+      Err(no) => panic!("the provider is asked: {no}"),
     }
-    let length = head
-      .lines()
-      .find_map(|line| {
-        line.to_ascii_lowercase().strip_prefix("content-length: ").map(str::to_owned)
-      })
-      .and_then(|length| length.trim().parse::<usize>().ok())
-      .unwrap_or_default();
-    let mut body = vec![0; length];
-    reader.read_exact(&mut body).expect("the body of the request");
-    let mut stream = reader.into_inner();
-    let head_out =
-      "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n";
-    stream.write_all(format!("{head_out}{events}").as_bytes()).expect("the turn is streamed");
-    format!("{head}{}", String::from_utf8_lossy(&body))
-  })
+  };
+  stream.set_nonblocking(false).expect("a stream that waits");
+  stream.set_read_timeout(Some(Duration::from_secs(10))).expect("a stream that waits a time");
+  let mut reader = BufReader::new(stream);
+  let mut head = String::new();
+  while !head.ends_with("\r\n\r\n") {
+    let read = reader.read_line(&mut head).expect("the head of the request");
+    assert!(read > 0, "the request ended before its head: {head}");
+  }
+  let length = head
+    .lines()
+    .find_map(|line| line.to_ascii_lowercase().strip_prefix("content-length: ").map(str::to_owned))
+    .and_then(|length| length.trim().parse::<usize>().ok())
+    .unwrap_or_default();
+  let mut body = vec![0; length];
+  reader.read_exact(&mut body).expect("the body of the request");
+  let mut stream = reader.into_inner();
+  let head_out = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n";
+  stream.write_all(format!("{head_out}{events}").as_bytes()).expect("the turn is streamed");
+  format!("{head}{}", String::from_utf8_lossy(&body))
 }
 
 /// One turn as chat completions stream it: a thought, a word in two parts, and its usage.
@@ -511,9 +526,10 @@ fn chatted() -> String {
 /// A life whose root prompts the one model of a provider of the network, which the catalog makes of this listing
 /// with this environment; and what the prompt came to.
 fn networked(name: &str, listed: &Value, env: &[(&str, &str)]) -> (Engine, Object) {
-  let catalog = Catalog::of(&super::catalog::parsed(&listed.to_string(), None), None, |name| {
-    env.iter().find(|(held, _)| *held == name).map(|(_, value)| (*value).to_owned())
-  });
+  let catalog =
+    Catalog::of(&super::catalog::parsed(&listed.to_string(), None), None, None, |name| {
+      env.iter().find(|(held, _)| *held == name).map(|(_, value)| (*value).to_owned())
+    });
   let (models, actor) = catalog.roster(None, None).expect("the model is offered");
   let mut engine = lived(Provider::new(yard(name).display().to_string(), models).actor(actor));
   let id = asked(&mut engine);
@@ -535,15 +551,16 @@ fn a_provider_of_the_network_is_asked_with_its_credential_and_streams_its_turn()
   let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
   let port = listener.local_addr().expect("the port").port();
   let asked_of = served(listener, chatted());
-  let listed = json!({"local": {"rig": "chat", "env": ["FURB_TEST_KEY"], "api": format!("http://127.0.0.1:{port}/v1"),
+  let listed = json!({"compat": {"rig": "chat", "env": ["FURB_TEST_KEY"], "api": format!("http://127.0.0.1:{port}/v1"),
     "models": {"m": {"reasoning": true, "reasoning_options": [{"type": "effort", "values": ["low", "high"]}],
       "limit": {"context": 1000}, "cost": {"input": 1e4, "output": 2e4},
       "modalities": {"input": ["text"], "output": ["text"]}}}}});
-  let catalog = Catalog::of(&super::catalog::parsed(&listed.to_string(), None), None, |name| {
-    (name == "FURB_TEST_KEY").then(|| "sekrit".to_owned())
-  });
+  let catalog =
+    Catalog::of(&super::catalog::parsed(&listed.to_string(), None), None, None, |name| {
+      (name == "FURB_TEST_KEY").then(|| "sekrit".to_owned())
+    });
   let (models, actor) = catalog.roster(None, Some("m/medium")).expect("the model is offered");
-  assert_eq!(actor.as_deref(), Some("local:m/high"));
+  assert_eq!(actor.as_deref(), Some("compat:m/high"));
   let (writes, told) = heard();
   let at = yard("network");
   let mut engine =
@@ -722,4 +739,121 @@ fn azure_is_asked_for_the_deployment_of_a_model_at_the_address_and_the_version_o
   let asked = "POST /openai/deployments/mine/chat/completions?api-version=2025-01-01 ";
   assert!(request.starts_with(asked), "{request}");
   assert_eq!(header(&request, "api-key"), Some("az"));
+}
+
+/// One chunk of the chat completions of a model, with what it adds and why it ended, if it did.
+fn chunk(delta: Value, finish: Value) -> String {
+  let one = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen",
+    "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]});
+  format!("data: {one}\n\n")
+}
+
+/// A life whose root prompts local:qwen, the one model of a local server of the tests, which lists it with a window of
+/// 1000 and streams these events for its one reply; the prompt, and the two requests the server read.
+fn local(name: &str, events: String) -> (Engine, String, std::thread::JoinHandle<[String; 2]>) {
+  let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
+  let port = listener.local_addr().expect("the port").port();
+  let listing =
+    json!({"object": "list", "data": [{"id": "qwen", "object": "model", "meta": {"n_ctx": 1000}}]});
+  let asked_of =
+    thread::spawn(move || [listing.to_string(), events].map(|one| exchanged(&listener, &one)));
+  let address = format!("http://127.0.0.1:{port}");
+  let env = |name: &str| (name == "FURB_LOCAL_URL").then(|| address.clone());
+  let catalog =
+    Catalog::of(&super::catalog::parsed("{}", None), None, Server::named(env).map(Arc::new), env);
+  let (models, actor) =
+    catalog.roster(None, Some("local:qwen/high")).expect("the model is offered");
+  assert_eq!(actor.as_deref(), Some("local:qwen"), "a model of a local server takes no effort");
+  assert_eq!(models[0].priced(), Some([0.0; 4]), "a model of a local server costs nothing");
+  let mut engine = lived(Provider::new(yard(name).display().to_string(), models).actor(actor));
+  let id = asked(&mut engine);
+  (engine, id, asked_of)
+}
+
+/// Whether a word that holds this text ran on the root.
+fn ran(engine: &mut Engine, text: &str) -> bool {
+  let root = engine.root().to_owned();
+  let facts =
+    engine.transcript(verbs::Transcript { on: on(&root) }).expect("the root has a transcript");
+  let holds = |one: &Fact| {
+    (0..4)
+      .any(|at| one.word(at).and_then(|word| word.as_str()).is_some_and(|word| word.contains(text)))
+  };
+  facts.iter().any(|one| one.kind() == "run" && holds(one))
+}
+
+/// The word of the done of the first reply, once the reply is done.
+fn replied(engine: &mut Engine) -> String {
+  let done = |engine: &mut Engine| {
+    let facts = said(engine).into_iter();
+    facts
+      .into_iter()
+      .find(|(kind, about, _)| kind == "done" && about == "reply1")
+      .map(|(_, _, word)| word)
+  };
+  assert!(until(engine, |engine| done(engine).is_some()), "the reply is done");
+  done(engine).unwrap_or_default()
+}
+
+#[test]
+fn a_model_of_a_local_server_is_asked_with_no_key_and_a_cap_and_the_thought_in_its_text_is_a_block_of_reasoning()
+ {
+  let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
+    "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105,
+      "prompt_tokens_details": {"cached_tokens": 40}}});
+  let thought = [
+    chunk(json!({"role": "assistant", "content": "<think>hm</think>\n"}), Value::Null),
+    chunk(json!({"content": "close(3)"}), json!("stop")),
+    format!("data: {usage}\n\ndata: [DONE]\n\n"),
+  ];
+  let (mut engine, id, asked_of) = local("local", thought.concat());
+  let turn = replied(&mut engine);
+  let reasoning =
+    "{'type': 'reasoning', 'id': None, 'content': [{'type': 'text', 'content': {'text': 'hm'}}]}";
+  let expected = format!(
+    "('assistant', 'close(3)', (100, 5, 40, 0, 0.0), [{reasoning}, {{'type': 'text', 'text': 'close(3)'}}])"
+  );
+  assert_eq!(turn, expected);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(3));
+  let [listed, request] = asked_of.join().expect("the server read the requests");
+  assert!(listed.starts_with("GET /v1/models "), "{listed}");
+  assert!(request.starts_with("POST /v1/chat/completions "), "{request}");
+  assert_eq!(
+    (header(&listed, "authorization"), header(&request, "authorization")),
+    (None, None),
+    "a server that takes no key is sent none"
+  );
+  let body: Value = serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap_or_default())
+    .expect("a JSON body");
+  let asked =
+    (&body["model"], &body["max_tokens"], body.get("cache_prompt"), body.get("reasoning_effort"));
+  assert_eq!(
+    asked,
+    (&json!("qwen"), &json!(250), None, None),
+    "a model writes a quarter of its window at most"
+  );
+}
+
+#[test]
+fn a_turn_whose_stream_stops_before_its_end_is_refused_and_no_part_of_its_word_runs() {
+  let part = chunk(json!({"role": "assistant", "content": "x = 1"}), Value::Null);
+  let (mut engine, _, asked_of) = local("cut", part);
+  let word = replied(&mut engine);
+  assert!(word.contains("the stream of local:qwen stopped before its end"), "{word}");
+  assert!(!ran(&mut engine, "x = 1"), "no part of the word runs");
+  asked_of.join().expect("the server read the requests");
+}
+
+#[test]
+fn a_turn_that_the_most_it_writes_ended_is_refused_and_no_part_of_its_word_runs() {
+  let part = chunk(json!({"role": "assistant", "content": "x = 1"}), json!("length"));
+  let (mut engine, _, asked_of) = local("length", format!("{part}data: [DONE]\n\n"));
+  let word = replied(&mut engine);
+  assert!(
+    word.contains("the turn of local:qwen reached the most it writes before its end"),
+    "{word}"
+  );
+  assert!(!ran(&mut engine, "x = 1"), "no part of the word runs");
+  asked_of.join().expect("the server read the requests");
 }

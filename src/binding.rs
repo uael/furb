@@ -419,15 +419,15 @@ pub fn answered(shape: String, line: String) -> Result<Record, Fault> {
 #[cfg_attr(feature = "typescript", napi)]
 pub fn models(claude: Option<String>) -> Vec<ModelInfo> {
   let catalog = world::Catalog::load().claude(claude.map(Into::into), None);
-  catalog.offered().into_iter().map(ModelInfo::of).collect()
+  catalog.offered().iter().map(ModelInfo::of).collect()
 }
 
-/// The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, whether it offers
-/// that model or not; nothing when it knows none.
+/// The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, which for a model of
+/// the local server holds a colon, whether it offers that model or not; nothing when it knows none.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn model(name: String) -> Option<ModelInfo> {
-  world::Catalog::load().find(&name).map(ModelInfo::of)
+  world::Catalog::load().find(&name).as_ref().map(ModelInfo::of)
 }
 
 /// The levels of effort, from least to most, which an actor names after its model.
