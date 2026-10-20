@@ -189,6 +189,33 @@ fn a_command_runs_on_this_machine_and_speaks_its_exit_from_its_own_thread() {
 }
 
 #[test]
+fn the_world_writes_the_stderr_of_a_merged_command_into_its_stdout() {
+  let mut lived = Lived::new("merged", &[], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Bash { on: on(&root), ..Default::default() };
+  let act = lived.engine.bash("printf a; printf b >&2; printf c", with).unwrap();
+  let id = act.id().to_owned();
+  let exit: Exit = block_on(act).unwrap();
+  assert_eq!((exit.stdout.content.as_str(), exit.stderr.content.as_str()), ("abc", ""));
+  let facts = lived.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let outs: Vec<(String, String)> = facts
+    .iter()
+    .filter(|one| one.kind() == "out" && one.about() == id)
+    .map(|one| {
+      let word =
+        |at| one.word(at).and_then(|it| it.as_str().map(str::to_owned)).unwrap_or_default();
+      (word(0), word(1))
+    })
+    .collect();
+  // The parts of a stream come as the pipe gives them, so the test joins them.
+  assert!(outs.iter().all(|(_, stream)| stream == "stdout"), "no out of the stderr: {outs:?}");
+  assert_eq!(outs.iter().map(|(text, _)| text.as_str()).collect::<String>(), "abc");
+  let door = || verbs::Read { on: on(&root), ..Default::default() };
+  assert_eq!(lived.engine.read(&format!("{id}/stdout"), door()).unwrap().content, "abc");
+  assert_eq!(lived.engine.read(&format!("{id}/stderr"), door()).unwrap().content, "");
+}
+
+#[test]
 fn a_command_is_fed_what_the_operator_writes_into_its_stdin() {
   let mut lived = Lived::new("feeds", &[], true).unwrap();
   let root = lived.root();
@@ -497,6 +524,13 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
   assert_eq!(pending.collect::<Vec<_>>(), ["rung1 rung", "wait1 wait"]);
   second.engine.wake(&root).unwrap();
   assert!(second.engine.pending().unwrap().is_empty(), "the wake put that work to the World again");
+  drop(second);
+  // A life after the one whose wake ran that work again finds it pending again, though the journal says the started
+  // of that second run again.
+  let mut third = Lived::new("pending", &[], false).unwrap();
+  let pending =
+    third.engine.pending().unwrap().into_iter().map(|(id, kind)| format!("{id} {kind}"));
+  assert_eq!(pending.collect::<Vec<_>>(), ["rung1 rung", "wait1 wait", "wait3 wait"]);
 }
 
 /// An ear that takes a wait and ends it by its work, of its own accord, once its gate opens: it tells a pause of the

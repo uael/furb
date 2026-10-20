@@ -385,19 +385,15 @@ def bash(
         case ("merged", qid, *_, about) if about == id:
           yield "done", qid, show_err is None
         case ("read", qid, *_, path) if path in (id + "/stdout", id + "/stderr"):
-          yield (
-            "done",
-            qid,
-            getattr(peek(id), path[len(id) + 1 :], None)
-            or Text(
-              path,
-              "".join(
-                x[3]
-                for x in transcript(scope(id))
-                if x[:2] == ("out", id) and f"{id}/{x[4] if show_err else 'stdout'}" == path
-              ),
-            ),
-          )
+          parts = []
+          for x in transcript(scope(id)):
+            if x[:2] == ("started", id):
+              parts = []
+            if x[:2] == ("out", id) and path == f"{id}/{x[4]}":
+              parts.append(x[3])
+          yield "done", qid, getattr(peek(id), path[len(id) + 1 :], None) or Text(path, "".join(parts))
+        case ("write", qid, *_, Text(path)) if path in (id + "/stdout", id + "/stderr"):
+          yield "done", qid, Refused(path + " takes no write")
         case ("write", qid, *_, Text(path, text) as took) if path == id + "/stdin":
           if mute := "ended" if peek(id, ...) is not ... else mute:
             took = Refused(mute)
@@ -624,7 +620,7 @@ def boot(record=(), **outside):
   get_running_loop()
   made, known, done, held, log, alive, born, busy, left = Counter(), {}, {}, {}, [], {}, {}, set(), []
   first, driven, taken, holding = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), set(), []
-  due = [e for (e,) in record[::-1] if e[0] != "started" and first.get(e[1]) is not e]
+  due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
   kept = {e[1]: e for (e,) in record if question(e)}
 
   def owed():

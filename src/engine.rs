@@ -55,10 +55,11 @@ const GATE: &str = "gate";
 /// The kinds of act that are work an operator waits for: a prompt, a rung, a command and a wait.
 const WORK: [&str; 4] = ["prompt", "rung", "bash", "wait"];
 
-/// Whether this life took up an act that the record shows started and not done: the outside says it started, which
-/// it does once a wake that this life says puts the act to it, or the act is done.
-const TOOK: &str =
-  "peek(__id, ...) is not ... or ('started', __id) in [x[:2] for x in transcript(scope(__id))]";
+/// Whether this life took up an act that the record shows started and not done: the outside says it started in this
+/// life, which it does once a wake that this life says puts the act to it, or the act is done. A started that the
+/// journal says again is of an earlier life.
+const TOOK: &str = "peek(__id, ...) is not ... or ('started', __id) in [x[:2] for x in transcript(scope(__id)) \
+  if x[2] != 'journal']";
 
 /// Whether an act waits: it is not done, and no pause holds it.
 const WAITS: &str = "peek(__id, ...) is ... and not paused(__id)";
