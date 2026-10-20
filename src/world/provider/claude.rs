@@ -798,7 +798,12 @@ impl Flight<'_> {
       }
       match kind {
         "stream_event" => reply.streamed(event.get("event").unwrap_or(&Value::Null)),
-        "assistant" => reply.settled(&event["message"]["content"]),
+        "assistant" => {
+          if let Some(spent) = event["message"].get("usage") {
+            reply.spent = Some(spent.clone());
+          }
+          reply.settled(&event["message"]["content"]);
+        }
         "result" => {
           if let Some(session) = event.get("session_id").and_then(Value::as_str) {
             session.clone_into(id);
@@ -841,6 +846,9 @@ struct Reply<'a> {
   streamed: Option<HashMap<u64, usize>>,
   /// How many blocks of the current message the command line has settled, which is the index of the next one.
   settled: u64,
+  /// The usage of the last message the command line settled, which is the one request of the turn whose answer the
+  /// reply holds.
+  spent: Option<Value>,
   deltas: Option<&'a Deltas>,
 }
 
@@ -995,7 +1003,10 @@ impl Reply<'_> {
   }
 
   /// The response the result of a turn ends the reply with: its blocks, or the text of the result when the reply
-  /// holds none, what the turn read and wrote, and its part of the cost the process says of all its turns.
+  /// holds none, what its last request read and wrote, and its part of the cost the process says of all its turns.
+  /// The usage of the result is the sum of every request of the turn, and the command line makes many when the model
+  /// calls a tool, which it refuses, or stops at its limit of output, so only the last request says what the answer
+  /// read of the window. A result that no message with a usage came before gives its own usage.
   fn response(
     mut self,
     result: &Value,
@@ -1008,7 +1019,7 @@ impl Reply<'_> {
     {
       self.blocks.push(Block::Text(text.to_owned()));
     }
-    let spent = &result["usage"];
+    let spent = self.spent.take().unwrap_or_else(|| result["usage"].clone());
     let count = |key: &str| spent.get(key).and_then(Value::as_u64).unwrap_or_default();
     let mut usage = Usage::new();
     usage.input_tokens = count("input_tokens");

@@ -167,6 +167,18 @@ fn a_turn_starts_the_command_line_for_a_pure_completion_and_says_its_blocks_and_
 }
 
 #[test]
+fn a_turn_of_many_requests_says_the_usage_of_its_last_request() {
+  let yard = Yard::new("loop");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let got = asked(&model, &[user("LOOP")], json!({"session": "chain"})).unwrap();
+  assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
+  let spent = got.usage;
+  let counts = (spent.input_tokens, spent.output_tokens, spent.cached_input_tokens);
+  assert_eq!(counts, (10, 5, 20));
+  assert_eq!((spent.cache_creation_input_tokens, spent.total_tokens), (3, 38));
+}
+
+#[test]
 fn the_next_turn_of_a_conversation_writes_to_its_process_only_what_it_has_not_heard() {
   let yard = Yard::new("next");
   let model = yard.claude(10_000).completion_model("sonnet");
