@@ -151,6 +151,8 @@ async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the
     "class Missing:\n  pass\nclose(Missing())",
     "close(1)",
     "close(ValueError('no value fits'))",
+    "close(1)",
+    "close(ValueError('no shape'))",
   )
   assert await engine.prompt(int, "count", on=root) == 1
   await settle()
@@ -160,6 +162,9 @@ async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the
   # A shape that python reads no instance against, as Any, has no value at all.
   with pytest.raises(ValueError, match="no value fits"):
     await engine.prompt("Any", "anything", on=root)
+  # Neither has a shape whose reading raises.
+  with pytest.raises(ValueError, match="no shape"):
+    await engine.prompt("list[int] | 3", "a shape python cannot read", on=root)
   await settle()
   steps = [one[2] for one in said(log, "reply")]
   raised = [one for one in paragraphs(engine.turns(on=root)) if one.split("\n")[0].endswith(" raised")]
@@ -167,6 +172,7 @@ async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the
     f"#{steps[0]} raised\n{steps[0]}_raised = Refused(\"'nope' not int\")",
     f"#{steps[2]} raised\n{steps[2]}_raised = Refused('1 not Missing')",
     f"#{steps[4]} raised\n{steps[4]}_raised = Refused('1 not Any')",
+    f"#{steps[6]} raised\n{steps[6]}_raised = Refused('1 not list[int] | 3')",
   ]
 
 
