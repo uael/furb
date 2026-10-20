@@ -562,7 +562,8 @@ def bound(id, of="object"):
 
 
 def shown(text, show):
-  return "\n".join(text.lines[i - 1] for i in show(text.lines))
+  lines = text.lines
+  return "\n".join(lines[i - 1] for i in show(text.lines))
 
 
 def unquoted(word):
