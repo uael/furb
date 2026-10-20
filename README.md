@@ -32,6 +32,9 @@ module, and each answer of the model is a program that runs in it.
   act of the operator and every answer of the World, and a later run replays it. Work that was interrupted
   starts again when you resume it.
 - **Limits that hold.** A chain pauses when it reaches a dollar ceiling or a share of the context window.
+- **No permissions, by design.** Each act runs with the rights of the user who runs furb, and the record shows who
+  made each act. For isolation, run furb in a virtual machine. An extension can
+  [ask you before an act](docs/extensions.md#permissions), but furb has none built in.
 - **The model can ask you.** A question to the operator waits in the feed until you answer it.
 - **Extensions are words.** An extension is Python that each chain runs as a rung, which the model reads in its turns.
   The official ones tell a chain the `CLAUDE.md` files of its project and the skills it can read. The system prompt
