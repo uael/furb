@@ -344,7 +344,8 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   let args = yard.args(&pids[0]);
   let after = |flag: &str| args.iter().position(|one| one == flag).map(|at| args[at + 1].as_str());
   assert_eq!((after("--model"), after("--effort")), (Some("opus"), Some("high")));
-  assert_eq!(after("--system-prompt"), Some(SYSTEM));
+  let prompt = after("--system-prompt-file").expect("the system prompt goes by a file");
+  assert_eq!(std::fs::read_to_string(prompt).expect("the file of the system prompt"), SYSTEM);
   let heard = yard.heard();
   assert_eq!(heard.len(), 2);
   assert!(heard[1].contains("second task") && !heard[1].contains("first task"), "{}", heard[1]);
