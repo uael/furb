@@ -33,6 +33,7 @@ EVENTS = {
   "closed",
   "done",
   "exited",
+  "timed",
   "raised",
   "debugged",
   "refused",
@@ -114,7 +115,7 @@ async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> N
 
 
 async def test_the_headers_of_the_file() -> None:
-  """The headers of the file are the open of an act, closed, done, exited, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled."""
+  """The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, refused, ledger, standing, advance, paused, woke and cancelled."""
   sand, _, root = born()
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
@@ -124,6 +125,8 @@ async def test_the_headers_of_the_file() -> None:
   engine.pause(root)
   engine.wake(root)
   engine.cancel(ceiling)
+  sand.auto = False
+  await engine.bash("forever", timeout=0, on=root)
   step = engine.rung("k = 1", on=root)
   assert await step is None
   await settle()

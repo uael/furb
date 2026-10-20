@@ -253,13 +253,25 @@ async fn ran(
     }
   };
   group.free();
-  let code = status.ok().and_then(|status| status.code()).map(i64::from);
+  let code = status.ok().and_then(coded).map(i64::from);
   let exit = Exit {
     code: if late { None } else { code },
     stdout: Text::new(format!("{about}/stdout"), out),
     stderr: Text::new(format!("{about}/stderr"), err),
   };
   let _ = says.unbounded_send(Said::Exit { about: about.clone(), exit });
+}
+
+/// The code of an exit, and for a command that a signal ended, 128 and the number of the signal, as a shell gives, so
+/// no code says only that the timeout ended the command.
+fn coded(status: std::process::ExitStatus) -> Option<i32> {
+  #[cfg(unix)]
+  {
+    use std::os::unix::process::ExitStatusExt;
+    status.code().or_else(|| status.signal().map(|signal| 128 + signal))
+  }
+  #[cfg(not(unix))]
+  status.code()
 }
 
 /// What is fed to a command, written into its stdin, until nothing closes it or the command reads no more.
