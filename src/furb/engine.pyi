@@ -378,7 +378,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the model is asked again.
   A replay makes a rung of its own retelling each rung of the donor it keeps.
   What a rung that retells asks is named under the one it retells, so the life answers it with what it answered then and the World is asked nothing twice.
-  A rung that awaits an act nobody settles waits until the operator cancels it, and holds nothing else of the chain.
+  A rung that awaits an act nobody settles waits until a cancel ends it, and holds nothing else of the chain.
   A rung that retells says each question it makes as the rung it retells, so the question it makes at a place is the one that rung made there.
   A rung that retells names the rung that the word first ran in and never another rung that retells it, so a second replay makes the same acts and asks the World nothing twice.
   A rung that retells is done with nothing when its word answers, runs to its end or is cancelled, whatever the Kernel makes of the word, and with what that word raised.
@@ -388,7 +388,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
 
 @overload
 def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[None]:
-  """A prompt: it makes the rung of one turn of its model, makes another while the rung it made gives no value, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike.
+  """A prompt: it makes the rung of one turn of its model, makes another when no rung that it made runs, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike.
   The driver gives the name of the prompt, and the prompt is awaited for the shape.
   The engine asks the model again after a refusal.
   The operator prompts a model to make the model work.
@@ -515,6 +515,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   A replay makes the module of the chain again, as it was at its birth but on the standing the chain stands on then, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in.
   The donor of a replay is the rungs of the origin for a chain with a source, and the rungs of the chain as they stand for a write of the door of one of its prompts.
   A write of a door gives the words of that ladder alone, so every rung of the chain that is no rung of that ladder stands as it did.
+  A write of a door cancels each rung of that ladder that it drops and that is not done, but the rung that writes, so a word of the program it replaces ends where it waits, with every act under it, the rung that writes among them when it answers that word.
   Before every reply the chain tells the last line of the turn, which says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
   The chain holds the text of each paragraph told on it, in order.
   At the first ready of the next rung, the chain runs that text as the told rung of that rung, before its word, and holds nothing more.

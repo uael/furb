@@ -1039,6 +1039,24 @@ async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
   assert engine.module(root)["mine"] == 1 and engine.module(root)["a"] == 2
 
 
+async def test_a_write_of_a_door_cancels_each_rung_that_it_drops() -> None:
+  """A write of a door cancels each rung of that ladder that it drops and that is not done, but the rung that writes, so a word of the program it replaces ends where it waits, with every act under it, the rung that writes among them when it answers that word."""
+  _, log, root = born(
+    "got = await prompt(str, 'next?')\nclose(got)",
+    "door = get(get(get(acting())[2])[2])[2]\nwrite(Text(door, 'close(\"new\")'))",
+  )
+  act = engine.prompt(str, "plan", on=root)
+  assert await act == "new"
+  await settle()
+  old, new = [a[1] for a in said(log, "rung") if a[2] == act]
+  (asked,) = [a[1] for a in said(log, "prompt") if a[2] == old]
+  (writer,) = [a[1] for a in said(log, "rung") if a[2] == asked]
+  assert [a[2] for a in said(log, "reply")] == [old, writer]
+  assert [type(engine.peek(one)).__name__ for one in (old, asked, writer)] == ["CancelledError"] * 3
+  assert [a[4] for a in said(log, "rung") if a[1] in (old, new)] == ["", 'close("new")']
+  assert said(log, "cancel") == [("cancel", old, root, [f"#{old} cancelled"])]
+
+
 async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_birth() -> None:
   """A replay makes the module of the chain again, as it was at its birth but on the standing the chain stands on then, and makes its rungs in that one, so what a word it drops bound is gone, and a word that runs while it happens ends in the module it began in."""
   sand, _, root = born()

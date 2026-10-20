@@ -491,7 +491,7 @@ async def test_a_rung_that_retells_is_done_with_nothing() -> None:
 
 
 async def test_a_rung_that_awaits_an_act_nobody_settles_waits_until_the_operator_cancels_it() -> None:
-  """A rung that awaits an act nobody settles waits until the operator cancels it, and holds nothing else of the chain."""
+  """A rung that awaits an act nobody settles waits until a cancel ends it, and holds nothing else of the chain."""
   _, _, root = born(auto=False)
   stuck = engine.rung("x = bash('never')\nclose(await x)", on=root)
   other = engine.rung("k = 2\nclose(k)", on=root)

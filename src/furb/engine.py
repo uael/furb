@@ -221,12 +221,15 @@ def prompt[T](shape: type[T] | object, message: str = "", to: str = "", on: str 
     if asks:
       yield "started", id
     yield told(id, "", bound(id, named), message=message)
+    live = set()
     while True:
-      while not asks or paused(id):
-        yield
-      asking = rung(to=to)
-      while (yield)[:2] != ("done", asking):
-        pass
+      if asks and not (live or paused(id)):
+        live.add(rung(to=to))
+      match (yield):
+        case ("rung", about, by, *_) if by == id:
+          live.add(about)
+        case ("done", about, *_):
+          live.discard(about)
 
   return act("prompt", on, controlled(ear), named, message, to)
 
@@ -247,7 +250,10 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       yield "module", id, {**globals(), "__name__": id, "actor": stood}
       for whose, said in rungs.items():
         if under(whose, of):
-          if whose == writer or not (words + "\n").startswith(said + "\n"):
+          if whose == writer:
+            continue
+          if not (words + "\n").startswith(said + "\n"):
+            cancel(whose)
             continue
           words = words[len(said) + 1 :]
         rung(said, whose)

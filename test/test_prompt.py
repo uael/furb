@@ -27,7 +27,7 @@ from furb.engine import OPERATOR, Act, Exit, Refused, Text
 
 
 async def test_a_prompt_it_makes_the_rung_of_one_turn_of_its_model() -> None:
-  """A prompt: it makes the rung of one turn of its model, makes another while the rung it made gives no value, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike."""
+  """A prompt: it makes the rung of one turn of its model, makes another when no rung that it made runs, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike."""
   _, log, root = born("k = BAD", "raise ValueError('boom')", "close(7)")
   act = engine.prompt(int, "try", on=root)
   assert await act == 7
