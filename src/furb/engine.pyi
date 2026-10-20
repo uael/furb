@@ -47,8 +47,10 @@ type Saying = tuple[str, str, *tuple[object, ...]]
 """What an ear says: the kind of the fact, the act it is about, and the words, and nothing of who says it, which the bus fills in from whoever is speaking."""
 type Ear = Generator[Saying | None, Fact]
 """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by.
-The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
+The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain, or against the scratch directory for a path of scratch://; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model.
 The World performs any fact that an extension defines and that the World knows.
+The opening of a life gives the World the scratch directory of its record, which every chain of that record shares, or, for a life that keeps no record, a scratch directory of its own, which goes when that life ends.
+A later life on a record finds its scratch directory again, and when the directory is missing, as on another machine, the opening makes again in it each file that a write of the record made, in the order of the last write of each, with the text that the journal kept, and no file that a command made; the opening of a new record starts with an empty directory.
 The facts that the World says of its own are for the acts that complete later.
 An ear speaks by yielding a saying, and the work it began speaks later by say, under the site of the ear that began it.
 The chain has the gate read every rung but the ones it wrote itself, and the Kernel begin every rung, by the acts gate and run.
@@ -151,6 +153,9 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   """A read: whoever serves the path answers it with the text of it, which the read tells by the lines its show picks.
   A read that the World refuses raises Refused in the caller.
   The engine judges no scheme, so a path of an unknown scheme goes to the World too.
+  The World serves the scratch directory as scratch://: a read of scratch://plan.md gives that file, and a read of scratch:// or of a folder of it gives the name of each entry of that folder, one on each line, each folder with / at its end, as ls does.
+  Each text and each refusal of scratch:// names its path under scratch:// and never the place of the scratch directory on the machine.
+  A path of scratch:// that leaves the scratch directory, by .. or by a link, is refused, and so is a path that starts with scratch: and not scratch://, with a refusal that names scratch://.
   read is given a path and a show.
   read gives a Text.
   A text without a show is told as HEAD, which is the span of its first 2000 lines.
@@ -175,6 +180,7 @@ def write(text: Text, on: str = "") -> Text:
   The chain makes the rungs of a write of a door from its text less the line breaks at its end, since a read of the door joins the words of its rungs with one, so an append to the door makes a rung of what it adds alone.
   A write of a door that a rung of that ladder says leaves the word of that rung out, and that rung is no rung of the chain after it.
   A new file is a write of a Text made of its path and its content.
+  A write of scratch://plan.md puts its text in that file of the scratch directory, and makes the directory and the folders of the file first when they are not there.
   """
 
 def peek(at: str, waiting: object = None) -> object:
@@ -248,12 +254,13 @@ def cd(path: str, on: str = "") -> str:
   The World answers it with the directory that its path names, resolved against the working directory of the chain, and refuses a path that names no directory, so a refused cd moves nothing.
   It is a question and no fact, since a fact a running word says is heard when the word yields, where a question is answered at once, so the paths of that word resolve against the new directory from then on.
   cd tells the directory it came to.
+  A cd to a path of scratch:// is refused with a refusal that names scratch://, since a chain cannot stand in a directory that has no path.
   """
 
 def cwd(on: str = "") -> str:
   """The working directory of a chain is the directory that the closest cd back in its transcript came to.
   The working directory of a chain is the directory of the standing it stands on while no cd stands in its transcript, so a later standing moves no chain that a cd moved.
-  The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads, and the path of a read or a write that is ~ or starts with ~/ against the home of the user.
+  The World resolves the path of a read, a write and a command against the working directory of the chain, which it reads, and the path of a read or a write that is ~ or starts with ~/ against the home of the user, and one of scratch:// against the scratch directory.
   cwd gives the working directory that the paths of the chain resolve against.
   cwd reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing.
   """
@@ -564,6 +571,7 @@ def bash(
   bash is given a command, a fed flag, a timeout, and a show for each stream, the plain words first, so the journal makes it again.
   bash gives the command, which is awaited for its exit code and its streams.
   The World runs the command in the working directory of the chain, which it reads.
+  The World runs each command with TMPDIR set to the scratch directory, and TMP and TEMP too on Windows, which it makes first, so the command finds the files of scratch:// in $TMPDIR, and a program that reads TMPDIR, as tempfile of python does, makes its files there.
   The command runs until it ends, until its timeout, or until a cancel.
   The World ends the command at its timeout.
   The command completes with its exit code and its streams.

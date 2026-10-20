@@ -22,7 +22,7 @@ import furb.kernel
 import furb_monty.engine
 from furb import engine, sheet
 from furb.engine import OPERATOR, Act, Exit, Refused, Text, site
-from furb.world import entries
+from furb.world import Live, entries
 from furb_monty import _monty
 
 ENGINE = vars(furb.python)
@@ -372,6 +372,21 @@ def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list
   """
   log: list[tuple] = []
   return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears(), **ears)
+
+
+def machine(directory: Path, record: Path | None = None) -> tuple[Live, str]:
+  """A life on the World of this machine, in a directory, on a record that it keeps when it is given one, which asks
+  no model and offers the operator alone: the World, which a test ends, and the root."""
+  live = Live(str(directory), roster=[])
+  return live, engine.boot(live.opened(record, extensions=False), world=live.hears(), **live.ears, **kernel())
+
+
+def ended(live: Live) -> None:
+  """The end of a life on the World of this machine: its World lets the ears of the crate go, and a second life that
+  hears nothing ends the first, since the engine of monty holds the ears of the crate it was given until its life
+  is gone."""
+  live.end()
+  engine.boot((), world=Dead(stands=STANDS).hears(), **kernel())
 
 
 def world_says(kind: str, about: str, *words: object) -> tuple:

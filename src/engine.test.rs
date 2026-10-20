@@ -123,10 +123,11 @@ impl Lived {
     let (record, store) = world::store(at.join("record.jsonl"))?;
     let read = Rc::default();
     let words = Rc::new(RefCell::new(words.iter().map(|one| (*one).to_owned()).collect()));
+    let scratch = world::Scratch::own();
     let ears = [
       ("provider", provider(at.clone(), words, Rc::clone(&read))),
-      ("files", world::files()),
-      ("bash", world::bash()),
+      ("files", world::files(scratch.clone())),
+      ("bash", world::bash(scratch)),
       ("time", world::time()),
       ("store", store),
     ];

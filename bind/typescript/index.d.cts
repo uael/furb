@@ -155,8 +155,11 @@ export declare function answered(shape: string, line: string): unknown
 /** An image copied into a directory of images under the digest of its bytes, as a message attaches it. */
 export declare function attachImage(directory: string, path: string): ImageAttachment
 
-/** The ear of commands, which runs each in a shell of this machine. */
-export declare function bash(): NativeEar
+/**
+ * The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
+ * the host names, which the ear of the files is given too.
+ */
+export declare function bash(scratch: string): NativeEar
 
 /**
  * The config directory of the user for this process, where the configs, the extensions of the user and the
@@ -191,8 +194,11 @@ export interface Extension {
  */
 export declare function extensions(given: Array<Extension>): NativeEar
 
-/** The ear of the files, which reads and writes a path. */
-export declare function files(): NativeEar
+/**
+ * The ear of the files, which reads and writes a path, and a path of `scratch://` in the scratch directory that the
+ * host names, which the ear of commands is given too.
+ */
+export declare function files(scratch: string): NativeEar
 
 /**
  * The gate of the crate: what the type checker of monty found on a sheet, each error by its line, and no warning.
@@ -333,7 +339,8 @@ export interface Opening {
   record?: string
   /**
    * Whether the life keeps what it says to its record, under the lease of the store; true when unsaid. A life that
-   * keeps nothing reads its record with no lease.
+   * keeps nothing reads its record with no lease, and has a scratch directory of its own in place of the one of its
+   * record.
    */
   keeps?: boolean
   /**
@@ -386,6 +393,12 @@ export interface Outcome {
 
 /** ROOT is the name of the root, which every life opens first under that one name, and on which boot stands the life. */
 export declare const ROOT: string
+
+/**
+ * The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the
+ * record; nothing when the machine has no cache of furb.
+ */
+export declare function scratch(record: string): string | null
 
 /** Every shape the operator answers, by its name. */
 export declare function shapes(): Array<string>

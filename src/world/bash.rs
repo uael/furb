@@ -21,7 +21,7 @@ use tokio::{
 };
 use unsync::{oneshot, spsc};
 
-use super::here;
+use super::{Scratch, here};
 use crate::{
   ear::{Co, Ear, Next, ear, say},
   fact::Fact,
@@ -57,10 +57,11 @@ fn runs(path: &Path) -> bool {
 
 /// The ear of commands: it takes a command, says what it writes, feeds it, and says it done with its exit.
 ///
-/// A command ends with every process it started, which its group holds. A command that a control ended first, which
-/// the engine says done, is ended so and says nothing more.
-pub fn bash() -> Box<dyn Ear> {
-  ear(|mut co: Co<Said>| async move {
+/// A command runs with `TMPDIR` set to the scratch directory of the life, and `TMP` and `TEMP` too on Windows, which
+/// the ear makes first, so a command finds there the files of `scratch://`. A command ends with every process it started, which its group holds. A
+/// command that a control ended first, which the engine says done, is ended so and says nothing more.
+pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
+  ear(move |mut co: Co<Said>| async move {
     let mut running: HashMap<String, Running> = HashMap::new();
     // What the operator fed a command that runs nowhere yet, which a later life holds until a wake starts it.
     let mut fed: HashMap<String, Vec<Option<String>>> = HashMap::new();
@@ -86,7 +87,7 @@ pub fn bash() -> Box<dyn Ear> {
       match a.kind() {
         "bash" if a.question() => {
           say(&mut co, Fact::says("started", &about, []));
-          match begun(&mut co, &a).await {
+          match begun(&mut co, &a, &scratch).await {
             Ok(begun) => {
               let (stdin, fed_in) = spsc::unbounded();
               let (stop, stopped) = oneshot::channel();
@@ -148,8 +149,8 @@ struct Begun {
   timeout: Option<Duration>,
 }
 
-/// A command begun: its shell spawned in the directory of its chain.
-async fn begun(co: &mut Co<Said>, a: &Fact) -> Result<Begun, Fault> {
+/// A command begun: its shell spawned in the directory of its chain, with the scratch directory as its `TMPDIR`.
+async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, Fault> {
   let about = a.about().to_owned();
   let on = a.on().to_owned();
   let line = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
@@ -169,6 +170,11 @@ async fn begun(co: &mut Co<Said>, a: &Fact) -> Result<Begun, Fault> {
     .stdin(if fed { Stdio::piped() } else { Stdio::null() })
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
+  let tmp = scratch.made()?;
+  command.env("TMPDIR", tmp);
+  if cfg!(windows) {
+    command.env("TMP", tmp).env("TEMP", tmp);
+  }
   grouped(&mut command);
   let mut child = tokio::process::Command::from(command)
     .spawn()

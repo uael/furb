@@ -6,7 +6,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use super::{here, resolved};
+use super::{SCRATCH, Scratch, here, resolved};
 use crate::{
   ear::{Co, Ear, ear, hear, say},
   fact::Fact,
@@ -15,9 +15,10 @@ use crate::{
 
 /// The ear of the files: it answers a cd with the directory that the path names, a read with the text at the path
 /// and a write with the text as it stands after, each resolved against the working directory of the chain, or with
-/// the refusal. The path of a read or a write that is `~` or starts with `~/` resolves against the home of the user.
-pub fn files() -> Box<dyn Ear> {
-  ear(|mut co| async move {
+/// the refusal. The path of a read or a write that is `~` or starts with `~/` resolves against the home of the user,
+/// and one of `scratch://` against the scratch directory of the life, which no chain stands in.
+pub fn files(scratch: Scratch) -> Box<dyn Ear> {
+  ear(move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
       if !a.question() || !matches!(a.kind(), "cd" | "read" | "write") {
@@ -25,7 +26,7 @@ pub fn files() -> Box<dyn Ear> {
       }
       let answer = match a.kind() {
         "cd" => moved(&mut co, &a).await.map(Object::string),
-        _ => served(&mut co, &a).await.map(|text| text.object()),
+        _ => served(&mut co, &a, &scratch).await.map(|text| text.object()),
       };
       let answer = answer.unwrap_or_else(|fault| fault.object());
       say(&mut co, Fact::says("done", a.about(), [answer]));
@@ -37,6 +38,11 @@ pub fn files() -> Box<dyn Ear> {
 /// stands there.
 async fn moved(co: &mut Co, a: &Fact) -> Result<String, Fault> {
   let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+  if path.starts_with("scratch:") {
+    return Err(Fault::refused(format!(
+      "A chain cannot stand in {path}, since {SCRATCH} has no path to stand in."
+    )));
+  }
   let at = resolved(&here(co, a.on()).await?, &path);
   if !at.is_dir() {
     return Err(Fault::refused(format!("There is no directory at {}.", at.display())));
@@ -45,7 +51,7 @@ async fn moved(co: &mut Co, a: &Fact) -> Result<String, Fault> {
 }
 
 /// What a read or a write came to.
-async fn served(co: &mut Co, a: &Fact) -> Result<Text, Fault> {
+async fn served(co: &mut Co, a: &Fact, scratch: &Scratch) -> Result<Text, Fault> {
   let (path, content) = match a.kind() {
     "read" => (a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default(), None),
     _ => {
@@ -54,6 +60,14 @@ async fn served(co: &mut Co, a: &Fact) -> Result<Text, Fault> {
       (text.path, Some(text.content))
     }
   };
+  if let Some(path) = path.strip_prefix(SCRATCH) {
+    return scratch.served(path, content);
+  }
+  if path.starts_with("scratch:") {
+    return Err(Fault::refused(format!(
+      "{path} is no path of {SCRATCH}, which starts with two slashes."
+    )));
+  }
   if path.contains("://") {
     return Err(Fault::refused(format!("No file at {path}.")));
   }
@@ -63,24 +77,28 @@ async fn served(co: &mut Co, a: &Fact) -> Result<Text, Fault> {
   };
   if let Some(content) = content {
     if let Some(parent) = at.parent() {
-      fs::create_dir_all(parent).map_err(|no| failed(&no, &at))?;
+      fs::create_dir_all(parent).map_err(|no| failed(&no, at.display()))?;
     }
-    fs::write(&at, content).map_err(|no| failed(&no, &at))?;
+    fs::write(&at, content).map_err(|no| failed(&no, at.display()))?;
   }
   read(&at)
 }
 
 /// The text at a path: a file of utf-8 of any size, since the engine bounds what a read tells.
 pub(crate) fn read(at: &Path) -> Result<Text, Fault> {
-  let shown = at.display();
-  let info = fs::metadata(at).map_err(|no| failed(&no, at))?;
+  text(at, at.display().to_string())
+}
+
+/// The text at a path under a name, which the text and each refusal of it give.
+pub(super) fn text(at: &Path, name: String) -> Result<Text, Fault> {
+  let info = fs::metadata(at).map_err(|no| failed(&no, &name))?;
   if !info.is_file() {
-    return Err(Fault::refused(format!("Read needs a text file: {shown}")));
+    return Err(Fault::refused(format!("Read needs a text file: {name}")));
   }
-  let bytes = fs::read(at).map_err(|no| failed(&no, at))?;
+  let bytes = fs::read(at).map_err(|no| failed(&no, &name))?;
   let content = String::from_utf8(bytes)
-    .map_err(|_| Fault::refused(format!("Read needs a text file in utf-8: {shown}")))?;
-  Ok(Text::new(shown.to_string(), content))
+    .map_err(|_| Fault::refused(format!("Read needs a text file in utf-8: {name}")))?;
+  Ok(Text::new(name, content))
 }
 
 /// A path that is `~` or starts with `~/`, resolved against the home of the user, as a shell reads it, or the refusal
@@ -91,11 +109,11 @@ fn homed(path: &str, home: Option<PathBuf>) -> Option<Result<PathBuf, Fault>> {
   Some(home.map(|home| resolved(&home, rest.trim_start_matches('/'))).ok_or_else(refused))
 }
 
-/// What the machine refused, in plain words, which the model and the operator both read.
-fn failed(no: &std::io::Error, at: &Path) -> Fault {
+/// What the machine refused at a path, under its name, in plain words, which the model and the operator both read.
+pub(super) fn failed(no: &std::io::Error, name: impl std::fmt::Display) -> Fault {
   match no.kind() {
-    ErrorKind::NotFound => Fault::refused(format!("There is no file at {}.", at.display())),
-    _ => Fault::refused(format!("{no}: {}", at.display())),
+    ErrorKind::NotFound => Fault::refused(format!("There is no file at {name}.")),
+    _ => Fault::refused(format!("{no}: {name}")),
   }
 }
 

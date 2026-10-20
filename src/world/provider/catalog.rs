@@ -31,7 +31,7 @@ use super::{
   claude::{self, Claude},
   clients::{Client, Reach},
 };
-use crate::ear::reactor;
+use crate::{ear::reactor, world::cache};
 
 /// The levels of effort, from least to most, which an actor names after its model, as `claude-cli:opus/low`.
 pub const LEVELS: [&str; 7] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -563,22 +563,6 @@ async fn refreshed(at: PathBuf) {
   if wrote {
     let _ = fs::rename(&partial, &at);
   }
-}
-
-/// The cache of furb on this machine: under `XDG_CACHE_HOME`, `LOCALAPPDATA` on Windows, `Library/Caches` of the
-/// home on macOS, and `.cache` of the home elsewhere.
-pub(super) fn cache() -> Option<PathBuf> {
-  let named = |name: &str| env::var_os(name).filter(|one| !one.is_empty()).map(PathBuf::from);
-  let base = named("XDG_CACHE_HOME").or_else(|| {
-    if cfg!(windows) {
-      named("LOCALAPPDATA")
-    } else if cfg!(target_os = "macos") {
-      env::home_dir().map(|home| home.join("Library/Caches"))
-    } else {
-      env::home_dir().map(|home| home.join(".cache"))
-    }
-  });
-  base.map(|base| base.join("furb"))
 }
 
 #[cfg(test)]

@@ -1,10 +1,29 @@
 """write, the text put at its path."""
 
+from pathlib import Path
+
 import pytest
 
-from conftest import BAD, Dead, Sand, World, born, fresh, life, of, paragraphs, prompted, said, settle, written
+from conftest import (
+  BAD,
+  Dead,
+  Sand,
+  World,
+  born,
+  ended,
+  fresh,
+  life,
+  machine,
+  of,
+  paragraphs,
+  prompted,
+  said,
+  settle,
+  written,
+)
 from furb import engine
 from furb.engine import OPERATOR, Refused, Text
+from furb_monty import _monty
 
 KEPT = (
   "def kept(id):\n"
@@ -215,3 +234,15 @@ async def test_the_chain_makes_the_rungs_of_a_write_of_a_door_from_its_text_less
     await settle()
   assert [a[4] for a in said(log, "bash")] == ["a", "b", "c"]
   assert engine.read(act, on=root) == Text(act, "bash('a')\nbash('b')\nbash('c')")
+
+
+async def test_a_write_of_scratch_puts_its_text_in_that_file_of_the_scratch_directory(tmp_path: Path) -> None:
+  """A write of scratch://plan.md puts its text in that file of the scratch directory, and makes the directory and the folders of the file first when they are not there."""
+  record = tmp_path / "record.jsonl"
+  live, root = machine(tmp_path, record)
+  place = Path(_monty.scratch(str(record)) or tmp_path / "none")
+  assert not place.exists()
+  wrote = engine.write(Text("scratch://deep/er/plan.md", "plan\n"), on=root)
+  ended(live)
+  assert wrote == Text("scratch://deep/er/plan.md", "plan\n")
+  assert (place / "deep" / "er" / "plan.md").read_text() == "plan\n"

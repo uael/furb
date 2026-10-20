@@ -1,8 +1,10 @@
 """cd, the verb that moves the working directory of a chain."""
 
+from pathlib import Path
+
 import pytest
 
-from conftest import WORLD, acts, born, paragraphs, said, settle
+from conftest import WORLD, acts, born, ended, machine, paragraphs, said, settle
 from furb import engine
 from furb.engine import Refused
 
@@ -59,3 +61,15 @@ async def test_cd_tells_the_directory_it_came_to() -> None:
   assert engine.turns(on=root)[-1][1] == "#cd1\ncd1_path = '/w/x'\n\n#prompt1 closed\nprompt1_value = 1"
   was = paragraphs(engine.turns(on=root))
   assert engine.cd("/y", on=root) == "/y" and paragraphs(engine.turns(on=root)) == was
+
+
+async def test_a_cd_to_a_path_of_scratch_is_refused(tmp_path: Path) -> None:
+  """A cd to a path of scratch:// is refused with a refusal that names scratch://, since a chain cannot stand in a directory that has no path."""
+  live, root = machine(tmp_path)
+  with pytest.raises(
+    Refused, match=r"^A chain cannot stand in scratch://notes, since scratch:// has no path to stand in\.$"
+  ):
+    engine.cd("scratch://notes", on=root)
+  where = engine.cwd(on=root)
+  ended(live)
+  assert where == str(tmp_path)

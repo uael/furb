@@ -20,7 +20,8 @@ use rig_core::{
   wasm_compat::WasmCompatSend,
 };
 
-use super::{Streams, catalog::cache, ended, pi::Pi, streams};
+use super::{Streams, ended, pi::Pi, streams};
+use crate::world::cache;
 
 /// The client of rig that asks a provider.
 #[derive(serde::Deserialize, Clone, Copy, PartialEq, Debug)]

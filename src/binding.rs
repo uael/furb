@@ -265,18 +265,28 @@ pub struct Inspection {
   pub value: Value,
 }
 
-/// The ear of the files, which reads and writes a path.
+/// The ear of the files, which reads and writes a path, and a path of `scratch://` in the scratch directory that the
+/// host names, which the ear of commands is given too.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn files() -> NativeEar {
-  NativeEar::of(world::files())
+pub fn files(scratch: String) -> NativeEar {
+  NativeEar::of(world::files(world::Scratch::at(scratch)))
 }
 
-/// The ear of commands, which runs each in a shell of this machine.
+/// The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
+/// the host names, which the ear of the files is given too.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn bash() -> NativeEar {
-  NativeEar::of(world::bash())
+pub fn bash(scratch: String) -> NativeEar {
+  NativeEar::of(world::bash(world::Scratch::at(scratch)))
+}
+
+/// The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the
+/// record; nothing when the machine has no cache of furb.
+#[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn scratch(record: String) -> Option<String> {
+  world::Scratch::of(record.as_ref()).map(|one| one.path().display().to_string())
 }
 
 /// The ear of time, which reads the clock, draws a chance, and ends a wait.

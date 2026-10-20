@@ -8,13 +8,17 @@
 //! runs what its record enables all the same. The ears are named as every host names them, so the record of one
 //! host opens in another.
 
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+  path::{Path, PathBuf},
+  sync::Arc,
+  time::Duration,
+};
 
 use crate::{
   Ear, Engine, Fault, Object,
   ear::{ear, hear},
   extension::{self, Places, memory::memory, skills::skills},
-  world::{self, Catalog, Writes},
+  world::{self, Catalog, Scratch, Writes},
 };
 
 /// The ears of a life, each under the name the engine hears it by, in the order of boot.
@@ -43,7 +47,8 @@ pub struct Opening {
   #[cfg_attr(feature = "python", pyo3(default))]
   pub record: Option<String>,
   /// Whether the life keeps what it says to its record, under the lease of the store; true when unsaid. A life that
-  /// keeps nothing reads its record with no lease.
+  /// keeps nothing reads its record with no lease, and has a scratch directory of its own in place of the one of its
+  /// record.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub keeps: Option<bool>,
   /// Whether the life only inspects its record; false when unsaid. Such a life keeps nothing, enables no new
@@ -103,13 +108,25 @@ impl Opening {
 
   /// The record the life opens on, and the ears of the crate, in the order of boot: the provider, the extensions,
   /// each official extension, the files, the commands and time, and the store when the life keeps.
+  ///
+  /// The files and the commands share the scratch directory of the life: the one of its record when it keeps the
+  /// record, and else one of its own, which goes with the life. A new record starts with an empty scratch directory,
+  /// and the files of the record are made again in one that is missing.
   pub fn parts(self) -> Result<(Vec<Object>, Ears), Fault> {
     let works = self.works();
-    let (record, store) = match (&self.record, self.keeps != Some(false) && works) {
+    let keeps = self.keeps != Some(false) && works;
+    let (record, store) = match (&self.record, keeps) {
       (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
       (Some(path), false) => (world::kept(path)?, None),
       (None, _) => (Vec::new(), None),
     };
+    let scratch = works.then(|| {
+      let kept =
+        self.record.as_ref().filter(|_| keeps).and_then(|path| Scratch::of(Path::new(path)));
+      let scratch = kept.unwrap_or_else(Scratch::own);
+      scratch.remade(&record);
+      scratch
+    });
     let here = Places::here();
     let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
     let extensions = match self.extensions != Some(false) && works {
@@ -117,16 +134,16 @@ impl Opening {
       false => Vec::new(),
     };
     let provider = self.provider()?;
-    let working = |made: fn() -> Box<dyn Ear>| if works { made() } else { silent() };
+    let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config;
     let mut ears = vec![
       ("provider", provider),
       ("extensions", extension::extensions(extensions)),
       ("memory", memory(config.clone())),
       ("skills", skills(config)),
-      ("files", working(world::files)),
-      ("bash", working(world::bash)),
-      ("time", working(world::time)),
+      ("files", working(scratch.clone().map(world::files))),
+      ("bash", working(scratch.map(world::bash))),
+      ("time", working(works.then(world::time))),
     ];
     ears.extend(store.map(|store| ("store", store)));
     Ok((record, ears.into_iter().map(|(name, ear)| (name.to_owned(), ear)).collect()))

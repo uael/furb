@@ -184,11 +184,17 @@ class Engine:
 
   def __getattr__(self, name: str) -> Callable[..., object]: ...
 
-def files() -> NativeEar:
-  """The ear of the files, which reads and writes a path."""
+def files(scratch: str) -> NativeEar:
+  """The ear of the files, which reads and writes a path, and a path of `scratch://` in the scratch directory that
+  the host names, which the ear of commands is given too."""
 
-def bash() -> NativeEar:
-  """The ear of commands, which runs each in a shell of this machine."""
+def bash(scratch: str) -> NativeEar:
+  """The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
+  the host names, which the ear of the files is given too."""
+
+def scratch(record: str) -> str | None:
+  """The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the
+  record; nothing when the machine has no cache of furb."""
 
 def time() -> NativeEar:
   """The ear of time, which reads the clock, draws a chance, and ends a wait."""

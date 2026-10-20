@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { type NativeEar, store } from "@furb/engine";
+import { type NativeEar, scratch, store } from "@furb/engine";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
@@ -158,7 +158,7 @@ test("workspaces keep sessions alive, report background completion and input, an
     expect(metadata.pending).toBeUndefined();
   }));
 
-test("deleting a session moves its record and state to trash, keeps other sessions alive, and refuses another owner", () =>
+test("deleting a session moves its record and state to trash, removes its scratch directory, keeps other sessions alive, and refuses another owner", () =>
   withLibrary(async ({ directory, open }) => {
     const library = open();
     let external: Session | undefined;
@@ -167,11 +167,16 @@ test("deleting a session moves its record and state to trash, keeps other sessio
       const first = await library.create(group, "Remove me");
       const second = await library.create(group, "Keep me");
       if (!first.session || !second.session) throw new Error("Missing live sessions.");
+      const word = 'kept_value = 41\nwrite(Text("scratch://plan.md", "plan"))';
       await first.session.engine.result(
-        await first.session.engine.rung({ word: "kept_value = 41", on: first.session.engine.root }),
+        await first.session.engine.rung({ word, on: first.session.engine.root }),
       );
+      const notes = scratch(first.path);
+      if (!notes) throw new Error("The record has no scratch directory.");
+      expect(readFileSync(join(notes, "plan.md"), "utf8")).toBe("plan");
       const otherEngine = second.session.engine;
       const trash = await library.delete(first);
+      expect(await stat(notes).catch(() => null)).toBeNull();
       expect(library.current).toBe(second);
       expect(second.session.engine).toBe(otherEngine);
       await otherEngine.result(await otherEngine.rung({ word: "still_alive = 17", on: otherEngine.root }));
@@ -185,6 +190,7 @@ test("deleting a session moves its record and state to trash, keeps other sessio
       expect((await restored.session?.engine.inspect("kept_value", restored.session.selected))?.value).toBe(
         41,
       );
+      expect(readFileSync(join(scratch(archived) ?? "", "plan.md"), "utf8")).toBe("plan");
       const locked = join(group.directory, ".furb/sessions/locked.jsonl");
       const opened = await openEngine({ cwd: directory, record: locked, demo: true });
       external = new Session(opened.engine, opened.host, true, library.preferences);

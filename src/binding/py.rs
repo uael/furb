@@ -1104,6 +1104,7 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   let functions = [
     wrap_pyfunction!(files, module)?,
     wrap_pyfunction!(bash, module)?,
+    wrap_pyfunction!(scratch, module)?,
     wrap_pyfunction!(time, module)?,
     wrap_pyfunction!(store, module)?,
     wrap_pyfunction!(kept, module)?,

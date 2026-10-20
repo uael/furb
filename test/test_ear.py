@@ -1,12 +1,35 @@
 """Ear, any generator that hears every fact and speaks by yielding one: the World and the Kernel among them."""
 
+import shutil
 from asyncio import CancelledError
 from collections.abc import Generator
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from conftest import WORLD, Py, Sand, Where, World, born, dones, fresh, life, prompted, ran, said, settle, sown, written
+import pytest
+
+from conftest import (
+  WORLD,
+  Py,
+  Sand,
+  Where,
+  World,
+  born,
+  dones,
+  ended,
+  fresh,
+  life,
+  machine,
+  prompted,
+  ran,
+  said,
+  settle,
+  sown,
+  written,
+)
 from furb import engine
 from furb.engine import OPERATOR, Exit, Refused, Text
+from furb_monty import _monty
 
 PING = "def ping(id):\n  while True:\n    yield\n\nclose(await act('ping', '', ping))\n"
 
@@ -42,8 +65,8 @@ class Answering(Sand):
       return
 
 
-async def test_the_world_hears_every_fact() -> None:
-  """The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model."""
+async def test_the_world_hears_every_fact(tmp_path: Path) -> None:
+  """The World, the ears of the outside that serve the machine, one or many, hears every fact, and every act that no ear before it took: it answers a stand, a clock, a chance, a cd, a read and a write of a path nobody of the engine serves, resolved against the working directory of the chain, or against the scratch directory for a path of scratch://; it takes a command, asks it whether it is merged, feeds it, and ends it at its timeout and at a cancel; it takes a wait and a prompt to the operator, which it shows; and it takes a reply, which it answers with the turn of the model."""
   sand, log, root = born(files={"/w/a.txt": "one\n"}, auto=False)
   assert engine.cwd(on=root) == "/w"
   assert engine.clock(on=root) == 1001.0
@@ -74,6 +97,11 @@ async def test_the_world_hears_every_fact() -> None:
   assert engine.read("a.txt", on=other) == Text("/x/a.txt", "three\n")
   assert (await engine.bash("echo hi", on=other)).code == 0
   assert where.where == ["/x"]
+  live, root = machine(tmp_path)
+  wrote = engine.write(Text("scratch://plan.md", "plan\n"), on=root)
+  ended(live)
+  assert wrote == Text("scratch://plan.md", "plan\n")
+  assert not (tmp_path / "scratch:").exists() and not (tmp_path / "plan.md").exists()
 
 
 async def test_the_world_performs_any_fact_that_an_extension_defines_and_that_the_world_knows() -> None:
@@ -176,3 +204,50 @@ async def test_the_kernel_sets_the_site_to_the_rung_whose_word_it_steps() -> Non
   _, log, root = born("x = bash('echo hi')\nclose((await x).code)")
   assert await engine.prompt(int, "run it", on=root) == 0
   assert [(one[1], one[2]) for one in said(log, "bash")] == [("bash1", "rung1")] and engine.site.get() == OPERATOR
+
+
+async def test_the_opening_of_a_life_gives_the_world_the_scratch_directory_of_its_record(tmp_path: Path) -> None:
+  """The opening of a life gives the World the scratch directory of its record, which every chain of that record shares, or, for a life that keeps no record, a scratch directory of its own, which goes when that life ends."""
+  one, two = tmp_path / "one.jsonl", tmp_path / "two.jsonl"
+  live, root = machine(tmp_path, one)
+  other = engine.chain("other", on=root)
+  engine.write(Text("scratch://plan.md", "one\n"), on=other)
+  shared = engine.read("scratch://plan.md", on=root).content
+  ended(live)
+  live, root = machine(tmp_path, two)
+  with pytest.raises(Refused, match=r"^There is no file at scratch://plan\.md\.$"):
+    engine.read("scratch://plan.md", on=root)
+  ended(live)
+  live, root = machine(tmp_path)
+  own = Path((await engine.bash('echo own > "$TMPDIR/own.txt" && echo "$TMPDIR"', on=root)).stdout.content.strip())
+  held = (own / "own.txt").read_text()
+  ended(live)
+  assert (shared, held) == ("one\n", "own\n")
+  assert not own.exists()
+
+
+async def test_a_later_life_on_a_record_finds_its_scratch_directory_again(tmp_path: Path) -> None:
+  """A later life on a record finds its scratch directory again, and when the directory is missing, as on another machine, the opening makes again in it each file that a write of the record made, in the order of the last write of each, with the text that the journal kept, and no file that a command made; the opening of a new record starts with an empty directory."""
+  record = tmp_path / "record.jsonl"
+  live, root = machine(tmp_path, record)
+  engine.write(Text("scratch://plan.md", "one\n"), on=root)
+  await engine.bash('echo made > "$TMPDIR/made.txt"', on=root)
+  ended(live)
+  live, root = machine(tmp_path, record)
+  found = engine.read("scratch://made.txt", on=root).content
+  engine.write(Text("scratch://a", "a file\n"), on=root)
+  await engine.bash('rm "$TMPDIR/a"', on=root)
+  engine.write(Text("scratch://a/b.md", "in a folder\n"), on=root)
+  engine.write(Text("scratch://plan.md", "two\n"), on=root)
+  ended(live)
+  shutil.rmtree(_monty.scratch(str(record)) or tmp_path / "none")
+  live, root = machine(tmp_path, record)
+  remade = [engine.read(f"scratch://{path}", on=root).content for path in ("", "plan.md", "a/b.md")]
+  ended(live)
+  record.unlink()
+  live, root = machine(tmp_path, record)
+  empty = engine.read("scratch://", on=root).content
+  ended(live)
+  assert found == "made\n"
+  assert remade == ["a/\nplan.md", "two\n", "in a folder\n"]
+  assert empty == ""

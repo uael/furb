@@ -1,6 +1,9 @@
 """bash, a command of the World."""
 
+import shlex
+import sys
 from asyncio import CancelledError
+from pathlib import Path
 
 import pytest
 
@@ -13,7 +16,9 @@ from conftest import (
   born,
   chained,
   dones,
+  ended,
   life,
+  machine,
   paragraphs,
   plain,
   relived,
@@ -442,3 +447,17 @@ async def test_the_world_that_takes_a_command_answers_it() -> None:
     ("done", WORLD),
   ]
   assert await act == Exit(7, Text(f"{act}/stdout", "out\n"), Text(f"{act}/stderr", "err\n"))
+
+
+async def test_the_world_runs_each_command_with_tmpdir_set_to_the_scratch_directory(tmp_path: Path) -> None:
+  """The World runs each command with TMPDIR set to the scratch directory, and TMP and TEMP too on Windows, which it makes first, so the command finds the files of scratch:// in $TMPDIR, and a program that reads TMPDIR, as tempfile of python does, makes its files there."""
+  live, root = machine(tmp_path)
+  first = await engine.bash('test -d "$TMPDIR" && echo made', on=root)
+  engine.write(Text("scratch://plan.md", "plan\n"), on=root)
+  made = f'{shlex.quote(sys.executable)} -c "import tempfile; print(tempfile.mkstemp()[1])"'
+  got = await engine.bash(f'cat "$TMPDIR/plan.md" && {made}', on=root)
+  listed = engine.read("scratch://", on=root).content
+  ended(live)
+  plan, one = got.stdout.content.splitlines()
+  assert (first.stdout.content, plan) == ("made\n", "plan")
+  assert listed == f"plan.md\n{Path(one).name}"
