@@ -300,7 +300,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("read", about, by, _, path) if question(("prompt", path)) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in rungs.items() if x != by and under(x, path)))
         case ("write", about, by, _, Text(path, content) as text) if question(("prompt", path)) and scope(path) == id:
-          yield from replay(path, content, by)
+          yield from replay(path, content.rstrip("\n"), by)
           yield "done", about, text
         case ("rung", rid, maker, _, "", _, to):
           waiting[rid] = maker, to
@@ -426,7 +426,7 @@ class Text:
     return Text(self.path, self.content + text)
 
   def edit(self, lo: int, hi: int, lines: list[str]) -> Text:
-    now = self.content.splitlines(True)
+    now = (self.content + "\n").splitlines(True)[: len(self.lines)]
     if not 1 <= lo <= hi + 1 <= len(now) + 1:
       raise Refused(f"{self.path} no lines {lo}:{hi}")
     now[lo - 1 : hi] = [x.removesuffix("\n") + "\n" for x in lines]

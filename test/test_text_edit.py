@@ -3,7 +3,7 @@
 import pytest
 
 from conftest import THREE
-from furb.engine import Refused
+from furb.engine import Refused, Text
 
 
 def test_the_text_with_one_more_edit_an_edit_whose_lines_are_not_there_is_refused() -> None:
@@ -24,3 +24,14 @@ def test_the_edits_that_say_themselves_are_one_edit_each() -> None:
   assert THREE.delete(2, 2).content == "one\nthree\n"
   for made in (THREE.replace("one", "1"), THREE.append("four"), THREE.insert(1, "top"), THREE.delete(2, 2)):
     assert made.before is THREE and made.undo() is THREE
+
+
+def test_an_edit_ends_the_last_line_of_the_text_with_a_line_break() -> None:
+  """An edit of lines, as an append, an insert or a delete, ends the last line of the text with a line break, so what it puts after a text that ends with none starts a line of its own."""
+  bare = Text("/w/n.txt", "one\ntwo")
+  assert bare.append("three").content == "one\ntwo\nthree\n"
+  assert bare.insert(3, "x\ny").lines == ["one", "two", "x", "y"]
+  assert bare.edit(1, 1, ["ONE"]).content == "ONE\ntwo\n"
+  assert Text("/w/n.txt", "a\r\nb").append("c").content == "a\r\nb\nc\n"
+  assert Text("/w/n.txt").append("x").content == "x\n"
+  assert bare.replace("two", "2").content == "one\n2"

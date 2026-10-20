@@ -202,3 +202,16 @@ async def test_a_new_file_is_a_write_of_a_text_made_of_its_path_and_its_content(
   assert engine.write(Text("new.txt", "one\n"), on=root) == Text("/w/new.txt", "one\n")
   assert sand.files["/w/new.txt"] == "one\n"
   assert engine.read("new.txt", on=root) == Text("/w/new.txt", "one\n")
+
+
+async def test_the_chain_makes_the_rungs_of_a_write_of_a_door_from_its_text_less_the_line_breaks_at_its_end() -> None:
+  """The chain makes the rungs of a write of a door from its text less the line breaks at its end, since a read of the door joins the words of its rungs with one, so an append to the door makes a rung of what it adds alone."""
+  _, log, root = born()
+  act = engine.prompt(None, "work", to=OPERATOR, on=root)
+  engine.write(Text(act, "bash('a')\n"), on=root)
+  await settle()
+  for more in ("bash('b')", "bash('c')"):
+    engine.write(engine.read(act, on=root).append(more), on=root)
+    await settle()
+  assert [a[4] for a in said(log, "bash")] == ["a", "b", "c"]
+  assert engine.read(act, on=root) == Text(act, "bash('a')\nbash('b')\nbash('c')")
