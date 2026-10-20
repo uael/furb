@@ -16,6 +16,9 @@ from furb import engine, python, sheet
 from furb.kernel import kernel
 from furb.world import Live, answered, kept
 
+# The catalog of the crate stands in the module of the door that furb.world reads too, and furb_monty gives no other.
+from furb_monty import _monty
+
 
 def say(text: str) -> None:
   """One line to the operator, said as it happens, since a line of a long run that waits for the end says nothing."""
@@ -23,10 +26,24 @@ def say(text: str) -> None:
   sys.stdout.flush()
 
 
-def ready() -> None:
-  """Stop the script at once when no claude stands on PATH, since no model can be asked then."""
-  if shutil.which(os.environ.get("FURB_CLAUDE_BIN") or "claude") is None:
-    say("no claude on PATH, so no model can be asked and the script stops here")
+def ready(actor: str | None = None) -> None:
+  """Stop the script at once when its actor cannot be asked: a model of the claude command line, by its name or by its
+  id alone, when the catalog of the crate finds no claude, or no model at all when the script names no actor and the
+  catalog offers none, since the default actor is the first model that it offers. A claude on PATH is the default
+  actor, so the catalog, which may ask a local server, is read only when none stands there."""
+  if shutil.which(os.environ.get("FURB_CLAUDE_BIN") or "claude") is not None:
+    return
+  offered = _monty.models()
+  # The catalog finds claude where PATH does not, as in the folders of Claude Desktop, and offers it first then.
+  if offered and str(offered[0]["name"]).startswith("claude-cli:"):
+    return
+  if actor is None and not offered:
+    say("the catalog offers no model, so no model can be asked and the script stops here")
+    raise SystemExit(1)
+  actor = actor or str(offered[0]["name"])
+  model = _monty.model(actor) or _monty.model(actor.rsplit("/", 1)[0])
+  if str(model["name"] if model else actor).startswith("claude-cli:"):
+    say("no claude stands, so no model can be asked and the script stops here")
     raise SystemExit(1)
 
 

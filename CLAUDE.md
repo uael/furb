@@ -181,8 +181,10 @@ nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
   a process, on a claude command line that answers from a script.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
 - `uv run pre-commit run --all-files`: every gate the commit hook runs.
-- `uv run python script/smoke.py`: one real life on claude-cli:opus/high through the claude command line on PATH, or
-  the one `FURB_CLAUDE_BIN` names. It is no test of the suite and spends one prompt.
+- `uv run python script/smoke.py`: one real life on the default actor: claude-cli:opus/high through the claude command
+  line on PATH, or the one `FURB_CLAUDE_BIN` names, and with no claude the first model of the network or of the local
+  server that the catalog offers, which may cost dollars. `--model` names the actor, as `--model local:qwen3` on the
+  local server that `FURB_LOCAL_URL` names. It is no test of the suite and spends one prompt.
 - `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/CLAUDE.md` says how to run.

@@ -754,7 +754,7 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace) 
 
 def run(args: argparse.Namespace) -> int:
   """Seed, let one life work the task, freeze what it left, grade it, and keep the whole of it."""
-  ready()
+  ready(args.to or None)
   work, task, meta, syn = seeded(args.task, keep_app=args.resume)
   app, run_dir = work / "app", work / ".run"
   # A fresh checkout takes a fresh record: a record beside a tree it never wrote is no run at all.

@@ -2,10 +2,12 @@
 time.
 
 Run it from the root of the repository, as `uv run python script/smoke.py`. It runs `furb prompt` twice on one record,
-on the default actor of the crate. It spends the dollars of one turn of one model and no more: the first life asks
-the model, and the second life is answered out of the record of the first, so no model is asked again.
+on the default actor of the crate, or on the actor that `--model` names, as `--model local:qwen3`. It spends the
+dollars of one turn of one model and no more: the first life asks the model, and the second life is answered out of
+the record of the first, so no model is asked again.
 """
 
+import argparse
 import subprocess
 import sys
 import tempfile
@@ -21,6 +23,10 @@ STALL = 300.0
 """STALL is the seconds the smoke waits for a command of furb, since a chain the World paused ends the command."""
 CEILING = 1.0
 """CEILING is the dollars the first life may spend, ten answers or so, so that a model that loops is paused."""
+SHARE = 0.5
+"""SHARE is the part of the window that one answer of the first life may fill, so that a model that loops and costs
+nothing, as a model of a local server does, is paused too. The first answer reads the system prompt, so it passes the
+share on a window under twice that size."""
 
 
 def furb(yard: Path, *words: str) -> str:
@@ -36,15 +42,20 @@ def furb(yard: Path, *words: str) -> str:
 
 
 def main() -> int:
-  """The two lives, in a directory of their own, and what the answer of the model cost."""
-  ready()
+  """The two lives, in a directory of their own, on the actor of the command line, and what the answer of the model
+  cost."""
+  given = argparse.ArgumentParser(description=__doc__)
+  given.add_argument("--model", help="The actor, as provider:model/effort; the default actor of the crate when unsaid.")
+  model = given.parse_args().model
+  ready(model)
+  stand = ["--model", model] if model else []
   yard = Path(tempfile.mkdtemp(prefix="furb-smoke-"))
   record = yard / "record.jsonl"
   (yard / "a.txt").write_text(HELD, encoding="utf-8")
   say(f"the directory of the smoke is {yard}")
-  furb(yard, "run", f"grant({CEILING})")
+  furb(yard, "run", f"grant({CEILING}, {SHARE})", *stand)
   for life in ("first", "second"):
-    got = furb(yard, "prompt", MESSAGE, "--shape", "int")
+    got = furb(yard, "prompt", MESSAGE, "--shape", "int", *stand)
     say(f"the {life} life gave {got}, and the record holds {len(bought(record))} answer(s) of a model")
     assert got == str(len(HELD.splitlines())), f"the {life} life answered {got}"
   _, word, usage, _ = bought(record)[0][3]
