@@ -6,7 +6,7 @@ from furb.engine import Text
 
 
 async def test_the_text_as_more_of_it_is_told() -> None:
-  """The text as more of it is told, which is how a stream of a command grows, and which comes from no text, since a stream that grows is no edit of one."""
+  """The text as more of it is told, as a stream of a command grows, which comes from no text, since a stream that grows is no edit of one."""
   grown = Text("/x/stdout").grow("half\n").grow("rest\n")
   assert grown.content == "half\nrest\n" and grown.lines == ["half", "rest"]
   assert grown.before is None and grown.undo() is grown

@@ -93,11 +93,7 @@ def program(on: str = "") -> dict[str, str]:
 
 
 def standing() -> list:
-  for x in reversed(transcript(ROOT)):
-    match x:
-      case ("done", about, _, [_, _, _] as now) if question(("stand", about)):
-        return now
-  return []
+  return next((now for x in reversed(transcript(ROOT)) if x[0] == "stand" and isinstance(now := peek(x[1]), list)), [])
 
 
 def stand(on: str = ROOT) -> list:
@@ -123,11 +119,10 @@ def cd(path: str, on: str = "") -> str:
 
 
 def cwd(on: str = "") -> str:
-  for x in reversed(transcript(on)):
-    match x:
-      case ("done", about, _, str() as path) if question(("cd", about)):
-        return path
-  return standing()[1]
+  return (
+    next((path for x in reversed(transcript(on)) if x[0] == "cd" and isinstance(path := peek(x[1]), str)), "")
+    or standing()[1]
+  )
 
 
 def pause(id: str) -> None:
@@ -377,14 +372,26 @@ def bash(
   on: str = "",
 ) -> Act[Exit]:
   def ear(id):
-    streams, mute = {x: Text(x) for x in (id + "/stdout", id + "/stderr")}, "" if fed else "not fed"
+    mute = "" if fed else "not fed"
     yield told(id, "", bound(id, "Exit"), command="" if show is HIDDEN else command)
     while True:
       match a := (yield):
         case ("merged", qid, *_, about) if about == id:
           yield "done", qid, show_err is None
-        case ("read", qid, *_, path) if path in streams:
-          yield "done", qid, streams[path]
+        case ("read", qid, *_, path) if path in (id + "/stdout", id + "/stderr"):
+          yield (
+            "done",
+            qid,
+            getattr(peek(id), path[len(id) + 1 :], None)
+            or Text(
+              path,
+              "".join(
+                x[3]
+                for x in transcript(scope(id))
+                if x[:2] == ("out", id) and f"{id}/{x[4] if show_err else 'stdout'}" == path
+              ),
+            ),
+          )
         case ("write", qid, *_, Text(path, text) as took) if path == id + "/stdin":
           if mute:
             took = Refused(mute)
@@ -394,11 +401,8 @@ def bash(
           yield "done", qid, took
         case _ if mute == "ended":
           continue
-        case ("out", about, _, text, stream) if about == id:
-          into = id + "/" + (stream if show_err else "stdout")
-          streams[into] = streams[into].grow(text)
         case ("done", about, _, Exit(code, out, err)) if about == id:
-          mute, streams = "ended", dict(zip(streams, (out, err), strict=True))
+          mute = "ended"
           if show is not HIDDEN:
             yield told(id, f"exited {code}", stdout=shown(out, show), stderr=show_err and shown(err, show_err))
         case ("cancel" | "close", *_) if covers(a, id):
