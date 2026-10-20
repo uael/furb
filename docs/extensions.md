@@ -89,6 +89,13 @@ answers the reads of a scheme of its own. An extension that needs an ear in rust
 Name only the extensions that you trust. A word runs in the sandbox of monty on the engine of the crate, and with the
 rights of the user on the engine of CPython, as a word of a model does there.
 
+## Permissions
+
+furb has no permissions, by design. Each act runs with the rights of the user who runs furb, and the record shows who
+made each act. For isolation, run furb in a virtual machine. An extension can add a check: its word can rebind a verb,
+such as `bash`, so that the verb asks the operator before it makes the act. A word of the model can rebind that verb
+again, so such a check stops a mistake and not an attack. furb has no such extension built in.
+
 ## In the hosts
 
 - `furb extensions` prints each extension that a life on a record runs, with its life word, and the state of the
