@@ -68,10 +68,12 @@ pub struct NativeEar {
   hearing: Homed<Hearing>,
 }
 
+/// The ear that a [`Lent`] lends, which is gone once the ear is given back.
+type Loan = RefCell<Option<Box<dyn Ear>>>;
 /// The ear, and what the engine of python steps it with once it is born there.
 struct Hearing {
   ear: Option<Box<dyn Ear>>,
-  lent: Option<Weak<RefCell<Option<Box<dyn Ear>>>>>,
+  lent: Option<Weak<Loan>>,
   #[cfg(feature = "python")]
   stepped: Option<py::Stepped>,
 }
@@ -182,7 +184,7 @@ impl NativeEar {
 }
 
 /// An ear of the crate as an engine holds it, which its [`NativeEar`] lets go at a dispose: from then on it is over.
-struct Lent(Rc<RefCell<Option<Box<dyn Ear>>>>);
+struct Lent(Rc<Loan>);
 
 impl Ear for Lent {
   fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
