@@ -1,6 +1,6 @@
 """Ready, the word a rung holds."""
 
-from conftest import BAD, DOOR, Sand, acts, born, fresh, plain, prompted, relived, said, settle, written
+from conftest import DOOR, Sand, acts, born, faulted, fresh, plain, prompted, relived, said, settle, written
 from furb import engine
 
 
@@ -25,7 +25,9 @@ async def test_the_word_of_a_rung_enters_the_program_when_the_gate_accepts_it_or
   assert await act == 2
   refused, first, second = [a[1] for a in said(log, "rung") if a[2] == act]
   wrote = fresh(root, prompted(act, "int", "count"), f"#{refused} advance on {act}")
-  shut = f"#{refused} refused\n{refused}_findings = {BAD!r}\n\n#{refused} closed\n{refused}_value = Refused()"
+  shut = (
+    f"#{refused} refused\n{refused}_findings = {faulted('a = BAD')!r}\n\n#{refused} closed\n{refused}_value = Refused()"
+  )
   bound = f"{shut}\n\n#{first} advance on {act}"
   assert engine.program(root) == {
     f"{refused}_told": wrote,

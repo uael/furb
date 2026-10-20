@@ -67,16 +67,56 @@ OPENED = "  try:\n    acting()\n"
 """OPENED opens the try of a word of the program."""
 CAUGHT = "  except BaseException:\n    pass\n"
 """CAUGHT closes the try of a word of the program."""
+CUT = 80
+"""CUT is the most characters of a line that a finding quotes."""
+PROSE = 3
+"""PROSE is the fewest words of a line that starts with a capital letter that a finding reads as a sentence."""
+STRAY = "a reply is python and quotes only, with no fence, no markup and no prose"
+"""STRAY is what a finding adds when a word that is not python holds a fence, the markup of a tool call or prose."""
+
+
+def quoted(word: str, n: int, why: str) -> str:
+  """A finding: the line of the word it is found on, what it says, and the line itself, cut to CUT characters, so a
+  model reads what the gate read."""
+  lines = word.split("\n")
+  line = lines[n - 1].strip() if 0 < n <= len(lines) else ""
+  cut = line if len(line) <= CUT else line[: CUT - 3] + "..."
+  return f"line {n}: {why}, in {cut!r}" if cut else f"line {n}: {why}"
+
+
+def stray(line: str) -> bool:
+  """Whether a line is no python a model means: a fence of markdown, the markup of a tool call, or a sentence of
+  prose."""
+  text = line.strip()
+  words = text.split()
+  return (
+    text.startswith(("```", "~~~"))
+    or (text.startswith("<") and not text.startswith("<s:"))
+    or (len(words) >= PROSE and words[0][:1].isupper() and all(w.strip(".,:;!?'").isalpha() for w in words))
+  )
 
 
 def python(word: str) -> list[str]:
   """What the word is as python, before ty reads what it means: nothing for a word the interpreter takes as the
   body of a module, and the fault for one it does not."""
+  lines = word.split("\n")
+  # A quote that has a close mark is a string already, so an open mark that stands as it is has none.
+  marks = [(n, one.strip()[3:-1]) for n, one in enumerate(lines, 1) if one.strip()[3:-1].isidentifier()]
+  opened = [(n, name) for n, name in marks if lines[n - 1].strip() == f"<s:{name}>"]
+  if opened:
+    return [
+      quoted(word, n, f"the quote <s:{name}> has no close mark </s:{name}> at the end of a line") for n, name in opened
+    ]
   try:
     compile(word, "<gate>", "exec", flags=PyCF_ALLOW_TOP_LEVEL_AWAIT)
   except SyntaxError as bad:
     # Which line and what it said is what an interpreter offers of it, and one that offers neither gives the text.
-    return [f"line {getattr(bad, 'lineno', None) or 1}: {getattr(bad, 'msg', None) or bad}"]
+    why = str(getattr(bad, "msg", None) or bad)
+    if any(stray(one) for one in lines):
+      why += f"; {STRAY}"
+    # An interpreter that gives no line number may name the line at the end of its text, as (<string>, line 2).
+    tail = str(bad).rpartition(", line ")[2].removesuffix(")")
+    return [quoted(word, getattr(bad, "lineno", None) or (int(tail) if tail.isdigit() else 1), why)]
   return []
 
 
@@ -102,7 +142,7 @@ def gate(engine: dict[str, object], program: Sequence[str], word: str, checked: 
   if found := python(word):
     return found
   text, above = sheet(engine, program, word)
-  return [f"line {n - above}: {why}" for n, why in checked(text) if n > above]
+  return [quoted(word, n - above, why) for n, why in checked(text) if n > above]
 
 
 def gating(engine: dict[str, object], checked: Checked) -> Ear:

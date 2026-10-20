@@ -70,8 +70,14 @@ WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nclose(k)"
 """A word of a rung that reads a file, starts a command and gives back how many lines the file holds, before the
 command is done, so the chain acknowledges the command."""
 
-BAD = "line 1: error[unresolved-reference] Name `BAD` used when not defined"
-"""BAD is what the gate finds against a word whose first line names BAD, which nothing binds."""
+
+def faulted(line: str) -> str:
+  """What the gate finds against a word whose first line is that line, which names BAD, which nothing binds."""
+  return f"line 1: error[unresolved-reference] Name `BAD` used when not defined, in {line!r}"
+
+
+BAD = faulted("k = BAD")
+"""BAD is what the gate finds against a word whose first line is k = BAD, which names BAD, which nothing binds."""
 
 TWO = Text("/w/n.txt", "one\ntwo\n")
 """TWO is a text of two lines."""

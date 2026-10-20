@@ -125,6 +125,41 @@ async def test_the_gate_gives_no_finding_when_the_gate_accepts_the_rung() -> Non
   assert engine.gate("k = BAD", on=root) == [BAD]
 
 
+async def test_each_finding_names_the_line_of_the_word_it_is_found_on_and_quotes_that_line() -> None:
+  """Each finding names the line of the word it is found on, and quotes that line, cut to 80 characters, so a model reads what the gate read."""
+  _, _, root = born()
+  long = "k = BAD + " + "1 + " * 30 + "1"
+  why = "error[unresolved-reference] Name `BAD` used when not defined"
+  assert engine.gate("k = 1\nj = BAD  ", on=root) == [f"line 2: {why}, in 'j = BAD'"]
+  (found,) = engine.gate("k = 1\n  j = 2", on=root)
+  assert found.startswith("line 2: ") and found.endswith(", in 'j = 2'")
+  assert engine.gate(long, on=root) == [f"line 1: {why}, in {long[:77] + '...'!r}"]
+
+
+async def test_a_word_that_holds_a_fence_markup_or_prose_finds_that_a_reply_is_python_and_quotes_only() -> None:
+  """A word that is not python and that holds a fence of markdown, the markup of a tool call or a sentence of prose finds that a reply is python and quotes only, with no fence, no markup and no prose."""
+  _, _, root = born()
+  stray = "a reply is python and quotes only, with no fence, no markup and no prose"
+  for word, line in [
+    ("```python\nclose(1)\n```", "```python"),
+    ('<invoke name="bash">\nclose(1)', '<invoke name="bash">'),
+    ("Let me read the file first.\nclose(1)", "Let me read the file first."),
+  ]:
+    (found,) = engine.gate(word, on=root)
+    assert found.startswith("line 1: ") and found.endswith(f"; {stray}, in {line!r}")
+  (found,) = engine.gate("= 1", on=root)
+  assert stray not in found and found.endswith(", in '= 1'")
+
+
+async def test_an_open_mark_of_a_quote_that_has_no_close_mark_is_a_finding_of_its_own() -> None:
+  """An open mark of a quote that has no close mark is a finding of its own, which names that mark and the close mark it wants."""
+  _, _, root = born()
+  assert engine.gate("k = 1\n<s:plan>\nstep one\nclose(plan)", on=root) == [
+    "line 2: the quote <s:plan> has no close mark </s:plan> at the end of a line, in '<s:plan>'"
+  ]
+  assert engine.gate("<s:plan>\nstep one</s:plan>\nclose(plan)", on=root) == []
+
+
 async def test_the_journal_keeps_what_the_gate_found() -> None:
   """The journal keeps what the gate found, since the gate is of the outside, so a later life reads the same findings and asks the gate nothing again."""
   sand, log, root = born("close(1)")

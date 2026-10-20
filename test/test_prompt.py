@@ -3,6 +3,7 @@
 from asyncio import CancelledError
 
 from conftest import (
+  BAD,
   COST,
   STANDS,
   WORLD,
@@ -52,7 +53,7 @@ async def test_the_engine_asks_the_model_again_after_a_refusal() -> None:
   first, second = [a[1] for a in said(log, "rung") if a[2] == act]
   assert [a[2] for a in said(log, "reply")] == [first, second]
   assert engine.turns(on=root)[2][1] == (
-    f"#{first} refused\n{first}_findings = 'line 1: error[unresolved-reference] Name `BAD` used when not defined'\n\n"
+    f"#{first} refused\n{first}_findings = {BAD!r}\n\n"
     f"#{first} closed\n{first}_value = Refused()\n\n#{second} advance on {act}"
   )
 
