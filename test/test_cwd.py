@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from conftest import STANDS, Sand, Where, acts, born, ended, life, machine, plain, said, settle
+from conftest import STANDS, Sand, Where, acts, born, life, machine, plain, said, settle
 from furb import engine
 from furb.engine import Text
 
@@ -52,7 +52,7 @@ async def test_the_world_resolves_the_path_of_a_read_a_write_and_a_command_again
   engine.write(Text("scratch://b.txt", "kept"), on=root)
   engine.cd("sub", on=root)
   moved = engine.read("scratch://b.txt", on=root)
-  ended(live)
+  live.end()
   assert moved == Text("scratch://b.txt", "kept")
 
 

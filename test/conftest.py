@@ -396,14 +396,6 @@ def machine(directory: Path, record: Path | None = None) -> tuple[Live, str]:
   return live, engine.boot(live.opened(record, extensions=False), world=live.hears(), **live.ears, **kernel())
 
 
-def ended(live: Live) -> None:
-  """The end of a life on the World of this machine: its World lets the ears of the crate go, and a second life that
-  hears nothing ends the first, since the engine of monty holds the ears of the crate it was given until its life
-  is gone."""
-  live.end()
-  engine.boot((), world=Dead(stands=STANDS).hears(), **kernel())
-
-
 def world_says(kind: str, about: str, *words: object) -> tuple:
   """A fact the World says from its own loop, under its own name, as a command, a wait or a model answers later."""
   token = site.set(WORLD)

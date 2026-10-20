@@ -16,7 +16,6 @@ from conftest import (
   World,
   born,
   dones,
-  ended,
   fresh,
   life,
   machine,
@@ -99,7 +98,7 @@ async def test_the_world_hears_every_fact(tmp_path: Path) -> None:
   assert where.where == ["/x"]
   live, root = machine(tmp_path)
   wrote = engine.write(Text("scratch://plan.md", "plan\n"), on=root)
-  ended(live)
+  live.end()
   assert wrote == Text("scratch://plan.md", "plan\n")
   assert not (tmp_path / "scratch:").exists() and not (tmp_path / "plan.md").exists()
 
@@ -213,15 +212,15 @@ async def test_the_opening_of_a_life_gives_the_world_the_scratch_directory_of_it
   other = engine.chain("other", on=root)
   engine.write(Text("scratch://plan.md", "one\n"), on=other)
   shared = engine.read("scratch://plan.md", on=root).content
-  ended(live)
+  live.end()
   live, root = machine(tmp_path, two)
   with pytest.raises(Refused, match=r"^There is no file at scratch://plan\.md\.$"):
     engine.read("scratch://plan.md", on=root)
-  ended(live)
+  live.end()
   live, root = machine(tmp_path)
   own = Path((await engine.bash('echo own > "$TMPDIR/own.txt" && echo "$TMPDIR"', on=root)).stdout.content.strip())
   held = (own / "own.txt").read_text()
-  ended(live)
+  live.end()
   assert (shared, held) == ("one\n", "own\n")
   assert not own.exists()
 
@@ -232,22 +231,22 @@ async def test_a_later_life_on_a_record_finds_its_scratch_directory_again(tmp_pa
   live, root = machine(tmp_path, record)
   engine.write(Text("scratch://plan.md", "one\n"), on=root)
   await engine.bash('echo made > "$TMPDIR/made.txt"', on=root)
-  ended(live)
+  live.end()
   live, root = machine(tmp_path, record)
   found = engine.read("scratch://made.txt", on=root).content
   engine.write(Text("scratch://a", "a file\n"), on=root)
   await engine.bash('rm "$TMPDIR/a"', on=root)
   engine.write(Text("scratch://a/b.md", "in a folder\n"), on=root)
   engine.write(Text("scratch://plan.md", "two\n"), on=root)
-  ended(live)
+  live.end()
   shutil.rmtree(_monty.scratch(str(record)) or tmp_path / "none")
   live, root = machine(tmp_path, record)
   remade = [engine.read(f"scratch://{path}", on=root).content for path in ("", "plan.md", "a/b.md")]
-  ended(live)
+  live.end()
   record.unlink()
   live, root = machine(tmp_path, record)
   empty = engine.read("scratch://", on=root).content
-  ended(live)
+  live.end()
   assert found == "made\n"
   assert remade == ["a/\nplan.md", "two\n", "in a folder\n"]
   assert empty == ""

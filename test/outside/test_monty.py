@@ -223,6 +223,23 @@ async def test_an_ear_of_the_crate_crosses_to_the_boot_of_the_door_and_what_it_s
   assert await engine.wait(0.01, on=root) is None
 
 
+async def test_an_ear_of_the_crate_that_the_host_lets_go_goes_while_the_life_it_crossed_to_lives(
+  tmp_path: Path,
+) -> None:
+  """An ear of the crate that crossed to the boot of the door goes when the host lets it go, while the life it
+  crossed to lives on: the store lets its record go, so a second life on that record owns it."""
+  path = str(tmp_path / "record.jsonl")
+  record, store = _monty.store(path)
+  root = furb_monty.engine.boot(record, time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
+  assert await engine.wait(0.01, on=root) is None
+  with pytest.raises(Refused, match="Another process owns"):
+    _monty.store(path)
+  store.dispose()
+  _, again = _monty.store(path)
+  again.dispose()
+  assert await engine.wait(0.01, on=root) is None
+
+
 async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_generator_of_its_own(
   tmp_path: Path,
 ) -> None:
