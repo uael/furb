@@ -1,6 +1,8 @@
 """Text, a path, what stands at it, and the text it came from."""
 
-from furb.engine import Text
+import pytest
+
+from furb.engine import Refused, Text
 
 ONE = Text("/w/n.txt", "one\ntwo\nthree\n")
 
@@ -29,3 +31,13 @@ def test_every_edit_of_it_gives_another_text_which_came_from_this_one() -> None:
   assert made is not ONE and made.before is ONE and ONE.content == "one\ntwo\nthree\n"
   again = made.delete(1, 1)
   assert again.before is made and again.content == "two\nthree\nfour\n"
+
+
+def test_a_method_of_a_text_that_has_the_name_of_a_method_of_str_gives_what_that_method_of_str_gives() -> None:
+  """A method of a text that has the name of a method of str gives what that method of str gives, or is refused."""
+  shared = {name for name in dir(Text) if not name.startswith("_")} & set(dir(str))
+  assert shared == {"replace"}
+  assert ONE.replace("two", "2").content == ONE.content.replace("two", "2") == "one\n2\nthree\n"
+  assert ONE.replace("t", "T", 1).content == ONE.content.replace("t", "T", 1) == "one\nTwo\nthree\n"
+  with pytest.raises(Refused):
+    ONE.replace("four", "4")
