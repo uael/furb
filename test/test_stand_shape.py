@@ -105,11 +105,15 @@ async def test_at_its_tip_boot_stands_the_life_again() -> None:
   assert engine.module(twin)["actor"] == "o/low"
 
 
-async def test_each_standing_binds_the_default_actor_of_the_chain_under_the_name_actor() -> None:
-  """Each standing binds the default actor of the chain, under the name actor."""
-  sand, log, root = born("close(1)", "close(None)")
+async def test_a_standing_binds_the_default_actor_of_the_chain_when_its_actor_differs() -> None:
+  """A standing binds the default actor of the chain, under the name actor, when its actor differs from that of the standing before it, so a new roster or a new directory alone keeps the actor that a word chose."""
+  sand, log, root = born("actor = 'n/low'\nclose(1)", "close(None)")
   assert await engine.prompt(int, "count", on=root) == 1
-  assert engine.module(root)["actor"] == "m/low" == said(log, "reply")[0][4]
+  assert said(log, "reply")[0][4] == "m/low" and engine.module(root)["actor"] == "n/low"
+  sand.stands = [STANDS[0], "/v", STANDS[2]]
+  engine.stand(on=root)
+  assert engine.module(root)["actor"] == "n/low"
+  assert paragraphs(engine.turns(on=root))[-1] == takes(root, [STANDS[0], "/v", "n/low"])
   sand.stands = LATER
   engine.stand(on=root)
   assert engine.module(root)["actor"] == "o/low"
@@ -146,7 +150,7 @@ async def test_the_standing_a_chain_tells_is_what_its_transcript_holds_of_it() -
 
 
 async def test_every_chain_hears_the_done_of_every_stand() -> None:
-  """Every chain hears the done of every stand, and a chain whose standing that answer changes binds its default actor and tells it there, so the transcript grows at one end."""
+  """Every chain hears the done of every stand, and a chain whose standing that answer changes tells it there, and binds its default actor again when the actor of the standing changes, so the transcript grows at one end."""
   first, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   await settle()
