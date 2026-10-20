@@ -612,8 +612,6 @@ class Text:
   before: Text | None = None
   @property
   def lines(self) -> list[str]: ...
-  def grow(self, text: str) -> Text:
-    """The text as more of it is told, as a stream of a command grows, which comes from no text, since a stream that grows is no edit of one."""
   def edit(self, lo: int, hi: int, lines: list[str]) -> Text:
     """The text with one more edit; an edit whose lines are not there is refused.
     The edits that say themselves are one edit each: a replace of a string, an append at the end, an insert before a line, and a delete of lines.

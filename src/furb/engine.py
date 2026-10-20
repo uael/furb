@@ -430,9 +430,6 @@ class Text:
   def lines(self) -> list[str]:
     return self.content.splitlines()
 
-  def grow(self, text: str) -> Text:
-    return Text(self.path, self.content + text)
-
   def edit(self, lo: int, hi: int, lines: list[str]) -> Text:
     now = (self.content + "\n").splitlines(True)[: len(self.lines)]
     if not 1 <= lo <= hi + 1 <= len(now) + 1:
