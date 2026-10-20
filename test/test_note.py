@@ -65,7 +65,10 @@ async def test_one_thing_a_tell_says() -> None:
   read = [a[3] for a in said(log, "tell") if a[3][0].startswith("#read1")]
   assert read == [["#read1\nread1_path = 'n.txt'\nread1_text = 'one'"]]
   opened = [a[3] for a in said(log, "tell") if a[1] == "prompt1"]
-  assert opened == [["#prompt1\nprompt1_message = 'read it'", "prompt1: Act[int] = Act('prompt1')"]]
+  assert opened == [
+    ["#prompt1\nprompt1_message = 'read it'", "prompt1: Act[int] = Act('prompt1')"],
+    ["#prompt1 closed\nprompt1_value = 1"],
+  ]
   assert all(isinstance(note, str) for a in said(log, "tell") for note in a[3])
 
 

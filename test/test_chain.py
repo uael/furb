@@ -222,7 +222,8 @@ async def test_the_chain_holds_the_control_it_says_itself() -> None:
   assert await one == 1
   step, last = steps(log, one)
   held = engine.transcript(root)
-  shut = [(a[1], a[2], a[4]) for a in said(held, "close")]
+  assert [(a[1], a[2]) for a in said(held, "close")] == [(ghost, root), (step, root), (one, last)]
+  shut = [(a[1], a[2], a[3]) for a in said(held, "tell") if a[3][0].split("\n")[0].endswith(" closed")]
   assert shut == [
     (ghost, root, [f"#{ghost} closed\n{ghost}_value = Refused('ghost no actor')"]),
     (step, root, [f"#{step} closed\n{step}_value = Refused()"]),
@@ -1054,7 +1055,7 @@ async def test_a_write_of_a_door_cancels_each_rung_that_it_drops() -> None:
   assert [a[2] for a in said(log, "reply")] == [old, writer]
   assert [type(engine.peek(one)).__name__ for one in (old, asked, writer)] == ["CancelledError"] * 3
   assert [a[4] for a in said(log, "rung") if a[1] in (old, new)] == ["", 'close("new")']
-  assert said(log, "cancel") == [("cancel", old, root, [f"#{old} cancelled"])]
+  assert said(log, "cancel") == [("cancel", old, root)]
 
 
 async def test_a_replay_makes_the_module_of_the_chain_again_as_it_was_at_its_birth() -> None:

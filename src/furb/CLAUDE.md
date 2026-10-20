@@ -80,8 +80,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   rung advances.
 - binding: a statement that binds the name of an act to the act, or a value that the act tells to the id of the act
   and the word of the value, as bash1_command, which a turn shows and a rung the chain writes runs.
-- tell: a fact that carries notes about the act it is of, which the turns are folded from and the journal keeps
-  none of.
+- tell: the one fact that carries notes, about the act it is of, which the turns are folded from; a control tells
+  its header by one, and the journal keeps a tell only when no act said it.
 - turn: one item of what a model reads of a transcript, folded from the tells: a role, python, a usage and blocks.
 - prompt: the act that sends a message to an actor and wants a response of a shape.
 - message: the text a prompt carries.

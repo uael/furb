@@ -3,13 +3,13 @@
 from conftest import acts, born, heads, of, opened, paragraphs, said, settle, takes, written
 from furb import engine
 
-CARRY = ("tell", "pause", "wake", "cancel", "close")
+CARRY = ("tell",)
 """The kinds of fact that carry notes, of which the turns are folded."""
 
 
 def notes(held: list[tuple]) -> list[list[object]]:
   """The notes of every fact of a transcript that carries notes, in the order they were said."""
-  return [a[4] if a[0] == "close" else a[3] for a in held if a[0] in CARRY]
+  return [a[3] for a in held if a[0] in CARRY]
 
 
 async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
@@ -21,7 +21,7 @@ async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
 
 
 async def test_the_turns_of_what_a_chain_has_heard() -> None:
-  """The turns of what a chain has heard: every fact that carries notes stands as a paragraph of them, and nothing else stands at all."""
+  """The turns of what a chain has heard: every tell stands as a paragraph of its notes, and nothing else stands at all."""
   sand, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   sand.script[root] = ["close(k + 1)"]
@@ -32,6 +32,7 @@ async def test_the_turns_of_what_a_chain_has_heard() -> None:
   assert all(isinstance(note, str) for one in carried for note in one)
   assert paragraphs(engine.turns(on=root)) == ["\n".join(str(note) for note in one) for one in carried]
   assert {a[0] for a in held if a[0] not in CARRY} == {
+    "close",
     "stand",
     "rung",
     "gate",

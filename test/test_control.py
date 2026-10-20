@@ -2,17 +2,25 @@
 
 from conftest import born, heads, said, settle, slow
 from furb import engine
+from furb.engine import OPERATOR
 
 
 async def test_a_control_said_over_the_act_it_names_with_a_header_of_its_name() -> None:
-  """A control said over the act it names, with a header of its name headed with that act, which is how pause, wake, cancel and close say theirs."""
+  """A control said over the act it names, after a tell of a header of its name headed with that act, which is how pause, wake, cancel and close say theirs."""
   _, log, _, act = slow()
   await settle()
   engine.control("pause", "paused", act)
   engine.wake(act)
   await settle()
-  assert [(one[1], one[3]) for one in said(log, "pause")] == [(act, ["#bash1 paused"])]
-  assert [(one[1], one[3]) for one in said(log, "wake")] == [(act, ["#bash1 woke"])]
+  assert [one[1:] for one in said(log, "pause")] == [(act, OPERATOR)]
+  assert [one[1:] for one in said(log, "wake")] == [(act, OPERATOR)]
+  told = [(one[0], one[1], one[-1]) for one in log if one[0] in ("tell", "pause", "wake") and one[1] == act]
+  assert told[-4:] == [
+    ("tell", act, ["#bash1 paused"]),
+    ("pause", act, OPERATOR),
+    ("tell", act, ["#bash1 woke"]),
+    ("wake", act, OPERATOR),
+  ]
 
 
 async def test_the_call_gives_the_control_as_the_life_made_it_whole() -> None:
@@ -22,7 +30,7 @@ async def test_the_call_gives_the_control_as_the_life_made_it_whole() -> None:
   assert await act == 3
   await settle()
   step = said(log, "rung")[0][1]
-  assert engine.module(root)["k"] == ("pause", "bash1", step, ["#bash1 paused"])
+  assert engine.module(root)["k"] == ("pause", "bash1", step)
   assert [(one[1], one[3]) for one in said(log, "close")] == [(act, 3)]
 
 

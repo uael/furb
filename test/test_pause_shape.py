@@ -77,25 +77,25 @@ async def test_it_reaches_by_the_chain_as_well_as_by_the_name() -> None:
 
 
 async def test_a_control_carries_the_header_it_tells() -> None:
-  """A control carries the header it tells, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it."""
+  """A control tells its header by a tell that its call says just before it, so a model reads what was done to its work whoever did it, and nothing else writes that header: the chain that pauses a chain at its ceiling, or closes a prompt it will not serve, says the control the one way there is to say it."""
   sand, log, root = born(cost=COST)
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
   closed = f"#{ghost} closed\n{ghost}_value = Refused('ghost no actor')"
   shut = said(log, "close")[0]
-  assert shut[:3] == ("close", ghost, root) and shut[4] == [closed]
+  assert shut[:3] == ("close", ghost, root) and len(shut) == 4
   assert isinstance(shut[3], Refused) and str(shut[3]) == "ghost no actor"
+  assert log[log.index(shut) - 1] == ("tell", ghost, root, [closed])
   ceiling = engine.grant(usd=1.0, on=root)
   sand.script[root] = ["a = 1", "close(2)"]
   engine.prompt(int, "count", on=root)
   await settle()
-  assert said(log, "pause") == [("pause", root, ceiling, [f"#{root} paused"])]
+  assert said(log, "pause") == [("pause", root, ceiling)]
+  assert log[log.index(said(log, "pause")[0]) - 1] == ("tell", root, ceiling, [f"#{root} paused"])
   assert [line for line in paragraphs(engine.turns(on=root)) if line in (closed, f"#{root} paused")] == [
     closed,
     f"#{root} paused",
   ]
-  told = [(a[0], a[-1]) for a in log if a[0] in ("tell", "pause", "wake", "cancel", "close")]
-  assert [kind for kind, notes in told if closed in notes or f"#{root} paused" in notes] == ["close", "pause"]
 
 
 async def test_a_pause_is_over_the_act_it_names_and_everything_under_it() -> None:
