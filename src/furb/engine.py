@@ -421,15 +421,17 @@ class Text:
   def grow(self, text: str) -> Text:
     return Text(self.path, self.content + text)
 
-  def edit(self, lo: int, hi: int, lines: list[str]) -> Text:
+  def edit(self, lo: int, hi: int, text: str) -> Text:
     now = (self.content + "\n").splitlines(True)[: len(self.lines)]
     if not 1 <= lo <= hi + 1 <= len(now) + 1:
       raise Refused(f"{self.path} no lines {lo}:{hi}")
-    now[lo - 1 : hi] = [x.removesuffix("\n") + "\n" for x in lines]
+    now[lo - 1 : hi] = [text and text.removesuffix("\n") + "\n"]
     return Text(self.path, "".join(now), self)
 
-  def replace(self, old: str, new: str, once: bool = False) -> Text:
-    return Text(self.path, self.content.replace(old, new, 1 if once else -1), self)
+  def replace(self, old: str, new: str, count: int = -1) -> Text:
+    if old not in self.content:
+      raise Refused(f"{self.path} no {old!r}")
+    return Text(self.path, self.content.replace(old, new, count), self)
 
   def undo(self, n: int = 1) -> Text:
     return self.before.undo(n - 1) if n > 0 and self.before else self
@@ -438,10 +440,10 @@ class Text:
     return self.insert(len(self.lines) + 1, text)
 
   def insert(self, line: int, text: str) -> Text:
-    return self.edit(line, line - 1, text.splitlines(True))
+    return self.edit(line, line - 1, text)
 
   def delete(self, lo: int, hi: int) -> Text:
-    return self.edit(lo, hi, [])
+    return self.edit(lo, hi, "")
 
   def find(self, pattern: str) -> list[int]:
     return grep(pattern)(self.lines)
@@ -835,8 +837,8 @@ A word is a program
 How to work
 - Read before you write. To see a file, read it, with a show for a part of it: read(path, grep(pattern)) or
   read(path, span(lo, hi)). A read shows lines without their numbers: text.find(pattern) gives the number of a line.
-- Change a file through the Text that read gave: replace, edit, insert, append or delete, then write. A write tells
-  the lines that landed otherwise than you asked.
+- Change a file through the Text that read gave: replace, edit, insert, append or delete, then write. An edit of
+  what the text does not hold raises Refused. A write tells the lines that landed otherwise than you asked.
 - Keep notes and scratch files in scratch://, as write(Text("scratch://plan.md", plan)). Every chain of the record
   shares it, and a command finds it in $TMPDIR, where tools put their temp files too.
 - Use bash to run commands and to find paths, as bash("grep -rln pattern src"). Let its show pick the lines of a long

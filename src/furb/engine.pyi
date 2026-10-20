@@ -608,13 +608,15 @@ class Text:
   def lines(self) -> list[str]: ...
   def grow(self, text: str) -> Text:
     """The text as more of it is told, as a stream of a command grows, which comes from no text, since a stream that grows is no edit of one."""
-  def edit(self, lo: int, hi: int, lines: list[str]) -> Text:
-    """The text with one more edit; an edit whose lines are not there is refused.
+  def edit(self, lo: int, hi: int, text: str) -> Text:
+    """edit(lo, hi, text) gives a new text in which the lines of text take the place of the lines lo through hi, each with a line break at its end; an edit of lines that are not there is refused.
     The edits that say themselves are one edit each: a replace of a string, an append at the end, an insert before a line, and a delete of lines.
     An edit of lines, as an append, an insert or a delete, ends the last line of the text with a line break, so what it puts after a text that ends with none starts a line of its own.
     """
-  def replace(self, old: str, new: str, once: bool = False) -> Text:
-    """replace(old, new, once) gives a new text with the edit added."""
+  def replace(self, old: str, new: str, count: int = -1) -> Text:
+    """replace(old, new, count) gives a new text with the edit added, as str.replace gives with the same count.
+    A replace of a string that the text does not hold is refused, and the refusal names the path and the string, as for an edit of lines that are not there.
+    """
   def undo(self, n: int = 1) -> Text:
     """undo(n) gives a new text without its last n edits.
     The text before its last n edits, and the text itself when it came from none.
