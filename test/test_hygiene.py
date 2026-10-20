@@ -17,8 +17,9 @@ TESTS = PYI.parents[2] / "test"
 EXTENSIONS = TESTS.parent / "extensions"
 # The contract of the engine and the contract of each extension, each with the folder of its suite.
 CONTRACTS = {PYI: TESTS, **{one: one.parent / "test" for one in sorted(EXTENSIONS.glob("*/*.pyi"))}}
-# What the engine may cost the model that reads it: a wall, and a shape that will not fit under it is a shape not
-# found yet. Six thousand, by the owner's word, for the engine alone, and two thousand for the doctrine after it.
+# What the engine may cost the model that reads it, counted with o200k_base as law 5 says: a wall, and a shape that
+# will not fit under it is a shape not found yet. Six thousand, by the owner's word, for the engine alone, and two
+# thousand for the doctrine after it.
 BUDGET = 6_000
 DOCTRINE = 2_000
 ENGINE, _, QUOTE = SYSTEM.partition("\n<s:doctrine>")
