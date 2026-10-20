@@ -3,6 +3,7 @@
 import asyncio
 import symtable
 from asyncio import CancelledError
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from conftest import (
   STANDS,
   Py,
   Sand,
+  World,
   acts,
   born,
   chained,
@@ -37,7 +39,7 @@ from conftest import (
   written,
 )
 from furb import engine
-from furb.engine import OPERATOR, Act, Refused, Text, take
+from furb.engine import OPERATOR, ROOT, Act, Refused, Text, take
 
 
 def binding(id: str, of: str = "object") -> str:
@@ -1266,3 +1268,41 @@ async def test_when_an_act_that_a_rung_made_on_another_chain_is_done_the_chain_t
   assert f"#{x} done\n<s:{x}_value>\na\nb</s:{x}_value>" in paragraphs(engine.turns(on=root))
   assert [a[5] for a in said(log, "prompt") if a[3] == root] == ["fan out", f"{x} done"]
   assert engine.peek(y) == "c" and engine.get(far)[0] == "chain"
+
+
+@dataclass
+class Down(Sand):
+  """A World whose model of each chain but the root answers nothing: at the next turn of the loop it pauses the chain
+  of such a reply and refuses the reply."""
+
+  def hear(self, a: tuple) -> World:
+    """The World of the suite, but for a reply on a chain that is not the root."""
+    match a:
+      case ("reply", about, _, on, _) if on != ROOT:
+        yield "started", about
+        self.loop.call_soon(self.refuse, on, about)
+      case _:
+        yield from super().hear(a)
+
+  def refuse(self, on: str, about: str) -> None:
+    """Pause the chain of a reply, then refuse the reply."""
+    engine.pause(on)
+    engine.say("done", about, Refused("m answered nothing: overloaded"))
+
+
+async def test_the_chain_tells_the_pause_of_a_prompt_that_one_of_its_rungs_made_on_another_chain() -> None:
+  """When the chain of a prompt that a rung of the chain made on another chain pauses at a refused reply of that prompt, the chain tells that rung under the header paused and binds the refusal under the word why, and when the word of that rung does not run it prompts nothing, so a model sees that the prompt waits for a wake."""
+  sand = Down()
+  log, root = life(sand)
+  sand.script[root] = ["lane = chain('lane')\nwork = prompt(int, 'work', on=lane)\nclose(0)", "close(None)"]
+  act = engine.prompt(int, "lead", on=root)
+  assert await act == 0
+  await settle(300)
+  (step,) = steps(log, act)
+  (work,) = [a[1] for a in said(log, "prompt") if a[5] == "work"]
+  told = f"#{work} paused\n{work}_why = Refused('m answered nothing: overloaded')"
+  assert [(a[1], a[2], a[3]) for a in said(log, "tell") if a[3][0].startswith(f"#{work} paused")] == [
+    (step, root, [told])
+  ]
+  assert told in paragraphs(engine.turns(on=root))
+  assert [a[5] for a in said(log, "prompt") if a[3] == root] == ["lead", f"{work} paused"]
