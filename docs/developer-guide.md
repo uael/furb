@@ -134,7 +134,7 @@ the word, so a change of either needs `uv sync --reinstall-package furb-monty --
 
 | File | What it holds |
 | --- | --- |
-| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `run` and `extensions`. |
+| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `run`, `extensions` and `facts`. |
 | `cli/src/life.rs` | One life on the opening of the crate: the prompt of the record it takes up, and how the operator awaits an act. |
 | `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back by the rules of the crate. |
 | `cli/src/rpc.rs` | The JSON-RPC of `--mode rpc`, which `docs/rpc.md` says. Change the two together. |

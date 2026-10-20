@@ -1,7 +1,8 @@
 //! furb, the command line: the TUI, a JSON-RPC on stdin and stdout, and one command of the operator on one life.
 //!
 //! With no command, furb hands the terminal to the TUI, or, with `--mode rpc`, serves a client on its stdin and its
-//! stdout. `prompt`, `turns`, `run` and `extensions` each open one life and print what it came to. Every life runs on
+//! stdout. `prompt`, `turns`, `run` and `extensions` each open one life and print what it came to, and `facts` prints a record
+//! as it is. Every life runs on
 //! the engine of the crate, on the ears of the World that the crate writes, the extensions among them, and on the
 //! provider of the model of its default actor and of the models that `--roster` names, from the catalog of the crate.
 
@@ -10,7 +11,11 @@ mod life;
 mod rpc;
 mod tui;
 
-use std::{path::PathBuf, process::ExitCode};
+use std::{
+  collections::HashMap,
+  path::{Path, PathBuf},
+  process::ExitCode,
+};
 
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use furb::{life::Opening, value::entry, verbs};
@@ -103,6 +108,19 @@ enum Command {
     #[command(flatten)]
     stand: Stand,
   },
+  /// Print each fact of a record after the number of its line, as python shows it, which opens no life and reads
+  /// the record as it is.
+  Facts {
+    /// The record to read.
+    #[arg(long)]
+    record: PathBuf,
+    /// Print only the facts about this act, as rung3 or bash1.
+    #[arg(long)]
+    act: Option<String>,
+    /// Print only the facts on this chain, as chain1: the acts on it and the facts about them.
+    #[arg(long)]
+    chain: Option<String>,
+  },
   /// Run a word the caller wrote on the root chain and print what it gave.
   Run {
     /// The python of the word.
@@ -150,6 +168,7 @@ fn main() -> ExitCode {
       let place = Place { record: Some(record), cwd };
       turns(stand.on(Opening { inspecting: Some(true), ..place.opening(false) }))
     }
+    Some(Command::Facts { record, act, chain }) => facts(&record, act.as_deref(), chain.as_deref()),
     Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word),
     Some(Command::Extensions { place }) => extensions(place.opening(false)),
     None if furb.mode == Mode::Rpc => {
@@ -204,6 +223,32 @@ fn turns(opening: Opening) -> Result<(), String> {
     let text =
       |at: usize| entry(&turn.as_ref(), at).and_then(|one| one.as_str()).unwrap_or_default();
     println!("[{}] {}", text(0), text(1));
+  }
+  Ok(())
+}
+
+/// Each fact of a record after the number of its line, as python shows it: those about an act, those on a chain, or
+/// all of them. A fact is on the chain of the act it is about, and a chain is on itself.
+fn facts(record: &Path, act: Option<&str>, chain: Option<&str>) -> Result<(), String> {
+  if !record.is_file() {
+    return Err(format!("No record at {}.", record.display()));
+  }
+  let mut scopes = HashMap::<String, String>::new();
+  for (at, kept) in furb::world::kept(record).map_err(|no| no.message())?.iter().enumerate() {
+    let Some(fact) = entry(&kept.as_ref(), 0) else { continue };
+    let word = |n: usize| {
+      entry(&fact, n).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default()
+    };
+    let (kind, about) = (word(0), word(1));
+    let number = about.strip_prefix(kind.as_str()).unwrap_or_default();
+    if !number.is_empty() && number.bytes().all(|one| one.is_ascii_digit()) {
+      scopes.insert(about.clone(), if kind == "chain" { about.clone() } else { word(3) });
+    }
+    let on = scopes.get(&about).map_or("", String::as_str);
+    if act.is_some_and(|one| one != about) || chain.is_some_and(|one| one != on) {
+      continue;
+    }
+    println!("{}: {}", at + 1, fact.py_repr());
   }
   Ok(())
 }
