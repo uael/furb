@@ -27,8 +27,10 @@ async def test_a_result_enters_the_transcript_whether_or_not_anyone_awaits_it() 
   assert [isinstance(one[3], Exit) for one in ends] == [True]
 
 
-async def test_an_act_that_is_over_says_nothing_and_the_chain_answers_the_doors_of_a_command_that_is_over() -> None:
-  """An act that is over says nothing, and the chain answers the doors of a command that is over."""
+async def test_an_act_that_is_over_says_nothing_and_the_chain_answers_a_read_of_the_doors_of_a_command_that_is_over() -> (
+  None
+):
+  """An act that is over says nothing, and the chain answers a read of the doors of a command that is over."""
   _, log, root = born()
   step = engine.rung("k = 1", on=root)
   await step

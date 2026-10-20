@@ -201,6 +201,22 @@ async def test_a_stdin_of_none_stays_open_and_the_stdin_door_is_writable_while_t
   assert sand.fed == ["go", "more"]
 
 
+async def test_the_world_feeds_a_command_the_text_of_each_write_of_its_stdin_that_it_answers() -> None:
+  """The World feeds a command the text of each write of its stdin that it answers, and a write of nothing closes that stdin; a later life feeds it again, in order, each such text of the record, which the World hears in the done that the journal says, when a wake starts the command again."""
+  sand, _, root = born(auto=False)
+  one = engine.bash("cat", stdin=None, on=root)
+  await settle()
+  assert engine.write(Text(door(one, "stdin"), "a"), on=root) == Text(door(one, "stdin"), "a")
+  engine.write(Text(door(one, "stdin")), on=root)
+  assert sand.fed == ["a", None] and sand.shut == {one}
+  later = Sand(auto=False)
+  _, over = await relived(later, plain(sand.record))
+  assert later.fed == ["a", None] and said(later.calls, "bash") == []
+  engine.wake(over)
+  await settle()
+  assert [a[1] for a in said(later.calls, "bash")] == [one] and said(later.calls, "write") == []
+
+
 async def test_the_stdout_and_the_stderr_doors_are_readable_while_the_command_runs_and_after_it() -> None:
   """The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it: a read gives that stream of the Exit once the command exited, and otherwise the out facts of that stream since the World last started it, so a command that runs again starts its streams again."""
   _, _, top = born(auto=False)
@@ -288,8 +304,8 @@ async def test_with_a_hidden_show_it_tells_its_header_and_its_binding_alone() ->
   ]
 
 
-async def test_the_chain_that_a_read_or_a_write_of_a_door_of_the_command_is_on_answers_it() -> None:
-  """The chain that a read or a write of a door of the command is on answers that read or that write, while the command runs and after it, so the ear of the command lives only until it hears the done of the command, and a cancel ends the command as it ends every other act."""
+async def test_the_chain_that_a_read_of_a_door_of_the_command_is_on_answers_it() -> None:
+  """The chain that a read of a door of the command is on answers that read, while the command runs and after it, and the World answers a write of a door of it, so the ear of the command lives only until it hears the done of the command, and a cancel ends the command as it ends every other act."""
   sand, log, root = born(auto=False)
   other = engine.chain("other")
   one = engine.bash("run", stdin=None, on=root)
@@ -311,13 +327,14 @@ async def test_the_chain_that_a_read_or_a_write_of_a_door_of_the_command_is_on_a
   engine.drive(engine.idle(two), two)
   assert engine.read(door(two, "stdout"), on=other).content == "part\n"
   assert (engine.peek(one), type(engine.peek(two))) == (got, CancelledError)
-  doors = {a[1]: a[3] for a in [*said(log, "read"), *said(log, "write")] if "/std" in str(a[4])}
+  doors = {a[1]: a[3] for a in said(log, "read") if "/std" in str(a[4])}
   assert {(doors[a[1]], a[2]) for a in said(log, "done") if a[1] in doors} == {(root, root), (other, other)}
-  assert [(a[2], a[3]) for a in said(log, "feed")] == [(other, "go")]
+  writes = [a[1] for a in said(log, "write")]
+  assert {a[2] for a in said(log, "done") if a[1] in writes} == {WORLD} and sand.fed == ["go"]
 
 
-async def test_a_read_or_a_write_of_a_door_of_a_command_that_an_ear_makes_while_the_chain_speaks_finds_no_ear() -> None:
-  """A read or a write of a door of a command that an ear makes while the chain of that read or that write speaks finds no ear of the engine that answers it, as a read of the door of a prompt finds none, since an ear that speaks hears nothing until it is done."""
+async def test_a_read_of_a_door_of_a_command_that_an_ear_makes_while_the_chain_speaks_finds_no_ear() -> None:
+  """A read of a door of a command that an ear makes while the chain of that read speaks finds no ear of the engine that answers it, as a read of the door of a prompt finds none, since an ear that speaks hears nothing until it is done."""
   _, _, root = born(auto=False)
   one = engine.bash("run", on=root)
   world_says("out", one, "half\n", "stdout")
@@ -387,8 +404,8 @@ async def test_the_stdout_of_a_command_without_a_show_is_told_as_tail() -> None:
   assert paragraphs(engine.turns(on=root))[-1] == f"#{one} exited 0\n<s:{one}_stdout>\n{told}</s:{one}_stdout>"
 
 
-async def test_the_engine_refuses_a_write_to_a_door_of_a_command_that_takes_no_write() -> None:
-  """The engine refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, or once its stdin is closed, as a stdin of text is from the start."""
+async def test_the_world_refuses_a_write_to_a_door_of_a_command_that_takes_no_write() -> None:
+  """The World refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, or once its stdin is closed, as a stdin of text is from the start."""
   sand, _, root = born()
   one = engine.bash("echo hi", stdin=None, on=root)
   assert one == "bash1"
@@ -409,7 +426,7 @@ async def test_the_engine_refuses_a_write_to_a_door_of_a_command_that_takes_no_w
   for one in (shut, given, bare):
     with pytest.raises(Refused, match="takes no write"):
       engine.write(Text(door(one, "stdin"), "late"), on=root)
-  assert [a for a in sand.calls if a[0] == "write"] == []
+  assert len(said(sand.calls, "write")) == 8 and sand.fed == ["x", None, None]
 
 
 async def test_its_close_tells_what_its_stdout_shows() -> None:

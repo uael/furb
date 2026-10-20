@@ -498,6 +498,32 @@ fn what_is_fed_to_a_command_before_a_wake_starts_it_in_a_later_life_reaches_its_
 }
 
 #[test]
+fn what_an_earlier_life_wrote_to_the_stdin_of_a_command_reaches_it_again_when_a_later_life_starts_it_at_a_wake()
+ {
+  let id = {
+    let mut first = Lived::new("again", &[], true).unwrap();
+    let root = first.root();
+    let with = verbs::Bash { stdin: Some(None), on: on(&root), ..Default::default() };
+    let id = first.engine.bash("cat", with).unwrap().id().to_owned();
+    let fed = Text::new(format!("{id}/stdin"), "a\n");
+    first.engine.write(&fed, verbs::Write { on: on(&root) }).unwrap();
+    id
+  };
+  let mut second = Lived::new("again", &[], false).unwrap();
+  let root = second.root();
+  second.engine.wake(&root).unwrap();
+  second
+    .engine
+    .write(&Text::new(format!("{id}/stdin"), ""), verbs::Write { on: on(&root) })
+    .unwrap();
+  let exit = Exit::of(second.settled(&id).unwrap().as_ref()).expect("the command came to its exit");
+  assert_eq!(
+    exit.stdout.content, "a\n",
+    "the later life feeds the command again what the earlier life wrote"
+  );
+}
+
+#[test]
 fn a_command_an_earlier_life_did_not_end_runs_once_at_the_wake_and_its_door_holds_what_it_said() {
   let line = "printf x >> count; [ -e done ] || { printf ready; exec sleep 30; }";
   let (id, at) = {
