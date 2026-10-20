@@ -1,4 +1,4 @@
-from furb.engine import Act, Text, act, ask, ending, pausing, question, scope, span, tell
+from furb.engine import Act, Text, act, ask, controlled, question, scope, span, tell
 
 
 def memory(path: str = ".", on: str = "") -> list[Text]:
@@ -22,4 +22,4 @@ def remember(on: str = "") -> Act:
         case ("done", about, *_) if question(("stand", about)):
           memory(on=on)
 
-  return act("remember", on, pausing(ending(ear)))
+  return act("remember", on, controlled(ear))

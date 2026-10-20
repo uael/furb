@@ -45,9 +45,9 @@ meanings. The entry of such a name here gives only its form in the engine.
 - act: a question, which is over at its done.
 - life: one run of the engine, which boot opens and a second boot ends; every act, name and outcome is of it.
 - ear: a generator that hears the facts of the life and speaks by yielding one; the ear of an act is given the name
-  of the act, and a verb makes it with pausing and ending. An ear of the engine hears every fact and every act; an
-  ear of the outside, the World, the Kernel and every other generator that boot is given, hears every fact, and an
-  act only while no ear before it took it.
+  of the act, and a verb makes it with controlled, so the controls over the act reach it. An ear of the engine hears
+  every fact and every act; an ear of the outside, the World, the Kernel and every other generator that boot is
+  given, hears every fact, and an act only while no ear before it took it.
 - done: the fact that settles the act it names with what the act came to.
 - outcome: what an act came to, held under its name once its done lands: the value or the exception.
 - id: the name of an act, as a string: its kind and its number among the acts of that kind, as bash1 or read3,
