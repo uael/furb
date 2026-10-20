@@ -14,8 +14,9 @@
 //! [`ear`] makes one from an async body: [`hear`] and [`say`] read like the ears of the engine. The work an ear
 //! begins, a command, a wait, a call of a model, is a stream the ear gives its [`Co`] with [`Co::work`], and the ear
 //! takes from [`Co::next`] what it heard and what its work came to, in turn. The life polls the work of every ear
-//! each time it is driven, and never while the ear hears, so what a work comes to lands in the log after what the
-//! life was doing; and whatever a work waits for wakes whoever drives.
+//! each time it is driven, and never while the ear hears, and it takes one thing that a work says at each poll, so
+//! what a work comes to lands in the log alone, after all that the life was doing, as a later life says it again;
+//! and whatever a work waits for wakes whoever drives.
 
 use std::{
   collections::VecDeque,
@@ -238,13 +239,16 @@ impl<W: 'static> Co<W> {
 
 type Body = Pin<Box<dyn Future<Output = Result<(), Fault>>>>;
 
-/// An ear of rust: its body, what it tells the body, what the body says, how the body ended, which the next resume
-/// gives, and whether the next fact a resume gives is the one the bus made of what the ear said at a resume, which
-/// goes nowhere, since the log gives the ear that fact later too.
+/// An ear of rust: its body, what it tells the body, what the body says, what its work said that the life has not
+/// taken yet, what the verb its work called came to, which the body takes at the next poll, how the body ended,
+/// which the next resume gives, and whether the next fact a resume gives is the one the bus made of what the ear
+/// said at a resume, which goes nowhere, since the log gives the ear that fact later too.
 struct Coroutine {
   body: Option<Body>,
   events: spsc::Sender<Event>,
   spoken: spsc::Receiver<Spoken>,
+  accord: VecDeque<Spoken>,
+  answer: Option<Result<Object, Fault>>,
   ended: Option<Step>,
   given: bool,
 }
@@ -263,13 +267,26 @@ impl Ear for Coroutine {
     step
   }
 
+  /// What the work of the ear said, one at a time. A body can say more than one thing in one poll, and what it said
+  /// past the first waits here for the next poll, so a resume never gives it and the work of an ear never speaks
+  /// while the ear hears: each thing it says lands in the log alone, as a later life says it again.
   fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
     self.tell(Event::Driven);
-    self.stepped(cx)
+    if let Some(spoken) = self.accord.pop_front() {
+      return Poll::Ready(spoken);
+    }
+    if let Some(got) = self.answer.take() {
+      self.tell(Event::Answer(got));
+    }
+    let got = self.stepped(cx);
+    while let Some(Some(more)) = self.spoken.recv().now_or_never() {
+      self.accord.push_back(more);
+    }
+    got
   }
 
   fn answered(&mut self, got: Result<Object, Fault>) {
-    self.tell(Event::Answer(got));
+    self.answer = Some(got);
   }
 }
 
@@ -333,7 +350,15 @@ where
     began: false,
   };
   let body = Box::pin(body(co));
-  Box::new(Coroutine { body: Some(body), events: told, spoken: said, ended: None, given: false })
+  Box::new(Coroutine {
+    body: Some(body),
+    events: told,
+    spoken: said,
+    accord: VecDeque::new(),
+    answer: None,
+    ended: None,
+    given: false,
+  })
 }
 
 /// The next fact the ear hears, which is `a = yield` of python, for an ear with no work.
@@ -345,8 +370,9 @@ pub async fn hear(co: &mut Co) -> Fact {
   }
 }
 
-/// One saying, said in its turn after what the ear said before. The ear hears it as every ear does, in the order of
-/// the log, and it goes on hearing while the life says it.
+/// One saying, said in its turn after what the ear said before in the same step: a saying of the ear while it hears
+/// lands at once, and a saying of its work waits for the next poll, so it lands after what the ear says while it
+/// hears. The ear hears it as every ear does, in the order of the log, and it goes on hearing while the life says it.
 pub fn say<W: 'static>(co: &mut Co<W>, saying: Fact) {
   co.spoke(Spoken::Saying(saying));
 }

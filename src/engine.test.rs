@@ -677,6 +677,125 @@ fn what_the_work_of_an_ear_came_to_lands_after_the_run_that_began_it() {
   assert!(ran, "the run that said the wait was over before its done came");
 }
 
+#[test]
+fn the_work_of_an_ear_speaks_when_the_life_drives_it_and_never_while_the_ear_hears() {
+  // Two waits end in one drive. The first wakes a word that waits on a rung that waits on it, the second a word
+  // that waits on it alone, and each word then makes a wait. What the second wait came to lands after all that the
+  // first one caused, as a later life says it again, so the later life makes each act under the name it had.
+  let at = std::env::temp_dir().join(format!("furb-engine-alone-{}", std::process::id()));
+  let _ = fs::remove_dir_all(&at);
+  fs::create_dir_all(&at).expect("a yard of the test");
+  let life = |at: &PathBuf| {
+    let (record, store) = world::store(at.join("record.jsonl")).unwrap();
+    let ears = [
+      ("provider", provider(at.clone(), Rc::default(), Rc::default())),
+      ("quick", quick()),
+      ("store", store),
+    ];
+    Engine::boot(record, ears).unwrap()
+  };
+  let makers = |engine: &mut Engine| {
+    ["wait3", "wait4"].map(|id| engine.get(id).unwrap().map(|one| one.by().to_owned()))
+  };
+  let first = {
+    let mut engine = life(&at);
+    let root = engine.root().to_owned();
+    let words = ["deep = rung(\"await wait(9)\")\nawait deep\nwait(1)", "await wait(9)\nwait(2)"];
+    let mut ids = Vec::new();
+    for word in words {
+      let word = Some(word.to_owned());
+      ids.push(
+        engine
+          .rung(verbs::Rung { word, on: on(&root), ..Default::default() })
+          .unwrap()
+          .id()
+          .to_owned(),
+      );
+    }
+    for id in ids {
+      block_on(Act::<Object>::of(&mut engine, &id)).unwrap();
+    }
+    makers(&mut engine)
+  };
+  let mut second = life(&at);
+  assert!(second.raised().is_none(), "{:?}", second.raised());
+  assert_eq!(makers(&mut second), first);
+  assert_eq!(first, [Some("rung1".to_owned()), Some("rung3".to_owned())]);
+}
+
+/// An ear that takes each wait that the ear `caller` made, and ends it by a work that is ready at once.
+fn early() -> Box<dyn Ear> {
+  ear(move |mut co: Co<String>| async move {
+    loop {
+      match co.next().await {
+        Next::Heard(a) => {
+          if a.kind() == "wait" && a.question() && a.by() == "caller" {
+            say(&mut co, Fact::says("started", a.about(), []));
+            co.work(stream::once(std::future::ready(a.about().to_owned())));
+          }
+        }
+        Next::Worked(about) => say(&mut co, done(&about, Object::none())),
+      }
+    }
+  })
+}
+
+/// An ear that takes each wait of the operator, and ends it by a work that is ready at once, which makes a wait of
+/// its own on the same chain first.
+fn caller() -> Box<dyn Ear> {
+  ear(move |mut co: Co<(String, String)>| async move {
+    loop {
+      match co.next().await {
+        Next::Heard(a) => {
+          if a.kind() == "wait" && a.question() && a.by() == "operator" {
+            say(&mut co, Fact::says("started", a.about(), []));
+            co.work(stream::once(std::future::ready((a.about().to_owned(), a.on().to_owned()))));
+          }
+        }
+        Next::Worked((about, on)) => {
+          let _ = co.call("wait", vec![Object::float(2.0)], vec![("on", Object::string(on))]).await;
+          say(&mut co, done(&about, Object::none()));
+        }
+      }
+    }
+  })
+}
+
+/// An ear that says it saw the done of each wait, as it hears it.
+fn seer() -> Box<dyn Ear> {
+  ear(move |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if a.kind() == "done" && a.about().starts_with("wait") {
+        say(&mut co, Fact::says("seen", a.about(), []));
+      }
+    }
+  })
+}
+
+#[test]
+fn the_work_of_an_ear_takes_what_its_verb_came_to_when_the_life_drives_it_and_never_while_the_ear_hears()
+ {
+  // The work of caller makes wait2, which early ends while the work of caller has not taken what its verb gave.
+  // The work of caller goes on at the next drive, so the done of wait1 lands after all that the done of wait2 made.
+  let at = std::env::temp_dir().join(format!("furb-engine-answered-{}", std::process::id()));
+  let ears = [
+    ("provider", provider(at, Rc::default(), Rc::default())),
+    ("early", early()),
+    ("caller", caller()),
+    ("seer", seer()),
+  ];
+  let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
+  let root = engine.root().to_owned();
+  let act = engine.wait(verbs::Wait { seconds: Some(1.0), on: on(&root) }).unwrap();
+  block_on(act).unwrap();
+  let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let at = |kind: &str, about: &str| {
+    facts.iter().position(|one| one.kind() == kind && one.about() == about).expect("the fact")
+  };
+  assert!(at("seen", "wait2") < at("done", "wait1"), "the done of wait1 came while caller heard");
+}
+
 /// A waker that counts how often it is woken.
 struct Counted(std::sync::atomic::AtomicUsize);
 
