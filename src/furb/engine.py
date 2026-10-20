@@ -258,8 +258,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
       if fresh:
         yield "module", id, {**globals(), "__name__": id, "actor": stood}
         for whose, said in rungs.items():
-          rung(said, whose)
-        rungs.clear()
+          if whose not in refused:
+            rung(said, whose)
       if words:
         with site.set(of):
           rung(words)
@@ -340,11 +340,8 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             heard = []
           ran = tells(rid) and rid
           rungs[(donor := get(rid)[5]) or rid] = word
-          if not tells(rid):
-            found = donor in refused
-          elif found := gate(word):
+          if tells(rid) and (found := gate(word)):
             yield told(rid, "refused", findings="\n".join(found))
-          if found:
             refused.add(rid)
             close(Refused(), rid)
           else:

@@ -859,7 +859,7 @@ type Gate = tuple[Literal["gate"], str, str, str, str]
 A gate carries the word alone, and the gate reads the program of the chain before that rung when it takes the gate, and the word after it, so the Kernel keeps no ladder of its own, the journal keeps no program, and a word of a program made again is read after the rungs that stand.
 The refused paragraph binds the findings that refused the word of a rung, one line for each, as rungN_findings.
 The chain has the word of a rung gated before it runs, but a word it wrote itself, and a refused word runs never.
-A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a copy of a refused word is refused again and tells its findings not again.
+A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a replay makes no copy of a refused word, which never ran, so the chain tells nothing of that word again.
 A refused word of a rung stands in the ladder of its prompt, which its door shows, and it is no part of the program of the chain, which holds the words that run.
 The chain tells the findings that refused a word, ends that rung with a refusal that holds none of them, and the prompt of it asks again as it does for a word that gave no value.
 """
