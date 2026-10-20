@@ -160,7 +160,7 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   read gives a Text.
   A text without a show is told as HEAD, which is the span of its first 2000 lines.
   A read of the name of a prompt gives the program of that ladder, the words of its rungs in order.
-  Whether a name is one of the prompts a chain has heard on itself, which is what its doors serve and no other path, a path of no name being none of them.
+  Whether a name is one of the prompts a chain has heard on itself, which is what the doors of its prompts serve and no other path, a path of no name being none of them.
   A prompt is the door of the program of its ladder, so a read of its name gives the word of every rung of it in order, the words the gate refused among them, which are none at all for a prompt that ran no word.
   A read of a door that a rung of that ladder says leaves the word of that rung out, since a rung is no part of the program it reads.
   One made from inside an act tells itself under its own name, with its path and what it was answered, on the scope of that act; one made from outside an act tells nothing, and neither does one whose show is hidden.
@@ -589,7 +589,8 @@ def bash(
   A wake on a chain with a source starts no inherited command again, since only the owner starts an act.
   The World takes it, and a later life has the World take it again only when the record shows it started and not ended, and then only at a wake.
   With a hidden show it tells its header and its binding alone, and not its command and not its close.
-  Once it has ended it lives on to answer its doors, and nothing else reaches it, so a cancel does not end it, as it ends every other act.
+  The chain that a read or a write of a door of the command is on answers that read or that write, while the command runs and after it, so the ear of the command lives only until it hears the done of the command, and a cancel ends the command as it ends every other act.
+  A read or a write of a door of a command that an ear makes while the chain of that read or that write speaks finds no ear of the engine that answers it, as a read of the door of a prompt finds none, since an ear that speaks hears nothing until it is done.
   It runs until it ends, until its timeout or until a cancel: the World is the one that ends it, at the timeout it reads off the act as at a cancel, since the World is the one running it, and the engine says nothing to make it.
   A pause stops no command: it runs on, the World says it done when it ends, and its ear tells its exit at the wake.
   Its close tells what its stdout shows, and what its stderr shows when that stream has a show of its own that is no hidden one, so a merged command tells no stderr.
@@ -650,7 +651,7 @@ class Act[T = object](str):
   """The name of an act, which is what a verb gives and what a caller holds of the act: a string, so it names the act to close, cancel, pause, peek and get, and awaitable, so it gives what the act comes to.
   An act is over when its done stands and lives until then; there is no other state, and a control over an act that is over reaches nothing, but a wake of the ear of a command that a pause holds.
   The outcome of a cancelled act is the CancelledError it completed with.
-  Only a command lives past its done, and every other act is dropped at its done.
+  An act is dropped at its done, and so is its ear, but a lasting ear, which lives on until it returns, as the ear of a command does once it heard that done and told the exit.
   """
 
   def __await__(self) -> Generator[Self | Future[T], object, T]:
@@ -727,7 +728,7 @@ The record is a sequence of entries about acts.
 type Done = tuple[Literal["done"], str, str, object]
 """What an act came to: a done settles the act it names.
 A result enters the transcript whether or not anyone awaits it.
-An act that is over says nothing, and a command lives on to answer its doors.
+An act that is over says nothing, and the chain answers the doors of a command that is over.
 A done that an act said itself is the result of the act.
 A done that an ear says while the act is put to it is the answer to the act, which takes it now.
 A kind that ends when it is told to: it starts its ear, and then a done that names it is what it came to; a cancel over it ends it with a CancelledError, and a close of it with the value that close carries.
@@ -963,7 +964,7 @@ def controlled(ear: Callable[[str], Ear], lasting: bool = False) -> Callable[[st
   A close from outside still ends what a pause is over.
   What an act a control is over is done with: the value a close carries for the act it names, and a CancelledError for every other.
   An ear that is not lasting is over as it says a done of its own, so it never hears that done and says nothing after it.
-  A lasting ear lives past the done of its act, as the ear of a command does, so it answers the questions put to it after, and a cancel or a close over its act ends the act all the same.
+  A lasting ear lives past the done of its act until it returns, as the ear of a command does to hear that done, whoever said it, and to tell its exit, and a cancel or a close over its act ends the act all the same.
   """
 
 def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:

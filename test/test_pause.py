@@ -85,8 +85,8 @@ async def test_an_act_made_in_that_time_it_hears_at_once() -> None:
   sand, log, root, act = slow()
   await settle()
   engine.pause(act)
-  assert engine.read(f"{act}/stdout", on=root).content == ""
-  wanted = said(log, "read")[-1][1]
+  assert engine.ask("merged", root, act) is True
+  wanted = said(log, "merged")[-1][1]
   assert [one[2] for one in said(log, "done") if one[1] == wanted] == [act]
   step = engine.rung("x = bash('two')\nclose((await x).code)", on=root)
   await settle()

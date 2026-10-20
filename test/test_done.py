@@ -27,8 +27,8 @@ async def test_a_result_enters_the_transcript_whether_or_not_anyone_awaits_it() 
   assert [isinstance(one[3], Exit) for one in ends] == [True]
 
 
-async def test_an_act_that_is_over_says_nothing_and_a_command_lives_on_to_answer_its_doors() -> None:
-  """An act that is over says nothing, and a command lives on to answer its doors."""
+async def test_an_act_that_is_over_says_nothing_and_the_chain_answers_the_doors_of_a_command_that_is_over() -> None:
+  """An act that is over says nothing, and the chain answers the doors of a command that is over."""
   _, log, root = born()
   step = engine.rung("k = 1", on=root)
   await step
@@ -40,6 +40,7 @@ async def test_an_act_that_is_over_says_nothing_and_a_command_lives_on_to_answer
   await settle()
   assert [one for one in log[mark:] if one[2] in (step, command)] == []
   assert engine.read(f"{command}/stdout", on=root).content == "ran echo hi\n"
+  assert said(log, "done")[-1][2] == root
 
 
 async def test_a_done_that_an_act_said_itself_is_the_result_of_the_act() -> None:
@@ -62,7 +63,7 @@ async def test_a_done_that_an_ear_says_while_the_act_is_put_to_it_is_the_answer_
   command = engine.bash("echo hi", on=root)
   await command
   door = engine.read(f"{command}/stdout", on=root)
-  assert [one[2] for one in said(log, "done") if one[1] == "read2"] == [command] and door.content == "ran echo hi\n"
+  assert [one[2] for one in said(log, "done") if one[1] == "read2"] == [root] and door.content == "ran echo hi\n"
 
 
 async def test_a_kind_that_ends_when_it_is_told_to() -> None:

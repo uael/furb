@@ -151,7 +151,7 @@ async def test_an_ear_that_is_not_lasting_is_over_as_it_says_a_done_of_its_own()
 
 
 async def test_a_lasting_ear_lives_past_the_done_of_its_act() -> None:
-  """A lasting ear lives past the done of its act, as the ear of a command does, so it answers the questions put to it after, and a cancel or a close over its act ends the act all the same."""
+  """A lasting ear lives past the done of its act until it returns, as the ear of a command does to hear that done, whoever said it, and to tell its exit, and a cancel or a close over its act ends the act all the same."""
   _, _, root = born()
 
   def serving(id: str) -> Generator[tuple | None, tuple]:
@@ -160,6 +160,9 @@ async def test_a_lasting_ear_lives_past_the_done_of_its_act() -> None:
       match (yield):
         case ("read", qid, *_, path) if path == f"{id}/door":
           yield "done", qid, Text(path, "open")
+        case ("read", qid, *_, path) if path == f"{id}/end":
+          yield "done", qid, Text(path, "ended")
+          return
 
   door = engine.act("door", root, engine.controlled(serving, True))
   assert engine.read(f"{door}/door", on=root).content == "open"
@@ -167,6 +170,8 @@ async def test_a_lasting_ear_lives_past_the_done_of_its_act() -> None:
   await settle()
   assert isinstance(engine.peek(door), CancelledError)
   assert engine.read(f"{door}/door", on=root).content == "open"
+  assert engine.read(f"{door}/end", on=root).content == "ended"
+  engine.drive(engine.idle(door), door)
 
 
 async def test_what_an_act_a_control_is_over_is_done_with() -> None:

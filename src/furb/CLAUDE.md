@@ -109,8 +109,10 @@ meanings. The entry of such a name here gives only its form in the engine.
   by its module.
 - command: what bash runs on the machine.
 - merged: the state of a command whose stderr flows into its stdout, in the order the command wrote them.
-- door: the name of an act, with a part after it or without; the name of a prompt is the door of its ladder, the
-  word of a rung adds a door by making an act whose ear answers reads of a scheme, and the World serves the rest.
+- door: the name of an act, with a part after it or without; the name of a prompt is the door of its ladder, and
+  the name of a command with /stdout, /stderr or /stdin after it is a door of that command, which the chain of the read
+  or the write serves while the command runs and after it; the word of a rung adds a door by making an act whose ear answers reads of a
+  scheme, and the World serves the rest.
 - text: what read gives, and what write is given and gives back as it landed; a Text, with a path and a content.
 - show: a callable given the lines of a text, which gives the numbers of the lines the engine tells; span, grep and
   differs make the shows of the file.
