@@ -7,7 +7,6 @@ def skills(on: str = "") -> Text:
   A skill is a folder that holds a SKILL.md file, whose frontmatter gives its name and its description, and a skill with no name there takes the name of its folder.
   A name that an earlier folder holds wins, and the lines stand in the order of the names.
   A chain that finds no skill reads a list that holds no line.
-  The life word of the extension is skills(), so a chain tells its skills when the life enables the extension, and a chain born later tells them at its birth.
   """
 
 def skill(name: str, show: Show = HEAD, on: str = "") -> Text:
@@ -15,4 +14,11 @@ def skill(name: str, show: Show = HEAD, on: str = "") -> Text:
   skill reads the path skills:// and the name, with its show, so its lines stand in the turns as the lines of any read.
   The World answers it with the text of the SKILL.md file at the path of that file, so the text of a skill is the text of a read of that path.
   A skill of a name that no skill has raises Refused in the caller.
+  """
+
+def counted(on: str = "") -> int:
+  """How many skills a chain knows, which it tells in one line, so a reply reads the count and not the list.
+  counted reads the path skills:// on its chain with the show HIDDEN, so the list stands in no turns.
+  counted tells the read under the word value, as one line with the count of the skills and the word skills() that lists them, and gives the count.
+  The life word of the extension is counted(), so a chain tells the count of its skills when the life enables the extension, and a chain born later tells it at its birth.
   """

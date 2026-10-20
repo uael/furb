@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from conftest import chained, of
+from conftest import of
 from extensions.conftest import extended, skilled
 from furb import engine
 from furb.engine import Text
@@ -67,14 +67,3 @@ async def test_a_name_that_an_earlier_folder_holds_wins(tmp_path: Path) -> None:
 async def test_a_chain_that_finds_no_skill_reads_a_list_that_holds_no_line(tmp_path: Path) -> None:
   """A chain that finds no skill reads a list that holds no line."""
   assert await lines(tmp_path) == []
-
-
-async def test_the_life_word_of_the_extension_is_skills(tmp_path: Path) -> None:
-  """The life word of the extension is skills(), so a chain tells its skills when the life enables the extension, and a chain born later tells them at its birth."""
-  skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
-  _, root = extended("skills", tmp_path, _monty.skills, lives=True)
-  two = await chained("two")
-  assert (of(engine.turns(on=root), "read"), of(engine.turns(on=two), "read")) == (
-    ["#read1\nread1_path = 'skills://'\nread1_text = 'brew: Make tea.'"],
-    ["#read2\nread2_path = 'skills://'\nread2_text = 'brew: Make tea.'"],
-  )

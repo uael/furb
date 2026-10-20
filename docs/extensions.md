@@ -63,9 +63,10 @@ journal answers again in a later life, so a replay is exact and the World is ask
 
 ## The official extensions
 
-- `skills` defines `skills()`, which reads `skills://`: one line for each skill that the World finds in
+- `skills` defines `counted()`, which tells in one line how many skills the chain knows and that `skills()` lists
+  them, and `skills()`, which reads `skills://`: one line for each skill that the World finds in
   `.furb/skills` and `.claude/skills` of the working directory of the chain and of each folder above it, then in
-  `skills` of the config directory. `skill(name)` reads the `SKILL.md` file of a skill. Its life word is `skills()`.
+  `skills` of the config directory. `skill(name)` reads the `SKILL.md` file of a skill. Its life word is `counted()`.
 - `memory` defines `memory(path)`, which tells the chain the memory files that apply to a path: the memory of the
   user, in the config directory, then that of each folder from the root down to the working directory of the chain,
   then that of each folder under it down to the folder of the path, when the path is under it. The memory of a
