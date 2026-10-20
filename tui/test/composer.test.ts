@@ -568,7 +568,7 @@ test("the footer offers the keys of the top layer that acts, and a click on one 
       expect(await footer()).toEndWith("Enter run   Esc leave the program");
       screen.mockInput.pressEscape();
       await until(session, () => session.editing === undefined);
-      app.composer.setText("show live progress");
+      app.composer.setText("Think until I cancel.");
       await app.submit();
       await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
       expect(await footer()).toEndWith("⌃P commands   Esc pause   F1 help");
@@ -606,7 +606,7 @@ test("a notice cut to the room of the footer keeps one line and the mark of its 
 
 test("a cancelled message keeps its place in the feed, and its cancel reads as a cancel, not as a failure", () =>
   composing(async ({ session, app, frame }) => {
-    app.composer.setText("show live progress");
+    app.composer.setText("Think until I cancel.");
     await app.submit();
     await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
     await session.submit("/cancel");
@@ -621,7 +621,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     // The first message says its cancel at its right, above the second message, and the rung that the cancel ended
     // before it wrote a word shows nothing.
     const lines = shown.split("\n");
-    const first = lines.findIndex((line) => line.includes("show live progress"));
+    const first = lines.findIndex((line) => line.includes("Think until I cancel."));
     expect(lines[first]).toContain("⊘ cancelled");
     expect(first).toBeLessThan(lines.findIndex((line) => line.includes("A second message.")));
     expect(lines.filter((line) => line.includes(" cancelled") && line.includes("⊘"))).toHaveLength(1);

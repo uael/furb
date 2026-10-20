@@ -339,6 +339,10 @@ test("rewind is a recorded rung and keeps the selected transcript after reopenin
 test.serial("a progress tick keeps an in-flight act's card and body in place", () =>
   composing(
     async ({ session, app, screen, frame }) => {
+      // The clock stands still from before the wait starts, so the elapsed time is what the test moves it by, however
+      // long the frames take.
+      const start = Date.now();
+      setSystemTime(new Date(start));
       try {
         const id = await session.engine.wait({ seconds: 60, on: session.engine.root });
         await session.refresh();
@@ -347,7 +351,7 @@ test.serial("a progress tick keeps an in-flight act's card and body in place", (
         if (!card) throw new Error("No card for the pending wait.");
         const body = card.getChildren().at(-1);
         // The clock moves past a tick of the spinner and a second of the elapsed time, and the card stays.
-        setSystemTime(new Date(Date.now() + 1300));
+        setSystemTime(new Date(start + 1300));
         await frame();
         expect(app.scroll.getChildren().find((node) => node.id === id)).toBe(card);
         expect(card.getChildren().at(-1)).toBe(body);
@@ -373,7 +377,7 @@ test("a name inside a transcript tag opens the same live inspector as Python cod
       expect(row).toBeGreaterThanOrEqual(0);
       const column = lines[row]?.indexOf("answer") ?? -1;
       await screen.mockMouse.click(column + 1, row, 0, { modifiers: { ctrl: true } });
-      await screen.waitForFrame((frame) => frame.includes("answer: int"), { maxPasses: 200 });
+      await until(screen.renderer, () => screen.captureCharFrame().includes("answer: int"), "frame");
       expect(screen.captureCharFrame()).toContain("17");
     },
     { width: 120, height: 44, useMouse: true },
