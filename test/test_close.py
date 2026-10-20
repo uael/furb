@@ -6,7 +6,7 @@ import pytest
 
 from conftest import born, chained, paragraphs, posed, prompted, said, settle, slow, stalled
 from furb import engine
-from furb.engine import OPERATOR, Refused
+from furb.engine import OPERATOR, Refused, Text
 
 
 async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
@@ -176,8 +176,8 @@ async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the
   ]
 
 
-async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
-  """A close on an act that is over reaches nothing."""
+async def test_a_close_on_an_act_that_is_over_reaches_only_the_words_that_still_run_under_it() -> None:
+  """A close on an act that is over reaches only the words that still run under it."""
   sand, log, root = born(auto=False)
   act = engine.bash("echo hi", on=root)
   sand.exits(act, 0)
@@ -194,6 +194,16 @@ async def test_a_close_on_an_act_that_is_over_reaches_nothing() -> None:
   assert engine.peek(running) is None
   assert said(log, "close") == closes
   assert engine.turns(on=root) == was
+  engine.write(Text(answered, "await wait(30)"), on=root)
+  await settle()
+  (word,) = [a[1] for a in said(log, "rung") if a[2] == answered and a[4] == "await wait(30)"]
+  assert engine.peek(word, ...) is ...
+  engine.close(9, answered)
+  await settle()
+  assert isinstance(engine.peek(word), CancelledError) and await answered == 7
+  assert said(log, "close")[len(closes) :] == [
+    ("close", answered, OPERATOR, 9, [f"#{answered} closed\n{answered}_value = 9"])
+  ]
 
 
 async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_that_made_the_rung_of_the_word() -> None:

@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import posed, settle, slow
+from conftest import posed, said, settle, slow
 from furb import engine
 from furb.engine import OPERATOR, Act, Refused
 
@@ -28,8 +28,8 @@ async def test_the_name_of_an_act() -> None:
 
 
 async def test_an_act_is_over_when_its_done_stands_and_lives_until_then() -> None:
-  """An act is over when its done stands and lives until then; there is no other state, and a control over an act that is over reaches nothing, but a wake of the ear of a command that a pause holds."""
-  _, log, root, one = await posed(None, "hi")
+  """An act is over when its done stands and lives until then; there is no other state, and a control over an act that is over reaches only the acts that it covers and that are not over, as control says, but a wake also reaches the ear of a command that a pause holds."""
+  sand, log, root, one = await posed(None, "hi")
   assert engine.peek(one) is None
   engine.close(21, one)
   await settle()
@@ -43,6 +43,14 @@ async def test_an_act_is_over_when_its_done_stands_and_lives_until_then() -> Non
   assert engine.peek(one) == 21 and (await one) == 21
   assert [(a[0], a[1]) for a in log if a[0] in ("pause", "wake", "cancel", "close")] == [("close", one)]
   assert engine.turns(on=root) == was
+  sand.auto = False
+  step = engine.rung("x = bash('slow')", on=root)
+  await step
+  command = said(log, "bash")[-1][1]
+  engine.cancel(step)
+  await settle()
+  assert isinstance(engine.peek(command), CancelledError)
+  assert [(a[0], a[1]) for a in log if a[0] == "cancel"] == [("cancel", step)]
 
 
 async def test_the_outcome_of_a_cancelled_act_is_the_cancellederror_it_completed_with() -> None:
