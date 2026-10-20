@@ -49,7 +49,7 @@ test("idle snapshots add no facts or sandbox calls as the act table grows, and s
   withLife(
     async ({ session, engine, snapshots, calls }) => {
       snapshots.take(engine.root);
-      for (let index = 0; index < 100; index++) engine.wait({ seconds: 60, on: engine.root });
+      for (let index = 0; index < 100; index++) engine.wait([], { seconds: 60, on: engine.root });
       await Promise.resolve();
       expect(snapshots.take(engine.root).acts).toHaveLength(101);
       await Promise.resolve();
@@ -127,7 +127,7 @@ test("a take carries the acts that changed after the count it is given, and ever
   withLife(async ({ session, engine, snapshots }) => {
     const first = snapshots.take(engine.root);
     expect(first.acts.map((act) => act.id)).toEqual([...session.activity.acts.keys()]);
-    const waiting = engine.wait({ seconds: 60, on: engine.root }).id;
+    const waiting = engine.wait([], { seconds: 60, on: engine.root }).id;
     await Promise.resolve();
     const second = snapshots.take(engine.root, first.count);
     expect(second.acts.map((act) => act.id)).toEqual([waiting]);

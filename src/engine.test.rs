@@ -270,7 +270,7 @@ fn a_command_is_fed_a_stdin_of_text_whole_at_its_start_and_then_its_stdin_closes
 fn a_timeout_or_a_wait_past_the_longest_timer_runs_its_full_time() {
   let mut lived = Lived::new("long", &[], true).unwrap();
   let root = lived.root();
-  let wait = lived.engine.wait(verbs::Wait { seconds: Some(1e300), on: on(&root) }).unwrap();
+  let wait = lived.engine.wait(&[], verbs::Wait { seconds: Some(1e300), on: on(&root) }).unwrap();
   let wait = wait.id().to_owned();
   let with = verbs::Bash { timeout: Some(1e300), on: on(&root), ..Default::default() };
   let exit: Exit = block_on(lived.engine.bash("echo finished", with).unwrap()).unwrap();
@@ -365,7 +365,7 @@ fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it
 fn a_wait_is_done_when_its_time_is_up_and_it_says_when_it_is_due() {
   let mut lived = Lived::new("waits", &[], true).unwrap();
   let root = lived.root();
-  let act = lived.engine.wait(verbs::Wait { seconds: Some(0.1), on: on(&root) }).unwrap();
+  let act = lived.engine.wait(&[], verbs::Wait { seconds: Some(0.1), on: on(&root) }).unwrap();
   let id = act.id().to_owned();
   block_on(act).unwrap();
   let facts = lived.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
@@ -379,11 +379,36 @@ fn a_wait_is_done_when_its_time_is_up_and_it_says_when_it_is_due() {
 }
 
 #[test]
+fn a_wait_for_an_act_is_done_with_its_name_when_it_ends_first_and_the_time_ear_stops_its_timer() {
+  let mut lived = Lived::new("first", &[], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Bash { on: on(&root), ..Default::default() };
+  let command = lived.engine.bash("sleep 0.1", with).unwrap().id().to_owned();
+  let act =
+    lived.engine.wait(&[&command], verbs::Wait { seconds: Some(0.5), on: on(&root) }).unwrap();
+  let id = act.id().to_owned();
+  assert_eq!(
+    block_on(act).unwrap(),
+    Some(command.clone()),
+    "the wait is done with the name of its act"
+  );
+  let later = lived.engine.wait(&[], verbs::Wait { seconds: Some(0.8), on: on(&root) }).unwrap();
+  block_on(later).unwrap();
+  let facts = lived.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
+  let dones: Vec<String> = facts
+    .iter()
+    .filter(|one| one.kind() == "done" && one.about() == id)
+    .map(|one| one.by().to_owned())
+    .collect();
+  assert_eq!(dones, [id], "the ear of the wait said it done, and the time ear stopped its timer");
+}
+
+#[test]
 fn a_wait_that_a_wake_starts_again_in_a_later_life_ends_when_it_was_due() {
   let root = {
     let mut first = Lived::new("due", &[], true).unwrap();
     let root = first.root();
-    let act = first.engine.wait(verbs::Wait { seconds: Some(0.4), on: on(&root) }).unwrap();
+    let act = first.engine.wait(&[], verbs::Wait { seconds: Some(0.4), on: on(&root) }).unwrap();
     assert_eq!(act.id(), "wait1");
     root
   };
@@ -507,7 +532,7 @@ fn a_wait_that_a_wake_starts_again_says_nothing_after_a_cancel() {
   {
     let mut first = Lived::new("hushed", &[], true).unwrap();
     let root = first.root();
-    first.engine.wait(verbs::Wait { seconds: Some(0.2), on: on(&root) }).unwrap();
+    first.engine.wait(&[], verbs::Wait { seconds: Some(0.2), on: on(&root) }).unwrap();
   }
   let mut second = Lived::new("hushed", &[], false).unwrap();
   let root = second.root();
@@ -515,7 +540,7 @@ fn a_wait_that_a_wake_starts_again_says_nothing_after_a_cancel() {
   second.engine.cancel("wait1").unwrap();
   assert_eq!(second.settled("wait1").unwrap_err().name, "CancelledError");
   // A later wait outlives the deadline of the first.
-  let later = second.engine.wait(verbs::Wait { seconds: Some(0.4), on: on(&root) }).unwrap();
+  let later = second.engine.wait(&[], verbs::Wait { seconds: Some(0.4), on: on(&root) }).unwrap();
   block_on(later).unwrap();
   let facts = second.engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
   let dones = facts.iter().filter(|one| one.kind() == "done" && one.about() == "wait1");
@@ -569,7 +594,7 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
     first.engine.rung(verbs::Rung { word, on: on(&root), ..Default::default() }).unwrap();
     let apart = first.engine.chain(verbs::Chain::default()).unwrap().id().to_owned();
     first.engine.pause(&apart).unwrap();
-    first.engine.wait(verbs::Wait { seconds: Some(600.0), on: on(&apart) }).unwrap();
+    first.engine.wait(&[], verbs::Wait { seconds: Some(600.0), on: on(&apart) }).unwrap();
     assert!(
       first.engine.pending().unwrap().is_empty(),
       "the work of a life is no work of an earlier one"
@@ -577,7 +602,7 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
     root
   };
   let mut second = Lived::new("pending", &[], false).unwrap();
-  second.engine.wait(verbs::Wait { seconds: Some(600.0), on: on(&root) }).unwrap();
+  second.engine.wait(&[], verbs::Wait { seconds: Some(600.0), on: on(&root) }).unwrap();
   // The wait of the chain that a pause holds waits for the wake of that chain, and the wait of this life is its own.
   let pending =
     second.engine.pending().unwrap().into_iter().map(|(id, kind)| format!("{id} {kind}"));
@@ -632,7 +657,7 @@ fn paused(yard: &str) -> (Engine, oneshot::Sender<()>) {
 fn the_work_of_an_ear_tells_a_verb_in_its_turn_and_under_its_name() {
   let (mut engine, gate) = paused("uttered");
   let root = engine.root().to_owned();
-  let act = engine.wait(verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap();
+  let act = engine.wait(&[], verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap();
   let id = act.id().to_owned();
   let _ = gate.send(());
   block_on(act).unwrap();
@@ -650,7 +675,8 @@ fn the_work_of_an_ear_tells_a_verb_in_its_turn_and_under_its_name() {
 fn what_the_ears_say_of_their_own_accord_in_one_drive_is_one_feed_of_the_sandbox() {
   let (mut engine, gate) = paused("drained");
   let root = engine.root().to_owned();
-  let id = engine.wait(verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap().id().to_owned();
+  let id =
+    engine.wait(&[], verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap().id().to_owned();
   let told = Rc::new(RefCell::new(Vec::new()));
   let held = Rc::clone(&told);
   engine.watch(&id, move |value| held.borrow_mut().push(value.py_repr())).unwrap();
@@ -811,7 +837,7 @@ fn the_work_of_an_ear_takes_what_its_verb_came_to_when_the_life_drives_it_and_ne
   ];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
   let root = engine.root().to_owned();
-  let act = engine.wait(verbs::Wait { seconds: Some(1.0), on: on(&root) }).unwrap();
+  let act = engine.wait(&[], verbs::Wait { seconds: Some(1.0), on: on(&root) }).unwrap();
   block_on(act).unwrap();
   let facts = engine.transcript(verbs::Transcript { on: on(&root) }).unwrap();
   let at = |kind: &str, about: &str| {

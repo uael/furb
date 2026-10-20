@@ -80,7 +80,7 @@ function open(record: unknown[] = []) {
 test("a pending result leaves JavaScript and other native operations available", async () => {
   const { engine, release } = open();
   const on = engine.root;
-  const id = engine.wait({ seconds: 60, on }).id;
+  const id = engine.wait([], { seconds: 60, on }).id;
   const pending = engine.result(id);
   expect(engine.cwd({ on })).toBe("/tmp");
   expect(engine.outcome(id)).toEqual({ done: false, value: null });
@@ -90,7 +90,7 @@ test("a pending result leaves JavaScript and other native operations available",
 
 test("a cancel rejects a native await", async () => {
   const { engine } = open();
-  const later = engine.wait({ seconds: 60, on: engine.root }).id;
+  const later = engine.wait([], { seconds: 60, on: engine.root }).id;
   const result = engine.result(later).then(
     () => "resolved",
     (error: Error) => error.message,
@@ -167,7 +167,11 @@ test("every ear hears a fact whose values have no plain form, and each value cro
   expect(engine.read("a", { on }).content).toBe("one\ntwo\n");
   await engine.rung({ word: 'write(Text("c", "after"))', on });
   expect(files.get("c")).toBe("after");
-  expect(await engine.wait({ seconds: 0, on })).toBeNull();
+  expect(await engine.wait([], { seconds: 0, on })).toBeNull();
+  // A wait for acts takes its seconds by place, and is done with the name of an act that is done already.
+  const over = engine.wait([], { seconds: 0, on });
+  await over;
+  expect(await engine.wait([over.id], { seconds: 60, on })).toBe(over.id);
 });
 
 test("a record keeps a value with no plain form, so a later life makes the same act again", () => {

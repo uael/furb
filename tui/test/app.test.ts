@@ -246,7 +246,7 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
   first.view = "transcript";
   app.render();
   app.composer.setText('draft = "keep this"');
-  const pending = await first.engine.wait({ seconds: 10, on: fork.id });
+  const pending = await first.engine.wait([], { seconds: 10, on: fork.id });
   const ids = first.chains.map((chain) => chain.id);
   const program = { ...first.program };
   const record = first.host.record;
@@ -344,7 +344,7 @@ test("a progress tick keeps an in-flight act's card and body in place", () =>
       const start = Date.now();
       setSystemTime(new Date(start));
       try {
-        const id = await session.engine.wait({ seconds: 60, on: session.engine.root });
+        const id = await session.engine.wait([], { seconds: 60, on: session.engine.root });
         await session.refresh();
         await frame();
         const card = app.scroll.getChildren().find((node) => node.id === id);
