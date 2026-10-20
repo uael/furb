@@ -148,10 +148,10 @@ def close(value: object, id: str = "") -> None:
     case ("prompt", _, _, on, shape, *_) if not isinstance(value, BaseException):
       try:
         s = eval(shape, module(on)) or object
-        try:
-          fits = isinstance(value, s)
-        except TypeError:
-          fits = isinstance(value, s.__origin__)
+        fits = any(
+          isinstance(value, getattr(x, "__origin__", x))
+          for x in (s.__args__ if isinstance(s, type(int | str)) else [s])
+        )
       except Exception:
         fits = False
       if not fits:
