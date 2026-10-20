@@ -29,13 +29,14 @@ use super::{JsAct, native, refused};
 use crate::{
   Ear, Engine, Fault, Heard, Object, Step,
   engine::{callable, handed},
-  value::{field, templated},
+  value::{field, paired},
   wire,
 };
 
 /// How a value of JavaScript goes in where the contract says its type: as it is; as it is with a null that goes in
 /// as None, where the type holds None beside a default of its own; as a text, which JavaScript writes as its path and
-/// its content; or as a template, which it writes as each expression beside its value.
+/// its content; or as a template, which it writes as each expression beside its value, and which reads as the f-string
+/// {expression=} of each.
 #[derive(Clone, Copy)]
 pub enum Word {
   Plain,
@@ -169,9 +170,10 @@ pub fn inward(env: &Env, value: Unknown<'_>, word: Word, depth: usize) -> Result
       let pairs = held.into_iter().map(|pair| {
         let items = pair.as_ref().items().unwrap_or_default();
         let at = |i: usize| items.get(i).map_or_else(Object::none, |one| one.to_owned());
-        (at(1), at(0))
+        let expression = at(0);
+        (expression.as_ref().as_str().map_or_else(|| expression.py_repr(), str::to_owned), at(1))
       });
-      return Ok(templated(pairs));
+      return Ok(paired(pairs));
     }
     return Ok(Object::list(held));
   }

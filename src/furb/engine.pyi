@@ -332,16 +332,16 @@ def close(value: object, id: str = "") -> None:
   """
 
 def debug(template: Template) -> None:
-  """What a word tells of itself as it runs: each interpolation of a template, with its expression and its value.
+  """What a word tells of itself as it runs: the text of a template, which debug makes as python makes the f-string of the same template.
   The engine tells what a step debugged.
-  A debugged header names the expression of each interpolation of a debug, in order, and the paragraph binds the repr of each value in the list of the rung, as #rung5 debugged i len(y) and rung5_debug = ['3', '7'].
+  A debugged paragraph binds the text as rungN_debug under the header debugged, as #rung5 debugged and rung5_debug = 'i=3 7', and a text of more than one line as a quote.
   A raised header and a debugged header stand at the place in the run where they happened.
   The transcript holds between the entries what the run of each word raised and debugged.
   debug is given a python template string.
-  debug tells each interpolation of the template, with its expression and its value.
-  A rung binds one list of what it debugged, rungN_debug, in the order debugged across all its debug calls: debug adds the repr of each value to the list in the module of the chain, and its paragraph binds the part that it added, as rung5_debug[2:] = ['9'] after two values.
-  rungN_debug holds the repr of each value as a str, since a debugged value is a live object of the chain and a tell holds only wire values, so the binding and the list in the module hold the same strings.
-  debug tells nothing but the interpolations.
+  debug makes each interpolation as an f-string makes it, with its conversion, !r, !s or !a, and its format spec, so {x=} makes the expression, an equals sign and the repr of the value.
+  Each debug of a rung binds rungN_debug to its own text, and a later one binds it again, as python binds a name again, so the name holds the last text and no text is told twice.
+  debug binds nothing in the module itself, since the told rung binds what its paragraph tells, rungN_debug among it.
+  debug tells nothing but the text of its template, and nothing at all when that text is empty.
   debug enters nothing in the record.
   It is no act and it enters no record, and it stands in the turns at the place in the run where it happened.
   Outside an act there is nothing to tell of, so it is refused.
