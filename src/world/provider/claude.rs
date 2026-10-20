@@ -57,8 +57,13 @@ const HELD: usize = 64;
 /// How long a conversation with no turn keeps its process.
 const IDLE: Duration = Duration::from_secs(300);
 
-/// How long a turn may go with no progress, unless `FURB_CLAUDE_STALL` gives other seconds.
+/// How long each wait of a turn may go with no progress, unless `FURB_CLAUDE_STALL` gives other seconds: for the process
+/// to take the input of the turn, to write a line of its stream, and to end once its stdout closed.
 const STALL: Duration = Duration::from_secs(900);
+
+/// How long a turn reads what a process that ended still holds on its stdout and its stderr, since a process that it
+/// started may hold them open.
+const GRACE: Duration = Duration::from_secs(1);
 
 /// The longest line of the stream that the command line may write.
 const LINE: usize = 32 * 1024 * 1024;
@@ -635,6 +640,22 @@ fn last(text: &str) -> &str {
   &text[cut..]
 }
 
+/// The failure of a turn that waited its stall with no progress, with the last line it read that was no event.
+fn stalled(stall: Duration, odd: &str) -> CompletionError {
+  let seconds = stall.as_secs_f64();
+  let odd =
+    if odd.is_empty() { String::new() } else { format!(" The last line it wrote was {odd}") };
+  failed(format!("Claude made no progress for {seconds}s.{odd}"))
+}
+
+/// The failure of a turn whose process ended, with its code or by a signal, and all that it wrote on its stderr,
+/// which the stderr gives until its end or for a grace.
+async fn exited(code: Option<i32>, tail: &mut Tail) -> CompletionError {
+  let _ = tokio::time::timeout(GRACE, tail.drained()).await;
+  let code = code.map_or_else(|| "a signal".to_owned(), |code| code.to_string());
+  failed(format!("Claude exited ({code}){}", tail.said()))
+}
+
 /// A turn in flight. However it ends, the conversation holds the request, what the command line heard of it, and
 /// the reply once the turn came to one; a turn that came to no reply ends its process, whose stream is then at no
 /// boundary a later turn can trust.
@@ -692,27 +713,43 @@ impl Flight<'_> {
     let Conversation { process: Some(process), id, name, .. } = held else {
       return Err(failed("claude is not running"));
     };
+    // The stall bounds each wait of the turn: for the process to take its input, to write a line, and to end once its
+    // stdout closed.
+    let mut due = tokio::time::Instant::now() + stall;
     let Process { stdin, tail, .. } = process;
     let wrote = async {
       stdin.write_all(line.as_bytes()).await?;
       stdin.flush().await
     };
-    if let Err(no) = tail.beside(wrote).await {
-      // A process that took no input ended, and the failure says all that it wrote on its stderr.
-      let _ = tokio::time::timeout(Duration::from_secs(1), process.tail.drained()).await;
-      return Err(failed(format!("claude took no input: {no}{}", process.tail.said())));
+    match tokio::time::timeout_at(due, tail.beside(wrote)).await {
+      Ok(Ok(())) => {}
+      Ok(Err(no)) => {
+        // A process that took no input ended, and the failure says all that it wrote on its stderr.
+        let _ = tokio::time::timeout(GRACE, process.tail.drained()).await;
+        return Err(failed(format!("claude took no input: {no}{}", process.tail.said())));
+      }
+      Err(_) => return Err(stalled(stall, "")),
     }
     self.heard = true;
     let mut reply = Reply { deltas, ..Reply::default() };
     let mut odd = String::new();
-    let mut due = tokio::time::Instant::now() + stall;
+    // The code of a process that ended. A process that it started may hold its stdout open, so the turn sees the end
+    // of the process itself, and then reads what its stdout holds for a grace.
+    let mut ended = None;
+    due = tokio::time::Instant::now() + stall;
     loop {
       let heard = tokio::select! {
         line = process.tail.beside(process.out.line()) => line,
+        status = process.child.wait(), if ended.is_none() => {
+          ended = Some(status.ok().and_then(|one| one.code()));
+          due = tokio::time::Instant::now() + GRACE;
+          continue;
+        }
         () = tokio::time::sleep_until(due) => {
-          let odd = if odd.is_empty() { odd } else { format!(" The last line it wrote was {odd}") };
-          let seconds = stall.as_secs_f64();
-          return Err(failed(format!("Claude made no progress for {seconds}s.{odd}")));
+          return Err(match ended {
+            Some(code) => exited(code, &mut process.tail).await,
+            None => stalled(stall, &odd),
+          });
         }
       };
       let event = match heard {
@@ -723,12 +760,17 @@ impl Flight<'_> {
         }
         Line::Over(Some(why)) => return Err(failed(why)),
         Line::Over(None) => {
-          let Process { child, tail, .. } = process;
-          let code = tail.beside(child.wait()).await.ok().and_then(|status| status.code());
-          // The failure says all that the process wrote, which its stderr gives until its end.
-          let _ = tokio::time::timeout(Duration::from_secs(1), process.tail.drained()).await;
-          let code = code.map_or_else(|| "a signal".to_owned(), |code| code.to_string());
-          return Err(failed(format!("Claude exited ({code}){}", process.tail.said())));
+          let code = match ended {
+            Some(code) => code,
+            None => {
+              let waited = process.tail.beside(process.child.wait());
+              match tokio::time::timeout_at(due, waited).await {
+                Ok(status) => status.ok().and_then(|one| one.code()),
+                Err(_) => return Err(stalled(stall, &odd)),
+              }
+            }
+          };
+          return Err(exited(code, &mut process.tail).await);
         }
       };
       let kind = event.get("type").and_then(Value::as_str).unwrap_or_default();

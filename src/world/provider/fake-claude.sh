@@ -8,8 +8,11 @@
 # that says an error, a line that holds BARE gets a result with no block before it, a line that holds THINK gets a
 # thought before the text, and a line that holds LOUD closes the stdout, writes more on the stderr than its pipe holds,
 # and ends it with a failure, and a line that holds GAP streams its text with its first part left out, and settles the
-# text whole. When the file loud stands beside it, it writes more on the stderr than its pipe holds before it reads any
-# input, and when the file odd stands beside it, it writes a line that is no JSON before it reads any input.
+# text whole. A line that holds MUTE closes the stdout and lives on, and a line that holds ORPHAN starts a process that
+# holds the stdout and the stderr open, writes the id of that process in the file orphan beside it, says so on the
+# stderr, and ends it with a failure. When the file loud stands beside it, it writes more on the stderr than its pipe
+# holds before it reads any input, when the file odd stands beside it, it writes a line that is no JSON before it reads
+# any input, and when the file deaf stands beside it, it reads no input and lives on.
 here=$(dirname "$0")
 printf '%s\0' "$@" > "$here/args.$$"
 echo "$$" >> "$here/pids"
@@ -25,6 +28,7 @@ settle() { printf '%s\n' "{\"type\":\"assistant\",\"message\":{\"content\":[$1]}
 part() { say "{\"type\":\"content_block_delta\",\"index\":$at,\"delta\":{\"type\":\"text_delta\",\"text\":$1}}"; }
 if [ -f "$here/loud" ]; then head -c 262144 /dev/zero | tr '\0' e >&2; fi
 if [ -f "$here/odd" ]; then echo "no line of json"; fi
+if [ -f "$here/deaf" ]; then exec sleep 60; fi
 n=0
 while IFS= read -r line; do
   printf '%s\n' "$line" >> "$here/in"
@@ -32,6 +36,8 @@ while IFS= read -r line; do
     *FAIL*) echo "deliberate failure" >&2; exit 2 ;;
     *WAIT*) continue ;;
     *LOUD*) exec 1>&-; head -c 262144 /dev/zero | tr '\0' e >&2; exit 3 ;;
+    *MUTE*) exec 1>&-; exec sleep 60 ;;
+    *ORPHAN*) sleep 60 & echo $! > "$here/orphan"; echo "orphan left" >&2; exit 4 ;;
     *LONG*) head -c 33554433 /dev/zero; echo; continue ;;
     *ERROR*) echo '{"type":"result","is_error":true,"result":"the model is overloaded"}'; continue ;;
     *BARE*) echo '{"type":"result","result":"close(1)","usage":{}}'; continue ;;

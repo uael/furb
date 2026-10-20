@@ -434,15 +434,61 @@ fn a_process_that_writes_more_on_its_stderr_than_its_pipe_holds_takes_a_long_inp
 fn a_turn_that_makes_no_progress_fails_at_its_stall_with_the_last_odd_line_and_ends_its_process() {
   let yard = Yard::new("stall");
   fs::write(yard.at.join("odd"), "").expect("the cue of the fake");
-  let model = yard.claude(300).completion_model("sonnet");
+  // The stall bounds the write of the input too, so it is long enough for the fake to start.
+  let model = yard.claude(3_000).completion_model("sonnet");
   // The fake writes its odd line before it reads, and the turn writes more than a pipe holds, so the write ends, and
-  // the stall starts, only once the odd line waits in the pipe, however slow the fake is.
+  // the stall of the stream starts, only once the odd line waits in the pipe, however slow the fake is.
   let long = format!("WAIT {}", "a".repeat(262_144));
   let no = asked(&model, &[user(&long)], json!({"session": "stall"})).unwrap_err();
-  let why = "Claude made no progress for 0.3s. The last line it wrote was no line of json";
+  let why = "Claude made no progress for 3s. The last line it wrote was no line of json";
   assert!(no.to_string().contains(why), "{no}");
   let pid = yard.pids().remove(0);
   assert!(gone(&pid), "the process of the turn ended");
+}
+
+/// One turn of a model that answers no request, bounded by ten seconds.
+fn ended(model: &Completion, text: &str) -> Result<rig_core::completion::CompletionError, String> {
+  let turn = model.completion(request("ENGINE ONLY", &[user(text)], json!({})));
+  let got = reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
+  match got {
+    Ok(Err(no)) => Ok(no),
+    Ok(Ok(response)) => Err(format!("the turn was answered: {:?}", response.choice)),
+    Err(_) => Err("the turn did not end in ten seconds".to_owned()),
+  }
+}
+
+#[test]
+fn a_process_that_takes_no_input_fails_its_turn_at_its_stall_and_ends() {
+  let yard = Yard::new("deaf");
+  fs::write(yard.at.join("deaf"), "").expect("the cue of the fake");
+  // The stall is long enough for the fake to start and write its id.
+  let model = yard.claude(3_000).completion_model("sonnet");
+  // The turn writes more than a pipe holds, so it waits for the process to take its input.
+  let no = ended(&model, &"a".repeat(262_144)).unwrap();
+  assert!(no.to_string().contains("Claude made no progress for 3s."), "{no}");
+  let pid = yard.pids().remove(0);
+  assert!(gone(&pid), "the process of the turn ended");
+}
+
+#[test]
+fn a_process_that_closes_its_stdout_and_lives_on_fails_its_turn_at_its_stall_and_ends() {
+  let yard = Yard::new("mute");
+  let model = yard.claude(300).completion_model("sonnet");
+  let no = ended(&model, "MUTE").unwrap();
+  assert!(no.to_string().contains("Claude made no progress for 0.3s."), "{no}");
+  let pid = yard.pids().remove(0);
+  assert!(gone(&pid), "the process of the turn ended");
+}
+
+#[test]
+fn a_process_that_ends_while_a_process_it_started_holds_its_stdout_fails_its_turn_at_once() {
+  let yard = Yard::new("orphan");
+  let model = yard.claude(60_000).completion_model("sonnet");
+  let no = ended(&model, "ORPHAN");
+  let orphan = fs::read_to_string(yard.at.join("orphan")).unwrap_or_default();
+  let _ = Command::new("kill").arg(orphan.trim()).status();
+  let no = no.unwrap();
+  assert!(no.to_string().contains("Claude exited (4): orphan left"), "{no}");
 }
 
 #[test]
