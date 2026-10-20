@@ -10,8 +10,9 @@
 //! the typeshed of monty, which describes what the sandbox runs but for its modules: it holds stubs that its other
 //! stubs import, `types` among them, which the sandbox does not run, and it lacks some modules that the sandbox
 //! runs, `ast` among them. So the sandbox alone says which import runs: each import of the sheet runs in a sandbox
-//! of its own, and one that raises is refused before the word runs. The errors alone count, since a warning refuses
-//! no word.
+//! of its own, and one that raises is refused before the word runs. A module that the sandbox runs but whose names
+//! only ask the operating system, `os`, is refused too, since a life asks nothing of the operating system and the
+//! host ends the run of a word that asks it. The errors alone count, since a warning refuses no word.
 
 use std::cell::RefCell;
 
@@ -38,6 +39,9 @@ const MODULE: &str = "__engine__";
 
 /// The rule of the checker that a finding on an import is under, which the findings of the sandbox take too.
 const IMPORT: &str = "error[unresolved-import]";
+
+/// The modules that the sandbox runs and whose names only ask the operating system, which no life answers.
+const ASKS: [&str; 1] = ["os"];
 
 thread_local! {
   /// The one checker of this thread, which every life of the thread and the Kernel of a python host read with,
@@ -96,7 +100,8 @@ fn read(said: &str) -> Option<(usize, String)> {
   Some((line.trim().parse().ok()?, rest.trim().to_owned()))
 }
 
-/// Each import of the sheet that the sandbox cannot run, by the line it stands on, with what the sandbox raised.
+/// Each import of the sheet that the sandbox cannot run, by the line it stands on, with what the sandbox raised, and
+/// each import of a module that only asks the operating system, by its line and that module.
 ///
 /// An import runs the same in every sandbox, since monty runs no module that code defines, so a sandbox of its own
 /// says what the sandbox of the word will. Each import is read where it stands, in a function or under a test that
@@ -111,22 +116,38 @@ fn unrun(sheet: &str) -> Vec<(usize, String)> {
   imports
     .0
     .into_iter()
-    .filter(|at| !(at.start() == 0.into() && sheet[*at] == opening))
-    .filter_map(|at| {
+    .filter(|(at, _)| !(at.start() == 0.into() && sheet[*at] == opening))
+    .filter_map(|(at, modules)| {
+      let line = sheet[..at.start().to_usize()].matches('\n').count() + 1;
+      if let Some(asks) = modules.iter().find(|one| ASKS.contains(&one.as_str())) {
+        let why =
+          format!("{IMPORT} {asks} asks the operating system, and a life asks nothing of it");
+        return Some((line, why));
+      }
       let raised =
         Sand::new().run(&sheet[at], NamedValues::new(), &mut Nobody("an import")).err()?;
-      Some((sheet[..at.start().to_usize()].matches('\n').count() + 1, format!("{IMPORT} {raised}")))
+      Some((line, format!("{IMPORT} {raised}")))
     })
     .collect()
 }
 
-/// The imports of a body and of every body beneath it, each by where it stands.
-struct Imports(Vec<TextRange>);
+/// The imports of a body and of every body beneath it, each by where it stands, with the module that each of its
+/// names comes from, as the first part of its dotted name: a relative import names none.
+struct Imports(Vec<(TextRange, Vec<String>)>);
 
 impl StatementVisitor<'_> for Imports {
   fn visit_stmt(&mut self, stmt: &Stmt) {
+    let first = |name: &str| name.split('.').next().unwrap_or_default().to_owned();
     match stmt {
-      Stmt::Import(_) | Stmt::ImportFrom(_) => self.0.push(stmt.range()),
+      Stmt::Import(one) => {
+        self
+          .0
+          .push((stmt.range(), one.names.iter().map(|alias| first(alias.name.as_str())).collect()));
+      }
+      Stmt::ImportFrom(one) => {
+        let module = one.module.as_ref().filter(|_| one.level == 0);
+        self.0.push((stmt.range(), module.map(|name| first(name.as_str())).into_iter().collect()));
+      }
       _ => walk_stmt(self, stmt),
     }
   }
@@ -224,6 +245,22 @@ mod tests {
         format!("error[unresolved-import] ModuleNotFoundError: No module named '{MODULE}'")
       )]
     );
+  }
+
+  #[test]
+  fn an_import_of_a_module_that_only_asks_the_operating_system_is_a_finding_of_its_line() {
+    let why =
+      "error[unresolved-import] os asks the operating system, and a life asks nothing of it";
+    let word = "k = 1\nimport os\ndef f():\n  from os import environ as e\n  return e\nimport json, os.path\nclose(k)";
+    assert_eq!(
+      said(&[], word),
+      vec![(2, why.to_owned()), (4, why.to_owned()), (6, why.to_owned())]
+    );
+  }
+
+  #[test]
+  fn a_module_whose_name_begins_as_os_does_is_no_finding() {
+    assert_eq!(said(&[], "import json\nfrom json import dumps\nclose(dumps(1))"), vec![]);
   }
 
   #[test]
