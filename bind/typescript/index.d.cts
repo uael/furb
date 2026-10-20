@@ -112,7 +112,7 @@ export declare class Engine {
   cancel(id: string): void
   /** An act ended from outside, by its name, with a value: it is done with it, and it ends what it made, since a close is a cancel that carries what the act it names is done with. */
   close(value: unknown, options?: { id?: string } | null): void
-  /** What a word tells of itself as it runs: each interpolation of a template, with its expression and its value. */
+  /** What a word tells of itself as it runs: the text of a template, which debug makes as python makes the f-string of the same template. */
   debug(template: Array<[string, unknown]>): void
   /** A wait: the World takes it and says it is done when its seconds have passed, and it is over then. */
   wait(options?: { seconds?: number; on?: string } | null): Act & PromiseLike<null>

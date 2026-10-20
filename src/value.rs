@@ -195,11 +195,22 @@ pub fn marked<'a>(name: &str, fields: impl IntoIterator<Item = (&'a str, Object)
   Object::dict(held)
 }
 
-/// A template string as the engine reads it: each interpolation as its value beside its expression.
-pub(crate) fn templated(interpolations: impl IntoIterator<Item = (Object, Object)>) -> Object {
-  let held =
-    interpolations.into_iter().map(|(value, expression)| Object::list([value, expression]));
-  marked("Templated", [("interpolations", Object::list(held))])
+/// A template string as the engine reads it: its parts in order, as python iterates one, each string as it is and
+/// each interpolation as its value, its expression, its conversion and its format spec.
+pub(crate) fn templated(parts: impl IntoIterator<Item = Object>) -> Object {
+  marked("Templated", [("parts", Object::list(parts))])
+}
+
+/// A template string as a host says one that writes each expression beside its value: each pair as the f-string
+/// {expression=} makes it, the expression, an equals sign and the repr of the value, with a space between two.
+pub(crate) fn paired(pairs: impl IntoIterator<Item = (String, Object)>) -> Object {
+  templated(pairs.into_iter().enumerate().flat_map(|(at, (expression, value))| {
+    let lead = if at == 0 { "" } else { " " };
+    [
+      Object::string(format!("{lead}{expression}=")),
+      Object::list([value, Object::string(expression), Object::string("r"), Object::string("")]),
+    ]
+  }))
 }
 
 #[cfg(test)]

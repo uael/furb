@@ -2,7 +2,8 @@
 
 The suite proves the contract on both engines, sentence for sentence. What is proved here is the door itself: an
 ear of this interpreter that says a verb while it hears and is answered with what the verb raised, a show the
-engine made that an ear calls back while it hears, a class a word defined held as a type of this interpreter
+engine made that an ear calls back while it hears, a template string that a function of this interpreter debugs
+while a word calls it, which crosses whole, a class a word defined held as a type of this interpreter
 and its instances as objects of it, both ways, the Kernel of this interpreter refused, since the engine of monty
 holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, an ear the
 crate writes, which serves a life of either engine, a life longer than the tables of its session could count, and
@@ -77,6 +78,26 @@ async def test_a_word_that_asks_the_operating_system_raises_where_it_asks_and_it
   sand.script[root] = ["open('a.txt')", "close(str(raised))"]
   said = await engine.prompt(str, "open it", on=root)
   assert said == "open asks the operating system, and a life asks nothing of it"
+
+
+async def test_a_template_string_that_a_function_of_this_interpreter_debugs_crosses_whole() -> None:
+  """A template string that a function here debugs while a word calls it crosses with its strings, its conversions and its format specs, so debug makes the text that python makes of it here."""
+  n, s = 5, "\u00e9"
+
+  def look() -> None:
+    engine.debug(t"{n=} {s!a} {n:03} and {s!r:>5}")
+
+  def handing() -> Generator[tuple | None, tuple | None]:
+    while True:
+      if (a := (yield)) is not None and a[0] == "hand":
+        yield "done", a[1], look
+
+  root = engine.boot((), handing=handing(), world=Sand(stands=STANDS).hears())
+  step = engine.rung("look = ask('hand', '')\nassert callable(look)\nlook()", on=root)
+  await step
+  made = f"{n=} {s!a} {n:03} and {s!r:>5}"
+  assert made == "n=5 '\\xe9' 005 and   '\u00e9'"
+  assert engine.turns(on=root)[-1][1].split("\n\n")[-1] == f"#{step} debugged\n{step}_debug = {made!r}"
 
 
 async def test_a_class_a_word_defined_is_a_type_of_this_interpreter_and_its_instances_are_objects_of_it() -> None:
