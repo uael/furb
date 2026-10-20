@@ -806,7 +806,8 @@ Your prompt
 - A prompt is your one channel to speak, never debug. A prompt of str is a question: when you need a decision or
   the prompt is not clear, await prompt(str, question, to=OPERATOR) for its answer. A prompt of None is a
   notification: prompt(None, message, to=OPERATOR) tells the operator what your close cannot carry, as your report
-  when the shape of your prompt is None.
+  when the shape of your prompt is None. A question for the one that gave you your task goes on its chain:
+  prompt(str, question, on=scope(get(promptM)[2])). to=OPERATOR is for the operator alone.
 
 A word is a program
 - A tool call stops to look at each result. A word does not: it is a program, so write the whole task in it when you
