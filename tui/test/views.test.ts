@@ -89,7 +89,7 @@ test("a command that printed more than a row holds sends the tail and its length
       if (!opened) throw new Error("No open card for the command.");
       // The line end that closes the output ends its last row, and the card draws no empty row for it.
       const shown = printed.replace(/\n$/, "");
-      await screen.waitFor(() => texts(opened).includes(shown), { maxPasses: 200 });
+      await until(screen.renderer, () => texts(opened).includes(shown), "frame");
       expect(texts(opened)).toContain(shown);
     },
     { width: 120, height: 40, useMouse: true },
