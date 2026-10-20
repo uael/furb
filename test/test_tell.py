@@ -46,8 +46,8 @@ async def test_a_question_is_put_to_the_ears_of_the_engine_before_those_of_the_o
   assert [a[0] for a in sand.calls] == ["stand", "prompt", "read"]
 
 
-async def test_the_question_that_tell_names_is_the_last_one_of_its_kind_on_its_chain_that_the_run_made() -> None:
-  """The question that tell names is the last one of its kind on its chain that the run made."""
+async def test_the_question_that_tell_names_is_the_last_question_on_its_chain_that_the_run_made() -> None:
+  """The question that tell names is the last question on its chain that the run made."""
   _, log, root = born("read('a.txt', HIDDEN)\nread('a.txt', span(1, 1))\nclose(1)")
   engine.read("a.txt", on=root)
   assert await engine.prompt(int, "read twice", on=root) == 1
