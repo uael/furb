@@ -710,9 +710,10 @@ fn spy(heard: Rc<RefCell<Vec<(String, String)>>>) -> Box<dyn Ear> {
 
 #[test]
 fn an_ear_of_the_host_hears_on_after_a_word_that_failed_where_it_reached_that_ear() {
-  // The sandbox cannot step an ear of the host from a generator that a builtin steps, so the word fails at the
-  // read, where the act reaches the first ear of the host that the engine drives.
-  let word = "def h(p):\n  return read(p).content\nclose(len(''.join(h(p) for p in ['a.txt'])))";
+  // The sandbox cannot step an ear of the host from a generator that map() walks, so the word fails at the read,
+  // where the act reaches the first ear of the host that the engine drives.
+  let word =
+    "def h(p):\n  return read(p).content\nclose(len(list(map(str, (h(p) for p in ['a.txt'])))))";
   let mut lived = Lived::new("reached", &[word, "close(8)"], true).unwrap();
   fs::write(lived.at.join("a.txt"), "one\ntwo\n").unwrap();
   let root = lived.root();
@@ -729,4 +730,15 @@ fn an_ear_of_the_host_hears_on_after_a_word_that_failed_where_it_reached_that_ea
   let heard = heard.borrow();
   assert!(heard.contains(&("read".to_owned(), "read1".to_owned())), "the spy heard the read");
   assert!(heard.contains(&("done".to_owned(), id)), "the spy heard the done of the prompt");
+}
+
+#[test]
+fn a_generator_that_a_builtin_steps_waits_on_an_act() {
+  let word = "def h(p):\n  return read(p).content\nclose(len(''.join(h(p) for p in ['a.txt'])))";
+  let mut lived = Lived::new("joined", &[word], true).unwrap();
+  fs::write(lived.at.join("a.txt"), "one\ntwo\n").unwrap();
+  let root = lived.root();
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let act = lived.engine.prompt(Object::string("int"), with).unwrap();
+  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8));
 }
