@@ -69,7 +69,7 @@ def turns(on: str = "") -> list[tuple]:
     match it:
       case ("reply", *_):
         cut = len(user)
-      case ("done", about, _, (_, _, _, _) as turn) if question(("reply", about)):
+      case ("done", about, _, tuple() as turn) if question(("reply", about)):
         folded += [("user", "\n\n".join(user[:cut]), None, None), turn]
         del user[:cut]
       case (kind, *_, notes) if kind in ("tell", "pause", "wake", "cancel", "close"):
@@ -93,7 +93,7 @@ def program(on: str = "") -> dict[str, str]:
 
 
 def standing() -> list:
-  return next((now for x in reversed(transcript(ROOT)) if x[0] == "stand" and isinstance(now := peek(x[1]), list)), [])
+  return latest("stand", ROOT, [])
 
 
 def stand(on: str = ROOT) -> list:
@@ -119,10 +119,7 @@ def cd(path: str, on: str = "") -> str:
 
 
 def cwd(on: str = "") -> str:
-  return (
-    next((path for x in reversed(transcript(on)) if x[0] == "cd" and isinstance(path := peek(x[1]), str)), "")
-    or standing()[1]
-  )
+  return latest("cd", on, "") or standing()[1]
 
 
 def pause(id: str) -> None:
@@ -332,7 +329,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
             act("run", id, None, rid, unquoted(word), donor)
         case ("done", about, by, Refused()) if not by and question(("reply", about)):
           pause(id)
-        case ("done", about, _, value):
+        case ("done", about, *_):
           waiting.pop(about, None)
       if (r := get(a[1]))[0] in ("run", "wants"):
         running[r[4] if r[0] == "run" else get(r[2])[4]] = (a[0] == "started") == (r[0] == "run")
@@ -510,6 +507,12 @@ def scope(name):
     case (kind, _, _, on, *_):
       return name if kind == "chain" else on
   return ""
+
+
+def latest(kind, on, empty):
+  return next(
+    (got for x in reversed(transcript(on)) if x[0] == kind and isinstance(got := peek(x[1]), type(empty))), empty
+  )
 
 
 def tell(on, path, got=None, show=HEAD):
