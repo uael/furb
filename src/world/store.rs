@@ -6,7 +6,9 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use serde_json::value::RawValue;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde_json::{Value, value::RawValue};
 
 use crate::{
   ear::{Ear, ear, hear},
@@ -19,7 +21,8 @@ use crate::{
 /// The lease is a lock on the file beside the record, `<record>.lock`, which the store holds until its ear is gone
 /// or the process ends; the kernel ends the lease of a process that ends. The lock file never moves and is never
 /// removed, so its name always means the one file that every process locks. A final line that a crash tore is
-/// removed, and a final line that is whole but not ended is ended, before the store keeps anything after it.
+/// removed, and a final line that is whole but not ended is ended, before the store keeps anything after it. Each
+/// line holds the entry and, after the fact, the time at which the store kept it, which the life never reads.
 pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
   let path = path.as_ref().to_path_buf();
   let lease = leased(&path)?;
@@ -34,7 +37,7 @@ pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Faul
         continue;
       }
       let Some(entry) = a.word(0) else { continue };
-      let line = format!("{}\n", record(entry));
+      let line = stamped(record(entry), now());
       file
         .write_all(line.as_bytes())
         .and_then(|()| file.sync_data())
@@ -44,12 +47,28 @@ pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Faul
   Ok((entries, kept))
 }
 
+/// The line of an entry: its fact, and after it the time at which the store kept it, in milliseconds since the start
+/// of 1970, so the fact stays as the journal said it.
+fn stamped(mut entry: Value, at: u64) -> String {
+  if let Value::Array(held) = &mut entry {
+    held.push(Value::from(at));
+  }
+  format!("{entry}\n")
+}
+
+/// The time now, in milliseconds since the start of 1970.
+fn now() -> u64 {
+  let since = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+  u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+}
+
 /// What the store kept at a path, read with no lease and changed in nothing, as a later life would open on it.
 pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
   read(path.as_ref(), false)
 }
 
-/// The entries of a record, each the fact it kept in a list of one, as boot takes them.
+/// The entries of a record, each the fact it kept in a list of one, as boot takes them. The time that a line holds
+/// after its fact stays out of the entry, and a line with no time, as an older store kept it, reads the same.
 fn read(path: &Path, repair: bool) -> Result<Vec<Object>, Fault> {
   let failed = |no: std::io::Error| Fault::refused(format!("{no}: {}", path.display()));
   let data = match std::fs::read(path) {
@@ -70,8 +89,8 @@ fn read(path: &Path, repair: bool) -> Result<Vec<Object>, Fault> {
       start = next;
       continue;
     }
-    let parsed = serde_json::from_str::<&RawValue>(text);
-    let Ok(raw) = parsed else {
+    let parsed = serde_json::from_str::<Vec<&RawValue>>(text);
+    let Ok(held) = parsed else {
       if end.is_none() {
         // The last line was torn as it was written: nothing after it was kept, so it goes.
         if repair {
@@ -82,6 +101,12 @@ fn read(path: &Path, repair: bool) -> Result<Vec<Object>, Fault> {
       }
       return Err(invalid(start));
     };
+    let timed = |one: &RawValue| serde_json::from_str::<u64>(one.get()).is_ok();
+    if held.is_empty() || held.len() > 2 || !held[1..].iter().all(|one| timed(one)) {
+      return Err(invalid(start));
+    }
+    let whole = format!("[{}]", held[0].get());
+    let raw = serde_json::from_str::<&RawValue>(&whole).map_err(|_| invalid(start))?;
     let entry =
       inward(&decoded(raw, 0).map_err(|_| invalid(start))?).map_err(|_| invalid(start))?;
     let fact = entry.as_ref().items().and_then(|held| held.first().and_then(|one| one.items()));
@@ -136,3 +161,7 @@ fn leased(path: &Path) -> Result<Lease, Fault> {
     Err(TryLockError::Error(no)) => Err(failed(no)),
   }
 }
+
+#[cfg(test)]
+#[path = "store.test.rs"]
+mod tests;
