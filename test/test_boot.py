@@ -333,10 +333,25 @@ async def test_the_engine_serves_the_doors_of_the_file_itself_and_asks_the_world
 async def test_a_later_life_reads_the_same_text_from_a_door() -> None:
   """A later life reads the same text from a door."""
   sand, log, root = await lived()
-  command = said(log, "bash")[0][1]
-  was = engine.read(f"{command}/stdout", on=root)
+  prompt = said(log, "prompt")[0][1]
+  was = engine.read(prompt, on=root)
   _, over = await relived(Dead(), list(sand.record))
-  assert engine.read(f"{command}/stdout", on=over) == was
+  assert engine.read(prompt, on=over) == was
+  first, _, root = born(auto=False)
+  one = engine.bash("run", on=root)
+  await settle()
+  first.writes(one, "first\n", "stdout")
+  await settle()
+  second = Sand(auto=False, record=list(first.record))
+  _, over = await relived(second, list(first.record))
+  engine.wake(over)
+  await settle()
+  second.writes(one, "second\n", "stdout")
+  await settle()
+  was = engine.read(f"{one}/stdout", on=over)
+  assert was == Text(f"{one}/stdout", "second\n") and engine.peek(one) is None
+  _, again = await relived(Dead(), list(second.record))
+  assert engine.read(f"{one}/stdout", on=again) == was
 
 
 async def test_it_is_given_what_the_world_kept_of_the_life_before_it() -> None:
@@ -639,7 +654,7 @@ async def test_a_later_life_says_such_an_act_again_only_through_a_verb_in_the_gl
 
 
 async def test_the_journal_says_again_the_first_answer_of_an_act_when_the_act_is_made_again() -> None:
-  """The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it but a started at the place where the record holds it."""
+  """The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it at the place where the record holds it, the started of each act that a wake began again among them."""
   sand, log, root = born("t = read('a.txt')\nawait wait()\nclose(t.content)", "close(None)")
   one = engine.prompt(str, "read and wait", on=root)
   assert await one == "one\ntwo\n"
@@ -661,6 +676,17 @@ async def test_the_journal_says_again_the_first_answer_of_an_act_when_the_act_is
   done = [a for a in said(again, "done") if a[1] == waited[1]]
   assert [a[2] for a in done] == ["journal"] and again.index(waited) < again.index(done[0])
   assert [a for a in said(again, "started") if a[1] == waited[1]] == []
+  first, _, root = born(auto=False)
+  run = engine.bash("run", on=root)
+  await settle()
+  second = Sand(auto=False, record=list(first.record))
+  _, woke = await relived(second, list(first.record))
+  engine.wake(woke)
+  await settle()
+  third, _ = await relived(Dead(), list(second.record))
+  starts = [a for a in said(third, "started") if a[1] == run]
+  wakes = [a for a in said(third, "wake") if a[2] == "journal"]
+  assert [a[2] for a in starts] == ["journal"] and len(wakes) == 1 and third.index(wakes[0]) < third.index(starts[0])
 
 
 async def test_what_the_record_shows_started_and_not_done_when_boot_returns_is_pending() -> None:

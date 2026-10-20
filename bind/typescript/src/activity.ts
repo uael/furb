@@ -62,7 +62,6 @@ export class Activity {
   private readonly runs = new Map<string, string>();
   private readonly ran = new Map<string, unknown>();
   private readonly refused = new Map<string, string>();
-  private readonly merged = new Map<string, boolean>();
 
   /** The chain whose transcript holds a fact about a name: the chain itself for a chain, the chain a question stands
    * on for any other question, and nothing for a name of no question. */
@@ -120,8 +119,6 @@ export class Activity {
           this.mark(row);
         }
     } else if (kind === "done") {
-      if (isQuestion("merged", id) && this.acts.get(by)?.kind === "bash")
-        this.merged.set(by, Boolean(fact[3]));
       if (isQuestion("reply", id) && Array.isArray(fact[3]) && Array.isArray(fact[3][2]))
         this.cost += Number(fact[3][2][4] ?? 0);
       const rung = this.runs.get(id);
@@ -148,9 +145,14 @@ export class Activity {
         this.refused.set(id, bound(lines, `${id}_findings`) ?? "");
         this.updateRun(act);
       }
+    } else if (kind === "started" && act?.kind === "bash" && !act.done) {
+      // A command that a wake runs again starts its streams again, as its doors do.
+      const value = act.value as { stdout: { content: string }; stderr: { content: string } };
+      value.stdout.content = value.stderr.content = "";
+      this.mark(act);
     } else if (kind === "out" && act?.kind === "bash" && !act.done) {
       const value = act.value as { stdout: { content: string }; stderr: { content: string } };
-      const stream = fact[4] === "stderr" && this.merged.get(id) === false ? value.stderr : value.stdout;
+      const stream = fact[4] === "stderr" ? value.stderr : value.stdout;
       stream.content += String(fact[3]);
       this.mark(act);
     }

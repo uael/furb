@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  Activity,
   actorParts,
   boot,
   type Ear,
@@ -634,4 +635,23 @@ test("a session enables the extensions of the configs, and a later session on it
     await fresh.dispose();
     await rm(cwd, { recursive: true, force: true });
   }
+});
+
+test("the activity starts the streams of a command again at each started of it, as a wake that runs it again does", () => {
+  const activity = new Activity();
+  const hear = (fact: Fact) => {
+    // No control stands, so the activity asks the engine nothing while it hears these facts.
+    const heard = activity.hear(fact);
+    while (!heard.next().done);
+  };
+  hear(["bash", "bash1", "operator", ROOT, "run", null, 600]);
+  hear(["started", "bash1", "world"]);
+  hear(["out", "bash1", "world", "first\n", "stdout"]);
+  hear(["started", "bash1", "world"]);
+  hear(["out", "bash1", "world", "second\n", "stdout"]);
+  hear(["out", "bash1", "world", "bad\n", "stderr"]);
+  expect(activity.acts.get("bash1")?.value).toMatchObject({
+    stdout: { content: "second\n" },
+    stderr: { content: "bad\n" },
+  });
 });

@@ -136,7 +136,8 @@ class Sand:
   `stands` is what a chain stands on, STANDS unless a test gives another, or the refusal it answers a stand with,
   `cost` the usage of one answer, and `auto` says whether a command tells a line and exits at once. `tick` counts
   the readings of its clock and the chances it drew, so a later life reads what the life before it read. `outs`
-  holds each command it runs: whether its stderr flows into its stdout, and its two streams as they came. `gone`
+  holds each command it runs: whether its stderr flows into its stdout, which it writes into its stdout then, and
+  its two streams as they came. `gone`
   names the directories that are not there, which a cd into is refused; every other directory is there. `home` is
   the home of its user, which a read or a write of a path that is ~ or starts with ~/ resolves against. `loop` is
   the loop of the life it hears.
@@ -156,6 +157,12 @@ class Sand:
   gone: set[str] = field(default_factory=set)
   home: str = "/h"
   loop: asyncio.AbstractEventLoop = field(init=False, repr=False, compare=False)
+
+  def writes(self, about: str, text: str, stream: str) -> None:
+    """The command writes a text into one of its streams while it runs, which the World says as an out fact from its
+    own loop, into its stdout when its stderr flows there."""
+    if about in self.outs:
+      world_says("out", about, text, "stdout" if self.outs[about][0] else stream)
 
   def exits(self, about: str, code: int | None) -> None:
     """The command ends with its code, and the World answers it with what it came to: its code and its streams as
@@ -193,10 +200,10 @@ class Sand:
         self.outs[about] = [engine.ask("merged", on, about), "", ""]
         self.loop.call_later(timeout, self.exits, about, None)
         if self.auto:
-          self.loop.call_soon(partial(engine.say, "out", about, f"ran {command}\n", "stdout"))
+          self.loop.call_soon(partial(self.writes, about, f"ran {command}\n", "stdout"))
           self.loop.call_soon(partial(self.exits, about, 0))
       case ("out", about, _, text, stream) if about in self.outs:
-        self.outs[about][1 if self.outs[about][0] or stream == "stdout" else 2] += text
+        self.outs[about][1 if stream == "stdout" else 2] += text
       case ("wait", about, _, _, seconds):
         yield "started", about
         self.loop.call_later(seconds, partial(engine.say, "done", about, None))

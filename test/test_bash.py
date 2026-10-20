@@ -166,21 +166,12 @@ async def test_the_stdin_of_the_command_is_closed_unless_bash_opened_the_command
 
 async def test_without_a_stderr_show_the_stderr_of_the_command_flows_into_its_stdout() -> None:
   """Without a stderr show, the stderr of the command flows into its stdout."""
-  _, _, root = born(auto=False)
-  one = engine.bash("run", on=root)
-  world_says("out", one, "half\n", "stdout")
-  world_says("out", one, "oops\n", "stderr")
+  # The engine answers the World that asks whether the stderr of a command flows into its stdout, and the World runs
+  # the command so, which the test of the crate the_world_writes_the_stderr_of_a_merged_command_into_its_stdout proves.
+  _, log, root = born(auto=False)
+  one, two = engine.bash("run", on=root), engine.bash("run", show_err=TAIL, on=root)
   await settle()
-  assert engine.read(door(one, "stdout"), on=root).content == "half\noops\n"
-
-
-async def test_the_stderr_door_of_a_merged_command_stays_empty() -> None:
-  """The stderr door of a merged command stays empty."""
-  _, _, root = born(auto=False)
-  one = engine.bash("run", on=root)
-  world_says("out", one, "oops\n", "stderr")
-  await settle()
-  assert engine.read(door(one, "stderr"), on=root) == Text(door(one, "stderr"), "")
+  assert {a[4]: engine.peek(a[1]) for a in acts(log).values() if a[0] == "merged"} == {one: True, two: False}
 
 
 async def test_a_command_without_a_timeout_has_the_timeout_timeout_that_the_file_names() -> None:
@@ -189,22 +180,6 @@ async def test_a_command_without_a_timeout_has_the_timeout_timeout_that_the_file
   engine.bash("run", on=root)
   assert engine.TIMEOUT == 600.0
   assert [a[6] for a in said(log, "bash")] == [engine.TIMEOUT]
-
-
-async def test_the_stdout_and_the_stderr_doors_are_readable_while_the_command_runs_and_after_it() -> None:
-  """The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it."""
-  sand, _, root = born(auto=False)
-  one = engine.bash("run", show_err=TAIL, on=root)
-  assert one == "bash1"
-  world_says("out", one, "one\n", "stdout")
-  world_says("out", one, "bad\n", "stderr")
-  await settle()
-  assert engine.read("bash1/stdout", on=root) == Text("bash1/stdout", "one\n")
-  assert engine.read("bash1/stderr", on=root) == Text("bash1/stderr", "bad\n")
-  sand.exits(one, 0)
-  await one
-  assert engine.read("bash1/stdout", on=root) == Text("bash1/stdout", "one\n")
-  assert engine.read("bash1/stderr", on=root) == Text("bash1/stderr", "bad\n")
 
 
 async def test_the_stdin_door_is_writable_while_a_fed_command_runs() -> None:
@@ -230,15 +205,48 @@ async def test_a_write_of_nothing_to_the_stdin_door_closes_the_stdin() -> None:
     engine.write(Text("bash1/stdin", "late"), on=root)
 
 
-async def test_a_read_of_the_stdout_door_gives_the_lines_of_the_command_while_the_command_runs() -> None:
-  """A read of bash1/stdout gives the lines of the command while the command runs."""
-  _, _, root = born(auto=False)
+async def test_the_stdout_and_the_stderr_doors_are_readable_while_the_command_runs_and_after_it() -> None:
+  """The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it: a read gives that stream of the Exit once the command exited, and otherwise the out facts of that stream since the World last started it, so a command that runs again starts its streams again."""
+  _, _, top = born(auto=False)
+  shown = engine.bash("run", show_err=TAIL, on=top)
+  assert shown == "bash1"
+  world_says("out", shown, "one\n", "stdout")
+  world_says("out", shown, "bad\n", "stderr")
+  await settle()
+  assert engine.read("bash1/stdout", on=top) == Text("bash1/stdout", "one\n")
+  assert engine.read("bash1/stderr", on=top) == Text("bash1/stderr", "bad\n")
+  engine.cancel(shown)
+  await settle()
+  assert isinstance(engine.peek(shown), CancelledError)
+  assert engine.read("bash1/stdout", on=top) == Text("bash1/stdout", "one\n")
+  sand, _, root = born(auto=False)
+  one = engine.bash("run", on=root)
+  await settle()
+  sand.writes(one, "first\n", "stdout")
+  await settle()
+  later = Sand(auto=False)
+  _, over = await relived(later, list(sand.record))
+  assert engine.read(door(one, "stdout"), on=over).content == "first\n"
+  engine.wake(over)
+  await settle()
+  assert engine.read(door(one, "stdout"), on=over).content == ""
+  later.writes(one, "second\n", "stdout")
+  await settle()
+  assert engine.read(door(one, "stdout"), on=over).content == "second\n"
+  world_says("done", one, Exit(0, Text(door(one, "stdout"), "kept\n"), Text(door(one, "stderr"))))
+  await settle()
+  assert engine.read(door(one, "stdout"), on=over).content == "kept\n"
+
+
+async def test_the_engine_refuses_a_write_to_the_door_of_a_stream() -> None:
+  """The engine refuses a write to the door bash1/stdout or bash1/stderr."""
+  sand, _, root = born(auto=False)
   one = engine.bash("run", on=root)
   assert one == "bash1"
-  world_says("out", one, "one\ntwo\n", "stdout")
-  await settle()
-  assert engine.read("bash1/stdout", on=root).lines == ["one", "two"]
-  assert engine.peek(one) is None
+  for path in ("bash1/stdout", "bash1/stderr"):
+    with pytest.raises(Refused, match="takes no write"):
+      engine.write(Text(path, "x"), on=root)
+  assert [a for a in sand.calls if a[0] == "write"] == []
 
 
 async def test_a_wake_on_a_chain_with_a_source_starts_no_inherited_command_again() -> None:
@@ -300,15 +308,10 @@ async def test_its_stdin_is_written_while_it_runs_and_it_is_fed() -> None:
     engine.write(Text(door(one, "stdin"), "late"), on=root)
 
 
-async def test_without_a_show_of_its_own_the_stderr_of_it_flows_into_its_stdout() -> None:
-  """Without a show of its own, the stderr of it flows into its stdout, and the door of its stderr stays empty; with a hidden show it tells its header and its binding alone, and not its command and not its close."""
+async def test_with_a_hidden_show_it_tells_its_header_and_its_binding_alone() -> None:
+  """With a hidden show it tells its header and its binding alone, and not its command and not its close."""
   sand, _, root = born(auto=False)
   one = engine.bash("run", on=root)
-  world_says("out", one, "half\n", "stdout")
-  world_says("out", one, "oops\n", "stderr")
-  await settle()
-  assert engine.read(door(one, "stdout"), on=root).content == "half\noops\n"
-  assert engine.read(door(one, "stderr"), on=root).content == ""
   quiet = engine.bash("quiet", show=HIDDEN, on=root)
   sand.exits(quiet, 0)
   await quiet
@@ -318,13 +321,12 @@ async def test_without_a_show_of_its_own_the_stderr_of_it_flows_into_its_stdout(
   ]
 
 
-async def test_it_answers_a_read_of_a_stream_while_it_runs() -> None:
-  """It answers a read of a stream while it runs, and once it has ended it lives on to answer a read of its streams and to refuse a write of its stdin, and nothing else reaches it, so a cancel does not end it, as it ends every other act."""
+async def test_once_it_has_ended_it_lives_on_to_answer_its_doors() -> None:
+  """Once it has ended it lives on to answer its doors, and nothing else reaches it, so a cancel does not end it, as it ends every other act."""
   sand, _, root = born(auto=False)
   one = engine.bash("run", on=root)
   world_says("out", one, "half\n", "stdout")
   await settle()
-  assert engine.read(door(one, "stdout"), on=root).content == "half\n"
   sand.exits(one, 0)
   got = await one
   assert engine.read(door(one, "stdout"), on=root).content == "half\n"
@@ -409,7 +411,7 @@ async def test_its_close_tells_what_its_stdout_shows() -> None:
     sand.exits(one, 0)
   await settle()
   assert paragraphs(engine.turns(on=root))[-3:] == [
-    f"#{merged} exited 0\n{merged}_stdout = 'bad'",
+    f"#{merged} exited 0",
     f"#{apart} exited 0\n{apart}_stderr = 'bad'",
     f"#{quiet} exited 0",
   ]

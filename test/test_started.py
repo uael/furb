@@ -25,7 +25,7 @@ async def test_the_started_names_the_act_and_says_no_more_of_it() -> None:
 
 
 async def test_the_journal_keeps_a_started_of_the_outside() -> None:
-  """The journal keeps a started of the outside, so a later life holds the act from the outside and says no started for it, since only the outside runs it: the act is done where the record holds its done, and pending when the record holds none."""
+  """The journal keeps a started of the outside, so a later life holds the act from the outside and does not say its first started again, since only the outside runs it: the act is done where the record holds its done, and pending when the record holds none."""
   sand, log, root = born(auto=False)
   step = engine.rung("x = bash('sleep 9')", on=root)
   await settle()

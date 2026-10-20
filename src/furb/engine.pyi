@@ -578,18 +578,17 @@ def bash(
   The exit code of the command is None after a timeout.
   The stdin of the command is closed unless bash opened the command fed.
   Without a stderr show, the stderr of the command flows into its stdout.
-  The stderr door of a merged command stays empty.
   A command without a timeout has the timeout TIMEOUT that the file names.
   The World that takes a command answers it: it says it done with its Exit, the code and the streams it kept, since the owner of an act is the one that answers it.
-  The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it.
   The door bash1/stdin is writable while a fed command runs.
   A write of nothing to bash1/stdin closes the stdin.
-  A read of bash1/stdout gives the lines of the command while the command runs.
+  The doors bash1/stdout and bash1/stderr of a command bash1 are readable while the command runs and after it: a read gives that stream of the Exit once the command exited, and otherwise the out facts of that stream since the World last started it, so a command that runs again starts its streams again.
+  The engine refuses a write to the door bash1/stdout or bash1/stderr.
   A wake on a chain with a source starts no inherited command again, since only the owner starts an act.
   The World takes it, and a later life has the World take it again only when the record shows it started and not ended, and then only at a wake.
   Its stdin is written while it runs and it is fed, which it says to the World as a feed and answers with the text that landed, and a write of nothing closes it; a write of it takes no word once the command ended, and none at all when the command was not opened fed.
-  Without a show of its own, the stderr of it flows into its stdout, and the door of its stderr stays empty; with a hidden show it tells its header and its binding alone, and not its command and not its close.
-  It answers a read of a stream while it runs, and once it has ended it lives on to answer a read of its streams and to refuse a write of its stdin, and nothing else reaches it, so a cancel does not end it, as it ends every other act.
+  With a hidden show it tells its header and its binding alone, and not its command and not its close.
+  Once it has ended it lives on to answer its doors, and nothing else reaches it, so a cancel does not end it, as it ends every other act.
   It runs until it ends, until its timeout or until a cancel: the World is the one that ends it, at the timeout it reads off the act as at a cancel, since the World is the one running it, and the engine says nothing to make it.
   A pause stops no command: it runs on, the World says it done when it ends, and its ear tells its exit at the wake.
   Its close tells what its stdout shows, and what its stderr shows when that stream has a show of its own that is no hidden one, so a merged command tells no stderr.
@@ -762,7 +761,7 @@ A close is over the act it names, the words running under it and the replies tha
 type Started = tuple[Literal["started"], str, str]
 """What an ear says to take an act whose done comes later, and which no ear after it hears.
 The started names the act and says no more of it, since the ear heard the act itself and nothing is told twice.
-The journal keeps a started of the outside, so a later life holds the act from the outside and says no started for it, since only the outside runs it: the act is done where the record holds its done, and pending when the record holds none.
+The journal keeps a started of the outside, so a later life holds the act from the outside and does not say its first started again, since only the outside runs it: the act is done where the record holds its done, and pending when the record holds none.
 """
 type Keep = tuple[Literal["keep"], str, str, Entry]
 """One entry of the record, kept and said: the journal holds it for this life and the World for the next.
@@ -861,7 +860,9 @@ The chain tells the findings that refused a word, ends that rung with a refusal 
 type Cd = tuple[Literal["cd"], str, str, str, str]
 """A cd is the question of the directory a path names, which the World answers and the transcript of the chain holds."""
 type Merged = tuple[Literal["merged"], str, str, str, str]
-"""A merged is the question of whether the stderr of a command flows into its stdout, which the command answers from what its verb was given, and which the World asks when it takes the command."""
+"""A merged is the question of whether the stderr of a command flows into its stdout, which the command answers from what its verb was given, and which the World asks when it takes the command.
+The World runs a merged command with its stderr in its stdout, so no out fact of it is of its stderr, and the door of its stderr stays empty.
+"""
 type Wait = tuple[Literal["wait"], str, str, str, float]
 """A wait carries the seconds that must pass before the World is done with it."""
 type Rung = tuple[Literal["rung"], str, str, str, str, str, str]
@@ -1009,7 +1010,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   A life settles an await of its acts from outside a run in the loop it is opened in, so boot outside a running loop raises before it makes anything.
   An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and a show or a filter it was given is not said again, since the record holds none.
   A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is a drift.
-  The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it but a started at the place where the record holds it.
+  The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it at the place where the record holds it, the started of each act that a wake began again among them.
   What the record shows started and not done when boot returns is pending: the journal holds it from the outside until a wake that this life says.
   """
 
