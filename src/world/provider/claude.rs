@@ -32,6 +32,7 @@ use tokio::{
 };
 
 use futures::{FutureExt, StreamExt};
+use sha2::{Digest, Sha256};
 
 use super::{Model, ended, uuid};
 use crate::ear::reactor;
@@ -380,6 +381,23 @@ fn swept(held: &mut HashMap<String, Slot>) {
   }
 }
 
+/// The file that holds a system prompt, which the command line reads by `--system-prompt-file`, so the command line
+/// of a process stays short and `ps` shows it whole. The file stands in the temporary directory under the digest of
+/// the prompt, so every process of one prompt reads the one file, and a new file lands whole by a rename.
+fn prompt_file(system: &str) -> Result<PathBuf, CompletionError> {
+  let folder = env::temp_dir().join("furb-claude");
+  let file = folder.join(format!("{:x}.md", Sha256::digest(system.as_bytes())));
+  if !file.is_file() {
+    std::fs::create_dir_all(&folder)
+      .map_err(|no| failed(format!("{} was not made: {no}", folder.display())))?;
+    let part = folder.join(format!("{}.part", uuid()));
+    std::fs::write(&part, system)
+      .and_then(|()| std::fs::rename(&part, &file))
+      .map_err(|no| failed(format!("{} was not written: {no}", file.display())))?;
+  }
+  Ok(file)
+}
+
 /// One conversation of the command line: what it is fixed at, its id, where it stands, and its process.
 struct Conversation {
   name: String,
@@ -486,7 +504,8 @@ impl Conversation {
     let mut command = Command::new(bin);
     command.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json"]);
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
-    command.args(["--system-prompt", &self.system, "--setting-sources", ""]);
+    let prompt = prompt_file(&self.system)?;
+    command.arg("--system-prompt-file").arg(&prompt).args(["--setting-sources", ""]);
     // A completion needs no tool: no tool of the command line, no server of another, and no command of its own.
     command.args(["--strict-mcp-config", "--tools", "", "--disable-slash-commands"]);
     match (&self.parent, self.resumed) {

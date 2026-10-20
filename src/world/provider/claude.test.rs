@@ -153,7 +153,9 @@ fn a_turn_starts_the_command_line_for_a_pure_completion_and_says_its_blocks_and_
     assert!(args.iter().any(|one| one == flag), "{flag} in {args:?}");
   }
   assert_eq!(after(&args, "--model").as_deref(), Some("sonnet"));
-  assert_eq!(after(&args, "--system-prompt").as_deref(), Some("ENGINE ONLY"));
+  assert!(!args.iter().any(|one| one == "--system-prompt"), "{args:?}");
+  let prompt = after(&args, "--system-prompt-file").unwrap();
+  assert_eq!(fs::read_to_string(prompt).unwrap(), "ENGINE ONLY");
   assert_eq!(after(&args, "--effort").as_deref(), Some("xhigh"));
   assert_eq!(after(&args, "--tools").as_deref(), Some(""));
   assert_eq!(after(&args, "--setting-sources").as_deref(), Some(""));
