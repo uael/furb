@@ -8,7 +8,7 @@ USAGE = (80000, 30, 200, 10, 1.5)
 
 
 async def test_what_one_answer_of_a_model_cost() -> None:
-  """What one answer of a model cost: the words it read and wrote, of which the words it read again and the words it kept to read again, and its dollars."""
+  """What one answer of a model cost: the tokens it read and wrote, of which the tokens it read again and the tokens it kept to read again, and its dollars."""
   _, _, root = born("close(1)", cost=USAGE)
   engine.grant(usd=10.0, on=root)
   assert await engine.prompt(int, "count", on=root) == 1
@@ -27,7 +27,7 @@ async def test_a_usage_holds_the_token_counts_and_the_dollars_of_one_model_respo
 
 
 async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_the_window_of_the_actor() -> None:
-  """The share of the window it filled is the words it read against the window of the actor its rung names, in the standing where the answer lands, so no word of it says the share."""
+  """The share of the window it filled is the tokens it read against the window of the actor its rung names, in the standing where the answer lands, so no word of it says the share."""
   sand, _, root = born(cost=USAGE)
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()

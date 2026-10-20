@@ -681,9 +681,9 @@ The engine applies a show before it writes a line, so a quote holds the lines th
 A show applies to a text or to a stream.
 """
 type Usage = tuple[int, int, int, int, float]
-"""What one answer of a model cost: the words it read and wrote, of which the words it read again and the words it kept to read again, and its dollars.
+"""What one answer of a model cost: the tokens it read and wrote, of which the tokens it read again and the tokens it kept to read again, and its dollars.
 A usage holds the token counts and the dollars of one model response.
-The share of the window it filled is the words it read against the window of the actor its rung names, in the standing where the answer lands, so no word of it says the share.
+The share of the window it filled is the tokens it read against the window of the actor its rung names, in the standing where the answer lands, so no word of it says the share.
 """
 type Turn = tuple[Literal["user", "assistant"], str, Usage | None, object]
 """One turn of what a model reads: who said it, the python it holds, what the answer to it cost, and the blocks of the provider, which are its own, are read by nothing of the engine, and go back to it with the turn.

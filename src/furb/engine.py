@@ -829,7 +829,7 @@ How to work
 - To see a value, debug it: debug(t"{value}") shows each value of its template. When a word raises, the chain binds
   the exception as raised.
 - Keep each word small. The chain reads each token that you write again at each reply.
-- Your share of the window is the words that your last answer read, [u for _, _, u, _ in turns() if u][-1][0], over
+- Your share of the window is the tokens that your last answer read, [u for _, _, u, _ in turns() if u][-1][0], over
   the window that the roster of your standing gives your actor. When it is high, go on in a chain that keeps only the
   work you still need: chain(label, source=<your chain>, filter=take(<ids of old work>, inside=False)).
 - Do what the prompt asks. Before an act that changes anything else, ask the operator.
