@@ -33,8 +33,9 @@ unfinished. The list shows at once, and each saved session shows its state when 
 [The gallery](../docs/tui.md) shows each screen of the TUI and what it does.
 
 `/workspace path` adds a folder, and `/new` starts a session in the current workspace. `/delete` archives a chosen
-session, or moves it and its companions to `.furb/trash`. The trash holds a `restore.json` with the original paths,
-and its record can be opened with `--resume`. Quit saves and closes all open sessions, and SIGINT, SIGTERM, SIGHUP,
+session, or moves it and its companions to `.furb/trash` and removes its scratch directory from the cache of furb. The
+trash holds a `restore.json` with the original paths, and its record can be opened with `--resume`, which makes again
+the scratch files that its words wrote. Quit saves and closes all open sessions, and SIGINT, SIGTERM, SIGHUP,
 and SIGQUIT quit the same way. On Windows, a console that closes and Ctrl+Break quit the same way. `sidebarWidth` in
 the preferences file sets the width of the sidebar, from 26 to 48 columns. On a terminal narrower than 100 columns the
 sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.

@@ -45,11 +45,15 @@ of each official extension, the files, the commands, time, and the store of the 
 record it opened on. The extensions enable at the start of the life what the configs of the user and of the directory
 turn on, which `docs/extensions.md` says: `SessionOptions.extensions` is false to enable nothing new, and `config` names
 the config directory of the user. A life runs what its record enables either way. The package also gives the ears of the
-files, the commands, time and the store one by one, as `files()`, `bash()`, `time()` and `store(path)`, for a host that
-boots an engine by hand. The files read and write a path against the directory where its chain stands. The commands
-stream what a command writes, feed its stdin, and end it at its timeout. Time gives the clock and a chance, and ends a
-wait. The provider asks the models of the catalog of the crate, which `models(claude?)` lists and `model(name)` finds,
-and it preserves provider response blocks in the record. The catalog offers the models of a provider when a credential
+files, the commands, time and the store one by one, as `files(scratch)`, `bash(scratch)`, `time()` and `store(path)`,
+for a host that boots an engine by hand. The files read and write a path against the directory where its chain stands,
+and a path of `scratch://` in the scratch directory that the host names. The commands stream what a command writes,
+feed its stdin, and end it at its timeout, and each runs with `TMPDIR` set to that scratch directory. Only the opening
+of a life makes the files of a record again in its scratch directory, and gives a life with no record a directory that
+goes with it. A session has the scratch directory of its record, in the cache of furb, which `scratch(record)` gives,
+so a host removes it when it deletes the record. Time gives the clock and a chance, and ends a wait. The provider asks
+the models of the catalog of the crate, which `models(claude?)` lists and `model(name)` finds, and it preserves
+provider response blocks in the record. The catalog offers the models of a provider when a credential
 of it stands in the environment, such as `ANTHROPIC_API_KEY`, and the models of the claude command line when it finds
 the program. The host names what the provider offers beside the model of the default actor in `roster`, as
 `provider:id`, and the default actor in `model` and `effort`: the first of the roster when unsaid. When the roster is

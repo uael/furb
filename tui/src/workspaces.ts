@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { mkdir, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { furbDirectory, saveFile, store } from "@furb/engine";
+import { furbDirectory, saveFile, scratch, store } from "@furb/engine";
 import { openEngine } from "./bridge.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
@@ -486,8 +486,11 @@ export class Workspaces extends EventEmitter {
     await this.release(entry);
     // The record and its files move to the trash while this store holds the lease, so no other process opens them
     // meanwhile. The lock file stays at its path, empty: on macOS a lookup of a renamed path can go on giving the
-    // moved file for seconds, so the lease holds only while no holder moves or removes the lock file.
+    // moved file for seconds, so the lease holds only while no holder moves or removes the lock file. The scratch
+    // directory of the record goes from the cache of furb, since a life on the record that is restored makes again
+    // the files that its writes made.
     const lease = store(entry.path)[1];
+    const scratchDirectory = scratch(entry.path);
     const moved: [string, string][] = [];
     try {
       const directory = furbDirectory(group.directory, "trash", randomUUID());
@@ -506,6 +509,14 @@ export class Workspaces extends EventEmitter {
       group.sessions = group.sessions.filter((candidate) => candidate !== entry);
       this.save({ directory: group.directory, remove: entry.path });
       this.emit("change");
+      // The delete is done: the scratch directory moves aside before it goes, so a remove that stops part of the way
+      // leaves no directory in its place, and a failure here undoes nothing.
+      if (scratchDirectory) {
+        const aside = `${scratchDirectory}.gone-${randomUUID()}`;
+        await rename(scratchDirectory, aside)
+          .then(() => rm(aside, { recursive: true, force: true }))
+          .catch(() => {});
+      }
       if (this.current?.session) this.current.session.notice = `Session moved to ${directory}`;
       return directory;
     } catch (error) {

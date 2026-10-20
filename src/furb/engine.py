@@ -841,6 +841,8 @@ How to work
   read(path, span(lo, hi)). A read shows lines without their numbers: text.find(pattern) gives the number of a line.
 - Change a file through the Text that read gave: replace, edit, insert, append or delete, then write. A write tells
   the lines that landed otherwise than you asked.
+- Keep notes and scratch files in scratch://, as write(Text("scratch://plan.md", plan)). Every chain of the record
+  shares it, and a command finds it in $TMPDIR, where tools put their temp files too.
 - Use bash to run commands and to find paths, as bash("grep -rln pattern src"). Let its show pick the lines of a long
   command, as bash(command, show=span(-40, -1)), since its stream flows while it runs. Give a long command a timeout
   that fits. The code None, as in "exited None", means that the timeout or a signal ended the command.

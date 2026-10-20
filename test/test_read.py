@@ -1,10 +1,14 @@
 """read, the text at a path."""
 
+import shlex
+from pathlib import Path
+
 import pytest
 
-from conftest import NUMS, Dead, born, life, of, paragraphs, said, settle
+from conftest import NUMS, Dead, born, ended, life, machine, of, paragraphs, said, settle
 from furb import engine
 from furb.engine import HEAD, HIDDEN, LARGEST, OPERATOR, Refused, Text, span
+from furb_monty import _monty
 
 BIG = "".join(f"line {i}\n" for i in range(1, 2101))
 """A text of two thousand and one hundred lines, which is longer than HEAD."""
@@ -148,3 +152,59 @@ async def test_a_read_from_inside_an_act_whose_show_picks_more_than_largest_byte
   assert engine.read("long.txt", HIDDEN, on=root).content == long
   assert engine.read("long.txt", on=root).content == long
   assert [one.split("\n")[0] for one in of(engine.turns(on=root), "read")] == ["#read2"]
+
+
+async def test_the_world_serves_the_scratch_directory_as_scratch(tmp_path: Path) -> None:
+  """The World serves the scratch directory as scratch://: a read of scratch://plan.md gives that file, and a read of scratch:// or of a folder of it gives the name of each entry of that folder, one on each line, each folder with / at its end, as ls does."""
+  live, root = machine(tmp_path)
+  engine.write(Text("scratch://notes/a.md", "a\n"), on=root)
+  engine.write(Text("scratch://plan.md", "plan\n"), on=root)
+  got = [engine.read(path, on=root) for path in ("scratch://plan.md", "scratch://", "scratch://notes")]
+  ended(live)
+  assert got == [
+    Text("scratch://plan.md", "plan\n"),
+    Text("scratch://", "notes/\nplan.md"),
+    Text("scratch://notes", "a.md"),
+  ]
+
+
+async def test_each_text_and_each_refusal_of_scratch_names_its_path_under_scratch(tmp_path: Path) -> None:
+  """Each text and each refusal of scratch:// names its path under scratch:// and never the place of the scratch directory on the machine."""
+  record = tmp_path / "record.jsonl"
+  live, root = machine(tmp_path, record)
+  place = _monty.scratch(str(record))
+  assert place is not None
+  wrote = engine.write(Text("scratch://notes/../plan.md", "plan\n"), on=root)
+  with pytest.raises(Refused) as none:
+    engine.read("scratch://none.md", on=root)
+  with pytest.raises(Refused) as out:
+    engine.write(Text("scratch://../out.md", "out"), on=root)
+  ended(live)
+  assert wrote == Text("scratch://plan.md", "plan\n")
+  assert [str(none.value), str(out.value)] == [
+    "There is no file at scratch://none.md.",
+    "scratch://../out.md is outside the scratch directory.",
+  ]
+  assert Path(place, "plan.md").read_text() == "plan\n"
+
+
+async def test_a_path_of_scratch_that_leaves_the_scratch_directory_is_refused(tmp_path: Path) -> None:
+  """A path of scratch:// that leaves the scratch directory, by .. or by a link, is refused, and so is a path that starts with scratch: and not scratch://, with a refusal that names scratch://."""
+  (tmp_path / "away.md").write_text("away\n")
+  live, root = machine(tmp_path)
+  await engine.bash(f'ln -s {shlex.quote(str(tmp_path))} "$TMPDIR/away"', on=root)
+  refused = []
+  for path in ("scratch://../out.md", "scratch://away/away.md", "scratch:/typo.md", "scratch:plan.md"):
+    with pytest.raises(Refused) as one:
+      engine.read(path, on=root)
+    refused.append(str(one.value))
+  with pytest.raises(Refused):
+    engine.write(Text("scratch://away/new.md", "x"), on=root)
+  ended(live)
+  assert refused == [
+    "scratch://../out.md is outside the scratch directory.",
+    "scratch://away/away.md is outside the scratch directory.",
+    "scratch:/typo.md is no path of scratch://, which starts with two slashes.",
+    "scratch:plan.md is no path of scratch://, which starts with two slashes.",
+  ]
+  assert not (tmp_path / "new.md").exists()

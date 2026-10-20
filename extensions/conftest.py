@@ -20,7 +20,8 @@ def extended(
   (at / "work").mkdir(exist_ok=True)
   given = _monty.extensions([one if lives else {**one, "life": ""}])
   sand = sown(stands=[STANDS[0], str(at / "work"), STANDS[2]])
-  return sand, life(sand, record, extensions=given, **{name: ear(str(at / "config"))}, files=_monty.files())[1]
+  files = _monty.files(str(at / "scratch"))
+  return sand, life(sand, record, extensions=given, **{name: ear(str(at / "config"))}, files=files)[1]
 
 
 def noted(folder: Path, text: str, name: str = "CLAUDE.md") -> Path:

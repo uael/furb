@@ -166,7 +166,7 @@ fn lived(at: &Path, given: Vec<Extension>) -> Engine {
   let ears = [
     ("extensions", extensions(given)),
     ("stand", standing(at.to_owned())),
-    ("files", world::files()),
+    ("files", world::files(world::Scratch::own())),
     ("store", store),
   ];
   let engine = Engine::boot(record, ears).unwrap();

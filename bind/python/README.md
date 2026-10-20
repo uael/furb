@@ -28,11 +28,15 @@ it names neither, and the operator alone when the roster names none and no actor
 answers each request in place of the models, which the suite of furb does. Its `stream`, a function, is told what a
 model writes as it writes it, and `images` is the directory of the images that a message names. A life that is
 `inspecting` keeps nothing, enables nothing new and asks no model. `models(claude)` gives the models the catalog of this
-machine offers, `model(name)` one model by its name, and `levels()` the levels of effort. `files()`, `bash()`, `time()`,
-`store(path)`, `official()`, `extensions(given)`, `memory(config)` and `skills(config)` give the ears one by one, as the
-suite of each extension boots them. `answered(shape, line)` reads a line of the operator as a value of one of the
-`shapes()`, by the rules that every console of the crate reads a line by. `_monty.SYSTEM` is the system prompt of every
-model: the engine, minified in layout alone.
+machine offers, `model(name)` one model by its name, and `levels()` the levels of effort. `files(scratch)`,
+`bash(scratch)`, `time()`, `store(path)`, `official()`, `extensions(given)`, `memory(config)` and `skills(config)` give
+the ears one by one, as the suite of each extension boots them: the files and the commands share the scratch directory
+that the host names, which a word reads as `scratch://` and a command as `$TMPDIR`. Only the opening of a life makes the
+files of a record again in its scratch directory, and gives a life with no record a directory that goes with it.
+`scratch(record)` gives the scratch directory of a record, which a host removes when it deletes the record.
+`answered(shape, line)` reads a line of the operator as a value of one of the `shapes()`, by the rules that every
+console of the crate reads a line by. `_monty.SYSTEM` is the system prompt of every model: the engine, minified in
+layout alone.
 
 `furb_monty.engine.pending()` names the work that an earlier life left, which waits for a wake that this life says,
 each act by its name and its kind, as the `Engine` of the door finds it: among each act that the outside started and

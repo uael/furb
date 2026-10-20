@@ -127,6 +127,9 @@ meanings. The entry of such a name here gives only its form in the engine.
 - ledger: what the grant holds: the dollars of the answers since it was made and the share the last one filled.
 - journal: the ear of the life that hears everything and says a keep for each entry of the record.
 - record: the entries the journal keeps, in the order they were said.
+- scratch directory: the directory of the machine that the World keeps for a record, which every chain of the record
+  shares, which a path of scratch:// names and a command reads as TMPDIR; the opening of a life takes it, and makes
+  its files again from the record when it is missing.
 - entry: one line of the record: one fact, an act among them.
 - plain: the form of a value on the wire, which the World may keep an entry as: nothing, a boolean, a number, a
   string, a list of plain, or a table from a string to plain.

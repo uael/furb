@@ -1,8 +1,9 @@
 //! The World that the crate writes: ears of the outside that serve the machine, one for each concern.
 //!
 //! The contract makes the World the ears of the outside that serve the machine, one or many. These are the ones
-//! every host shares, written once in rust: [`files`] reads and writes a path, [`bash`] runs a command, [`time`]
-//! reads the clock, draws a chance and ends a wait, [`store`] keeps the record on the disk under a lease, and the
+//! every host shares, written once in rust: [`files`] reads and writes a path, the files of the [`Scratch`] directory
+//! of the life among them, [`bash`] runs a command, [`time`] reads the clock, draws a chance and ends a wait,
+//! [`store`] keeps the record on the disk under a lease, and the
 //! [`Provider`] answers what the chains stand on and asks the models of rig for their turns, which the [`Catalog`]
 //! knows, the claude command line among them. The host names the models it offers, and gives the rest, its
 //! console, which reads what the operator answers by the rules of [`answered`].
@@ -14,10 +15,14 @@ mod bash;
 pub(crate) mod files;
 mod operator;
 mod provider;
+mod scratch;
 mod store;
 mod time;
 
-use std::path::{Component, Path, PathBuf};
+use std::{
+  env,
+  path::{Component, Path, PathBuf},
+};
 
 pub use bash::{SHELL, bash, program};
 pub use files::files;
@@ -27,6 +32,7 @@ pub use provider::{
   catalog::{self, Catalog},
   claude, images,
 };
+pub use scratch::{SCRATCH, Scratch};
 pub use store::{kept, store};
 pub use time::time;
 
@@ -63,6 +69,22 @@ pub(crate) fn resolved(directory: &Path, path: &str) -> PathBuf {
     }
   }
   out
+}
+
+/// The cache of furb on this machine: under `XDG_CACHE_HOME`, `LOCALAPPDATA` on Windows, `Library/Caches` of the
+/// home on macOS, and `.cache` of the home elsewhere.
+pub(crate) fn cache() -> Option<PathBuf> {
+  let named = |name: &str| env::var_os(name).filter(|one| !one.is_empty()).map(PathBuf::from);
+  let base = named("XDG_CACHE_HOME").or_else(|| {
+    if cfg!(windows) {
+      named("LOCALAPPDATA")
+    } else if cfg!(target_os = "macos") {
+      env::home_dir().map(|home| home.join("Library/Caches"))
+    } else {
+      env::home_dir().map(|home| home.join(".cache"))
+    }
+  });
+  base.map(|base| base.join("furb"))
 }
 
 #[cfg(test)]

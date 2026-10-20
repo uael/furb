@@ -6,11 +6,11 @@ import {
   type Ear,
   Engine,
   type Fact,
-  files,
   isQuestion,
   paragraphs,
   plain,
   speaking,
+  time,
 } from "../src/index.ts";
 
 // Each test of this file is serial, since this hook disposes the engines of every test that runs.
@@ -231,17 +231,17 @@ test.serial("an ear that throws raises in the life, and an ear of the crate hear
       if (fact?.[0] === "clock") throw { is: "Refused", args: ["no clock here"] };
     }
   }
-  const once = files();
+  const once = time();
   const engine = Engine.boot(
     [],
     [
       ["world", world()],
-      ["files", once],
+      ["time", once],
     ],
   );
   engines.push(engine);
   expect(() => engine.clock({ on: engine.root })).toThrow("no clock here");
-  expect(() => Engine.boot([], [["files", once]])).toThrow("hears in one engine");
+  expect(() => Engine.boot([], [["time", once]])).toThrow("hears in one engine");
 });
 
 test.serial(

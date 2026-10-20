@@ -61,10 +61,11 @@ fn yard(name: &str) -> PathBuf {
 
 /// A life of the real engine on a provider in a yard of its own, and the ears of the World.
 fn lived(provider: Provider) -> Engine {
+  let scratch = world::Scratch::own();
   let ears: [(&str, Box<dyn Ear>); 4] = [
     ("provider", provider.ear()),
-    ("files", world::files()),
-    ("bash", world::bash()),
+    ("files", world::files(scratch.clone())),
+    ("bash", world::bash(scratch)),
     ("time", world::time()),
   ];
   Engine::boot(Vec::<Object>::new(), ears).expect("the life opens")

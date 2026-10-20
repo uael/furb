@@ -15,7 +15,8 @@ API of its own:
   `provider.rs`, which asks each model through rig and streams what it writes. Its catalog, `provider/catalog.rs`,
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
   model whose credential stands in the environment, and the claude command line when it finds the program.
-  `operator.rs` holds the rules by which every console reads what the operator answers.
+  `operator.rs` holds the rules by which every console reads what the operator answers, and `scratch.rs` the
+  scratch directory of a life, which the files serve as `scratch://` and the commands name as `$TMPDIR`.
 - `src/extension.rs` says what an extension is and where a host finds the ones that a life runs, and holds the ear
   `extensions`, which enables each by a fact that the record keeps and plays its word as a rung on each chain.
   `extensions/` holds the official extensions, `memory` and `skills`, each a word, a contract and a suite, and

@@ -23,6 +23,9 @@ module, and each answer of the model is a program that runs in it.
   runs, so it has no effects, and the model reads why.
 - **Work runs side by side.** A command, a question to a model, and a wait are acts that a word can await
   together. Chains work in parallel, and each chain has its own module and folder.
+- **A scratch directory for each session.** A word keeps its notes and scratch files in `scratch://`, and a command
+  finds them in `$TMPDIR`. A resumed session finds them again, and the record makes again the files that its words
+  wrote.
 - **Rewind to any point.** A new chain can start from any point of another chain. In the TUI, press Escape twice
   to open the rewind tree.
 - **You see what the model sees.** The transcript is the exact text that the model reads. The record holds every

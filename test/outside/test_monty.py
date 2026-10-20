@@ -222,7 +222,7 @@ async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_gen
   swapped(furb.python)
   path = str(tmp_path / "record.jsonl")
   _, store = _monty.store(path)
-  ears = {"files": _monty.files(), "time": _monty.time(), "store": store}
+  ears = {"files": _monty.files(str(tmp_path / "scratch")), "time": _monty.time(), "store": store}
   world = Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
   root = furb.python.boot((), kernel=Py().kernel(), gate=Py().gating(), **ears, world=world)
   furb.python.write(furb.python.Text("a.txt", "one\n"), on=root)
@@ -245,7 +245,7 @@ async def test_an_engine_and_an_ear_that_the_collector_of_cycles_drops_on_anothe
   sys.unraisablehook = lambda one: heard.append(str(one.exc_value))
   try:
     engine.boot((), world=Dead(stands=STANDS).hears())
-    cycle: list[object] = [furb_monty.engine.held_engine(), _monty.files()]
+    cycle: list[object] = [furb_monty.engine.held_engine(), _monty.time()]
     cycle.append(cycle)
     # The second life ends the first, and the cycle alone holds its engine.
     engine.boot((), world=Dead(stands=STANDS).hears())
