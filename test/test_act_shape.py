@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import posed, settle, slow
+from conftest import paragraphs, posed, settle, slow
 from furb import engine
 from furb.engine import OPERATOR, Act, Refused
 
@@ -57,8 +57,8 @@ async def test_the_outcome_of_a_cancelled_act_is_the_cancellederror_it_completed
     await one
 
 
-async def test_only_a_command_lives_past_its_done_and_every_other_act_is_dropped_at_its_done() -> None:
-  """Only a command lives past its done, and every other act is dropped at its done."""
+async def test_an_act_is_dropped_at_its_done_and_only_the_ear_of_a_command_lives_on_until_it_hears_that_done() -> None:
+  """An act is dropped at its done, and so is its ear, but a lasting ear, which lives on until it returns, as the ear of a command does once it heard that done and told the exit."""
   _, _, root, one = await posed(None, "hi")
   with pytest.raises(Refused, match="hears"):
     engine.drive(engine.idle(one), one)
@@ -66,7 +66,9 @@ async def test_only_a_command_lives_past_its_done_and_every_other_act_is_dropped
   await settle()
   engine.drive(engine.idle(one), one)
   two = engine.bash("echo hi", on=root)
-  assert (await two).code == 0
   with pytest.raises(Refused, match="hears"):
     engine.drive(engine.idle(two), two)
-  assert engine.read(f"{two}/stdout", on=root).content == "ran echo hi\n"
+  assert (await two).code == 0
+  await settle()
+  engine.drive(engine.idle(two), two)
+  assert f"#{two} exited 0\n{two}_stdout = 'ran echo hi'" in paragraphs(engine.turns(on=root))

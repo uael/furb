@@ -302,6 +302,29 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         case ("write", about, by, _, Text(path, content) as text) if question(("prompt", path)) and scope(path) == id:
           yield from replay(path, content.rstrip("\n"), by)
           yield "done", about, text
+        case ("read", about, *_, path) if (door := re.fullmatch(r"(bash\d+)/(stdout|stderr)", path)) and get(
+          command := door[1]
+        ):
+          part = ""
+          for seen in transcript(scope(command)):
+            if seen[:2] == ("started", command):
+              part = ""
+            elif seen[:2] == ("out", command) and seen[4] == door[2]:
+              part += seen[3]
+          yield "done", about, getattr(peek(command), door[2], Text(path, part))
+        case ("write", about, *_, Text(path, content) as took) if (
+          door := re.fullmatch(r"(bash\d+)/std(in|out|err)", path)
+        ) and get(command := door[1]):
+          if (
+            door[2] != "in"
+            or peek(command)
+            or get(command)[5] is not None
+            or ("feed", command, id, None) in transcript(scope(command))
+          ):
+            took = Refused(path + " takes no write")
+          else:
+            yield "feed", command, content or None
+          yield "done", about, took
         case ("rung", rid, maker, _, "", _, to):
           waiting[rid] = maker, to
         case (kind, *_, notes) if kind in ("tell", "pause", "wake", "cancel", "close"):
@@ -378,37 +401,21 @@ def bash(
   on: str = "",
 ) -> Act[Exit]:
   def ear(id):
-    mute = "" if stdin is None else "closed"
     yield told(id, "", bound(id, "Exit"), command="" if show is HIDDEN else command)
     while True:
       match (yield):
         case ("merged", qid, *_, about) if about == id:
           yield "done", qid, show_err is None
-        case ("read", qid, *_, path) if path in (id + "/stdout", id + "/stderr"):
-          parts = []
-          for x in transcript(scope(id)):
-            if x[:2] == ("started", id):
-              parts = []
-            if x[:2] == ("out", id) and path == f"{id}/{x[4]}":
-              parts.append(x[3])
-          yield "done", qid, getattr(peek(id), path[len(id) + 1 :], None) or Text(path, "".join(parts))
-        case ("write", qid, *_, Text(path)) if path in (id + "/stdout", id + "/stderr"):
-          yield "done", qid, Refused(path + " takes no write")
-        case ("write", qid, *_, Text(path, text) as took) if path == id + "/stdin":
-          if mute := "ended" if peek(id, ...) is not ... else mute:
-            took = Refused(mute)
-          else:
-            yield "feed", id, text or None
-            mute = "" if text else "closed"
-          yield "done", qid, took
-        case ("done", about, _, Exit(code, out, err) as got) if about == id and got is peek(id):
-          if show is not HIDDEN:
-            yield told(
-              id,
-              f"exited {code}" if code is not None else f"timed out after {timeout}s",
-              stdout=shown(out, show),
-              stderr=show_err and shown(err, show_err),
-            )
+        case ("done", about, _, got) if about == id:
+          match got:
+            case Exit(code, out, err) if show is not HIDDEN:
+              yield told(
+                id,
+                f"timed out after {timeout}s" if code is None else f"exited {code}",
+                stdout=shown(out, show),
+                stderr=show_err and shown(err, show_err),
+              )
+          return
 
   return act("bash", on, controlled(ear, True), command, stdin, timeout)
 

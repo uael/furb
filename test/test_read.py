@@ -79,7 +79,7 @@ async def test_a_read_of_the_name_of_a_prompt_gives_the_program_of_that_ladder()
 
 
 async def test_whether_a_name_is_one_of_the_prompts_a_chain_has_heard_on_itself() -> None:
-  """Whether a name is one of the prompts a chain has heard on itself, which is what its doors serve and no other path, a path of no name being none of them."""
+  """Whether a name is one of the prompts a chain has heard on itself, which is what the doors of its prompts serve and no other path, a path of no name being none of them."""
   _, log, root = born("a = 1", "close(a + 1)", "close(None)")
   act = engine.prompt(int, "count", on=root)
   assert await act == 2

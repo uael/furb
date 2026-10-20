@@ -3,6 +3,7 @@
 import shlex
 import sys
 from asyncio import CancelledError
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -287,21 +288,58 @@ async def test_with_a_hidden_show_it_tells_its_header_and_its_binding_alone() ->
   ]
 
 
-async def test_once_it_has_ended_it_lives_on_to_answer_its_doors() -> None:
-  """Once it has ended it lives on to answer its doors, and nothing else reaches it, so a cancel does not end it, as it ends every other act."""
-  sand, _, root = born(auto=False)
+async def test_the_chain_that_a_read_or_a_write_of_a_door_of_the_command_is_on_answers_it() -> None:
+  """The chain that a read or a write of a door of the command is on answers that read or that write, while the command runs and after it, so the ear of the command lives only until it hears the done of the command, and a cancel ends the command as it ends every other act."""
+  sand, log, root = born(auto=False)
+  other = engine.chain("other")
+  one = engine.bash("run", stdin=None, on=root)
+  world_says("out", one, "half\n", "stdout")
+  await settle()
+  assert engine.read(door(one, "stdout"), on=other).content == "half\n"
+  assert engine.write(Text(door(one, "stdin"), "go"), on=other) == Text(door(one, "stdin"), "go")
+  sand.exits(one, 0)
+  got = await one
+  await settle()
+  engine.drive(engine.idle(one), one)
+  assert engine.read(door(one, "stdout"), on=root).content == "half\n"
+  with pytest.raises(Refused, match="takes no write"):
+    engine.write(Text(door(one, "stdin"), "late"), on=other)
+  two = engine.bash("slow", on=root)
+  world_says("out", two, "part\n", "stdout")
+  engine.cancel(two)
+  await settle()
+  engine.drive(engine.idle(two), two)
+  assert engine.read(door(two, "stdout"), on=other).content == "part\n"
+  assert (engine.peek(one), type(engine.peek(two))) == (got, CancelledError)
+  doors = {a[1]: a[3] for a in [*said(log, "read"), *said(log, "write")] if "/std" in str(a[4])}
+  assert {(doors[a[1]], a[2]) for a in said(log, "done") if a[1] in doors} == {(root, root), (other, other)}
+  assert [(a[2], a[3]) for a in said(log, "feed")] == [(other, "go")]
+
+
+async def test_a_read_or_a_write_of_a_door_of_a_command_that_an_ear_makes_while_the_chain_speaks_finds_no_ear() -> None:
+  """A read or a write of a door of a command that an ear makes while the chain of that read or that write speaks finds no ear of the engine that answers it, as a read of the door of a prompt finds none, since an ear that speaks hears nothing until it is done."""
+  _, _, root = born(auto=False)
   one = engine.bash("run", on=root)
   world_says("out", one, "half\n", "stdout")
   await settle()
-  sand.exits(one, 0)
-  got = await one
+  got: list[object] = []
+
+  def watch() -> Generator[None, tuple]:
+    while True:
+      a = yield
+      if a[0] == "run" and not got:
+        for path in (door(one, "stdout"), "prompt1"):
+          try:
+            got.append(engine.read(path, on=root))
+          except Refused as no:
+            got.append(str(no))
+
+  engine.drive(watch(), "watch")
+  asked = engine.prompt(str, "go", on=root)
+  await engine.rung("x = 1", on=root)
+  assert got == ["nothing takes read", "nothing takes read"]
   assert engine.read(door(one, "stdout"), on=root).content == "half\n"
-  with pytest.raises(Refused, match="ended"):
-    engine.write(Text(door(one, "stdin"), "late"), on=root)
-  engine.cancel(one)
-  await settle()
-  assert engine.peek(one) == got
-  assert engine.read(door(one, "stdout"), on=root).content == "half\n"
+  assert engine.read(asked, on=root).content == ""
 
 
 async def test_it_runs_until_it_ends_until_its_timeout_or_until_a_cancel() -> None:
@@ -358,18 +396,18 @@ async def test_the_engine_refuses_a_write_to_a_door_of_a_command_that_takes_no_w
     with pytest.raises(Refused, match="takes no write"):
       engine.write(Text(path, "x"), on=root)
   await one
-  with pytest.raises(Refused, match="ended"):
+  with pytest.raises(Refused, match="takes no write"):
     engine.write(Text("bash1/stdin", "late"), on=root)
   sand.auto = False
   gone, shut = engine.bash("sleep", stdin=None, on=root), engine.bash("sleep", stdin=None, on=root)
   given, bare = engine.bash("cat", stdin="x", on=root), engine.bash("cat", on=root)
   engine.cancel(gone)
   await settle()
-  with pytest.raises(Refused, match="ended"):
+  with pytest.raises(Refused, match="takes no write"):
     engine.write(Text(door(gone, "stdin"), "late"), on=root)
   engine.write(Text(door(shut, "stdin")), on=root)
   for one in (shut, given, bare):
-    with pytest.raises(Refused, match="closed"):
+    with pytest.raises(Refused, match="takes no write"):
       engine.write(Text(door(one, "stdin"), "late"), on=root)
   assert [a for a in sand.calls if a[0] == "write"] == []
 
