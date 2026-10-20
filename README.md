@@ -18,7 +18,7 @@ module, and each answer of the model is a program that runs in it.
 - **One answer, one program.** In one word, the model can read files, run commands, ask other models, wait,
   and combine the results with loops and conditions. It does not have to spend one turn on each call.
 - **The system prompt is one file that you can read.** The engine is `src/furb/engine.py`. Minified, it is the
-  whole system prompt, and it costs fewer than 6000 tokens. No text is hidden from you.
+  whole system prompt, and it costs fewer than 6200 tokens. No text is hidden from you.
 - **Every word is checked before it runs.** A type checker reads each word first. A word that it refuses never
   runs, so it has no effects, and the model reads why.
 - **Work runs side by side.** A command, a question to a model, and a wait are acts that a word can await

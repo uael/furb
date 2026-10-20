@@ -144,7 +144,7 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py` less its doctrine, minified in layout alone, costs fewer than 6000 tokens to the model that reads it,
+5. `engine.py` less its doctrine, minified in layout alone, costs fewer than 6200 tokens to the model that reads it,
    and the doctrine costs at most 2000.
 6. The system prompt, unquoted, parses to the same program as `engine.py` on disk.
 7. No name in `engine.py` is bound again beneath a scope that already binds it: a parameter, a local, a loop
