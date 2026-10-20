@@ -66,7 +66,7 @@ async def test_the_life_word_of_the_extension_is_remember(tmp_path: Path) -> Non
 
 
 async def test_a_memory_file_enters_a_chain_once_and_again_only_when_it_changed(tmp_path: Path) -> None:
-  """A memory file enters a chain once, and again whole only when it changed, since the World leaves out what the chain holds."""
+  """A memory file enters a chain once, and again only when it changed, by the lines that changed, since the World leaves out what the chain holds."""
   top = noted(tmp_path / "work", "one\ntwo\n")
   _, root = extended("memory", tmp_path, _monty.memory, lives=True)
   engine.stand()
@@ -75,7 +75,7 @@ async def test_a_memory_file_enters_a_chain_once_and_again_only_when_it_changed(
   engine.stand()
   assert recalled(root, tmp_path) == [
     memorized("memory1", top, "one\ntwo\n"),
-    memorized("memory4", top, "one\nthree\n"),
+    f"#memory4\nmemory4_path = {str(top)!r}\nmemory4_text = 'three'",
   ]
 
 
@@ -87,5 +87,5 @@ async def test_a_later_life_tells_what_the_record_holds(tmp_path: Path) -> None:
   top.write_text("one\nthree\n", encoding="utf-8")
   _, root = extended("memory", tmp_path, _monty.memory, lives=True, record=plain(sand.record))
   await settle()
-  assert recalled(root, tmp_path) == [*first, memorized("memory2", top, "one\nthree\n")]
+  assert recalled(root, tmp_path) == [*first, f"#memory2\nmemory2_path = {str(top)!r}\nmemory2_text = 'three'"]
   assert first == [memorized("memory1", top, "one\ntwo\n")]
