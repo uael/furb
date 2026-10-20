@@ -64,7 +64,7 @@ test("idle snapshots add no facts or sandbox calls as the act table grows, and s
       expect(calls.filter((name) => ["get", "outcome", "peek"].includes(name))).toEqual([]);
 
       const command = engine.bash('printf first; read line; printf "$line"; read hold', {
-        fed: true,
+        stdin: null,
         on: engine.root,
       }).id;
       const output = () =>

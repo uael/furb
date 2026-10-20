@@ -33,11 +33,13 @@ use crate::{
   wire,
 };
 
-/// How a value of JavaScript goes in where the contract says its type: as it is, as a text, which JavaScript writes
-/// as its path and its content, or as a template, which it writes as each expression beside its value.
+/// How a value of JavaScript goes in where the contract says its type: as it is; as it is with a null that goes in
+/// as None, where the type holds None beside a default of its own; as a text, which JavaScript writes as its path and
+/// its content; or as a template, which it writes as each expression beside its value.
 #[derive(Clone, Copy)]
 pub enum Word {
   Plain,
+  Maybe,
   Text,
   Template,
 }
@@ -191,7 +193,8 @@ pub fn inward(env: &Env, value: Unknown<'_>, word: Word, depth: usize) -> Result
   Ok(Object::dict(pairs))
 }
 
-/// The words of an object of options, by the keys of the verb and as each goes in.
+/// The words of an object of options, by the keys of the verb and as each goes in. A word that is undefined leaves the
+/// default of the engine, and so does a null, but for a word whose null goes in as None.
 pub fn named(
   env: &Env,
   options: JsObject<'_>,
@@ -205,7 +208,10 @@ pub fn named(
       return Err(Fault::refused(format!("{key} is no word of this verb")));
     };
     let one: Unknown = options.get_named_property(&key).map_err(refused)?;
-    if matches!(one.get_type().map_err(refused)?, ValueType::Undefined | ValueType::Null) {
+    let kind = one.get_type().map_err(refused)?;
+    if matches!(kind, ValueType::Undefined)
+      || (matches!(kind, ValueType::Null) && !matches!(word, Word::Maybe))
+    {
       continue;
     }
     named.push((key, inward(env, one, *word, 0)?));

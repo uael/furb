@@ -371,14 +371,14 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
 
 def bash(
   command: str,
-  fed: bool = False,
+  stdin: str | None = "",
   timeout: float = TIMEOUT,
   show: Show = TAIL,
   show_err: Show | None = None,
   on: str = "",
 ) -> Act[Exit]:
   def ear(id):
-    mute = "" if fed else "not fed"
+    mute = "" if stdin is None else "closed"
     yield told(id, "", bound(id, "Exit"), command="" if show is HIDDEN else command)
     while True:
       match (yield):
@@ -405,7 +405,7 @@ def bash(
           if show is not HIDDEN:
             yield told(id, f"exited {code}", stdout=shown(out, show), stderr=show_err and shown(err, show_err))
 
-  return act("bash", on, controlled(ear, True), command, fed, timeout)
+  return act("bash", on, controlled(ear, True), command, stdin, timeout)
 
 
 @dataclass

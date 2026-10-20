@@ -189,6 +189,25 @@ fn a_command_runs_on_this_machine_and_speaks_its_exit_from_its_own_thread() {
 }
 
 #[test]
+fn a_command_whose_stdin_is_neither_a_text_nor_none_has_a_stdin_that_is_empty_and_closed() {
+  let mut lived = Lived::new("flag", &[], true).unwrap();
+  let root = lived.root();
+  // The flag of a record made before the stdin was a text, False or True.
+  for flag in [false, true] {
+    let kwargs = vec![
+      ("stdin", Object::bool(flag)),
+      ("timeout", Object::float(5.0)),
+      ("on", Object::string(&root)),
+    ];
+    let id = lived.engine.verb("bash", vec![Object::string("cat; echo end")], kwargs).unwrap();
+    let id = id.as_ref().as_str().expect("the name of the command").to_owned();
+    let exit =
+      Exit::of(lived.settled(&id).unwrap().as_ref()).expect("the command came to its exit");
+    assert_eq!((exit.code, exit.stdout.content.as_str()), (Some(0), "end\n"), "the flag {flag}");
+  }
+}
+
+#[test]
 fn the_world_writes_the_stderr_of_a_merged_command_into_its_stdout() {
   let mut lived = Lived::new("merged", &[], true).unwrap();
   let root = lived.root();
@@ -221,7 +240,7 @@ fn a_command_is_fed_what_the_operator_writes_into_its_stdin() {
   let root = lived.root();
   let act = lived
     .engine
-    .bash("cat", verbs::Bash { fed: Some(true), on: on(&root), ..Default::default() })
+    .bash("cat", verbs::Bash { stdin: Some(None), on: on(&root), ..Default::default() })
     .unwrap();
   let id = act.id().to_owned();
   let stdin = Text::new(format!("{id}/stdin"), "fed\n");
@@ -232,6 +251,19 @@ fn a_command_is_fed_what_the_operator_writes_into_its_stdin() {
     .unwrap();
   let exit = Exit::of(lived.settled(&id).unwrap().as_ref()).expect("the command came to its exit");
   assert_eq!(exit.stdout.content, "fed\n");
+}
+
+#[test]
+fn a_command_is_fed_a_stdin_of_text_whole_at_its_start_and_then_its_stdin_closes() {
+  let mut lived = Lived::new("given", &[], true).unwrap();
+  let with = verbs::Bash {
+    stdin: Some(Some("one\ntwo\n".to_owned())),
+    on: on(&lived.root()),
+    ..Default::default()
+  };
+  // cat ends only at the end of its stdin, so the end of the command says that the stdin closed.
+  let exit: Exit = block_on(lived.engine.bash("cat; echo end", with).unwrap()).unwrap();
+  assert_eq!((exit.code, exit.stdout.content.as_str()), (Some(0), "one\ntwo\nend\n"));
 }
 
 #[test]
@@ -396,7 +428,7 @@ fn what_is_fed_to_a_command_before_a_wake_starts_it_in_a_later_life_reaches_its_
   let id = {
     let mut first = Lived::new("held", &[], true).unwrap();
     let root = first.root();
-    let with = verbs::Bash { fed: Some(true), on: on(&root), ..Default::default() };
+    let with = verbs::Bash { stdin: Some(None), on: on(&root), ..Default::default() };
     first.engine.bash("cat", with).unwrap().id().to_owned()
   };
   let mut second = Lived::new("held", &[], false).unwrap();

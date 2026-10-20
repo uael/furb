@@ -7,7 +7,9 @@
 //! The method of a verb takes the parameters that have no default, in their order, then a list for its star
 //! parameter, then one struct of the rest, named after the verb, whose fields are none until a host gives them, so
 //! the engine keeps its own defaults. The door to TypeScript takes the same, with an object of options for the struct,
-//! and the door to python takes each of those words by its name.
+//! and the door to python takes each of those words by its name. A word whose type holds None beside a default of
+//! its own, as the stdin of bash, takes None as a word apart from that default: its field holds an option of an
+//! option, TypeScript gives it as null, and python as None, and a word left out leaves the default of the engine.
 //! What each annotation is, in rust and in TypeScript, is the table of [`Kind::of`] and [`Answer::of`], and an
 //! annotation that the tables do not hold stops the build, so no verb of the contract goes without its method.
 //!
@@ -38,6 +40,8 @@ enum Kind {
   Strs,
   /// A callable that may be none.
   MaybeCallable,
+  /// A text that may be None, where None is a word of its own beside the default.
+  MaybeStr,
   Ear,
   Template,
 }
@@ -46,6 +50,7 @@ impl Kind {
   fn of(annotation: &str) -> Kind {
     match annotation {
       "str" => Kind::Str,
+      "str | None" => Kind::MaybeStr,
       "int" => Kind::Int,
       "float" | "float | None" => Kind::Float,
       "bool" => Kind::Bool,
@@ -68,6 +73,7 @@ impl Kind {
       Kind::Bool => "bool",
       Kind::Object => "Object",
       Kind::MaybeCallable => "Option<Object>",
+      Kind::MaybeStr => "Option<&str>",
       Kind::Text => "&Text",
       Kind::Strs => "&[&str]",
       Kind::Ear => "Box<dyn Ear>",
@@ -83,6 +89,7 @@ impl Kind {
       Kind::Float => "Option<f64>",
       Kind::Bool => "Option<bool>",
       Kind::Object | Kind::MaybeCallable => "Option<Object>",
+      Kind::MaybeStr => "Option<Option<String>>",
       Kind::Text => "Option<Text>",
       Kind::Strs => "Option<Vec<String>>",
       Kind::Ear | Kind::Template => panic!("the build holds no default of an ear or of a template"),
@@ -98,6 +105,7 @@ impl Kind {
       Kind::Bool => format!("Object::bool({name})"),
       Kind::Object => name.to_owned(),
       Kind::MaybeCallable => format!("{name}.unwrap_or_else(Object::none)"),
+      Kind::MaybeStr => format!("{name}.map_or_else(Object::none, Object::string)"),
       Kind::Text => format!("{name}.object()"),
       Kind::Strs => format!("Object::list({name}.iter().map(|one| Object::string(*one)))"),
       Kind::Ear => format!("handed({name}, false)"),
@@ -121,6 +129,7 @@ impl Kind {
       Kind::Int | Kind::Float => "number",
       Kind::Bool => "boolean",
       Kind::Object | Kind::MaybeCallable => "unknown",
+      Kind::MaybeStr => "string | null",
       Kind::Text => "TextValue",
       Kind::Strs => "string[]",
       Kind::Ear => "Generator<unknown, unknown, unknown> | NativeEar",
@@ -131,6 +140,7 @@ impl Kind {
   /// How the door to TypeScript carries the value in.
   fn carried(self) -> &'static str {
     match self {
+      Kind::MaybeStr => "Word::Maybe",
       Kind::Text => "Word::Text",
       Kind::Template => "Word::Template",
       _ => "Word::Plain",
@@ -507,10 +517,24 @@ fn pythonic(verbs: &[Verb]) -> String {
       None if verb.with().is_some() => signature.push("*".to_owned()),
       None => {}
     }
-    signature.extend(verb.defaults().map(|one| format!("{} = None", one.name)));
-    given.extend(verb.defaults().map(|one| format!("{}: Option<Value>", one.name)));
+    // A word whose None is a word of its own is left out apart from None, so a None that python gives goes in as
+    // None, and a word left out leaves the default of the engine.
+    signature.extend(verb.defaults().map(|one| match one.kind {
+      Kind::MaybeStr => format!("{} = Maybe(None)", one.name),
+      _ => format!("{} = None", one.name),
+    }));
+    given.extend(verb.defaults().map(|one| match one.kind {
+      Kind::MaybeStr => format!("{}: Maybe", one.name),
+      _ => format!("{}: Option<Value>", one.name),
+    }));
     let words: Vec<String> = verb.needed().map(|one| format!("{}.0", one.name)).collect();
-    let keys: Vec<String> = verb.defaults().map(|one| format!("({0:?}, {0})", one.name)).collect();
+    let keys: Vec<String> = verb
+      .defaults()
+      .map(|one| match one.kind {
+        Kind::MaybeStr => format!("({0:?}, {0}.0)", one.name),
+        _ => format!("({0:?}, {0})", one.name),
+      })
+      .collect();
     let (answer, made) = match verb.answer {
       Answer::Act(_) => ("PyAct", "PyAct::of(slf, got)?"),
       _ => ("Value", "Value(got)"),

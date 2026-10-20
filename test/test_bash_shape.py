@@ -5,12 +5,12 @@ from furb import engine
 from furb.engine import HEAD, OPERATOR, TAIL
 
 
-async def test_a_bash_carries_the_command_the_fed_flag_and_the_timeout() -> None:
-  """A bash carries the command, the fed flag and the timeout, and no show and no working directory."""
+async def test_a_bash_carries_the_command_the_stdin_and_the_timeout() -> None:
+  """A bash carries the command, the stdin and the timeout, and no show and no working directory."""
   _, log, root = born()
   engine.cd("/deep", on=root)
-  one = engine.bash("echo hi", fed=True, show=HEAD, show_err=TAIL, timeout=5.0, on=root)
+  one = engine.bash("echo hi", stdin=None, show=HEAD, show_err=TAIL, timeout=5.0, on=root)
   got = await one
-  assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", True, 5.0)]
+  assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", None, 5.0)]
   assert got.stdout.content == "ran echo hi\n"
   assert paragraphs(engine.turns(on=root))[-1] == (f"#{one} exited 0\n{one}_stdout = 'ran echo hi'")

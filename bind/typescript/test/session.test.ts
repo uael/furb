@@ -456,7 +456,7 @@ test("record inspection reports pending work when its replay starts or feeds a c
   const on = engine.root;
   engine.rung({ word: 'await bash("exec sleep 30")', on });
   engine.rung({
-    word: 'c = bash("head -c 6; exec sleep 30", fed=True)\nwrite(Text(c + "/stdin", "hello\\n"))\nawait c',
+    word: 'c = bash("head -c 6; exec sleep 30", stdin=None)\nwrite(Text(c + "/stdin", "hello\\n"))\nawait c',
     on,
   });
   await until(first, () => printed(first, "bash2") === "hello\n");

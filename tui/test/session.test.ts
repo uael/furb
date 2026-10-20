@@ -231,7 +231,7 @@ test("a follow-up that the operator removes while its files are read is not sent
 test("each /feed sends one line, and a /feed with no text closes the input", () =>
   withDemo(async (session) => {
     const command = await session.engine.bash('read -r a; read -r b; echo "a=[$a] b=[$b]"; cat', {
-      fed: true,
+      stdin: null,
       on: session.engine.root,
     });
     await session.submit(`/feed ${command} yes`);

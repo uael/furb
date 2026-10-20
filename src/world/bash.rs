@@ -88,10 +88,15 @@ pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
         "bash" if a.question() => {
           say(&mut co, Fact::says("started", &about, []));
           match begun(&mut co, &a, &scratch).await {
-            Ok(begun) => {
+            Ok(mut begun) => {
               let (stdin, fed_in) = spsc::unbounded();
               let (stop, stopped) = oneshot::channel();
               let mut one = Running { stdin, _stop: stop };
+              // A stdin of text goes in whole at the start, and then it closes.
+              if let Some(text) = begun.given.take().filter(|text| !text.is_empty()) {
+                one.feed(Some(text));
+                one.feed(None);
+              }
               for text in fed.remove(&about).unwrap_or_default() {
                 one.feed(text);
               }
@@ -141,12 +146,14 @@ enum Said {
   Exit { about: String, exit: Exit },
 }
 
-/// A command that just started: its act, its process, the group of its processes, and its timeout.
+/// A command that just started: its act, its process, the group of its processes, its timeout, and the text that its
+/// stdin is given, or nothing when its stdin stays open for what is fed to it.
 struct Begun {
   about: String,
   child: Child,
   group: Group,
   timeout: Option<Duration>,
+  given: Option<String>,
 }
 
 /// A command begun: its shell spawned in the directory of its chain, with the scratch directory as its `TMPDIR`.
@@ -155,7 +162,12 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
   let on = a.on().to_owned();
   let line = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
   let shown = format!("{line:?}");
-  let fed = a.word(2).and_then(|one| one.as_bool()).unwrap_or_default();
+  // A stdin of text goes in whole and closes, None stays open for what is fed, and any other word, as the flag of a
+  // record made before the stdin was a text, gives a stdin that is empty and closed.
+  let given = match a.word(2) {
+    Some(one) if one.type_name() == "NoneType" => None,
+    one => Some(one.and_then(|it| it.as_str()).unwrap_or_default().to_owned()),
+  };
   let timeout = a.word(3).and_then(|one| one.as_float().or_else(|| one.as_int().map(|n| n as f64)));
   // A timeout past what the machine counts runs to the end of the command, as no timeout does.
   let timeout = timeout.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
@@ -167,7 +179,7 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
     .arg("-c")
     .arg(if merged { format!("exec 2>&1\n{line}") } else { line })
     .current_dir(&dir)
-    .stdin(if fed { Stdio::piped() } else { Stdio::null() })
+    .stdin(if given.as_deref() == Some("") { Stdio::null() } else { Stdio::piped() })
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
   let tmp = scratch.made()?;
@@ -180,7 +192,7 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
     .spawn()
     .map_err(|no| Fault::refused(format!("{shown} did not start: {no}: {}", dir.display())))?;
   match Group::of(&child) {
-    Ok(group) => Ok(Begun { about, child, group, timeout }),
+    Ok(group) => Ok(Begun { about, child, group, timeout, given }),
     Err(no) => {
       let _ = child.start_kill();
       Err(Fault::refused(format!("{shown} could not be held: {no}")))
@@ -212,7 +224,7 @@ async fn ran(
   stopped: oneshot::Receiver<()>,
   says: UnboundedSender<Said>,
 ) {
-  let Begun { about, mut child, mut group, timeout } = begun;
+  let Begun { about, mut child, mut group, timeout, .. } = begun;
   let (stdout, stderr, stdin) = (child.stdout.take(), child.stderr.take(), child.stdin.take());
   let ended = async {
     let (out, err) =

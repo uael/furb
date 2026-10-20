@@ -73,7 +73,7 @@ async def test_the_world_hears_every_fact(tmp_path: Path) -> None:
   assert engine.chance(on=root) == 2 / 7
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\n")
   assert engine.write(Text("b.txt", "two\n"), on=root) == Text("/w/b.txt", "two\n")
-  fed = engine.bash("forever", fed=True, on=root)
+  fed = engine.bash("forever", stdin=None, on=root)
   await settle()
   _, command, *_ = said(log, "bash")[0]
   held = engine.transcript(root)
