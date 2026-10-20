@@ -344,8 +344,7 @@ def debug(template: Template) -> None:
   debug tells nothing but the text of its template, and nothing at all when that text is empty.
   debug enters nothing in the record.
   It is no act and it enters no record, and it stands in the turns at the place in the run where it happened.
-  Outside an act there is nothing to tell of, so it is refused.
-  The engine refuses debug outside an act.
+  Outside an act there is nothing to tell of, so it tells nothing, as a tell outside a run.
   A tell is on the scope of the act it is of, so debug takes no chain of its own.
   """
 

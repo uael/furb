@@ -162,15 +162,13 @@ def close(value: object, id: str = "") -> None:
 
 
 def debug(template: Template) -> None:
-  if not (who := acting()):
-    raise Refused("no act")
   text = "".join(
     x
     if isinstance(x, str)
     else format(("{!" + x.conversion + "}").format(x.value) if x.conversion else x.value, x.format_spec)
     for x in template
   )
-  if tells(who) and text:
+  if (who := acting()) and tells(who) and text:
     say(*told(who, "debugged", debug=text))
 
 

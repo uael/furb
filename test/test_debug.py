@@ -1,10 +1,7 @@
 """debug, what a word tells of itself as it runs."""
 
-import pytest
-
 from conftest import acts, born, chained, heads, paragraphs, prompted, said, settle, written
 from furb import engine
-from furb.engine import Refused
 
 
 async def test_what_a_word_tells_of_itself_as_it_runs() -> None:
@@ -156,19 +153,11 @@ async def test_it_is_no_act_and_it_enters_no_record() -> None:
   assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing", f"#{act}", f"#{act} debugged"]
 
 
-async def test_outside_an_act_there_is_nothing_to_tell_of_so_it_is_refused() -> None:
-  """Outside an act there is nothing to tell of, so it is refused."""
-  _, _, _ = born()
-  with pytest.raises(Refused, match="no act"):
-    engine.debug(t"{1}")
-
-
-async def test_the_engine_refuses_debug_outside_an_act() -> None:
-  """The engine refuses debug outside an act."""
+async def test_outside_an_act_there_is_nothing_to_tell_of_so_it_tells_nothing_as_a_tell_outside_a_run() -> None:
+  """Outside an act there is nothing to tell of, so it tells nothing, as a tell outside a run."""
   _, log, root = born()
   mark = len(log)
-  with pytest.raises(Refused):
-    engine.debug(t"{1}")
+  assert engine.debug(t"{1}") is None
   assert log[mark:] == []
   assert heads(engine.turns(on=root)) == [f"#{root}", f"#{root} standing"]
 
