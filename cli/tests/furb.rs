@@ -217,6 +217,35 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
 }
 
 #[test]
+fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
+  let yard = Yard::new("facts");
+  fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
+  let off = r#"{"extensions": {"memory": false, "skills": false}}"#;
+  fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
+  assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
+  let facts = |words: &[&str]| {
+    let mut command = yard.furb(&["facts", "--record"]);
+    command.arg(yard.record()).args(words);
+    printed(command, "")
+  };
+  let all = facts(&[]);
+  let lines = fs::read_to_string(yard.record()).expect("the record").lines().count();
+  let numbers: Vec<String> =
+    all.lines().map(|line| line.split(": ").next().unwrap_or_default().to_owned()).collect();
+  let expected: Vec<String> = (1..=lines).map(|n| n.to_string()).collect();
+  assert_eq!(numbers, expected, "one fact for each line of the record: {all}");
+  assert!(all.starts_with("1: ['chain', 'chain1', 'operator', '', 'root', '']\n"), "{all}");
+  let rung = facts(&["--act", "rung1"]);
+  assert!(rung.ends_with(": ['rung', 'rung1', 'operator', 'chain1', 'k = 3', '', '']\n"), "{rung}");
+  assert_eq!(rung.lines().count(), 1, "the facts about one act: {rung}");
+  assert!(all.contains(&rung), "a fact keeps the number of its line: {all}");
+  assert_eq!(facts(&["--chain", "chain1"]), all, "every fact of this record is on the root");
+  assert_eq!(facts(&["--chain", "chain2"]), "", "no fact is on a chain the record does not hold");
+  let mut missing = yard.furb(&["facts", "--record", "nope.jsonl"]);
+  missing.current_dir(&yard.at);
+  assert!(refused(missing, "").contains("No record at nope.jsonl."), "a record that is not there");
+}
+#[test]
 fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs_turn_on() {
   let yard = Yard::new("extensions");
   let skill = yard.at.join(".furb/skills/brew/SKILL.md");
