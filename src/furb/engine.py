@@ -93,7 +93,7 @@ def program(on: str = "") -> dict[str, str]:
 
 
 def standing() -> list:
-  return next((now for x in reversed(transcript(ROOT)) if x[0] == "stand" and isinstance(now := peek(x[1]), list)), [])
+  return answer("stand", ROOT, [])
 
 
 def stand(on: str = ROOT) -> list:
@@ -119,10 +119,7 @@ def cd(path: str, on: str = "") -> str:
 
 
 def cwd(on: str = "") -> str:
-  return (
-    next((path for x in reversed(transcript(on)) if x[0] == "cd" and isinstance(path := peek(x[1]), str)), "")
-    or standing()[1]
-  )
+  return answer("cd", on, "") or standing()[1]
 
 
 def pause(id: str) -> None:
@@ -527,6 +524,12 @@ def tell(on, path, got=None, show=HEAD):
         headed(asked(who, on)[-1], path=path, **{"text": shown(got, show)} if isinstance(got, Text) else {"value": got})
       ],
     )
+
+
+def answer(kind, on, empty):
+  return next(
+    (got for x in reversed(transcript(on)) if x[0] == kind and isinstance(got := peek(x[1]), type(empty))), empty
+  )
 
 
 def over(id):

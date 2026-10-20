@@ -895,6 +895,9 @@ def question(a: Saying) -> bool:
 def scope(name: str) -> str:
   """The scope of a question, from its name: the chain it is on, and itself for a chain, and nothing for a name of no question of the life."""
 
+def answer[T](kind: str, on: str, empty: T) -> T:
+  """The answer of the last question of a kind on a chain that is of the type of empty, and empty when no such question stands."""
+
 def over(id: str) -> bool:
   """Whether an act is over: its done stands, so the life holds its outcome under its name, and a name of no act is never over."""
 
