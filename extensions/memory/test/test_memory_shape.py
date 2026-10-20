@@ -53,7 +53,7 @@ async def test_the_memory_of_a_folder_is_its_claude_md_file_or_its_agents_md_fil
 
 
 async def test_the_world_leaves_out_a_memory_file_whose_content_the_chain_holds(tmp_path: Path) -> None:
-  """The World leaves out a memory file whose content the chain holds: one that a memory question told it, or that it read or wrote, with that content, its prefix among them."""
+  """The World leaves out a memory file whose content the chain holds at any path: one that a memory question told it, or that it read or wrote, with that content, its prefix among them, so one text in two folders, as in a checkout and its worktree, enters a chain once."""
   top = noted(tmp_path / "work", "t\n")
   sub = noted(tmp_path / "work" / "sub", "s\n")
   noted(tmp_path / "work" / "other", "o\n")
@@ -78,6 +78,11 @@ async def test_the_world_leaves_out_a_memory_file_whose_content_the_chain_holds(
   await engine.rung("remember()", on=four)
   await engine.rung('read("sub/c.txt")\nread("sub/CLAUDE.md")', on=four)
   assert [one.split("\n")[1] for one in recalled(four, tmp_path)] == [f"memory8_path = {str(top)!r}"]
+  # One text in two folders enters a chain once.
+  twin = noted(tmp_path / "work" / "twin", "t2\n")
+  assert await paths(root, tmp_path, "twin/c.txt") == []
+  assert await paths(four, tmp_path, "twin/c.txt") == []
+  assert twin.read_text(encoding="utf-8") == "t2\n"
 
 
 async def test_a_path_of_a_scheme_adds_no_folder_of_its_own(tmp_path: Path) -> None:

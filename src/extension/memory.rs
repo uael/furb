@@ -18,7 +18,7 @@ use crate::{
 const NAMES: [&str; 2] = ["CLAUDE.md", "AGENTS.md"];
 
 /// The ear of the memory: it answers a memory question with the texts of the memory files that apply to its path
-/// and that its chain does not hold as they stand, which are the memory of the config directory of the user, then
+/// and whose content its chain does not hold at any path, which are the memory of the config directory of the user, then
 /// of each folder from the root down to the working directory of the chain, then of each folder under it down to the
 /// folder of the path. What each chain holds it reads off the facts alone, so it holds the same in every life: the
 /// texts of the answer of each memory question, the text of each read and each write of a memory file, and what the
@@ -57,8 +57,9 @@ pub fn memory(config: PathBuf) -> Box<dyn Ear> {
           for one in
             [config.clone()].into_iter().chain(folders(&here, &target)).filter_map(|one| of(&one))
           {
-            let fresh = chain.and_then(|chain| chain.get(&one.path)) != Some(&one.content);
-            if fresh && !told.iter().any(|two| two.path == one.path) {
+            // The chain holds a content once, whatever its path, as a checkout and its worktree hold one text.
+            let fresh = !chain.is_some_and(|chain| chain.values().any(|two| *two == one.content));
+            if fresh && !told.iter().any(|two| two.path == one.path || two.content == one.content) {
               told.push(one);
             }
           }

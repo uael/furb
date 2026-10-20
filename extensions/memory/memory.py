@@ -1,11 +1,23 @@
-from furb.engine import Act, Text, act, ask, controlled, question, scope, span, tell
+from furb.engine import Act, Text, act, ask, controlled, differs, get, question, scope, span, tell, tells, transcript
 
 
 def memory(path: str = ".", on: str = "") -> list[Text]:
+  was: dict[str, list[str]] = {}
+  for x in transcript(on):
+    match x:
+      case ("done", about, _, list(texts)) if (
+        question(("memory", about)) and get(maker := get(about)[2]) and tells(maker)
+      ):
+        for one in texts:
+          was[one.path] = one.lines
+      case ("done", about, _, Text(place, content)) if (
+        (question(("read", about)) or question(("write", about))) and get(maker := get(about)[2]) and tells(maker)
+      ):
+        was[place] = content.splitlines()
   got = ask("memory", on, path)
   assert isinstance(got, list)
   for one in got:
-    tell(on, one.path, one, span(1, -1))
+    tell(on, one.path, one, differs(was[one.path]) if one.path in was else span(1, -1))
   return got
 
 

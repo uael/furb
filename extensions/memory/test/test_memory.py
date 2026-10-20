@@ -12,7 +12,7 @@ from furb_monty import _monty
 
 
 async def test_the_memory_of_a_path_told_to_its_chain(tmp_path: Path) -> None:
-  """The memory of a path, told to its chain: each memory file that applies to the path and that the chain does not hold as it stands, read with the show of every line, so the chain holds the whole file, and told whole."""
+  """The memory of a path, told to its chain: each memory file that applies to the path and whose content the chain does not hold, told whole when the chain holds no text at its path, and else by the lines that differ from the text the chain holds there, as differs picks them, so the chain holds the whole file."""
   text = "".join(f"{n}\n" for n in range(1, 2101))
   top = noted(tmp_path / "work", text)
   _, root = extended("memory", tmp_path, _monty.memory)
@@ -20,11 +20,11 @@ async def test_the_memory_of_a_path_told_to_its_chain(tmp_path: Path) -> None:
   assert recalled(root, tmp_path) == [memorized("memory1", top, text)]
   top.write_text(text.replace("\n5\n", "\nfive\n"))
   await engine.rung("memory()", on=root)
-  assert recalled(root, tmp_path)[1:] == [memorized("memory2", top, text.replace("\n5\n", "\nfive\n"))]
+  assert recalled(root, tmp_path)[1:] == [f"#memory2\nmemory2_path = {str(top)!r}\nmemory2_text = 'five'"]
 
 
 async def test_memory_asks_the_world_a_memory_question_and_tells_each_text(tmp_path: Path) -> None:
-  """memory asks the World a memory question on its chain with the path, and tells each text of the answer in its order, in a paragraph headed with the name of the question, which binds the path of the text and the text, with the show of every line."""
+  """memory asks the World a memory question on its chain with the path, and tells each text of the answer in its order, in a paragraph headed with the name of the question, which binds the path of the text and the text, by the lines that the first sentence says."""
   top = noted(tmp_path / "work", "one\ntwo\n")
   sub = noted(tmp_path / "work" / "sub", "three\n")
   _, root = extended("memory", tmp_path, _monty.memory)
