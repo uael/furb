@@ -274,8 +274,8 @@ export declare function levels(): Array<string>
 export declare function memory(config: string): NativeEar
 
 /**
- * The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, whether it offers
- * that model or not; nothing when it knows none.
+ * The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, which for a model of
+ * the local server holds a colon, whether it offers that model or not; nothing when it knows none.
  */
 export declare function model(name: string): ModelInfo | null
 

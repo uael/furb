@@ -62,8 +62,8 @@ struct Place {
 /// of that actor. The standing of every chain tells the roster, so a life offers the models it names and no more.
 #[derive(Args, Default)]
 struct Stand {
-  /// The actor a prompt goes to when it names none, as provider:model/effort; the first model the catalog offers when
-  /// unsaid.
+  /// The actor a prompt goes to when it names none, as provider:model/effort; when unsaid, a model of the claude
+  /// command line, then of the network, then of the local server that FURB_LOCAL_URL names.
   #[arg(long)]
   model: Option<String>,
   /// A model the life offers beside the model of that actor, as provider:model; say it again for each model.
@@ -78,7 +78,8 @@ enum Command {
   Prompt {
     /// The message, which the actor reads.
     message: String,
-    /// The actor, as provider:model/effort, or as an id that one model alone holds; the default actor of the chain
+    /// The actor, as provider:model/effort, or as an id that one model alone holds, which for a model of the local
+    /// server holds a colon; the default actor of the chain
     /// when unsaid.
     #[arg(long, default_value = "", hide_default_value = true)]
     to: String,

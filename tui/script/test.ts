@@ -14,7 +14,12 @@ const files = ["bind/typescript/test", "tui/test"]
   .filter((file) => filters.length === 0 || filters.some((filter) => file.includes(filter)))
   .sort((one, other) => statSync(other).size - statSync(one).size);
 const cores = availableParallelism();
-const env = { ...process.env, FURB_CONFIG_DIR: ".furb/tests", XDG_CACHE_HOME: ".furb/tests/cache" };
+const env = {
+  ...process.env,
+  FURB_CONFIG_DIR: ".furb/tests",
+  XDG_CACHE_HOME: ".furb/tests/cache",
+  FURB_LOCAL_URL: "",
+};
 const waiting = [...files];
 const failed: string[] = [];
 await Promise.all(

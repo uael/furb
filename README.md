@@ -46,8 +46,9 @@ module, and each answer of the model is a program that runs in it.
 pip install furb                     # The engine, and furb, the command line. It needs Python 3.14 or later.
 ```
 
-`furb` is a program of Rust. It runs the engine in monty. It asks the models of the claude command line, and the models
-of each provider whose credential, such as `ANTHROPIC_API_KEY`, stands in the environment:
+`furb` is a program of Rust. It runs the engine in monty. It asks the models of the claude command line, the models of
+each provider whose credential, such as `ANTHROPIC_API_KEY`, stands in the environment, and the models of the local
+server whose address `FURB_LOCAL_URL` names:
 
 ```sh
 furb                                 # The TUI, when furb finds one.
@@ -57,6 +58,22 @@ furb run "close(1 + 1)"              # A Python word, run on the root chain.
 furb turns --record session.jsonl    # The turns of a life made again from its record, which it only reads.
 furb extensions                      # The extensions that a life runs here.
 ```
+
+A local server serves the chat completions of OpenAI under `/v1` and lists its models at `/v1/models`, as llama.cpp, LM
+Studio, Ollama, vLLM and Strata do. `FURB_LOCAL_KEY` gives its key when it takes one. furb names each model for chat
+that the server lists `local:` and its id, as in `--model local:qwen3`. Such a model takes no effort, costs nothing, and
+writes a quarter of its window at most in one turn, or the number that `FURB_LOCAL_TOKENS` gives. Its window is the one
+that the server gives, or the number that `FURB_LOCAL_WINDOW` gives, and furb offers no model whose window neither
+gives. Ollama serves a model in the `num_ctx` of its parameters, or in `OLLAMA_CONTEXT_LENGTH`: set it to 32768 or more,
+since the system prompt of furb is about 9000 tokens. Ollama tells that window only for a model that it loaded, so give
+the same number to `FURB_LOCAL_WINDOW`. furb asks the server only for a name of the provider `local` or of a provider
+that furb does not know, as `local:qwen3` or `qwen3:8b`, when a host lists the models, as the TUI and the scripts do,
+and when no other model stands for the default actor. `local:` and the id is the sure name, as
+`local:mistral:7b`, since `mistral:7b` names the provider `mistral`. A list that the server gave holds for the process,
+but for a model that it did not list or gave no window of, which furb asks for again after 30 seconds, as it asks
+again a server that answered nothing. When furb finds
+no claude command line, the default actor is a model of a provider of the network whose credential stands, and then a
+model of the local server.
 
 The TUI runs from a clone of this repository. It needs uv, the Rust toolchain, and Bun 1.4.2 or later:
 

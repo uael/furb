@@ -14,7 +14,8 @@ API of its own:
   commands in `bash.rs`, time in `time.rs`, the store of the record in `store.rs`, and the provider of models in
   `provider.rs`, which asks each model through rig and streams what it writes. Its catalog, `provider/catalog.rs`,
   knows the models of every provider that pi-ai serves and those of the claude command line, and it offers each
-  model whose credential stands in the environment, and the claude command line when it finds the program.
+  model whose credential stands in the environment, the claude command line when it finds the program, and each
+  model for chat that a local server lists when `FURB_LOCAL_URL` names its address, which `provider/local.rs` asks.
   `operator.rs` holds the rules by which every console reads what the operator answers, and `scratch.rs` the
   scratch directory of a life, which the files serve as `scratch://` and the commands name as `$TMPDIR`.
 - `src/extension.rs` says what an extension is and where a host finds the ones that a life runs, and holds the ear

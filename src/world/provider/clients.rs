@@ -1,5 +1,5 @@
 //! The clients of rig that ask the providers of the catalog: each client that rig or a crate of rig gives, the chat
-//! completions of OpenAI at the address of a provider, and the protocol of pi-ai.
+//! completions of OpenAI at the address of a provider or of a local server, and the protocol of pi-ai.
 
 use std::future::Future;
 
@@ -40,7 +40,8 @@ pub(super) enum Client {
   Zai,
   Huggingface,
   Xiaomi,
-  /// The chat completions of OpenAI at the address of the provider.
+  /// The chat completions of OpenAI at the address of the provider, which take no credential when it is empty, as a
+  /// local server may take none.
   Chat,
   /// The chat completions of the gateway of Cloudflare, which takes the credential of Cloudflare alone.
   Gateway,
@@ -102,6 +103,10 @@ impl Client {
           built = built.base_url(api);
         }
         streams(built.build().map_err(failed)?.completion_model(id))
+      }
+      Client::Chat if key.is_empty() => {
+        let built = openai::CompletionsClient::builder().api_key(UNSENT).base_url(api()?);
+        streams(built.http_client(Unsent::default()).build().map_err(failed)?.completion_model(id))
       }
       Client::Chat => {
         let built = openai::CompletionsClient::builder().api_key(key).base_url(api()?);

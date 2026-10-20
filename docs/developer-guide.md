@@ -13,7 +13,7 @@ each part. When the two differ, `CLAUDE.md` is right, and this guide must change
 | [uv](https://docs.astral.sh/uv/) | The Python environment, the hooks, and every Python command. |
 | Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the packages `furb-monty` and `furb-cli`. rustup reads the version from the file. |
 | [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings and the TUI. On Windows, bun 1.3 crashes the TUI. |
-| The `claude` command line, signed in, or the credential of a provider | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`. The demo and the suite need no model. |
+| The `claude` command line, signed in, the credential of a provider, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`. The demo and the suite need no model. |
 
 Then set up a clone as the [README](../README.md#try-it) says, and install the hooks, which run at each commit:
 
@@ -113,7 +113,8 @@ no network.
 | File | What it holds |
 | --- | --- |
 | `src/world/provider.rs` | The ear: the standing, each reply, the messages of a turn, what a model writes as it writes it, and the usage of a turn. |
-| `src/world/provider/catalog.rs` | The catalog: the snapshot and its cache, which models it offers, the credential and the address of each, the efforts of each kind of request, and the roster. |
+| `src/world/provider/catalog.rs` | The catalog: the snapshot and its cache, which models it offers, the credential and the address of each, the efforts of each kind of request, the default actor, and the roster. |
+| `src/world/provider/local.rs` | The local server: its address, its key and the overrides that the environment gives, the models it lists, the window of each where its kind of server gives it, and when it is asked again. |
 | `src/world/provider/catalog.json` | The snapshot of models.dev and of the data of pi-ai, one model on each line, which `script/catalog.py` makes again. |
 | `src/world/provider/clients.rs` | The client of rig that asks each provider, with its credential and its address. |
 | `src/world/provider/pi.rs` | The protocol of pi-ai itself, which the gateway Radius speaks. |

@@ -9,7 +9,8 @@
 
 use std::{
   fs,
-  io::{BufRead, BufReader, Write},
+  io::{BufRead, BufReader, Read, Write},
+  net::TcpListener,
   os::unix::fs::PermissionsExt,
   path::{Path, PathBuf},
   process::{Child, ChildStdin, Command, Output, Stdio},
@@ -67,11 +68,14 @@ impl Yard {
   }
 
   /// furb with these words, in the yard, on the fake claude and on the config directory and the cache of the yard,
-  /// and with no TUI that the machine names.
+  /// and with no TUI and no local server that the machine names.
   fn furb(&self, words: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_furb"));
     command.args(words).current_dir(&self.at);
     command.env("FURB_CLAUDE_BIN", self.fake.join("claude")).env_remove("FURB_TUI");
+    for name in ["FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_LOCAL_WINDOW", "FURB_LOCAL_TOKENS"] {
+      command.env_remove(name);
+    }
     command.env("FURB_CONFIG_DIR", self.config()).env("XDG_CACHE_HOME", self.at.join("cache"));
     command
   }
@@ -93,6 +97,55 @@ impl Yard {
 fn program(at: &Path, script: &str) {
   fs::write(at, script).expect("the program is written");
   fs::set_permissions(at, fs::Permissions::from_mode(0o755)).expect("the program runs");
+}
+
+/// A local server of models on a port of this machine, which lists one model, `m`, and answers each chat completion
+/// with this word; and each request it reads, as it reads it. A test of the command line sees no helper of the tests
+/// of the crate, so this fake is a second one.
+fn served(word: &str) -> (u16, mpsc::Receiver<String>) {
+  let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
+  let port = listener.local_addr().expect("the port").port();
+  let listing =
+    json!({"object": "list", "data": [{"id": "m", "object": "model", "meta": {"n_ctx": 1000}}]});
+  let chunk = |delta: Value, usage: Value| {
+    let one = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "m",
+      "choices": [{"index": 0, "delta": delta, "finish_reason": usage.is_object().then_some("stop")}],
+      "usage": usage});
+    format!("data: {one}\n\n")
+  };
+  let usage = json!({"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105});
+  let turn =
+    [chunk(json!({"role": "assistant", "content": word}), Value::Null), chunk(json!({}), usage)];
+  let turn = format!("{}data: [DONE]\n\n", turn.concat());
+  let (tells, told) = mpsc::channel();
+  thread::spawn(move || {
+    for stream in listener.incoming() {
+      let Ok(stream) = stream else { return };
+      let mut reader = BufReader::new(stream);
+      let mut head = String::new();
+      while !head.ends_with("\r\n\r\n") {
+        if reader.read_line(&mut head).unwrap_or_default() == 0 {
+          break;
+        }
+      }
+      let length = head.lines().find_map(|line| {
+        let length = line.to_ascii_lowercase().strip_prefix("content-length: ")?.trim().to_owned();
+        length.parse::<usize>().ok()
+      });
+      let mut body = vec![0; length.unwrap_or_default()];
+      let _ = reader.read_exact(&mut body);
+      let listed = head.starts_with("GET /v1/models ");
+      let _ = tells.send(format!("{head}{}", String::from_utf8_lossy(&body)));
+      let (kind, answer) = if listed {
+        ("application/json", listing.to_string())
+      } else {
+        ("text/event-stream", turn.clone())
+      };
+      let head = format!("HTTP/1.1 200 OK\r\ncontent-type: {kind}\r\nconnection: close\r\n\r\n");
+      let _ = reader.into_inner().write_all(format!("{head}{answer}").as_bytes());
+    }
+  });
+  (port, told)
 }
 
 /// What a command did, given this input.
@@ -627,4 +680,22 @@ fn furb_hands_the_terminal_to_the_tui_with_the_words_it_takes() {
   let expected = "--demo\n--record\nr.jsonl\n--cwd\nthere\n--model\nclaude-cli:sonnet\n--effort\nhigh\n\
                   --roster\nn\nmore\n";
   assert_eq!(words, expected);
+}
+
+#[test]
+fn a_prompt_to_a_model_of_a_local_server_is_answered_by_that_server() {
+  let yard = Yard::new("local");
+  let (port, asked) = served(COUNT);
+  let mut command = yard.kept(&["prompt", "count", "--shape", "int", "--model", "local:m"]);
+  command.env("FURB_LOCAL_URL", format!("http://127.0.0.1:{port}")).env("FURB_LOCAL_KEY", "k");
+  assert_eq!(printed(command, ""), "3\n");
+  let requests: Vec<String> = asked.try_iter().collect();
+  let lines: Vec<&str> = requests.iter().filter_map(|one| one.lines().next()).collect();
+  assert_eq!(lines, ["GET /v1/models HTTP/1.1", "POST /v1/chat/completions HTTP/1.1"]);
+  let keyed = |one: &String| one.to_ascii_lowercase().contains("authorization: bearer k");
+  assert!(requests.iter().all(keyed), "{requests:?}");
+  let body: Value = serde_json::from_str(requests[1].split("\r\n\r\n").nth(1).unwrap_or_default())
+    .expect("a JSON body");
+  assert_eq!((&body["model"], &body["max_tokens"]), (&json!("m"), &json!(250)));
+  assert_eq!(yard.answered(), 0, "no claude is asked");
 }

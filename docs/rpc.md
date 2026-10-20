@@ -16,15 +16,20 @@ The life runs on the engine of the crate and on the ears of the World that the c
 time, the store of the record, the provider of models, and the extensions, which the life enables at its start as the
 configs of the user and of the directory say, and whose words it plays as rungs on each chain. The catalog of the crate
 knows the models, each named `provider:id`, and offers those of the claude command line, `claude-cli:opus`,
-`claude-cli:sonnet`, `claude-cli:haiku` and `claude-cli:fable`, when furb finds the program, and those of each provider
-whose credential, such as `ANTHROPIC_API_KEY`, stands in the environment. The roster of the life holds the model of the
+`claude-cli:sonnet`, `claude-cli:haiku` and `claude-cli:fable`, when furb finds the program, those of a local server
+that `FURB_LOCAL_URL` names, each named `local:` and the id that the server lists, and those of each provider whose
+credential, such as `ANTHROPIC_API_KEY`, stands in the environment. The roster of the life holds the model of the
 default actor, the models that `--roster` names, and the operator, which is the client. `--model provider:model/effort`
-names the default actor, and a prompt that names no actor goes to it. When it is not given, the default actor is the
-first model the catalog offers, `claude-cli:opus/high` when furb finds the claude command line. An actor that names no
+names the default actor, and a prompt that names no actor goes to it. When it is not given, the default actor is
+`claude-cli:opus/high` when furb finds the claude command line, then the first model of a provider of the network, and
+then the first model of the local server, which furb asks only then or when a name needs it. An actor that names no
 effort takes `high`, and an effort moves to the nearest one that its model takes. The life refuses a prompt to a model
 that its roster does not hold. An actor may name its model by the id alone, when one model alone holds it, and furb
-names it as the roster does. `FURB_CLAUDE_BIN` names the claude command line, and the `claude` on PATH is used when it
-is not set.
+names it as the roster does. A model of the local server takes its id alone only when that id holds a colon, as
+`qwen3:8b`; when the part before the colon names a provider, as `mistral:7b`, only once the server listed it, and
+`local:mistral:7b` is the sure name. A command that names a model of the local server that furb has not listed waits
+for the list, five seconds at most. `FURB_CLAUDE_BIN` names the claude command line, and the `claude` on PATH is used
+when it is not set.
 
 ## Framing
 
