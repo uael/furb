@@ -69,6 +69,16 @@ async def test_a_show_the_engine_made_is_called_back_by_an_ear_while_it_hears() 
   assert picked == [[2]]
 
 
+async def test_a_word_that_asks_the_operating_system_raises_where_it_asks_and_its_chain_goes_on() -> None:
+  """A word that asks the operating system raises there, as the sandbox refuses it, and the chain goes on, so the
+  prompt asks its model again."""
+  sand = Sand(stands=STANDS)
+  root = engine.boot((), world=sand.hears())
+  sand.script[root] = ["open('a.txt')", "close(str(raised))"]
+  said = await engine.prompt(str, "open it", on=root)
+  assert said == "open asks the operating system, and a life asks nothing of it"
+
+
 async def test_a_class_a_word_defined_is_a_type_of_this_interpreter_and_its_instances_are_objects_of_it() -> None:
   """A class a word defined crosses as a type of this interpreter, one for the class, whose call makes the instance
   in the sandbox; an instance of it crosses as an object of that type with its fields; and both go back in as

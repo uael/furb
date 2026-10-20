@@ -185,11 +185,15 @@ impl Sand {
         ReplProgress::NameLookup(asked) => {
           asked.resume(NameLookupResult::Undefined, PrintWriter::Disabled)
         }
-        // A life reaches neither: nothing in the sandbox opens a file, and what waits, waits on the host through a
-        // fact, which is the engine's way and not a future of the interpreter.
+        // A life asks nothing of the operating system, so the call raises where the word made it: an abort would
+        // end every frame of the run, the bus among them, and the life would hear nothing more.
         ReplProgress::OsCall(call) => {
-          call.abort(refusal("a life asks nothing of the operating system"), PrintWriter::Disabled)
+          let asked: &'static str = (&call.function_call).into();
+          let why = format!("{asked} asks the operating system, and a life asks nothing of it");
+          call.resume(refusal(&why), PrintWriter::Disabled)
         }
+        // A life reaches none: what waits, waits on the host through a fact, which is the engine's way and not a
+        // future of the interpreter, and the host makes no future in the sandbox.
         ReplProgress::ResolveFutures(waiting) => waiting.abort(
           refusal("a life waits by a fact and not by a future of the host"),
           PrintWriter::Disabled,
@@ -280,3 +284,7 @@ impl Host for Nobody {
     Answer::Abort(Fault::refused(format!("{} calls no host, and it called {name}", self.0)))
   }
 }
+
+#[cfg(test)]
+#[path = "sand.test.rs"]
+mod test;
