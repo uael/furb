@@ -298,7 +298,7 @@ def on_console_end(callback: Callable[[str], None]) -> None:
 ENGINE: str
 """The engine: the one file the sandbox runs."""
 SYSTEM: str
-"""The system prompt of every model: the engine, minified in layout alone, and nothing else."""
+"""The system prompt of every model: the engine, minified with its program kept as it is, and nothing else."""
 WINDOW: int
 """The window, in tokens, of a model whose roster entry does not say one."""
 OPERATOR: str

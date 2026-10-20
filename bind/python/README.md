@@ -36,8 +36,8 @@ that the host names, which a word reads as `scratch://` and a command as `$TMPDI
 files of a record again in its scratch directory, and gives a life with no record a directory that goes with it.
 `scratch(record)` gives the scratch directory of a record, which a host removes when it deletes the record.
 `answered(shape, line)` reads a line of the operator as a value of one of the `shapes()`, by the rules that every
-console of the crate reads a line by. `_monty.SYSTEM` is the system prompt of every model: the engine, minified in
-layout alone.
+console of the crate reads a line by. `_monty.SYSTEM` is the system prompt of every model: the engine, minified with
+its program kept as it is.
 
 `furb_monty.engine.pending()` names the work that an earlier life left, which waits for a wake that this life says,
 each act by its name and its kind, as the `Engine` of the door finds it: among each act that the outside started and

@@ -571,6 +571,7 @@ fn pythonic(verbs: &[Verb]) -> String {
 
 /// One logical line of the engine: how deep it stands, and its parts, each the text of one token as the engine
 /// writes it and the kind of that token. A string that holds expressions is one part, whole.
+#[derive(Clone)]
 struct Line<'a> {
   depth: usize,
   parts: Vec<(TokenKind, &'a str)>,
@@ -643,13 +644,11 @@ impl Line<'_> {
 }
 
 /// The logical lines of a program, from its tokens: no comment, no line break inside brackets, and every string that
-/// holds expressions as the one part it is in the source, so what stands between its quotes stays as it is. What the
-/// formatter adds to break a long line goes with the line break: a comma that a line break and a closing bracket
-/// follow, and the parentheses that a return or a yield opens a line break with.
+/// holds expressions as the one part it is in the source, so what stands between its quotes stays as it is. A comma
+/// that the formatter adds to break a long line goes with the line break: one that a line break and a closing
+/// bracket follow.
 fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
   let (mut lines, mut depth, mut parts) = (Vec::new(), 0, Vec::new());
-  // Each bracket that stands open, and whether it is one that the formatter added and the line goes without.
-  let mut open: Vec<bool> = Vec::new();
   let mut at = 0;
   while at < tokens.len() {
     let token = tokens[at];
@@ -668,20 +667,6 @@ fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
             .is_some_and(|kind| {
               matches!(kind, TokenKind::Rpar | TokenKind::Rsqb | TokenKind::Rbrace)
             }) => {}
-      TokenKind::Lpar | TokenKind::Lsqb | TokenKind::Lbrace => {
-        let added = token.kind() == TokenKind::Lpar
-          && broken
-          && matches!(parts.last(), Some((TokenKind::Return | TokenKind::Yield, _)));
-        open.push(added);
-        if !added {
-          parts.push((token.kind(), &source[token.range()]));
-        }
-      }
-      TokenKind::Rpar | TokenKind::Rsqb | TokenKind::Rbrace => {
-        if !open.pop().unwrap_or_default() {
-          parts.push((token.kind(), &source[token.range()]));
-        }
-      }
       TokenKind::Comment
       | TokenKind::NonLogicalNewline
       | TokenKind::Newline
@@ -709,15 +694,70 @@ fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
   lines
 }
 
-/// The engine minified in layout alone, which is the system prompt of every model. The comments go, and one tab is
-/// one level of indentation. A suite of simple statements stands on the line of its header, the simple statements
+/// The engine minified with its program kept as it is, which is the system prompt of every model. The comments go,
+/// one space is one level of indentation, and each pair of parentheses goes that the program does not need, as the
+/// formatter adds them to break a long line. A suite of simple statements stands on the line of its header, the simple statements
 /// that follow one another in a block share one line, and the outer parentheses of a case pattern go. The last
 /// statement, when it binds a name to a string of more than one line, stands as a quote of that string, which is how
 /// the doctrine stands after the engine. The build stops unless the text it makes, less that quote, is the program
 /// on disk.
 fn minified(source: &str) -> String {
   let parsed = parse_module(source).expect("the engine parses");
-  let lines = logical(source, parsed.tokens());
+  let program = ComparableModModule::from(parsed.syntax());
+  let mut lines = logical(source, parsed.tokens());
+  // Each pair of parentheses goes, one after the other, when the program without it is the same program.
+  for at in 0..lines.len() {
+    let mut open = 0;
+    while open < lines[at].parts.len() {
+      if lines[at].parts[open].0 == TokenKind::Lpar {
+        let mut depth = 0;
+        let close = open
+          + lines[at].parts[open..]
+            .iter()
+            .position(|(kind, _)| {
+              depth += match kind {
+                TokenKind::Lpar => 1,
+                TokenKind::Rpar => -1,
+                _ => 0,
+              };
+              depth == 0
+            })
+            .expect("a line closes each parenthesis that it opens");
+        let mut fewer = lines.clone();
+        fewer[at].parts.remove(close);
+        fewer[at].parts.remove(open);
+        if parse_module(&laid(&fewer).join("\n"))
+          .is_ok_and(|one| ComparableModModule::from(one.syntax()) == program)
+        {
+          lines = fewer;
+          continue;
+        }
+      }
+      open += 1;
+    }
+  }
+  let mut lines = laid(&lines);
+  let prompt = lines.join("\n");
+  let again = parse_module(&prompt).expect("the minified engine parses");
+  assert!(
+    ComparableModModule::from(again.syntax()) == program,
+    "the minified engine is the program on disk"
+  );
+  if let Some(Stmt::Assign(last)) = parsed.syntax().body.last()
+    && let [Expr::Name(name)] = &last.targets[..]
+    && let Expr::StringLiteral(text) = &*last.value
+    && text.value.to_str().contains('\n')
+  {
+    lines.pop();
+    lines.push(format!("<s:{0}>\n{1}</s:{0}>", name.id, text.value.to_str()));
+    return lines.join("\n");
+  }
+  prompt
+}
+
+/// The logical lines as the prompt writes them: each line with its indentation, a suite of simple statements on the
+/// line of its header, and the simple statements that follow one another in a block on one line.
+fn laid(lines: &[Line]) -> Vec<String> {
   // Each line as the prompt writes it, with its depth, and whether a simple statement after it may join it.
   let mut out: Vec<(String, usize, bool)> = Vec::new();
   let mut at = 0;
@@ -725,7 +765,7 @@ fn minified(source: &str) -> String {
     let line = &lines[at];
     let suite = lines[at + 1..].iter().take_while(|one| one.depth > line.depth).count();
     let body = &lines[at + 1..at + 1 + suite];
-    let indent = "\t".repeat(line.depth);
+    let indent = " ".repeat(line.depth);
     if suite > 0 && body.iter().all(|one| one.depth == line.depth + 1 && one.simple()) {
       let joined = body.iter().map(Line::text).collect::<Vec<_>>().join(";");
       out.push((format!("{indent}{}{joined}", line.text()), line.depth, false));
@@ -742,23 +782,7 @@ fn minified(source: &str) -> String {
     }
     at += 1;
   }
-  let mut lines = out.into_iter().map(|(text, ..)| text).collect::<Vec<_>>();
-  let prompt = lines.join("\n");
-  let again = parse_module(&prompt).expect("the minified engine parses");
-  assert!(
-    ComparableModModule::from(again.syntax()) == ComparableModModule::from(parsed.syntax()),
-    "the minified engine is the program on disk"
-  );
-  if let Some(Stmt::Assign(last)) = parsed.syntax().body.last()
-    && let [Expr::Name(name)] = &last.targets[..]
-    && let Expr::StringLiteral(text) = &*last.value
-    && text.value.to_str().contains('\n')
-  {
-    lines.pop();
-    lines.push(format!("<s:{0}>\n{1}</s:{0}>", name.id, text.value.to_str()));
-    return lines.join("\n");
-  }
-  prompt
+  out.into_iter().map(|(text, ..)| text).collect()
 }
 
 fn main() {

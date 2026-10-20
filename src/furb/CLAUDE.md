@@ -151,8 +151,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 
 - A model does everything with the python that the model writes.
 - The engine hosts itself.
-- The system prompt a model reads is the engine, minified in layout alone, with the doctrine as a quote at its end,
-  and nothing else.
+- The system prompt a model reads is the engine, minified with its program kept as it is, with the doctrine as a quote
+  at its end, and nothing else.
 - The engine phrases everything that a model reads, as python, and the World renders nothing.
 - Everything that the file defines is public, and what is in engine.py is the API, the same for the model and for the
   operator.
