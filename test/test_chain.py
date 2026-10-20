@@ -153,7 +153,10 @@ async def test_in_a_chain_with_a_source_the_ladder_of_the_origin_runs_again_in_i
   await settle()
   twin = await chained("twin", root)
   first, second = steps(log, one)
-  told = [fresh(root, prompted(one, "int", "count"), f"#{first} advance on {one}"), f"#{second} advance on {one}"]
+  told = [
+    fresh(root, prompted(one, "int", "count"), f"#{first} advance on {one}"),
+    f"#{first} told nothing\n\n#{second} advance on {one}",
+  ]
   words = [told[0], "a = 1", told[1], "close(a + 1)"]
   theirs = [opened(twin, "twin", root), *words]
   assert [(a[3], a[5]) for a in said(log, "run")] == [(root, word) for word in words] + [
@@ -960,7 +963,10 @@ async def test_the_chain_retells_the_rungs_of_its_origin_through_the_program_of_
   twin = await chained("twin", root)
   theirs = engine.program(root)
   first, second = steps(log, one)
-  told = [fresh(root, prompted(one, "int", "count"), f"#{first} advance on {one}"), f"#{second} advance on {one}"]
+  told = [
+    fresh(root, prompted(one, "int", "count"), f"#{first} advance on {one}"),
+    f"#{first} told nothing\n\n#{second} advance on {one}",
+  ]
   assert list(theirs.values()) == [told[0], "a = 1", told[1], "close(a + 1)"]
   retold = [a for a in said(log, "rung") if a[3] == twin]
   assert [(a[2], a[4], a[5]) for a in retold] == [(twin, word, donor) for donor, word in theirs.items()]
@@ -982,7 +988,10 @@ async def test_a_replay_makes_the_rungs_of_a_chain_again_from_its_donor() -> Non
   await settle()
   made = [a for a in said(log, "rung") if a[1] not in was]
   bind = fresh(root, prompted(act, "None", "count"), f"#{first} advance on {act}")
-  advances = [(f"#{one} advance on {act}", f"{one}_told") for one in gone]
+  advances = [
+    (f"#{before} told nothing\n\n#{one} advance on {act}", f"{one}_told")
+    for before, one in zip([first, *gone], gone, strict=False)
+  ]
   assert [(a[4], a[5]) for a in made] == [(bind, f"{first}_told"), ("a = 1", first), *advances, ("b = 20\nc = 30", "")]
   last = made[-1][1]
   kept = engine.program(root)
@@ -1036,7 +1045,7 @@ async def test_a_write_of_a_door_gives_the_words_of_that_ladder_alone() -> None:
     fresh(root, written(laid, "mine = 1")),
     "mine = 1",
     f"{prompted(act, 'None', 'count')}\n\n#{first} advance on {act}",
-    f"#{closer} advance on {act}",
+    f"#{first} told nothing\n\n#{closer} advance on {act}",
     written(made, "a = 2"),
     "a = 2",
   ]
@@ -1128,6 +1137,22 @@ async def test_before_every_reply_the_chain_tells_the_last_line_of_the_turn() ->
     (bare, "user", f"#{bare} advance on {OPERATOR}"),
   ]
   assert engine.module(root)["k"] == 2
+
+
+async def test_the_chain_tells_a_word_that_told_nothing_before_the_advance() -> None:
+  """When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing."""
+  _, log, root = born("x = read('/w/a.txt', show=HIDDEN)", "x = read('/w/a.txt')", "close(1)")
+  one = engine.prompt(int, "count", on=root)
+  assert await one == 1
+  first, second, third = steps(log, one)
+  look = said(log, "read")[1][1]
+  assert heads(engine.turns(on=root))[3:8] == [
+    f"#{first} advance on {one}",
+    f"#{first} told nothing",
+    f"#{second} advance on {one}",
+    f"#{look}",
+    f"#{third} advance on {one}",
+  ]
 
 
 async def test_the_chain_holds_the_text_of_each_paragraph_told_on_it() -> None:

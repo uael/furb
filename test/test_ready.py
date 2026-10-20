@@ -33,7 +33,7 @@ async def test_the_word_of_a_rung_enters_the_program_when_the_gate_accepts_it_or
     f"{refused}_told": wrote,
     f"{first}_told": bound,
     first: "a = 1",
-    f"{second}_told": f"#{second} advance on {act}",
+    f"{second}_told": f"#{first} told nothing\n\n#{second} advance on {act}",
     second: "close(a + 1)",
   }
   assert [q[4] for q in acts(log).values() if q[0] == "gate"] == ["a = BAD", "a = 1", "close(a + 1)"]

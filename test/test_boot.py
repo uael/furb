@@ -259,7 +259,7 @@ async def test_the_rungs_of_the_ladder_run_in_record_order() -> None:
   await settle()
   again, _ = await relived(Sand(), list(sand.record))
   bound = fresh(root, prompted("prompt1", "int", "count"), "#rung1 advance on prompt1")
-  told = ["#rung2 advance on prompt1", "#rung3 advance on prompt1"]
+  told = ["#rung1 told nothing\n\n#rung2 advance on prompt1", "#rung2 told nothing\n\n#rung3 advance on prompt1"]
   assert ran(again) == [bound, "a = 1", told[0], "b = a + 1", told[1], "close(b)"]
 
 

@@ -24,7 +24,7 @@ async def test_program_gives_the_program_of_a_chain() -> None:
     (mine, "mine = 1"),
     (f"{first}_told", f"{prompted(one, 'int', 'count')}\n\n#{first} advance on {one}"),
     (first, "hi = 'hi\\n'\n\n\na = hi"),
-    (f"{refused}_told", f"#{refused} advance on {one}"),
+    (f"{refused}_told", f"#{first} told nothing\n\n#{refused} advance on {one}"),
     (f"{last}_told", f"{findings}\n\n#{last} advance on {one}"),
     (last, "close(len(a))"),
   ]
