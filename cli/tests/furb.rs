@@ -223,7 +223,7 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
   fs::create_dir_all(skill.parent().expect("a folder")).expect("the folder of a skill");
   fs::write(&skill, "---\nname: brew\ndescription: Make tea.\n---\n").expect("a skill");
   fs::write(yard.at.join("CLAUDE.md"), "Use two spaces.\n").expect("a memory file");
-  let every = "memory: remember()\nskills: skills()\n";
+  let every = "memory: remember()\nskills: counted()\n";
   assert_eq!(printed(yard.furb(&["extensions"]), ""), every, "the official extensions are on");
   let path = printed(yard.kept(&["run", "close(skill('brew').path)"]), "");
   assert_eq!(path, format!("{:?}\n", skill.display().to_string()).replace('"', "'"));
@@ -234,7 +234,7 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
   fs::write(yard.at.join(".furb/config.json"), r#"{"extensions": {"memory": false}}"#)
     .expect("a config of the project");
-  assert_eq!(printed(yard.furb(&["extensions"]), ""), "skills: skills()\n");
+  assert_eq!(printed(yard.furb(&["extensions"]), ""), "skills: counted()\n");
   assert_eq!(printed(yard.kept(&["extensions"]), ""), every, "a life runs what its record enables");
 }
 
