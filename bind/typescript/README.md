@@ -137,7 +137,13 @@ each act, as `engine.pending()` finds it: among each act that the outside starte
 made it, each prompt, rung, command and wait that is not done and that no pause holds. `session.resume()` wakes each
 chain that holds some, and an act that a wake puts to the outside again is pending no more. The engine reads the
 pending work off the transcripts, so the session asks it again only after a pause, a wake, or a start or a done of
-an act of that work, and keeps what it gave until then. The record's
+an act of that work, and keeps what it gave until then.
+
+`engine.keyed(key, kind, args, kwargs)` makes the act of a verb once for a key of the client, across a crash of the
+host and a retry of the client, as `engine.keyed("k1", "prompt", ["int"], { message: "count", on })`. A key fact goes
+to the record before the act, and a later call with the same key on the same chain gives the act that the key made,
+in this life or in a later life on the record. When the host crashed after it kept the key and before it kept the
+act, the call makes the act. The record's
 `.session.json` companion holds the directory, the model and the effort that the host chose last, and no stream,
 since a stream lives only while its reply runs. File snapshots append to `.changes.jsonl`;
 `session.changes.read` loads a page of them. Keep both companions with the JSONL record. The session saves

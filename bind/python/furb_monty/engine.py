@@ -250,6 +250,13 @@ def pending() -> list[tuple[str, str]]:
   return held_engine().pending()
 
 
+def keyed(key: str, kind: str, *args: object, **kwargs: object) -> Act:
+  """The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client:
+  the act that the key made before, or a new act of that verb with these words, as the engine of the crate finds
+  it."""
+  return Act(held_engine().keyed(key, kind, list(eared(kind, args)), dict(kwargs)))
+
+
 def ours(making: object) -> bool:
   """Whether a callable is one of this interpreter: no name of the engine, and no callable the engine made, which go
   back in as themselves."""
