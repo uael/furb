@@ -137,6 +137,9 @@ bun run tui -- --help        # The options: --cwd, --model, --effort, --record, 
 the environment, such as `ANTHROPIC_API_KEY`, else a model of the local server that `FURB_LOCAL_URL` names. A real
 life can cost dollars. The demo costs nothing.
 
+A session offers every model that the catalog offers, with its model first: the default model when you name none.
+With `--roster`, it offers its model and the models of `--roster`, and no more.
+
 ### Run it from `pip install furb`
 
 `pip install furb` gives the command `furb`, which needs python 3.14 or later. With no command, `furb` hands the

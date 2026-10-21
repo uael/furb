@@ -222,22 +222,26 @@ fn a_level_that_a_model_does_not_take_moves_to_the_nearest_one_it_takes() {
 }
 
 #[test]
-fn a_roster_holds_the_model_of_its_actor_first_and_the_models_a_host_names() {
+fn a_roster_holds_the_model_of_its_actor_first_and_the_models_a_host_names_or_every_model_the_catalog_offers()
+ {
   let catalog = catalog(&["OPENAI_API_KEY"]);
   let names =
     |models: &[super::Model]| models.iter().map(|one| one.name.clone()).collect::<Vec<_>>();
   let (models, actor) = catalog.roster(None, None).expect("the roster of no name");
   assert_eq!(
     (names(&models), actor),
-    (vec!["openai:gpt-5".to_owned()], None),
-    "a host that names nothing stands on the first model the catalog offers"
+    (vec!["openai:gpt-5".to_owned(), "openai:gpt-4o".to_owned()], None),
+    "a host that names nothing offers every model the catalog offers, and stands on the first"
   );
   let (models, actor) =
     catalog.roster(None, Some("openai:gpt-4o/high")).expect("the roster of an actor");
   assert_eq!(
     (names(&models), actor.as_deref()),
-    (vec!["openai:gpt-4o".to_owned()], Some("openai:gpt-4o"))
+    (vec!["openai:gpt-4o".to_owned(), "openai:gpt-5".to_owned()], Some("openai:gpt-4o"))
   );
+  let (models, _) =
+    catalog.roster(Some(&[]), Some("openai:gpt-4o")).expect("a roster that names none");
+  assert_eq!(names(&models), ["openai:gpt-4o"], "a roster that names none holds the actor alone");
   let named = ["claude-opus-5".to_owned(), "openai:gpt-5".to_owned()];
   let (models, actor) =
     catalog.roster(Some(&named), Some("x/thinks/high")).expect("a named roster");
@@ -278,7 +282,13 @@ fn a_model_whose_credential_stands_nowhere_is_refused_when_it_is_asked() {
     record_telemetry_content: false,
   };
   let told: Told = Arc::new(|_, _| {});
-  let asked = Asked { actor: "google:gemini-flash".into(), chain: "chain1".into(), request, told };
+  let asked = Asked {
+    actor: "google:gemini-flash".into(),
+    chain: "chain1".into(),
+    request,
+    told,
+    thought: None,
+  };
   let Err(no) = reactor().block_on((model.answers)(asked)) else {
     panic!("a model with no credential answers nothing")
   };
@@ -383,24 +393,26 @@ fn qwen() -> (String, std::sync::mpsc::Receiver<String>) {
 fn the_catalog_asks_the_local_server_only_when_a_name_needs_it_or_a_host_lists_what_it_offers() {
   let (url, told) = qwen();
   let catalog = catalog(&[&url, "OPENAI_API_KEY"]);
-  let (models, actor) = catalog.roster(None, None).expect("the default");
-  assert_eq!((names_of(&models), actor), (vec!["openai:gpt-5".to_owned()], None));
   let named = ["openai:gpt-4o".to_owned()];
   catalog.roster(Some(&named), Some("openai:gpt-5")).expect("a roster of the network");
-  catalog.roster(None, Some("openai:gpt-5/high")).expect("an actor of the network at an effort");
+  catalog
+    .roster(Some(&[]), Some("openai:gpt-5/high"))
+    .expect("an actor of the network at an effort");
   assert!(catalog.find("openai:gpt-6").is_none() && catalog.find("gpt-6").is_none());
   assert_eq!(
     told.try_iter().count(),
     0,
     "a roster that names no model of the local server asks it nothing"
   );
-  let offered: Vec<_> = catalog.offered().iter().map(|one| one.name.clone()).collect();
+  let (models, actor) = catalog.roster(None, None).expect("the default");
   assert_eq!(
-    offered,
-    ["openai:gpt-5", "openai:gpt-4o", "local:qwen"],
-    "the local server comes after the network, as for the default actor"
+    (names_of(&models), actor),
+    (vec!["openai:gpt-5".to_owned(), "openai:gpt-4o".to_owned(), "local:qwen".to_owned()], None),
+    "a roster that the host does not name lists what the catalog offers, the local server after the network"
   );
   assert_eq!(told.try_iter().count(), 1);
+  let offered: Vec<_> = catalog.offered().iter().map(|one| one.name.clone()).collect();
+  assert_eq!(offered, names_of(&models));
   assert!(
     catalog.find("qwen").is_none(),
     "an id alone with no colon finds no model of the local server"
@@ -427,8 +439,34 @@ fn the_default_actor_is_a_model_of_the_claude_command_line_then_of_the_network_t
   );
   let claude = catalog(&[&url]).claude(Some(PathBuf::from("/bin/true")), None);
   let (models, _) = claude.roster(None, None).expect("the default");
-  assert_eq!(names_of(&models), ["claude-cli:opus"]);
+  assert_eq!(names_of(&models)[0], "claude-cli:opus");
   assert_eq!(claude.find("local:qwen").map(|one| one.name.clone()).as_deref(), Some("local:qwen"));
+}
+
+#[test]
+fn a_roster_that_the_host_does_not_name_offers_every_model_of_the_claude_command_line_that_it_finds()
+ {
+  let claude = catalog(&["OPENAI_API_KEY"]).claude(Some(PathBuf::from("/bin/true")), None);
+  let (models, actor) = claude.roster(None, None).expect("the default");
+  let all = [
+    "claude-cli:opus",
+    "claude-cli:sonnet",
+    "claude-cli:haiku",
+    "claude-cli:fable",
+    "openai:gpt-5",
+    "openai:gpt-4o",
+  ];
+  assert_eq!((names_of(&models), actor), (all.map(str::to_owned).to_vec(), None));
+  let (models, actor) = claude.roster(None, Some("sonnet/medium")).expect("an actor of sonnet");
+  assert_eq!(names_of(&models)[..2], ["claude-cli:sonnet", "claude-cli:opus"]);
+  assert_eq!((models.len(), actor.as_deref()), (all.len(), Some("claude-cli:sonnet/medium")));
+  let named = ["haiku".to_owned()];
+  let (models, _) = claude.roster(Some(&named), Some("sonnet")).expect("a named roster");
+  assert_eq!(
+    names_of(&models),
+    ["claude-cli:sonnet", "claude-cli:haiku"],
+    "a named roster keeps its meaning"
+  );
 }
 
 #[test]

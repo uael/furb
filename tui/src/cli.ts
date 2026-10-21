@@ -35,9 +35,10 @@ prompt that you owe. Space pauses or wakes the selection, x cancels it, and ? li
 --demo opens a scripted life of a conductor and four workers, which asks no model.
 The default model is the one that the catalog offers first: opus, through your Claude CLI subscription, when this
 machine holds the claude command line, then a model of a provider of the network, then a model of the local server.
-A session offers it and the models of --roster. /model lists them, and every model of a provider whose credentials
-stand in the environment, such as ANTHROPIC_API_KEY, and of the local server that FURB_LOCAL_URL names, each named as
-provider:model. A model of that list joins the session when you choose it.`);
+A session offers every model of the claude command line, of a provider whose credentials stand in the environment,
+such as ANTHROPIC_API_KEY, and of the local server that FURB_LOCAL_URL names, each named as provider:model, and
+/model lists them. With --roster, a session offers its model and the models of --roster, and a model of the list
+of /model joins the session when you choose it.`);
   process.exit(0);
 }
 if (values.effort && !efforts.some((effort) => effort === values.effort)) throw new Error("Invalid effort.");
