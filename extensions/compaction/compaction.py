@@ -1,4 +1,4 @@
-from furb.engine import WINDOW, Act, act, controlled, get, offered, peek, question, scope, standing, told, transcript
+from furb.engine import Act, act, controlled, filled, peek, question, scope, told, transcript
 
 SHARE = 0.6
 
@@ -9,18 +9,11 @@ def compaction(on: str = "") -> Act:
     here = scope(id)
     while True:
       match (yield):
-        case ("done", about, _, (_, _, (int() as tokens, *_), _)) if (
-          question(("reply", about)) and scope(about) == here
-        ):
-          roster = standing()[0]
-          assert isinstance(roster, list)
-          fill = tokens / (offered(roster, str(get(about)[4])) or WINDOW)
-          if fill > SHARE:
+        case ("done", about, _, (_, _, (int(), *_), _)) if question(("reply", about)) and scope(about) == here:
+          if (fill := filled(about)) > SHARE:
             old = [x[1] for x in transcript(here) if x[0] == "prompt" and x[3] == here and peek(x[1], ...) is not ...]
             kept = ", ".join([*map(repr, old), "inside=False"])
-            yield told(
-              id, "filled", share=round(fill, 2), word=f"chain('compacted', source={here!r}, filter=take({kept}))"
-            )
+            yield told(id, "filled", share=fill, word=f"chain('compacted', source={here!r}, filter=take({kept}))")
             while True:
               yield
 

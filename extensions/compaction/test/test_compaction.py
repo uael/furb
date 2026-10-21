@@ -39,11 +39,11 @@ async def test_the_fill_of_a_chain_watched(tmp_path: Path) -> None:
   assert engine.peek(watcher, "watching") == "watching"
 
 
-async def test_the_share_is_the_tokens_that_the_answer_read_over_the_window_of_the_actor_of_its_reply(
-  tmp_path: Path,
-) -> None:
-  """The share is the tokens that the answer read over the window of the actor of its reply, in the standing where the answer lands."""
-  _, root, watcher = await watching(tmp_path, (150000, 0, 0, 0, 0.0), to="n/low")
+async def test_the_share_is_what_filled_of_the_engine_gives_of_the_reply(tmp_path: Path) -> None:
+  """The share is what filled of the engine gives of the reply, so compaction tells the share that the advance and the ledger bind, to two places."""
+  _, root, watcher = await watching(tmp_path, (150001, 0, 0, 0, 0.0), to="n/low")
+  (reply,) = [a[1] for a in engine.transcript(root) if engine.question(a) and a[0] == "reply"]
+  assert engine.filled(reply) == 0.75
   assert of(engine.turns(on=root), "compaction")[0].split("\n")[1] == f"{watcher}_share = 0.75"
 
 

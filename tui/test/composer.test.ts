@@ -494,10 +494,10 @@ test("the usage counts each token once, and the context share shows from the fir
       dollars: expect.closeTo(0.0024 * answers, 6),
     });
     expect(session.activity.some((act) => act.kind === "grant")).toBe(false);
-    expect(session.filled).toBe(3240 / 1_000_000);
+    expect(session.filled).toBe(0);
     expect(session.context).toBe(3240);
     const shown = await frame();
-    expect(shown).toContain("0.3%");
+    expect(shown).toContain("0%");
     expect(shown).toContain("Cache read");
     expect(shown).not.toContain("Cached");
     expect(shown).toContain("━");

@@ -15,7 +15,6 @@ import {
   ROOT,
   saveFile,
   shapes,
-  WINDOW,
   WORK,
 } from "@furb/engine";
 import { createTwoFilesPatch } from "diff";
@@ -139,6 +138,9 @@ export class Session extends EventEmitter {
   turns: Turn[] = [];
   /** The usage of each answer of the chain itself, which the turns of a chain with a source do not tell apart. */
   answers: Usage[] = [];
+  /** The share of the window that the last answer of the chain filled, as filled of the engine gives it, which the
+   * advance and the ledger of a grant bind too. Nothing before the first answer. */
+  filled?: number;
   changes: ShownChange[] = [];
   changePage = 0;
   program: Record<string, string> = {};
@@ -443,21 +445,6 @@ export class Session extends EventEmitter {
   get context(): number | undefined {
     return this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2]?.[0];
   }
-  /** The share of the window that the last answer of the chain filled, as filled of the engine reckons it, less its
-   * rounding: the whole prompt of that answer over the window of the model that the last rung of a prompt asked, or
-   * the window of the engine for a model that the roster does not name. Nothing before the first answer. */
-  get filled(): number | undefined {
-    const usage = this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2];
-    if (!usage) return undefined;
-    // A rung of a prompt writes the actor it asks into its actor word, and a rung of the operator leaves it empty.
-    const asked = this.activity.findLast(
-      (act) => act.kind === "rung" && act.words[2] && act.words[2] !== "operator",
-    );
-    const names = this.roster.map(([name]) => name);
-    const { model } = actorParts(String(asked?.words[2] || this.actor), names);
-    const window = Number(this.roster.find(([name]) => name === model)?.[2]) || WINDOW;
-    return usage[0] / window;
-  }
   get label(): string {
     return this.labelOf(this.selected);
   }
@@ -515,6 +502,7 @@ export class Session extends EventEmitter {
       this.editing = undefined;
       this.turns = [];
       this.answers = [];
+      this.filled = undefined;
       this.program = {};
     }
     this.selected = id;
