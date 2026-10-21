@@ -612,6 +612,7 @@ class Text:
   """A text: its path, what stands at it, of which its lines are the lines, and the text it came from.
   The lines of a text derive from its content.
   Every edit of it gives another text, which came from this one.
+  A method of a text that has the name of a method of str gives what that method of str gives, or is refused.
   """
 
   path: str
@@ -638,10 +639,6 @@ class Text:
     """insert(line, text) gives a new text with the text put at that line."""
   def delete(self, lo: int, hi: int) -> Text:
     """delete(lo, hi) gives a new text without the lines lo through hi."""
-  def find(self, pattern: str) -> list[int]:
-    """find(pattern) gives the numbers of the lines that the pattern matches.
-    The numbers of the lines the pattern matches, which is what grep picks of them.
-    """
 
 @dataclass
 class Exit:

@@ -454,9 +454,6 @@ class Text:
   def delete(self, lo: int, hi: int) -> Text:
     return self.edit(lo, hi, "")
 
-  def find(self, pattern: str) -> list[int]:
-    return grep(pattern)(self.lines)
-
 
 @dataclass
 class Exit:
@@ -855,7 +852,8 @@ A word is a program
 
 How to work
 - Read before you write. To see a file, read it, with a show for a part of it: read(path, grep(pattern)) or
-  read(path, span(lo, hi)). A read shows lines without their numbers: text.find(pattern) gives the number of a line.
+  read(path, span(lo, hi)). A read shows lines without their numbers: grep(pattern)(text.lines) gives the numbers
+  of the lines that the pattern matches.
 - Change a file through the Text that read gave: replace, edit, insert, append or delete, then write. An edit of
   what the text does not hold raises Refused. A write tells the lines that landed otherwise than you asked.
 - Keep notes and scratch files in scratch://, as write(Text("scratch://plan.md", plan)). Every chain of the record
