@@ -238,7 +238,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def takes():
-      return told(id, "standing", roster=last[0], cwd=last[1], actor=module().get("actor"))
+      return told(id, "standing", roster=[x[:3] for x in last[0]], cwd=last[1], actor=module().get("actor"))
 
     def replay(of="", words=""):
       fresh = not of
@@ -354,7 +354,10 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
         else:
           if ran and not heard:
             yield told(ran, "told nothing")
-          yield told(asking, f"advance on {maker}", share=filled(reply) or None)
+          taught = offered(last[0], to, 3)
+          if taught in [offered(last[0], x[4], 3) for x in transcript() if x[0] == "reply"]:
+            taught = ""
+          yield told(asking, f"advance on {maker}", share=filled(reply) or None, doctrine=taught)
           with site.set(asking):
             reply = act("reply", id, controlled(idle), to)
           unseen = ""
@@ -582,8 +585,8 @@ def unquoted(word):
   return word
 
 
-def offered(roster, to):
-  return next((w for name, efforts, w in roster if to in (name, *[name + "/" + x for x in efforts])), None)
+def offered(roster, to, at=2):
+  return next(((*x, "")[at] for x in roster if to in (x[0], *[x[0] + "/" + e for e in x[1]])), None)
 
 
 def covers(a, id):

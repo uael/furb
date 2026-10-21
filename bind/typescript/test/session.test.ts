@@ -318,6 +318,49 @@ test("unfinished model work and waits reopen pending until the host resumes them
   }
 });
 
+test("work that ends with its life again and again parks until the host retries it", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-parked-"));
+  const record = join(cwd, "life.jsonl");
+  const never = { ...modeled, answer: () => new Promise(() => {}) };
+  const first = new Session({ cwd, record, ...never });
+  const engine = first.open();
+  const prompt = engine.prompt("str", { message: "parked", on: engine.root }).id;
+  await tick();
+  await first.dispose();
+  for (let life = 1; life < 5; life++) {
+    const later = new Session({ record, ...never });
+    later.open();
+    await later.resume();
+    await tick();
+    await later.dispose();
+  }
+  let calls = 0;
+  const last = new Session({
+    record,
+    ...modeled,
+    answer: async () => {
+      calls++;
+      return ["assistant", 'close("retried")', null, null];
+    },
+  });
+  const resumed = last.open();
+  try {
+    expect([...last.parked.values()]).toEqual(["reply"]);
+    const [reply = ""] = last.parked.keys();
+    expect(last.pending.size).toBe(0);
+    resumed.wake(resumed.root);
+    await tick();
+    expect(calls).toBe(0);
+    last.retry(reply);
+    expect(await resumed.result<string>(prompt)).toBe("retried");
+    expect(calls).toBe(1);
+    expect(last.parked.size).toBe(0);
+  } finally {
+    await last.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
 test("the session asks the engine for the pending work again only after a fact that can change it", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-pending-"));
   const record = join(cwd, "life.jsonl");
@@ -665,7 +708,9 @@ test("a session opens a record in a directory that does not stand yet, and keeps
     const { engine } = session;
     engine.write({ path: "note.txt", content: "one\n" }, { on: engine.root });
     await until(session, () => session.changes.length === 1);
-    expect(session.changes.read()).toEqual([{ path: join(cwd, "note.txt"), before: "", after: "one\n" }]);
+    expect(session.changes.read()).toEqual([
+      { path: join(cwd, "note.txt"), before: "", after: "one\n", act: expect.stringMatching(/^write\d+$/) },
+    ]);
     expect((await stat(`${record}.changes.jsonl`)).isFile()).toBe(true);
   } finally {
     await session.dispose();
@@ -725,4 +770,21 @@ test("the activity starts the streams of a command again at each started of it, 
     stdout: { content: "second\n" },
     stderr: { content: "bad\n" },
   });
+});
+
+test("the activity places each act in time by the count of facts, and keeps the answers of each chain", () => {
+  const activity = new Activity();
+  const hear = (fact: Fact) => {
+    const heard = activity.hear(fact);
+    while (!heard.next().done);
+  };
+  hear(["bash", "bash1", "operator", ROOT, "ls", "", 600]);
+  hear(["done", "bash1", "world", { is: "Exit", code: 0 }]);
+  hear(["reply", "reply1", "rung1", ROOT, "claude-cli:opus/high"]);
+  hear(["done", "reply1", "world", ["assistant", "close(1)", [100, 10, 80, 0, 0.5], null]]);
+  expect(activity.acts.get("bash1")).toMatchObject({ kind: "bash", began: 1, ended: 2, done: true });
+  expect(activity.answers.get(ROOT)).toEqual([
+    { at: 4, actor: "claude-cli:opus/high", usage: [100, 10, 80, 0, 0.5] },
+  ]);
+  expect(activity.cost).toBe(0.5);
 });

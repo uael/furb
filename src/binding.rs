@@ -347,7 +347,8 @@ pub fn time() -> NativeEar {
 }
 
 /// The record at a path, read under its lease, and the ear of the store, which keeps on it what the journal says to
-/// keep.
+/// keep: a database of SQLite when the name of the path ends in `.sqlite`, `.sqlite3` or `.db`, and else a file of
+/// lines.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi(ts_return_type = "[unknown[], NativeEar]"))]
 pub fn store(path: String) -> Result<(Record, NativeEar), Fault> {

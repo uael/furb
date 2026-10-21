@@ -250,6 +250,19 @@ def pending() -> list[tuple[str, str]]:
   return held_engine().pending()
 
 
+def parked() -> list[tuple[str, str]]:
+  """The work that a crash loop parked, each act by its name and its kind: a run, a command or a reply that the
+  record shows started in five lives and not done. A wake puts no parked act to the outside, and it is pending no
+  more until a retry."""
+  return held_engine().parked()
+
+
+def retry(act: str) -> None:
+  """A parked act, run again: it is parked no more in this life, and a wake of it puts it to the outside. An act that
+  is not parked is refused."""
+  held_engine().retry(act)
+
+
 def keyed(key: str, kind: str, *args: object, **kwargs: object) -> Act:
   """The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client:
   the act that the key made before, or a new act of that verb with these words, as the engine of the crate finds

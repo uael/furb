@@ -1,14 +1,17 @@
 """read, the text at a path."""
 
-import shlex
+import sys
 from pathlib import Path
 
 import pytest
 
-from conftest import NUMS, Dead, born, life, machine, of, paragraphs, said, settle
+from conftest import NUMS, Dead, born, life, machine, of, paragraphs, said, scratched, settle
 from furb import engine
 from furb.engine import HEAD, HIDDEN, LARGEST, OPERATOR, Refused, Text, span
 from furb_monty import _monty
+
+if sys.platform == "win32":
+  import _winapi
 
 BIG = "".join(f"line {i}\n" for i in range(1, 2101))
 """A text of two thousand and one hundred lines, which is longer than HEAD."""
@@ -154,6 +157,25 @@ async def test_a_read_from_inside_an_act_that_would_tell_more_than_largest_bytes
   assert [one.split("\n")[0] for one in of(engine.turns(on=root), "read")] == ["#read2"]
 
 
+async def test_the_world_refuses_a_read_of_a_path_whose_first_part_is_the_name_of_an_act(tmp_path: Path) -> None:
+  """The World refuses a read of a path whose first part is the name of an act, since that path is a door that no ear of the engine served and never a file, and the refusal names the chain of that act."""
+  live, root = machine(tmp_path)
+  away = engine.chain("away")
+  asked = engine.wait(60.0, on=away)
+  (tmp_path / asked).write_text("a file\n")
+  refused = []
+  for path in (asked, f"{asked}/x", away):
+    with pytest.raises(Refused) as one:
+      engine.read(path, on=root)
+    refused.append(str(one.value))
+  live.end()
+  assert refused == [
+    f"{asked} is no file, since {asked} is an act of {away}: read it on {away}.",
+    f"{asked}/x is no file, since {asked} is an act of {away}: read it on {away}.",
+    f"{away} is no file, since {away} is an act of {away}: read it on {away}.",
+  ]
+
+
 async def test_the_world_serves_the_scratch_directory_as_scratch(tmp_path: Path) -> None:
   """The World serves the scratch directory as scratch://: a read of scratch://plan.md gives that file, and a read of scratch:// or of a folder of it gives the name of each entry of that folder, one on each line, each folder with / at its end, as ls does."""
   live, root = machine(tmp_path)
@@ -188,11 +210,20 @@ async def test_each_text_and_each_refusal_of_scratch_names_its_path_under_scratc
   assert Path(place, "plan.md").read_text() == "plan\n"
 
 
+def linked(target: Path, at: Path) -> None:
+  """A link at a path to a folder: a junction on Windows, which a user makes with no privilege, and else a link of the
+  system."""
+  if sys.platform == "win32":
+    _winapi.CreateJunction(str(target), str(at))
+  else:
+    at.symlink_to(target)
+
+
 async def test_a_path_of_scratch_that_leaves_the_scratch_directory_is_refused(tmp_path: Path) -> None:
   """A path of scratch:// that leaves the scratch directory, by .. or by a link, is refused, and so is a path that starts with scratch: and not scratch://, with a refusal that names scratch://."""
   (tmp_path / "away.md").write_text("away\n")
   live, root = machine(tmp_path)
-  await engine.bash(f'ln -s {shlex.quote(str(tmp_path))} "$TMPDIR/away"', on=root)
+  linked(tmp_path, await scratched(root) / "away")
   refused = []
   for path in ("scratch://../out.md", "scratch://away/away.md", "scratch:/typo.md", "scratch:plan.md"):
     with pytest.raises(Refused) as one:
@@ -208,3 +239,15 @@ async def test_a_path_of_scratch_that_leaves_the_scratch_directory_is_refused(tm
     "scratch:plan.md is no path of scratch://, which starts with two slashes.",
   ]
   assert not (tmp_path / "new.md").exists()
+
+
+async def test_the_world_gives_a_file_whose_every_line_ends_with_crlf_with_lf_at_the_end_of_each_line(
+  tmp_path: Path,
+) -> None:
+  """The World gives a file whose every line ends with CRLF with LF at the end of each line, so a text holds the same lines on every machine, and a file of other line ends as it is."""
+  (tmp_path / "crlf.txt").write_bytes(b"one\r\ntwo\r\n")
+  (tmp_path / "mixed.txt").write_bytes(b"one\r\ntwo\n")
+  live, root = machine(tmp_path)
+  got = [engine.read(str(tmp_path / name), on=root).content for name in ("crlf.txt", "mixed.txt")]
+  live.end()
+  assert got == ["one\ntwo\n", "one\r\ntwo\n"]

@@ -1,5 +1,6 @@
 """Memory, the question of the memory files that apply to a path."""
 
+import sys
 from pathlib import Path
 
 from conftest import settle
@@ -63,7 +64,7 @@ async def test_the_world_leaves_out_a_memory_file_whose_content_the_chain_holds(
   two = engine.chain("two", root)
   await settle()
   assert await paths(two, tmp_path, "other/c.txt") == []
-  top.write_text("t2\n", encoding="utf-8")
+  top.write_text("t2\n", encoding="utf-8", newline="")
   assert await paths(root, tmp_path, ".") == [str(top)]
   # A question from outside an act tells nothing, so the chain holds nothing of it.
   three = engine.chain("three")
@@ -72,7 +73,7 @@ async def test_the_world_leaves_out_a_memory_file_whose_content_the_chain_holds(
   engine.read("sub/CLAUDE.md", on=three)
   assert await paths(three, tmp_path, "sub/c.txt") == [str(top), str(sub)]
   # A read in the step whose done the watcher hears first is held all the same.
-  (sub.parent / "c.txt").write_text("c\n", encoding="utf-8")
+  (sub.parent / "c.txt").write_text("c\n", encoding="utf-8", newline="")
   four = engine.chain("four")
   await settle()
   await engine.rung("remember()", on=four)
@@ -82,12 +83,13 @@ async def test_the_world_leaves_out_a_memory_file_whose_content_the_chain_holds(
   twin = noted(tmp_path / "work" / "twin", "t2\n")
   assert await paths(root, tmp_path, "twin/c.txt") == []
   assert await paths(four, tmp_path, "twin/c.txt") == []
-  assert twin.read_text(encoding="utf-8") == "t2\n"
+  assert twin.read_text(encoding="utf-8", newline="") == "t2\n"
 
 
 async def test_a_path_of_a_scheme_adds_no_folder_of_its_own(tmp_path: Path) -> None:
   """A path of a scheme adds no folder of its own."""
   top = noted(tmp_path / "work", "t\n")
-  noted(tmp_path / "work" / "skills:", "s\n")
+  if sys.platform != "win32":
+    noted(tmp_path / "work" / "skills:", "s\n")
   _, root = extended("memory", tmp_path, _monty.memory)
   assert await paths(root, tmp_path, "skills://brew") == [str(top)]

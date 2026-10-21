@@ -22,6 +22,7 @@ from conftest import (
   prompted,
   ran,
   said,
+  scratched,
   settle,
   sown,
   written,
@@ -218,7 +219,8 @@ async def test_the_opening_of_a_life_gives_the_world_the_scratch_directory_of_it
     engine.read("scratch://plan.md", on=root)
   live.end()
   live, root = machine(tmp_path)
-  own = Path((await engine.bash('echo own > "$TMPDIR/own.txt" && echo "$TMPDIR"', on=root)).stdout.content.strip())
+  await engine.bash('echo own > "$TMPDIR/own.txt"', on=root)
+  own = await scratched(root)
   held = (own / "own.txt").read_text()
   live.end()
   assert (shared, held) == ("one\n", "own\n")

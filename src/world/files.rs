@@ -17,7 +17,10 @@ use crate::{
 /// and a write with the text as it stands after, but a write of a door of a command, which the ear of the commands
 /// answers, each resolved against the working directory of the chain, or with
 /// the refusal. The path of a read or a write that is `~` or starts with `~/` resolves against the home of the user,
-/// and one of `scratch://` against the scratch directory of the life, which no chain stands in.
+/// and one of `scratch://` against the scratch directory of the life, which no chain stands in. A file whose every
+/// line ends with CRLF reads with LF, and a write to it writes CRLF. A path whose first part is the name of an act
+/// of the life is a door that no ear of the engine served, and never a file, so the ear refuses it with the chain of
+/// that act.
 pub fn files(scratch: Scratch) -> Box<dyn Ear> {
   ear(move |mut co| async move {
     loop {
@@ -80,6 +83,15 @@ async fn served(co: &mut Co, a: &Fact, scratch: &Scratch) -> Result<Text, Fault>
   if path.contains("://") {
     return Err(Fault::refused(format!("No file at {path}.")));
   }
+  let head = path.split('/').next().unwrap_or_default();
+  if co.call("get", vec![Object::string(head)], vec![]).await?.as_ref().type_name() != "NoneType" {
+    let chain = co.call("scope", vec![Object::string(head)], vec![]).await?;
+    let chain = chain.as_ref().as_str().unwrap_or_default().to_owned();
+    return Err(Fault::refused(format!(
+      "{path} is no file, since {head} is an act of {chain}: {} it on {chain}.",
+      a.kind()
+    )));
+  }
   let at = match homed(&path, std::env::home_dir()) {
     Some(at) => at?,
     None => resolved(&here(co, a.on()).await?, &path),
@@ -88,9 +100,25 @@ async fn served(co: &mut Co, a: &Fact, scratch: &Scratch) -> Result<Text, Fault>
     if let Some(parent) = at.parent() {
       fs::create_dir_all(parent).map_err(|no| failed(&no, at.display()))?;
     }
-    fs::write(&at, content).map_err(|no| failed(&no, at.display()))?;
+    fs::write(&at, ended(&at, content)).map_err(|no| failed(&no, at.display()))?;
   }
   read(&at)
+}
+
+/// Whether bytes end each of their lines with CRLF: they hold a line break, and a CR comes before each one.
+fn crlf(bytes: &[u8]) -> bool {
+  let mut breaks = memchr::memchr_iter(b'\n', bytes).peekable();
+  breaks.peek().is_some() && breaks.all(|at| at > 0 && bytes[at - 1] == b'\r')
+}
+
+/// The content of a write as the file at a path takes it: with CRLF at the end of each line when every line of the
+/// file there ends with CRLF, so the file keeps its line ends, and else as it is given.
+pub(super) fn ended(at: &Path, content: String) -> String {
+  if fs::read(at).is_ok_and(|held| crlf(&held)) {
+    content.replace("\r\n", "\n").replace('\n', "\r\n")
+  } else {
+    content
+  }
 }
 
 /// The text at a path: a file of utf-8 of any size, since the engine bounds what a read tells.
@@ -98,7 +126,9 @@ pub(crate) fn read(at: &Path) -> Result<Text, Fault> {
   text(at, at.display().to_string())
 }
 
-/// The text at a path under a name, which the text and each refusal of it give.
+/// The text at a path under a name, which the text and each refusal of it give. A file whose every line ends with
+/// CRLF gives its lines with LF, so a text holds the same lines on every machine, and a write gives them their CRLF
+/// back.
 pub(super) fn text(at: &Path, name: String) -> Result<Text, Fault> {
   let info = fs::metadata(at).map_err(|no| failed(&no, &name))?;
   if !info.is_file() {
@@ -107,6 +137,7 @@ pub(super) fn text(at: &Path, name: String) -> Result<Text, Fault> {
   let bytes = fs::read(at).map_err(|no| failed(&no, &name))?;
   let content = String::from_utf8(bytes)
     .map_err(|_| Fault::refused(format!("Read needs a text file in utf-8: {name}")))?;
+  let content = if crlf(content.as_bytes()) { content.replace("\r\n", "\n") } else { content };
   Ok(Text::new(name, content))
 }
 

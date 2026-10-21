@@ -49,6 +49,10 @@ export declare class Engine {
    * kind, as the engine of the crate finds it.
    */
   pending(): Array<[string, string]>
+  /** The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it. */
+  parked(): Array<[string, string]>
+  /** A parked act, run again, as the engine of the crate runs it. */
+  retry(id: string): void
   /**
    * The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client:
    * the act that the key made before, or a new act, as the engine of the crate finds it.
@@ -421,7 +425,8 @@ export declare function skills(config: string): NativeEar
 
 /**
  * The record at a path, read under its lease, and the ear of the store, which keeps on it what the journal says to
- * keep.
+ * keep: a database of SQLite when the name of the path ends in `.sqlite`, `.sqlite3` or `.db`, and else a file of
+ * lines.
  */
 export declare function store(path: string): [unknown[], NativeEar]
 

@@ -168,6 +168,12 @@ class Engine:
     """The work that an earlier life left, which waits for a wake that this life says, each act by its name and its
     kind, as the engine of the crate finds it."""
 
+  def parked(self) -> list[tuple[str, str]]:
+    """The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it."""
+
+  def retry(self, act: str) -> None:
+    """A parked act, run again, as the engine of the crate runs it."""
+
   def keyed(
     self, key: str, kind: str, args: Iterable[object] | None = None, kwargs: dict[str, object] | None = None
   ) -> str:
@@ -208,7 +214,8 @@ def time() -> NativeEar:
 
 def store(path: str) -> tuple[list[list[list[object]]], NativeEar]:
   """The record at a path, read under its lease, and the ear of the store, which keeps on it what the journal says
-  to keep."""
+  to keep: a database of SQLite when the name of the path ends in `.sqlite`, `.sqlite3` or `.db`, and else a file
+  of lines."""
 
 def kept(path: str) -> list[list[list[object]]]:
   """What the store kept at a path, read with no lease and changed in nothing."""
