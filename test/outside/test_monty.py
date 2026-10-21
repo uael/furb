@@ -314,7 +314,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
   record, ears = _monty.opened(directory=str(tmp_path), record=path, config=config)
   assert (record, [name for name, _ in ears]) == (
     [],
-    ["provider", "extensions", "memory", "skills", "files", "bash", "time", "store"],
+    ["provider", "extensions", "memory", "skills", "web", "files", "bash", "time", "store"],
   )
   root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
   await settle()
@@ -323,6 +323,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
     "skills",
     "compaction",
     "ouroboros",
+    "web",
   ]
   assert {a[0] for a in engine.transcript(on=root) if a[2] == "memory"} == {"done"}, "the memory ear answered"
   for _, one in ears:
@@ -331,7 +332,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
   record, ears = _monty.opened(directory=str(tmp_path), record=fresh, config=config, keeps=False, extensions=False)
   assert (record, [name for name, _ in ears]) == (
     [],
-    ["provider", "extensions", "memory", "skills", "files", "bash", "time"],
+    ["provider", "extensions", "memory", "skills", "web", "files", "bash", "time"],
   )
   root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
   await settle()

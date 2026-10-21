@@ -15,6 +15,7 @@
 
 pub mod memory;
 pub mod skills;
+pub mod web;
 
 use std::{
   fs,
@@ -38,7 +39,7 @@ pub const ENABLE: &str = "enable";
 const JOURNAL: &str = "journal";
 
 /// The official extensions, each as its manifest and the file of its word, in the order a life runs them.
-const OFFICIAL: [(&str, &str); 4] = [
+const OFFICIAL: [(&str, &str); 5] = [
   (include_str!("../extensions/memory/furb.json"), include_str!("../extensions/memory/memory.py")),
   (include_str!("../extensions/skills/furb.json"), include_str!("../extensions/skills/skills.py")),
   (
@@ -49,6 +50,7 @@ const OFFICIAL: [(&str, &str); 4] = [
     include_str!("../extensions/ouroboros/furb.json"),
     include_str!("../extensions/ouroboros/ouroboros.py"),
   ),
+  (include_str!("../extensions/web/furb.json"), include_str!("../extensions/web/web.py")),
 ];
 
 /// Whether a line imports furb or a module of it, as `from furb import`, `from furb.engine import` or `import
