@@ -736,6 +736,35 @@ fn the_state_names_the_work_that_an_earlier_life_left_pending() {
 }
 
 #[test]
+fn the_state_names_the_work_that_a_crash_loop_parked_and_a_retry_runs_it_again() {
+  let yard = Yard::new("rpc-parked");
+  let started =
+    |one: &Value| one["type"] == "fact" && one["fact"][0] == "started" && one["fact"][1] == "bash1";
+  let mut client = Client::new(&yard);
+  client.data("1", json!({"type": "rung", "word": "bash('sleep 30')"}));
+  client.until(started);
+  assert!(client.ended());
+  // Each life that the client wakes as it opens starts the command again, and ends while it runs.
+  for _ in 1..5 {
+    let mut later = Client::new(&yard);
+    let state = later.data("1", json!({"type": "state"}));
+    assert_eq!((&state["pending"], &state["parked"]), (&json!([["bash1", "bash"]]), &json!([])));
+    later.data("2", json!({"type": "wake", "act": "chain1"}));
+    later.until(started);
+    assert!(later.ended());
+  }
+  let mut parked = Client::new(&yard);
+  let state = parked.data("1", json!({"type": "state"}));
+  assert_eq!((&state["pending"], &state["parked"]), (&json!([]), &json!([["bash1", "bash"]])));
+  parked.data("2", json!({"type": "wake", "act": "chain1"}));
+  parked.data("3", json!({"type": "retry", "act": "bash1"}));
+  parked.until(started);
+  let state = parked.data("4", json!({"type": "state"}));
+  assert_eq!(state["parked"], json!([]), "a retry runs the act again");
+  assert!(parked.ended());
+}
+
+#[test]
 fn furb_hands_the_terminal_to_the_tui_with_the_words_it_takes() {
   let yard = Yard::new("tui");
   let tui = yard.at.join("tui");

@@ -68,10 +68,11 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
 | `cancel` | `act` | none |
 | `pause` | `act` | none |
 | `wake` | `act` | none |
+| `retry` | `act` | none |
 | `turns` | `on` | `{"turns": [...]}` |
 | `transcript` | `on` | `{"facts": [...]}` |
 | `peek` | `act` | `{"done": false}`, or `{"done": true, "value": ...}`, or `{"done": true, "raised": ...}` |
-| `state` | none | `{"root", "record", "standing", "extensions", "paused", "prompts", "acts", "pending"}` |
+| `state` | none | `{"root", "record", "standing", "extensions", "paused", "prompts", "acts", "pending", "parked"}` |
 
 - `prompt` prompts an actor on a chain. `message` is what the actor reads, and the actor reads the transcript alone when
   there is no message. `shape` is the name of the type of the response, such as `int`, `str` or `list[str]`. A prompt
@@ -92,13 +93,14 @@ Each command is an object whose `type` names it. An `id` is optional, and the re
   float. A value of another shape is refused, and the prompt stays open.
 - `cancel` ends an act and everything that it made, each with `CancelledError`.
 - `pause` holds an act, or every act on a chain, until a `wake` of the same act or chain.
+- `retry` runs again an act that a crash loop parked, which the part on a resumed life says.
 - `turns` gives the turns of a chain, as the model reads them: each is its role, its python, its usage and its blocks.
 - `transcript` gives the facts on a chain, in the order of the log.
 - `peek` gives what an act came to, when it is done.
 - `state` gives the root, the path of the record, the standing, which is the roster, the directory and the default
   actor, the names of the extensions that the life runs, whether a pause stands over the root, each prompt to the
   operator that waits for a close, each act that a `prompt` or a `rung` of the client made that is not done, and the
-  work that an earlier life left pending, which the part on a resumed life says.
+  work that an earlier life left pending or that a crash loop parked, which the part on a resumed life says.
 
 ## Responses
 
@@ -156,6 +158,12 @@ of the client. `state` says whether a pause stands over the root, and `pending` 
 waits, each act as its name and its kind, such as `["bash1", "bash"]`: among each act that the World started and did
 not end, and the acts that made it, each prompt, rung, command and wait that is not done and that no pause holds. An
 act is pending no more once a `wake` puts it to the World again.
+
+A run of a word, a command or a reply that the record shows started in five lives and not done is parked, since each
+of those lives ended while it ran, so it may be what ended them. `parked` names each such act as `pending` names an
+act, and a parked act is pending no more. A `wake` puts no parked act to the World, so a client that wakes the work of
+a life as it opens does not run it again and end furb again. `retry` runs a parked act again: it is parked no more in
+this life, and a `wake` of it puts it to the World. A `retry` of an act that is not parked fails.
 
 ## A session
 
