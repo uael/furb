@@ -62,6 +62,8 @@ line-length = 120
 indent-width = 2
 target-version = "py314"
 src = ["src", "test", "bind/python"]
+# A word of an extension of the project runs in a chain, on the names of the engine, and keeps its own form.
+extend-exclude = [".furb"]
 
 [tool.ruff.lint]
 select = [
