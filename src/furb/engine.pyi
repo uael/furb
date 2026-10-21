@@ -956,7 +956,9 @@ def offered(roster: list[Actor], to: str) -> int | None:
   """The window an actor reads, and nothing at all when the roster holds no such actor, or when that one takes no such effort."""
 
 def covers(a: Fact, id: str) -> bool:
-  """Whether a control is over an act: over the act it names and everything under it, and over every act on the chain it names; a close is over the act it names, the words running under it and the replies that ask for those words, where a cancel is over everything under it."""
+  """Whether a control is over an act: over the act it names and everything under it, and over every act on the chain it names; a close is over the act it names, each rung that act made and each reply that asks for the word of one of those, where a cancel is over everything under it.
+  A rung that a word makes is an act of that word, as a command is, so a close of the prompt of that word is not over it, on whatever chain it runs.
+  """
 
 def paused(id: str) -> bool:
   """paused reads whether an act is paused off the transcript of its chain, so an ear born while a pause over its act stands is born paused, and takes its act all the same."""

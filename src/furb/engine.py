@@ -589,9 +589,9 @@ def covers(a, id):
   kind, of, *_ = a
   if kind != "close":
     return under(id, of) or scope(id) == of
-  while id != of and (question(("rung", id)) or question(("reply", id))):
+  if question(("reply", id)):
     id = get(id)[2]
-  return id == of
+  return id == of or (question(("rung", id)) and get(id)[2] == of)
 
 
 def paused(id):
@@ -814,8 +814,9 @@ Your reply
 Your prompt
 - The line "#rungN advance on promptM" names the prompt that you answer, and its binding shows its shape, as
   promptM: Act[str]. Work until its task is done, then close it with a value of its shape: your final report for a
-  str, as close(report). A close ends the word that says it. close checks the value with isinstance, so close a
-  prompt of float with a float, as 1.0. A value of another shape raises Refused in your word.
+  str, as close(report). A close ends the word that says it, but no act that the word started, as a rung or a bash.
+  close checks the value with isinstance, so close a prompt of float with a float, as 1.0. A value of another shape
+  raises Refused in your word.
 - A word that runs to its end with no close ends its step, and the prompt asks you again with all that the word told,
   or with "#rungN told nothing". HIDDEN shows nothing: hide only what your word uses itself, never what you must see.
 - When the gate refuses your word, fix it through the door of your prompt. The name of your prompt is the door of its
