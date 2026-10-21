@@ -208,3 +208,15 @@ async def test_a_path_of_scratch_that_leaves_the_scratch_directory_is_refused(tm
     "scratch:plan.md is no path of scratch://, which starts with two slashes.",
   ]
   assert not (tmp_path / "new.md").exists()
+
+
+async def test_the_world_gives_a_file_whose_every_line_ends_with_crlf_with_lf_at_the_end_of_each_line(
+  tmp_path: Path,
+) -> None:
+  """The World gives a file whose every line ends with CRLF with LF at the end of each line, so a text holds the same lines on every machine, and a file of other line ends as it is."""
+  (tmp_path / "crlf.txt").write_bytes(b"one\r\ntwo\r\n")
+  (tmp_path / "mixed.txt").write_bytes(b"one\r\ntwo\n")
+  live, root = machine(tmp_path)
+  got = [engine.read(str(tmp_path / name), on=root).content for name in ("crlf.txt", "mixed.txt")]
+  live.end()
+  assert got == ["one\ntwo\n", "one\r\ntwo\n"]
