@@ -3,7 +3,8 @@
 //! The contract makes the World the ears of the outside that serve the machine, one or many. These are the ones
 //! every host shares, written once in rust: [`files`] reads and writes a path, the files of the [`Scratch`] directory
 //! of the life among them, [`bash`] runs a command, [`time`] reads the clock, draws a chance and ends a wait,
-//! [`store`] keeps the record on the disk under a lease, as a file of lines or a database of SQLite, and the
+//! [`store`] keeps the record on the disk under a lease, as a file of lines or a database of SQLite, [`log`] writes
+//! the log of the life beside the record, which [`logged`] reads, and the
 //! [`Provider`] answers what the chains stand on and asks the models of rig for their turns, which the [`Catalog`]
 //! knows, the claude command line among them. The host names the models it offers, and gives the rest, its
 //! console, which reads what the operator answers by the rules of [`answered`].
@@ -13,6 +14,7 @@
 
 mod bash;
 pub(crate) mod files;
+mod log;
 mod operator;
 mod provider;
 mod scratch;
@@ -26,6 +28,7 @@ use std::{
 
 pub use bash::{bash, program, shell};
 pub use files::files;
+pub use log::{log, logged};
 pub use operator::{SHAPES, answered};
 pub(crate) use provider::search::{posted, spawned};
 pub use provider::{

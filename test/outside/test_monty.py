@@ -296,6 +296,28 @@ async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_gen
   ]
 
 
+async def test_the_ear_of_the_log_writes_the_log_of_a_life_on_the_engine_of_this_interpreter_and_the_door_reads_it(
+  tmp_path: Path,
+) -> None:
+  """The ear of the log writes the log of a life beside its record on the engine of this interpreter too, and the door
+  gives its facts, the rung and the run that the record leaves out among them, while the log agrees with the record."""
+  swapped(furb.python)
+  path = str(tmp_path / "record.jsonl")
+  _, store = _monty.store(path)
+  log = _monty.log(path)
+  world = Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
+  root = furb.python.boot((), kernel=Py().kernel(), gate=Py().gating(), store=store, log=log, world=world)
+  assert await furb.python.rung("x = 1\nclose(x)", on=root) == 1
+  store.dispose()
+  log.dispose()
+  logged = _monty.logged(path)
+  assert logged is not None
+  heads = [fact[:2] for fact in logged]
+  assert heads[0] == ["chain", "chain1"]
+  assert ["rung", "rung1"] in heads and ["run", "run1"] in heads
+  assert ["run", "run1"] not in [fact[:2] for (fact,) in _monty.kept(path)]
+
+
 async def test_an_engine_and_an_ear_that_the_collector_of_cycles_drops_on_another_thread_go_with_no_error() -> None:
   """An engine and an ear of the crate that a cycle alone holds, as a traceback holds the frame of a verb, go with no
   error when the collector of cycles drops them on another thread, as the reader of a gateway of xdist does."""
@@ -326,7 +348,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
   record, ears = _monty.opened(directory=str(tmp_path), record=path, config=config)
   assert (record, [name for name, _ in ears]) == (
     [],
-    ["provider", "extensions", "memory", "skills", "web", "files", "bash", "time", "store"],
+    ["provider", "extensions", "memory", "skills", "web", "files", "bash", "time", "store", "log"],
   )
   root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
   await settle()

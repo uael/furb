@@ -155,7 +155,18 @@ in this life or in a later life on the record. When the host crashed after it ke
 act, the call makes the act. The record's
 `.session.json` companion holds the directory, the model and the effort that the host chose last, and no stream,
 since a stream lives only while its reply runs. File snapshots append to `.changes.jsonl`;
-`session.changes.read` loads a page of them. Keep both companions with the JSONL record. The session saves
+`session.changes.read` loads a page of them. Keep both companions with the JSONL record.
+
+The ear of the log writes the log of the life beside its record, `<record>.log`, in each life that keeps its record,
+and `log(record)` gives it to a host that boots an engine by hand: every fact that the life said, in the order
+in which every ear heard it, with the rungs of each ladder, each run and each tell of a chain, which the record leaves
+out. The fact of a module stands with no words. It is a cache: each life on the record writes it again from its first
+line, and a host can delete it, since the next life writes it again. `logged(record)` gives its facts, as
+`session.facts` holds them, while the log agrees with the record, and `null` otherwise, so a host shows a life whole
+with no life, and opens an inspection when the log does not agree. An `Activity` reads them as it reads a live life,
+but for the question `covers`, which a reader with no life answers from the acts of the log, as the engine does: a
+pause, a wake or a cancel covers the act that it names, each act that this act made at any depth, and each act on the
+chain that it names; a close covers the act that it names, each rung that this act made, and each reply that one of these made. The session saves
 `.session.json` whole with `saveFile(path, text)`, which writes `<path>.tmp` and gives it the name of the file. A
 save that fails throws an error that names the file, with the error of the system as its cause. The TUI saves its
 own files with it.

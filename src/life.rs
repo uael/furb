@@ -116,7 +116,8 @@ impl Opening {
   }
 
   /// The record the life opens on, and the ears of the crate, in the order of boot: the provider, the extensions,
-  /// each official extension, the files, the commands and time, and the store when the life keeps. The ear of the
+  /// each official extension, the files, the commands and time, and the store and the log of the life when the life
+  /// keeps. The ear of the
   /// web does work, so a life that inspects hears it silent.
   ///
   /// The files and the commands share the scratch directory of the life: the one of its record when it keeps the
@@ -148,6 +149,7 @@ impl Opening {
       true => extension::configured(&places, self.directory.as_ref())?,
       false => Vec::new(),
     };
+    let logs = self.record.as_ref().filter(|_| keeps).map(|path| world::log(path, record.len()));
     let (provider, search) = self.provider()?;
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config;
@@ -162,6 +164,7 @@ impl Opening {
       ("time", working(works.then(world::time))),
     ];
     ears.extend(store.map(|store| ("store", store)));
+    ears.extend(logs.map(|log| ("log", log)));
     Ok((record, ears.into_iter().map(|(name, ear)| (name.to_owned(), ear)).collect()))
   }
 
