@@ -587,3 +587,24 @@ async def test_a_rung_with_a_word_says_its_word_ready_only_while_the_one_that_ma
   assert [a[1] for a in said(log, "ready")].count(made) == 1 and engine.module(root)["k"] == 1
   again, _ = await relived(Sand(stands=STANDS), list(sand.record))
   assert [a[4] for a in said(again, "run")].count(made) == 1 and engine.module(root)["k"] == 1
+
+
+async def test_a_rung_that_retells_says_its_word_ready_only_once_the_rung_that_it_retells_is_over() -> None:
+  """A rung that retells says its word ready only once the rung that it retells is over, so no word runs twice at once, and the copy of a word that ran on through a replay finds each act of that word done and binds what it bound in the new module."""
+  _, log, root = born()
+  slow = engine.rung("x = await prompt(int, 'n', to=OPERATOR)\ny = x + 1", on=root)
+  await settle()
+  act = engine.prompt(None, "work", to=OPERATOR, on=root)
+  engine.write(Text(act, "a = 1"), on=root)
+  await settle()
+  engine.write(Text(act, "a = 2"), on=root)
+  await settle()
+  (copy,) = [a[1] for a in said(log, "rung") if a[5] == slow]
+  assert [a for a in said(log, "ready") if a[1] == copy] == []
+  (asked, _) = [a[1] for a in said(log, "prompt")]
+  engine.close(4, asked)
+  await settle()
+  assert [a[1] for a in said(log, "ready")].count(copy) == 1
+  assert engine.peek(slow) is None and engine.peek(copy) is None
+  assert (engine.module(root)["y"], engine.module(root)["a"]) == (5, 2)
+  assert [a[1] for a in said(log, "prompt")] == [asked, act]

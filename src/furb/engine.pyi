@@ -397,6 +397,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   A rung takes its own act, since the engine is the one that runs it.
   A rung with no word holds the word of its model when the reply for it is done, and it is done with the refusal a reply came to.
   A rung with a word that it does not retell says its word ready only while the one that made it is not paused, so a paused prompt runs no word that a write of its door gives until the wake.
+  A rung that retells says its word ready only once the rung that it retells is over, so no word runs twice at once, and the copy of a word that ran on through a replay finds each act of that word done and binds what it bound in the new module.
   """
 
 @overload
