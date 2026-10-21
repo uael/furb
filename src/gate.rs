@@ -18,8 +18,9 @@ use std::cell::RefCell;
 use monty_type_checking::{SourceFile, TypeChecker};
 use monty_types::{NamedValues, TypeCheckingConfig, TypeCheckingFormat};
 use ruff_python_ast::{
-  Stmt,
+  Expr, Stmt,
   statement_visitor::{StatementVisitor, walk_stmt},
+  visitor::{self, Visitor},
 };
 use ruff_python_parser::parse_module;
 use ruff_text_size::{Ranged, TextRange};
@@ -39,6 +40,9 @@ const MODULE: &str = "__engine__";
 /// The rule of the checker that a finding on an import is under, which the findings of the sandbox take too.
 const IMPORT: &str = "error[unresolved-import]";
 
+/// The rule of a finding on an await in a function that is not async.
+const AWAIT: &str = "error[await-outside-async]";
+
 thread_local! {
   /// The one checker of this thread, which every life of the thread and the Kernel of a python host read with,
   /// and nothing before its first reading. It holds one reading of the typeshed and one of the engine, which cost
@@ -48,11 +52,13 @@ thread_local! {
 }
 
 /// What the gate found on a sheet, in the order of its lines: each error of the checker by the line it stands on,
-/// in the concise form it writes, and no warning, since a warning refuses no word; and each import that the
-/// sandbox cannot run, in place of what the checker says of the imports.
+/// in the concise form it writes, and no warning, since a warning refuses no word; each import that the
+/// sandbox cannot run, in place of what the checker says of the imports; and each await in a function that is not
+/// async.
 pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
   let mut found = typed(sheet)?;
   found.extend(unrun(sheet));
+  found.extend(unawaited(sheet));
   found.sort_by_key(|(line, _)| *line);
   Ok(found)
 }
@@ -118,6 +124,64 @@ fn unrun(sheet: &str) -> Vec<(usize, String)> {
       Some((sheet[..at.start().to_usize()].matches('\n').count() + 1, format!("{IMPORT} {raised}")))
     })
     .collect()
+}
+
+/// Each await of the sheet in a function that is not async, by the line it stands on.
+///
+/// Python refuses such a word, but the checker of monty lets it pass, though it refuses an async for and an async
+/// with there, and the sandbox then runs it to a fault that ends the life, so the gate refuses it. An await at the
+/// top of the sheet is the word's own, which a word may hold.
+fn unawaited(sheet: &str) -> Vec<(usize, String)> {
+  let Ok(parsed) = parse_module(sheet) else { return vec![] };
+  let mut awaits = Awaits { function: None, found: vec![] };
+  awaits.visit_body(&parsed.syntax().body);
+  let line = |at: usize| sheet[..at].matches('\n').count() + 1;
+  awaits
+    .found
+    .into_iter()
+    .map(|(at, name)| {
+      let why = format!(
+        "{AWAIT} `await` stands in `def {name}`, which is not async: write `async def {name}`, and await each call of it"
+      );
+      (line(at), why)
+    })
+    .collect()
+}
+
+/// The awaits of a sheet that stand in a function that is not async: the name of the innermost function while it
+/// is not async, and each await found, by where it starts, with the name of its function.
+struct Awaits<'a> {
+  function: Option<&'a str>,
+  found: Vec<(usize, &'a str)>,
+}
+
+impl<'a> Visitor<'a> for Awaits<'a> {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    match stmt {
+      Stmt::FunctionDef(def) => {
+        // The decorators, the defaults and the annotations run in the scope around the function.
+        for decorator in &def.decorator_list {
+          self.visit_decorator(decorator);
+        }
+        self.visit_parameters(&def.parameters);
+        if let Some(returns) = &def.returns {
+          self.visit_annotation(returns);
+        }
+        let around =
+          std::mem::replace(&mut self.function, (!def.is_async).then_some(def.name.as_str()));
+        self.visit_body(&def.body);
+        self.function = around;
+      }
+      _ => visitor::walk_stmt(self, stmt),
+    }
+  }
+
+  fn visit_expr(&mut self, expr: &'a Expr) {
+    if let (Expr::Await(_), Some(name)) = (expr, self.function) {
+      self.found.push((expr.start().to_usize(), name));
+    }
+    visitor::walk_expr(self, expr);
+  }
 }
 
 /// The imports of a body and of every body beneath it, each by where it stands.
@@ -224,6 +288,27 @@ mod tests {
         format!("error[unresolved-import] ModuleNotFoundError: No module named '{MODULE}'")
       )]
     );
+  }
+
+  #[test]
+  fn an_await_in_a_function_that_is_not_async_is_a_finding_of_its_line() {
+    let found = said(&[], "def fix():\n  got = await wait(0)\n  return got\nfix()");
+    let why = "`await` stands in `def fix`, which is not async: write `async def fix`, and await each call of it";
+    assert_eq!(found, vec![(2, format!("{AWAIT} {why}"))]);
+  }
+
+  #[test]
+  fn an_await_in_a_function_that_is_not_async_in_an_async_one_is_a_finding() {
+    let found =
+      said(&[], "async def outer():\n  def inner():\n    return await wait(0)\n  return inner");
+    assert_eq!(found.iter().map(|(line, _)| *line).collect::<Vec<_>>(), vec![3], "{found:?}");
+    assert!(found[0].1.contains("`def inner`"), "{found:?}");
+  }
+
+  #[test]
+  fn an_await_in_an_async_function_or_at_the_top_of_the_word_is_no_finding() {
+    let word = "async def fix():\n  return await wait(0)\nawait fix()\nawait wait(0)\nclose(1)";
+    assert_eq!(said(&[], word), vec![]);
   }
 
   #[test]
