@@ -266,11 +266,37 @@ test("the sidebar tree groups sessions, switches by mouse, collapses and toggles
     expect(app().composer.plainText).toBe("keep this draft");
   }));
 
+test("a session whose operator names no roster offers every model that the catalog offers", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-workspaces-"));
+  // A claude command line that the session names is one the catalog offers, and no model is asked.
+  const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), {
+    claude: join(directory, "claude"),
+  });
+  try {
+    const entry = await library.create(await library.add(directory), "Models");
+    const names = entry.session?.roster.map(([name]) => name) ?? [];
+    expect(names.slice(0, 4)).toEqual([
+      "claude-cli:opus",
+      "claude-cli:sonnet",
+      "claude-cli:haiku",
+      "claude-cli:fable",
+    ]);
+    expect(names.at(-1)).toBe("operator");
+    await entry.session?.submit("/model sonnet");
+    expect(entry.session?.actor).toBe("claude-cli:sonnet/high");
+    expect(entry.session?.models).toEqual([]);
+  } finally {
+    await library.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("a model of the catalog that the roster does not hold joins the session, which opens again on it", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-workspaces-"));
   // A claude command line that the session names is one the catalog offers, and no model is asked.
   const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), {
     claude: join(directory, "claude"),
+    roster: ["claude-cli:opus"],
   });
   try {
     const entry = await library.create(await library.add(directory), "Models");

@@ -4,7 +4,8 @@
 //! stdout. `prompt`, `turns`, `run` and `extensions` each open one life and print what it came to, and `facts` prints a record
 //! as it is. Every life runs on
 //! the engine of the crate, on the ears of the World that the crate writes, the extensions among them, and on the
-//! provider of the model of its default actor and of the models that `--roster` names, from the catalog of the crate.
+//! provider of the model of its default actor and of the models that `--roster` names, or of every model that the
+//! catalog of the crate offers when `--roster` names none.
 
 mod console;
 mod life;
@@ -64,14 +65,16 @@ struct Place {
 }
 
 /// What a life stands on: the actor a prompt goes to when it names none, and the models it offers beside the model
-/// of that actor. The standing of every chain tells the roster, so a life offers the models it names and no more.
+/// of that actor. A life that names no model in its roster offers every model that the catalog offers, and a life
+/// that names some offers those and no more, since the standing of every chain tells the roster.
 #[derive(Args, Default)]
 struct Stand {
   /// The actor a prompt goes to when it names none, as provider:model/effort; when unsaid, a model of the claude
   /// command line, then of the network, then of the local server that FURB_LOCAL_URL names.
   #[arg(long)]
   model: Option<String>,
-  /// A model the life offers beside the model of that actor, as provider:model; say it again for each model.
+  /// A model the life offers beside the model of that actor, as provider:model; say it again for each model. When
+  /// unsaid, the life offers every model of the catalog.
   #[arg(long)]
   roster: Vec<String>,
 }
@@ -160,8 +163,10 @@ fn main() -> ExitCode {
   let furb = Furb::parse();
   let done = match furb.command {
     Some(Command::Prompt { message, to, shape, place, mut stand }) => {
-      // The actor of the prompt is one the life offers.
-      stand.roster.extend(life::actor(&to).1);
+      // The actor of the prompt is one the life offers, which a roster that names models must name too.
+      if !stand.roster.is_empty() {
+        stand.roster.extend(life::actor(&to).1);
+      }
       prompt(stand.on(place.opening(true)), &shape, message, to)
     }
     Some(Command::Turns { record, cwd, stand }) => {
