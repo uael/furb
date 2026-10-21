@@ -2,9 +2,12 @@
 the suite of each extension only through a conftest above it, and the helpers that only those suites need."""
 
 import asyncio
-from collections.abc import Callable, Sequence
+import tempfile
+from collections.abc import Callable, Generator, Sequence
 from dataclasses import replace
 from pathlib import Path
+
+import pytest
 
 from conftest import STANDS, Sand, World, engine_of, life, of, pytest_generate_tests, sown, world_says  # noqa: F401
 from furb import engine
@@ -16,6 +19,31 @@ EXTENDING = (
   " enables on each chain of a life."
 )
 """EXTENDING is the line that the list of the skills holds of the skill that the extension carries."""
+
+
+SKILLED = (".furb/skills", ".claude/skills")
+"""SKILLED is the folders of skills that the World finds in the working directory of a chain and in each folder above
+it."""
+
+
+def stray(folder: Path) -> bool:
+  """Whether a folder above this one holds a folder of skills, whose skills the World finds for a chain that stands
+  under it."""
+  return any((one / place).is_dir() for one in folder.parents for place in SKILLED)
+
+
+@pytest.fixture
+def tmp_path(tmp_path: Path) -> Generator[Path]:
+  """The temporary folder of a test, under no folder that holds skills: the one of pytest, or else a new one in /tmp,
+  as when the temporary folder of the system lies under a home that holds skills. So a test sees only the skills that
+  it gives, and none of the machine."""
+  if not stray(tmp_path):
+    yield tmp_path
+    return
+  with tempfile.TemporaryDirectory(dir="/tmp") as made:
+    one = Path(made).resolve()
+    assert not stray(one), f"a folder above {one} holds skills"
+    yield one
 
 
 def extended(  # noqa: PLR0913
