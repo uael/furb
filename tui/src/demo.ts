@@ -94,3 +94,28 @@ export async function seedDemo(session: Session): Promise<void> {
   await engine.chain({ label: "Review notes" });
   await session.refresh();
 }
+
+/** The words of a conductor on the root of the demo: it hires a worker for each item on a chain of its own, and
+ * waits for the first that ends, as a conductor loop does. */
+export const conducting = `briefs = [
+  ("search", "Add the search shortcut and cover it with a test."),
+  ("docs", "Think until I cancel."),
+  ("ui", "Ask me first, then tidy the layout of the notes."),
+  ("gif", "Record the animation of the search."),
+]
+lanes = {}
+for key, brief in briefs:
+  lane = chain("w " + key)
+  if key == "gif":
+    pause(lane)
+  lanes[key] = prompt(str, brief, on=lane)
+first = await wait(600, *lanes.values())`;
+
+/** A demo life of many workers: the conversation of the demo, then a conductor on the root that hires four workers.
+ * One does its item, one thinks until a cancel, one asks the operator, and a pause holds the last before it starts. */
+export async function seedConductor(session: Session): Promise<void> {
+  const { engine } = session;
+  await seedDemo(session);
+  await engine.rung({ word: conducting, on: engine.root });
+  await session.refresh();
+}

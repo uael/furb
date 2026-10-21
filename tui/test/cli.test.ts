@@ -98,11 +98,13 @@ for (const ending of endings)
         ? windowsConsole(cli, env, directory)
         : terminal(cli, env, ending as NodeJS.Signals);
     try {
-      await eventually(() => tui.screen().includes("Ready"), "the first frame");
+      await eventually(() => tui.screen().includes("waits on"), "the first frame");
       tui.type(`!${printPid} > '${pidFile}'; sleep 30\r`);
       const pid = async () => Number(await readFile(pidFile, "utf8").catch(() => ""));
       await eventually(async () => (await pid()) > 0, "the command to start");
-      // The submit takes its text from the composer at once, so a draft typed after it stays.
+      // The word line asks the model once i opens it, and what it holds when the TUI ends stays as a draft.
+      tui.type("i");
+      await eventually(() => tui.screen().includes("ask ›"), "the word line");
       tui.type("draftmarker");
       await eventually(() => tui.screen().includes("draftmarker"), "the draft on the screen");
       await tui.signal();

@@ -1,4 +1,12 @@
-import { type Engine, type Fact, isQuestion, type LiveAct, questionKind, type Session } from "@furb/engine";
+import {
+  type Engine,
+  type Fact,
+  isQuestion,
+  type LiveAct,
+  questionKind,
+  type Session,
+  WINDOW,
+} from "@furb/engine";
 import type { Snapshot, Usage } from "./bridge.ts";
 import { queueDispatches } from "./queue.ts";
 import type { ActRow, Exit } from "./session.ts";
@@ -15,8 +23,20 @@ interface ChainView {
 /** How many of the last characters of each stream of a command a row carries. */
 const TAIL = 2000;
 
-/** An act as a row of a snapshot: a command that printed more than a tail carries the tail of each stream. */
+/** An act as a row of a snapshot: a read or a write whose text is longer than a tail carries its start, and a command
+ * that printed more than a tail carries the tail of each stream. */
 function row(act: LiveAct): ActRow {
+  const text = act.value as { is?: string; content?: string } | null;
+  if (
+    (act.kind === "read" || act.kind === "write") &&
+    text?.is === "Text" &&
+    (text.content?.length ?? 0) > TAIL
+  )
+    return {
+      ...act,
+      value: { ...text, content: text.content?.slice(0, TAIL) },
+      output: text.content?.length,
+    };
   const exit: Exit = act.kind === "bash" ? (act.value as Exit) : {};
   const streams = [exit?.stdout?.content ?? "", exit?.stderr?.content ?? ""];
   if (streams.every((content) => content.length <= TAIL)) return act;
@@ -110,6 +130,34 @@ export class Snapshots {
     // The share of the window has one home, filled of the engine, which the advance binds too.
     const reply = this.replies.get(selected);
     const filled = reply === undefined ? undefined : this.engine.verb("filled", [reply]);
+    const roster = view.roster;
+    const window = (actor: string) =>
+      roster.find(
+        ([name, efforts]) => actor === name || efforts.some((effort) => actor === `${name}/${effort}`),
+      )?.[2] ?? WINDOW;
+    const measures: Snapshot["measures"] = {};
+    for (const [chain, answers] of this.session.activity.answers) {
+      const grant = [...this.session.activity.acts.values()].findLast(
+        (act) => act.kind === "grant" && act.on === chain && !act.done,
+      );
+      const last = answers.at(-1);
+      measures[chain] = {
+        dollars: answers.reduce((sum, { usage }) => sum + usage[4], 0),
+        spent: answers.reduce((sum, { at, usage }) => sum + (grant && at > grant.began ? usage[4] : 0), 0),
+        ceiling: grant ? Number(grant.words[0] ?? 0) || undefined : undefined,
+        share: last ? Math.round((last.usage[0] / window(last.actor)) * 10000) / 10000 : undefined,
+        answers: answers.length,
+        actor: last?.actor,
+      };
+    }
+    for (const act of this.session.activity.acts.values())
+      if (act.kind === "grant" && !act.done && !measures[act.on])
+        measures[act.on] = {
+          dollars: 0,
+          spent: 0,
+          ceiling: Number(act.words[0] ?? 0) || undefined,
+          answers: 0,
+        };
     return {
       selected,
       acts: acts.map(row),
@@ -121,6 +169,7 @@ export class Snapshots {
       turns: view.turns,
       answers: [...(this.answers.get(selected) ?? [])],
       filled: typeof filled === "number" ? filled : undefined,
+      measures,
       directory: view.directory,
       actor: view.actor,
     };

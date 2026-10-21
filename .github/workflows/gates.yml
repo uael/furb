@@ -104,3 +104,5 @@ jobs:
       - run: bun run check
       - run: bun run lint
       - run: bun run test
+      # The TUI loads OpenTUI and the crate on each system, which its help proves with no terminal.
+      - run: bun run tui -- --help

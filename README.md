@@ -6,7 +6,7 @@
 
 [![gates](https://github.com/uael/furb/actions/workflows/gates.yml/badge.svg)](https://github.com/uael/furb/actions/workflows/gates.yml)
 
-<img src="docs/furb.gif" alt="The furb TUI: a message, the Python that the model writes, a Python word of the operator, the three views, the command palette, the rewind tree, and a change of theme" width="880">
+<img src="docs/furb.gif" alt="The furb TUI: a prompt to the model, a word of python that makes a conductor of four workers, the loom of their threads, an answer to a worker, a fold, a pause and a cancel, and a change of theme" width="880">
 
 </div>
 
@@ -26,8 +26,8 @@ module, and each answer of the model is a program that runs in it.
 - **A scratch directory for each session.** A word keeps its notes and scratch files in `scratch://`, and a command
   finds them in `$TMPDIR`. A resumed session finds them again, and the record makes again the files that its words
   wrote.
-- **Rewind to any point.** A new chain can start from any point of another chain. In the TUI, press Escape twice
-  to open the rewind tree.
+- **Rewind to any point.** A new chain can start from any point of another chain. In the TUI, press b on an act to
+  branch its chain after it.
 - **You see what the model sees.** The transcript is the exact text that the model reads. The record holds every
   act of the operator and every answer of the World, and a later run replays it. Work that was interrupted
   starts again when you resume it.
@@ -35,7 +35,8 @@ module, and each answer of the model is a program that runs in it.
 - **No permissions, by design.** Each act runs with the rights of the user who runs furb, and the record shows who
   made each act. For isolation, run furb in a virtual machine. An extension can
   [ask you before an act](docs/extensions.md#permissions), but furb has none built in.
-- **The model can ask you.** A question to the operator waits in the feed until you answer it.
+- **The model can ask you.** A question to the operator waits in your thread at the top of the loom until you
+  answer it, and Tab goes to the oldest one.
 - **Extensions are words.** An extension is Python that each chain runs as a rung, which the model reads in its turns.
   The official ones tell a chain the `CLAUDE.md` files of its project and the skills it can read. The system prompt
   stays the engine alone, so an extension never breaks what a provider caches.
@@ -83,7 +84,7 @@ The TUI runs from a clone of this repository. It needs uv, the Rust toolchain, a
 ```sh
 uv sync                              # The Python environment, with furb, which the build reads.
 bun install && bun run build         # The TUI, and the engine that it runs through the crate.
-bun run demo                         # A scripted life on a sample project. It asks no model.
+bun run demo                         # A scripted life of a conductor and four workers. It asks no model.
 bun run tui                          # A real life, through the claude command line.
 ```
 
@@ -92,7 +93,8 @@ program that `FURB_TUI` names, or the `furb-tui` on PATH.
 
 ## Learn more
 
-- [The TUI](tui/README.md): the views, the keys, the commands, and [a gallery of each screen](docs/tui.md).
+- [The TUI](tui/README.md): the loom, the keys, the commands, how to install it on each system, and
+  [a gallery of each screen](docs/tui.md).
 - [The JSON-RPC](docs/rpc.md): the commands and the events of `furb --mode rpc`.
 - [The extensions](docs/extensions.md): what an extension is, the configs that turn one on, and the official ones.
 - [The developer guide](docs/developer-guide.md): the tools to install, how a word runs, and how to change the TUI.

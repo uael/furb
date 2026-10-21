@@ -249,3 +249,26 @@ the models, the controls, the doors and the pending work.
    answer, the keys of the verbs. New tests replace the tests of the old screens, and the captures are made again.
 3. The lens, the door, and the time cursor with its branch.
 4. The lives, the help, and the narrow terminal. The Loom on a real life.
+
+## As built
+
+The first version of the Loom follows this document, with these changes that the work taught:
+
+- A cell of a thread is a height, not a glyph. The lowest cell, `▁`, is work that runs, and a taller cell holds more
+  acts that began or ended at that moment. A cell is yellow where the chain asks the operator, and red where an act
+  failed. The cells of the past fade, so the present is the brightest part of the loom. One kind of mark keeps the
+  loom quiet, and the colors carry the states.
+- A short life stretches each moment over as many as three columns, so its threads fill the loom. A long life folds
+  its past: the newest moments take a column each, and older moments share a column, twice as many at each step back.
+- The word line asks a model with `i`, takes python with `:`, a command with `/`, and a command of the shell with `!`.
+  The verbs are single keys only while the word line is not focused, and Esc leaves it.
+- The list of lives, ⌃O, takes the place of the sidebar of workspaces.
+- The Session of `bind/typescript` gives two new views: the place of each act in time, as `began` and `ended` on each
+  act, and the answers of the models on each chain, as `Activity.answers`, from which the TUI reads the dollars and
+  the share of the window of each thread. It also follows reads, writes and changes of directory as acts, so a thread
+  names them.
+
+What is left for later work: the time cursor, `[` and `]`, which shows a chain as it was at a moment and branches
+there; a lens for the transcript of a chain and for the change of a write; and the commands of the old TUI that acted
+on its screens alone, such as the share of a conversation as HTML, images in the word line, the external editor, and
+the queue of follow-ups in the screen.

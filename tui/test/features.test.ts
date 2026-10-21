@@ -12,94 +12,10 @@ import { externalEditor, opener } from "../src/editor.ts";
 import { fileReferences, projectFiles } from "../src/files.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
-import { composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
 
 afterAll(removeDemoDirectories);
-
-test("rungs retain clicked folds across views and reopen, with running, failed, and done labels and gate findings", async () => {
-  let rung = "";
-  let record: string | undefined;
-  await composing(
-    async ({ session, app, screen, frame }) => {
-      rung = await session.engine.rung({ word: "await wait(60)", on: session.engine.root });
-      await session.refresh();
-      await frame();
-      let card = app.scroll.getChildren().find((card) => card.id === rung);
-      let heading = card?.getChildren()[0];
-      if (!heading) throw new Error("No rung header.");
-      expect(screen.captureCharFrame()).toContain(`${rung}  by you  running`);
-      expect(card?.getChildren().length).toBeGreaterThan(1);
-      await screen.mockMouse.click(heading.x + 1, heading.y);
-      await frame();
-      expect(
-        app.scroll
-          .getChildren()
-          .find((card) => card.id === rung)
-          ?.getChildren(),
-      ).toHaveLength(1);
-      const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
-      if (!wait) throw new Error("No pending wait.");
-      await session.engine.close(null, { id: wait.id });
-      await session.engine.result(rung);
-      await session.refresh();
-      expect(await frame()).toContain(`✓ ${rung}`);
-      expect(screen.captureCharFrame()).not.toContain(`${rung}  by you  running`);
-      expect(
-        app.scroll
-          .getChildren()
-          .find((card) => card.id === rung)
-          ?.getChildren(),
-      ).toHaveLength(1);
-      session.show("transcript");
-      await session.refresh();
-      await frame();
-      session.show("feed");
-      await session.refresh();
-      await frame();
-      card = app.scroll.getChildren().find((card) => card.id === rung);
-      expect(card?.getChildren()).toHaveLength(1);
-      heading = card?.getChildren()[0];
-      if (heading) await screen.mockMouse.click(heading.x + 1, heading.y);
-      await frame();
-      expect(
-        app.scroll
-          .getChildren()
-          .find((card) => card.id === rung)
-          ?.getChildren().length,
-      ).toBeGreaterThan(1);
-      await session.submit("/run this is invalid python !!!");
-      const refused = session.activity.findLast(
-        (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
-      );
-      expect(refused?.run?.status).toBe("failed");
-      expect(session.error).toBe("");
-      expect(session.findings.join("\n")).toContain("line 1");
-      await session.refresh();
-      expect(await frame()).toContain("line 1");
-      expect(screen.captureCharFrame()).toContain("failed");
-      record = session.host.record;
-    },
-    { width: 140, height: 42, useMouse: true },
-  );
-  if (!record) throw new Error("No record.");
-  const session = await demoSession({ record });
-  await composing(
-    async ({ app }) => {
-      expect(session.folds[rung]).toBe(false);
-      expect(session.acts.find((act) => act.id === rung)?.run?.status).toBe("done");
-      expect(
-        app.scroll
-          .getChildren()
-          .find((card) => card.id === rung)
-          ?.getChildren().length,
-      ).toBeGreaterThan(1);
-    },
-    { width: 140, height: 42, useMouse: true },
-    session,
-  );
-});
 
 test("queued follow-ups wait for current work, attach files, and message undo and redo keep their branches", async () => {
   let session = await demoSession();
@@ -222,34 +138,6 @@ test("clipboard import and share publication use bounded files and the explicitl
   }
 });
 
-test("a model request failure shows in the feed as the failure of an act, and not as an error of the view", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "furb-model-failure-"));
-  try {
-    const opened = await openEngine({
-      cwd: directory,
-      record: join(directory, "session.jsonl"),
-      // A claude command line that does not start fails every request, as a model that is not there does.
-      claude: join(directory, "missing"),
-      roster: ["claude-cli:sonnet"],
-    });
-    await composing(
-      async ({ session, frame }) => {
-        await session.submit("Say something.");
-        // The chain pauses at the second failure in a row, and no work runs after that.
-        await until(session, () => session.paused);
-        await session.refresh();
-        const shown = await frame();
-        expect(shown).not.toContain("Refresh view");
-        expect(shown).toContain("answered nothing");
-      },
-      { width: 140, height: 42 },
-      new Session(opened.engine, opened.host, true),
-    );
-  } finally {
-    await remove(directory);
-  }
-});
-
 test("file and shell shortcuts, an external editor, and a safe standalone share use the real session", async () => {
   const session = await demoSession();
   const oldEditor = process.env.EDITOR,
@@ -325,50 +213,23 @@ test("/extensions lists what a life runs, and a cancel of the work of a chain le
   const directory = await mkdtemp(join(tmpdir(), "furb-extensions-"));
   try {
     const opened = await openEngine({ cwd: directory, record: join(directory, "session.jsonl") });
-    await composing(
-      async ({ session, frame }) => {
-        await session.command("/extensions");
-        expect(session.notice).toBe(
-          "This life runs memory with remember(), skills with counted(), compaction, ouroboros with ouroboros(). Run a word of one with /run.",
-        );
-        await session.command("/run await wait(60)");
-        await session.command("/cancel");
-        await until(session, () => session.activity.every((act) => act.kind !== "wait" || act.done));
-        await session.refresh();
-        // The watcher lives on, and shows no work in the feed.
-        expect((await session.engine.outcome("remember1")).done).toBe(false);
-        expect(await frame()).not.toContain("running");
-      },
-      { width: 140, height: 42 },
-      new Session(opened.engine, opened.host, true),
-    );
-  } finally {
-    await remove(directory);
-  }
-});
-
-test("an act that ended and told nothing shows nothing in the feed, as a question of memory that found no file", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "furb-untold-"));
-  try {
-    await writeFile(join(directory, "a.txt"), "one");
-    const opened = await openEngine({ cwd: directory, record: join(directory, "session.jsonl") });
-    await composing(
-      async ({ session, frame }) => {
-        await session.command('/run read("a.txt")');
-        await until(session, () =>
-          session.activity.some(
-            (act) => act.kind === "memory" && String(act.words[0]).endsWith("a.txt") && act.done,
-          ),
-        );
-        await session.refresh();
-        const shown = await frame();
-        expect(shown).toContain("read1");
-        // The word of the rung that defines memory still shows, but no act named memory does.
-        expect(shown).not.toContain("✓ memory");
-      },
-      { width: 140, height: 42 },
-      new Session(opened.engine, opened.host, true),
-    );
+    const session = new Session(opened.engine, opened.host, true);
+    try {
+      await session.refresh();
+      await session.command("/extensions");
+      expect(session.notice).toBe(
+        "This life runs memory with remember(), skills with counted(), compaction, ouroboros with ouroboros(). Run a word of one with /run.",
+      );
+      await session.command("/run await wait(60)");
+      await session.command("/cancel");
+      await until(session, () => session.activity.every((act) => act.kind !== "wait" || act.done));
+      await session.refresh();
+      // The watcher lives on, and is no work of the chain.
+      expect((await session.engine.outcome("remember1")).done).toBe(false);
+      expect(session.activity.some((act) => act.kind === "wait" && !act.done)).toBe(false);
+    } finally {
+      await session.dispose();
+    }
   } finally {
     await remove(directory);
   }

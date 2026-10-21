@@ -1,91 +1,56 @@
 # furb TUI
 
-An OpenTUI application built on `@furb/engine`. The TUI owns a Bun worker for each open session: its life and its
-ears.
-Rendering, input, and syntax coloring stay responsive while the sandbox gates and runs Python. The TUI needs Bun
-1.4.2 or later. On Windows, Bun 1.3 crashes the TUI when it calls into OpenTUI.
-
-```sh
-uv sync
-bun install
-bun run build
-bun run demo                 # A local, scripted life. No model request.
-bun run tui                  # A real life, on the models of the catalog of the crate.
-bun run tui -- --resume .furb/sessions/example.jsonl
-```
-
-`furb`, the command line, opens this TUI when it has no command, with `--demo`, `--record`, `--cwd`, the model and the
-effort of its `--model` as `--model` and `--effort`, each `--roster`, and the words after `--`.
-
-Use `--cwd`, `--model provider:model`, `--effort`, `--record`, and repeated `--roster` options to configure
-a new life. A session offers its model, the default model when you name none, and the models of `--roster`.
-Sessions are saved under `.furb/sessions` in the selected directory. The `.furb` that the TUI makes holds
-a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.session.json`, `.changes.jsonl`, and
-`.ui.json` files together. The last file keeps the view of the session as you left it. Keep its `.images` directory
-too when the session has image attachments. An unfinished session opens paused and offers a resume choice. The
-native engine replays completed work from the record.
-⌃W lists the workspaces and their sessions, each with its state, save time, cost, and record size. It reads
-unfinished work through native replay without locking or changing the saved record. The record shows what remains
-unfinished. The list shows at once, and each saved session shows its state when its replay ends.
+The TUI shows a life of furb as a loom. Each chain is a thread, a row of the loom, in the order of the tree of
+chains, and time goes from left to right. You see at once which chains work, which wait for you, which stopped at a
+ceiling, and which failed. [The design](DESIGN.md) says why the TUI is made so, and [the gallery](../docs/tui.md)
+shows each screen.
 
 ![The furb TUI in action](../docs/furb.gif)
 
-[The gallery](../docs/tui.md) shows each screen of the TUI and what it does.
+## What the screen shows
 
-`/workspace path` adds a folder, and `/new` starts a session in the current workspace. `/delete` archives a chosen
-session, or moves it and its companions to `.furb/trash` and removes its scratch directory from the cache of furb. The
-trash holds a `restore.json` with the original paths, and its record can be opened with `--resume`, which makes again
-the scratch files that its words wrote. Quit saves and closes all open sessions, and SIGINT, SIGTERM, SIGHUP,
-and SIGQUIT quit the same way. On Windows, a console that closes and Ctrl+Break quit the same way. `sidebarWidth` in
-the preferences file sets the width of the sidebar, from 26 to 48 columns. On a terminal narrower than 100 columns the
-sidebar is hidden, and `/workspace` keeps all sessions available from the keyboard.
+- **The loom**, at the top. The first thread is you, the operator: its cells show the prompts that you owe. Then
+  each chain, under the chain whose word made it, so a conductor stands with its workers under it. A thread gives the
+  state of the chain, its label, its cells, the act that it waits on, its dollars against the ceiling of its grant,
+  and the share of the window that its last answer read.
+- **The cells** of a thread show what the chain did at each moment, where a moment is the start or the end of an act.
+  The lowest cell, `▁`, is work that runs: a command, a wait, or a model that writes its answer. A taller cell holds
+  more acts that began or ended. A cell is yellow where the chain asks you, and red where an act failed. The newest
+  moments take a column each, and older moments share a column, so a long life fits in the terminal. `older ┊` marks
+  where the folded past starts, and `now` is the right edge.
+- **The thread**, in the middle: the chain that you select, as its ladders. Each prompt is a line, each rung of its
+  ladder is a line under it with the first line of its word, and the acts that the rung made follow by their names.
+  A command that runs shows the end of what it prints, and a model shows what it writes.
+- **The lens**: Enter on a line shows its act whole. A rung shows its word as python, a command its command and all
+  that it printed, a prompt its message and its value, and a read or a write its text.
+- **The word line**, at the bottom. `i` asks the model of the selected chain, `:` writes a word of python that runs
+  as a rung there, and `/` types a command. Tab answers the oldest prompt that you owe, on any chain.
 
-Python words have offline Tree-sitter colors. GitHub Dark is the default. Sessions share the theme, and the TUI saves
-it in `$XDG_CONFIG_HOME/furb/ui.json` (or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows).
-`FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated
-preferences; the CLI shares the user's choice across sessions, including demos.
-
-The mouse reaches every control: a click is a press and a release on one control, and a drag selects text instead.
-The text that a drag selects goes to the clipboard through OSC 52 when the drag ends, where the terminal supports
-it, and ⌃Y copies it again. The wheel scrolls the feed, the sidebar, and every list.
-
-A chord before "or" reaches the TUI only from a terminal with the kitty keyboard protocol. The chord after "or"
-reaches it from every terminal. F1 lists the chords that the terminal in use sends.
+The keys are the verbs of the engine, and each key acts on what you select: a chain in the loom, or an act in the
+thread and the lens. The same space pauses one command and a conductor with its five workers.
 
 <!-- keys:start -->
 
 | Key | Action |
 | --- | --- |
-| Enter | Send a message, or run Python input |
-| ⇧Enter or ⌃J | Insert a new line |
-| ⌥Enter | Queue this message after current work |
-| ↑ / ↓ | Previous / next sent input, from the first or the last line |
-| ↑ in an empty input | Take the last queued message back to edit it |
-| ⌃S | Put the input aside, or bring it back |
-| Esc twice | Rewind: branch from an earlier point of the chain |
-| ⌃1-3 or ⌥1-3 | Feed / transcript / changes view |
-| ⌃Tab / ⇧⌃Tab | Next / previous chain |
-| ⌃P | Search all actions |
-| ⌃B / ⌃N | Switch / create a chain |
-| ⌃M or ⌥M | Choose a model |
-| ⇧Tab / ⌃T | Choose an effort / a theme |
-| ⌃W / ⌃\\ | Workspaces and sessions / show or hide the sidebar |
-| ⌥D / ⌥E | Fold or expand details / external editor |
-| ⌃V | Paste a clipboard image |
-| @ or ! | Find a project file, or run a shell command |
-| ↑, ↓, Tab, Enter after / or @ | Choose a slash command, its value, or a project file as it is typed |
-| ⌃F / PageUp / PageDown | Filter the current view / scroll |
-| ⌃R / ⌃Space | Python input / complete a name |
-| ⌃L / ⌃A | Edit a prompt program / answer an operator question |
-| ⌃G / ⌃click a name | Inspect a value and follow its definition |
-| Drag / ⌃Y | Select text and copy it / copy the selected text again |
-| Click / right-click an act | Fold or expand it / inspect its value or prompt program |
-| ⌃⌥← | Return from a definition jump |
-| ⌥[ / ⌥] or ⌥P / ⌥N | Previous / next message of the feed |
-| ⌃PageUp / ⌃PageDown | Previous / next page of file changes |
-| ⌃C | Clear the input, close a dialog, or cancel current work |
-| Esc | Close a dialog or pause current model work |
-| F1 / ⌃Q / ⌃D twice | Help / save and quit / save and quit from an empty input |
+| ↑ ↓ or k j | Select a thread of the loom, a line of the thread, or scroll the lens |
+| ← → or h l | Fold the workers of a thread into it, or show them again |
+| Enter | Open the selection: a thread, a lens of an act, or the answer of a prompt that you owe |
+| Esc | Go back one level |
+| Tab | Answer the oldest prompt that you owe, on any chain |
+| i | Ask the model of the selected chain |
+| : | Write a word of python, which runs as a rung on the selected chain |
+| / | Type a command, as /model, /theme or /fork |
+| space | Pause the selection, or wake it |
+| x | Cancel the selection, or the work of the selected chain |
+| c | Close the selected act with a value |
+| g | Put a ceiling of dollars on the selected chain |
+| e | Edit the door of the prompt of the selection, which replays its ladder |
+| b | Branch the chain after the selected act |
+| w | Wake the work that an earlier life left |
+| ⌃O | Open the list of lives, by workspace |
+| ? | Show or hide these keys |
+| ⌃Q, or ⌃D twice | Save and quit |
 
 <!-- keys:end -->
 
@@ -100,21 +65,14 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/theme [name]` | Change the palette of every surface |
 | `/chain <label>` | A conversation with its own state |
 | `/fork <label>` | Copy this chain's current transcript and program |
-| `/tree` | Browse the chains and their turns, and open or branch from one |
-| `/rewind` | Branch from an earlier message or act of this chain |
 | `/undo` | Remove the last user message from a new transcript branch |
 | `/redo` | Return to the branch before undo |
 | `/queue [text]` | Send after current work, or manage queued messages |
-| `/files` | Search project files for an @ reference |
-| `/image [path]` | Attach an image file, or paste one from the clipboard |
-| `/editor` | Edit this draft with VISUAL or EDITOR |
 | `/run <python>` | Write a rung through the gate |
 | `/bash <command>` | Stream a shell command |
 | `/read <path>` | Show a file to this chain |
 | `/cd <path>` | Change this chain's working directory |
 | `/edit [prompt id]` | Change a prompt's program and replay it |
-| `/inspect <name>` | Read a value from this chain's module |
-| `/details` | Expand or collapse an act in the current view |
 | `/grant <dollars>` | Pause at a dollar ceiling |
 | `/context <fraction>` | Pause at a share of the model window |
 | `/pause [act or chain]` | Hold delivery while work completes |
@@ -125,56 +83,115 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/name <name>` | Set a name in the session picker |
 | `/share [path]` | Export a standalone HTML conversation |
 | `/export <path>` | Write the transcript and program to a new JSON file |
-| `/workspace [path]` | Choose a workspace or add a project folder |
-| `/sidebar` | Show or hide the chains, the usage, and the workspaces |
-| `/delete` | Archive a session, or move it and its files to the workspace trash |
-| `/autocollapse` | Toggle collapse of completed rungs |
 | `/extensions` | List the extensions that this life runs |
 | `/exit` | Save every session and quit |
 
 <!-- commands:end -->
 
-The command table comes from the same source as completion, the palette, and help. Run `bun run docs` after
-changing that source. Enter sends a message straight to the engine. The engine gives the next
-ask to the rung that has waited longest. ⌥Enter or `/queue text` holds a follow-up until the chain's
-current prompt and rungs complete. `/queue` edits or removes waiting messages. Saved queues require a resume
-choice; a dispatch recorded before a crash is not sent twice. Editing a prompt's program writes its door, and the engine
-makes the program again only when the edit drops a word that ran; else it keeps the module and runs only the new words.
-A slash command typed while a program is under edit runs as a command, since no Python program starts with a
-slash. Python input uses the same gate as a model's word and marks a refused line in the word and editor.
-The editor matches brackets and indents a new Python line.
-`@` opens project file search. A reference that names a file, such as `@README.md` or `@"file name.txt"`, is read
-before the message is sent; any other @word, such as `@dataclass`, stays text. A leading `!` runs a shell
-command. ⌥E or `/editor` edits the current draft with `VISUAL`, then `EDITOR`, then `vi`, through the shell
-that runs commands; configure the editor to wait until the file is saved and closed.
-`/image path` attaches a PNG, JPEG, GIF, or WebP file. ⌃V or bare `/image` pastes an image through macOS
-AppKit, Windows PowerShell, Wayland `wl-paste`, or X11 `xclip`. Attachments have a limit of 20 MiB each and are
-copied beside the record. The provider of the session sends them to a model that takes images, with their
-references kept in the prompt.
-Click the attachment row to open or remove an image from the draft.
-`/model` and `/effort` open separate pickers. The model picker lists the models of the session, then every
-model that the catalog of the crate offers. `/model name` takes `provider:model` or the model's id alone, by the
-rule of the catalog. A model of the catalog that the session does not offer joins the session: the session saves
-it, opens again on its record, starts again the work that was running, and sends the next prompt of the chain to
-that model. Each model offers the efforts that the catalog gives it, saved in the chain's roster. A model change
-keeps the current effort if the new model offers it. A choice of a model or an effort sets the actor of the chain
-by a rung of the operator. A prompt names no actor, so the next rung of a prompt that runs, and each follow-up that
-the queue sends, asks the actor that the chain has then.
+Run `bun run docs` after a change of `tui/src/keys.ts` or `tui/src/commands.ts`, which writes these tables again.
 
-The engine contract takes a chain as a fork source. A fork is not a filesystem rollback or an arbitrary
-historical checkpoint. A branch that the rewind tree makes uses the engine's `take` filter and runs as an operator
-rung, so the filter is made again after a reopen. Its module and files keep their current state. `/undo` uses the
-same durable filter to remove the last user message from a new branch; `/redo` returns to its origin. These commands
-change the model's conversation. The module and filesystem remain current. The TUI does not add a separate
-permission or tool protocol to the engine.
+## Install and run
 
-`/share` writes a standalone HTML conversation, including its images and exact transcript. `/share`, `/export`
-and `/image` read a leading `~` as the home directory, and a relative path from the directory of the selected chain.
-The share dialog can open the file, copy its path, or upload the selected conversation to an unlisted GitHub gist
-through `gh`. Upload happens only when chosen. Anyone with its link can read the shared conversation. `/export` keeps
-the structured JSON export. `/context` sets the context ceiling.
+The TUI is a program of bun on `@furb/engine`, the crate of furb through N-API. You build the crate once from a
+checkout. The TUI needs no python and no uv: only `furb` itself and the suite of the engine need them.
 
-A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says,
-and each chain shows the rungs of their words in its feed, as it shows any rung. The TUI has no part of its own for an extension: `/extensions` lists what the life runs, and `/run`
-runs a word of one on the chain on screen, as `/run skill("pdf")`. A cancel of the work of a chain ends its prompts,
-rungs, commands and waits, and not what an extension started on it, such as the watcher of the memory.
+### macOS
+
+1. Install the command line tools of Xcode, which give the linker: `xcode-select --install`.
+2. Install rust with rustup: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`. The file
+   `rust-toolchain.toml` of the checkout chooses the version, and rustup installs it at the first build.
+3. Install bun 1.4.2 or later: `curl -fsSL https://bun.sh/install | bash`.
+
+### Linux
+
+1. Install a C compiler and git, as `sudo apt install build-essential git` on Debian and Ubuntu, or
+   `sudo dnf install gcc git` on Fedora.
+2. Install rust with rustup: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`.
+3. Install bun 1.4.2 or later: `curl -fsSL https://bun.sh/install | bash`.
+
+### Windows
+
+1. Install the Build Tools for Visual Studio with the part "Desktop development with C++", which give the linker
+   of rust: `winget install Microsoft.VisualStudio.2022.BuildTools`, then add that part in the installer.
+2. Install rust with rustup: `winget install Rustlang.Rustup`.
+3. Install git, which gives the `sh` that furb runs commands in: `winget install Git.Git`.
+4. Install bun 1.4.2 or later: `powershell -c "irm bun.sh/install.ps1 | iex"`. Bun 1.3 crashes the TUI on Windows
+   when it calls into OpenTUI.
+
+### Build and run from a checkout
+
+The same commands on each system, from the root of the checkout:
+
+```sh
+git clone https://github.com/uael/furb.git
+cd furb
+bun install
+bun run build                # The crate through N-API, in the dev profile. The first build takes minutes.
+bun run demo                 # A scripted life of a conductor and four workers. It asks no model.
+bun run tui                  # A real life, on the models of the catalog of the crate.
+bun run tui -- --resume .furb/sessions/example.jsonl
+bun run tui -- --help        # The options: --cwd, --model, --effort, --record, --resume and --roster.
+```
+
+`bun run tui` asks the claude command line when it finds one, else a model of a provider whose credential stands in
+the environment, such as `ANTHROPIC_API_KEY`, else a model of the local server that `FURB_LOCAL_URL` names. A real
+life can cost dollars. The demo costs nothing.
+
+### Run it from `pip install furb`
+
+`pip install furb` gives the command `furb`, which needs python 3.14 or later. With no command, `furb` hands the
+terminal to the TUI. It runs the program that `FURB_TUI` names, else the `furb-tui` on PATH, else the TUI of the
+checkout that it was built from. The wheel holds no TUI, so put the TUI of a built checkout on PATH as `furb-tui`:
+
+- On macOS and on Linux, from the root of the checkout:
+
+  ```sh
+  mkdir -p ~/.local/bin
+  printf '#!/bin/sh\nexec bun "%s/tui/src/cli.ts" "$@"\n' "$PWD" > ~/.local/bin/furb-tui
+  chmod +x ~/.local/bin/furb-tui
+  furb --demo
+  ```
+
+- On Windows, in PowerShell, from the root of the checkout, with a folder on PATH such as `$HOME\bin`:
+
+  ```powershell
+  Set-Content "$HOME\bin\furb-tui.cmd" "@bun `"$PWD\tui\src\cli.ts`" %*"
+  furb --demo
+  ```
+
+`furb` gives the TUI the options that it takes itself: `--demo`, `--record`, `--cwd`, `--model` and each `--roster`,
+and the words after `--`.
+
+### When it does not start
+
+- `bun --version` must say 1.4.2 or later. An older bun fails to load OpenTUI, and on Windows it crashes.
+- `Cannot find module '@furb/engine'` or a missing `furb.node`: run `bun run build` again. Each change of the crate
+  needs a new build, and `git pull` can bring one.
+- A build that fails at the link: install the linker of the system, as the steps above say, and open a new terminal
+  so that PATH holds rust.
+- `no TUI is found` from `furb`: set `FURB_TUI`, or put `furb-tui` on PATH, as above.
+- No model answers in `bun run tui`: sign in to the claude command line, set the credential of a provider, or name a
+  local server in `FURB_LOCAL_URL`. `bun run demo` needs none of them.
+- Keys with Shift, as Shift+Enter, reach the TUI only from a terminal with the kitty keyboard protocol. Ctrl+J adds
+  a line in every terminal.
+- A screen that draws badly: use a terminal with true color and a font with the block characters, such as Ghostty,
+  kitty, WezTerm, iTerm2 or Windows Terminal.
+
+The gates of CI run `bun install`, `bun run build`, `bun run check`, `bun run lint`, `bun run test` and
+`bun run tui -- --help` on Linux, macOS and Windows. No gate runs `pip install furb` with the TUI, or the TUI in a
+real terminal, since a runner has no terminal and the wheel is published only from a tag.
+
+## Lives and files
+
+A life is a session on its record. The TUI keeps each life under `.furb/sessions` of its directory, and the `.furb`
+that it makes holds a `.gitignore` that keeps it out of version control. Keep the `.jsonl`, `.session.json`,
+`.changes.jsonl` and `.ui.json` files of a life together, and its `.images` directory when it has one. A life that
+holds work from before opens with that work held, and `w` wakes it. ⌃O lists the lives of each workspace with their
+state and their cost, and `n` there starts a new life.
+
+The theme is a preference of the user, in `ui.json` of the config directory: `$XDG_CONFIG_HOME/furb`, `~/.config/furb`,
+or `%APPDATA%\furb` on Windows, and `FURB_CONFIG_DIR` names another one. `/theme github`, `paper`, `midnight` or
+`forest` changes it. The tests and the gallery use preferences of their own.
+
+A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says.
+The rungs of their words stand in the thread of each chain, as every rung does. `/extensions` lists what the life runs.

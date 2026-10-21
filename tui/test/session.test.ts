@@ -9,8 +9,8 @@ import { until } from "../../bind/typescript/test/until.ts";
 import type { Engine } from "../src/bridge.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
-import { withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
+import { withDemo } from "./looming.ts";
 
 afterAll(removeDemoDirectories);
 

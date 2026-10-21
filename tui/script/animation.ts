@@ -1,13 +1,13 @@
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
-import { demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
+import { conducting, demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { palettes } from "../src/theme.ts";
 import { idle } from "../test/idle.ts";
 import { gif, pack, type Still } from "./gif.ts";
 import { pixels } from "./raster.ts";
-import { click, highlighting, home, mount } from "./stage.ts";
+import { highlighting, home, mount } from "./stage.ts";
 
 // The model of the demo writes its words as a stream in the animation, as a real model does.
 process.env.FURB_DEMO_STREAM = "1";
@@ -20,7 +20,7 @@ const columns = 138,
 const output = resolve(process.env.FURB_ANIMATION_OUT ?? "docs/furb.gif");
 await seedDemoFiles(directory);
 const session = await demoSession({ cwd: directory });
-await session.command("/name Explore project");
+await session.command("/name Release 0.4");
 // With the kitty keyboard protocol, an Escape is a key of its own that no key after it joins.
 const test = await createTestRenderer({ width: columns, height: rows, useMouse: true, kittyKeyboard: true });
 const { library, app } = await mount(session, test.renderer);
@@ -30,11 +30,16 @@ let size = { width: 0, height: 0 };
 async function still(delay: number): Promise<void> {
   // The input is colored by a parser off the main thread, which a moment lets finish.
   await new Promise((done) => setTimeout(done, 30));
+  await session.refresh();
   app().render();
   await test.flush();
   await Promise.all(highlighting(test.renderer.root));
   await test.flush();
   const image = pixels(test.captureSpans(), palettes[session.theme], "furb", zoom);
+  // The text of each picture goes to a folder that FURB_ANIMATION_TEXT names, to read the animation without it.
+  const texts = process.env.FURB_ANIMATION_TEXT;
+  if (texts)
+    await writeFile(join(texts, `${String(stills.length).padStart(3, "0")}.txt`), test.captureCharFrame());
   size = { width: image.width, height: image.height };
   stills.push(pack(image.pixels, delay));
 }
@@ -45,71 +50,76 @@ async function type(text: string, step = 3, delay = 5): Promise<void> {
     await still(delay);
   }
 }
-/** The screen while the session works, a picture for each moment, until it rests. */
-async function working(delay = 8): Promise<void> {
-  for (let moment = 0; moment < 120; moment++) {
+/** The screen while the life works, a picture for each moment, for a count of moments. */
+async function moments(count: number, delay = 8): Promise<void> {
+  for (let moment = 0; moment < count; moment++) {
     await new Promise((done) => setTimeout(done, delay * 10));
     await still(delay);
-    if (!session.activity.some((act) => !act.done && ["prompt", "rung", "bash"].includes(act.kind))) break;
   }
-  await idle(session);
-  await session.refresh();
+}
+/** A key, and the picture after it. */
+async function press(name: string, delay: number, modifiers?: { ctrl?: boolean }): Promise<void> {
+  if (name === "escape") test.mockInput.pressEscape();
+  else if (["up", "down", "left", "right"].includes(name)) test.mockInput.pressArrow(name as "up");
+  else if (name === "enter") test.mockInput.pressEnter();
+  else if (name === "tab") test.mockInput.pressTab();
+  else test.mockInput.pressKey(name, modifiers);
+  await still(delay);
+}
+/** The thread of a label selected in the loom, a key at a time. */
+async function pick(label: string): Promise<void> {
+  for (let step = 0; step < 3 && app().focus !== "loom"; step++) await press("escape", 15);
+  const at = app().loom.threads.findIndex((thread) => thread.label === label);
+  const by = at - app().selectedThread;
+  for (let step = 0; step < Math.abs(by); step++) await press(by > 0 ? "down" : "up", 25);
 }
 
 try {
   await loadParsers();
-  await still(180);
-  await type("Explore this project, run its checks, and suggest a next step.", 2, 4);
-  await still(40);
-  test.mockInput.pressEnter();
-  await working();
-  await still(260);
-  // Python input: the operator writes a word with the same gate as the model.
-  test.mockInput.pressKey("r", { ctrl: true });
-  await still(60);
-  await type('write(read("README.md").append("\\nPress Ctrl+K to search.\\n"))', 3, 3);
-  await still(80);
-  test.mockInput.pressEnter();
-  await working();
-  test.mockInput.pressKey("r", { ctrl: true });
-  await still(150);
-  await click(test, "Changes");
-  await still(200);
-  await click(test, "Transcript");
-  await still(150);
-  await click(test, "Feed");
-  await still(80);
-  // The palette finds any action by its name or its slash command.
-  test.mockInput.pressKey("p", { ctrl: true });
-  await still(120);
-  await type("rew", 1, 12);
-  await still(140);
-  test.mockInput.pressEscape();
-  await still(30);
-  // Escape twice opens the rewind tree in the feed. A picture takes longer to draw than the time between the two
-  // presses, so the picture comes after both.
-  test.mockInput.pressEscape();
-  test.mockInput.pressEscape();
   await still(160);
-  if (!test.captureCharFrame().includes("Rewind")) throw new Error("The rewind tree did not open.");
-  test.mockInput.pressArrow("down");
-  await still(60);
-  test.mockInput.pressArrow("down");
-  await still(110);
-  test.mockInput.pressEscape();
-  await still(120);
-  // Ctrl+T changes the colors of every surface, and the choice shows at once.
-  test.mockInput.pressKey("t", { ctrl: true });
-  await still(80);
-  await type("paper", 1, 10);
-  await still(60);
-  test.mockInput.pressEnter();
-  await still(200);
-  test.mockInput.pressKey("t", { ctrl: true });
-  await still(50);
-  await type("github", 1, 8);
-  test.mockInput.pressEnter();
+  // The operator asks the model of the root, and the thread shows the prompt, its rung and its acts.
+  await press("i", 30);
+  await type("Explore this project, run its checks, and suggest a next step.", 3, 4);
+  await press("enter", 10);
+  await moments(30);
+  await idle(session);
+  await still(160);
+  await press("escape", 20);
+  // A word of python makes a conductor, which hires four workers, each on a chain of its own.
+  await type(":", 1, 30);
+  app().word.setText(conducting);
   await still(220);
+  await press("enter", 10);
+  await press("escape", 10);
+  await moments(40);
+  await still(200);
+  // Tab answers the question that a worker put to the operator, wherever it stands.
+  await press("tab", 120);
+  await type("high", 1, 12);
+  await press("enter", 10);
+  await moments(12);
+  // The folds of the loom hold the conductor and its workers in one thread.
+  await pick("Main");
+  await press("left", 160);
+  await press("right", 80);
+  // A worker opens as its ladder, and a rung as its word.
+  await pick("w search");
+  await press("enter", 140);
+  await press("enter", 220);
+  await press("escape", 40);
+  await press("escape", 60);
+  // The verbs act on the selection: space pauses a worker, and x cancels its work.
+  await pick("w docs");
+  await press(" ", 140);
+  await press("x", 160);
+  await moments(6);
+  // The palettes change every surface at once.
+  await press("/", 30);
+  await type("theme paper", 2, 6);
+  await press("enter", 220);
+  await press("/", 20);
+  await type("theme github", 3, 6);
+  await press("enter", 200);
   // The lights of the title bar are rare pixels, which the palette keeps all the same.
   await writeFile(output, gif(stills, size.width, size.height, [0xff5f57, 0xfebc2e, 0x28c840]));
   console.log(`${output}: ${stills.length} pictures`);

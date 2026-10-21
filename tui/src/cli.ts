@@ -6,7 +6,7 @@ import { parseArgs } from "node:util";
 import { efforts, furbDirectory, onConsoleEnd } from "@furb/engine";
 import { createCliRenderer } from "@opentui/core";
 import { follow } from "./app.ts";
-import { demoDirectory, removeDemoDirectories } from "./demo.ts";
+import { demoDirectory, removeDemoDirectories, seedConductor } from "./demo.ts";
 import type { EngineOptions } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import { palettes } from "./theme.ts";
@@ -29,9 +29,10 @@ if (values.help) {
   console.log(`furb-tui [--demo] [--cwd path] [--model provider:model] [--effort ${efforts.join("|")}]
          [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...]
 
-Enter sends a prompt. ⌃J (Control J) adds a line, and so does ⇧Enter (Shift Enter) in a terminal with the kitty
-keyboard protocol. ⌃P opens actions. F1 shows all keys that the terminal sends. ⌃ is Control, ⌥ is Option or Alt,
-and ⇧ is Shift.
+The loom shows each chain of the life as a thread, and the thread below it the ladders of the selected chain.
+↑ and ↓ select a thread, Enter opens it, i asks its model, : writes a word of python, and Tab answers the oldest
+prompt that you owe. Space pauses or wakes the selection, x cancels it, and ? lists every key. ⌃Q quits.
+--demo opens a scripted life of a conductor and four workers, which asks no model.
 The default model is the one that the catalog offers first: opus, through your Claude CLI subscription, when this
 machine holds the claude command line, then a model of a provider of the network, then a model of the local server.
 A session offers it and the models of --roster. /model lists them, and every model of a provider whose credentials
@@ -71,6 +72,8 @@ if (record) await library.import(record, group);
 else await library.create(group);
 const initial = library.current?.session;
 if (!initial) throw new Error("The session did not open.");
+// A new demo shows a life of many workers at once, as a conductor runs them.
+if (values.demo && !record) await seedConductor(initial);
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
   // The TUI ends on a signal by its own quit, since the view saves its draft before the renderer goes.

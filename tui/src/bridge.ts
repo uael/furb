@@ -26,6 +26,19 @@ export interface Snapshot {
   program: Record<string, string>;
   actor: string;
   directory: string;
+  /** The measure of each chain whose models answered or that a grant holds: the dollars of its answers, the dollars
+   * since the grant that stands on it and the dollars of its ceiling, the share of the window that its last answer
+   * read, and how many answers it had. */
+  measures: Record<string, Measure>;
+}
+export interface Measure {
+  dollars: number;
+  spent: number;
+  ceiling?: number;
+  share?: number;
+  answers: number;
+  /** The actor of its last answer. */
+  actor?: string;
 }
 
 type Returned<T> = T extends Act ? string : Awaited<T>;

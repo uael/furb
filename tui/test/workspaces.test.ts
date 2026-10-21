@@ -4,89 +4,31 @@ import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { type NativeEar, scratch, store } from "@furb/engine";
-import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
-import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { seedDemoFiles } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
-import { Session, savedView } from "../src/session.ts";
+import { Session } from "../src/session.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
-import { cellAt } from "./composing.ts";
-
-/** A library in the sidebar of an App on a test terminal: the terminal, the App that shows the session that the
- * library selects now, the first column of the sidebar, the rows of the frame that the App draws anew, and the row of
- * the sidebar that names a workspace or a session in the frame that the terminal shows now. */
-interface Sidebar {
-  screen: Awaited<ReturnType<typeof createTestRenderer>>;
-  app: () => App;
-  left: number;
-  frame: () => Promise<string[]>;
-  row: (name: string) => number;
-}
 
 /** A test in a temporary directory of its own, with the list of the workspaces of the TUI in it. `open` reads the
- * list into a library, as each run of the TUI does, and `sidebar` shows a library in an App, which follows the
- * session that the library selects. All of it ends after the test, with the directory. */
+ * list into a library, as each run of the TUI does. All of it ends after the test, with the directory. */
 async function withLibrary(
-  use: (context: {
-    directory: string;
-    open: () => Workspaces;
-    sidebar: (library: Workspaces) => Promise<Sidebar>;
-  }) => Promise<void>,
+  use: (context: { directory: string; open: () => Workspaces }) => Promise<void>,
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), "furb-workspaces-"));
   const libraries: Workspaces[] = [];
-  const sidebars: Sidebar[] = [];
   const open = () => {
     const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), { demo: true });
     libraries.push(library);
     return library;
   };
-  const sidebar = async (library: Workspaces): Promise<Sidebar> => {
-    const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true });
-    const app = follow(screen.renderer, { quit() {}, workspaces: library });
-    const left = 152 - library.preferences.sidebarWidth;
-    const shown = {
-      screen,
-      app,
-      left,
-      frame: async () => {
-        app().render();
-        await screen.flush();
-        return screen.captureCharFrame().split("\n");
-      },
-      row: (name: string) =>
-        screen
-          .captureCharFrame()
-          .split("\n")
-          .findIndex((line) => new RegExp(` ${name}\\b`).test(line.slice(left))),
-    };
-    sidebars.push(shown);
-    await screen.flush();
-    return shown;
-  };
   try {
-    await use({ directory, open, sidebar });
+    await use({ directory, open });
   } finally {
-    for (const { app, screen } of sidebars) {
-      app().dispose();
-      screen.renderer.destroy();
-    }
     for (const library of libraries) await library.dispose();
     await rm(directory, { recursive: true, force: true });
   }
-}
-
-/** A library with the workspace `project`, which holds the open sessions `foo` and `bar`. */
-async function fooAndBar(directory: string, open: () => Workspaces) {
-  await mkdir(join(directory, "project"));
-  const library = open();
-  const group = await library.add(join(directory, "project"));
-  const first = await library.create(group, "foo");
-  const second = await library.create(group, "bar");
-  if (!first.session || !second.session) throw new Error("The session did not open.");
-  return { library, group, first, second };
 }
 
 test("workspaces keep sessions alive, report background completion and input, and reopen saved records paused", () =>
@@ -137,7 +79,6 @@ test("workspaces keep sessions alive, report background completion and input, an
     await until(library, () => first.status === "idle");
     const waiting = await first.session.engine.wait([], { seconds: 60, on: first.session.engine.root });
     await until(library, () => first.status === "working");
-    library.preferences.sidebar = false;
     library.preferences.save("paper");
     expect(second.session.theme).toBe("paper");
     library.toggle(beta);
@@ -147,7 +88,6 @@ test("workspaces keep sessions alive, report background completion and input, an
     await library.refresh();
     expect(library.groups.map((group) => group.name)).toEqual(["alpha", "beta"]);
     expect(library.groups[1]?.collapsed).toBe(true);
-    expect(library.preferences.sidebar).toBe(false);
     expect(library.preferences.theme).toBe("paper");
     expect(
       library.groups
@@ -209,61 +149,6 @@ test("deleting a session moves its record and state to trash, removes its scratc
     } finally {
       await external?.dispose();
     }
-  }));
-
-test("the sidebar tree groups sessions, switches by mouse, collapses and toggles without losing a draft", () =>
-  withLibrary(async ({ directory, open, sidebar }) => {
-    const { library, group, first, second } = await fooAndBar(directory, open);
-    const { screen, app, left, row } = await sidebar(library);
-    app().composer.setText("keep this draft");
-    await screen.flush();
-    const projectRow = row("project");
-    const fooRow = row("foo");
-    const barRow = row("bar");
-    expect(fooRow).toBeGreaterThan(projectRow);
-    expect(barRow).toBeGreaterThan(projectRow);
-    await screen.mockMouse.click(left + 6, fooRow);
-    await until(library, () => library.current === first);
-    await screen.flush();
-    expect(first.session).toBe(app().session);
-    await library.select(second);
-    await screen.flush();
-    expect(app().composer.plainText).toBe("keep this draft");
-    await screen.mockMouse.click(left + 3, projectRow);
-    app().render();
-    await screen.flush();
-    expect(group.collapsed).toBe(true);
-    expect(
-      screen
-        .captureCharFrame()
-        .split("\n")
-        .some((line) => line.slice(left).includes("foo")),
-    ).toBe(false);
-    screen.mockInput.pressKey("\\", { ctrl: true });
-    await screen.flush();
-    app().render();
-    await screen.flush();
-    expect(library.preferences.sidebar).toBe(false);
-    expect(app().scroll.x).toBe(2);
-    expect(app().composer.plainText).toBe("keep this draft");
-    // The picker reads the workspaces again before it opens: the test awaits the picker the key opened.
-    const picker = app().workspacePicker;
-    let opened: Promise<void> | undefined;
-    app().workspacePicker = () => {
-      opened = picker();
-      return opened;
-    };
-    screen.mockInput.pressKey("w", { ctrl: true });
-    await opened;
-    await screen.flush();
-    expect(screen.captureCharFrame()).toContain("Workspaces and sessions");
-    app().closeOverlay();
-    library.toggle();
-    screen.resize(82, 32);
-    app().render();
-    await screen.flush();
-    expect(app().scroll.x).toBe(2);
-    expect(app().composer.plainText).toBe("keep this draft");
   }));
 
 test("a model of the catalog that the roster does not hold joins the session, which opens again on it", async () => {
@@ -405,228 +290,4 @@ test("a save of the workspace list that fails names its file", () =>
     expect(String(await library.add(join(directory, "project")).catch((error: unknown) => error))).toContain(
       "workspaces.json.tmp",
     );
-  }));
-
-test("a session row archives a session through its remove button, which folds it under Archived until a click brings it back", () =>
-  withLibrary(async ({ directory, open, sidebar }) => {
-    const { library, first, second } = await fooAndBar(directory, open);
-    const { screen, left, frame, row } = await sidebar(library);
-    let lines = await frame();
-    const fooRow = row("foo");
-    const remove = (lines[fooRow] ?? "").lastIndexOf("×");
-    expect(remove).toBeGreaterThan(left);
-    await screen.mockMouse.moveTo(remove, fooRow);
-    await screen.mockMouse.click(remove, fooRow);
-    lines = await frame();
-    expect(lines.join("\n")).toContain("Remove the session “foo”?");
-    const archive = lines.findIndex((line) => line.includes("Archive") && line.includes("Fold it under"));
-    await screen.mockMouse.click((lines[archive] ?? "").indexOf("Archive") + 1, archive);
-    await until(library, () => first.archived === true);
-    expect(library.current).toBe(second);
-    lines = await frame();
-    expect(row("foo")).toBe(-1);
-    const folded = lines.findIndex((line) => /▸ +Archived +1/.test(line.slice(left)));
-    expect(folded).toBeGreaterThan(0);
-    const saved = JSON.parse(await readFile(library.path, "utf8")) as {
-      workspaces: { archived: string[] }[];
-    };
-    expect(saved.workspaces[0]?.archived).toEqual([first.path]);
-    await screen.mockMouse.click(left + 4, folded);
-    lines = await frame();
-    const archivedRow = row("foo");
-    expect(archivedRow).toBeGreaterThan(folded);
-    await screen.mockMouse.click(left + 8, archivedRow);
-    await until(library, () => library.current === first);
-    expect(first.archived).toBe(false);
-  }));
-
-test("a session row lights under the pointer with its buttons, tells its state on its mark alone, and goes dark when the pointer leaves", () =>
-  withLibrary(async ({ directory, open, sidebar }) => {
-    const { library } = await fooAndBar(directory, open);
-    const { screen, left, row } = await sidebar(library);
-    const lines = screen.captureCharFrame().split("\n");
-    const fooRow = row("foo");
-    const pencil = (lines[fooRow] ?? "").lastIndexOf("✎");
-    const cross = (lines[fooRow] ?? "").lastIndexOf("×");
-    const mark = left + (lines[fooRow] ?? "").slice(left).indexOf("○");
-    const name = (lines[fooRow] ?? "").indexOf("foo");
-    const hidden = (x: number) => {
-      const cell = cellAt(screen.captureSpans(), x, fooRow);
-      return Boolean(cell.fg?.equals(cell.bg));
-    };
-    const ground = () => cellAt(screen.captureSpans(), name - 2, fooRow).bg;
-    expect(pencil).toBeGreaterThan(name);
-    expect(cross).toBe(pencil + 2);
-    expect(hidden(pencil) && hidden(cross)).toBe(true);
-    const rest = ground();
-    await screen.mockMouse.moveTo(name + 1, fooRow);
-    await screen.flush();
-    expect(hidden(pencil) || hidden(cross)).toBe(false);
-    expect(ground()?.equals(rest)).toBe(false);
-    // A tip stands on the row under the pointer.
-    const under = () => screen.captureCharFrame().split("\n")[fooRow + 1] ?? "";
-    expect(under()).not.toContain("Ready");
-    await screen.mockMouse.moveTo(mark, fooRow);
-    await screen.flush();
-    expect(under()).toContain("○ Ready");
-    await screen.mockMouse.moveTo(pencil, fooRow);
-    await screen.flush();
-    expect(screen.captureCharFrame()).toContain("Rename this session");
-    await screen.mockMouse.moveTo(cross, fooRow);
-    await screen.flush();
-    expect(screen.captureCharFrame()).toContain("Archive or remove this session");
-    await screen.mockMouse.moveTo(10, 10);
-    await screen.flush();
-    expect(ground()?.equals(rest)).toBe(true);
-    expect(hidden(pencil) && hidden(cross)).toBe(true);
-    expect(screen.captureCharFrame()).not.toContain("Archive or remove this session");
-  }));
-
-test("a right click on a session row opens its menu at the pointer, and Rename takes a new name in the row", () =>
-  withLibrary(async ({ directory, open, sidebar }) => {
-    const { library, first } = await fooAndBar(directory, open);
-    const { screen, app, left, frame, row } = await sidebar(library);
-    let lines = await frame();
-    const fooRow = row("foo");
-    await screen.mockMouse.click(left + 8, fooRow, 2);
-    lines = await frame();
-    const menu = lines.slice(fooRow + 1).map((line) => line.slice(left + 8).trim());
-    expect(menu.slice(0, 8)).toEqual([
-      "",
-      "foo        Esc",
-      "",
-      "❯ Open",
-      "Rename",
-      "Archive",
-      "Move to trash",
-      "",
-    ]);
-    const renameRow = lines.findIndex((line) => line.slice(left).includes("Rename"));
-    await screen.mockMouse.click((lines[renameRow] ?? "").indexOf("Rename") + 1, renameRow);
-    lines = await frame();
-    expect(lines.join("\n")).toContain("Enter keeps the new name, and Esc leaves it as it was.");
-    for (let index = 0; index < 3; index++) screen.mockInput.pressBackspace();
-    await screen.mockInput.typeText("notes");
-    screen.mockInput.pressEnter();
-    lines = await frame();
-    expect(first.name).toBe("notes");
-    expect(savedView(first.path).view.sessionName).toBe("notes");
-    expect(row("notes")).toBeGreaterThan(0);
-    // Escape leaves the name as it was.
-    const notesRow = row("notes");
-    await screen.mockMouse.moveTo(left + 8, notesRow);
-    await screen.mockMouse.click((lines[notesRow] ?? "").lastIndexOf("✎"), notesRow);
-    await frame();
-    await screen.mockInput.typeText(" draft");
-    screen.mockInput.pressEscape();
-    // A lone Escape reaches the app once the parser knows that no sequence follows it.
-    for (let tries = 0; tries < 100 && !app().composer.focused; tries++) await Bun.sleep(10);
-    lines = await frame();
-    expect(first.name).toBe("notes");
-    expect(app().composer.focused).toBe(true);
-    // A session that is not open keeps its new name in its saved view.
-    await library.archive(first);
-    library.rename(first, "old notes");
-    expect(savedView(first.path).view.sessionName).toBe("old notes");
-  }));
-
-test("Move to trash in the menu of a session row asks what its remove button asks, as /delete does, and moves nothing before a choice", () =>
-  withLibrary(async ({ directory, open, sidebar }) => {
-    const { library, group, first } = await fooAndBar(directory, open);
-    const { screen, app, left, frame, row } = await sidebar(library);
-    await screen.mockMouse.click(left + 8, row("foo"), 2);
-    let lines = await frame();
-    const menu = lines.findIndex((line) => line.slice(left).includes("Move to trash"));
-    await screen.mockMouse.click((lines[menu] ?? "").indexOf("Move to trash") + 1, menu);
-    lines = await frame();
-    expect(lines.join("\n")).toContain("Remove the session “foo”?");
-    expect(group.sessions).toContain(first);
-    app().closeOverlay();
-    app().composer.setText("/delete");
-    await app().submit();
-    await screen.mockInput.typeText("foo");
-    screen.mockInput.pressEnter();
-    lines = await frame();
-    expect(lines.join("\n")).toContain("Remove the session “foo”?");
-    const trash = lines.findIndex(
-      (line) => line.includes("Move to trash") && line.includes("Stop this session"),
-    );
-    await screen.mockMouse.click((lines[trash] ?? "").indexOf("Move to trash") + 1, trash);
-    await until(library, () => !group.sessions.includes(first));
-  }));
-
-test("a workspace row renames its workspace in place, and its remove button takes it off the list and leaves its folder", () =>
-  withLibrary(async ({ directory, open, sidebar }) => {
-    await mkdir(join(directory, "project"));
-    await mkdir(join(directory, "other"));
-    const library = open();
-    const project = await library.add(join(directory, "project"));
-    const other = await library.add(join(directory, "other"));
-    const first = await library.create(project, "foo");
-    if (!first.session) throw new Error("The session did not open.");
-    const { screen, left, frame, row } = await sidebar(library);
-    let lines = await frame();
-    const otherRow = row("other");
-    await screen.mockMouse.moveTo(left + 5, otherRow);
-    await screen.mockMouse.click((lines[otherRow] ?? "").lastIndexOf("✎"), otherRow);
-    await frame();
-    for (let index = 0; index < 5; index++) screen.mockInput.pressBackspace();
-    await screen.mockInput.typeText("docs");
-    screen.mockInput.pressEnter();
-    lines = await frame();
-    expect(other.name).toBe("docs");
-    expect(other.collapsed).toBe(false);
-    const listed = () =>
-      (
-        JSON.parse(readFileSync(library.path, "utf8")) as {
-          workspaces: { directory: string; name: string }[];
-        }
-      ).workspaces;
-    expect(listed().find((one) => one.directory === other.directory)?.name).toBe("docs");
-    const projectRow = row("project");
-    await screen.mockMouse.moveTo(left + 5, projectRow);
-    await screen.mockMouse.click((lines[projectRow] ?? "").lastIndexOf("×"), projectRow);
-    lines = await frame();
-    expect(lines.join("\n")).toContain("Remove the workspace “project” from the list?");
-    const remove = lines.findIndex((line) => line.includes("Remove from the list"));
-    await screen.mockMouse.click((lines[remove] ?? "").indexOf("Remove from the list") + 1, remove);
-    await until(library, () => library.groups.length === 1);
-    expect(library.groups).toEqual([other]);
-    expect(library.groupOf()).toBe(other);
-    expect(first.session).toBeUndefined();
-    expect(listed().map((one) => one.directory)).toEqual([other.directory]);
-    expect((await stat(project.directory)).isDirectory()).toBe(true);
-    // The last workspace stays, since the current session needs one.
-    await expect(library.remove(other)).rejects.toThrow("This is the only workspace.");
-  }));
-
-test("a rename in a row ends when a dialog opens or another row is clicked, and the dialog and the click still work", () =>
-  withLibrary(async ({ directory, open, sidebar }) => {
-    const { library, first, second } = await fooAndBar(directory, open);
-    const { screen, app, left, frame, row } = await sidebar(library);
-    const rename = async (name: string) => {
-      const lines = await frame();
-      const at = row(name);
-      await screen.mockMouse.moveTo(left + 8, at);
-      await screen.mockMouse.click((lines[at] ?? "").lastIndexOf("✎"), at);
-      await frame();
-    };
-    // A dialog that opens during a rename keeps the name typed so far, and takes the keys.
-    await rename("bar");
-    await screen.mockInput.typeText("2");
-    app().palette();
-    await screen.mockInput.typeText("them");
-    await frame();
-    expect(second.name).toBe("bar2");
-    expect(app().composer.plainText).toBe("");
-    expect(screen.captureCharFrame()).toContain("them");
-    app().closeOverlay();
-    // One click on another row keeps the name and opens that row.
-    await rename("bar2");
-    await screen.mockInput.typeText("x");
-    await frame();
-    const fooRow = row("foo");
-    await screen.mockMouse.click(left + 8, fooRow);
-    await until(library, () => library.current === first);
-    expect(second.name).toBe("bar2x");
   }));

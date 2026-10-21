@@ -18,7 +18,7 @@ import {
   WORK,
 } from "@furb/engine";
 import { createTwoFilesPatch } from "diff";
-import type { Engine, HostView, Usage } from "./bridge.ts";
+import type { Engine, HostView, Measure, Usage } from "./bridge.ts";
 import { refusal } from "./conversation.ts";
 import { expandHome, fileReferences, projectFiles, shortenHome } from "./files.ts";
 import { dollars } from "./format.ts";
@@ -144,6 +144,9 @@ export class Session extends EventEmitter {
   changes: ShownChange[] = [];
   changePage = 0;
   program: Record<string, string> = {};
+  /** The measure of each chain whose models answered or that a grant holds, which the loom shows at the end of its
+   * thread. */
+  measures: Record<string, Measure> = {};
   /** The text of the search box, which the rows of the view must hold. */
   search = "";
   private message = "";
@@ -709,21 +712,26 @@ export class Session extends EventEmitter {
     else {
       const pending = this.operatorPrompt;
       if (pending) await this.host.answer(pending.id, input);
-      else {
-        await this.attachFiles(input);
-        this.redo = [];
-        const pending = this.host.pending.size > 0;
-        const id = await this.engine.prompt(this.shape, {
-          message: this.withImages(input),
-          on: this.selected,
-        });
-        delete this.images[this.selected];
-        this.save();
-        if (pending) this.emit("resume");
-        this.track(id);
-      }
+      else await this.ask(input);
     }
     await this.refresh();
+  }
+  /** A prompt of the operator on the selected chain, to the actor that the chain stands on, with the files that the
+   * text names read first and the images of the draft, whatever the operator owes on the chain. It gives the prompt. */
+  async ask(input: string): Promise<string> {
+    await this.attachFiles(input);
+    this.redo = [];
+    const pending = this.host.pending.size > 0;
+    const id = await this.engine.prompt(this.shape, {
+      message: this.withImages(input),
+      on: this.selected,
+    });
+    delete this.images[this.selected];
+    this.save();
+    if (pending) this.emit("resume");
+    this.track(id);
+    await this.refresh();
+    return id;
   }
 
   async command(text: string): Promise<void> {
@@ -782,13 +790,6 @@ export class Session extends EventEmitter {
       case "queue":
         if (!argument) throw new Error("Use /queue followed by a message.");
         this.enqueue(argument);
-        break;
-      case "autocollapse":
-        this.preferences.foldRungs = !this.preferences.foldRungs;
-        this.preferences.save();
-        this.notice = this.preferences.foldRungs
-          ? "Completed rungs collapse automatically."
-          : "Rungs keep their open state.";
         break;
       case "grant": {
         const amount = Number(argument);

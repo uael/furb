@@ -95,11 +95,14 @@ uv run pre-commit install
 
 | File | What it holds |
 | --- | --- |
-| `tui/src/app.ts` | The screen: the top line, the feed, the sidebar, the composer, the footer, and the dialogs. Its keys are layers of `@opentui/keymap`, and the footer offers the keys of the top layer that acts. |
-| `tui/src/session.ts` | The state of one session: its chains, its views, its drafts, its queue, and its record of the UI. |
+| `tui/DESIGN.md` | Why the TUI is a loom: the principles, the directions that it did not take, and what it builds. |
+| `tui/src/app.ts` | The screen: the top line, the loom, the thread, the lens, the list of lives, the word line, the footer and the help. Each key acts on the selection, and the footer offers the keys of the focus. |
+| `tui/src/loom.ts` | The loom, from the acts of the life alone: the threads in the order of the tree of chains, the cells of each over the moments of the life, the state of each, and the prompts that the operator owes. |
+| `tui/src/ladder.ts` | The thread of one chain, from its acts: each prompt, the rungs of its ladder, the acts of each rung as chips, and the tails of what runs. |
+| `tui/src/session.ts` | The state of one session: its chains, its drafts, its queue, its commands, and its record of the UI. |
 | `tui/src/worker.ts` | The session, in a worker thread, and the demo session with its scripted answers. |
 | `tui/src/theme.ts` | The palettes, the marks, and the spacing. One mark says one thing everywhere. |
-| `tui/src/keys.ts`, `tui/src/commands.ts` | The keys and the slash commands, which the keymap, the footer, the help and the docs read. |
+| `tui/src/keys.ts`, `tui/src/commands.ts` | The keys and the slash commands, which the footer, the help and the docs read. |
 | `tui/script/` | The gallery, the animation, and the rasterizer that turns a frame into a PNG. |
 
 A screen must read clearly at first sight. `bun run screenshots` with `FURB_GALLERY_ONLY` set to a pattern, such as

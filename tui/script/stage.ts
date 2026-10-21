@@ -39,14 +39,12 @@ export async function home(name: string, environment: Record<string, string> = {
   process.exit();
 }
 
-/** A session in a library of its own that shows the sidebar, and an App on the session that the library selects. */
+/** A session in a library of its own, and an App on the session that the library selects. */
 export async function mount(
   session: Session,
   renderer: CliRenderer,
 ): Promise<{ library: Workspaces; app: () => App }> {
   const library = await demoLibrary(session);
-  library.preferences.sidebar = true;
-  library.preferences.save();
   return { library, app: follow(renderer, { quit() {}, workspaces: library }) };
 }
 

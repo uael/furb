@@ -111,9 +111,9 @@ function scriptedSession(options: SessionOptions): Session {
       // A message that asks for an answer in a fence gets one, as a model sometimes writes it, which the gate refuses,
       // and the model answers again once it reads the refusal.
       const fenced = !first && last.includes("an answer in a fence");
-      // A message that says to ask first gets a question to the operator and no close, so the model answers again
-      // once the operator has answered.
-      const asks = !first && last.includes("Ask me first");
+      // A prompt whose message says to ask first gets a question to the operator and no close, so the model answers
+      // again once the operator has answered.
+      const asks = message?.startsWith("Ask me first") ?? false;
       const code = fenced
         ? '```python\nclose("Here is the answer, in a fence.")\n```'
         : asks

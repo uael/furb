@@ -21,7 +21,7 @@ export interface SessionEntry {
   modified?: number;
   size?: number;
   cost?: number;
-  /** Whether the operator archived the session, which the sidebar folds under a row of its own. */
+  /** Whether the operator archived the session, which the list of lives folds under a row of its own. */
   archived?: boolean;
 }
 export interface Workspace {
@@ -394,17 +394,12 @@ export class Workspaces extends EventEmitter {
     await this.select(entry);
     return entry;
   }
-  toggle(group?: Workspace): void {
-    if (group) {
-      group.collapsed = !group.collapsed;
-      this.save({ directory: group.directory, collapsed: group.collapsed });
-    } else {
-      this.preferences.sidebar = !this.preferences.sidebar;
-      this.preferences.save();
-    }
+  toggle(group: Workspace): void {
+    group.collapsed = !group.collapsed;
+    this.save({ directory: group.directory, collapsed: group.collapsed });
     this.emit("change");
   }
-  /** Archive a session: it leaves the list of its workspace for a row of its own, which the sidebar folds, and its
+  /** Archive a session: it leaves the list of its workspace for a row of its own, which the list of lives folds, and its
    * record stays. The current session moves to another session first, as it does for a delete, and an open session
    * closes. */
   async archive(entry: SessionEntry): Promise<void> {

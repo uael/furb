@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { slashes } from "../src/commands.ts";
-import { chords, keys } from "../src/keys.ts";
+import { keyTable } from "../src/keys.ts";
 
 const path = new URL("../README.md", import.meta.url);
 const cell = (text: string) => text.replaceAll("\\", "\\\\").replaceAll("|", "\\|");
@@ -8,7 +8,7 @@ const tables = {
   keys: [
     "| Key | Action |",
     "| --- | --- |",
-    ...keys.map((key) => `| ${cell(chords(key, true))} | ${cell(key.action)} |`),
+    ...keyTable.map(([key, action]) => `| ${cell(key)} | ${cell(action)} |`),
   ],
   commands: [
     "| Command | Action |",

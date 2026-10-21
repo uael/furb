@@ -694,3 +694,20 @@ test("the activity starts the streams of a command again at each started of it, 
     stderr: { content: "bad\n" },
   });
 });
+
+test("the activity places each act in time by the count of facts, and keeps the answers of each chain", () => {
+  const activity = new Activity();
+  const hear = (fact: Fact) => {
+    const heard = activity.hear(fact);
+    while (!heard.next().done);
+  };
+  hear(["read", "read1", "operator", ROOT, "notes.md"]);
+  hear(["done", "read1", "world", { is: "Text", path: "notes.md", content: "hi" }]);
+  hear(["reply", "reply1", "rung1", ROOT, "claude-cli:opus/high"]);
+  hear(["done", "reply1", "world", ["assistant", "close(1)", [100, 10, 80, 0, 0.5], null]]);
+  expect(activity.acts.get("read1")).toMatchObject({ kind: "read", began: 1, ended: 2, done: true });
+  expect(activity.answers.get(ROOT)).toEqual([
+    { at: 4, actor: "claude-cli:opus/high", usage: [100, 10, 80, 0, 0.5] },
+  ]);
+  expect(activity.cost).toBe(0.5);
+});
